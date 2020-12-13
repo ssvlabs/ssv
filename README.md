@@ -7,15 +7,15 @@
 SSV is a protocol for distribuiting an eth2 validator key between multiple operators governed by a consensus protocol (Istanbul BFT).
 
 ### TODO
-[ ] Port POC code to Glang
-[ ] Single standing instance running with Prysm's validator client
-[ ] Networking and discovery
-[ ] db, persistance and recovery
-[ ] Multi network support (being part of multiple SSV groups)
-[ ] DKG
-[ ] Documentation
-[ ] Phase 1 changes
-[ ] Audit
+[ ] Port POC code to Glang\
+[ ] Single standing instance running with Prysm's validator client\
+[ ] Networking and discovery\
+[ ] db, persistance and recovery\
+[ ] Multi network support (being part of multiple SSV groups)\
+[ ] DKG\
+[ ] Documentation\
+[ ] Phase 1 changes\
+[ ] Audit\
 
 ### Research
 - iBTF
@@ -35,4 +35,4 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
     - [Blox's eth2 pools research](https://github.com/bloxapp/eth2-staking-pools-research)
     - [ETH DKG](https://github.com/PhilippSchindler/ethdkg)
 
-    
+     
