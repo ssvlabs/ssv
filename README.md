@@ -6,6 +6,17 @@
 # SSV - Secret Shared Validator
 SSV is a protocol for distribuiting an eth2 validator key between multiple operators governed by a consensus protocol (Istanbul BFT).
 
+### TODO
+[ ] Port POC code to Glang
+[ ] Single standing instance running with Prysm's validator client
+[ ] Networking and discovery
+[ ] db, persistance and recovery
+[ ] Multi network support (being part of multiple SSV groups)
+[ ] DKG
+[ ] Documentation
+[ ] Phase 1 changes
+[ ] Audit
+
 ### Research
 - iBTF
     - [Paper](https://www.google.com/search?q=istanbul+bft&oq=istanbul+bft&aqs=chrome..69i57j0j0i22i30l6.2399j0j7&sourceid=chrome&ie=UTF-8)
@@ -18,6 +29,8 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
     - [Prysm adapted validator client](https://github.com/alonmuroch/prysm/tree/ssv)
 - Other implementations
     - [Consensys Quorum](https://github.com/ConsenSys/quorum)   
+    - [Besu Hyperledger](https://besu.hyperledger.org/en/stable/HowTo/Configure/Consensus-Protocols/IBFT/)
+        - [code]( https://github.com/hyperledger/besu/tree/master/consensus/ibft)
 - DKG
     - [Blox's eth2 pools research](https://github.com/bloxapp/eth2-staking-pools-research)
     - [ETH DKG](https://github.com/PhilippSchindler/ethdkg)
