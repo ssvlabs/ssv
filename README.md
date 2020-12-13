@@ -15,7 +15,8 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 [ ] DKG\
 [ ] Documentation\
 [ ] Phase 1 changes\
-[ ] Audit\
+[ ] Audit
+
 
 ### Research
 - iBTF
