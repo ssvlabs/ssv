@@ -2,6 +2,7 @@
 
 <br>
 <br>
+
 # SSV - Secret Shared Validator
 SSV is a protocol for distribuiting an eth2 validator key between multiple operators governed by a consensus protocol (Istanbul BFT).
 
@@ -20,3 +21,5 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 - DKG
     - [Blox's eth2 pools research](https://github.com/bloxapp/eth2-staking-pools-research)
     - [ETH DKG](https://github.com/PhilippSchindler/ethdkg)
+
+    
