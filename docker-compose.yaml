@@ -1,0 +1,17 @@
+version: '3.5'
+
+services:
+  ssv:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DOCKER_COMPOSE: "true"
+    networks:
+      - bloxapp-docker
+    restart: always
+
+networks:
+  bloxapp-docker:
+    driver: bridge
+    name: bloxapp-docker
