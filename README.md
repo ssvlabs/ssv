@@ -41,3 +41,8 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 
      
 # How to run
+
+```bash 
+$ docker-compose build ssv
+$ docker-compose up -d ssv
+```
