@@ -46,3 +46,12 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 $ docker-compose build ssv
 $ docker-compose up -d ssv
 ```
+
+The following commands are for building and running CLI to generate threshold keys:
+```bash
+# Build binary
+$ CGO_ENABLED=1 go build ./cmd/ssvcli/
+
+# Run tool
+$ ./ssvcli create-threshold --key <hex-encoded-private-key>
+```

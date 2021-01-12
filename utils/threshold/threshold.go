@@ -1,0 +1,57 @@
+package threshold
+
+import (
+	"math/big"
+	"math/rand"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/herumi/bls-eth-go-binary/bls"
+)
+
+var (
+	curveOrder = new(big.Int)
+)
+
+func init() {
+	bls.Init(bls.BLS12_381)
+	bls.SetETHmode(bls.EthModeDraft07)
+
+	curveOrder, _ = curveOrder.SetString(bls.GetCurveOrder(), 10)
+}
+
+// Create turns the given private key into a threshold key
+func Create(privKeyHex string, count uint64) (*bls.SecretKey, []*bls.SecretKey, error) {
+	sk := &bls.SecretKey{}
+	if err := sk.SetHexString(privKeyHex); err != nil {
+		return nil, nil, err
+	}
+
+	privKeyInt := hexutil.MustDecodeBig("0x" + privKeyHex)
+	curveOrder := new(big.Int)
+	curveOrder.SetString(bls.GetCurveOrder(), 10)
+
+	coefs := []*big.Int{privKeyInt}
+	for i := 0; i < 2; i++ {
+		randVal := new(big.Int)
+		randVal = randVal.Rand(rand.New(rand.NewSource(time.Now().UnixNano())), curveOrder)
+		coefs = append(coefs, randVal)
+	}
+
+	privKeys := []*bls.SecretKey{}
+	for i := uint64(1); i <= count; i++ {
+		prkInt := evalPoly(coefs, i)
+		pkrRaw := hexutil.EncodeBig(prkInt)
+		sk := &bls.SecretKey{}
+		if err := sk.SetHexString(pkrRaw); err != nil {
+			return sk, nil, err
+		}
+		privKeys = append(privKeys, sk)
+	}
+
+	return sk, privKeys, nil
+}
+
+func evalPoly(coeffs []*big.Int, x uint64) *big.Int {
+	// TODO: Implement
+}
