@@ -28,9 +28,6 @@ func Create(privKeyHex string, count uint64) (*bls.SecretKey, []*bls.SecretKey, 
 	}
 
 	privKeyInt := hexutil.MustDecodeBig("0x" + privKeyHex)
-	curveOrder := new(big.Int)
-	curveOrder.SetString(bls.GetCurveOrder(), 10)
-
 	coefs := []*big.Int{privKeyInt}
 	for i := 0; i < 2; i++ {
 		randVal := new(big.Int)
