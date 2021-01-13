@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -25,7 +26,12 @@ var createThresholdCmd = &cobra.Command{
 			Logger.Fatal("failed to get keys count flag value", zap.Error(err))
 		}
 
-		baseKey, privKeys, err := threshold.Create(privKey, keysCount)
+		baseKey := &bls.SecretKey{}
+		if err := baseKey.SetHexString(privKey); err != nil {
+			Logger.Fatal("failed to set hex private key", zap.Error(err))
+		}
+
+		privKeys, err := threshold.Create(privKey, keysCount)
 		if err != nil {
 			Logger.Fatal("failed to turn a private key into a threshold key", zap.Error(err))
 		}

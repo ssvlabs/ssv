@@ -21,12 +21,7 @@ func init() {
 }
 
 // Create turns the given private key into a threshold key
-func Create(privKeyHex string, count uint64) (*bls.SecretKey, []*bls.SecretKey, error) {
-	sk := &bls.SecretKey{}
-	if err := sk.SetHexString(privKeyHex); err != nil {
-		return nil, nil, err
-	}
-
+func Create(privKeyHex string, count uint64) ([]*bls.SecretKey, error) {
 	privKeyInt := hexutil.MustDecodeBig("0x" + privKeyHex)
 	coefs := []*big.Int{privKeyInt}
 	for i := 0; i < 2; i++ {
@@ -41,12 +36,12 @@ func Create(privKeyHex string, count uint64) (*bls.SecretKey, []*bls.SecretKey, 
 		pkrRaw := hexutil.EncodeBig(prkInt)
 		sk := &bls.SecretKey{}
 		if err := sk.SetHexString(pkrRaw); err != nil {
-			return sk, nil, err
+			return nil, err
 		}
 		privKeys = append(privKeys, sk)
 	}
 
-	return sk, privKeys, nil
+	return privKeys, nil
 }
 
 func evalPoly(coeffs []*big.Int, x uint64) *big.Int {
