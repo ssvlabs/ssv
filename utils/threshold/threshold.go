@@ -53,5 +53,18 @@ func Create(privKeyHex string, count uint64) (*bls.SecretKey, []*bls.SecretKey, 
 }
 
 func evalPoly(coeffs []*big.Int, x uint64) *big.Int {
-	// TODO: Implement
+	result := big.NewInt(0)
+	powerOfX := big.NewInt(1)
+	xInt := big.NewInt(int64(x))
+	for i := 0; i < len(coeffs); i++ {
+		val := coeffs[i]
+		val = val.Mul(val, powerOfX)
+		val = val.Mod(val, curveOrder)
+
+		result = result.Add(result, val)
+
+		powerOfX = powerOfX.Mul(powerOfX, xInt)
+		powerOfX = powerOfX.Mod(powerOfX, curveOrder)
+	}
+	return result.Mod(result, curveOrder)
 }
