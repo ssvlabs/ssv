@@ -3,21 +3,17 @@ package ibft.v1alpha;
 
 option go_package = "github.com/bloxapp/ssv/ibft/types";
 
-import "eth/v1alpha1/attestation.proto";
-import "eth/v1alpha1/beacon_block.proto";
-
 enum MsgType {
-  Preprepare = 0;
-  Prepare = 1;
-  CreatePool = 2;
-  CreateOperator = 3;
+  Preprepare    = 0;
+  Prepare       = 1;
+  Commit        = 2;
+  RoundChange   = 3;
+  Decide        = 4;
 }
 
-message iBFTMessage {
-  MsgType type = 10;
-  uint64 beacon_duty_slot = 20; // the lambda variable according to https://arxiv.org/pdf/2002.03613.pdf
-  oneof data {
-      ethereum.eth.v1alpha1.AttestationData attestation_data = 30;
-      ethereum.eth.v1alpha1.BeaconBlock beacon_block = 31;
-  }
+message Message {
+  MsgType type      = 1;
+  uint64 round      = 2;
+  bytes lambda      = 3;
+  bytes input_value = 4;
 }

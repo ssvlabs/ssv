@@ -1,0 +1,14 @@
+syntax = "proto3";
+package ssv_eth2.v1alpha;
+
+option go_package = "github.com/bloxapp/ssv/ibft/implementations/ssv_eth2/types";
+
+import "eth/v1alpha1/attestation.proto";
+import "eth/v1alpha1/beacon_block.proto";
+
+message InputValue {
+  oneof data {
+    ethereum.eth.v1alpha1.AttestationData attestation_data = 1;
+    ethereum.eth.v1alpha1.BeaconBlock beacon_block = 2;
+  }
+}
