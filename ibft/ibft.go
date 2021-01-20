@@ -14,29 +14,51 @@ func Place() {
 }
 
 type iBFTInstance struct {
-	state   *types.State
-	network types.Networker
+	state          *types.State
+	network        types.Networker
+	implementation types.Implementor
+	params         *types.Params
 
 	// messages
 	prePrepareMessages []*types.Message
 	prepareMessages    []*types.Message
 	commitMessages     []*types.Message
+
+	// flags
+	started bool
 }
 
-func Start(network types.Networker, lambda interface{}, inputValue interface{}) *iBFTInstance {
-	ret := &iBFTInstance{
-		state: &types.State{
-			Lambda:        lambda,
-			Round:         0,
-			PreparedRound: 0,
-			PreparedValue: nil,
-			InputValue:    inputValue,
-		},
+func New(network types.Networker, implementation types.Implementor, params *types.Params) *iBFTInstance {
+	return &iBFTInstance{
+		state:              &types.State{},
 		network:            network,
+		implementation:     implementation,
+		params:             params,
+		started:            false,
 		prePrepareMessages: make([]*types.Message, 0),
 		prepareMessages:    make([]*types.Message, 0),
 		commitMessages:     make([]*types.Message, 0),
 	}
+}
 
-	return ret
+func (i *iBFTInstance) Start(lambda interface{}, inputValue interface{}) error {
+	i.state.Lambda = lambda
+	i.state.InputValue = inputValue
+
+	if i.IsLeader() {
+		if err := i.network.Broadcast(i.implementation.NewPrePrepareMsg(i.state)); err != nil {
+			return err
+		}
+	}
+	i.started = true
+	i.roundChangeAfter(i.params.RoundChangeDuration)
+	return nil
+}
+
+func (i *iBFTInstance) IsLeader() bool {
+	return i.implementation.IsLeader(i.state)
+}
+
+func (i *iBFTInstance) roundChangeAfter(duration int64) {
+
 }
