@@ -23,7 +23,7 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 ### Research
 
 - iBTF
-    - [Paper](https://www.google.com/search?q=istanbul+bft&oq=istanbul+bft&aqs=chrome..69i57j0j0i22i30l6.2399j0j7&sourceid=chrome&ie=UTF-8)
+    - [Paper](https://arxiv.org/pdf/2002.03613.pdf)
     - [EIP650](https://github.com/ethereum/EIPs/issues/650)
     - [Liveness issues](https://github.com/ConsenSys/quorum/issues/305) - should have been addressed in the paper
     - [Consensys short description](https://docs.goquorum.consensys.net/en/stable/Concepts/Consensus/IBFT/)
