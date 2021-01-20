@@ -1,6 +1,11 @@
 package types
 
-// Implementor is an interface that bundles together iBFT implementation specific functions which iBFTInstance calls
+// Implementor is an interface that bundles together iBFT implementation specific functions which iBFTInstance calls.
+// All implementation specific details should be encapsulated on the implementation level.
+// For example:
+// 		- input value + verification
+//		- lambda value + verification
+// 		- Signature verification (including key management)
 type Implementor interface {
 	// IsLeader returns true if iBFTInstance should behave as a leader. Specific leader selection logic depends on the implementation
 	IsLeader(state *State) bool
@@ -9,6 +14,6 @@ type Implementor interface {
 	ValidatePrePrepareMsg(state *State, msg *Message) error
 	NewPrepareMsg(state *State) *Message
 	ValidatePrepareMsg(state *State, msg *Message) error
-	NewCommiteMsg(state *State) *Message
+	NewCommitMsg(state *State) *Message
 	ValidateCommitMsg(state *State, msg *Message) error
 }
