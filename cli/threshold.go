@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/base64"
 	"fmt"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -40,7 +41,7 @@ var createThresholdCmd = &cobra.Command{
 		for i, pk := range privKeys {
 			fmt.Println()
 			fmt.Println("Public key", i+1, pk.GetPublicKey().SerializeToHexStr())
-			fmt.Println("Private key", i+1, pk.SerializeToHexStr())
+			fmt.Println("Private key", i+1, base64.StdEncoding.EncodeToString(pk.Serialize()))
 		}
 	},
 }
