@@ -8,13 +8,14 @@
 SSV is a protocol for distribuiting an eth2 validator key between multiple operators governed by a consensus protocol (Istanbul BFT).
 
 ### TODO
-
+[\] Free standing, reference iBFT Go implementation
+[\] SSV specific iBFT implementor
 [ ] Port POC code to Glang\
 [ ] Single standing instance running with Prysm's validator client\
 [ ] Networking and discovery\
 [ ] db, persistance and recovery\
 [ ] Multi network support (being part of multiple SSV groups)\
-[ ] DKG\
+[X] Key sharing\
 [ ] Documentation\
 [ ] Phase 1 changes\
 [ ] Audit
