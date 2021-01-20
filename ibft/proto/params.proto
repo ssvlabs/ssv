@@ -7,4 +7,5 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 message Params{
   int64 round_change_duration = 1 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+  uint64 ibft_committee_size  = 2;
 }
