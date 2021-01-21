@@ -1,9 +1,10 @@
 package types
 
 type State struct {
-	Lambda        interface{}
+	IBFTId        uint64
+	Lambda        []byte
+	InputValue    []byte
 	Round         uint64
 	PreparedRound uint64
-	PreparedValue interface{}
-	InputValue    interface{}
+	PreparedValue []byte
 }

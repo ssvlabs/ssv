@@ -13,7 +13,9 @@ enum MsgType {
 
 message Message {
   MsgType type      = 1;
-  uint64 round      = 2;
-  bytes lambda      = 3;
-  bytes input_value = 4;
+  uint64 ibft_id    = 2;
+  uint64 round      = 3;
+  bytes lambda      = 4;
+  bytes input_value = 5;
+  bytes signature   = 6;
 }

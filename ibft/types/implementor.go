@@ -5,7 +5,6 @@ package types
 // For example:
 // 		- input value + verification
 //		- lambda value + verification
-// 		- Signature verification (including key management)
 type Implementor interface {
 	// IsLeader returns true if iBFTInstance should behave as a leader. Specific leader selection logic depends on the implementation
 	IsLeader(state *State) bool

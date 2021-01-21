@@ -1,16 +1,10 @@
 package ibft
 
 import (
-	"fmt"
-
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
 func (i *iBFTInstance) validatePrePrepare(msg *types.Message) error {
-	// data
-	// leader
-	// signature
-
 	if err := i.implementation.ValidatePrePrepareMsg(i.state, msg); err != nil {
 		return err
 	}
@@ -18,18 +12,19 @@ func (i *iBFTInstance) validatePrePrepare(msg *types.Message) error {
 	return nil
 }
 
-func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) error {
+func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 	if err := i.validatePrePrepare(msg); err != nil {
-		return err
+		i.log.WithError(err).Errorf("pre-prepare message is invalid")
 	}
 
 	// validate round
 	if msg.Round != i.state.Round {
-		return fmt.Errorf("pre-prepare round %d, expected %d", msg.Round, i.state.Round)
+		i.log.Errorf("pre-prepare round %d, expected %d", msg.Round, i.state.Round)
 	}
 
 	// add to pre-prepare messages
 	i.prePrepareMessages = append(i.prePrepareMessages, msg)
+	i.log.Info("received valid pre-prepare message")
 
 	// In case current round is not the first round for the instance, we need to consider previous justifications
 	if msg.Round > 0 {
@@ -37,7 +32,6 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) error {
 	}
 
 	if err := i.network.Broadcast(i.implementation.NewPrepareMsg(i.state)); err != nil {
-		return err
+		i.log.WithError(err).Errorf("could not broadcast prepare message")
 	}
-	return nil
 }
