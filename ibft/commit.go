@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"fmt"
 
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
 func (i *iBFTInstance) validateCommit(msg *types.Message) error {
-	if !bytes.Equal(i.state.PreparedValue, msg.InputValue) {
-		return errors.New("prepared input value different than commit message input value")
+	// Only 1 prepare per peer per round is valid
+	msgs := i.commitMessages.ReadOnlyMessagesByRound(msg.Round)
+	if val, found := msgs[msg.IbftId]; found {
+		if !val.Compare(*msg) {
+			return errors.New(fmt.Sprintf("another (different) commit message for peer %d was received", msg.IbftId))
+		}
 	}
 
 	// TODO - should we test prepared round as well?
@@ -22,15 +27,17 @@ func (i *iBFTInstance) validateCommit(msg *types.Message) error {
 	return nil
 }
 
-func (i *iBFTInstance) commitQuorum(inputValue []byte) bool {
+func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t uint64, n uint64) {
 	// TODO - do we need to test round?
 	cnt := uint64(0)
-	for _, m := range i.prepareMessages {
-		if bytes.Compare(inputValue, m.InputValue) == 0 {
+	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
+	for _, v := range msgs {
+		if bytes.Compare(inputValue, v.InputValue) == 0 {
 			cnt += 1
 		}
 	}
-	return cnt*3 >= i.params.IbftCommitteeSize*2
+	quorum = cnt*3 >= i.params.IbftCommitteeSize*2
+	return quorum, cnt, i.params.IbftCommitteeSize
 }
 
 func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
@@ -46,12 +53,12 @@ func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 	//}
 
 	// add to prepare messages
-	i.commitMessages = append(i.commitMessages, msg)
+	i.commitMessages.AddMessage(*msg)
 	i.log.Info("received valid commit message")
 
 	// check if quorum achieved, act upon it.
-	if i.commitQuorum(i.state.InputValue) {
-		i.log.Infof("concluded iBFT instance %s", hex.EncodeToString(i.state.Lambda))
+	if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
+		i.log.Infof("concluded iBFT instance %s (%d out of %d)", hex.EncodeToString(i.state.Lambda), t, n)
 		i.committed <- true
 	}
 }

@@ -2,14 +2,20 @@ package ibft
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
 func (i *iBFTInstance) validatePrepare(msg *types.Message) error {
-	// data
-	// leader
-	// signature
+	// Only 1 prepare per peer per round is valid
+	msgs := i.prepareMessages.ReadOnlyMessagesByRound(msg.Round)
+	if val, found := msgs[msg.IbftId]; found {
+		if !val.Compare(*msg) {
+			return errors.New(fmt.Sprintf("another (different) prepare message for peer %d was received", msg.IbftId))
+		}
+	}
 
 	if err := i.implementation.ValidatePrepareMsg(i.state, msg); err != nil {
 		return err
@@ -18,18 +24,21 @@ func (i *iBFTInstance) validatePrepare(msg *types.Message) error {
 	return nil
 }
 
-func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) bool {
+func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t uint64, n uint64) {
 	cnt := uint64(0)
-	for _, m := range i.prepareMessages {
-		if m.Round == round && bytes.Compare(inputValue, m.InputValue) == 0 {
+	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
+	for _, v := range msgs {
+		if bytes.Compare(inputValue, v.InputValue) == 0 {
 			cnt += 1
 		}
 	}
-	return cnt*3 >= i.params.IbftCommitteeSize*2
+
+	quorum = cnt*3 >= i.params.IbftCommitteeSize*2
+	return quorum, cnt, i.params.IbftCommitteeSize
 }
 
 func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
-	if err := i.validatePrePrepare(msg); err != nil {
+	if err := i.validatePrepare(msg); err != nil {
 		i.log.WithError(err).Errorf("prepare message is invalid")
 	}
 
@@ -41,16 +50,20 @@ func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 	// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 
 	// add to prepare messages
-	i.prepareMessages = append(i.prepareMessages, msg)
-	i.log.Info("received valid prepare message")
+	i.prepareMessages.AddMessage(*msg)
+	i.log.Infof("received valid prepare message for round %d", msg.Round)
 
 	// check if quorum achieved, act upon it.
-	if i.prepareQuorum(msg.Round, msg.InputValue) {
+	if quorum, t, n := i.prepareQuorum(msg.Round, msg.InputValue); quorum {
+		i.log.Infof("Prepared (%d out of %d)", t, n)
 		// set prepared state
 		i.state.PreparedRound = msg.Round
 		i.state.PreparedValue = msg.InputValue
 
-		if err := i.network.Broadcast(i.implementation.NewCommitMsg(i.state)); err != nil {
+		// send commit msg
+		broadcastMsg := i.implementation.NewCommitMsg(i.state)
+		broadcastMsg.IbftId = i.state.IBFTId
+		if err := i.network.Broadcast(broadcastMsg); err != nil {
 			i.log.WithError(err).Errorf("could not broadcast commit message")
 		}
 	}

@@ -23,9 +23,9 @@ type iBFTInstance struct {
 	log            *logrus.Entry
 
 	// messages
-	prePrepareMessages []*types.Message
-	prepareMessages    []*types.Message
-	commitMessages     []*types.Message
+	prePrepareMessages *types.MessagesContainer
+	prepareMessages    *types.MessagesContainer
+	commitMessages     *types.MessagesContainer
 
 	// flags
 	started     bool
@@ -41,9 +41,9 @@ func New(nodeId uint64, network types.Networker, implementation types.Implemento
 		params:         params,
 		log:            logrus.WithFields(logrus.Fields{"node_id": nodeId}),
 		//
-		prePrepareMessages: make([]*types.Message, 0),
-		prepareMessages:    make([]*types.Message, 0),
-		commitMessages:     make([]*types.Message, 0),
+		prePrepareMessages: types.NewMessagesContainer(),
+		prepareMessages:    types.NewMessagesContainer(),
+		commitMessages:     types.NewMessagesContainer(),
 		//
 		started:     false,
 		committed:   make(chan bool),
@@ -52,11 +52,14 @@ func New(nodeId uint64, network types.Networker, implementation types.Implemento
 }
 
 func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
+	i.initRound(0)
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
 
 	if i.implementation.IsLeader(i.state) {
-		if err := i.network.Broadcast(i.implementation.NewPrePrepareMsg(i.state)); err != nil {
+		msg := i.implementation.NewPrePrepareMsg(i.state)
+		msg.IbftId = i.state.IBFTId
+		if err := i.network.Broadcast(msg); err != nil {
 			return err
 		}
 	}
@@ -102,6 +105,11 @@ func (i *iBFTInstance) StartEventLoop() {
 			}
 		}
 	}()
+}
+
+// initRound prepares the iBFT instance for a fresh round.
+func (i *iBFTInstance) initRound(round uint64) {
+	i.state.Round = round
 }
 
 func (i *iBFTInstance) roundChangeAfter(duration int64) {

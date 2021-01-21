@@ -1,10 +1,19 @@
 package ibft
 
 import (
+	"errors"
+
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
 func (i *iBFTInstance) validatePrePrepare(msg *types.Message) error {
+	// Only 1 pre-prepare per round is valid
+	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(msg.Round); len(msgs) > 0 {
+		if !msgs[0].Compare(*msg) {
+			return errors.New("another (different) pre-prepare message for the round was received")
+		}
+	}
+
 	if err := i.implementation.ValidatePrePrepareMsg(i.state, msg); err != nil {
 		return err
 	}
@@ -23,7 +32,7 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 	}
 
 	// add to pre-prepare messages
-	i.prePrepareMessages = append(i.prePrepareMessages, msg)
+	i.prePrepareMessages.AddMessage(*msg)
 	i.log.Info("received valid pre-prepare message")
 
 	// In case current round is not the first round for the instance, we need to consider previous justifications
@@ -31,7 +40,9 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 		// TODO
 	}
 
-	if err := i.network.Broadcast(i.implementation.NewPrepareMsg(i.state)); err != nil {
+	broadcastMsg := i.implementation.NewPrepareMsg(i.state)
+	broadcastMsg.IbftId = i.state.IBFTId
+	if err := i.network.Broadcast(broadcastMsg); err != nil {
 		i.log.WithError(err).Errorf("could not broadcast prepare message")
 	}
 }
