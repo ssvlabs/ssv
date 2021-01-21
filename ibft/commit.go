@@ -59,6 +59,7 @@ func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 	// check if quorum achieved, act upon it.
 	if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
 		i.log.Infof("concluded iBFT instance %s (%d out of %d)", hex.EncodeToString(i.state.Lambda), t, n)
+		i.stopRoundChangeTimer()
 		i.committed <- true
 	}
 }

@@ -17,15 +17,6 @@ func (c *DayNumberConsensus) IsLeader(_ *types.State) bool {
 	return c.Id == c.Leader
 }
 
-func (c *DayNumberConsensus) NewPrePrepareMsg(state *types.State) *types.Message {
-	return &types.Message{
-		Type:       types.MsgType_Preprepare,
-		Round:      state.Round,
-		Lambda:     state.Lambda,
-		InputValue: state.InputValue,
-	}
-}
-
 func (c *DayNumberConsensus) ValidatePrePrepareMsg(state *types.State, msg *types.Message) error {
 	// validate leader
 	if msg.IbftId != c.Leader {
@@ -44,15 +35,6 @@ func (c *DayNumberConsensus) ValidatePrePrepareMsg(state *types.State, msg *type
 	return nil
 }
 
-func (c *DayNumberConsensus) NewPrepareMsg(state *types.State) *types.Message {
-	return &types.Message{
-		Type:       types.MsgType_Prepare,
-		Round:      state.Round,
-		Lambda:     state.Lambda,
-		InputValue: state.InputValue,
-	}
-}
-
 func (c *DayNumberConsensus) ValidatePrepareMsg(state *types.State, msg *types.Message) error {
 	// validate lambda
 	if bytes.Compare(state.Lambda, msg.Lambda) != 0 {
@@ -66,15 +48,10 @@ func (c *DayNumberConsensus) ValidatePrepareMsg(state *types.State, msg *types.M
 	return nil
 }
 
-func (c *DayNumberConsensus) NewCommitMsg(state *types.State) *types.Message {
-	return &types.Message{
-		Type:       types.MsgType_Commit,
-		Round:      state.Round,
-		Lambda:     state.Lambda,
-		InputValue: state.InputValue,
-	}
+func (c *DayNumberConsensus) ValidateCommitMsg(state *types.State, msg *types.Message) error {
+	return nil
 }
 
-func (c *DayNumberConsensus) ValidateCommitMsg(state *types.State, msg *types.Message) error {
+func (c *DayNumberConsensus) ValidateChangeRoundMsg(state *types.State, msg *types.Message) error {
 	return nil
 }

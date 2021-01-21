@@ -14,8 +14,8 @@ require (
 	github.com/prysmaticlabs/prysm v1.1.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.1
+	github.com/stretchr/testify v1.6.1
 	go.opencensus.io v0.22.5
-	github.com/stretchr/testify v1.4.0
 	go.uber.org/zap v1.16.0
 	google.golang.org/grpc v1.33.1
 )

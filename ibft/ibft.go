@@ -1,6 +1,8 @@
 package ibft
 
 import (
+	"time"
+
 	"github.com/sirupsen/logrus"
 
 	"github.com/bloxapp/ssv/ibft/types"
@@ -16,11 +18,12 @@ func Place() {
 }
 
 type iBFTInstance struct {
-	state          *types.State
-	network        types.Networker
-	implementation types.Implementor
-	params         *types.Params
-	log            *logrus.Entry
+	state            *types.State
+	network          types.Networker
+	implementation   types.Implementor
+	params           *types.Params
+	log              *logrus.Entry
+	roundChangeTimer *time.Timer
 
 	// messages
 	prePrepareMessages *types.MessagesContainer
@@ -57,14 +60,19 @@ func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
 	i.state.InputValue = inputValue
 
 	if i.implementation.IsLeader(i.state) {
-		msg := i.implementation.NewPrePrepareMsg(i.state)
-		msg.IbftId = i.state.IBFTId
+		msg := &types.Message{
+			Type:       types.MsgType_Preprepare,
+			Round:      i.state.Round,
+			Lambda:     i.state.Lambda,
+			InputValue: i.state.InputValue,
+			IbftId:     i.state.IBFTId,
+		}
 		if err := i.network.Broadcast(msg); err != nil {
 			return err
 		}
 	}
 	i.started = true
-	i.roundChangeAfter(i.params.RoundChangeDuration)
+	i.triggerRoundChangeOnTimer()
 	return nil
 }
 
@@ -87,9 +95,8 @@ func (i *iBFTInstance) StartEventLoop() {
 					go i.uponPrepareMessage(msg)
 				case types.MsgType_Commit:
 					go i.uponCommitMessage(msg)
-					//case types.MsgType_RoundChange:
-					//	// TODO
-					//	continue
+				case types.MsgType_RoundChange:
+					go i.uponChangeRoundMessage(msg)
 					//case types.MsgType_Decide:
 					//	// TODO
 					//	continue
@@ -101,7 +108,7 @@ func (i *iBFTInstance) StartEventLoop() {
 				//return
 			// Change round is called when no Quorum was achieved within a time duration
 			case <-i.changeRound:
-				return
+				go i.uponChangeRoundTrigger()
 			}
 		}
 	}()
@@ -112,6 +119,23 @@ func (i *iBFTInstance) initRound(round uint64) {
 	i.state.Round = round
 }
 
-func (i *iBFTInstance) roundChangeAfter(duration int64) {
-	// TODO - use i.changeRound to trigger round change
+func (i *iBFTInstance) triggerRoundChangeOnTimer() {
+	// make sure previous timer is stopped
+	if i.roundChangeTimer != nil {
+		i.roundChangeTimer.Stop()
+		i.roundChangeTimer = nil
+	}
+
+	// stat new timer
+	i.roundChangeTimer = time.NewTimer(time.Duration(i.params.RoundChangeDuration))
+	go func() {
+		<-i.roundChangeTimer.C
+		i.changeRound <- true
+		i.stopRoundChangeTimer()
+	}()
+}
+
+func (i *iBFTInstance) stopRoundChangeTimer() {
+	i.roundChangeTimer.Stop()
+	i.roundChangeTimer = nil
 }

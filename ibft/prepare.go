@@ -61,8 +61,13 @@ func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 		i.state.PreparedValue = msg.InputValue
 
 		// send commit msg
-		broadcastMsg := i.implementation.NewCommitMsg(i.state)
-		broadcastMsg.IbftId = i.state.IBFTId
+		broadcastMsg := &types.Message{
+			Type:       types.MsgType_Commit,
+			Round:      i.state.Round,
+			Lambda:     i.state.Lambda,
+			InputValue: i.state.InputValue,
+			IbftId:     i.state.IBFTId,
+		}
 		if err := i.network.Broadcast(broadcastMsg); err != nil {
 			i.log.WithError(err).Errorf("could not broadcast commit message")
 		}

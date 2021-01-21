@@ -40,8 +40,14 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 		// TODO
 	}
 
-	broadcastMsg := i.implementation.NewPrepareMsg(i.state)
-	broadcastMsg.IbftId = i.state.IBFTId
+	// broadcast prepare msg
+	broadcastMsg := &types.Message{
+		Type:       types.MsgType_Prepare,
+		Round:      i.state.Round,
+		Lambda:     i.state.Lambda,
+		InputValue: i.state.InputValue,
+		IbftId:     i.state.IBFTId,
+	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
 		i.log.WithError(err).Errorf("could not broadcast prepare message")
 	}

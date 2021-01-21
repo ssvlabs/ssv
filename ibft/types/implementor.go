@@ -9,10 +9,8 @@ type Implementor interface {
 	// IsLeader returns true if iBFTInstance should behave as a leader. Specific leader selection logic depends on the implementation
 	IsLeader(state *State) bool
 
-	NewPrePrepareMsg(state *State) *Message
 	ValidatePrePrepareMsg(state *State, msg *Message) error
-	NewPrepareMsg(state *State) *Message
 	ValidatePrepareMsg(state *State, msg *Message) error
-	NewCommitMsg(state *State) *Message
 	ValidateCommitMsg(state *State, msg *Message) error
+	ValidateChangeRoundMsg(state *State, msg *Message) error
 }
