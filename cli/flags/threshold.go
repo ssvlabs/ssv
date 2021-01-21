@@ -8,7 +8,7 @@ import (
 
 // Flag names.
 const (
-	privKeyFlag   = "key"
+	privKeyFlag   = "private-key"
 	keysCountFlag = "count"
 )
 
