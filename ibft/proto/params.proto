@@ -5,6 +5,14 @@ option go_package = "github.com/bloxapp/ssv/ibft/types";
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
+enum RoundState {
+  Preprepare    = 0;
+  Prepare       = 1;
+  Commit        = 2;
+  RoundChange   = 3;
+  Decide        = 4;
+}
+
 message Params{
   int64 round_change_duration = 1 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
   uint64 ibft_committee_size  = 2;

@@ -37,6 +37,13 @@ func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bo
 	return quorum, cnt, i.params.IbftCommitteeSize
 }
 
+/**
+### Algorithm 2 IBFT pseudocode for process pi: normal case operation
+upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
+	pri ← ri
+	pvi ← value
+	broadcast ⟨COMMIT, λi, ri, value⟩
+*/
 func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 	if err := i.validatePrepare(msg); err != nil {
 		i.log.WithError(err).Errorf("prepare message is invalid")
@@ -59,10 +66,11 @@ func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 		// set prepared state
 		i.state.PreparedRound = msg.Round
 		i.state.PreparedValue = msg.InputValue
+		i.state.Stage = types.RoundState_Prepare
 
 		// send commit msg
 		broadcastMsg := &types.Message{
-			Type:       types.MsgType_Commit,
+			Type:       types.RoundState_Commit,
 			Round:      i.state.Round,
 			Lambda:     i.state.Lambda,
 			InputValue: i.state.InputValue,

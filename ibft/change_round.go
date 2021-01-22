@@ -34,7 +34,7 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 		i.log.WithError(err).Errorf("failed to create round change data for round %d", i.state.Round)
 	}
 	broadcastMsg := &types.Message{
-		Type:       types.MsgType_RoundChange,
+		Type:       types.RoundState_RoundChange,
 		Round:      i.state.Round,
 		Lambda:     i.state.Lambda,
 		InputValue: data,

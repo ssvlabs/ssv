@@ -2,17 +2,10 @@ syntax = "proto3";
 package ibft.v1alpha;
 
 option go_package = "github.com/bloxapp/ssv/ibft/types";
-
-enum MsgType {
-  Preprepare    = 0;
-  Prepare       = 1;
-  Commit        = 2;
-  RoundChange   = 3;
-  Decide        = 4;
-}
+import "params.proto";
 
 message Message {
-  MsgType type      = 1;
+  RoundState type      = 1;
   uint64 ibft_id    = 2;
   uint64 round      = 3;
   bytes lambda      = 4;

@@ -21,6 +21,13 @@ func (i *iBFTInstance) validatePrePrepare(msg *types.Message) error {
 	return nil
 }
 
+/**
+### Algorithm 2 IBFT pseudocode for process pi: normal case operation
+upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(λi, round) such that:
+	JustifyPrePrepare(m) do
+		set timer i to running and expire after t(ri)
+		broadcast ⟨PREPARE, λi, ri, value⟩
+*/
 func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 	if err := i.validatePrePrepare(msg); err != nil {
 		i.log.WithError(err).Errorf("pre-prepare message is invalid")
@@ -42,7 +49,7 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 
 	// broadcast prepare msg
 	broadcastMsg := &types.Message{
-		Type:       types.MsgType_Prepare,
+		Type:       types.RoundState_Prepare,
 		Round:      i.state.Round,
 		Lambda:     i.state.Lambda,
 		InputValue: i.state.InputValue,

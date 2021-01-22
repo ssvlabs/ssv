@@ -1,7 +1,10 @@
 package ibft
 
 import (
+	"encoding/hex"
 	"time"
+
+	"github.com/prysmaticlabs/prysm/shared/mathutil"
 
 	"github.com/sirupsen/logrus"
 
@@ -32,7 +35,7 @@ type iBFTInstance struct {
 
 	// flags
 	started     bool
-	committed   chan bool
+	decided     chan bool
 	changeRound chan bool
 }
 
@@ -49,19 +52,34 @@ func New(nodeId uint64, network types.Networker, implementation types.Implemento
 		commitMessages:     types.NewMessagesContainer(),
 		//
 		started:     false,
-		committed:   make(chan bool),
+		decided:     make(chan bool),
 		changeRound: make(chan bool),
 	}
 }
 
+/**
+### Algorithm 1 IBFT pseudocode for process pi: constants, state variables, and ancillary procedures
+ procedure Start(λ, value)
+ 	λi ← λ
+ 	ri ← 1
+ 	pri ← ⊥
+ 	pvi ← ⊥
+ 	inputV aluei ← value
+ 	if leader(hi, ri) = pi then
+ 		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
+ 		set timeri to running and expire after t(ri)
+*/
 func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
-	i.initRound(0)
+	i.log.Infof("Node %d starting iBFT instance %s", i.state.IBFTId, hex.EncodeToString(lambda))
+	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
+	i.state.Stage = types.RoundState_Preprepare
 
 	if i.implementation.IsLeader(i.state) {
+		i.log.Infof("Node %d is leader for round 1", i.state.IBFTId)
 		msg := &types.Message{
-			Type:       types.MsgType_Preprepare,
+			Type:       types.RoundState_Preprepare,
 			Round:      i.state.Round,
 			Lambda:     i.state.Lambda,
 			InputValue: i.state.InputValue,
@@ -76,9 +94,9 @@ func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
 	return nil
 }
 
-// Committed returns a channel which indicates when this instance of iBFT committed an input value.
+// Committed returns a channel which indicates when this instance of iBFT decided an input value.
 func (i *iBFTInstance) Committed() chan bool {
-	return i.committed
+	return i.decided
 }
 
 func (i *iBFTInstance) StartEventLoop() {
@@ -89,21 +107,21 @@ func (i *iBFTInstance) StartEventLoop() {
 			// When a new msg is received, we act upon it to progress in the protocol
 			case msg := <-msgChan:
 				switch msg.Type {
-				case types.MsgType_Preprepare:
+				case types.RoundState_Preprepare:
 					go i.uponPrePrepareMessage(msg)
-				case types.MsgType_Prepare:
+				case types.RoundState_Prepare:
 					go i.uponPrepareMessage(msg)
-				case types.MsgType_Commit:
+				case types.RoundState_Commit:
 					go i.uponCommitMessage(msg)
-				case types.MsgType_RoundChange:
+				case types.RoundState_RoundChange:
 					go i.uponChangeRoundMessage(msg)
 					//case types.MsgType_Decide:
 					//	// TODO
 					//	continue
 				}
-			// When committed is triggered the iBFT instance has concluded and should stop.
-			case <-i.committed:
-				i.log.Info("iBFT instance committed, exiting..")
+			// When decided is triggered the iBFT instance has concluded and should stop.
+			case <-i.decided:
+				i.log.Info("iBFT instance decided, exiting..")
 				//close(msgChan) // TODO - find a safe way to close connection
 				//return
 			// Change round is called when no Quorum was achieved within a time duration
@@ -114,20 +132,20 @@ func (i *iBFTInstance) StartEventLoop() {
 	}()
 }
 
-// initRound prepares the iBFT instance for a fresh round.
-func (i *iBFTInstance) initRound(round uint64) {
-	i.state.Round = round
-}
-
+/**
+"Timer:
+	In addition to the state variables, each correct process pi also maintains a timer represented by timeri,
+	which is used to trigger a round change when the algorithm does not sufficiently progress.
+	The timer can be in one of two states: running or expired.
+	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the state changes to expired."
+*/
 func (i *iBFTInstance) triggerRoundChangeOnTimer() {
 	// make sure previous timer is stopped
-	if i.roundChangeTimer != nil {
-		i.roundChangeTimer.Stop()
-		i.roundChangeTimer = nil
-	}
+	i.stopRoundChangeTimer()
 
 	// stat new timer
-	i.roundChangeTimer = time.NewTimer(time.Duration(i.params.RoundChangeDuration))
+	roundTimeout := uint64(i.params.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
+	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 	go func() {
 		<-i.roundChangeTimer.C
 		i.changeRound <- true
@@ -136,6 +154,8 @@ func (i *iBFTInstance) triggerRoundChangeOnTimer() {
 }
 
 func (i *iBFTInstance) stopRoundChangeTimer() {
-	i.roundChangeTimer.Stop()
-	i.roundChangeTimer = nil
+	if i.roundChangeTimer != nil {
+		i.roundChangeTimer.Stop()
+		i.roundChangeTimer = nil
+	}
 }

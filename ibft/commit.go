@@ -40,6 +40,11 @@ func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum boo
 	return quorum, cnt, i.params.IbftCommitteeSize
 }
 
+/**
+upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ messages do:
+	set timer i to stopped
+	Decide(λi , value, Qcommit)
+*/
 func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 	if err := i.validateCommit(msg); err != nil {
 		i.log.WithError(err).Errorf("commit message is invalid")
@@ -59,7 +64,8 @@ func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 	// check if quorum achieved, act upon it.
 	if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
 		i.log.Infof("concluded iBFT instance %s (%d out of %d)", hex.EncodeToString(i.state.Lambda), t, n)
+		i.state.Stage = types.RoundState_Commit
 		i.stopRoundChangeTimer()
-		i.committed <- true
+		i.decided <- true
 	}
 }

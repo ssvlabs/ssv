@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
+	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/ibft/types"
 )
@@ -41,7 +40,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	net := &LocalNodeNetworker{c: make([]chan *types.Message, 0), l: make([]sync.Mutex, 0)}
 	nodes := make([]*iBFTInstance, 0)
 
-	leader := uint64(10) //types.BasicParams.IbftCommitteeSize - 1
+	leader := types.BasicParams.IbftCommitteeSize - 1
 	for i := uint64(0); i < types.BasicParams.IbftCommitteeSize; i++ {
 		nodes = append(nodes, New(i, net, &day_number_consensus.DayNumberConsensus{Id: i, Leader: leader}, types.BasicParams))
 		nodes[i].StartEventLoop()
