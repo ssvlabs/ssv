@@ -3,6 +3,7 @@ package beacon
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 
@@ -62,4 +63,23 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 	}()
 
 	return dutiesChan, nil
+}
+
+// domainData returns domain data for the given epoch and domain
+func (b *prysmGRPC) domainData(ctx context.Context, epoch uint64, domain []byte) (*ethpb.DomainResponse, error) {
+	req := &ethpb.DomainRequest{
+		Epoch:  epoch,
+		Domain: domain,
+	}
+
+	// TODO: Try to get data from cache
+
+	res, err := b.validatorClient.DomainData(ctx, req)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get domain data")
+	}
+
+	// TODO: Cache data
+
+	return res, nil
 }
