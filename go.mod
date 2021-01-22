@@ -3,12 +3,14 @@ module github.com/bloxapp/ssv
 go 1.15
 
 require (
+	github.com/bloxapp/eth2-key-manager v1.0.4
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.4.3
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/herumi/bls-eth-go-binary v0.0.0-20210102080045-a126987eca2b
+	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
 	github.com/prysmaticlabs/prysm v1.1.0

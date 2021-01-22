@@ -4,12 +4,11 @@ import (
 	"encoding/hex"
 	"time"
 
+	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
-
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 )
 
 func Place() {
@@ -25,8 +24,8 @@ type iBFTInstance struct {
 	network          types.Networker
 	implementation   types.Implementor
 	params           *types.Params
-	log              *logrus.Entry
 	roundChangeTimer *time.Timer
+	log              *zap.Logger
 
 	// messages
 	prePrepareMessages *types.MessagesContainer
@@ -39,18 +38,19 @@ type iBFTInstance struct {
 	changeRound chan bool
 }
 
-func New(nodeId uint64, network types.Networker, implementation types.Implementor, params *types.Params) *iBFTInstance {
+// New is the constructor of iBFTInstance
+func New(logger *zap.Logger, nodeId uint64, network types.Networker, implementation types.Implementor, params *types.Params) *iBFTInstance {
 	return &iBFTInstance{
 		state:          &types.State{IBFTId: nodeId},
 		network:        network,
 		implementation: implementation,
 		params:         params,
-		log:            logrus.WithFields(logrus.Fields{"node_id": nodeId}),
-		//
+		log:            logger.With(zap.Uint64("node_id", nodeId)),
+
 		prePrepareMessages: types.NewMessagesContainer(),
 		prepareMessages:    types.NewMessagesContainer(),
 		commitMessages:     types.NewMessagesContainer(),
-		//
+
 		started:     false,
 		decided:     make(chan bool),
 		changeRound: make(chan bool),
@@ -70,14 +70,14 @@ func New(nodeId uint64, network types.Networker, implementation types.Implemento
  		set timeri to running and expire after t(ri)
 */
 func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
-	i.log.Infof("Node %d starting iBFT instance %s", i.state.IBFTId, hex.EncodeToString(lambda))
+	i.log.Info("Node is starting iBFT instance", zap.String("instance", hex.EncodeToString(lambda)))
 	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
 	i.state.Stage = types.RoundState_Preprepare
 
 	if i.implementation.IsLeader(i.state) {
-		i.log.Infof("Node %d is leader for round 1", i.state.IBFTId)
+		i.log.Info("Node is leader for round 1")
 		msg := &types.Message{
 			Type:       types.RoundState_Preprepare,
 			Round:      i.state.Round,
