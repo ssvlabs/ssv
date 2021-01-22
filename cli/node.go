@@ -51,7 +51,7 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := beacon.New(logger, beaconAddr)
+		beaconClient, err := beacon.NewPrysmGRPC(logger, beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
