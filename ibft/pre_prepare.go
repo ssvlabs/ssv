@@ -3,6 +3,8 @@ package ibft
 import (
 	"errors"
 
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
@@ -30,12 +32,12 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 	if err := i.validatePrePrepare(msg); err != nil {
-		i.log.WithError(err).Errorf("pre-prepare message is invalid")
+		i.log.Error("pre-prepare message is invalid", zap.Error(err))
 	}
 
 	// validate round
 	if msg.Round != i.state.Round {
-		i.log.Errorf("pre-prepare round %d, expected %d", msg.Round, i.state.Round)
+		i.log.Error("got unexpected pre-prepare round", zap.Uint64("expected_round", msg.Round), zap.Uint64("got_round", i.state.Round))
 	}
 
 	// add to pre-prepare messages
@@ -56,6 +58,6 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 		IbftId:     i.state.IBFTId,
 	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
-		i.log.WithError(err).Errorf("could not broadcast prepare message")
+		i.log.Error("could not broadcast prepare message", zap.Error(err))
 	}
 }

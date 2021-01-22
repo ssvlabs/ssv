@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/bloxapp/ssv/ibft/types"
+	"go.uber.org/zap"
 )
 
 func (i *iBFTInstance) validatePrepare(msg *types.Message) error {
@@ -46,23 +47,24 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 */
 func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 	if err := i.validatePrepare(msg); err != nil {
-		i.log.WithError(err).Errorf("prepare message is invalid")
+		i.log.Error("prepare message is invalid", zap.Error(err))
 	}
 
 	// validate round
 	if msg.Round != i.state.Round {
-		i.log.Errorf("prepare round %d, expected %d", msg.Round, i.state.Round)
+		i.log.Error("got unexpected prepare round", zap.Uint64("expected_round", msg.Round), zap.Uint64("got_round", i.state.Round))
 	}
 
 	// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 
 	// add to prepare messages
 	i.prepareMessages.AddMessage(*msg)
-	i.log.Infof("received valid prepare message for round %d", msg.Round)
+	i.log.Info("received valid prepare message for round", zap.Uint64("round", msg.Round))
 
 	// check if quorum achieved, act upon it.
 	if quorum, t, n := i.prepareQuorum(msg.Round, msg.InputValue); quorum {
-		i.log.Infof("Prepared (%d out of %d)", t, n)
+		i.log.Info("Prepared", zap.Uint64("completed_round", t), zap.Uint64("total_rounds", n))
+
 		// set prepared state
 		i.state.PreparedRound = msg.Round
 		i.state.PreparedValue = msg.InputValue
@@ -77,7 +79,7 @@ func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 			IbftId:     i.state.IBFTId,
 		}
 		if err := i.network.Broadcast(broadcastMsg); err != nil {
-			i.log.WithError(err).Errorf("could not broadcast commit message")
+			i.log.Error("could not broadcast commit message", zap.Error(err))
 		}
 	}
 }

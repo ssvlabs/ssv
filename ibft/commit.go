@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
@@ -47,7 +49,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 	if err := i.validateCommit(msg); err != nil {
-		i.log.WithError(err).Errorf("commit message is invalid")
+		i.log.Error("commit message is invalid", zap.Error(err))
 	}
 
 	// validate round
@@ -63,7 +65,11 @@ func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 
 	// check if quorum achieved, act upon it.
 	if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
-		i.log.Infof("concluded iBFT instance %s (%d out of %d)", hex.EncodeToString(i.state.Lambda), t, n)
+		i.log.Info("concluded iBFT instance",
+			zap.Uint64("completed_round", t),
+			zap.Uint64("total_rounds", n),
+			zap.String("lambda", hex.EncodeToString(i.state.Lambda)))
+
 		i.state.Stage = types.RoundState_Commit
 		i.stopRoundChangeTimer()
 		i.decided <- true
