@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
@@ -20,7 +22,7 @@ func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *iBFTInstance) uponChangeRoundTrigger() {
-	i.log.Infof("round %d timeout, changing round", i.state.Round)
+	i.log.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
 
 	// bump round
 	i.state.Round++
@@ -31,7 +33,7 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 	// broadcast round change
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		i.log.WithError(err).Errorf("failed to create round change data for round %d", i.state.Round)
+		i.log.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
 	}
 	broadcastMsg := &types.Message{
 		Type:       types.RoundState_RoundChange,
@@ -41,10 +43,10 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 		IbftId:     i.state.IBFTId,
 	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
-		i.log.WithError(err).Errorf("could not broadcast round change message")
+		i.log.Error("could not broadcast round change message", zap.Error(err))
 	}
 }
 
 func (i *iBFTInstance) uponChangeRoundMessage(msg *types.Message) {
-	i.log.Infof("changing round")
+	i.log.Info("changing round")
 }

@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
+	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
@@ -39,10 +40,11 @@ func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 func TestIBFTInstance_Start(t *testing.T) {
 	net := &LocalNodeNetworker{c: make([]chan *types.Message, 0), l: make([]sync.Mutex, 0)}
 	nodes := make([]*iBFTInstance, 0)
+	logger := zaptest.NewLogger(t)
 
 	leader := types.BasicParams.IbftCommitteeSize - 1
 	for i := uint64(0); i < types.BasicParams.IbftCommitteeSize; i++ {
-		nodes = append(nodes, New(i, net, &day_number_consensus.DayNumberConsensus{Id: i, Leader: leader}, types.BasicParams))
+		nodes = append(nodes, New(logger, i, net, &day_number_consensus.DayNumberConsensus{Id: i, Leader: leader}, types.BasicParams))
 		nodes[i].StartEventLoop()
 	}
 
