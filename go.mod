@@ -13,6 +13,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
+	github.com/prysmaticlabs/go-bitfield v0.0.0-20210107162333-9e9cf77d4921
 	github.com/prysmaticlabs/prysm v1.1.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.1

@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -26,8 +27,8 @@ func (i *iBFTInstance) validatePrepare(msg *types.Message) error {
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t uint64, n uint64) {
-	cnt := uint64(0)
+func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+	cnt := 0
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
 		if bytes.Compare(inputValue, v.InputValue) == 0 {
@@ -35,8 +36,8 @@ func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bo
 		}
 	}
 
-	quorum = cnt*3 >= i.params.IbftCommitteeSize*2
-	return quorum, cnt, i.params.IbftCommitteeSize
+	quorum = cnt*3 >= i.params.CommitteeSize()*2
+	return quorum, cnt, i.params.CommitteeSize()
 }
 
 /**
@@ -64,7 +65,7 @@ func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 
 	// check if quorum achieved, act upon it.
 	if quorum, t, n := i.prepareQuorum(msg.Round, msg.InputValue); quorum {
-		i.log.Info("Prepared", zap.Uint64("completed_round", t), zap.Uint64("total_rounds", n))
+		i.log.Infof("prepared instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
 
 		// set prepared state
 		i.state.PreparedRound = msg.Round
@@ -77,7 +78,7 @@ func (i *iBFTInstance) uponPrepareMessage(msg *types.Message) {
 			Round:      i.state.Round,
 			Lambda:     i.state.Lambda,
 			InputValue: i.state.InputValue,
-			IbftId:     i.state.IBFTId,
+			IbftId:     i.me.IbftId,
 		}
 		if err := i.network.Broadcast(broadcastMsg); err != nil {
 			i.log.Error("could not broadcast commit message", zap.Error(err))

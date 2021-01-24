@@ -2,7 +2,6 @@ package types
 
 type State struct {
 	Stage         RoundState
-	IBFTId        uint64
 	Lambda        []byte
 	InputValue    []byte
 	Round         uint64

@@ -64,7 +64,7 @@ predicate JustifyRoundChange(Qrc) return
 		(pr, pv) = HighestPrepared(Qrc)
 */
 func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
-	cnt := uint64(0)
+	cnt := 0
 	// Find quorum for round change messages with prj = ⊥ ∧ pvj = ⊥
 	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
 		if msg.InputValue == nil {
@@ -72,7 +72,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 		}
 	}
 
-	quorum := cnt*3 >= i.params.IbftCommitteeSize*2
+	quorum := cnt*3 >= i.params.CommitteeSize()*2
 	if quorum { // quorum for prj = ⊥ ∧ pvj = ⊥ found
 		return true, nil
 	} else {
@@ -107,6 +107,7 @@ func (i *iBFTInstance) validateChangeRoundMsg(msg *types.Message) error {
 	if msg.InputValue != nil {
 		//
 	}
+	return nil
 }
 
 func (i *iBFTInstance) uponChangeRoundTrigger() {
@@ -128,7 +129,7 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 		Round:      i.state.Round,
 		Lambda:     i.state.Lambda,
 		InputValue: data,
-		IbftId:     i.state.IBFTId,
+		IbftId:     i.me.IbftId,
 	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
 		i.log.Error("could not broadcast round change message", zap.Error(err))

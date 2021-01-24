@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
 	"github.com/bloxapp/ssv/ibft/types"
@@ -37,18 +38,37 @@ func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 	return nil
 }
 
+func generateNodes(cnt int) []*types.Node {
+	bls.Init(bls.BLS12_381)
+	ret := make([]*types.Node, cnt)
+	for i := 0; i < cnt; i++ {
+		sk := bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		ret[i] = &types.Node{
+			IbftId: uint64(i),
+			Pk:     sk.GetPublicKey().Serialize(),
+		}
+	}
+	return ret
+}
+
 func TestIBFTInstance_Start(t *testing.T) {
 	net := &LocalNodeNetworker{c: make([]chan *types.Message, 0), l: make([]sync.Mutex, 0)}
-	nodes := make([]*iBFTInstance, 0)
-	logger := zaptest.NewLogger(t)
-
-	leader := types.BasicParams.IbftCommitteeSize - 1
-	for i := uint64(0); i < types.BasicParams.IbftCommitteeSize; i++ {
-		nodes = append(nodes, New(logger, i, net, &day_number_consensus.DayNumberConsensus{Id: i, Leader: leader}, types.BasicParams))
-		nodes[i].StartEventLoop()
+	instances := make([]*iBFTInstance, 0)
+	nodes := generateNodes(4)
+	params := &types.InstanceParams{
+		ConsensusParams: types.DefaultConsensusParams(),
+		IbftCommittee:   nodes,
 	}
 
-	for _, i := range nodes {
+	leader := params.CommitteeSize() - 1
+	for i := 0; i < params.CommitteeSize(); i++ {
+		instances = append(instances, New(nodes[i], net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
+		instances[i].StartEventLoop()
+	}
+
+	for _, i := range instances {
 		require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
 	}
 

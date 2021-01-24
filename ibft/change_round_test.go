@@ -19,8 +19,14 @@ func TestRoundChangeJustification(t *testing.T) {
 
 	i := &iBFTInstance{
 		roundChangeMessages: types.NewMessagesContainer(),
-		params: &types.Params{
-			IbftCommitteeSize: 4,
+		params: &types.InstanceParams{
+			ConsensusParams: types.DefaultConsensusParams(),
+			IbftCommittee: []*types.Node{
+				{IbftId: 0},
+				{IbftId: 1},
+				{IbftId: 2},
+				{IbftId: 3},
+			},
 		},
 		state: &types.State{
 			Round:         1,
@@ -112,8 +118,14 @@ func TestHighestPrepared(t *testing.T) {
 
 	i := &iBFTInstance{
 		roundChangeMessages: types.NewMessagesContainer(),
-		params: &types.Params{
-			IbftCommitteeSize: 4,
+		params: &types.InstanceParams{
+			ConsensusParams: types.DefaultConsensusParams(),
+			IbftCommittee: []*types.Node{
+				{IbftId: 0},
+				{IbftId: 1},
+				{IbftId: 2},
+				{IbftId: 3},
+			},
 		},
 	}
 	i.roundChangeMessages.AddMessage(types.Message{

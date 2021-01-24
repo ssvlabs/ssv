@@ -30,17 +30,17 @@ func (i *iBFTInstance) validateCommit(msg *types.Message) error {
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t uint64, n uint64) {
-	// TODO - do we need to test round?
-	cnt := uint64(0)
+func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+	// TODO - do we need to validate round?
+	cnt := 0
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
 		if bytes.Compare(inputValue, v.InputValue) == 0 {
 			cnt += 1
 		}
 	}
-	quorum = cnt*3 >= i.params.IbftCommitteeSize*2
-	return quorum, cnt, i.params.IbftCommitteeSize
+	quorum = cnt*3 >= i.params.CommitteeSize()*2
+	return quorum, cnt, i.params.CommitteeSize()
 }
 
 /**
@@ -66,10 +66,7 @@ func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
 
 	// check if quorum achieved, act upon it.
 	if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
-		i.log.Info("concluded iBFT instance",
-			zap.Uint64("completed_round", t),
-			zap.Uint64("total_rounds", n),
-			zap.String("lambda", hex.EncodeToString(i.state.Lambda)))
+		i.log.Infof("decided iBFT instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
 
 		i.state.Stage = types.RoundState_Commit
 		i.stopRoundChangeTimer()

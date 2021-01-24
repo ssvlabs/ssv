@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
@@ -20,12 +22,13 @@ func Place() {
 }
 
 type iBFTInstance struct {
+	me               *types.Node
 	state            *types.State
 	network          types.Networker
 	implementation   types.Implementor
-	params           *types.Params
+	params           *types.InstanceParams
 	roundChangeTimer *time.Timer
-	log              *zap.Logger
+	log              *logrus.Entry
 
 	// messages
 	prePrepareMessages  *types.MessagesContainer
@@ -40,13 +43,21 @@ type iBFTInstance struct {
 }
 
 // New is the constructor of iBFTInstance
-func New(logger *zap.Logger, nodeId uint64, network types.Networker, implementation types.Implementor, params *types.Params) *iBFTInstance {
+func New(
+	me *types.Node,
+	network types.Networker,
+	implementation types.Implementor,
+	params *types.InstanceParams,
+) *iBFTInstance {
 	return &iBFTInstance{
-		state:          &types.State{IBFTId: nodeId},
+		me:             me,
+		state:          &types.State{},
 		network:        network,
 		implementation: implementation,
 		params:         params,
-		log:            logger.With(zap.Uint64("node_id", nodeId)),
+		log: logrus.WithFields(logrus.Fields{
+			"node_id": me.IbftId,
+		}),
 
 		prePrepareMessages:  types.NewMessagesContainer(),
 		prepareMessages:     types.NewMessagesContainer(),
@@ -85,7 +96,6 @@ func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
 			Round:      i.state.Round,
 			Lambda:     i.state.Lambda,
 			InputValue: i.state.InputValue,
-			IbftId:     i.state.IBFTId,
 		}
 		if err := i.network.Broadcast(msg); err != nil {
 			return err
@@ -147,7 +157,7 @@ func (i *iBFTInstance) triggerRoundChangeOnTimer() {
 	i.stopRoundChangeTimer()
 
 	// stat new timer
-	roundTimeout := uint64(i.params.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
+	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 	go func() {
 		<-i.roundChangeTimer.C

@@ -2,11 +2,12 @@ package types
 
 import "time"
 
-func DefaultParams() *Params {
-	return &Params{
+func DefaultConsensusParams() *ConsensusParams {
+	return &ConsensusParams{
 		RoundChangeDuration: int64(time.Second * 2),
-		IbftCommitteeSize:   3,
 	}
 }
 
-var BasicParams = DefaultParams()
+func (p *InstanceParams) CommitteeSize() int {
+	return len(p.IbftCommittee)
+}

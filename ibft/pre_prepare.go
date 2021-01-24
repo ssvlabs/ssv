@@ -55,7 +55,7 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 		Round:      i.state.Round,
 		Lambda:     i.state.Lambda,
 		InputValue: i.state.InputValue,
-		IbftId:     i.state.IBFTId,
+		IbftId:     i.me.IbftId,
 	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
 		i.log.Error("could not broadcast prepare message", zap.Error(err))
