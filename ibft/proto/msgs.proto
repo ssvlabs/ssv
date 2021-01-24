@@ -2,13 +2,33 @@ syntax = "proto3";
 package ibft.v1alpha;
 
 option go_package = "github.com/bloxapp/ssv/ibft/types";
-import "params.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+enum RoundState {
+  Preprepare    = 0;
+  Prepare       = 1;
+  Commit        = 2;
+  ChangeRound   = 3;
+  Decide        = 4;
+}
 
 message Message {
-  RoundState type      = 1;
-  uint64 ibft_id    = 2;
-  uint64 round      = 3;
-  bytes lambda      = 4;
-  bytes input_value = 5;
-  bytes signature   = 6;
+  RoundState type   = 1;
+  uint64 round      = 2;
+  bytes lambda      = 3;
+  bytes value       = 4;
+}
+
+message SignedMessage{
+  Message message = 1 [(gogoproto.nullable) = false];
+  bytes signature = 2;
+  uint64 ibft_id  = 3;
+}
+
+message ChangeRoundData{
+  uint64 prepared_round       = 1;
+  bytes prepared_value        = 2 [(gogoproto.nullable) = false];
+  Message justification_msg   = 3 [(gogoproto.nullable) = false];
+  bytes justification_sig     = 4 [(gogoproto.nullable) = false];
+  repeated uint64 signed_ids  = 5;
 }

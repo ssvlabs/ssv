@@ -9,23 +9,26 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func inputDataToBytes(input *roundChangeData) []byte {
+func inputDataToBytes(input *types.ChangeRoundData) []byte {
 	ret, _ := json.Marshal(input)
 	return ret
 }
 
 func TestRoundChangeJustification(t *testing.T) {
-	inputValue := []byte("input value")
+	inputValue := inputDataToBytes(&types.ChangeRoundData{
+		PreparedRound: 1,
+		PreparedValue: []byte("hello"),
+	})
 
 	i := &iBFTInstance{
 		roundChangeMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
-			IbftCommittee: []*types.Node{
-				{IbftId: 0},
-				{IbftId: 1},
-				{IbftId: 2},
-				{IbftId: 3},
+			IbftCommittee: map[uint64]*types.Node{
+				0: {IbftId: 0},
+				1: {IbftId: 1},
+				2: {IbftId: 2},
+				3: {IbftId: 3},
 			},
 		},
 		state: &types.State{
@@ -40,26 +43,32 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.EqualError(t, err, "could not justify round change, did not find highest prepared")
 	require.False(t, res)
 
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:       types.RoundState_RoundChange,
-		IbftId:     1,
-		Round:      2,
-		Lambda:     []byte("lambda"),
-		InputValue: nil,
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  2,
+			Lambda: []byte("lambda"),
+			Value:  nil,
+		},
+		IbftId: 1,
 	})
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:       types.RoundState_RoundChange,
-		IbftId:     2,
-		Round:      2,
-		Lambda:     []byte("lambda"),
-		InputValue: nil,
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  2,
+			Lambda: []byte("lambda"),
+			Value:  nil,
+		},
+		IbftId: 2,
 	})
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:       types.RoundState_RoundChange,
-		IbftId:     3,
-		Round:      2,
-		Lambda:     []byte("lambda"),
-		InputValue: nil,
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  2,
+			Lambda: []byte("lambda"),
+			Value:  nil,
+		},
+		IbftId: 3,
 	})
 
 	// test no previous prepared round with round change quorum (no justification)
@@ -68,35 +77,32 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.True(t, res)
 
 	i.roundChangeMessages = types.NewMessagesContainer()
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:   types.RoundState_RoundChange,
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  1,
+			Lambda: []byte("lambda"),
+			Value:  inputValue,
+		},
 		IbftId: 1,
-		Round:  2,
-		Lambda: []byte("lambda"),
-		InputValue: inputDataToBytes(&roundChangeData{
-			PreparedRound: 1,
-			PreparedValue: inputValue,
-		}),
 	})
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:   types.RoundState_RoundChange,
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  2,
+			Lambda: []byte("lambda"),
+			Value:  inputValue,
+		},
 		IbftId: 2,
-		Round:  2,
-		Lambda: []byte("lambda"),
-		InputValue: inputDataToBytes(&roundChangeData{
-			PreparedRound: 1,
-			PreparedValue: inputValue,
-		}),
 	})
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:   types.RoundState_RoundChange,
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  2,
+			Lambda: []byte("lambda"),
+			Value:  inputValue,
+		},
 		IbftId: 3,
-		Round:  2,
-		Lambda: []byte("lambda"),
-		InputValue: inputDataToBytes(&roundChangeData{
-			PreparedRound: 1,
-			PreparedValue: inputValue,
-		}),
 	})
 
 	// test no previous prepared round with round change quorum (with justification)
@@ -105,7 +111,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.False(t, res)
 
 	i.state.PreparedRound = 1
-	i.state.PreparedValue = inputValue
+	i.state.PreparedValue = []byte("hello")
 
 	// test previously prepared round with round change quorum (with justification)
 	res, err = i.justifyRoundChange(2)
@@ -120,31 +126,37 @@ func TestHighestPrepared(t *testing.T) {
 		roundChangeMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
-			IbftCommittee: []*types.Node{
-				{IbftId: 0},
-				{IbftId: 1},
-				{IbftId: 2},
-				{IbftId: 3},
+			IbftCommittee: map[uint64]*types.Node{
+				0: {IbftId: 0},
+				1: {IbftId: 1},
+				2: {IbftId: 2},
+				3: {IbftId: 3},
 			},
 		},
 	}
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:   types.RoundState_RoundChange,
-		Round:  3,
-		Lambda: []byte("lambda"),
-		InputValue: inputDataToBytes(&roundChangeData{
-			PreparedRound: 1,
-			PreparedValue: inputValue,
-		}),
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  3,
+			Lambda: []byte("lambda"),
+			Value: inputDataToBytes(&types.ChangeRoundData{
+				PreparedRound: 1,
+				PreparedValue: inputValue,
+			}),
+		},
+		IbftId: 1,
 	})
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:   types.RoundState_RoundChange,
-		Round:  3,
-		Lambda: []byte("lambda"),
-		InputValue: inputDataToBytes(&roundChangeData{
-			PreparedRound: 2,
-			PreparedValue: append(inputValue, []byte("highest")...),
-		}),
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  3,
+			Lambda: []byte("lambda"),
+			Value: inputDataToBytes(&types.ChangeRoundData{
+				PreparedRound: 2,
+				PreparedValue: append(inputValue, []byte("highest")...),
+			}),
+		},
+		IbftId: 2,
 	})
 
 	// test one higher than other
@@ -154,14 +166,17 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 
 	// test 2 equals
-	i.roundChangeMessages.AddMessage(types.Message{
-		Type:   types.RoundState_RoundChange,
-		Round:  3,
-		Lambda: []byte("lambda"),
-		InputValue: inputDataToBytes(&roundChangeData{
-			PreparedRound: 2,
-			PreparedValue: append(inputValue, []byte("highest")...),
-		}),
+	i.roundChangeMessages.AddMessage(types.SignedMessage{
+		Message: &types.Message{
+			Type:   types.RoundState_ChangeRound,
+			Round:  3,
+			Lambda: []byte("lambda"),
+			Value: inputDataToBytes(&types.ChangeRoundData{
+				PreparedRound: 2,
+				PreparedValue: append(inputValue, []byte("highest")...),
+			}),
+		},
+		IbftId: 2,
 	})
 	res, err = i.highestPrepared(3)
 	require.NoError(t, err)

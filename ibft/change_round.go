@@ -10,13 +10,15 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-type roundChangeData struct {
-	PreparedRound uint64
-	PreparedValue []byte
-}
+//type roundChangeData struct {
+//	PreparedRound        uint64
+//	PreparedValue        []byte
+//	justificationMessage *types.Message
+//	justificationSig     []byte
+//}
 
 func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
-	data := &roundChangeData{
+	data := &types.ChangeRoundData{
 		PreparedRound: i.state.PreparedRound,
 		PreparedValue: i.state.PreparedValue,
 	}
@@ -33,13 +35,13 @@ func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
 			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
-func (i *iBFTInstance) highestPrepared(round uint64) (changeData *roundChangeData, err error) {
+func (i *iBFTInstance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
 	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
-		if msg.InputValue == nil {
+		if msg.Message.Value == nil {
 			continue
 		}
-		candidateChangeData := &roundChangeData{}
-		err = json.Unmarshal(msg.InputValue, candidateChangeData)
+		candidateChangeData := &types.ChangeRoundData{}
+		err = json.Unmarshal(msg.Message.Value, candidateChangeData)
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +69,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 	cnt := 0
 	// Find quorum for round change messages with prj = ⊥ ∧ pvj = ⊥
 	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
-		if msg.InputValue == nil {
+		if msg.Message.Value == nil {
 			cnt++
 		}
 	}
@@ -91,7 +93,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *iBFTInstance) validateRoundChange(msg *types.Message) error {
+func (i *iBFTInstance) validateRoundChange(msg *types.SignedMessage) error {
 	// TODO - round change with prepared_round/ prepared_value should also carry justifications
 	// TODO - verify justification sigs
 
@@ -103,9 +105,40 @@ func (i *iBFTInstance) validateRoundChange(msg *types.Message) error {
 }
 
 func (i *iBFTInstance) validateChangeRoundMsg(msg *types.Message) error {
-	// InputValue in a change round msg stores the justification data which needs to be validated
-	if msg.InputValue != nil {
-		//
+	// msg.value holds the justification value in a change round message
+	if msg.Value != nil {
+		if msg.Type != types.RoundState_ChangeRound {
+			return errors.New("msg not a change round message")
+		}
+		if msg.Value == nil {
+			return errors.New("change round data is nil")
+		}
+
+		data := &types.ChangeRoundData{}
+		if err := json.Unmarshal(msg.Value, data); err != nil {
+			return err
+		}
+		if data.PreparedRound != data.JustificationMsg.Round {
+			return errors.New("change round prepared round not equal to justification msg round")
+		}
+		if !bytes.Equal(data.PreparedValue, data.JustificationMsg.Value) {
+			return errors.New("change round prepared value not equal to justification msg value")
+		}
+
+		// validate signature
+		pks, err := i.params.PubKeysById(data.SignedIds)
+		if err != nil {
+			return err
+		}
+		aggregated := types.PubKeys(pks).Aggregate()
+		res, err := data.VerifySig(aggregated)
+		if err != nil {
+			return err
+		}
+		if !res {
+			return errors.New("change round justification signature doesn't verify")
+		}
+
 	}
 	return nil
 }
@@ -125,17 +158,16 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 		i.log.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
 	}
 	broadcastMsg := &types.Message{
-		Type:       types.RoundState_RoundChange,
-		Round:      i.state.Round,
-		Lambda:     i.state.Lambda,
-		InputValue: data,
-		IbftId:     i.me.IbftId,
+		Type:   types.RoundState_ChangeRound,
+		Round:  i.state.Round,
+		Lambda: i.state.Lambda,
+		Value:  data,
 	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
 		i.log.Error("could not broadcast round change message", zap.Error(err))
 	}
 }
 
-func (i *iBFTInstance) uponChangeRoundMessage(msg *types.Message) {
+func (i *iBFTInstance) uponChangeRoundMessage(msg *types.SignedMessage) {
 	i.log.Info("changing round")
 }

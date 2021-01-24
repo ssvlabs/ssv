@@ -11,11 +11,11 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validateCommit(msg *types.Message) error {
+func (i *iBFTInstance) validateCommit(msg *types.SignedMessage) error {
 	// Only 1 prepare per peer per round is valid
-	msgs := i.commitMessages.ReadOnlyMessagesByRound(msg.Round)
+	msgs := i.commitMessages.ReadOnlyMessagesByRound(msg.Message.Round)
 	if val, found := msgs[msg.IbftId]; found {
-		if !val.Compare(*msg) {
+		if !val.Message.Compare(*msg.Message) {
 			return errors.New(fmt.Sprintf("another (different) commit message for peer %d was received", msg.IbftId))
 		}
 	}
@@ -35,7 +35,7 @@ func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum boo
 	cnt := 0
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
-		if bytes.Compare(inputValue, v.InputValue) == 0 {
+		if bytes.Compare(inputValue, v.Message.Value) == 0 {
 			cnt += 1
 		}
 	}
@@ -48,7 +48,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *iBFTInstance) uponCommitMessage(msg *types.Message) {
+func (i *iBFTInstance) uponCommitMessage(msg *types.SignedMessage) {
 	if err := i.validateCommit(msg); err != nil {
 		i.log.Error("commit message is invalid", zap.Error(err))
 	}

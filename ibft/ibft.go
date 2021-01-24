@@ -92,10 +92,10 @@ func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
 	if i.implementation.IsLeader(i.state) {
 		i.log.Info("Node is leader for round 1")
 		msg := &types.Message{
-			Type:       types.RoundState_Preprepare,
-			Round:      i.state.Round,
-			Lambda:     i.state.Lambda,
-			InputValue: i.state.InputValue,
+			Type:   types.RoundState_Preprepare,
+			Round:  i.state.Round,
+			Lambda: i.state.Lambda,
+			Value:  i.state.InputValue,
 		}
 		if err := i.network.Broadcast(msg); err != nil {
 			return err
@@ -119,14 +119,14 @@ func (i *iBFTInstance) StartEventLoop() {
 			// When a new msg is received, we act upon it to progress in the protocol
 			case msg := <-msgChan:
 				// TODO - check iBFT instance (lambda)
-				switch msg.Type {
+				switch msg.Message.Type {
 				case types.RoundState_Preprepare:
 					go i.uponPrePrepareMessage(msg)
 				case types.RoundState_Prepare:
 					go i.uponPrepareMessage(msg)
 				case types.RoundState_Commit:
 					go i.uponCommitMessage(msg)
-				case types.RoundState_RoundChange:
+				case types.RoundState_ChangeRound:
 					go i.uponChangeRoundMessage(msg)
 					//case types.MsgType_Decide:
 					//	// TODO

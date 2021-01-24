@@ -14,12 +14,12 @@ import (
 )
 
 type LocalNodeNetworker struct {
-	c []chan *types.Message
+	c []chan *types.SignedMessage
 	l []sync.Mutex
 }
 
-func (n *LocalNodeNetworker) ReceivedMsgChan() chan *types.Message {
-	c := make(chan *types.Message)
+func (n *LocalNodeNetworker) ReceivedMsgChan() chan *types.SignedMessage {
+	c := make(chan *types.SignedMessage)
 	l := sync.Mutex{}
 	n.c = append(n.c, c)
 	n.l = append(n.l, l)
@@ -30,7 +30,11 @@ func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 	go func() {
 		for i, c := range n.c {
 			n.l[i].Lock()
-			c <- msg
+			c <- &types.SignedMessage{ // TODO - broadcast only signed messages
+				Message:   msg,
+				Signature: nil,
+				IbftId:    0,
+			}
 			n.l[i].Unlock()
 		}
 	}()
@@ -38,14 +42,14 @@ func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 	return nil
 }
 
-func generateNodes(cnt int) []*types.Node {
+func generateNodes(cnt int) map[uint64]*types.Node {
 	bls.Init(bls.BLS12_381)
-	ret := make([]*types.Node, cnt)
+	ret := make(map[uint64]*types.Node)
 	for i := 0; i < cnt; i++ {
 		sk := bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		ret[i] = &types.Node{
+		ret[uint64(i)] = &types.Node{
 			IbftId: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
@@ -54,7 +58,7 @@ func generateNodes(cnt int) []*types.Node {
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
-	net := &LocalNodeNetworker{c: make([]chan *types.Message, 0), l: make([]sync.Mutex, 0)}
+	net := &LocalNodeNetworker{c: make([]chan *types.SignedMessage, 0), l: make([]sync.Mutex, 0)}
 	instances := make([]*iBFTInstance, 0)
 	nodes := generateNodes(4)
 	params := &types.InstanceParams{
@@ -64,7 +68,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 
 	leader := params.CommitteeSize() - 1
 	for i := 0; i < params.CommitteeSize(); i++ {
-		instances = append(instances, New(nodes[i], net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
+		instances = append(instances, New(nodes[uint64(i)], net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
 		instances[i].StartEventLoop()
 	}
 

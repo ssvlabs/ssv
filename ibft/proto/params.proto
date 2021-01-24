@@ -5,14 +5,6 @@ option go_package = "github.com/bloxapp/ssv/ibft/types";
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-enum RoundState {
-  Preprepare    = 0;
-  Prepare       = 1;
-  Commit        = 2;
-  RoundChange   = 3;
-  Decide        = 4;
-}
-
 message ConsensusParams{
   int64 round_change_duration     = 1 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
 }
@@ -24,5 +16,5 @@ message Node{
 
 message InstanceParams{
     ConsensusParams consensus_params = 1;
-    repeated Node ibft_committee  = 2;
+    map<uint64, Node> ibft_committee  = 2;
 }

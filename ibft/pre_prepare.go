@@ -8,10 +8,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validatePrePrepare(msg *types.Message) error {
+func (i *iBFTInstance) validatePrePrepare(msg *types.SignedMessage) error {
 	// Only 1 pre-prepare per round is valid
-	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(msg.Round); len(msgs) > 0 {
-		if !msgs[0].Compare(*msg) {
+	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(msg.Message.Round); len(msgs) > 0 {
+		if !msgs[0].Message.Compare(*msg.Message) {
 			return errors.New("another (different) pre-prepare message for the round was received")
 		}
 	}
@@ -30,14 +30,14 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
+func (i *iBFTInstance) uponPrePrepareMessage(msg *types.SignedMessage) {
 	if err := i.validatePrePrepare(msg); err != nil {
 		i.log.Error("pre-prepare message is invalid", zap.Error(err))
 	}
 
 	// validate round
-	if msg.Round != i.state.Round {
-		i.log.Error("got unexpected pre-prepare round", zap.Uint64("expected_round", msg.Round), zap.Uint64("got_round", i.state.Round))
+	if msg.Message.Round != i.state.Round {
+		i.log.Error("got unexpected pre-prepare round", zap.Uint64("expected_round", msg.Message.Round), zap.Uint64("got_round", i.state.Round))
 	}
 
 	// add to pre-prepare messages
@@ -45,17 +45,16 @@ func (i *iBFTInstance) uponPrePrepareMessage(msg *types.Message) {
 	i.log.Info("received valid pre-prepare message")
 
 	// In case current round is not the first round for the instance, we need to consider previous justifications
-	if msg.Round > 0 {
+	if msg.Message.Round > 0 {
 		// TODO
 	}
 
 	// broadcast prepare msg
 	broadcastMsg := &types.Message{
-		Type:       types.RoundState_Prepare,
-		Round:      i.state.Round,
-		Lambda:     i.state.Lambda,
-		InputValue: i.state.InputValue,
-		IbftId:     i.me.IbftId,
+		Type:   types.RoundState_Prepare,
+		Round:  i.state.Round,
+		Lambda: i.state.Lambda,
+		Value:  i.state.InputValue,
 	}
 	if err := i.network.Broadcast(broadcastMsg); err != nil {
 		i.log.Error("could not broadcast prepare message", zap.Error(err))
