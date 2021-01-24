@@ -9,3 +9,7 @@ type State struct {
 	PreparedRound uint64
 	PreparedValue []byte
 }
+
+func (s *State) PreviouslyPrepared() bool {
+	return s.PreparedRound != 0 && s.PreparedValue != nil
+}

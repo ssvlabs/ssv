@@ -28,9 +28,10 @@ type iBFTInstance struct {
 	log              *zap.Logger
 
 	// messages
-	prePrepareMessages *types.MessagesContainer
-	prepareMessages    *types.MessagesContainer
-	commitMessages     *types.MessagesContainer
+	prePrepareMessages  *types.MessagesContainer
+	prepareMessages     *types.MessagesContainer
+	commitMessages      *types.MessagesContainer
+	roundChangeMessages *types.MessagesContainer
 
 	// flags
 	started     bool
@@ -47,9 +48,10 @@ func New(logger *zap.Logger, nodeId uint64, network types.Networker, implementat
 		params:         params,
 		log:            logger.With(zap.Uint64("node_id", nodeId)),
 
-		prePrepareMessages: types.NewMessagesContainer(),
-		prepareMessages:    types.NewMessagesContainer(),
-		commitMessages:     types.NewMessagesContainer(),
+		prePrepareMessages:  types.NewMessagesContainer(),
+		prepareMessages:     types.NewMessagesContainer(),
+		commitMessages:      types.NewMessagesContainer(),
+		roundChangeMessages: types.NewMessagesContainer(),
 
 		started:     false,
 		decided:     make(chan bool),
@@ -106,6 +108,7 @@ func (i *iBFTInstance) StartEventLoop() {
 			select {
 			// When a new msg is received, we act upon it to progress in the protocol
 			case msg := <-msgChan:
+				// TODO - check iBFT instance (lambda)
 				switch msg.Type {
 				case types.RoundState_Preprepare:
 					go i.uponPrePrepareMessage(msg)

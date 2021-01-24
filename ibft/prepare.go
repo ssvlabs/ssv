@@ -25,6 +25,7 @@ func (i *iBFTInstance) validatePrepare(msg *types.Message) error {
 	return nil
 }
 
+// TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t uint64, n uint64) {
 	cnt := uint64(0)
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
