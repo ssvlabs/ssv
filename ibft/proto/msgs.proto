@@ -21,7 +21,7 @@ message Message {
 
 message SignedMessage{
   Message message = 1 [(gogoproto.nullable) = false];
-  bytes signature = 2;
+  bytes signature = 2 [(gogoproto.nullable) = false];
   uint64 ibft_id  = 3;
 }
 

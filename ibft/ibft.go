@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -115,7 +116,7 @@ func (i *iBFTInstance) Committed() chan bool {
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
-	id := string(i.me.IbftId)
+	id := fmt.Sprint(i.me.IbftId)
 	i.network.SetMessagePipeline(id, types.RoundState_Preprepare, []types.PipelineFunc{
 		MsgTypeCheck(types.RoundState_Preprepare),
 		i.ValidateLambda(),

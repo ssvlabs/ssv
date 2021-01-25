@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
@@ -48,6 +49,10 @@ func (msg *Message) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
 
 // VerifySig returns true if the justification signed msg verifies against the public key, false if otherwise
 func (msg *SignedMessage) VerifySig(pk *bls.PublicKey) (bool, error) {
+	if msg.Signature == nil || len(msg.Signature) == 0 {
+		return false, errors.New("message signature is invalid")
+	}
+
 	root, err := msg.Message.SigningRoot()
 	if err != nil {
 		return false, err

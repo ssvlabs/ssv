@@ -21,7 +21,7 @@ func bytesTochangeRoundData(input []byte) *types.ChangeRoundData {
 	return ret
 }
 
-func TestChangeRoundMessage(t *testing.T) {
+func TestValidateChangeRoundMessage(t *testing.T) {
 	sks, nodes := generateNodes(4)
 	i := &iBFTInstance{
 		params: &types.InstanceParams{
@@ -38,11 +38,13 @@ func TestChangeRoundMessage(t *testing.T) {
 	tests := []struct {
 		name                string
 		msg                 *types.Message
+		signerId            uint64
 		justificationSigIds []uint64
 		expectedError       string
 	}{
 		{
-			name: "valid",
+			name:     "valid",
+			signerId: 1,
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
 				Round:  1,
@@ -52,7 +54,8 @@ func TestChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name: "valid",
+			name:     "valid",
+			signerId: 1,
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
 				Round:  2,
@@ -62,7 +65,8 @@ func TestChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name: "valid",
+			name:     "valid",
+			signerId: 1,
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
 				Round:  3,
@@ -72,7 +76,8 @@ func TestChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name: "valid",
+			name:     "valid",
+			signerId: 1,
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
 				Round:  3,
@@ -83,6 +88,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "valid justification",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -105,6 +111,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification msg type",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -127,6 +134,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification round",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -149,6 +157,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid prepared and  justification round",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -171,6 +180,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification instance",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -193,6 +203,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "valid justification",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -215,6 +226,7 @@ func TestChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification sig",
+			signerId:            1,
 			justificationSigIds: []uint64{0, 1},
 			msg: &types.Message{
 				Type:   types.RoundState_ChangeRound,
@@ -256,7 +268,14 @@ func TestChangeRoundMessage(t *testing.T) {
 				test.msg.Value = changeRoundDataToBytes(data)
 			}
 
-			err := i.validateChangeRoundMsg()(test.msg)
+			sig, err := test.msg.Sign(sks[test.signerId])
+			require.NoError(t, err)
+
+			err = i.validateChangeRoundMsg()(&types.SignedMessage{
+				Message:   test.msg,
+				Signature: sig.Serialize(),
+				IbftId:    test.signerId,
+			})
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {

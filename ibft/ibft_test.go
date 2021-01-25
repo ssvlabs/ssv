@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	"github.com/stretchr/testify/require"
@@ -15,7 +17,7 @@ import (
 
 type LocalNodeNetworker struct {
 	pipelines map[types.RoundState]map[string][]types.PipelineFunc
-	l         map[string]sync.Mutex
+	l         map[string]*sync.Mutex
 }
 
 func (n *LocalNodeNetworker) SetMessagePipeline(id string, roundState types.RoundState, pipeline []types.PipelineFunc) {
@@ -23,7 +25,7 @@ func (n *LocalNodeNetworker) SetMessagePipeline(id string, roundState types.Roun
 		n.pipelines[roundState] = make(map[string][]types.PipelineFunc)
 	}
 	n.pipelines[roundState][id] = pipeline
-	n.l[id] = sync.Mutex{}
+	n.l[id] = &sync.Mutex{}
 }
 
 func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
@@ -36,7 +38,11 @@ func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 				IbftId:    0,
 			}
 			for _, item := range pipelineForType {
-				item(signed)
+				err := item(signed)
+				if err != nil {
+					logrus.WithError(err).Errorf("failed to execute pipeline for node id %s", id)
+					break
+				}
 			}
 			n.l[id].Unlock()
 		}
@@ -63,7 +69,7 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) 
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
-	net := &LocalNodeNetworker{c: make([]chan *types.SignedMessage, 0), l: make([]sync.Mutex, 0)}
+	net := &LocalNodeNetworker{pipelines: make(map[types.RoundState]map[string][]types.PipelineFunc), l: make(map[string]*sync.Mutex)}
 	instances := make([]*iBFTInstance, 0)
 	_, nodes := generateNodes(4)
 	params := &types.InstanceParams{
