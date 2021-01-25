@@ -14,28 +14,31 @@ import (
 )
 
 type LocalNodeNetworker struct {
-	c []chan *types.SignedMessage
-	l []sync.Mutex
+	pipelines map[types.RoundState]map[string][]types.PipelineFunc
+	l         map[string]sync.Mutex
 }
 
-func (n *LocalNodeNetworker) ReceivedMsgChan() chan *types.SignedMessage {
-	c := make(chan *types.SignedMessage)
-	l := sync.Mutex{}
-	n.c = append(n.c, c)
-	n.l = append(n.l, l)
-	return c
+func (n *LocalNodeNetworker) SetMessagePipeline(id string, roundState types.RoundState, pipeline []types.PipelineFunc) {
+	if n.pipelines[roundState] == nil {
+		n.pipelines[roundState] = make(map[string][]types.PipelineFunc)
+	}
+	n.pipelines[roundState][id] = pipeline
+	n.l[id] = sync.Mutex{}
 }
 
 func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 	go func() {
-		for i, c := range n.c {
-			n.l[i].Lock()
-			c <- &types.SignedMessage{ // TODO - broadcast only signed messages
+		for id, pipelineForType := range n.pipelines[msg.Type] {
+			n.l[id].Lock()
+			signed := &types.SignedMessage{ // TODO - broadcast only signed messages
 				Message:   msg,
 				Signature: nil,
 				IbftId:    0,
 			}
-			n.l[i].Unlock()
+			for _, item := range pipelineForType {
+				item(signed)
+			}
+			n.l[id].Unlock()
 		}
 	}()
 
@@ -71,7 +74,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	leader := params.CommitteeSize() - 1
 	for i := 0; i < params.CommitteeSize(); i++ {
 		instances = append(instances, New(nodes[uint64(i)], net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
-		instances[i].StartEventLoop()
+		instances[i].StartEventLoopAndMessagePipeline()
 	}
 
 	for _, i := range instances {

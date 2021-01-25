@@ -256,7 +256,7 @@ func TestChangeRoundMessage(t *testing.T) {
 				test.msg.Value = changeRoundDataToBytes(data)
 			}
 
-			err := i.validateChangeRoundMsg(test.msg)
+			err := i.validateChangeRoundMsg()(test.msg)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {

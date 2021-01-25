@@ -6,27 +6,27 @@ import (
 	"errors"
 	"fmt"
 
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validateCommit(msg *types.SignedMessage) error {
-	// Only 1 prepare per peer per round is valid
-	msgs := i.commitMessages.ReadOnlyMessagesByRound(msg.Message.Round)
-	if val, found := msgs[msg.IbftId]; found {
-		if !val.Message.Compare(*msg.Message) {
-			return errors.New(fmt.Sprintf("another (different) commit message for peer %d was received", msg.IbftId))
+func (i *iBFTInstance) validateCommitMsg() types.PipelineFunc {
+	return func(signedMessage *types.SignedMessage) error {
+		// Only 1 prepare per peer per round is valid
+		msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
+		if val, found := msgs[signedMessage.IbftId]; found {
+			if !val.Message.Compare(*signedMessage.Message) {
+				return errors.New(fmt.Sprintf("another (different) commit message for peer %d was received", signedMessage.IbftId))
+			}
 		}
+
+		// TODO - should we test prepared round as well?
+
+		if err := i.implementation.ValidateCommitMsg(i.state, signedMessage); err != nil {
+			return err
+		}
+
+		return nil
 	}
-
-	// TODO - should we test prepared round as well?
-
-	if err := i.implementation.ValidateCommitMsg(i.state, msg); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
@@ -48,28 +48,20 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *iBFTInstance) uponCommitMessage(msg *types.SignedMessage) {
-	if err := i.validateCommit(msg); err != nil {
-		i.log.Error("commit message is invalid", zap.Error(err))
-	}
+func (i *iBFTInstance) uponCommitMsg() types.PipelineFunc {
+	return func(signedMessage *types.SignedMessage) error {
+		// add to prepare messages
+		i.commitMessages.AddMessage(*signedMessage)
+		i.log.Info("received valid commit message")
 
-	// validate round
-	// TODO - should we test round?
-	//if msg.Round != i.state.Round {
-	//	i.log.Errorf("commit round %d, expected %d", msg.Round, i.state.Round)
-	//	return fmt.Errorf("commit round %d, expected %d", msg.Round, i.state.Round)
-	//}
+		// check if quorum achieved, act upon it.
+		if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
+			i.log.Infof("decided iBFT instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
 
-	// add to prepare messages
-	i.commitMessages.AddMessage(*msg)
-	i.log.Info("received valid commit message")
-
-	// check if quorum achieved, act upon it.
-	if quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue); quorum {
-		i.log.Infof("decided iBFT instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
-
-		i.state.Stage = types.RoundState_Commit
-		i.stopRoundChangeTimer()
-		i.decided <- true
+			i.state.Stage = types.RoundState_Commit
+			i.stopRoundChangeTimer()
+			i.decided <- true
+		}
+		return nil
 	}
 }

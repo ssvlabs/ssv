@@ -17,11 +17,11 @@ func (p *InstanceParams) CommitteeSize() int {
 }
 
 // PubKeysById returns the public keys with the associated ids
-func (p *InstanceParams) PubKeysById(ids []uint64) ([]bls.PublicKey, error) {
-	ret := make([]bls.PublicKey, 0)
+func (p *InstanceParams) PubKeysById(ids []uint64) ([]*bls.PublicKey, error) {
+	ret := make([]*bls.PublicKey, 0)
 	for _, id := range ids {
 		if val, ok := p.IbftCommittee[id]; ok {
-			pk := bls.PublicKey{}
+			pk := &bls.PublicKey{}
 			if err := pk.Deserialize(val.Pk); err != nil {
 				return ret, err
 			}

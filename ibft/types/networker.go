@@ -1,10 +1,12 @@
 package types
 
-type Networker interface {
-	// ReceivedMsgChan is a channel that forwards new propagated messages to a subscriber
-	// message signature verification should be done in the specific networker implementation
-	ReceivedMsgChan() chan *SignedMessage
+type PipelineFunc func(signedMessage *SignedMessage) error
 
+type Networker interface {
 	// Broadcast propagates a signed message to all peers
 	Broadcast(msg *Message) error
+
+	// SetMessagePipeline sets a pipeline for a message to go through before it's sent to the msg channel.
+	// Message validation and processing should happen in the pipeline
+	SetMessagePipeline(id string, roundState RoundState, pipeline []PipelineFunc)
 }

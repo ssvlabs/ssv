@@ -10,20 +10,22 @@ import (
 	"go.uber.org/zap"
 )
 
-func (i *iBFTInstance) validatePrepare(msg *types.SignedMessage) error {
-	// Only 1 prepare per peer per round is valid
-	msgs := i.prepareMessages.ReadOnlyMessagesByRound(msg.Message.Round)
-	if val, found := msgs[msg.IbftId]; found {
-		if !val.Message.Compare(*msg.Message) {
-			return errors.New(fmt.Sprintf("another (different) prepare message for peer %d was received", msg.IbftId))
+func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
+	return func(signedMessage *types.SignedMessage) error {
+		// Only 1 prepare per node per round is valid
+		msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
+		if val, found := msgs[signedMessage.IbftId]; found {
+			if !val.Message.Compare(*signedMessage.Message) {
+				return errors.New(fmt.Sprintf("another (different) prepare message for peer %d was received", signedMessage.IbftId))
+			}
 		}
-	}
 
-	if err := i.implementation.ValidatePrepareMsg(i.state, msg); err != nil {
-		return err
-	}
+		if err := i.implementation.ValidatePrepareMsg(i.state, signedMessage); err != nil {
+			return err
+		}
 
-	return nil
+		return nil
+	}
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
@@ -47,40 +49,36 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrepareMessage(msg *types.SignedMessage) {
-	if err := i.validatePrepare(msg); err != nil {
-		i.log.Error("prepare message is invalid", zap.Error(err))
-	}
+func (i *iBFTInstance) uponPrepareMsg() types.PipelineFunc {
+	return func(signedMessage *types.SignedMessage) error {
+		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 
-	// validate round
-	if msg.Message.Round != i.state.Round {
-		i.log.Error("got unexpected prepare round", zap.Uint64("expected_round", msg.Message.Round), zap.Uint64("got_round", i.state.Round))
-	}
+		// add to prepare messages
+		i.prepareMessages.AddMessage(*signedMessage)
+		i.log.Info("received valid prepare message for round", zap.Uint64("round", signedMessage.Message.Round))
 
-	// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
+		// check if quorum achieved, act upon it.
+		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
+			i.log.Infof("prepared instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
 
-	// add to prepare messages
-	i.prepareMessages.AddMessage(*msg)
-	i.log.Info("received valid prepare message for round", zap.Uint64("round", msg.Message.Round))
+			// set prepared state
+			i.state.PreparedRound = signedMessage.Message.Round
+			i.state.PreparedValue = signedMessage.Message.Value
+			i.state.Stage = types.RoundState_Prepare
 
-	// check if quorum achieved, act upon it.
-	if quorum, t, n := i.prepareQuorum(msg.Message.Round, msg.Message.Value); quorum {
-		i.log.Infof("prepared instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
-
-		// set prepared state
-		i.state.PreparedRound = msg.Message.Round
-		i.state.PreparedValue = msg.Message.Value
-		i.state.Stage = types.RoundState_Prepare
-
-		// send commit msg
-		broadcastMsg := &types.Message{
-			Type:   types.RoundState_Commit,
-			Round:  i.state.Round,
-			Lambda: i.state.Lambda,
-			Value:  i.state.InputValue,
+			// send commit msg
+			broadcastMsg := &types.Message{
+				Type:   types.RoundState_Commit,
+				Round:  i.state.Round,
+				Lambda: i.state.Lambda,
+				Value:  i.state.InputValue,
+			}
+			if err := i.network.Broadcast(broadcastMsg); err != nil {
+				i.log.Error("could not broadcast commit message", zap.Error(err))
+				return err
+			}
+			return nil
 		}
-		if err := i.network.Broadcast(broadcastMsg); err != nil {
-			i.log.Error("could not broadcast commit message", zap.Error(err))
-		}
+		return nil
 	}
 }

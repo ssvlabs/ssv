@@ -111,27 +111,47 @@ func (i *iBFTInstance) Committed() chan bool {
 	return i.decided
 }
 
-func (i *iBFTInstance) StartEventLoop() {
-	msgChan := i.network.ReceivedMsgChan()
+// StartEventLoopAndMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
+// each message type has it's own pipeline of checks and actions, called by the networker implementation.
+// Internal chan monitor if the instance reached decision or if a round change is required.
+func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
+	id := string(i.me.IbftId)
+	i.network.SetMessagePipeline(id, types.RoundState_Preprepare, []types.PipelineFunc{
+		MsgTypeCheck(types.RoundState_Preprepare),
+		i.ValidateLambda(),
+		i.ValidateRound(),
+		i.AuthMsg(),
+		i.validatePrePrepareMsg(),
+		i.uponPrePrepareMsg(),
+	})
+	i.network.SetMessagePipeline(id, types.RoundState_Prepare, []types.PipelineFunc{
+		MsgTypeCheck(types.RoundState_Prepare),
+		i.ValidateLambda(),
+		i.ValidateRound(),
+		i.AuthMsg(),
+		i.validatePrepareMsg(),
+		i.uponPrepareMsg(),
+	})
+	i.network.SetMessagePipeline(id, types.RoundState_Commit, []types.PipelineFunc{
+		MsgTypeCheck(types.RoundState_Commit),
+		i.ValidateLambda(),
+		i.ValidateRound(),
+		i.AuthMsg(),
+		i.validateCommitMsg(),
+		i.uponCommitMsg(),
+	})
+	i.network.SetMessagePipeline(id, types.RoundState_ChangeRound, []types.PipelineFunc{
+		MsgTypeCheck(types.RoundState_ChangeRound),
+		i.ValidateLambda(),
+		i.ValidateRound(), // TODO - should we validate round?
+		i.AuthMsg(),
+		i.validateChangeRoundMsg(),
+		i.uponChangeRoundMsg(),
+	})
+
 	go func() {
 		for {
 			select {
-			// When a new msg is received, we act upon it to progress in the protocol
-			case msg := <-msgChan:
-				// TODO - check iBFT instance (lambda)
-				switch msg.Message.Type {
-				case types.RoundState_Preprepare:
-					go i.uponPrePrepareMessage(msg)
-				case types.RoundState_Prepare:
-					go i.uponPrepareMessage(msg)
-				case types.RoundState_Commit:
-					go i.uponCommitMessage(msg)
-				case types.RoundState_ChangeRound:
-					go i.uponChangeRoundMessage(msg)
-					//case types.MsgType_Decide:
-					//	// TODO
-					//	continue
-				}
 			// When decided is triggered the iBFT instance has concluded and should stop.
 			case <-i.decided:
 				i.log.Info("iBFT instance decided, exiting..")
