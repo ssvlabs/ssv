@@ -37,6 +37,14 @@ func (msg *Message) SigningRoot() ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
+func (msg *Message) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
+	root, err := msg.SigningRoot()
+	if err != nil {
+		return nil, err
+	}
+	return sk.SignByte(root), nil
+}
+
 // VerifySig returns true if the justification signed msg verifies against the public key, false if otherwise
 func (d *ChangeRoundData) VerifySig(pk bls.PublicKey) (bool, error) {
 	root, err := d.JustificationMsg.SigningRoot()

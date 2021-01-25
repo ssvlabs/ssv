@@ -107,19 +107,21 @@ func (i *iBFTInstance) validateRoundChange(msg *types.SignedMessage) error {
 func (i *iBFTInstance) validateChangeRoundMsg(msg *types.Message) error {
 	// msg.value holds the justification value in a change round message
 	if msg.Value != nil {
-		if msg.Type != types.RoundState_ChangeRound {
-			return errors.New("msg not a change round message")
-		}
-		if msg.Value == nil {
-			return errors.New("change round data is nil")
-		}
-
 		data := &types.ChangeRoundData{}
 		if err := json.Unmarshal(msg.Value, data); err != nil {
 			return err
 		}
+		if data.JustificationMsg.Type != types.RoundState_Prepare {
+			return errors.New("change round justification msg type not Prepare")
+		}
+		if msg.Round <= data.JustificationMsg.Round {
+			return errors.New("change round justification round lower or equal to message round")
+		}
 		if data.PreparedRound != data.JustificationMsg.Round {
 			return errors.New("change round prepared round not equal to justification msg round")
+		}
+		if !bytes.Equal(msg.Lambda, data.JustificationMsg.Lambda) {
+			return errors.New("change round justification msg lambda not equal to msg lambda")
 		}
 		if !bytes.Equal(data.PreparedValue, data.JustificationMsg.Value) {
 			return errors.New("change round prepared value not equal to justification msg value")

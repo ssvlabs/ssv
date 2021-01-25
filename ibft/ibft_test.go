@@ -42,25 +42,27 @@ func (n *LocalNodeNetworker) Broadcast(msg *types.Message) error {
 	return nil
 }
 
-func generateNodes(cnt int) map[uint64]*types.Node {
+func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) {
 	bls.Init(bls.BLS12_381)
-	ret := make(map[uint64]*types.Node)
+	nodes := make(map[uint64]*types.Node)
+	sks := make(map[uint64]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
-		sk := bls.SecretKey{}
+		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		ret[uint64(i)] = &types.Node{
+		nodes[uint64(i)] = &types.Node{
 			IbftId: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
+		sks[uint64(i)] = sk
 	}
-	return ret
+	return sks, nodes
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
 	net := &LocalNodeNetworker{c: make([]chan *types.SignedMessage, 0), l: make([]sync.Mutex, 0)}
 	instances := make([]*iBFTInstance, 0)
-	nodes := generateNodes(4)
+	_, nodes := generateNodes(4)
 	params := &types.InstanceParams{
 		ConsensusParams: types.DefaultConsensusParams(),
 		IbftCommittee:   nodes,

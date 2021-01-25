@@ -4,18 +4,270 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func inputDataToBytes(input *types.ChangeRoundData) []byte {
+func changeRoundDataToBytes(input *types.ChangeRoundData) []byte {
 	ret, _ := json.Marshal(input)
 	return ret
 }
+func bytesTochangeRoundData(input []byte) *types.ChangeRoundData {
+	ret := &types.ChangeRoundData{}
+	json.Unmarshal(input, ret)
+	return ret
+}
+
+func TestChangeRoundMessage(t *testing.T) {
+	sks, nodes := generateNodes(4)
+	i := &iBFTInstance{
+		params: &types.InstanceParams{
+			ConsensusParams: types.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		state: &types.State{
+			Round:         1,
+			PreparedRound: 0,
+			PreparedValue: nil,
+		},
+	}
+
+	tests := []struct {
+		name                string
+		msg                 *types.Message
+		justificationSigIds []uint64
+		expectedError       string
+	}{
+		{
+			name: "valid",
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  1,
+				Lambda: []byte("lambda"),
+				Value:  nil,
+			},
+			expectedError: "",
+		},
+		{
+			name: "valid",
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  2,
+				Lambda: []byte("lambda"),
+				Value:  nil,
+			},
+			expectedError: "",
+		},
+		{
+			name: "valid",
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambda"),
+				Value:  nil,
+			},
+			expectedError: "",
+		},
+		{
+			name: "valid",
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value:  nil,
+			},
+			expectedError: "",
+		},
+		{
+			name:                "valid justification",
+			justificationSigIds: []uint64{0, 1, 2},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Prepare,
+						Round:  2,
+						Lambda: []byte("lambdas"),
+						Value:  []byte("value"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "",
+		},
+		{
+			name:                "invalid justification msg type",
+			justificationSigIds: []uint64{0, 1, 2},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Preprepare,
+						Round:  2,
+						Lambda: []byte("lambdas"),
+						Value:  []byte("value"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "change round justification msg type not Prepare",
+		},
+		{
+			name:                "invalid justification round",
+			justificationSigIds: []uint64{0, 1, 2},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Prepare,
+						Round:  3,
+						Lambda: []byte("lambdas"),
+						Value:  []byte("value"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "change round justification round lower or equal to message round",
+		},
+		{
+			name:                "invalid prepared and  justification round",
+			justificationSigIds: []uint64{0, 1, 2},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Prepare,
+						Round:  1,
+						Lambda: []byte("lambdas"),
+						Value:  []byte("value"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "change round prepared round not equal to justification msg round",
+		},
+		{
+			name:                "invalid justification instance",
+			justificationSigIds: []uint64{0, 1, 2},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Prepare,
+						Round:  2,
+						Lambda: []byte("lambda"),
+						Value:  []byte("value"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "change round justification msg lambda not equal to msg lambda",
+		},
+		{
+			name:                "valid justification",
+			justificationSigIds: []uint64{0, 1, 2},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Prepare,
+						Round:  2,
+						Lambda: []byte("lambdas"),
+						Value:  []byte("values"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "change round prepared value not equal to justification msg value",
+		},
+		{
+			name:                "invalid justification sig",
+			justificationSigIds: []uint64{0, 1},
+			msg: &types.Message{
+				Type:   types.RoundState_ChangeRound,
+				Round:  3,
+				Lambda: []byte("lambdas"),
+				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+					PreparedRound: 2,
+					PreparedValue: []byte("value"),
+					JustificationMsg: &types.Message{
+						Type:   types.RoundState_Prepare,
+						Round:  2,
+						Lambda: []byte("lambdas"),
+						Value:  []byte("value"),
+					},
+					JustificationSig: nil,
+					SignedIds:        []uint64{0, 1, 2},
+				}),
+			},
+			expectedError: "change round justification signature doesn't verify",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// sign if needed
+			if test.msg.Value != nil {
+				var sig *bls.Sign
+				data := bytesTochangeRoundData(test.msg.Value)
+				for _, id := range test.justificationSigIds {
+					s, err := data.JustificationMsg.Sign(sks[id])
+					require.NoError(t, err)
+					if sig == nil {
+						sig = s
+					} else {
+						sig.Add(s)
+					}
+				}
+				data.JustificationSig = sig.Serialize()
+				test.msg.Value = changeRoundDataToBytes(data)
+			}
+
+			err := i.validateChangeRoundMsg(test.msg)
+			if len(test.expectedError) > 0 {
+				require.EqualError(t, err, test.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
 
 func TestRoundChangeJustification(t *testing.T) {
-	inputValue := inputDataToBytes(&types.ChangeRoundData{
+	inputValue := changeRoundDataToBytes(&types.ChangeRoundData{
 		PreparedRound: 1,
 		PreparedValue: []byte("hello"),
 	})
@@ -139,7 +391,7 @@ func TestHighestPrepared(t *testing.T) {
 			Type:   types.RoundState_ChangeRound,
 			Round:  3,
 			Lambda: []byte("lambda"),
-			Value: inputDataToBytes(&types.ChangeRoundData{
+			Value: changeRoundDataToBytes(&types.ChangeRoundData{
 				PreparedRound: 1,
 				PreparedValue: inputValue,
 			}),
@@ -151,7 +403,7 @@ func TestHighestPrepared(t *testing.T) {
 			Type:   types.RoundState_ChangeRound,
 			Round:  3,
 			Lambda: []byte("lambda"),
-			Value: inputDataToBytes(&types.ChangeRoundData{
+			Value: changeRoundDataToBytes(&types.ChangeRoundData{
 				PreparedRound: 2,
 				PreparedValue: append(inputValue, []byte("highest")...),
 			}),
@@ -171,7 +423,7 @@ func TestHighestPrepared(t *testing.T) {
 			Type:   types.RoundState_ChangeRound,
 			Round:  3,
 			Lambda: []byte("lambda"),
-			Value: inputDataToBytes(&types.ChangeRoundData{
+			Value: changeRoundDataToBytes(&types.ChangeRoundData{
 				PreparedRound: 2,
 				PreparedValue: append(inputValue, []byte("highest")...),
 			}),
