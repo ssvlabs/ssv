@@ -157,9 +157,12 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 		Lambda: i.state.Lambda,
 		Value:  data,
 	}
-	if err := i.network.Broadcast(broadcastMsg); err != nil {
+	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 		i.log.Error("could not broadcast round change message", zap.Error(err))
 	}
+
+	// mark stage
+	i.state.Stage = types.RoundState_ChangeRound
 }
 
 func (i *iBFTInstance) uponChangeRoundMsg() types.PipelineFunc {

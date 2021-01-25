@@ -73,7 +73,7 @@ func (i *iBFTInstance) uponPrepareMsg() types.PipelineFunc {
 				Lambda: i.state.Lambda,
 				Value:  i.state.InputValue,
 			}
-			if err := i.network.Broadcast(broadcastMsg); err != nil {
+			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.log.Error("could not broadcast commit message", zap.Error(err))
 				return err
 			}

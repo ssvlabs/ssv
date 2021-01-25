@@ -5,11 +5,12 @@ option go_package = "github.com/bloxapp/ssv/ibft/types";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 enum RoundState {
-  Preprepare    = 0;
-  Prepare       = 1;
-  Commit        = 2;
-  ChangeRound   = 3;
-  Decide        = 4;
+  NotStarted    = 0;
+  PrePrepare    = 1;
+  Prepare       = 2;
+  Commit        = 3;
+  ChangeRound   = 4;
+  Decide        = 5;
 }
 
 message Message {

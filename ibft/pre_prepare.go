@@ -45,6 +45,9 @@ func (i *iBFTInstance) uponPrePrepareMsg() types.PipelineFunc {
 			// TODO
 		}
 
+		// mark state
+		i.state.Stage = types.RoundState_PrePrepare
+
 		// broadcast prepare msg
 		broadcastMsg := &types.Message{
 			Type:   types.RoundState_Prepare,
@@ -52,7 +55,7 @@ func (i *iBFTInstance) uponPrePrepareMsg() types.PipelineFunc {
 			Lambda: i.state.Lambda,
 			Value:  i.state.InputValue,
 		}
-		if err := i.network.Broadcast(broadcastMsg); err != nil {
+		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.log.Error("could not broadcast prepare message", zap.Error(err))
 			return err
 		}

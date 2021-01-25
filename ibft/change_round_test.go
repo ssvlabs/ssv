@@ -121,7 +121,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
 					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Preprepare,
+						Type:   types.RoundState_PrePrepare,
 						Round:  2,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("value"),

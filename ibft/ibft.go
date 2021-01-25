@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/sirupsen/logrus"
 
 	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -38,7 +40,6 @@ type iBFTInstance struct {
 	roundChangeMessages *types.MessagesContainer
 
 	// flags
-	started     bool
 	decided     chan bool
 	changeRound chan bool
 }
@@ -50,9 +51,15 @@ func New(
 	implementation types.Implementor,
 	params *types.InstanceParams,
 ) *iBFTInstance {
+	// make sure secret key is not nil, otherwise the node can't operate
+	if me.Sk == nil || len(me.Sk) == 0 {
+		logrus.Fatalf("can't create iBFTInstance with invalid secret key")
+		return nil
+	}
+
 	return &iBFTInstance{
 		me:             me,
-		state:          &types.State{},
+		state:          &types.State{Stage: types.RoundState_NotStarted},
 		network:        network,
 		implementation: implementation,
 		params:         params,
@@ -65,7 +72,6 @@ func New(
 		commitMessages:      types.NewMessagesContainer(),
 		roundChangeMessages: types.NewMessagesContainer(),
 
-		started:     false,
 		decided:     make(chan bool),
 		changeRound: make(chan bool),
 	}
@@ -88,21 +94,20 @@ func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
 	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
-	i.state.Stage = types.RoundState_Preprepare
 
 	if i.implementation.IsLeader(i.state) {
 		i.log.Info("Node is leader for round 1")
+		i.state.Stage = types.RoundState_PrePrepare
 		msg := &types.Message{
-			Type:   types.RoundState_Preprepare,
+			Type:   types.RoundState_PrePrepare,
 			Round:  i.state.Round,
 			Lambda: i.state.Lambda,
 			Value:  i.state.InputValue,
 		}
-		if err := i.network.Broadcast(msg); err != nil {
+		if err := i.SignAndBroadcast(msg); err != nil {
 			return err
 		}
 	}
-	i.started = true
 	i.triggerRoundChangeOnTimer()
 	return nil
 }
@@ -117,8 +122,8 @@ func (i *iBFTInstance) Committed() chan bool {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 	id := fmt.Sprint(i.me.IbftId)
-	i.network.SetMessagePipeline(id, types.RoundState_Preprepare, []types.PipelineFunc{
-		MsgTypeCheck(types.RoundState_Preprepare),
+	i.network.SetMessagePipeline(id, types.RoundState_PrePrepare, []types.PipelineFunc{
+		MsgTypeCheck(types.RoundState_PrePrepare),
 		i.ValidateLambda(),
 		i.ValidateRound(),
 		i.AuthMsg(),
@@ -164,6 +169,25 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 			}
 		}
 	}()
+}
+
+func (i *iBFTInstance) SignAndBroadcast(msg *types.Message) error {
+	sk := &bls.SecretKey{}
+	if err := sk.Deserialize(i.me.Sk); err != nil { // TODO - cache somewhere
+		return err
+	}
+
+	sig, err := msg.Sign(sk)
+	if err != nil {
+		return err
+	}
+
+	signedMessage := &types.SignedMessage{
+		Message:   msg,
+		Signature: sig.Serialize(),
+		IbftId:    i.me.IbftId,
+	}
+	return i.network.Broadcast(signedMessage)
 }
 
 /**
