@@ -9,7 +9,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validatePrePrepareMsg() networker.PipelineFunc {
+func (i *Instance) validatePrePrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - validate proposer correct
 
@@ -35,7 +35,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrePrepareMsg() networker.PipelineFunc {
+func (i *Instance) uponPrePrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(*signedMessage)

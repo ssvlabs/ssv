@@ -18,7 +18,7 @@ import (
 //	justificationSig     []byte
 //}
 
-func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
+func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	data := &types.ChangeRoundData{
 		PreparedRound: i.state.PreparedRound,
 		PreparedValue: i.state.PreparedValue,
@@ -36,7 +36,7 @@ func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
 			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
-func (i *iBFTInstance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
+func (i *Instance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
 	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
 		if msg.Message.Value == nil {
 			continue
@@ -66,7 +66,7 @@ predicate JustifyRoundChange(Qrc) return
 	∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
 		(pr, pv) = HighestPrepared(Qrc)
 */
-func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
+func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 	cnt := 0
 	// Find quorum for round change messages with prj = ⊥ ∧ pvj = ⊥
 	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
@@ -94,7 +94,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *iBFTInstance) validateChangeRoundMsg() networker.PipelineFunc {
+func (i *Instance) validateChangeRoundMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
@@ -138,7 +138,7 @@ func (i *iBFTInstance) validateChangeRoundMsg() networker.PipelineFunc {
 	}
 }
 
-func (i *iBFTInstance) uponChangeRoundTrigger() {
+func (i *Instance) uponChangeRoundTrigger() {
 	i.logger.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
 
 	// bump round
@@ -166,7 +166,7 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 	i.state.Stage = types.RoundState_ChangeRound
 }
 
-func (i *iBFTInstance) uponChangeRoundMsg() networker.PipelineFunc {
+func (i *Instance) uponChangeRoundMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		i.logger.Info("changing round")
 		return nil

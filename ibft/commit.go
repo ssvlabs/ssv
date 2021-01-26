@@ -12,7 +12,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validateCommitMsg() networker.PipelineFunc {
+func (i *Instance) validateCommitMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
 		msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
@@ -33,7 +33,7 @@ func (i *iBFTInstance) validateCommitMsg() networker.PipelineFunc {
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	// TODO - do we need to validate round?
 	cnt := 0
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
@@ -51,7 +51,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *iBFTInstance) uponCommitMsg() networker.PipelineFunc {
+func (i *Instance) uponCommitMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// add to prepare messages
 		i.commitMessages.AddMessage(*signedMessage)
