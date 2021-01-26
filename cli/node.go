@@ -3,12 +3,6 @@ package cli
 import (
 	"encoding/hex"
 
-	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
-
-	"github.com/bloxapp/ssv/ibft/networker/p2p"
-
-	"github.com/bloxapp/ssv/ibft/types"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -17,6 +11,9 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
+	"github.com/bloxapp/ssv/ibft/networker/p2p"
+	"github.com/bloxapp/ssv/ibft/types"
 	"github.com/bloxapp/ssv/node"
 )
 
