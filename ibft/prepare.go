@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -28,18 +27,28 @@ func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
 	}
 }
 
+func (i *iBFTInstance) batchedPrepareMsgs(round uint64) map[string][]types.SignedMessage {
+	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
+	ret := make(map[string][]types.SignedMessage)
+	for _, msg := range msgs {
+		valueHex := hex.EncodeToString(msg.Message.Value)
+		if ret[valueHex] == nil {
+			ret[valueHex] = make([]types.SignedMessage, 0)
+		}
+		ret[valueHex] = append(ret[valueHex], msg)
+	}
+	return ret
+}
+
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
-	cnt := 0
-	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
-	for _, v := range msgs {
-		if bytes.Compare(inputValue, v.Message.Value) == 0 {
-			cnt += 1
-		}
+	batched := i.batchedPrepareMsgs(round)
+	if msgs, ok := batched[hex.EncodeToString(inputValue)]; ok {
+		quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
+		return quorum, len(msgs), i.params.CommitteeSize()
 	}
 
-	quorum = cnt*3 >= i.params.CommitteeSize()*2
-	return quorum, cnt, i.params.CommitteeSize()
+	return false, 0, i.params.CommitteeSize()
 }
 
 /**

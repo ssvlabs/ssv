@@ -15,10 +15,88 @@ func changeRoundDataToBytes(input *types.ChangeRoundData) []byte {
 	ret, _ := json.Marshal(input)
 	return ret
 }
-func bytesTochangeRoundData(input []byte) *types.ChangeRoundData {
+func bytesToChangeRoundData(input []byte) *types.ChangeRoundData {
 	ret := &types.ChangeRoundData{}
 	json.Unmarshal(input, ret)
 	return ret
+}
+
+func signMsg(id uint64, sk *bls.SecretKey, msg *types.Message) types.SignedMessage {
+	sig, _ := msg.Sign(sk)
+	return types.SignedMessage{
+		Message:   msg,
+		Signature: sig.Serialize(),
+		IbftId:    id,
+	}
+}
+
+func TestRoundChangeInputValue(t *testing.T) {
+	sks, nodes := generateNodes(4)
+	i := &iBFTInstance{
+		prepareMessages: types.NewMessagesContainer(),
+		params: &types.InstanceParams{
+			ConsensusParams: types.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		state: &types.State{
+			Round:         1,
+			PreparedRound: 0,
+			PreparedValue: nil,
+		},
+	}
+
+	// no prepared round
+	byts, err := i.roundChangeInputValue()
+	require.NoError(t, err)
+	require.Nil(t, byts)
+
+	// add votes
+	i.prepareMessages.AddMessage(signMsg(1, sks[1], &types.Message{
+		Type:   types.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("lambda"),
+		Value:  []byte("value"),
+	}))
+	i.prepareMessages.AddMessage(signMsg(2, sks[2], &types.Message{
+		Type:   types.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("lambda"),
+		Value:  []byte("value"),
+	}))
+
+	// with some prepare votes but not enough
+	byts, err = i.roundChangeInputValue()
+	require.NoError(t, err)
+	require.Nil(t, byts)
+
+	// add more votes
+	i.prepareMessages.AddMessage(signMsg(3, sks[3], &types.Message{
+		Type:   types.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("lambda"),
+		Value:  []byte("value"),
+	}))
+	i.state.PreparedRound = 1
+	i.state.PreparedValue = []byte("value")
+
+	// with a prepared round
+	byts, err = i.roundChangeInputValue()
+	require.NoError(t, err)
+	require.NotNil(t, byts)
+	data := bytesToChangeRoundData(byts)
+	require.EqualValues(t, 1, data.PreparedRound)
+	require.EqualValues(t, []byte("value"), data.PreparedValue)
+
+	// with a different prepared value
+	i.state.PreparedValue = []byte("value2")
+	byts, err = i.roundChangeInputValue()
+	require.EqualError(t, err, "prepared value is set but no quorum of prepare messages found")
+
+	// with different prepared round
+	i.state.PreparedRound = 2
+	i.state.PreparedValue = []byte("value")
+	byts, err = i.roundChangeInputValue()
+	require.EqualError(t, err, "prepared value is set but no quorum of prepare messages found")
 }
 
 func TestValidateChangeRoundMessage(t *testing.T) {
@@ -254,7 +332,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			// sign if needed
 			if test.msg.Value != nil {
 				var sig *bls.Sign
-				data := bytesTochangeRoundData(test.msg.Value)
+				data := bytesToChangeRoundData(test.msg.Value)
 				for _, id := range test.justificationSigIds {
 					s, err := data.JustificationMsg.Sign(sks[id])
 					require.NoError(t, err)

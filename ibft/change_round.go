@@ -2,29 +2,16 @@ package ibft
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
 )
-
-//type roundChangeData struct {
-//	PreparedRound        uint64
-//	PreparedValue        []byte
-//	justificationMessage *types.Message
-//	justificationSig     []byte
-//}
-
-func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
-	data := &types.ChangeRoundData{
-		PreparedRound: i.state.PreparedRound,
-		PreparedValue: i.state.PreparedValue,
-	}
-
-	return json.Marshal(data)
-}
 
 /**
 ### Algorithm 4 IBFT pseudocode for process pi: message justification
@@ -135,6 +122,49 @@ func (i *iBFTInstance) validateChangeRoundMsg() types.PipelineFunc {
 		}
 		return nil
 	}
+}
+
+func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
+	if i.state.PreparedRound != 0 { // TODO is this safe? should we have a flag indicating we prepared?
+		batched := i.batchedPrepareMsgs(i.state.PreparedRound)
+		msgs := batched[hex.EncodeToString(i.state.PreparedValue)]
+
+		// set justificationMsg and sig
+		var justificationMsg *types.Message
+		var aggregatedSig *bls.Sign
+		ids := make([]uint64, 0)
+		if len(msgs)*3 >= i.params.CommitteeSize()*2 {
+			justificationMsg = msgs[0].Message
+			for _, msg := range msgs {
+				// add sig to aggregate
+				sig := &bls.Sign{}
+				if err := sig.Deserialize(msg.Signature); err != nil {
+					return nil, err
+				}
+				if aggregatedSig == nil {
+					aggregatedSig = sig
+				} else {
+					aggregatedSig.Add(sig)
+				}
+
+				// add id to list
+				ids = append(ids, msg.IbftId)
+			}
+		} else {
+			return nil, errors.New("prepared value/ round is set but no quorum of prepare messages found")
+		}
+
+		data := &types.ChangeRoundData{
+			PreparedRound:    i.state.PreparedRound,
+			PreparedValue:    i.state.PreparedValue,
+			JustificationMsg: justificationMsg,
+			JustificationSig: aggregatedSig.Serialize(),
+			SignedIds:        ids,
+		}
+
+		return json.Marshal(data)
+	}
+	return nil, nil // not previously prepared
 }
 
 func (i *iBFTInstance) uponChangeRoundTrigger() {
