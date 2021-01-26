@@ -6,13 +6,11 @@ import (
 	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-
-	"github.com/sirupsen/logrus"
-
 	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/networker"
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
@@ -27,11 +25,11 @@ func Place() {
 type iBFTInstance struct {
 	me               *types.Node
 	state            *types.State
-	network          types.Networker
+	network          networker.Networker
 	implementation   types.Implementor
 	params           *types.InstanceParams
 	roundChangeTimer *time.Timer
-	log              *logrus.Entry
+	logger           *zap.Logger
 
 	// messages
 	prePrepareMessages  *types.MessagesContainer
@@ -46,14 +44,15 @@ type iBFTInstance struct {
 
 // New is the constructor of iBFTInstance
 func New(
+	logger *zap.Logger,
 	me *types.Node,
-	network types.Networker,
+	network networker.Networker,
 	implementation types.Implementor,
 	params *types.InstanceParams,
 ) *iBFTInstance {
 	// make sure secret key is not nil, otherwise the node can't operate
 	if me.Sk == nil || len(me.Sk) == 0 {
-		logrus.Fatalf("can't create iBFTInstance with invalid secret key")
+		logger.Fatal("can't create iBFTInstance with invalid secret key")
 		return nil
 	}
 
@@ -63,9 +62,7 @@ func New(
 		network:        network,
 		implementation: implementation,
 		params:         params,
-		log: logrus.WithFields(logrus.Fields{
-			"node_id": me.IbftId,
-		}),
+		logger:         logger.With(zap.Uint64("node_id", me.IbftId)),
 
 		prePrepareMessages:  types.NewMessagesContainer(),
 		prepareMessages:     types.NewMessagesContainer(),
@@ -90,13 +87,13 @@ func New(
  		set timeri to running and expire after t(ri)
 */
 func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
-	i.log.Info("Node is starting iBFT instance", zap.String("instance", hex.EncodeToString(lambda)))
+	i.logger.Info("Node is starting iBFT instance", zap.String("instance", hex.EncodeToString(lambda)))
 	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
 
 	if i.implementation.IsLeader(i.state) {
-		i.log.Info("Node is leader for round 1")
+		i.logger.Info("Node is leader for round 1")
 		i.state.Stage = types.RoundState_PrePrepare
 		msg := &types.Message{
 			Type:   types.RoundState_PrePrepare,
@@ -122,7 +119,7 @@ func (i *iBFTInstance) Committed() chan bool {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 	id := fmt.Sprint(i.me.IbftId)
-	i.network.SetMessagePipeline(id, types.RoundState_PrePrepare, []types.PipelineFunc{
+	i.network.SetMessagePipeline(id, types.RoundState_PrePrepare, []networker.PipelineFunc{
 		MsgTypeCheck(types.RoundState_PrePrepare),
 		i.ValidateLambda(),
 		i.ValidateRound(),
@@ -130,7 +127,7 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 		i.validatePrePrepareMsg(),
 		i.uponPrePrepareMsg(),
 	})
-	i.network.SetMessagePipeline(id, types.RoundState_Prepare, []types.PipelineFunc{
+	i.network.SetMessagePipeline(id, types.RoundState_Prepare, []networker.PipelineFunc{
 		MsgTypeCheck(types.RoundState_Prepare),
 		i.ValidateLambda(),
 		i.ValidateRound(),
@@ -138,7 +135,7 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	})
-	i.network.SetMessagePipeline(id, types.RoundState_Commit, []types.PipelineFunc{
+	i.network.SetMessagePipeline(id, types.RoundState_Commit, []networker.PipelineFunc{
 		MsgTypeCheck(types.RoundState_Commit),
 		i.ValidateLambda(),
 		i.ValidateRound(),
@@ -146,7 +143,7 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
 	})
-	i.network.SetMessagePipeline(id, types.RoundState_ChangeRound, []types.PipelineFunc{
+	i.network.SetMessagePipeline(id, types.RoundState_ChangeRound, []networker.PipelineFunc{
 		MsgTypeCheck(types.RoundState_ChangeRound),
 		i.ValidateLambda(),
 		i.ValidateRound(), // TODO - should we validate round?
@@ -160,7 +157,7 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 			select {
 			// When decided is triggered the iBFT instance has concluded and should stop.
 			case <-i.decided:
-				i.log.Info("iBFT instance decided, exiting..")
+				i.logger.Info("iBFT instance decided, exiting..")
 				//close(msgChan) // TODO - find a safe way to close connection
 				//return
 			// Change round is called when no Quorum was achieved within a time duration

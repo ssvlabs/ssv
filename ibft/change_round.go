@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/networker"
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
@@ -93,7 +94,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *iBFTInstance) validateChangeRoundMsg() types.PipelineFunc {
+func (i *iBFTInstance) validateChangeRoundMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
@@ -138,7 +139,7 @@ func (i *iBFTInstance) validateChangeRoundMsg() types.PipelineFunc {
 }
 
 func (i *iBFTInstance) uponChangeRoundTrigger() {
-	i.log.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
+	i.logger.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
 
 	// bump round
 	i.state.Round++
@@ -149,7 +150,7 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 	// broadcast round change
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		i.log.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
+		i.logger.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
 	}
 	broadcastMsg := &types.Message{
 		Type:   types.RoundState_ChangeRound,
@@ -158,16 +159,16 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 		Value:  data,
 	}
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-		i.log.Error("could not broadcast round change message", zap.Error(err))
+		i.logger.Error("could not broadcast round change message", zap.Error(err))
 	}
 
 	// mark stage
 	i.state.Stage = types.RoundState_ChangeRound
 }
 
-func (i *iBFTInstance) uponChangeRoundMsg() types.PipelineFunc {
+func (i *iBFTInstance) uponChangeRoundMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
-		i.log.Info("changing round")
+		i.logger.Info("changing round")
 		return nil
 	}
 }

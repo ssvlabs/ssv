@@ -5,24 +5,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
+	"github.com/bloxapp/ssv/ibft/networker"
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
 type LocalNodeNetworker struct {
-	pipelines map[types.RoundState]map[string][]types.PipelineFunc
+	t         *testing.T
+	pipelines map[types.RoundState]map[string][]networker.PipelineFunc
 	l         map[string]*sync.Mutex
 }
 
-func (n *LocalNodeNetworker) SetMessagePipeline(id string, roundState types.RoundState, pipeline []types.PipelineFunc) {
+func (n *LocalNodeNetworker) SetMessagePipeline(id string, roundState types.RoundState, pipeline []networker.PipelineFunc) {
 	if n.pipelines[roundState] == nil {
-		n.pipelines[roundState] = make(map[string][]types.PipelineFunc)
+		n.pipelines[roundState] = make(map[string][]networker.PipelineFunc)
 	}
 	n.pipelines[roundState][id] = pipeline
 	n.l[id] = &sync.Mutex{}
@@ -35,7 +35,8 @@ func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
 			for _, item := range pipelineForType {
 				err := item(signed)
 				if err != nil {
-					logrus.WithError(err).Errorf("failed to execute pipeline for node id %s", id)
+					n.t.Errorf("failed to execute pipeline for node id %s", id)
+					n.l[id].Unlock()
 					break
 				}
 			}
@@ -64,7 +65,12 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) 
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
-	net := &LocalNodeNetworker{pipelines: make(map[types.RoundState]map[string][]types.PipelineFunc), l: make(map[string]*sync.Mutex)}
+	logger := zaptest.NewLogger(t)
+	net := &LocalNodeNetworker{
+		t:         t,
+		pipelines: make(map[types.RoundState]map[string][]networker.PipelineFunc),
+		l:         make(map[string]*sync.Mutex),
+	}
 	instances := make([]*iBFTInstance, 0)
 	sks, nodes := generateNodes(4)
 	params := &types.InstanceParams{
@@ -79,7 +85,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
-		instances = append(instances, New(me, net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
+		instances = append(instances, New(logger, me, net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
 		instances[i].StartEventLoopAndMessagePipeline()
 	}
 

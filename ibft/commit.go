@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/networker"
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validateCommitMsg() types.PipelineFunc {
+func (i *iBFTInstance) validateCommitMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
 		msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
@@ -48,16 +51,19 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *iBFTInstance) uponCommitMsg() types.PipelineFunc {
+func (i *iBFTInstance) uponCommitMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// add to prepare messages
 		i.commitMessages.AddMessage(*signedMessage)
-		i.log.Info("received valid commit message")
+		i.logger.Info("received valid commit message")
 
 		// check if quorum achieved, act upon it.
 		quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue)
 		if i.state.Stage != types.RoundState_Commit && quorum { // if already decided no need to do it again
-			i.log.Infof("decided iBFT instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
+			i.logger.Info("decided iBFT instance, round %d (%d/%d votes)",
+				zap.String("lambda", hex.EncodeToString(i.state.Lambda)),
+				zap.Uint64("round", i.state.Round),
+				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// mark stage
 			i.state.Stage = types.RoundState_Commit

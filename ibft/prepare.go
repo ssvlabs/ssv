@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bloxapp/ssv/ibft/types"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/networker"
+	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
+func (i *iBFTInstance) validatePrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per node per round is valid
 		msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
@@ -49,17 +51,19 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrepareMsg() types.PipelineFunc {
+func (i *iBFTInstance) uponPrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 
 		// add to prepare messages
 		i.prepareMessages.AddMessage(*signedMessage)
-		i.log.Info("received valid prepare message for round", zap.Uint64("round", signedMessage.Message.Round))
+		i.logger.Info("received valid prepare message for round", zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
-			i.log.Infof("prepared instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
+			i.logger.Info("prepared instance %s, round %d (%d/%d votes)",
+				zap.String("lambda", hex.EncodeToString(i.state.Lambda)), zap.Uint64("round", i.state.Round),
+				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// set prepared state
 			i.state.PreparedRound = signedMessage.Message.Round
@@ -74,7 +78,7 @@ func (i *iBFTInstance) uponPrepareMsg() types.PipelineFunc {
 				Value:  i.state.InputValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-				i.log.Error("could not broadcast commit message", zap.Error(err))
+				i.logger.Error("could not broadcast commit message", zap.Error(err))
 				return err
 			}
 			return nil

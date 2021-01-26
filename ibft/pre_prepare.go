@@ -5,10 +5,11 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/networker"
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validatePrePrepareMsg() types.PipelineFunc {
+func (i *iBFTInstance) validatePrePrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - validate proposer correct
 
@@ -34,11 +35,11 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrePrepareMsg() types.PipelineFunc {
+func (i *iBFTInstance) uponPrePrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(*signedMessage)
-		i.log.Info("received valid pre-prepare message")
+		i.logger.Info("received valid pre-prepare message")
 
 		// In case current round is not the first round for the instance, we need to consider previous justifications
 		if signedMessage.Message.Round > 0 {
@@ -56,7 +57,7 @@ func (i *iBFTInstance) uponPrePrepareMsg() types.PipelineFunc {
 			Value:  i.state.InputValue,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-			i.log.Error("could not broadcast prepare message", zap.Error(err))
+			i.logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err
 		}
 		return nil
