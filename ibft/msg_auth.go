@@ -8,7 +8,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) ValidateLambda() networker.PipelineFunc {
+func (i *Instance) ValidateLambda() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.state.Lambda) {
 			return errors.New("message lambda does not equal state lambda")
@@ -17,7 +17,7 @@ func (i *iBFTInstance) ValidateLambda() networker.PipelineFunc {
 	}
 }
 
-func (i *iBFTInstance) ValidateRound() networker.PipelineFunc {
+func (i *Instance) ValidateRound() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if i.state.Round != signedMessage.Message.Round {
 			return errors.New("message round does not equal state round")
@@ -26,7 +26,7 @@ func (i *iBFTInstance) ValidateRound() networker.PipelineFunc {
 	}
 }
 
-func (i *iBFTInstance) AuthMsg() networker.PipelineFunc {
+func (i *Instance) AuthMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		pks, err := i.params.PubKeysById([]uint64{signedMessage.IbftId})
 		if err != nil {

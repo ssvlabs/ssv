@@ -23,7 +23,7 @@ func bytesTochangeRoundData(input []byte) *types.ChangeRoundData {
 
 func TestValidateChangeRoundMessage(t *testing.T) {
 	sks, nodes := generateNodes(4)
-	i := &iBFTInstance{
+	i := &Instance{
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -291,7 +291,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		PreparedValue: []byte("hello"),
 	})
 
-	i := &iBFTInstance{
+	i := &Instance{
 		roundChangeMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
@@ -393,7 +393,7 @@ func TestRoundChangeJustification(t *testing.T) {
 func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
-	i := &iBFTInstance{
+	i := &Instance{
 		roundChangeMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),

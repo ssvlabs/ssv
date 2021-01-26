@@ -12,7 +12,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validatePrepareMsg() networker.PipelineFunc {
+func (i *Instance) validatePrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per node per round is valid
 		msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
@@ -31,7 +31,7 @@ func (i *iBFTInstance) validatePrepareMsg() networker.PipelineFunc {
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	cnt := 0
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
@@ -51,7 +51,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrepareMsg() networker.PipelineFunc {
+func (i *Instance) uponPrepareMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 

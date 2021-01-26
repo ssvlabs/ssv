@@ -36,7 +36,6 @@ func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
 				err := item(signed)
 				if err != nil {
 					n.t.Errorf("failed to execute pipeline for node id %s", id)
-					n.l[id].Unlock()
 					break
 				}
 			}
@@ -64,14 +63,14 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) 
 	return sks, nodes
 }
 
-func TestIBFTInstance_Start(t *testing.T) {
+func TestInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	net := &LocalNodeNetworker{
 		t:         t,
 		pipelines: make(map[types.RoundState]map[string][]networker.PipelineFunc),
 		l:         make(map[string]*sync.Mutex),
 	}
-	instances := make([]*iBFTInstance, 0)
+	instances := make([]*Instance, 0)
 	sks, nodes := generateNodes(4)
 	params := &types.InstanceParams{
 		ConsensusParams: types.DefaultConsensusParams(),
