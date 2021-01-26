@@ -23,7 +23,7 @@ import (
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
 func (i *iBFTInstance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
-	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
+	for _, msg := range i.changeRoundMessages.ReadOnlyMessagesByRound(round) {
 		if msg.Message.Value == nil {
 			continue
 		}
@@ -55,7 +55,7 @@ predicate JustifyRoundChange(Qrc) return
 func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 	cnt := 0
 	// Find quorum for round change messages with prj = ⊥ ∧ pvj = ⊥
-	for _, msg := range i.roundChangeMessages.ReadOnlyMessagesByRound(round) {
+	for _, msg := range i.changeRoundMessages.ReadOnlyMessagesByRound(round) {
 		if msg.Message.Value == nil {
 			cnt++
 		}
@@ -70,7 +70,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 			return false, err
 		}
 		if data == nil {
-			return false, errors.New("could not justify round change, did not find highest prepared")
+			return true, nil
 		}
 		if !i.state.PreviouslyPrepared() { // no previous prepared round
 			return false, errors.New("could not justify round change, did not received quorum of prepare messages previously")
@@ -168,7 +168,7 @@ func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *iBFTInstance) uponChangeRoundTrigger() {
-	i.log.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
+	i.log.Infof("round timeout, changing round to %d", i.state.Round)
 
 	// bump round
 	i.state.Round++
@@ -195,9 +195,58 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 	i.state.Stage = types.RoundState_ChangeRound
 }
 
+// TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
+func (i *iBFTInstance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
+	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(round)
+	quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
+	return quorum, len(msgs), i.params.CommitteeSize()
+}
+
 func (i *iBFTInstance) uponChangeRoundMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
-		i.log.Info("changing round")
+		// TODO - if instance decided should we process round change?
+
+		// add to prepare messages
+		i.changeRoundMessages.AddMessage(*signedMessage)
+		i.log.Infof("received valid change round message for round %d", signedMessage.Message.Round)
+
+		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
+		justifyRound, err := i.justifyRoundChange(signedMessage.Message.Round)
+		if err != nil {
+			return err
+		}
+		isLeader := i.implementation.IsLeader(i.state)
+		if quorum {
+			i.log.Infof("change round (%d) quorum received. Is_leader=%t, round_justified=%t", signedMessage.Message.Round, isLeader, justifyRound)
+
+			if isLeader && justifyRound {
+				i.log.Infof("broadcasting pre-prepare as leader after round change (round %d)", signedMessage.Message.Round)
+				var value []byte
+				highest, err := i.highestPrepared(signedMessage.Message.Round)
+				if err != nil {
+					return err
+				}
+				if highest == nil {
+					value = highest.PreparedValue
+				} else {
+					value = i.state.InputValue
+				}
+
+				// send pre-prepare msg
+				broadcastMsg := &types.Message{
+					Type:   types.RoundState_PrePrepare,
+					Round:  signedMessage.Message.Round,
+					Lambda: i.state.Lambda,
+					Value:  value,
+				}
+				if err := i.SignAndBroadcast(broadcastMsg); err != nil {
+					i.log.WithError(err).Error("could not broadcast pre-prepare message after round change")
+					return err
+				}
+			}
+			return nil
+		}
+
 		return nil
 	}
 }

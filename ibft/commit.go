@@ -35,7 +35,7 @@ func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum boo
 	cnt := 0
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
-		if bytes.Compare(inputValue, v.Message.Value) == 0 {
+		if bytes.Equal(inputValue, v.Message.Value) {
 			cnt += 1
 		}
 	}

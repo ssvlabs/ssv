@@ -9,11 +9,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/bloxapp/ssv/ibft/types"
 	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/ibft/types"
 )
 
 func Place() {
@@ -37,7 +35,7 @@ type iBFTInstance struct {
 	prePrepareMessages  *types.MessagesContainer
 	prepareMessages     *types.MessagesContainer
 	commitMessages      *types.MessagesContainer
-	roundChangeMessages *types.MessagesContainer
+	changeRoundMessages *types.MessagesContainer
 
 	// flags
 	decided     chan bool
@@ -70,7 +68,7 @@ func New(
 		prePrepareMessages:  types.NewMessagesContainer(),
 		prepareMessages:     types.NewMessagesContainer(),
 		commitMessages:      types.NewMessagesContainer(),
-		roundChangeMessages: types.NewMessagesContainer(),
+		changeRoundMessages: types.NewMessagesContainer(),
 
 		decided:     make(chan bool),
 		changeRound: make(chan bool),
@@ -90,7 +88,7 @@ func New(
  		set timeri to running and expire after t(ri)
 */
 func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
-	i.log.Info("Node is starting iBFT instance", zap.String("instance", hex.EncodeToString(lambda)))
+	i.log.Infof("Node is starting iBFT instance %s", hex.EncodeToString(lambda))
 	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
@@ -149,7 +147,7 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 	i.network.SetMessagePipeline(id, types.RoundState_ChangeRound, []types.PipelineFunc{
 		MsgTypeCheck(types.RoundState_ChangeRound),
 		i.ValidateLambda(),
-		i.ValidateRound(), // TODO - should we validate round?
+		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
 		i.AuthMsg(),
 		i.validateChangeRoundMsg(),
 		i.uponChangeRoundMsg(),
@@ -204,6 +202,7 @@ func (i *iBFTInstance) triggerRoundChangeOnTimer() {
 	// stat new timer
 	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
+	i.log.Infof("started timeout clock for %f sec", time.Duration(roundTimeout).Seconds())
 	go func() {
 		<-i.roundChangeTimer.C
 		i.changeRound <- true

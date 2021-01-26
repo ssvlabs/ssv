@@ -19,6 +19,8 @@ func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
 			}
 		}
 
+		// TODO - prepare should equal pre-prepare value
+
 		if err := i.implementation.ValidatePrepareMsg(i.state, signedMessage); err != nil {
 			return err
 		}

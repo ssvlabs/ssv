@@ -72,7 +72,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 		IbftCommittee:   nodes,
 	}
 
-	leader := params.CommitteeSize() - 1
+	leader := 10 //params.CommitteeSize() - 1
 	for i := 0; i < params.CommitteeSize(); i++ {
 		me := &types.Node{
 			IbftId: uint64(i),
@@ -87,5 +87,5 @@ func TestIBFTInstance_Start(t *testing.T) {
 		require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
 	}
 
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Minute * 5)
 }
