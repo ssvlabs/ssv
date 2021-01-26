@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 
@@ -19,6 +20,7 @@ type Options struct {
 	PrivateKey      *bls.SecretKey
 	Network         core.Network
 	Beacon          beacon.Beacon
+	IBFTInstance    *ibft.Instance
 	Logger          *zap.Logger
 }
 
@@ -35,6 +37,7 @@ type ssvNode struct {
 	network         core.Network
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
+	iBFTInstance    *ibft.Instance
 	logger          *zap.Logger
 }
 
@@ -46,6 +49,7 @@ func New(opts Options) Node {
 		network:         opts.Network,
 		slotQueue:       slotqueue.New(opts.Network),
 		beacon:          opts.Beacon,
+		iBFTInstance:    opts.IBFTInstance,
 		logger:          opts.Logger,
 	}
 }
@@ -107,7 +111,10 @@ func (n *ssvNode) startSlotQueueListener() {
 			zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 			zap.Uint64("slot", slot))
 
-		// TODO: IBFT start
+		// TODO: Pass real values
+		if err := n.iBFTInstance.Start([]byte("some lambda"), []byte("some value")); err != nil {
+			n.logger.Error("failed to start IBFT instance", zap.Error(err))
+		}
 	}
 }
 

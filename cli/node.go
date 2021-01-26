@@ -3,6 +3,12 @@ package cli
 import (
 	"encoding/hex"
 
+	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
+
+	"github.com/bloxapp/ssv/ibft/networker/p2p"
+
+	"github.com/bloxapp/ssv/ibft/types"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -10,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/cli/flags"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/node"
 )
 
@@ -56,12 +63,34 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
+		peer, err := p2p.New(cmd.Context(), logger, validatorKey)
+		if err != nil {
+			logger.Fatal("failed to create peer", zap.Error(err))
+		}
+
 		ssvNode := node.New(node.Options{
 			ValidatorPubKey: validatorKeyBytes,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
 			Network:         core.NetworkFromString(network),
-			Logger:          logger,
+			IBFTInstance: ibft.New(
+				logger,
+				&types.Node{
+					IbftId: 0, // TODO: Number from arguments - ID
+					Pk:     baseKey.GetPublicKey().Serialize(),
+					Sk:     baseKey.Serialize(),
+				},
+				peer,
+				&day_number_consensus.DayNumberConsensus{
+					Id:     uint64(i),      // TODO: Number from arguments - ID
+					Leader: uint64(leader), // TODO: Fill
+				},
+				&types.InstanceParams{
+					ConsensusParams: types.DefaultConsensusParams(),
+					IbftCommittee:   nodes, // TODO: Fill
+				},
+			),
+			Logger: logger,
 		})
 
 		if err := ssvNode.Start(cmd.Context()); err != nil {
