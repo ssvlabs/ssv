@@ -58,6 +58,8 @@ func New(opts Options) Node {
 func (n *ssvNode) Start(ctx context.Context) error {
 	go n.startSlotQueueListener()
 
+	n.iBFTInstance.StartEventLoopAndMessagePipeline()
+
 	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey)
 	if err != nil {
 		n.logger.Fatal("failed to open duties stream", zap.Error(err))

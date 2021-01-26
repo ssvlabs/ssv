@@ -36,7 +36,6 @@ func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
 				err := item(signed)
 				if err != nil {
 					n.t.Errorf("failed to execute pipeline for node id %s", id)
-					n.l[id].Unlock()
 					break
 				}
 			}

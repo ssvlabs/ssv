@@ -109,7 +109,6 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (networker.N
 				for _, item := range pipelineForType {
 					if err := item(cm); err != nil {
 						logger.Error("failed to execute pipeline for node", zap.Error(err), zap.String("node_id", id))
-						ntw.locks[id].Unlock()
 						break
 					}
 				}

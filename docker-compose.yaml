@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: start-node --private-key ${SSN_NODE_1} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
+    command: start-node --node-id 1 --leader-id 1 --private-key ${SSN_NODE_1} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
     environment:
       DOCKER_COMPOSE: "true"
     networks:
@@ -16,7 +16,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: start-node --private-key ${SSN_NODE_2} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
+    command: start-node --node-id 2 --leader-id 1 --private-key ${SSN_NODE_2} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
     environment:
       DOCKER_COMPOSE: "true"
     networks:
@@ -27,7 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: start-node --private-key ${SSN_NODE_2} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
+    command: start-node --node-id 3 --leader-id 1 --private-key ${SSN_NODE_2} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
     environment:
       DOCKER_COMPOSE: "true"
     networks:
