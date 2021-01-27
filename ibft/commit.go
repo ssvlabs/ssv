@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/hex"
 
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/networker"
 )
 
-func (i *Instance) validateCommitMsg() types.PipelineFunc {
+func (i *Instance) validateCommitMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
@@ -46,7 +49,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *Instance) uponCommitMsg() types.PipelineFunc {
+func (i *Instance) uponCommitMsg() networker.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
@@ -56,7 +59,7 @@ func (i *Instance) uponCommitMsg() types.PipelineFunc {
 
 		// add to prepare messages
 		i.commitMessages.AddMessage(*signedMessage)
-		i.log.Infof("received valid commit message from %d, for round %d", signedMessage.IbftId, signedMessage.Message.Round)
+		i.logger.Info("received valid commit message for round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
 		if i.state.Stage == types.RoundState_Decided {
@@ -64,7 +67,9 @@ func (i *Instance) uponCommitMsg() types.PipelineFunc {
 		}
 		quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue)
 		if quorum { // if already decided no need to do it again
-			i.log.Infof("decided iBFT instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
+			i.logger.Info("decided iBFT instance",
+				zap.String("lambda", hex.EncodeToString(i.state.Lambda)), zap.Uint64("round", i.state.Round),
+				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// mark stage
 			i.state.Stage = types.RoundState_Decided

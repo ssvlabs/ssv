@@ -2,20 +2,22 @@ package ibft
 
 import (
 	"sync"
+	"testing"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/sirupsen/logrus"
+	"github.com/bloxapp/ssv/networker"
 )
 
 type LocalNodeNetworker struct {
+	t         *testing.T
 	replay    *IBFTReplay
-	pipelines map[types.RoundState]map[uint64][]types.PipelineFunc
+	pipelines map[types.RoundState]map[uint64][]networker.PipelineFunc
 	l         map[uint64]*sync.Mutex
 }
 
-func (n *LocalNodeNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []types.PipelineFunc) {
+func (n *LocalNodeNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []networker.PipelineFunc) {
 	if n.pipelines[roundState] == nil {
-		n.pipelines[roundState] = make(map[uint64][]types.PipelineFunc)
+		n.pipelines[roundState] = make(map[uint64][]networker.PipelineFunc)
 	}
 	n.pipelines[roundState][id] = pipeline
 	n.l[id] = &sync.Mutex{}
@@ -39,7 +41,7 @@ func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
 			for _, item := range pipelineForType {
 				err := item(signed)
 				if err != nil {
-					logrus.WithError(err).Errorf("failed to execute pipeline for node id %d", id)
+					n.t.Errorf("failed to execute pipeline for node id %d - %s", id, err)
 					break
 				}
 			}
@@ -60,7 +62,7 @@ type IBFTReplay struct {
 func NewIBFTReplay(nodes map[uint64]*types.Node) *IBFTReplay {
 	ret := &IBFTReplay{
 		Networker: &LocalNodeNetworker{
-			pipelines: make(map[types.RoundState]map[uint64][]types.PipelineFunc),
+			pipelines: make(map[types.RoundState]map[uint64][]networker.PipelineFunc),
 			l:         make(map[uint64]*sync.Mutex),
 		},
 		scripts: make(map[uint64]*RoundScript),

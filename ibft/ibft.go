@@ -5,13 +5,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
-
-	"github.com/sirupsen/logrus"
-
 	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
+	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/networker"
 )
 
 func Place() {
@@ -25,11 +26,11 @@ func Place() {
 type Instance struct {
 	me               *types.Node
 	state            *types.State
-	network          types.Networker
+	network          networker.Networker
 	implementation   types.Implementor
 	params           *types.InstanceParams
 	roundChangeTimer *time.Timer
-	log              *logrus.Entry
+	logger           *zap.Logger
 	msgLock          sync.Mutex
 
 	// messages
@@ -45,8 +46,9 @@ type Instance struct {
 
 // New is the constructor of Instance
 func New(
+	logger *zap.Logger,
 	me *types.Node,
-	network types.Networker,
+	network networker.Networker,
 	implementation types.Implementor,
 	params *types.InstanceParams,
 ) *Instance {
@@ -62,10 +64,8 @@ func New(
 		network:        network,
 		implementation: implementation,
 		params:         params,
-		log: logrus.WithFields(logrus.Fields{
-			"node_id": me.IbftId,
-		}),
-		msgLock: sync.Mutex{},
+		logger:         logger.With(zap.Uint64("node_id", me.IbftId)),
+		msgLock:        sync.Mutex{},
 
 		prePrepareMessages:  types.NewMessagesContainer(),
 		prepareMessages:     types.NewMessagesContainer(),
@@ -89,15 +89,15 @@ func New(
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) error {
-	i.log.Infof("Node is starting iBFT instance %s", hex.EncodeToString(lambda))
+func (i *Instance) Start(lambda []byte, inputValue []byte) error {
+	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
 	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.PreviousLambda = previousLambda
 	i.state.InputValue = inputValue
 
-	if i.IsLeader() {
-		i.log.Info("Node is leader for round 1")
+	if i.implementation.IsLeader(i.state) {
+		i.logger.Info("Node is leader for round 1")
 		i.state.Stage = types.RoundState_PrePrepare
 		msg := &types.Message{
 			Type:           types.RoundState_PrePrepare,
@@ -178,7 +178,7 @@ func (i *Instance) StartEventLoopAndMessagePipeline() {
 			select {
 			// When decided is triggered the iBFT instance has concluded and should stop.
 			case <-i.decided:
-				i.log.Info("iBFT instance decided, exiting..")
+				i.logger.Info("iBFT instance decided, exiting..")
 				//close(msgChan) // TODO - find a safe way to close connection
 				//return
 			// Change round is called when no Quorum was achieved within a time duration
@@ -222,7 +222,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	// stat new timer
 	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
-	i.log.Infof("started timeout clock for %f sec", time.Duration(roundTimeout).Seconds())
+	i.logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {
 		<-i.roundChangeTimer.C
 		i.changeRound <- true

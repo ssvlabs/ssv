@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
 	"github.com/bloxapp/ssv/ibft/types"
@@ -30,6 +30,7 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) 
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
 	sks, nodes := generateNodes(4)
 	replay := NewIBFTReplay(nodes)

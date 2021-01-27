@@ -77,13 +77,31 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create peer", zap.Error(err))
 		}
 
+		// TODO: Refactor that
+		ibftCommittee := map[uint64]*types.Node{
+			1: {
+				IbftId: 1,
+				Pk:     _getBytesFromHex("a50a268aca7be24d4032cd0295db234b3196ed1a0dcd7368b71df73521472db96edf2c822f015cb80f426d4bce5c1229"),
+			},
+			2: {
+				IbftId: 2,
+				Pk:     _getBytesFromHex("8e075489434c0f7c246c555dba372e8acf3ca55d50652fc2eccd9a2261c54c8fa84873abbc4983acdb4a75e2a4c50db5"),
+			},
+			3: {
+				IbftId: 3,
+				Pk:     _getBytesFromHex("8e0bc250eb11f80bf57aef6d55d332f3253d01b1a56cb5d75b58d9680abe227b06c82be94891f9d3d32ed3fc60e36b55"),
+			},
+		}
+		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
+		ibftCommittee[nodeID].Sk = baseKey.Serialize()
+
 		ssvNode := node.New(node.Options{
 			ValidatorPubKey: validatorKeyBytes,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
 			Network:         core.NetworkFromString(network),
 			IBFTInstance: ibft.New(
-				//logger, // TODO - change logger
+				logger,
 				&types.Node{
 					IbftId: nodeID,
 					Pk:     baseKey.GetPublicKey().Serialize(),
@@ -96,23 +114,7 @@ var startNodeCmd = &cobra.Command{
 				},
 				&types.InstanceParams{
 					ConsensusParams: types.DefaultConsensusParams(),
-
-					// TODO: Should came from network
-					IbftCommittee: map[uint64]*types.Node{
-						1: {
-							IbftId: 1,
-							Pk:     baseKey.GetPublicKey().Serialize(),
-							Sk:     baseKey.Serialize(),
-						},
-						2: {
-							IbftId: 2,
-							Pk:     _getBytesFromHex("8e075489434c0f7c246c555dba372e8acf3ca55d50652fc2eccd9a2261c54c8fa84873abbc4983acdb4a75e2a4c50db5"),
-						},
-						3: {
-							IbftId: 3,
-							Pk:     _getBytesFromHex("8e0bc250eb11f80bf57aef6d55d332f3253d01b1a56cb5d75b58d9680abe227b06c82be94891f9d3d32ed3fc60e36b55"),
-						},
-					},
+					IbftCommittee:   ibftCommittee,
 				},
 			),
 			Logger: logger,

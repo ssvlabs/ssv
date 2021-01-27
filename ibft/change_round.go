@@ -7,10 +7,10 @@ import (
 	"errors"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/networker"
 )
 
 /**
@@ -80,7 +80,7 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *Instance) validateChangeRoundMsg() types.PipelineFunc {
+func (i *Instance) validateChangeRoundMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
@@ -170,7 +170,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
 	i.state.Round++
-	i.log.Infof("round timeout, changing round to %d", i.state.Round)
+	i.logger.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
 
 	// set time for next round change
 	i.triggerRoundChangeOnTimer()
@@ -178,7 +178,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 	// broadcast round change
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		i.log.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
+		i.logger.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
 	}
 	broadcastMsg := &types.Message{
 		Type:   types.RoundState_ChangeRound,
@@ -187,7 +187,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 		Value:  data,
 	}
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-		i.log.Error("could not broadcast round change message", zap.Error(err))
+		i.logger.Error("could not broadcast round change message", zap.Error(err))
 	}
 
 	// mark stage
@@ -209,7 +209,7 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	return quorum, len(msgs), i.params.CommitteeSize()
 }
 
-func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
+func (i *Instance) uponChangeRoundMsg() networker.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - if instance decided should we process round change?
@@ -226,7 +226,7 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 
 		// add to prepare messages
 		i.changeRoundMessages.AddMessage(*signedMessage)
-		i.log.Infof("received valid change round message from %d, for round %d", signedMessage.IbftId, signedMessage.Message.Round)
+		i.logger.Info("received valid change round message for round", zap.Uint64("ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		if i.state.Stage == types.RoundState_PrePrepare {
 			return nil // no reason to pre-prepare again
@@ -239,7 +239,7 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 		isLeader := i.IsLeader()
 		if quorum {
 			i.state.Stage = types.RoundState_PrePrepare
-			i.log.Infof("change round (%d) quorum received. Is_leader=%t, round_justified=%t", signedMessage.Message.Round, isLeader, justifyRound)
+			i.logger.Info("change round quorum received.", zap.Uint64("round", signedMessage.Message.Round), zap.Bool("is_leader", isLeader), zap.Bool("round_justified", justifyRound))
 
 			if isLeader && justifyRound {
 				var value []byte
@@ -249,11 +249,11 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 				}
 				if highest != nil {
 					value = highest.PreparedValue
-					i.log.Infof("broadcasting pre-prepare as leader after round change (round %d) with existing prepared", signedMessage.Message.Round)
+					i.logger.Info("broadcasting pre-prepare as leader after round change with existing prepared", zap.Uint64("round", signedMessage.Message.Round))
 
 				} else {
 					value = i.state.InputValue
-					i.log.Infof("broadcasting pre-prepare as leader after round change (round %d) with input value", signedMessage.Message.Round)
+					i.logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.Uint64("round", signedMessage.Message.Round))
 				}
 
 				// send pre-prepare msg
@@ -264,7 +264,7 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 					Value:  value,
 				}
 				if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-					i.log.WithError(err).Error("could not broadcast pre-prepare message after round change")
+					i.logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
 					return err
 				}
 			}

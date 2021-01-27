@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/networker"
 )
 
 const (
@@ -32,12 +33,12 @@ type p2pNetworker struct {
 	logger *zap.Logger
 
 	// TODO: Refactor that out
-	pipelines map[types.RoundState]map[uint64][]types.PipelineFunc
+	pipelines map[types.RoundState]map[uint64][]networker.PipelineFunc
 	locks     map[uint64]*sync.Mutex
 }
 
 // New is the constructor of p2pNetworker
-func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Networker, error) {
+func New(ctx context.Context, logger *zap.Logger, topicName string) (networker.Networker, error) {
 	// Create a new libp2p Host that listens on a random TCP port
 	host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	if err != nil {
@@ -74,7 +75,7 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Netwo
 		topic:  topic,
 		logger: logger,
 
-		pipelines: make(map[types.RoundState]map[uint64][]types.PipelineFunc),
+		pipelines: make(map[types.RoundState]map[uint64][]networker.PipelineFunc),
 		locks:     make(map[uint64]*sync.Mutex),
 	}
 
@@ -120,13 +121,13 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Netwo
 
 // SetMessagePipeline sets a pipeline for a message to go through before it's sent to the msg channel.
 // Message validation and processing should happen in the pipeline
-func (n *p2pNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []types.PipelineFunc) {
+func (n *p2pNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []networker.PipelineFunc) {
 	if _, ok := n.locks[id]; !ok {
 		n.locks[id] = &sync.Mutex{}
 	}
 
 	if _, ok := n.pipelines[roundState]; !ok {
-		n.pipelines[roundState] = make(map[uint64][]types.PipelineFunc)
+		n.pipelines[roundState] = make(map[uint64][]networker.PipelineFunc)
 	}
 
 	n.locks[id].Lock()

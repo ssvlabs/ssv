@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/types"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/types"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 
@@ -117,17 +116,25 @@ func (n *ssvNode) startSlotQueueListener() {
 
 		logger.Info("starting IBFT instance for slot...")
 
+		msg := &types.Message{
+			Type:   types.RoundState_PrePrepare,
+			Round:  1,
+			Lambda: []byte("0"),
+			Value:  nil,
+		}
+
+		sig, err := msg.Sign(n.privateKey)
+		if err != nil {
+			logger.Error("failed to sign message", zap.Error(err))
+			return
+		}
+
 		// TODO: Refactor that
 		val, err := json.Marshal(&types.ChangeRoundData{
-			PreparedRound: 1,
-			PreparedValue: []byte("some value"),
-			JustificationMsg: &types.Message{
-				Type:   types.RoundState_PrePrepare,
-				Round:  1,
-				Lambda: nil,
-				Value:  nil,
-			},
-			JustificationSig: []byte("some signature"),
+			PreparedRound:    1,
+			PreparedValue:    []byte("some value"),
+			JustificationMsg: msg,
+			JustificationSig: sig.Serialize(),
 			SignedIds:        []uint64{1},
 		})
 		if err != nil {
@@ -136,7 +143,7 @@ func (n *ssvNode) startSlotQueueListener() {
 		}
 
 		// TODO: Pass real values
-		if err := n.iBFTInstance.Start([]byte("some lambda"), val); err != nil {
+		if err := n.iBFTInstance.Start([]byte("0"), val); err != nil {
 			logger.Error("failed to start IBFT instance", zap.Error(err))
 		}
 	}
