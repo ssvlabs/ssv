@@ -27,7 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: start-node --node-id 3 --leader-id 1 --private-key ${SSN_NODE_2} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
+    command: start-node --node-id 3 --leader-id 1 --private-key ${SSN_NODE_3} --validator-key ${VALIDATOR_PUBLIC_KEY} --beacon-node-addr ${BEACON_NODE_ADDR} --network ${NETWORK}
     environment:
       DOCKER_COMPOSE: "true"
     networks:

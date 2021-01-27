@@ -92,6 +92,7 @@ var startNodeCmd = &cobra.Command{
 				Pk:     _getBytesFromHex("8e0bc250eb11f80bf57aef6d55d332f3253d01b1a56cb5d75b58d9680abe227b06c82be94891f9d3d32ed3fc60e36b55"),
 			},
 		}
+		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
 
 		ssvNode := node.New(node.Options{
