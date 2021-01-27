@@ -2,7 +2,8 @@ package ibft
 
 import (
 	"bytes"
-	"errors"
+
+	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/types"
 	"github.com/bloxapp/ssv/networker"
@@ -20,7 +21,7 @@ func (i *Instance) ValidateLambda() networker.PipelineFunc {
 func (i *Instance) ValidateRound() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if i.state.Round != signedMessage.Message.Round {
-			return errors.New("message round does not equal state round")
+			return errors.Errorf("message round (%d) does not equal state round (%d)", signedMessage.Message.Round, i.state.Round)
 		}
 		return nil
 	}
