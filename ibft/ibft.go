@@ -95,7 +95,7 @@ func (i *Instance) Start(lambda []byte, inputValue []byte) error {
 	i.state.Lambda = lambda
 	i.state.InputValue = inputValue
 
-	if i.implementation.IsLeader(i.state) {
+	if i.IsLeader() {
 		i.log.Info("Node is leader for round 1")
 		i.state.Stage = types.RoundState_PrePrepare
 		msg := &types.Message{
@@ -122,11 +122,11 @@ func (i *Instance) Committed() chan bool {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartEventLoopAndMessagePipeline() {
 	lockMsg := func(signedMsg *types.SignedMessage) error {
-		i.msgLock.Lock()
+		//i.msgLock.Lock()
 		return nil
 	}
 	unlockMsg := func(signedMsg *types.SignedMessage) error {
-		i.msgLock.Unlock()
+		//i.msgLock.Unlock()
 		return nil
 	}
 
@@ -233,4 +233,12 @@ func (i *Instance) stopRoundChangeTimer() {
 		i.roundChangeTimer.Stop()
 		i.roundChangeTimer = nil
 	}
+}
+
+func (i *Instance) IsLeader() bool {
+	return i.me.IbftId == i.RoundLeader()
+}
+
+func (i *Instance) RoundLeader() uint64 {
+	return i.state.Round % uint64(i.params.CommitteeSize())
 }

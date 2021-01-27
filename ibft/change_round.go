@@ -213,6 +213,12 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - if instance decided should we process round change?
+		if i.state.Stage == types.RoundState_Decided {
+			// TODO - can't get here, fails on round verification in pipeline
+			i.log.Infof("received change round after decision, sending decided message")
+			return nil
+		}
+
 		// Only 1 prepare per node per round is valid
 		if i.existingChangeRoundMsg(signedMessage) {
 			return nil
@@ -230,7 +236,7 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 		if err != nil {
 			return err
 		}
-		isLeader := i.implementation.IsLeader(i.state)
+		isLeader := i.IsLeader()
 		if quorum {
 			i.state.Stage = types.RoundState_PrePrepare
 			i.log.Infof("change round (%d) quorum received. Is_leader=%t, round_justified=%t", signedMessage.Message.Round, isLeader, justifyRound)

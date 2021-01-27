@@ -23,6 +23,7 @@ func (n *LocalNodeNetworker) SetMessagePipeline(id uint64, roundState types.Roun
 
 func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
 	go func() {
+
 		// verify node is not prevented from sending msgs
 		if !n.replay.CanSend(signed.Message.Type, signed.Message.Round, signed.IbftId) {
 			return

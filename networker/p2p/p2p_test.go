@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/bloxapp/ssv/networker"
-
 	"github.com/pborman/uuid"
 
 	"github.com/stretchr/testify/require"
@@ -43,14 +41,14 @@ func TestP2PNetworker(t *testing.T) {
 		var wg sync.WaitGroup
 
 		var peer1Pipeline bool
-		peer1.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []networker.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer1.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
 			peer1Pipeline = true
 			return nil
 		}})
 
 		wg.Add(1)
 		var peer2Pipeline bool
-		peer2.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []networker.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer2.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
 			require.Equal(t, messageToBroadcast, signedMessage)
 			peer2Pipeline = true
 			wg.Done()
@@ -59,7 +57,7 @@ func TestP2PNetworker(t *testing.T) {
 
 		wg.Add(1)
 		var peer3Pipeline bool
-		peer3.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []networker.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer3.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
 			require.Equal(t, messageToBroadcast, signedMessage)
 			peer3Pipeline = true
 			wg.Done()
@@ -67,7 +65,7 @@ func TestP2PNetworker(t *testing.T) {
 		}})
 
 		var peer4Pipeline bool
-		peer4.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []networker.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer4.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
 			peer4Pipeline = true
 			return nil
 		}})

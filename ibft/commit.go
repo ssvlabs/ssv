@@ -59,7 +59,7 @@ func (i *Instance) uponCommitMsg() types.PipelineFunc {
 		i.log.Infof("received valid commit message from %d, for round %d", signedMessage.IbftId, signedMessage.Message.Round)
 
 		// check if quorum achieved, act upon it.
-		if i.state.Stage == types.RoundState_Commit {
+		if i.state.Stage == types.RoundState_Decided {
 			return nil // no reason to commit again
 		}
 		quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue)
@@ -67,7 +67,7 @@ func (i *Instance) uponCommitMsg() types.PipelineFunc {
 			i.log.Infof("decided iBFT instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
 
 			// mark stage
-			i.state.Stage = types.RoundState_Commit
+			i.state.Stage = types.RoundState_Decided
 
 			i.stopRoundChangeTimer()
 			i.decided <- true

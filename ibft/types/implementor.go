@@ -6,9 +6,6 @@ package types
 // 		- input value + verification
 //		- lambda value + verification
 type Implementor interface {
-	// IsLeader returns true if Instance should behave as a leader. Specific leader selection logic depends on the implementation
-	IsLeader(state *State) bool
-
 	ValidatePrePrepareMsg(state *State, msg *SignedMessage) error
 	ValidatePrepareMsg(state *State, msg *SignedMessage) error
 	ValidateCommitMsg(state *State, msg *SignedMessage) error

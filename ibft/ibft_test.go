@@ -39,7 +39,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	}
 
 	// setup scenario
-	replay.StartRound(1).PreventMessages(types.RoundState_Commit, []uint64{0, 1}).EndRound()
+	//replay.StartRound(1).PreventMessages(types.RoundState_Prepare, []uint64{0, 1}).EndRound()
 
 	leader := params.CommitteeSize() - 1
 	for i := 0; i < params.CommitteeSize(); i++ {
@@ -48,12 +48,17 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
-		instances = append(instances, New(me, replay.Networker, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
+		instances = append(instances, New(me, replay.Networker, &day_number_consensus.DayNumberConsensus{Id: uint64(i)}, params))
 		instances[i].StartEventLoopAndMessagePipeline()
 	}
 
 	for _, i := range instances {
-		require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
+		if i.me.IbftId != uint64(leader) {
+			require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
+		} else {
+			require.NoError(t, i.Start([]byte("0"), []byte("wrong input")))
+		}
+		//require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
 	}
 
 	time.Sleep(time.Minute * 5)

@@ -1,6 +1,8 @@
 package ibft
 
 import (
+	"errors"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
@@ -9,7 +11,9 @@ import (
 func (i *Instance) validatePrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - validate proposer correct
-
+		if signedMessage.IbftId != i.RoundLeader() {
+			return errors.New("pre-prepare message sent not by leader")
+		}
 		if err := i.implementation.ValidatePrePrepareMsg(i.state, signedMessage); err != nil {
 			return err
 		}
