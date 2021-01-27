@@ -5,9 +5,10 @@ import (
 	"errors"
 
 	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/networker"
 )
 
-func (i *Instance) ValidateLambda() types.PipelineFunc {
+func (i *Instance) ValidateLambda() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.state.Lambda) {
 			return errors.New("message lambda does not equal state lambda")
@@ -16,7 +17,7 @@ func (i *Instance) ValidateLambda() types.PipelineFunc {
 	}
 }
 
-func (i *Instance) ValidateRound() types.PipelineFunc {
+func (i *Instance) ValidateRound() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if i.state.Round != signedMessage.Message.Round {
 			return errors.New("message round does not equal state round")
@@ -25,7 +26,7 @@ func (i *Instance) ValidateRound() types.PipelineFunc {
 	}
 }
 
-func (i *Instance) AuthMsg() types.PipelineFunc {
+func (i *Instance) AuthMsg() networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		pks, err := i.params.PubKeysById([]uint64{signedMessage.IbftId})
 		if err != nil {
@@ -46,7 +47,7 @@ func (i *Instance) AuthMsg() types.PipelineFunc {
 	}
 }
 
-func MsgTypeCheck(expected types.RoundState) types.PipelineFunc {
+func MsgTypeCheck(expected types.RoundState) networker.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if signedMessage.Message.Type != expected {
 			return errors.New("message type is wrong")
