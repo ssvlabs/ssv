@@ -1,12 +1,13 @@
 package types
 
 type State struct {
-	Stage         RoundState
-	Lambda        []byte
-	InputValue    []byte
-	Round         uint64
-	PreparedRound uint64
-	PreparedValue []byte
+	Stage          RoundState
+	Lambda         []byte
+	PreviousLambda []byte
+	InputValue     []byte
+	Round          uint64
+	PreparedRound  uint64
+	PreparedValue  []byte
 }
 
 func (s *State) PreviouslyPrepared() bool {

@@ -41,7 +41,6 @@ func TestIBFTInstance_Start(t *testing.T) {
 	// setup scenario
 	//replay.StartRound(1).PreventMessages(types.RoundState_Prepare, []uint64{0, 1}).EndRound()
 
-	leader := params.CommitteeSize() - 1
 	for i := 0; i < params.CommitteeSize(); i++ {
 		me := &types.Node{
 			IbftId: uint64(i),
@@ -53,12 +52,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	}
 
 	for _, i := range instances {
-		if i.me.IbftId != uint64(leader) {
-			require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
-		} else {
-			require.NoError(t, i.Start([]byte("0"), []byte("wrong input")))
-		}
-		//require.NoError(t, i.Start([]byte("0"), []byte(time.Now().Weekday().String())))
+		require.NoError(t, i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String())))
 	}
 
 	time.Sleep(time.Minute * 5)

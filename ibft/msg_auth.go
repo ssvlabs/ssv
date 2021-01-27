@@ -7,10 +7,14 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *Instance) ValidateLambda() types.PipelineFunc {
+// ValidateLambdas valdiates current and previous lambdas
+func (i *Instance) ValidateLambdas() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.state.Lambda) {
 			return errors.New("message lambda does not equal state lambda")
+		}
+		if !bytes.Equal(signedMessage.Message.PreviousLambda, i.state.PreviousLambda) {
+			return errors.New("message previous lambda does not equal state previous lambda")
 		}
 		return nil
 	}

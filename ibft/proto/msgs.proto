@@ -14,10 +14,11 @@ enum RoundState {
 }
 
 message Message {
-  RoundState type   = 1;
-  uint64 round      = 2;
-  bytes lambda      = 3;
-  bytes value       = 4;
+  RoundState type         = 1;
+  uint64 round            = 2;
+  bytes lambda            = 3;
+  bytes previous_lambda   = 4; // previous_lambda could be compared to prev block hash, to build instances as a chain
+  bytes value             = 5;
 }
 
 message SignedMessage{
