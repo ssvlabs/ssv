@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validatePrePrepareMsg() types.PipelineFunc {
+func (i *Instance) validatePrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - validate proposer correct
 
@@ -18,7 +18,7 @@ func (i *iBFTInstance) validatePrePrepareMsg() types.PipelineFunc {
 	}
 }
 
-func (i *iBFTInstance) existingPreprepareMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingPreprepareMsg(signedMessage *types.SignedMessage) bool {
 	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round); len(msgs) > 0 {
 		if _, ok := msgs[signedMessage.IbftId]; ok {
 			return true
@@ -34,7 +34,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrePrepareMsg() types.PipelineFunc {
+func (i *Instance) uponPrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPreprepareMsg(signedMessage) {

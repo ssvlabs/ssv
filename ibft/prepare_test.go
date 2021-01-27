@@ -11,7 +11,7 @@ import (
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := generateNodes(4)
-	i := &iBFTInstance{
+	i := &Instance{
 		prepareMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),

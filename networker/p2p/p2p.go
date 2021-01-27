@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/networker"
-
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
@@ -34,12 +32,12 @@ type p2pNetworker struct {
 	logger *zap.Logger
 
 	// TODO: Refactor that out
-	pipelines map[types.RoundState]map[string][]networker.PipelineFunc
-	locks     map[string]*sync.Mutex
+	pipelines map[types.RoundState]map[uint64][]types.PipelineFunc
+	locks     map[uint64]*sync.Mutex
 }
 
 // New is the constructor of p2pNetworker
-func New(ctx context.Context, logger *zap.Logger, topicName string) (networker.Networker, error) {
+func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Networker, error) {
 	// Create a new libp2p Host that listens on a random TCP port
 	host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	if err != nil {
@@ -76,8 +74,8 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (networker.N
 		topic:  topic,
 		logger: logger,
 
-		pipelines: make(map[types.RoundState]map[string][]networker.PipelineFunc),
-		locks:     make(map[string]*sync.Mutex),
+		pipelines: make(map[types.RoundState]map[uint64][]types.PipelineFunc),
+		locks:     make(map[uint64]*sync.Mutex),
 	}
 
 	go func() {
@@ -108,7 +106,7 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (networker.N
 				ntw.locks[id].Lock()
 				for _, item := range pipelineForType {
 					if err := item(cm); err != nil {
-						logger.Error("failed to execute pipeline for node", zap.Error(err), zap.String("node_id", id))
+						logger.Error("failed to execute pipeline for node", zap.Error(err), zap.Uint64("node_id", id))
 						break
 					}
 				}
@@ -122,13 +120,13 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (networker.N
 
 // SetMessagePipeline sets a pipeline for a message to go through before it's sent to the msg channel.
 // Message validation and processing should happen in the pipeline
-func (n *p2pNetworker) SetMessagePipeline(id string, roundState types.RoundState, pipeline []networker.PipelineFunc) {
+func (n *p2pNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []types.PipelineFunc) {
 	if _, ok := n.locks[id]; !ok {
 		n.locks[id] = &sync.Mutex{}
 	}
 
 	if _, ok := n.pipelines[roundState]; !ok {
-		n.pipelines[roundState] = make(map[string][]networker.PipelineFunc)
+		n.pipelines[roundState] = make(map[uint64][]types.PipelineFunc)
 	}
 
 	n.locks[id].Lock()

@@ -7,7 +7,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func (i *iBFTInstance) validateCommitMsg() types.PipelineFunc {
+func (i *Instance) validateCommitMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
@@ -20,7 +20,7 @@ func (i *iBFTInstance) validateCommitMsg() types.PipelineFunc {
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	// TODO - do we need to validate round?
 	cnt := 0
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
@@ -33,7 +33,7 @@ func (i *iBFTInstance) commitQuorum(round uint64, inputValue []byte) (quorum boo
 	return quorum, cnt, i.params.CommitteeSize()
 }
 
-func (i *iBFTInstance) existingCommitMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingCommitMsg(signedMessage *types.SignedMessage) bool {
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
@@ -46,7 +46,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *iBFTInstance) uponCommitMsg() types.PipelineFunc {
+func (i *Instance) uponCommitMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid

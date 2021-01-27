@@ -30,7 +30,7 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) 
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
-	instances := make([]*iBFTInstance, 0)
+	instances := make([]*Instance, 0)
 	sks, nodes := generateNodes(4)
 	replay := NewIBFTReplay(nodes)
 	params := &types.InstanceParams{

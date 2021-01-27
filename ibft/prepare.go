@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
+func (i *Instance) validatePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - prepare should equal pre-prepare value
 
@@ -19,7 +19,7 @@ func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
 	}
 }
 
-func (i *iBFTInstance) batchedPrepareMsgs(round uint64) map[string][]types.SignedMessage {
+func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]types.SignedMessage {
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
 	ret := make(map[string][]types.SignedMessage)
 	for _, msg := range msgs {
@@ -33,7 +33,7 @@ func (i *iBFTInstance) batchedPrepareMsgs(round uint64) map[string][]types.Signe
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	batched := i.batchedPrepareMsgs(round)
 	if msgs, ok := batched[hex.EncodeToString(inputValue)]; ok {
 		quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
@@ -43,7 +43,7 @@ func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bo
 	return false, 0, i.params.CommitteeSize()
 }
 
-func (i *iBFTInstance) existingPrepareMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingPrepareMsg(signedMessage *types.SignedMessage) bool {
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
@@ -58,7 +58,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *iBFTInstance) uponPrepareMsg() types.PipelineFunc {
+func (i *Instance) uponPrepareMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?

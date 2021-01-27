@@ -26,7 +26,7 @@ require (
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20210107162333-9e9cf77d4921
 	github.com/prysmaticlabs/prysm v1.1.0
-	github.com/sirupsen/logrus v1.7.0 // indirect
+	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.1
 	github.com/stretchr/testify v1.6.1
 	go.opencensus.io v0.22.5

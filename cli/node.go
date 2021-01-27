@@ -12,8 +12,8 @@ import (
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
-	"github.com/bloxapp/ssv/ibft/networker/p2p"
 	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/networker/p2p"
 	"github.com/bloxapp/ssv/node"
 )
 
@@ -83,7 +83,7 @@ var startNodeCmd = &cobra.Command{
 			Beacon:          beaconClient,
 			Network:         core.NetworkFromString(network),
 			IBFTInstance: ibft.New(
-				logger,
+				//logger, // TODO - change logger
 				&types.Node{
 					IbftId: nodeID,
 					Pk:     baseKey.GetPublicKey().Serialize(),

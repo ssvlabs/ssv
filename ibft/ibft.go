@@ -22,7 +22,7 @@ func Place() {
 	blk.String()
 }
 
-type iBFTInstance struct {
+type Instance struct {
 	me               *types.Node
 	state            *types.State
 	network          types.Networker
@@ -43,20 +43,20 @@ type iBFTInstance struct {
 	changeRound chan bool
 }
 
-// New is the constructor of iBFTInstance
+// New is the constructor of Instance
 func New(
 	me *types.Node,
 	network types.Networker,
 	implementation types.Implementor,
 	params *types.InstanceParams,
-) *iBFTInstance {
+) *Instance {
 	// make sure secret key is not nil, otherwise the node can't operate
 	if me.Sk == nil || len(me.Sk) == 0 {
-		logrus.Fatalf("can't create iBFTInstance with invalid secret key")
+		logrus.Fatalf("can't create Instance with invalid secret key")
 		return nil
 	}
 
-	return &iBFTInstance{
+	return &Instance{
 		me:             me,
 		state:          &types.State{Stage: types.RoundState_NotStarted},
 		network:        network,
@@ -89,7 +89,7 @@ func New(
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
+func (i *Instance) Start(lambda []byte, inputValue []byte) error {
 	i.log.Infof("Node is starting iBFT instance %s", hex.EncodeToString(lambda))
 	i.state.Round = 1
 	i.state.Lambda = lambda
@@ -113,14 +113,14 @@ func (i *iBFTInstance) Start(lambda []byte, inputValue []byte) error {
 }
 
 // Committed returns a channel which indicates when this instance of iBFT decided an input value.
-func (i *iBFTInstance) Committed() chan bool {
+func (i *Instance) Committed() chan bool {
 	return i.decided
 }
 
 // StartEventLoopAndMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
-func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
+func (i *Instance) StartEventLoopAndMessagePipeline() {
 	lockMsg := func(signedMsg *types.SignedMessage) error {
 		i.msgLock.Lock()
 		return nil
@@ -187,7 +187,7 @@ func (i *iBFTInstance) StartEventLoopAndMessagePipeline() {
 	}()
 }
 
-func (i *iBFTInstance) SignAndBroadcast(msg *types.Message) error {
+func (i *Instance) SignAndBroadcast(msg *types.Message) error {
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(i.me.Sk); err != nil { // TODO - cache somewhere
 		return err
@@ -213,7 +213,7 @@ func (i *iBFTInstance) SignAndBroadcast(msg *types.Message) error {
 	The timer can be in one of two states: running or expired.
 	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the state changes to expired."
 */
-func (i *iBFTInstance) triggerRoundChangeOnTimer() {
+func (i *Instance) triggerRoundChangeOnTimer() {
 	// make sure previous timer is stopped
 	i.stopRoundChangeTimer()
 
@@ -228,7 +228,7 @@ func (i *iBFTInstance) triggerRoundChangeOnTimer() {
 	}()
 }
 
-func (i *iBFTInstance) stopRoundChangeTimer() {
+func (i *Instance) stopRoundChangeTimer() {
 	if i.roundChangeTimer != nil {
 		i.roundChangeTimer.Stop()
 		i.roundChangeTimer = nil

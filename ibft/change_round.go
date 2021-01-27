@@ -22,7 +22,7 @@ import (
 			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
-func (i *iBFTInstance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
+func (i *Instance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
 	for _, msg := range i.changeRoundMessages.ReadOnlyMessagesByRound(round) {
 		if msg.Message.Value == nil {
 			continue
@@ -52,7 +52,7 @@ predicate JustifyRoundChange(Qrc) return
 	∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
 		(pr, pv) = HighestPrepared(Qrc)
 */
-func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
+func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 	cnt := 0
 	// Find quorum for round change messages with prj = ⊥ ∧ pvj = ⊥
 	for _, msg := range i.changeRoundMessages.ReadOnlyMessagesByRound(round) {
@@ -80,7 +80,7 @@ func (i *iBFTInstance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *iBFTInstance) validateChangeRoundMsg() types.PipelineFunc {
+func (i *Instance) validateChangeRoundMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
@@ -124,7 +124,7 @@ func (i *iBFTInstance) validateChangeRoundMsg() types.PipelineFunc {
 	}
 }
 
-func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
+func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	if i.state.PreparedRound != 0 { // TODO is this safe? should we have a flag indicating we prepared?
 		batched := i.batchedPrepareMsgs(i.state.PreparedRound)
 		msgs := batched[hex.EncodeToString(i.state.PreparedValue)]
@@ -167,7 +167,7 @@ func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
 	return nil, nil // not previously prepared
 }
 
-func (i *iBFTInstance) uponChangeRoundTrigger() {
+func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
 	i.state.Round++
 	i.log.Infof("round timeout, changing round to %d", i.state.Round)
@@ -194,7 +194,7 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 	i.state.Stage = types.RoundState_ChangeRound
 }
 
-func (i *iBFTInstance) existingChangeRoundMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingChangeRoundMsg(signedMessage *types.SignedMessage) bool {
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
@@ -203,13 +203,13 @@ func (i *iBFTInstance) existingChangeRoundMsg(signedMessage *types.SignedMessage
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *iBFTInstance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
+func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
 	return quorum, len(msgs), i.params.CommitteeSize()
 }
 
-func (i *iBFTInstance) uponChangeRoundMsg() types.PipelineFunc {
+func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - if instance decided should we process round change?

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/bloxapp/ssv/ibft/networker"
+	"github.com/bloxapp/ssv/networker"
 
 	"github.com/pborman/uuid"
 

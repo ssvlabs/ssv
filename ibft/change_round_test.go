@@ -32,7 +32,7 @@ func signMsg(id uint64, sk *bls.SecretKey, msg *types.Message) types.SignedMessa
 
 func TestRoundChangeInputValue(t *testing.T) {
 	sks, nodes := generateNodes(4)
-	i := &iBFTInstance{
+	i := &Instance{
 		prepareMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
@@ -101,7 +101,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 
 func TestValidateChangeRoundMessage(t *testing.T) {
 	sks, nodes := generateNodes(4)
-	i := &iBFTInstance{
+	i := &Instance{
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -369,7 +369,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		PreparedValue: []byte("hello"),
 	})
 
-	i := &iBFTInstance{
+	i := &Instance{
 		changeRoundMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
@@ -471,7 +471,7 @@ func TestRoundChangeJustification(t *testing.T) {
 func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
-	i := &iBFTInstance{
+	i := &Instance{
 		changeRoundMessages: types.NewMessagesContainer(),
 		params: &types.InstanceParams{
 			ConsensusParams: types.DefaultConsensusParams(),
