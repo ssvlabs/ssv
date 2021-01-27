@@ -8,10 +8,32 @@ import (
 
 // Flag names.
 const (
+	nodeIDKeyFlag    = "node-id"
+	leaderIDFlag     = "leader-id"
 	validatorKeyFlag = "validator-key"
 	beaconAddrFlag   = "beacon-node-addr"
 	networkFlag      = "network"
 )
+
+// AddNodeIDKeyFlag adds the node ID flag to the command
+func AddNodeIDKeyFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, nodeIDKeyFlag, 0, "SSV node ID", true)
+}
+
+// GetNodeIDKeyFlagValue gets the node ID flag from the command
+func GetNodeIDKeyFlagValue(c *cobra.Command) (uint64, error) {
+	return c.Flags().GetUint64(nodeIDKeyFlag)
+}
+
+// AddLeaderIDKeyFlag adds the leader ID flag to the command
+func AddLeaderIDKeyFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, leaderIDFlag, 0, "SSV node leader ID", true)
+}
+
+// GetLeaderIDKeyFlagValue gets the leader ID flag from the command
+func GetLeaderIDKeyFlagValue(c *cobra.Command) (uint64, error) {
+	return c.Flags().GetUint64(leaderIDFlag)
+}
 
 // AddValidatorKeyFlag adds the validator key flag to the command
 func AddValidatorKeyFlag(c *cobra.Command) {
