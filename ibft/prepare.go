@@ -2,8 +2,6 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
-	"fmt"
 
 	"github.com/bloxapp/ssv/ibft/types"
 	"go.uber.org/zap"
@@ -11,14 +9,6 @@ import (
 
 func (i *iBFTInstance) validatePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
-		// Only 1 prepare per node per round is valid
-		msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-		if val, found := msgs[signedMessage.IbftId]; found {
-			if !val.Message.Compare(*signedMessage.Message) {
-				return errors.New(fmt.Sprintf("another (different) prepare message for peer %d was received", signedMessage.IbftId))
-			}
-		}
-
 		// TODO - prepare should equal pre-prepare value
 
 		if err := i.implementation.ValidatePrepareMsg(i.state, signedMessage); err != nil {
@@ -53,6 +43,14 @@ func (i *iBFTInstance) prepareQuorum(round uint64, inputValue []byte) (quorum bo
 	return false, 0, i.params.CommitteeSize()
 }
 
+func (i *iBFTInstance) existingPrepareMsg(signedMessage *types.SignedMessage) bool {
+	msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
+	if _, found := msgs[signedMessage.IbftId]; found {
+		return true
+	}
+	return false
+}
+
 /**
 ### Algorithm 2 IBFT pseudocode for process pi: normal case operation
 upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
@@ -61,14 +59,22 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
 func (i *iBFTInstance) uponPrepareMsg() types.PipelineFunc {
+	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
+		// Only 1 prepare per node per round is valid
+		if i.existingPrepareMsg(signedMessage) {
+			return nil
+		}
 
 		// add to prepare messages
 		i.prepareMessages.AddMessage(*signedMessage)
-		i.log.Info("received valid prepare message for round", zap.Uint64("round", signedMessage.Message.Round))
+		i.log.Infof("received valid prepare message from %d, for round %d", signedMessage.IbftId, signedMessage.Message.Round)
 
 		// check if quorum achieved, act upon it.
+		if i.state.Stage == types.RoundState_Prepare {
+			return nil // no reason to prepare again
+		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
 			i.log.Infof("prepared instance %s, round %d (%d/%d votes)", hex.EncodeToString(i.state.Lambda), i.state.Round, t, n)
 

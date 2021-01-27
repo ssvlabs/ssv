@@ -1,11 +1,8 @@
 package ibft
 
 import (
-	"sync"
 	"testing"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 
@@ -14,37 +11,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
 	"github.com/bloxapp/ssv/ibft/types"
 )
-
-type LocalNodeNetworker struct {
-	pipelines map[types.RoundState]map[string][]types.PipelineFunc
-	l         map[string]*sync.Mutex
-}
-
-func (n *LocalNodeNetworker) SetMessagePipeline(id string, roundState types.RoundState, pipeline []types.PipelineFunc) {
-	if n.pipelines[roundState] == nil {
-		n.pipelines[roundState] = make(map[string][]types.PipelineFunc)
-	}
-	n.pipelines[roundState][id] = pipeline
-	n.l[id] = &sync.Mutex{}
-}
-
-func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
-	go func() {
-		for id, pipelineForType := range n.pipelines[signed.Message.Type] {
-			n.l[id].Lock()
-			for _, item := range pipelineForType {
-				err := item(signed)
-				if err != nil {
-					logrus.WithError(err).Errorf("failed to execute pipeline for node id %s", id)
-					break
-				}
-			}
-			n.l[id].Unlock()
-		}
-	}()
-
-	return nil
-}
 
 func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) {
 	bls.Init(bls.BLS12_381)
@@ -64,22 +30,25 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) 
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
-	net := &LocalNodeNetworker{pipelines: make(map[types.RoundState]map[string][]types.PipelineFunc), l: make(map[string]*sync.Mutex)}
 	instances := make([]*iBFTInstance, 0)
 	sks, nodes := generateNodes(4)
+	replay := NewIBFTReplay(nodes)
 	params := &types.InstanceParams{
 		ConsensusParams: types.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
 	}
 
-	leader := 10 //params.CommitteeSize() - 1
+	// setup scenario
+	replay.StartRound(1).PreventMessages(types.RoundState_Commit, []uint64{0, 1}).EndRound()
+
+	leader := params.CommitteeSize() - 1
 	for i := 0; i < params.CommitteeSize(); i++ {
 		me := &types.Node{
 			IbftId: uint64(i),
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
-		instances = append(instances, New(me, net, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
+		instances = append(instances, New(me, replay.Networker, &day_number_consensus.DayNumberConsensus{Id: uint64(i), Leader: uint64(leader)}, params))
 		instances[i].StartEventLoopAndMessagePipeline()
 	}
 

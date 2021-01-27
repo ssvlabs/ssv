@@ -168,10 +168,9 @@ func (i *iBFTInstance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *iBFTInstance) uponChangeRoundTrigger() {
-	i.log.Infof("round timeout, changing round to %d", i.state.Round)
-
 	// bump round
 	i.state.Round++
+	i.log.Infof("round timeout, changing round to %d", i.state.Round)
 
 	// set time for next round change
 	i.triggerRoundChangeOnTimer()
@@ -195,6 +194,14 @@ func (i *iBFTInstance) uponChangeRoundTrigger() {
 	i.state.Stage = types.RoundState_ChangeRound
 }
 
+func (i *iBFTInstance) existingChangeRoundMsg(signedMessage *types.SignedMessage) bool {
+	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
+	if _, found := msgs[signedMessage.IbftId]; found {
+		return true
+	}
+	return false
+}
+
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *iBFTInstance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(round)
@@ -203,13 +210,21 @@ func (i *iBFTInstance) changeRoundQuorum(round uint64) (quorum bool, t int, n in
 }
 
 func (i *iBFTInstance) uponChangeRoundMsg() types.PipelineFunc {
+	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - if instance decided should we process round change?
+		// Only 1 prepare per node per round is valid
+		if i.existingChangeRoundMsg(signedMessage) {
+			return nil
+		}
 
 		// add to prepare messages
 		i.changeRoundMessages.AddMessage(*signedMessage)
-		i.log.Infof("received valid change round message for round %d", signedMessage.Message.Round)
+		i.log.Infof("received valid change round message from %d, for round %d", signedMessage.IbftId, signedMessage.Message.Round)
 
+		if i.state.Stage == types.RoundState_PrePrepare {
+			return nil // no reason to pre-prepare again
+		}
 		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
 		justifyRound, err := i.justifyRoundChange(signedMessage.Message.Round)
 		if err != nil {
@@ -217,19 +232,22 @@ func (i *iBFTInstance) uponChangeRoundMsg() types.PipelineFunc {
 		}
 		isLeader := i.implementation.IsLeader(i.state)
 		if quorum {
+			i.state.Stage = types.RoundState_PrePrepare
 			i.log.Infof("change round (%d) quorum received. Is_leader=%t, round_justified=%t", signedMessage.Message.Round, isLeader, justifyRound)
 
 			if isLeader && justifyRound {
-				i.log.Infof("broadcasting pre-prepare as leader after round change (round %d)", signedMessage.Message.Round)
 				var value []byte
 				highest, err := i.highestPrepared(signedMessage.Message.Round)
 				if err != nil {
 					return err
 				}
-				if highest == nil {
+				if highest != nil {
 					value = highest.PreparedValue
+					i.log.Infof("broadcasting pre-prepare as leader after round change (round %d) with existing prepared", signedMessage.Message.Round)
+
 				} else {
 					value = i.state.InputValue
+					i.log.Infof("broadcasting pre-prepare as leader after round change (round %d) with input value", signedMessage.Message.Round)
 				}
 
 				// send pre-prepare msg

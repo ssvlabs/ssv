@@ -1,8 +1,6 @@
 package ibft
 
 import (
-	"errors"
-
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
@@ -12,19 +10,21 @@ func (i *iBFTInstance) validatePrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - validate proposer correct
 
-		// Only 1 pre-prepare per round is valid
-		if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round); len(msgs) > 0 {
-			if !msgs[0].Message.Compare(*signedMessage.Message) {
-				return errors.New("another (different) pre-prepare message for the round was received")
-			}
-		}
-
 		if err := i.implementation.ValidatePrePrepareMsg(i.state, signedMessage); err != nil {
 			return err
 		}
 
 		return nil
 	}
+}
+
+func (i *iBFTInstance) existingPreprepareMsg(signedMessage *types.SignedMessage) bool {
+	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round); len(msgs) > 0 {
+		if _, ok := msgs[signedMessage.IbftId]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 /**
@@ -36,9 +36,14 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *iBFTInstance) uponPrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
+		// Only 1 pre-prepare per round is valid
+		if i.existingPreprepareMsg(signedMessage) {
+			return nil
+		}
+
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(*signedMessage)
-		i.log.Info("received valid pre-prepare message")
+		i.log.Infof("received valid pre-prepare message from %d, for round %d", signedMessage.IbftId, signedMessage.Message.Round)
 
 		// In case current round is not the first round for the instance, we need to consider previous justifications
 		if signedMessage.Message.Round > 0 {

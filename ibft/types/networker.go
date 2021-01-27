@@ -8,5 +8,5 @@ type Networker interface {
 
 	// SetMessagePipeline sets a pipeline for a message to go through before it's sent to the msg channel.
 	// Message validation and processing should happen in the pipeline
-	SetMessagePipeline(id string, roundState RoundState, pipeline []PipelineFunc)
+	SetMessagePipeline(id uint64, roundState RoundState, pipeline []PipelineFunc)
 }
