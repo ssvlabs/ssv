@@ -143,7 +143,7 @@ func (n *ssvNode) startSlotQueueListener() {
 		}
 
 		// TODO: Pass real values
-		if err := n.iBFTInstance.Start([]byte("0"), val); err != nil {
+		if err := n.iBFTInstance.Start([]byte{}, []byte("0"), val); err != nil {
 			logger.Error("failed to start IBFT instance", zap.Error(err))
 		}
 	}

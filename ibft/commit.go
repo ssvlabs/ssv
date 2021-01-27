@@ -7,10 +7,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker"
 )
 
-func (i *Instance) validateCommitMsg() networker.PipelineFunc {
+func (i *Instance) validateCommitMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
@@ -49,7 +48,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *Instance) uponCommitMsg() networker.PipelineFunc {
+func (i *Instance) uponCommitMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid

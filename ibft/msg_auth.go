@@ -6,7 +6,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker"
 )
 
 // ValidateLambdas valdiates current and previous lambdas

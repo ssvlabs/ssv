@@ -6,10 +6,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker"
 )
 
-func (i *Instance) validatePrepareMsg() networker.PipelineFunc {
+func (i *Instance) validatePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - prepare should equal pre-prepare value
 
@@ -60,7 +59,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *Instance) uponPrepareMsg() networker.PipelineFunc {
+func (i *Instance) uponPrepareMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?

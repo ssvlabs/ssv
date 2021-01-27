@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker"
 )
 
 /**
@@ -80,7 +79,7 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *Instance) validateChangeRoundMsg() networker.PipelineFunc {
+func (i *Instance) validateChangeRoundMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
@@ -209,13 +208,13 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	return quorum, len(msgs), i.params.CommitteeSize()
 }
 
-func (i *Instance) uponChangeRoundMsg() networker.PipelineFunc {
+func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - if instance decided should we process round change?
 		if i.state.Stage == types.RoundState_Decided {
 			// TODO - can't get here, fails on round verification in pipeline
-			i.log.Infof("received change round after decision, sending decided message")
+			i.logger.Info("received change round after decision, sending decided message")
 			return nil
 		}
 

@@ -5,19 +5,18 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker"
 )
 
 type LocalNodeNetworker struct {
 	t         *testing.T
 	replay    *IBFTReplay
-	pipelines map[types.RoundState]map[uint64][]networker.PipelineFunc
+	pipelines map[types.RoundState]map[uint64][]types.PipelineFunc
 	l         map[uint64]*sync.Mutex
 }
 
-func (n *LocalNodeNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []networker.PipelineFunc) {
+func (n *LocalNodeNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []types.PipelineFunc) {
 	if n.pipelines[roundState] == nil {
-		n.pipelines[roundState] = make(map[uint64][]networker.PipelineFunc)
+		n.pipelines[roundState] = make(map[uint64][]types.PipelineFunc)
 	}
 	n.pipelines[roundState][id] = pipeline
 	n.l[id] = &sync.Mutex{}
@@ -62,7 +61,7 @@ type IBFTReplay struct {
 func NewIBFTReplay(nodes map[uint64]*types.Node) *IBFTReplay {
 	ret := &IBFTReplay{
 		Networker: &LocalNodeNetworker{
-			pipelines: make(map[types.RoundState]map[uint64][]networker.PipelineFunc),
+			pipelines: make(map[types.RoundState]map[uint64][]types.PipelineFunc),
 			l:         make(map[uint64]*sync.Mutex),
 		},
 		scripts: make(map[uint64]*RoundScript),

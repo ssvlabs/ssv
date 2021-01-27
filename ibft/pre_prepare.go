@@ -6,10 +6,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker"
 )
 
-func (i *Instance) validatePrePrepareMsg() networker.PipelineFunc {
+func (i *Instance) validatePrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - validate proposer correct
 		if signedMessage.IbftId != i.RoundLeader() {
@@ -39,7 +38,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) uponPrePrepareMsg() networker.PipelineFunc {
+func (i *Instance) uponPrePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPreprepareMsg(signedMessage) {

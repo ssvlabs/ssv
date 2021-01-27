@@ -11,8 +11,6 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/networker"
 )
 
 func Place() {
@@ -26,7 +24,7 @@ func Place() {
 type Instance struct {
 	me               *types.Node
 	state            *types.State
-	network          networker.Networker
+	network          types.Networker
 	implementation   types.Implementor
 	params           *types.InstanceParams
 	roundChangeTimer *time.Timer
@@ -48,7 +46,7 @@ type Instance struct {
 func New(
 	logger *zap.Logger,
 	me *types.Node,
-	network networker.Networker,
+	network types.Networker,
 	implementation types.Implementor,
 	params *types.InstanceParams,
 ) *Instance {
@@ -89,14 +87,14 @@ func New(
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(lambda []byte, inputValue []byte) error {
+func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) error {
 	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
 	i.state.Round = 1
 	i.state.Lambda = lambda
 	i.state.PreviousLambda = previousLambda
 	i.state.InputValue = inputValue
 
-	if i.implementation.IsLeader(i.state) {
+	if i.IsLeader() {
 		i.logger.Info("Node is leader for round 1")
 		i.state.Stage = types.RoundState_PrePrepare
 		msg := &types.Message{

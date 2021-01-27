@@ -109,8 +109,7 @@ var startNodeCmd = &cobra.Command{
 				},
 				peer,
 				&day_number_consensus.DayNumberConsensus{
-					Id:     nodeID,
-					Leader: leaderID,
+					Id: nodeID,
 				},
 				&types.InstanceParams{
 					ConsensusParams: types.DefaultConsensusParams(),
