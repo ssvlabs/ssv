@@ -208,8 +208,7 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	return quorum, len(msgs), i.params.CommitteeSize()
 }
 
-func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
-	// TODO - concurrency lock?
+func (i *Instance) addChangeRoundMessage() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - if instance decided should we process round change?
 		if i.state.Stage == types.RoundState_Decided {
@@ -227,6 +226,37 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 		i.changeRoundMessages.AddMessage(*signedMessage)
 		i.logger.Info("received valid change round message for round", zap.Uint64("ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
+		return nil
+	}
+}
+
+/**
+upon receiving a set Frc of f + 1 valid ⟨ROUND-CHANGE, λi, rj, −, −⟩ messages such that:
+	∀⟨ROUND-CHANGE, λi, rj, −, −⟩ ∈ Frc : rj > ri do
+		let ⟨ROUND-CHANGE, hi, rmin, −, −⟩ ∈ Frc such that:
+			∀⟨ROUND-CHANGE, λi, rj, −, −⟩ ∈ Frc : rmin ≤ rj
+		ri ← rmin
+		set timer i to running and expire after t(ri)
+		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
+*/
+func (i *Instance) uponChangeRoundPartialQuorum() types.PipelineFunc {
+	return func(signedMessage *types.SignedMessage) error {
+		return nil // TODO
+	}
+}
+
+/**
+upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messages such that
+	leader(λi, ri) = pi ∧ JustifyRoundChange(Qrc) do
+		if HighestPrepared(Qrc) ̸= ⊥ then
+			let v such that (−, v) = HighestPrepared(Qrc))
+		else
+			let v such that v = inputValue i
+		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
+*/
+func (i *Instance) uponChangeRoundFullQuorum() types.PipelineFunc {
+	// TODO - concurrency lock?
+	return func(signedMessage *types.SignedMessage) error {
 		if i.state.Stage == types.RoundState_PrePrepare {
 			return nil // no reason to pre-prepare again
 		}
@@ -236,6 +266,8 @@ func (i *Instance) uponChangeRoundMsg() types.PipelineFunc {
 			return err
 		}
 		isLeader := i.IsLeader()
+
+		// change round if quorum reached
 		if quorum {
 			i.state.Stage = types.RoundState_PrePrepare
 			i.logger.Info("change round quorum received.", zap.Uint64("round", signedMessage.Message.Round), zap.Bool("is_leader", isLeader), zap.Bool("round_justified", justifyRound))

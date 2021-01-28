@@ -111,11 +111,6 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) error
 	return nil
 }
 
-// Committed returns a channel which indicates when this instance of iBFT decided an input value.
-func (i *Instance) Committed() chan bool {
-	return i.decided
-}
-
 // StartEventLoopAndMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
@@ -150,7 +145,9 @@ func (i *Instance) StartEventLoopAndMessagePipeline() {
 		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
 		i.AuthMsg(),
 		i.validateChangeRoundMsg(),
-		i.uponChangeRoundMsg(),
+		i.addChangeRoundMessage(),
+		i.uponChangeRoundPartialQuorum(),
+		i.uponChangeRoundFullQuorum(),
 	})
 
 	go func() {
