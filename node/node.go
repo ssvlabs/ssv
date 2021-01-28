@@ -21,7 +21,7 @@ type Options struct {
 	PrivateKey      *bls.SecretKey
 	Network         core.Network
 	Beacon          beacon.Beacon
-	IBFTInstance    *ibft.Instance
+	IBFT            *ibft.IBFT
 	Logger          *zap.Logger
 }
 
@@ -38,7 +38,7 @@ type ssvNode struct {
 	network         core.Network
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
-	iBFTInstance    *ibft.Instance
+	iBFT            *ibft.IBFT
 	logger          *zap.Logger
 }
 
@@ -50,7 +50,7 @@ func New(opts Options) Node {
 		network:         opts.Network,
 		slotQueue:       slotqueue.New(opts.Network),
 		beacon:          opts.Beacon,
-		iBFTInstance:    opts.IBFTInstance,
+		iBFT:            opts.IBFT,
 		logger:          opts.Logger,
 	}
 }
@@ -58,8 +58,6 @@ func New(opts Options) Node {
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
 	go n.startSlotQueueListener()
-
-	n.iBFTInstance.StartEventLoopAndMessagePipeline()
 
 	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey)
 	if err != nil {
@@ -116,7 +114,7 @@ func (n *ssvNode) startSlotQueueListener() {
 		logger.Info("starting IBFT instance for slot...")
 
 		// TODO: Pass real values
-		if err := n.iBFTInstance.Start([]byte{}, []byte(strconv.Itoa(int(slot))), []byte(time.Now().Weekday().String())); err != nil {
+		if err := n.iBFT.StartInstance([]byte{}, []byte(strconv.Itoa(int(slot))), []byte(time.Now().Weekday().String())); err != nil {
 			logger.Error("failed to start IBFT instance", zap.Error(err))
 		}
 	}

@@ -49,8 +49,8 @@ type Instance struct {
 	changeRound chan bool
 }
 
-// New is the constructor of Instance
-func New(opts InstanceOptions) *Instance {
+// NewInstance is the constructor of Instance
+func NewInstance(opts InstanceOptions) *Instance {
 	// make sure secret key is not nil, otherwise the node can't operate
 	if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
 		opts.Logger.Fatal("can't create Instance with invalid secret key")

@@ -48,7 +48,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
-		instances = append(instances, New(InstanceOptions{
+		instances = append(instances, NewInstance(InstanceOptions{
 			Logger:         logger,
 			Me:             me,
 			Network:        replay.Networker,
