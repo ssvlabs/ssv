@@ -6,8 +6,5 @@ package types
 // 		- input value + verification
 //		- lambda value + verification
 type Implementor interface {
-	ValidatePrePrepareMsg(state *State, msg *SignedMessage) error
-	ValidatePrepareMsg(state *State, msg *SignedMessage) error
-	ValidateCommitMsg(state *State, msg *SignedMessage) error
-	ValidateChangeRoundMsg(state *State, msg *SignedMessage) error
+	ValidateValue(value []byte) error
 }

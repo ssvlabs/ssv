@@ -14,7 +14,7 @@ func (i *Instance) validatePrePrepareMsg() types.PipelineFunc {
 		if signedMessage.IbftId != i.RoundLeader() {
 			return errors.New("pre-prepare message sent not by leader")
 		}
-		if err := i.implementation.ValidatePrePrepareMsg(i.state, signedMessage); err != nil {
+		if err := i.implementation.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 

@@ -12,7 +12,7 @@ func (i *Instance) validatePrepareMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - prepare should equal pre-prepare value
 
-		if err := i.implementation.ValidatePrepareMsg(i.state, signedMessage); err != nil {
+		if err := i.implementation.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 

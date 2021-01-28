@@ -13,7 +13,7 @@ func (i *Instance) validateCommitMsg() types.PipelineFunc {
 	return func(signedMessage *types.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
-		if err := i.implementation.ValidateCommitMsg(i.state, signedMessage); err != nil {
+		if err := i.implementation.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 

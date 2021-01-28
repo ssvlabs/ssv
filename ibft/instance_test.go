@@ -48,12 +48,13 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
-		instances = append(instances, New(logger, me, replay.Networker, &day_number_consensus.DayNumberConsensus{Id: uint64(i)}, params))
+		instances = append(instances, New(logger, me, replay.Networker, &day_number_consensus.DayNumberConsensus{}, params))
 		instances[i].StartEventLoopAndMessagePipeline()
 	}
 
 	for _, i := range instances {
-		require.NoError(t, i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String())))
+		_, err := i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String()))
+		require.NoError(t, err)
 	}
 
 	time.Sleep(time.Minute * 5)

@@ -86,7 +86,7 @@ func New(
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) error {
+func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (decided chan bool, err error) {
 	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
 	i.state.Round = 1
 	i.state.Lambda = lambda
@@ -104,11 +104,15 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) error
 			Value:          i.state.InputValue,
 		}
 		if err := i.SignAndBroadcast(msg); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	i.triggerRoundChangeOnTimer()
-	return nil
+	return i.decided, nil
+}
+
+func (i *Instance) Stage() types.RoundState {
+	return i.state.Stage
 }
 
 // StartEventLoopAndMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
