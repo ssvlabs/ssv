@@ -9,7 +9,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
-	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +51,7 @@ func New(
 ) *Instance {
 	// make sure secret key is not nil, otherwise the node can't operate
 	if me.Sk == nil || len(me.Sk) == 0 {
-		logrus.Fatalf("can't create Instance with invalid secret key")
+		logger.Fatal("can't create Instance with invalid secret key")
 		return nil
 	}
 
