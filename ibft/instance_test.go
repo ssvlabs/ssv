@@ -48,7 +48,13 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
-		instances = append(instances, New(logger, me, replay.Networker, &day_number_consensus.DayNumberConsensus{}, params))
+		instances = append(instances, NewInstance(InstanceOptions{
+			Logger:         logger,
+			Me:             me,
+			Network:        replay.Networker,
+			Implementation: &day_number_consensus.DayNumberConsensus{},
+			Params:         params,
+		}))
 		instances[i].StartEventLoopAndMessagePipeline()
 	}
 

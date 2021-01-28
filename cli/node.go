@@ -100,17 +100,16 @@ var startNodeCmd = &cobra.Command{
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
 			Network:         core.NetworkFromString(network),
-			IBFTInstance: ibft.New(
+			IBFT: ibft.New(
 				logger,
+				nil, // TODO: Implement DB
 				&types.Node{
 					IbftId: nodeID,
 					Pk:     baseKey.GetPublicKey().Serialize(),
 					Sk:     baseKey.Serialize(),
 				},
 				peer,
-				&day_number_consensus.DayNumberConsensus{
-					Id: nodeID,
-				},
+				&day_number_consensus.DayNumberConsensus{},
 				&types.InstanceParams{
 					ConsensusParams: types.DefaultConsensusParams(),
 					IbftCommittee:   ibftCommittee,

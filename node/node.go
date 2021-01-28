@@ -2,7 +2,7 @@ package node
 
 import (
 	"context"
-	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/types"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 
@@ -22,7 +21,7 @@ type Options struct {
 	PrivateKey      *bls.SecretKey
 	Network         core.Network
 	Beacon          beacon.Beacon
-	IBFTInstance    *ibft.Instance
+	IBFT            *ibft.IBFT
 	Logger          *zap.Logger
 }
 
@@ -39,7 +38,7 @@ type ssvNode struct {
 	network         core.Network
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
-	iBFTInstance    *ibft.Instance
+	iBFT            *ibft.IBFT
 	logger          *zap.Logger
 }
 
@@ -51,7 +50,7 @@ func New(opts Options) Node {
 		network:         opts.Network,
 		slotQueue:       slotqueue.New(opts.Network),
 		beacon:          opts.Beacon,
-		iBFTInstance:    opts.IBFTInstance,
+		iBFT:            opts.IBFT,
 		logger:          opts.Logger,
 	}
 }
@@ -59,8 +58,6 @@ func New(opts Options) Node {
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
 	go n.startSlotQueueListener()
-
-	n.iBFTInstance.StartEventLoopAndMessagePipeline()
 
 	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey)
 	if err != nil {
@@ -116,34 +113,8 @@ func (n *ssvNode) startSlotQueueListener() {
 
 		logger.Info("starting IBFT instance for slot...")
 
-		msg := &types.Message{
-			Type:   types.RoundState_PrePrepare,
-			Round:  1,
-			Lambda: []byte("0"),
-			Value:  nil,
-		}
-
-		sig, err := msg.Sign(n.privateKey)
-		if err != nil {
-			logger.Error("failed to sign message", zap.Error(err))
-			return
-		}
-
-		// TODO: Refactor that
-		val, err := json.Marshal(&types.ChangeRoundData{
-			PreparedRound:    1,
-			PreparedValue:    []byte("some value"),
-			JustificationMsg: msg,
-			JustificationSig: sig.Serialize(),
-			SignedIds:        []uint64{1},
-		})
-		if err != nil {
-			logger.Error("failed to marshal change round data", zap.Error(err))
-			return
-		}
-
 		// TODO: Pass real values
-		if err := n.iBFTInstance.Start([]byte{}, []byte("0"), val); err != nil {
+		if err := n.iBFT.StartInstance([]byte{}, []byte(strconv.Itoa(int(slot))), []byte(time.Now().Weekday().String())); err != nil {
 			logger.Error("failed to start IBFT instance", zap.Error(err))
 		}
 	}

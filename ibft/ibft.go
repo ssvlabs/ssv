@@ -23,6 +23,19 @@ type IBFT struct {
 	logger         *zap.Logger
 }
 
+// New is the constructor of IBFT
+func New(logger *zap.Logger, db types.DB, me *types.Node, network types.Networker, implementation types.Implementor, params *types.InstanceParams) *IBFT {
+	return &IBFT{
+		instances:      make(map[string]*Instance),
+		db:             db,
+		me:             me,
+		network:        network,
+		implementation: implementation,
+		params:         params,
+		logger:         logger,
+	}
+}
+
 func (i *IBFT) StartInstance(prevInstance []byte, identifier, value []byte) error {
 	prevId := hex.EncodeToString(prevInstance)
 	if prevId != FirstInstanceIdentifier {
@@ -35,8 +48,15 @@ func (i *IBFT) StartInstance(prevInstance []byte, identifier, value []byte) erro
 		}
 	}
 
-	newInstance := New(i.logger, i.me, i.network, i.implementation, i.params)
+	newInstance := NewInstance(InstanceOptions{
+		Logger:         i.logger,
+		Me:             i.me,
+		Network:        i.network,
+		Implementation: i.implementation,
+		Params:         i.params,
+	})
 	i.instances[hex.EncodeToString(identifier)] = newInstance
+	newInstance.StartEventLoopAndMessagePipeline()
 	_, err := newInstance.Start(prevInstance, identifier, value)
 	return err
 }
