@@ -120,54 +120,37 @@ func (i *Instance) Committed() chan bool {
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartEventLoopAndMessagePipeline() {
-	lockMsg := func(signedMsg *types.SignedMessage) error {
-		//i.msgLock.Lock()
-		return nil
-	}
-	unlockMsg := func(signedMsg *types.SignedMessage) error {
-		//i.msgLock.Unlock()
-		return nil
-	}
-
 	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_PrePrepare, []types.PipelineFunc{
-		lockMsg,
 		MsgTypeCheck(types.RoundState_PrePrepare),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
 		i.validatePrePrepareMsg(),
 		i.uponPrePrepareMsg(),
-		unlockMsg,
 	})
 	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_Prepare, []types.PipelineFunc{
-		lockMsg,
 		MsgTypeCheck(types.RoundState_Prepare),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
-		unlockMsg,
 	})
 	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_Commit, []types.PipelineFunc{
-		lockMsg,
 		MsgTypeCheck(types.RoundState_Commit),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
-		unlockMsg,
 	})
 	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_ChangeRound, []types.PipelineFunc{
-		lockMsg,
 		MsgTypeCheck(types.RoundState_ChangeRound),
 		i.ValidateLambdas(),
 		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
 		i.AuthMsg(),
 		i.validateChangeRoundMsg(),
 		i.uponChangeRoundMsg(),
-		unlockMsg,
 	})
 
 	go func() {
