@@ -35,7 +35,13 @@ func (i *IBFT) StartInstance(prevInstance []byte, identifier, value []byte) erro
 		}
 	}
 
-	newInstance := New(i.logger, i.me, i.network, i.implementation, i.params)
+	newInstance := New(InstanceOptions{
+		Logger:         i.logger,
+		Me:             i.me,
+		Network:        i.network,
+		Implementation: i.implementation,
+		Params:         i.params,
+	})
 	i.instances[hex.EncodeToString(identifier)] = newInstance
 	_, err := newInstance.Start(prevInstance, identifier, value)
 	return err

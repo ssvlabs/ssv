@@ -20,6 +20,14 @@ func Place() {
 	blk.String()
 }
 
+type InstanceOptions struct {
+	Logger         *zap.Logger
+	Me             *types.Node
+	Network        types.Networker
+	Implementation types.Implementor
+	Params         *types.InstanceParams
+}
+
 type Instance struct {
 	me               *types.Node
 	state            *types.State
@@ -42,26 +50,20 @@ type Instance struct {
 }
 
 // New is the constructor of Instance
-func New(
-	logger *zap.Logger,
-	me *types.Node,
-	network types.Networker,
-	implementation types.Implementor,
-	params *types.InstanceParams,
-) *Instance {
+func New(opts InstanceOptions) *Instance {
 	// make sure secret key is not nil, otherwise the node can't operate
-	if me.Sk == nil || len(me.Sk) == 0 {
-		logger.Fatal("can't create Instance with invalid secret key")
+	if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
+		opts.Logger.Fatal("can't create Instance with invalid secret key")
 		return nil
 	}
 
 	return &Instance{
-		me:             me,
+		me:             opts.Me,
 		state:          &types.State{Stage: types.RoundState_NotStarted},
-		network:        network,
-		implementation: implementation,
-		params:         params,
-		logger:         logger.With(zap.Uint64("node_id", me.IbftId)),
+		network:        opts.Network,
+		implementation: opts.Implementation,
+		params:         opts.Params,
+		logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
 		msgLock:        sync.Mutex{},
 
 		prePrepareMessages:  types.NewMessagesContainer(),

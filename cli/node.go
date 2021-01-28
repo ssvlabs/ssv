@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/hex"
+	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -112,8 +113,10 @@ var startNodeCmd = &cobra.Command{
 					Id: nodeID,
 				},
 				&types.InstanceParams{
-					ConsensusParams: types.DefaultConsensusParams(),
-					IbftCommittee:   ibftCommittee,
+					ConsensusParams: &types.ConsensusParams{
+						RoundChangeDuration: int64(time.Second * 5),
+					},
+					IbftCommittee: ibftCommittee,
 				},
 			),
 			Logger: logger,

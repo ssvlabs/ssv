@@ -1,5 +1,5 @@
 package types
 
-// Persister is an interface for persisting chain data
-type Persister interface {
+// DB is an interface for persisting chain data
+type DB interface {
 }
