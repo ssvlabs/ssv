@@ -4,23 +4,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/network/local"
+
+	"github.com/bloxapp/ssv/ibft/proto"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/ibft/consensus/validation"
 )
 
-func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*types.Node) {
+func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
 	bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*types.Node)
+	nodes := make(map[uint64]*proto.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[uint64(i)] = &types.Node{
+		nodes[uint64(i)] = &proto.Node{
 			IbftId: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
@@ -33,9 +36,9 @@ func TestIBFTInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
 	sks, nodes := generateNodes(4)
-	replay := NewIBFTReplay(nodes)
-	params := &types.InstanceParams{
-		ConsensusParams: types.DefaultConsensusParams(),
+	replay := local.NewIBFTReplay(nodes)
+	params := &proto.InstanceParams{
+		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
 	}
 
@@ -43,17 +46,17 @@ func TestIBFTInstance_Start(t *testing.T) {
 	//replay.StartRound(1).PreventMessages(types.RoundState_Prepare, []uint64{0, 1}).EndRound()
 
 	for i := 0; i < params.CommitteeSize(); i++ {
-		me := &types.Node{
+		me := &proto.Node{
 			IbftId: uint64(i),
 			Pk:     nodes[uint64(i)].Pk,
 			Sk:     sks[uint64(i)].Serialize(),
 		}
 		instances = append(instances, NewInstance(InstanceOptions{
-			Logger:         logger,
-			Me:             me,
-			Network:        replay.Networker,
-			Implementation: &day_number_consensus.DayNumberConsensus{},
-			Params:         params,
+			Logger:    logger,
+			Me:        me,
+			Network:   replay.Network,
+			Consensus: &validation.Consensus{},
+			Params:    params,
 		}))
 		instances[i].StartEventLoopAndMessagePipeline()
 	}
@@ -63,5 +66,5 @@ func TestIBFTInstance_Start(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	time.Sleep(time.Minute * 5)
+	time.Sleep(time.Minute * 2)
 }

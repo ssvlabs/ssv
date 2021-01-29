@@ -3,6 +3,10 @@ package cli
 import (
 	"encoding/hex"
 
+	"github.com/bloxapp/ssv/ibft/proto"
+
+	"github.com/bloxapp/ssv/ibft/consensus/validation"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -11,9 +15,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/implementations/day_number_consensus"
-	"github.com/bloxapp/ssv/ibft/types"
-	"github.com/bloxapp/ssv/networker/p2p"
+	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
 )
 
@@ -78,7 +80,7 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		// TODO: Refactor that
-		ibftCommittee := map[uint64]*types.Node{
+		ibftCommittee := map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,
 				Pk:     _getBytesFromHex("a50a268aca7be24d4032cd0295db234b3196ed1a0dcd7368b71df73521472db96edf2c822f015cb80f426d4bce5c1229"),
@@ -101,17 +103,16 @@ var startNodeCmd = &cobra.Command{
 			Beacon:          beaconClient,
 			Network:         core.NetworkFromString(network),
 			IBFT: ibft.New(
-				logger,
 				nil, // TODO: Implement DB
-				&types.Node{
+				&proto.Node{
 					IbftId: nodeID,
 					Pk:     baseKey.GetPublicKey().Serialize(),
 					Sk:     baseKey.Serialize(),
 				},
 				peer,
-				&day_number_consensus.DayNumberConsensus{},
-				&types.InstanceParams{
-					ConsensusParams: types.DefaultConsensusParams(),
+				&validation.Consensus{},
+				&proto.InstanceParams{
+					ConsensusParams: proto.DefaultConsensusParams(),
 					IbftCommittee:   ibftCommittee,
 				},
 			),

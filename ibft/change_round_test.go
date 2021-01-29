@@ -4,26 +4,28 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/bloxapp/ssv/ibft/proto"
+
+	"github.com/bloxapp/ssv/ibft/msgcont"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/ibft/types"
 )
 
-func changeRoundDataToBytes(input *types.ChangeRoundData) []byte {
+func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
 	ret, _ := json.Marshal(input)
 	return ret
 }
-func bytesToChangeRoundData(input []byte) *types.ChangeRoundData {
-	ret := &types.ChangeRoundData{}
+func bytesToChangeRoundData(input []byte) *proto.ChangeRoundData {
+	ret := &proto.ChangeRoundData{}
 	json.Unmarshal(input, ret)
 	return ret
 }
 
-func signMsg(id uint64, sk *bls.SecretKey, msg *types.Message) types.SignedMessage {
+func signMsg(id uint64, sk *bls.SecretKey, msg *proto.Message) proto.SignedMessage {
 	sig, _ := msg.Sign(sk)
-	return types.SignedMessage{
+	return proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
 		IbftId:    id,
@@ -33,12 +35,12 @@ func signMsg(id uint64, sk *bls.SecretKey, msg *types.Message) types.SignedMessa
 func TestRoundChangeInputValue(t *testing.T) {
 	sks, nodes := generateNodes(4)
 	i := &Instance{
-		prepareMessages: types.NewMessagesContainer(),
-		params: &types.InstanceParams{
-			ConsensusParams: types.DefaultConsensusParams(),
+		prepareMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &types.State{
+		state: &State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -51,14 +53,14 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.Nil(t, byts)
 
 	// add votes
-	i.prepareMessages.AddMessage(signMsg(1, sks[1], &types.Message{
-		Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(signMsg(1, sks[1], &proto.Message{
+		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("value"),
 	}))
-	i.prepareMessages.AddMessage(signMsg(2, sks[2], &types.Message{
-		Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("value"),
@@ -70,8 +72,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.Nil(t, byts)
 
 	// add more votes
-	i.prepareMessages.AddMessage(signMsg(3, sks[3], &types.Message{
-		Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(signMsg(3, sks[3], &proto.Message{
+		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("value"),
@@ -102,11 +104,11 @@ func TestRoundChangeInputValue(t *testing.T) {
 func TestValidateChangeRoundMessage(t *testing.T) {
 	sks, nodes := generateNodes(4)
 	i := &Instance{
-		params: &types.InstanceParams{
-			ConsensusParams: types.DefaultConsensusParams(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &types.State{
+		state: &State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -115,7 +117,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		msg                 *types.Message
+		msg                 *proto.Message
 		signerId            uint64
 		justificationSigIds []uint64
 		expectedError       string
@@ -123,8 +125,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		{
 			name:     "valid",
 			signerId: 1,
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  1,
 				Lambda: []byte("lambda"),
 				Value:  nil,
@@ -134,8 +136,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		{
 			name:     "valid",
 			signerId: 1,
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  2,
 				Lambda: []byte("lambda"),
 				Value:  nil,
@@ -145,8 +147,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		{
 			name:     "valid",
 			signerId: 1,
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambda"),
 				Value:  nil,
@@ -156,8 +158,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		{
 			name:     "valid",
 			signerId: 1,
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
 				Value:  nil,
@@ -168,15 +170,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "valid justification",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Prepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_Prepare,
 						Round:  2,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("value"),
@@ -191,15 +193,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "invalid justification msg type",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_PrePrepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_PrePrepare,
 						Round:  2,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("value"),
@@ -214,15 +216,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "invalid justification round",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Prepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_Prepare,
 						Round:  3,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("value"),
@@ -237,15 +239,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "invalid prepared and  justification round",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Prepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_Prepare,
 						Round:  1,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("value"),
@@ -260,15 +262,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "invalid justification instance",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Prepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_Prepare,
 						Round:  2,
 						Lambda: []byte("lambda"),
 						Value:  []byte("value"),
@@ -283,15 +285,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "valid justification",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Prepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_Prepare,
 						Round:  2,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("values"),
@@ -306,15 +308,15 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			name:                "invalid justification sig",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1},
-			msg: &types.Message{
-				Type:   types.RoundState_ChangeRound,
+			msg: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
 				Lambda: []byte("lambdas"),
-				Value: changeRoundDataToBytes(&types.ChangeRoundData{
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedRound: 2,
 					PreparedValue: []byte("value"),
-					JustificationMsg: &types.Message{
-						Type:   types.RoundState_Prepare,
+					JustificationMsg: &proto.Message{
+						Type:   proto.RoundState_Prepare,
 						Round:  2,
 						Lambda: []byte("lambdas"),
 						Value:  []byte("value"),
@@ -349,7 +351,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			sig, err := test.msg.Sign(sks[test.signerId])
 			require.NoError(t, err)
 
-			err = i.validateChangeRoundMsg()(&types.SignedMessage{
+			err = i.validateChangeRoundMsg()(&proto.SignedMessage{
 				Message:   test.msg,
 				Signature: sig.Serialize(),
 				IbftId:    test.signerId,
@@ -364,23 +366,23 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 }
 
 func TestRoundChangeJustification(t *testing.T) {
-	inputValue := changeRoundDataToBytes(&types.ChangeRoundData{
+	inputValue := changeRoundDataToBytes(&proto.ChangeRoundData{
 		PreparedRound: 1,
 		PreparedValue: []byte("hello"),
 	})
 
 	i := &Instance{
-		changeRoundMessages: types.NewMessagesContainer(),
-		params: &types.InstanceParams{
-			ConsensusParams: types.DefaultConsensusParams(),
-			IbftCommittee: map[uint64]*types.Node{
+		changeRoundMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee: map[uint64]*proto.Node{
 				0: {IbftId: 0},
 				1: {IbftId: 1},
 				2: {IbftId: 2},
 				3: {IbftId: 3},
 			},
 		},
-		state: &types.State{
+		state: &State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -392,27 +394,27 @@ func TestRoundChangeJustification(t *testing.T) {
 	//require.EqualError(t, err, "could not justify round change, did not find highest prepared")
 	//require.False(t, res)
 
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
 			Lambda: []byte("lambda"),
 			Value:  nil,
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
 			Lambda: []byte("lambda"),
 			Value:  nil,
 		},
 		IbftId: 2,
 	})
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
 			Lambda: []byte("lambda"),
 			Value:  nil,
@@ -425,28 +427,28 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res)
 
-	i.changeRoundMessages = types.NewMessagesContainer()
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages = msgcont.NewMessagesContainer()
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  1,
 			Lambda: []byte("lambda"),
 			Value:  inputValue,
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
 			Lambda: []byte("lambda"),
 			Value:  inputValue,
 		},
 		IbftId: 2,
 	})
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
 			Lambda: []byte("lambda"),
 			Value:  inputValue,
@@ -472,10 +474,10 @@ func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
 	i := &Instance{
-		changeRoundMessages: types.NewMessagesContainer(),
-		params: &types.InstanceParams{
-			ConsensusParams: types.DefaultConsensusParams(),
-			IbftCommittee: map[uint64]*types.Node{
+		changeRoundMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee: map[uint64]*proto.Node{
 				0: {IbftId: 0},
 				1: {IbftId: 1},
 				2: {IbftId: 2},
@@ -483,24 +485,24 @@ func TestHighestPrepared(t *testing.T) {
 			},
 		},
 	}
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
 			Lambda: []byte("lambda"),
-			Value: changeRoundDataToBytes(&types.ChangeRoundData{
+			Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 				PreparedRound: 1,
 				PreparedValue: inputValue,
 			}),
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
 			Lambda: []byte("lambda"),
-			Value: changeRoundDataToBytes(&types.ChangeRoundData{
+			Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 				PreparedRound: 2,
 				PreparedValue: append(inputValue, []byte("highest")...),
 			}),
@@ -515,12 +517,12 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 
 	// test 2 equals
-	i.changeRoundMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_ChangeRound,
+	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
 			Lambda: []byte("lambda"),
-			Value: changeRoundDataToBytes(&types.ChangeRoundData{
+			Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 				PreparedRound: 2,
 				PreparedValue: append(inputValue, []byte("highest")...),
 			}),

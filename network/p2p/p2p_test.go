@@ -5,12 +5,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/bloxapp/ssv/ibft/proto"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/network"
 )
 
 func TestP2PNetworker(t *testing.T) {
@@ -29,9 +29,9 @@ func TestP2PNetworker(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("peer 2 and peer 3 must receive messages from peer 1", func(t *testing.T) {
-		messageToBroadcast := &types.SignedMessage{
-			Message: &types.Message{
-				Type:   types.RoundState_PrePrepare,
+		messageToBroadcast := &proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_PrePrepare,
 				Round:  1,
 				Lambda: []byte("test-lambda"),
 				Value:  []byte("test-value"),
@@ -41,14 +41,14 @@ func TestP2PNetworker(t *testing.T) {
 		var wg sync.WaitGroup
 
 		var peer1Pipeline bool
-		peer1.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer1.SetMessagePipeline(1, proto.RoundState_PrePrepare, []network.PipelineFunc{func(signedMessage *proto.SignedMessage) error {
 			peer1Pipeline = true
 			return nil
 		}})
 
 		wg.Add(1)
 		var peer2Pipeline bool
-		peer2.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer2.SetMessagePipeline(2, proto.RoundState_PrePrepare, []network.PipelineFunc{func(signedMessage *proto.SignedMessage) error {
 			require.Equal(t, messageToBroadcast, signedMessage)
 			peer2Pipeline = true
 			wg.Done()
@@ -57,7 +57,7 @@ func TestP2PNetworker(t *testing.T) {
 
 		wg.Add(1)
 		var peer3Pipeline bool
-		peer3.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer3.SetMessagePipeline(3, proto.RoundState_PrePrepare, []network.PipelineFunc{func(signedMessage *proto.SignedMessage) error {
 			require.Equal(t, messageToBroadcast, signedMessage)
 			peer3Pipeline = true
 			wg.Done()
@@ -65,7 +65,7 @@ func TestP2PNetworker(t *testing.T) {
 		}})
 
 		var peer4Pipeline bool
-		peer4.SetMessagePipeline(uuid.New(), types.RoundState_PrePrepare, []types.PipelineFunc{func(signedMessage *types.SignedMessage) error {
+		peer4.SetMessagePipeline(4, proto.RoundState_PrePrepare, []network.PipelineFunc{func(signedMessage *proto.SignedMessage) error {
 			peer4Pipeline = true
 			return nil
 		}})

@@ -1,7 +1,8 @@
 syntax = "proto3";
-package ssv_eth2.v1alpha;
 
-option go_package = "github.com/bloxapp/ssv/ibft/implementations/ssv_eth2/types";
+package validation;
+
+option go_package = "github.com/bloxapp/ssv/ibft/consensus/validation";
 
 import "eth/v1alpha1/attestation.proto";
 import "eth/v1alpha1/beacon_block.proto";

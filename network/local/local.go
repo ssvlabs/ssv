@@ -1,28 +1,29 @@
-package ibft
+package local
 
 import (
 	"sync"
 	"testing"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network"
 )
 
-type LocalNodeNetworker struct {
+type Network struct {
 	t         *testing.T
 	replay    *IBFTReplay
-	pipelines map[types.RoundState]map[uint64][]types.PipelineFunc
+	pipelines map[proto.RoundState]map[uint64][]network.PipelineFunc
 	l         map[uint64]*sync.Mutex
 }
 
-func (n *LocalNodeNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []types.PipelineFunc) {
+func (n *Network) SetMessagePipeline(id uint64, roundState proto.RoundState, pipeline []network.PipelineFunc) {
 	if n.pipelines[roundState] == nil {
-		n.pipelines[roundState] = make(map[uint64][]types.PipelineFunc)
+		n.pipelines[roundState] = make(map[uint64][]network.PipelineFunc)
 	}
 	n.pipelines[roundState][id] = pipeline
 	n.l[id] = &sync.Mutex{}
 }
 
-func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
+func (n *Network) Broadcast(signed *proto.SignedMessage) error {
 	go func() {
 
 		// verify node is not prevented from sending msgs
@@ -53,21 +54,21 @@ func (n *LocalNodeNetworker) Broadcast(signed *types.SignedMessage) error {
 
 // IBFTReplay allows to script a precise scenario for every ibft node's behaviour each round
 type IBFTReplay struct {
-	Networker *LocalNodeNetworker
-	scripts   map[uint64]*RoundScript
-	nodes     []uint64
+	Network *Network
+	scripts map[uint64]*RoundScript
+	nodes   []uint64
 }
 
-func NewIBFTReplay(nodes map[uint64]*types.Node) *IBFTReplay {
+func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	ret := &IBFTReplay{
-		Networker: &LocalNodeNetworker{
-			pipelines: make(map[types.RoundState]map[uint64][]types.PipelineFunc),
+		Network: &Network{
+			pipelines: make(map[proto.RoundState]map[uint64][]network.PipelineFunc),
 			l:         make(map[uint64]*sync.Mutex),
 		},
 		scripts: make(map[uint64]*RoundScript),
 		nodes:   make([]uint64, len(nodes)),
 	}
-	ret.Networker.replay = ret
+	ret.Network.replay = ret
 
 	// set ids
 	for k, v := range nodes {
@@ -82,14 +83,14 @@ func (r *IBFTReplay) StartRound(round uint64) *RoundScript {
 	return r.scripts[round]
 }
 
-func (r *IBFTReplay) CanSend(state types.RoundState, round uint64, node uint64) bool {
+func (r *IBFTReplay) CanSend(state proto.RoundState, round uint64, node uint64) bool {
 	if v, ok := r.scripts[round]; ok {
 		return v.CanSend(state, node)
 	}
 	return true
 }
 
-func (r *IBFTReplay) CanReceive(state types.RoundState, round uint64, node uint64) bool {
+func (r *IBFTReplay) CanReceive(state proto.RoundState, round uint64, node uint64) bool {
 	if v, ok := r.scripts[round]; ok {
 		return v.CanSend(state, node)
 	}
@@ -98,12 +99,12 @@ func (r *IBFTReplay) CanReceive(state types.RoundState, round uint64, node uint6
 
 type RoundScript struct {
 	replay *IBFTReplay
-	rules  map[types.RoundState]map[uint64]bool // if true the node receives (and sends) all messages. False it doesn't
+	rules  map[proto.RoundState]map[uint64]bool // if true the node receives (and sends) all messages. False it doesn't
 }
 
 func NewRoundScript(r *IBFTReplay, nodes []uint64) *RoundScript {
-	rules := make(map[types.RoundState]map[uint64]bool)
-	for _, t := range []types.RoundState{types.RoundState_PrePrepare, types.RoundState_Prepare, types.RoundState_Commit, types.RoundState_ChangeRound} {
+	rules := make(map[proto.RoundState]map[uint64]bool)
+	for _, t := range []proto.RoundState{proto.RoundState_PrePrepare, proto.RoundState_Prepare, proto.RoundState_Commit, proto.RoundState_ChangeRound} {
 		rules[t] = make(map[uint64]bool)
 		for _, id := range nodes {
 			rules[t][id] = true
@@ -115,15 +116,15 @@ func NewRoundScript(r *IBFTReplay, nodes []uint64) *RoundScript {
 	}
 }
 
-func (r *RoundScript) CanSend(state types.RoundState, node uint64) bool {
+func (r *RoundScript) CanSend(state proto.RoundState, node uint64) bool {
 	return r.rules[state][node]
 }
 
-func (r *RoundScript) CanReceive(state types.RoundState, node uint64) bool {
+func (r *RoundScript) CanReceive(state proto.RoundState, node uint64) bool {
 	return r.rules[state][node]
 }
 
-func (r *RoundScript) PreventMessages(state types.RoundState, nodes []uint64) *RoundScript {
+func (r *RoundScript) PreventMessages(state proto.RoundState, nodes []uint64) *RoundScript {
 	for _, id := range nodes {
 		r.rules[state][id] = false
 	}

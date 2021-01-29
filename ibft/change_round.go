@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+
+	"github.com/bloxapp/ssv/ibft/proto"
+
+	"github.com/bloxapp/ssv/network"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/ibft/types"
 )
 
 /**
@@ -21,12 +23,12 @@ import (
 			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
-func (i *Instance) highestPrepared(round uint64) (changeData *types.ChangeRoundData, err error) {
+func (i *Instance) highestPrepared(round uint64) (changeData *proto.ChangeRoundData, err error) {
 	for _, msg := range i.changeRoundMessages.ReadOnlyMessagesByRound(round) {
 		if msg.Message.Value == nil {
 			continue
 		}
-		candidateChangeData := &types.ChangeRoundData{}
+		candidateChangeData := &proto.ChangeRoundData{}
 		err = json.Unmarshal(msg.Message.Value, candidateChangeData)
 		if err != nil {
 			return nil, err
@@ -72,22 +74,22 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 			return true, nil
 		}
 		if !i.state.PreviouslyPrepared() { // no previous prepared round
-			return false, errors.New("could not justify round change, did not received quorum of prepare messages previously")
+			return false, errors.Errorf("could not justify round (%d) change, did not received quorum of prepare messages previously", round)
 		}
 		return data.PreparedRound == i.state.PreparedRound &&
 			bytes.Equal(data.PreparedValue, i.state.PreparedValue), nil
 	}
 }
 
-func (i *Instance) validateChangeRoundMsg() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) validateChangeRoundMsg() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
-			data := &types.ChangeRoundData{}
+			data := &proto.ChangeRoundData{}
 			if err := json.Unmarshal(signedMessage.Message.Value, data); err != nil {
 				return err
 			}
-			if data.JustificationMsg.Type != types.RoundState_Prepare {
+			if data.JustificationMsg.Type != proto.RoundState_Prepare {
 				return errors.New("change round justification msg type not Prepare")
 			}
 			if signedMessage.Message.Round <= data.JustificationMsg.Round {
@@ -109,7 +111,7 @@ func (i *Instance) validateChangeRoundMsg() types.PipelineFunc {
 			if err != nil {
 				return err
 			}
-			aggregated := types.PubKeys(pks).Aggregate()
+			aggregated := pks.Aggregate()
 			res, err := data.VerifySig(aggregated)
 			if err != nil {
 				return err
@@ -129,7 +131,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		msgs := batched[hex.EncodeToString(i.state.PreparedValue)]
 
 		// set justificationMsg and sig
-		var justificationMsg *types.Message
+		var justificationMsg *proto.Message
 		var aggregatedSig *bls.Sign
 		ids := make([]uint64, 0)
 		if len(msgs)*3 >= i.params.CommitteeSize()*2 {
@@ -153,7 +155,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 			return nil, errors.New("prepared value/ round is set but no quorum of prepare messages found")
 		}
 
-		data := &types.ChangeRoundData{
+		data := &proto.ChangeRoundData{
 			PreparedRound:    i.state.PreparedRound,
 			PreparedValue:    i.state.PreparedValue,
 			JustificationMsg: justificationMsg,
@@ -179,8 +181,8 @@ func (i *Instance) uponChangeRoundTrigger() {
 	if err != nil {
 		i.logger.Error("failed to create round change data for round", zap.Uint64("round", i.state.Round), zap.Error(err))
 	}
-	broadcastMsg := &types.Message{
-		Type:   types.RoundState_ChangeRound,
+	broadcastMsg := &proto.Message{
+		Type:   proto.RoundState_ChangeRound,
 		Round:  i.state.Round,
 		Lambda: i.state.Lambda,
 		Value:  data,
@@ -190,10 +192,10 @@ func (i *Instance) uponChangeRoundTrigger() {
 	}
 
 	// mark stage
-	i.state.Stage = types.RoundState_ChangeRound
+	i.state.Stage = proto.RoundState_ChangeRound
 }
 
-func (i *Instance) existingChangeRoundMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
@@ -208,10 +210,10 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	return quorum, len(msgs), i.params.CommitteeSize()
 }
 
-func (i *Instance) addChangeRoundMessage() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) addChangeRoundMessage() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - if instance decided should we process round change?
-		if i.state.Stage == types.RoundState_Decided {
+		if i.state.Stage == proto.RoundState_Decided {
 			// TODO - can't get here, fails on round verification in pipeline
 			i.logger.Info("received change round after decision, sending decided message")
 			return nil
@@ -239,8 +241,8 @@ upon receiving a set Frc of f + 1 valid ⟨ROUND-CHANGE, λi, rj, −, −⟩ me
 		set timer i to running and expire after t(ri)
 		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
 */
-func (i *Instance) uponChangeRoundPartialQuorum() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) uponChangeRoundPartialQuorum() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		return nil // TODO
 	}
 }
@@ -254,10 +256,10 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 			let v such that v = inputValue i
 		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
 */
-func (i *Instance) uponChangeRoundFullQuorum() types.PipelineFunc {
+func (i *Instance) uponChangeRoundFullQuorum() network.PipelineFunc {
 	// TODO - concurrency lock?
-	return func(signedMessage *types.SignedMessage) error {
-		if i.state.Stage == types.RoundState_PrePrepare {
+	return func(signedMessage *proto.SignedMessage) error {
+		if i.state.Stage == proto.RoundState_PrePrepare {
 			return nil // no reason to pre-prepare again
 		}
 		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
@@ -269,7 +271,7 @@ func (i *Instance) uponChangeRoundFullQuorum() types.PipelineFunc {
 
 		// change round if quorum reached
 		if quorum {
-			i.state.Stage = types.RoundState_PrePrepare
+			i.state.Stage = proto.RoundState_PrePrepare
 			i.logger.Info("change round quorum received.", zap.Uint64("round", signedMessage.Message.Round), zap.Bool("is_leader", isLeader), zap.Bool("round_justified", justifyRound))
 
 			if isLeader && justifyRound {
@@ -288,8 +290,8 @@ func (i *Instance) uponChangeRoundFullQuorum() types.PipelineFunc {
 				}
 
 				// send pre-prepare msg
-				broadcastMsg := &types.Message{
-					Type:   types.RoundState_PrePrepare,
+				broadcastMsg := &proto.Message{
+					Type:   proto.RoundState_PrePrepare,
 					Round:  signedMessage.Message.Round,
 					Lambda: i.state.Lambda,
 					Value:  value,

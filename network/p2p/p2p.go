@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft/proto"
+
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/network"
 )
 
 const (
@@ -25,19 +27,19 @@ const (
 	topicFmt = "bloxstaking.ssv.%s"
 )
 
-// p2pNetworker implements networker.Networker interface using P2P
-type p2pNetworker struct {
+// p2pNetwork implements network.Network interface using P2P
+type p2pNetwork struct {
 	ctx    context.Context
 	topic  *pubsub.Topic
 	logger *zap.Logger
 
 	// TODO: Refactor that out
-	pipelines map[types.RoundState]map[uint64][]types.PipelineFunc
+	pipelines map[proto.RoundState]map[uint64][]network.PipelineFunc
 	locks     map[uint64]*sync.Mutex
 }
 
 // New is the constructor of p2pNetworker
-func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Networker, error) {
+func New(ctx context.Context, logger *zap.Logger, topicName string) (network.Network, error) {
 	// Create a new libp2p Host that listens on a random TCP port
 	host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	if err != nil {
@@ -69,12 +71,12 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Netwo
 		return nil, errors.Wrap(err, "failed to subscribe on topic")
 	}
 
-	ntw := &p2pNetworker{
+	ntw := &p2pNetwork{
 		ctx:    ctx,
 		topic:  topic,
 		logger: logger,
 
-		pipelines: make(map[types.RoundState]map[uint64][]types.PipelineFunc),
+		pipelines: make(map[proto.RoundState]map[uint64][]network.PipelineFunc),
 		locks:     make(map[uint64]*sync.Mutex),
 	}
 
@@ -92,7 +94,7 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Netwo
 				continue
 			}
 
-			cm := &types.SignedMessage{}
+			cm := &proto.SignedMessage{}
 			if err := json.Unmarshal(msg.Data, cm); err != nil {
 				logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
@@ -120,13 +122,13 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (types.Netwo
 
 // SetMessagePipeline sets a pipeline for a message to go through before it's sent to the msg channel.
 // Message validation and processing should happen in the pipeline
-func (n *p2pNetworker) SetMessagePipeline(id uint64, roundState types.RoundState, pipeline []types.PipelineFunc) {
+func (n *p2pNetwork) SetMessagePipeline(id uint64, roundState proto.RoundState, pipeline []network.PipelineFunc) {
 	if _, ok := n.locks[id]; !ok {
 		n.locks[id] = &sync.Mutex{}
 	}
 
 	if _, ok := n.pipelines[roundState]; !ok {
-		n.pipelines[roundState] = make(map[uint64][]types.PipelineFunc)
+		n.pipelines[roundState] = make(map[uint64][]network.PipelineFunc)
 	}
 
 	n.locks[id].Lock()
@@ -135,7 +137,7 @@ func (n *p2pNetworker) SetMessagePipeline(id uint64, roundState types.RoundState
 }
 
 // Broadcast propagates a signed message to all peers
-func (n *p2pNetworker) Broadcast(msg *types.SignedMessage) error {
+func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")

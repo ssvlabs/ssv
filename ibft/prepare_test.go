@@ -4,54 +4,56 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/bloxapp/ssv/ibft/proto"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/ibft/msgcont"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := generateNodes(4)
 	i := &Instance{
-		prepareMessages: types.NewMessagesContainer(),
-		params: &types.InstanceParams{
-			ConsensusParams: types.DefaultConsensusParams(),
+		prepareMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &types.State{
+		state: &State{
 			Round: 1,
 		},
 	}
 
-	i.prepareMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_Prepare,
 			Round:  1,
 			Lambda: []byte("lambda"),
 			Value:  []byte("value"),
 		},
 		IbftId: 1,
 	})
-	i.prepareMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_Prepare,
 			Round:  1,
 			Lambda: []byte("lambda"),
 			Value:  []byte("value"),
 		},
 		IbftId: 2,
 	})
-	i.prepareMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_Prepare,
 			Round:  1,
 			Lambda: []byte("lambda"),
 			Value:  []byte("value"),
 		},
 		IbftId: 3,
 	})
-	i.prepareMessages.AddMessage(types.SignedMessage{
-		Message: &types.Message{
-			Type:   types.RoundState_Prepare,
+	i.prepareMessages.AddMessage(proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_Prepare,
 			Round:  1,
 			Lambda: []byte("lambda"),
 			Value:  []byte("value2"),

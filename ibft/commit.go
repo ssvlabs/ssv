@@ -4,16 +4,18 @@ import (
 	"bytes"
 	"encoding/hex"
 
+	"github.com/bloxapp/ssv/ibft/proto"
+
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/network"
 )
 
-func (i *Instance) validateCommitMsg() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) validateCommitMsg() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
-		if err := i.implementation.ValidateValue(signedMessage.Message.Value); err != nil {
+		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 
@@ -35,7 +37,7 @@ func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t
 	return quorum, cnt, i.params.CommitteeSize()
 }
 
-func (i *Instance) existingCommitMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingCommitMsg(signedMessage *proto.SignedMessage) bool {
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
@@ -48,9 +50,9 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *Instance) uponCommitMsg() types.PipelineFunc {
+func (i *Instance) uponCommitMsg() network.PipelineFunc {
 	// TODO - concurrency lock?
-	return func(signedMessage *types.SignedMessage) error {
+	return func(signedMessage *proto.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
 		if i.existingCommitMsg(signedMessage) {
 			return nil
@@ -61,7 +63,7 @@ func (i *Instance) uponCommitMsg() types.PipelineFunc {
 		i.logger.Info("received valid commit message for round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
-		if i.state.Stage == types.RoundState_Decided {
+		if i.state.Stage == proto.RoundState_Decided {
 			return nil // no reason to commit again
 		}
 		quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue)
@@ -71,7 +73,7 @@ func (i *Instance) uponCommitMsg() types.PipelineFunc {
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// mark stage
-			i.state.Stage = types.RoundState_Decided
+			i.state.Stage = proto.RoundState_Decided
 
 			i.stopRoundChangeTimer()
 			i.decided <- true

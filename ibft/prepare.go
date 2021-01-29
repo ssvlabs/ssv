@@ -3,16 +3,18 @@ package ibft
 import (
 	"encoding/hex"
 
+	"github.com/bloxapp/ssv/ibft/proto"
+
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/network"
 )
 
-func (i *Instance) validatePrepareMsg() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) validatePrepareMsg() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - prepare should equal pre-prepare value
 
-		if err := i.implementation.ValidateValue(signedMessage.Message.Value); err != nil {
+		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 
@@ -20,13 +22,13 @@ func (i *Instance) validatePrepareMsg() types.PipelineFunc {
 	}
 }
 
-func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]types.SignedMessage {
+func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]proto.SignedMessage {
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
-	ret := make(map[string][]types.SignedMessage)
+	ret := make(map[string][]proto.SignedMessage)
 	for _, msg := range msgs {
 		valueHex := hex.EncodeToString(msg.Message.Value)
 		if ret[valueHex] == nil {
-			ret[valueHex] = make([]types.SignedMessage, 0)
+			ret[valueHex] = make([]proto.SignedMessage, 0)
 		}
 		ret[valueHex] = append(ret[valueHex], msg)
 	}
@@ -44,7 +46,7 @@ func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, 
 	return false, 0, i.params.CommitteeSize()
 }
 
-func (i *Instance) existingPrepareMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingPrepareMsg(signedMessage *proto.SignedMessage) bool {
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
@@ -59,9 +61,9 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *Instance) uponPrepareMsg() types.PipelineFunc {
+func (i *Instance) uponPrepareMsg() network.PipelineFunc {
 	// TODO - concurrency lock?
-	return func(signedMessage *types.SignedMessage) error {
+	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 		// Only 1 prepare per node per round is valid
 		if i.existingPrepareMsg(signedMessage) {
@@ -73,7 +75,7 @@ func (i *Instance) uponPrepareMsg() types.PipelineFunc {
 		i.logger.Info("received valid prepare message from round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
-		if i.state.Stage == types.RoundState_Prepare {
+		if i.state.Stage == proto.RoundState_Prepare {
 			return nil // no reason to prepare again
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
@@ -84,11 +86,11 @@ func (i *Instance) uponPrepareMsg() types.PipelineFunc {
 			// set prepared state
 			i.state.PreparedRound = signedMessage.Message.Round
 			i.state.PreparedValue = signedMessage.Message.Value
-			i.state.Stage = types.RoundState_Prepare
+			i.state.Stage = proto.RoundState_Prepare
 
 			// send commit msg
-			broadcastMsg := &types.Message{
-				Type:   types.RoundState_Commit,
+			broadcastMsg := &proto.Message{
+				Type:   proto.RoundState_Commit,
 				Round:  i.state.Round,
 				Lambda: i.state.Lambda,
 				Value:  i.state.InputValue,

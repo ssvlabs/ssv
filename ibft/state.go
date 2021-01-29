@@ -1,7 +1,9 @@
-package types
+package ibft
+
+import "github.com/bloxapp/ssv/ibft/proto"
 
 type State struct {
-	Stage          RoundState
+	Stage          proto.RoundState
 	Lambda         []byte
 	PreviousLambda []byte
 	InputValue     []byte
