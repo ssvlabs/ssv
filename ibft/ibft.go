@@ -4,12 +4,13 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/bloxapp/ssv/storage"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/consensus"
-	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
 )
 
