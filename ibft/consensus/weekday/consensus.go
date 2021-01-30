@@ -1,4 +1,4 @@
-package day_number_consensus
+package weekday
 
 import (
 	"bytes"
@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-type DayNumberConsensus struct {
+type Consensus struct {
 }
 
-func (c *DayNumberConsensus) ValidateValue(value []byte) error {
+func (c *Consensus) ValidateValue(value []byte) error {
 	day := time.Now().Weekday().String()
 
 	// validate lambda

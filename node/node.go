@@ -113,8 +113,21 @@ func (n *ssvNode) startSlotQueueListener() {
 
 		logger.Info("starting IBFT instance for slot...")
 
-		// TODO: Pass real values
-		if err := n.iBFT.StartInstance([]byte{}, []byte(strconv.Itoa(int(slot))), []byte(time.Now().Weekday().String())); err != nil {
+		lambda, val, err := prepareInstanceParams(slot, duty)
+		if err != nil {
+			logger.Error("failed to prepare params to start instance")
+			continue
+		}
+
+		// Resolve role and pass a specific object
+		/*inputValue := &validation.InputValue{
+			Data: &validation.InputValue_AttestationData{
+				AttestationData: &ethpb.AttestationData{},
+			},
+		}
+		*/
+		// TODO: Pass prev lambda
+		if err := n.iBFT.StartInstance(logger, []byte{}, lambda, val); err != nil {
 			logger.Error("failed to start IBFT instance", zap.Error(err))
 		}
 	}
@@ -133,4 +146,13 @@ func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
 	slots = append(slots, duty.GetAttesterSlot())
 	slots = append(slots, duty.GetProposerSlots()...)
 	return slots
+}
+
+func prepareInstanceParams(slot uint64, duty *ethpb.DutiesResponse_Duty) ([]byte, []byte, error) {
+	val, err := duty.Marshal()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return []byte(strconv.Itoa(int(slot))), val, nil
 }

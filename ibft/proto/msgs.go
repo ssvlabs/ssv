@@ -1,4 +1,4 @@
-package types
+package proto
 
 import (
 	"bytes"

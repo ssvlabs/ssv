@@ -1,10 +1,20 @@
-package types
+package proto
 
 import (
 	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
+
+type PubKeys []*bls.PublicKey
+
+func (keys PubKeys) Aggregate() bls.PublicKey {
+	ret := bls.PublicKey{}
+	for _, k := range keys {
+		ret.Add(k)
+	}
+	return ret
+}
 
 func DefaultConsensusParams() *ConsensusParams {
 	return &ConsensusParams{
@@ -17,7 +27,7 @@ func (p *InstanceParams) CommitteeSize() int {
 }
 
 // PubKeysById returns the public keys with the associated ids
-func (p *InstanceParams) PubKeysById(ids []uint64) ([]*bls.PublicKey, error) {
+func (p *InstanceParams) PubKeysById(ids []uint64) (PubKeys, error) {
 	ret := make([]*bls.PublicKey, 0)
 	for _, id := range ids {
 		if val, ok := p.IbftCommittee[id]; ok {

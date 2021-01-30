@@ -14,7 +14,7 @@ require (
 	github.com/libp2p/go-libp2p-core v0.7.0
 	github.com/libp2p/go-libp2p-pubsub v0.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/pborman/uuid v1.2.1
+	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20210107162333-9e9cf77d4921
@@ -25,6 +25,7 @@ require (
 	go.opencensus.io v0.22.5
 	go.uber.org/zap v1.16.0
 	google.golang.org/grpc v1.33.1
+	google.golang.org/protobuf v1.25.0
 )
 
 replace github.com/ethereum/go-ethereum => github.com/prysmaticlabs/bazel-go-ethereum v0.0.0-20201113091623-013fd65b3791

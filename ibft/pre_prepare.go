@@ -3,18 +3,21 @@ package ibft
 import (
 	"errors"
 
+	"github.com/bloxapp/ssv/ibft/proto"
+
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/network"
 )
 
-func (i *Instance) validatePrePrepareMsg() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - validate proposer correct
 		if signedMessage.IbftId != i.RoundLeader() {
 			return errors.New("pre-prepare message sent not by leader")
 		}
-		if err := i.implementation.ValidateValue(signedMessage.Message.Value); err != nil {
+
+		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 
@@ -22,7 +25,7 @@ func (i *Instance) validatePrePrepareMsg() types.PipelineFunc {
 	}
 }
 
-func (i *Instance) existingPreprepareMsg(signedMessage *types.SignedMessage) bool {
+func (i *Instance) existingPreprepareMsg(signedMessage *proto.SignedMessage) bool {
 	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round); len(msgs) > 0 {
 		if _, ok := msgs[signedMessage.IbftId]; ok {
 			return true
@@ -38,8 +41,8 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) uponPrePrepareMsg() types.PipelineFunc {
-	return func(signedMessage *types.SignedMessage) error {
+func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
+	return func(signedMessage *proto.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPreprepareMsg(signedMessage) {
 			return nil
@@ -55,11 +58,11 @@ func (i *Instance) uponPrePrepareMsg() types.PipelineFunc {
 		}
 
 		// mark state
-		i.state.Stage = types.RoundState_PrePrepare
+		i.state.Stage = proto.RoundState_PrePrepare
 
 		// broadcast prepare msg
-		broadcastMsg := &types.Message{
-			Type:   types.RoundState_Prepare,
+		broadcastMsg := &proto.Message{
+			Type:   proto.RoundState_Prepare,
 			Round:  i.state.Round,
 			Lambda: i.state.Lambda,
 			Value:  i.state.InputValue,

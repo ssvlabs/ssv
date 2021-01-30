@@ -5,44 +5,41 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/types"
+	"github.com/bloxapp/ssv/ibft/proto"
+
+	"github.com/bloxapp/ssv/ibft/msgcont"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
-	eth "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/network"
 )
 
-func Place() {
-	att := eth.Attestation{}
-	att.String()
-
-	blk := eth.BeaconBlock{}
-	blk.String()
-}
-
 type InstanceOptions struct {
-	Logger         *zap.Logger
-	Me             *types.Node
-	Network        types.Networker
-	Implementation types.Implementor
-	Params         *types.InstanceParams
+	Logger    *zap.Logger
+	Me        *proto.Node
+	Network   network.Network
+	Consensus consensus.Consensus
+	Params    *proto.InstanceParams
 }
 
 type Instance struct {
-	me               *types.Node
-	state            *types.State
-	network          types.Networker
-	implementation   types.Implementor
-	params           *types.InstanceParams
+	me               *proto.Node
+	state            *State
+	network          network.Network
+	consensus        consensus.Consensus
+	params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	logger           *zap.Logger
 	msgLock          sync.Mutex
 
 	// messages
-	prePrepareMessages  *types.MessagesContainer
-	prepareMessages     *types.MessagesContainer
-	commitMessages      *types.MessagesContainer
-	changeRoundMessages *types.MessagesContainer
+	prePrepareMessages  *msgcont.MessagesContainer
+	prepareMessages     *msgcont.MessagesContainer
+	commitMessages      *msgcont.MessagesContainer
+	changeRoundMessages *msgcont.MessagesContainer
 
 	// flags
 	decided     chan bool
@@ -58,18 +55,18 @@ func NewInstance(opts InstanceOptions) *Instance {
 	}
 
 	return &Instance{
-		me:             opts.Me,
-		state:          &types.State{Stage: types.RoundState_NotStarted},
-		network:        opts.Network,
-		implementation: opts.Implementation,
-		params:         opts.Params,
-		logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
-		msgLock:        sync.Mutex{},
+		me:        opts.Me,
+		state:     &State{Stage: proto.RoundState_NotStarted},
+		network:   opts.Network,
+		consensus: opts.Consensus,
+		params:    opts.Params,
+		logger:    opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
+		msgLock:   sync.Mutex{},
 
-		prePrepareMessages:  types.NewMessagesContainer(),
-		prepareMessages:     types.NewMessagesContainer(),
-		commitMessages:      types.NewMessagesContainer(),
-		changeRoundMessages: types.NewMessagesContainer(),
+		prePrepareMessages:  msgcont.NewMessagesContainer(),
+		prepareMessages:     msgcont.NewMessagesContainer(),
+		commitMessages:      msgcont.NewMessagesContainer(),
+		changeRoundMessages: msgcont.NewMessagesContainer(),
 
 		decided:     make(chan bool),
 		changeRound: make(chan bool),
@@ -97,9 +94,9 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (deci
 
 	if i.IsLeader() {
 		i.logger.Info("Node is leader for round 1")
-		i.state.Stage = types.RoundState_PrePrepare
-		msg := &types.Message{
-			Type:           types.RoundState_PrePrepare,
+		i.state.Stage = proto.RoundState_PrePrepare
+		msg := &proto.Message{
+			Type:           proto.RoundState_PrePrepare,
 			Round:          i.state.Round,
 			Lambda:         i.state.Lambda,
 			PreviousLambda: previousLambda,
@@ -113,7 +110,7 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (deci
 	return i.decided, nil
 }
 
-func (i *Instance) Stage() types.RoundState {
+func (i *Instance) Stage() proto.RoundState {
 	return i.state.Stage
 }
 
@@ -121,32 +118,32 @@ func (i *Instance) Stage() types.RoundState {
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartEventLoopAndMessagePipeline() {
-	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_PrePrepare, []types.PipelineFunc{
-		MsgTypeCheck(types.RoundState_PrePrepare),
+	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_PrePrepare, []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_PrePrepare),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
 		i.validatePrePrepareMsg(),
 		i.uponPrePrepareMsg(),
 	})
-	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_Prepare, []types.PipelineFunc{
-		MsgTypeCheck(types.RoundState_Prepare),
+	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_Prepare, []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_Prepare),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	})
-	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_Commit, []types.PipelineFunc{
-		MsgTypeCheck(types.RoundState_Commit),
+	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_Commit, []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_Commit),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
 	})
-	i.network.SetMessagePipeline(i.me.IbftId, types.RoundState_ChangeRound, []types.PipelineFunc{
-		MsgTypeCheck(types.RoundState_ChangeRound),
+	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_ChangeRound, []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_ChangeRound),
 		i.ValidateLambdas(),
 		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
 		i.AuthMsg(),
@@ -172,7 +169,7 @@ func (i *Instance) StartEventLoopAndMessagePipeline() {
 	}()
 }
 
-func (i *Instance) SignAndBroadcast(msg *types.Message) error {
+func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(i.me.Sk); err != nil { // TODO - cache somewhere
 		return err
@@ -183,7 +180,7 @@ func (i *Instance) SignAndBroadcast(msg *types.Message) error {
 		return err
 	}
 
-	signedMessage := &types.SignedMessage{
+	signedMessage := &proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
 		IbftId:    i.me.IbftId,
