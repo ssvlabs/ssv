@@ -205,6 +205,7 @@ func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bo
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
+	// TODO - should we check the actual change round msg? what if there are no 2/3 change round with the same value?
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
 	return quorum, len(msgs), i.params.CommitteeSize()

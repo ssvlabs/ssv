@@ -12,7 +12,6 @@ import (
 
 func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		// TODO - validate proposer correct
 		if signedMessage.IbftId != i.RoundLeader() {
 			return errors.New("pre-prepare message sent not by leader")
 		}
@@ -35,6 +34,26 @@ func (i *Instance) existingPreprepareMsg(signedMessage *proto.SignedMessage) boo
 }
 
 /**
+predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
+	return
+		round = 1
+		∨ received a quorum Qrc of valid <ROUND-CHANGE, λi, round, prj , pvj> messages such that:
+			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
+			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
+				(pr, value) = HighestPrepared(Qrc)
+*/
+func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
+	if round == 1 {
+		return true, nil
+	}
+	quorum, _, _ := i.changeRoundQuorum(round)
+	if quorum {
+		return i.justifyRoundChange(round)
+	}
+	return false, nil
+}
+
+/**
 ### Algorithm 2 IBFT pseudocode for process pi: normal case operation
 upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(λi, round) such that:
 	JustifyPrePrepare(m) do
@@ -52,9 +71,13 @@ func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
 		i.prePrepareMessages.AddMessage(*signedMessage)
 		i.logger.Info("received valid pre-prepare message for round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
-		// In case current round is not the first round for the instance, we need to consider previous justifications
-		if signedMessage.Message.Round > 0 {
-			// TODO
+		// Pre-prepare justification
+		justified, err := i.JustifyPrePrepare(signedMessage.Message.Round)
+		if err != nil {
+			return err
+		}
+		if !justified {
+			return errors.New("received un-justified pre-prepare message")
 		}
 
 		// mark state
