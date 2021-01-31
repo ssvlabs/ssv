@@ -35,7 +35,7 @@ func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
 	}
 }
 
-func (i *Instance) existingPreprepareMsg(signedMessage *proto.SignedMessage) bool {
+func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) bool {
 	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round); len(msgs) > 0 {
 		if _, ok := msgs[signedMessage.IbftId]; ok {
 			return true
@@ -74,13 +74,16 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
-		if i.existingPreprepareMsg(signedMessage) {
+		if i.existingPrePrepareMsg(signedMessage) {
 			return nil
 		}
 
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(*signedMessage)
-		i.logger.Info("received valid pre-prepare message for round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
+		i.Log("received valid pre-prepare message for round",
+			false,
+			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
+			zap.Uint64("round", signedMessage.Message.Round))
 
 		// Pre-prepare justification
 		justified, err := i.JustifyPrePrepare(signedMessage.Message.Round)
@@ -102,7 +105,7 @@ func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
 			Value:  i.state.InputValue,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-			i.logger.Error("could not broadcast prepare message", zap.Error(err))
+			i.Log("could not broadcast prepare message", true, zap.Error(err))
 			return err
 		}
 		return nil

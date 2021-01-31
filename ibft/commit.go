@@ -71,7 +71,7 @@ func (i *Instance) uponCommitMsg() network.PipelineFunc {
 
 		// add to prepare messages
 		i.commitMessages.AddMessage(*signedMessage)
-		i.logger.Info("received valid commit message for round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
+		i.Log("received valid commit message for round", false, zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
 		if i.state.Stage == proto.RoundState_Decided {
@@ -79,7 +79,8 @@ func (i *Instance) uponCommitMsg() network.PipelineFunc {
 		}
 		quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue)
 		if quorum { // if already decided no need to do it again
-			i.logger.Info("decided iBFT instance",
+			i.Log("decided iBFT instance",
+				false,
 				zap.String("lambda", hex.EncodeToString(i.state.Lambda)), zap.Uint64("round", i.state.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 

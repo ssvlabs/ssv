@@ -84,14 +84,18 @@ func (i *Instance) uponPrepareMsg() network.PipelineFunc {
 
 		// add to prepare messages
 		i.prepareMessages.AddMessage(*signedMessage)
-		i.logger.Info("received valid prepare message from round", zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
+		i.Log("received valid prepare message from round",
+			false,
+			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
+			zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
 		if i.state.Stage == proto.RoundState_Prepare {
 			return nil // no reason to prepare again
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
-			i.logger.Info("prepared instance",
+			i.Log("prepared instance",
+				false,
 				zap.String("lambda", hex.EncodeToString(i.state.Lambda)), zap.Uint64("round", i.state.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
@@ -108,7 +112,7 @@ func (i *Instance) uponPrepareMsg() network.PipelineFunc {
 				Value:  i.state.InputValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-				i.logger.Error("could not broadcast commit message", zap.Error(err))
+				i.Log("could not broadcast commit message", true, zap.Error(err))
 				return err
 			}
 			return nil

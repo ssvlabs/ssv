@@ -90,14 +90,14 @@ func NewInstance(opts InstanceOptions) *Instance {
  		set timeri to running and expire after t(ri)
 */
 func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (decided chan bool, err error) {
-	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
+	i.Log("Node is starting iBFT instance", false, zap.String("lambda", hex.EncodeToString(lambda)))
 	i.BumpRound(1)
 	i.state.Lambda = lambda
 	i.state.PreviousLambda = previousLambda
 	i.state.InputValue = inputValue
 
 	if i.IsLeader() {
-		i.logger.Info("Node is leader for round 1")
+		i.Log("Node is leader for round 1", false)
 		i.state.Stage = proto.RoundState_PrePrepare
 		msg := &proto.Message{
 			Type:           proto.RoundState_PrePrepare,
@@ -129,7 +129,7 @@ func (i *Instance) StartEventLoop() {
 				i.msgQueue.AddMessage(msg)
 			// When decided is triggered the iBFT instance has concluded and should stop.
 			case <-i.decided:
-				i.logger.Info("iBFT instance decided, exiting..")
+				i.Log("iBFT instance decided, exiting..", false)
 				//close(msgChan) // TODO - find a safe way to close connection
 				//return
 			// Change round is called when no Quorum was achieved within a time duration
@@ -165,7 +165,7 @@ func (i *Instance) StartMessagePipeline() {
 			}
 
 			if err != nil {
-				i.logger.Error("msg pipeline error", zap.Error(err))
+				i.Log("msg pipeline error", true, zap.Error(err))
 			}
 		}
 	}()
@@ -204,7 +204,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	// stat new timer
 	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
-	i.logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
+	i.Log("started timeout clock", false, zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {
 		<-i.roundChangeTimer.C
 		i.changeRound <- true
@@ -230,4 +230,14 @@ func (i *Instance) RoundLeader() uint64 {
 func (i *Instance) BumpRound(round uint64) {
 	i.state.Round = round
 	i.msgQueue.SetRound(round)
+}
+
+func (i *Instance) Log(msg string, err bool, fields ...zap.Field) {
+	if i.logger != nil {
+		if err {
+			i.logger.Error(msg, fields...)
+		} else {
+			i.logger.Info(msg, fields...)
+		}
+	}
 }
