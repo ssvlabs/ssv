@@ -35,15 +35,6 @@ func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
 	}
 }
 
-func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) bool {
-	if msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round); len(msgs) > 0 {
-		if _, ok := msgs[signedMessage.IbftId]; ok {
-			return true
-		}
-	}
-	return false
-}
-
 /**
 predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
 	return
@@ -62,6 +53,22 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 		return i.justifyRoundChange(round)
 	}
 	return false, nil
+}
+
+func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
+	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(round)
+	if msg, found := msgs[i.RoundLeader(round)]; found {
+		return msg.Message.Value, nil
+	}
+	return nil, errors.New("no pre-prepare value found")
+}
+
+func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) bool {
+	val, _ := i.PrePrepareValue(signedMessage.Message.Round)
+	if len(val) > 0 {
+		return true
+	}
+	return false
 }
 
 /**

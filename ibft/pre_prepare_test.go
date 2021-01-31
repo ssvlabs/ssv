@@ -59,6 +59,12 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	i.changeRoundMessages.AddMessage(msg)
 
 	// no quorum achived, err
+	msg = signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_PrePrepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
 	require.EqualError(t, i.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
 
 	// test justified change round
@@ -72,6 +78,13 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		}),
 	})
 	i.changeRoundMessages.AddMessage(msg)
+
+	msg = signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_PrePrepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
 	require.NoError(t, i.uponPrePrepareMsg()(&msg))
 }
 
