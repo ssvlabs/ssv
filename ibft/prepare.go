@@ -47,6 +47,7 @@ func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, 
 }
 
 func (i *Instance) existingPrepareMsg(signedMessage *proto.SignedMessage) bool {
+	// TODO - not sure the spec requires unique votes.
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true

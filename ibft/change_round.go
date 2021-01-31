@@ -196,6 +196,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 }
 
 func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
+	// TODO - not sure the spec requires unique votes.
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	if _, found := msgs[signedMessage.IbftId]; found {
 		return true
