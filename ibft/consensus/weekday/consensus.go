@@ -14,7 +14,7 @@ func (c *Consensus) ValidateValue(value []byte) error {
 
 	// validate lambda
 	if !bytes.Equal(value, []byte(day)) {
-		return errors.New("pre-prepare msg lambda is wrong")
+		return errors.New("msg value is wrong")
 	}
 	return nil
 }

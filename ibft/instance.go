@@ -187,7 +187,10 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		Signature: sig.Serialize(),
 		IbftId:    i.me.IbftId,
 	}
-	return i.network.Broadcast(signedMessage)
+	if i.network != nil {
+		return i.network.Broadcast(signedMessage)
+	}
+	return nil
 }
 
 /**
@@ -220,11 +223,15 @@ func (i *Instance) stopRoundChangeTimer() {
 }
 
 func (i *Instance) IsLeader() bool {
-	return i.me.IbftId == i.RoundLeader()
+	return i.me.IbftId == i.ThisRoundLeader()
 }
 
-func (i *Instance) RoundLeader() uint64 {
-	return i.state.Round % uint64(i.params.CommitteeSize())
+func (i *Instance) ThisRoundLeader() uint64 {
+	return i.RoundLeader(i.state.Round)
+}
+
+func (i *Instance) RoundLeader(round uint64) uint64 {
+	return round % uint64(i.params.CommitteeSize())
 }
 
 func (i *Instance) BumpRound(round uint64) {

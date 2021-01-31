@@ -23,8 +23,8 @@ func (i *Instance) prePrepareMsgPipeline() network.Pipeline {
 
 func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		if signedMessage.IbftId != i.RoundLeader() {
-			return errors.New("pre-prepare message sent not by leader")
+		if signedMessage.IbftId != i.ThisRoundLeader() {
+			return errors.New("pre-prepare message sender is not the round's leader")
 		}
 
 		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
