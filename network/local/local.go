@@ -5,22 +5,20 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
 )
 
 type Network struct {
-	t         *testing.T
-	replay    *IBFTReplay
-	pipelines map[proto.RoundState]map[uint64][]network.PipelineFunc
-	l         map[uint64]*sync.Mutex
+	t      *testing.T
+	replay *IBFTReplay
+	l      map[uint64]*sync.Mutex
+	c      map[uint64]chan *proto.SignedMessage
 }
 
-func (n *Network) SetMessagePipeline(id uint64, roundState proto.RoundState, pipeline []network.PipelineFunc) {
-	if n.pipelines[roundState] == nil {
-		n.pipelines[roundState] = make(map[uint64][]network.PipelineFunc)
-	}
-	n.pipelines[roundState][id] = pipeline
+func (n *Network) ReceivedMsgChan(id uint64) chan *proto.SignedMessage {
+	c := make(chan *proto.SignedMessage)
+	n.c[id] = c
 	n.l[id] = &sync.Mutex{}
+	return c
 }
 
 func (n *Network) Broadcast(signed *proto.SignedMessage) error {
@@ -31,21 +29,14 @@ func (n *Network) Broadcast(signed *proto.SignedMessage) error {
 			return
 		}
 
-		for id, pipelineForType := range n.pipelines[signed.Message.Type] {
-			// verify node is not prevented from receiving msgs
-			if !n.replay.CanReceive(signed.Message.Type, signed.Message.Round, id) {
+		for i, c := range n.c {
+			if !n.replay.CanReceive(signed.Message.Type, signed.Message.Round, i) {
 				continue
 			}
 
-			n.l[id].Lock()
-			for _, item := range pipelineForType {
-				err := item(signed)
-				if err != nil {
-					n.t.Errorf("failed to execute pipeline for node id %d - %s", id, err)
-					break
-				}
-			}
-			n.l[id].Unlock()
+			n.l[i].Lock()
+			c <- signed
+			n.l[i].Unlock()
 		}
 	}()
 
@@ -62,8 +53,8 @@ type IBFTReplay struct {
 func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	ret := &IBFTReplay{
 		Network: &Network{
-			pipelines: make(map[proto.RoundState]map[uint64][]network.PipelineFunc),
-			l:         make(map[uint64]*sync.Mutex),
+			c: make(map[uint64]chan *proto.SignedMessage),
+			l: make(map[uint64]*sync.Mutex),
 		},
 		scripts: make(map[uint64]*RoundScript),
 		nodes:   make([]uint64, len(nodes)),

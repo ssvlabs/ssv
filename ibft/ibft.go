@@ -59,7 +59,8 @@ func (i *IBFT) StartInstance(logger *zap.Logger, prevInstance []byte, identifier
 		Params:    i.params,
 	})
 	i.instances[hex.EncodeToString(identifier)] = newInstance
-	newInstance.StartEventLoopAndMessagePipeline()
+	newInstance.StartEventLoop()
+	newInstance.StartMessagePipeline()
 	_, err := newInstance.Start(prevInstance, identifier, value)
 	return err
 }

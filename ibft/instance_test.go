@@ -43,7 +43,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	}
 
 	// setup scenario
-	//replay.StartRound(1).PreventMessages(types.RoundState_Prepare, []uint64{0, 1}).EndRound()
+	replay.StartRound(1).PreventMessages(proto.RoundState_Prepare, []uint64{0, 1}).EndRound()
 
 	for i := 0; i < params.CommitteeSize(); i++ {
 		me := &proto.Node{
@@ -58,7 +58,8 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Consensus: &validation.Consensus{},
 			Params:    params,
 		}))
-		instances[i].StartEventLoopAndMessagePipeline()
+		instances[i].StartEventLoop()
+		instances[i].StartMessagePipeline()
 	}
 
 	for _, i := range instances {

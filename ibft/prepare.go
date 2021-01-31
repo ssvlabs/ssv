@@ -10,6 +10,17 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
+func (i *Instance) prepareMsgPipeline() network.Pipeline {
+	return []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_Prepare),
+		i.ValidateLambdas(),
+		i.ValidateRound(),
+		i.AuthMsg(),
+		i.validatePrepareMsg(),
+		i.uponPrepareMsg(),
+	}
+}
+
 func (i *Instance) validatePrepareMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - prepare should equal pre-prepare value

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft/msgqueue"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
@@ -36,6 +38,7 @@ type Instance struct {
 	msgLock          sync.Mutex
 
 	// messages
+	msgQueue            *msgqueue.MessageQueue
 	prePrepareMessages  *msgcont.MessagesContainer
 	prepareMessages     *msgcont.MessagesContainer
 	commitMessages      *msgcont.MessagesContainer
@@ -63,6 +66,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		logger:    opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
 		msgLock:   sync.Mutex{},
 
+		msgQueue:            msgqueue.New(),
 		prePrepareMessages:  msgcont.NewMessagesContainer(),
 		prepareMessages:     msgcont.NewMessagesContainer(),
 		commitMessages:      msgcont.NewMessagesContainer(),
@@ -87,7 +91,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 */
 func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (decided chan bool, err error) {
 	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
-	i.state.Round = 1
+	i.BumpRound(1)
 	i.state.Lambda = lambda
 	i.state.PreviousLambda = previousLambda
 	i.state.InputValue = inputValue
@@ -114,48 +118,15 @@ func (i *Instance) Stage() proto.RoundState {
 	return i.state.Stage
 }
 
-// StartEventLoopAndMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
-// each message type has it's own pipeline of checks and actions, called by the networker implementation.
-// Internal chan monitor if the instance reached decision or if a round change is required.
-func (i *Instance) StartEventLoopAndMessagePipeline() {
-	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_PrePrepare, []network.PipelineFunc{
-		MsgTypeCheck(proto.RoundState_PrePrepare),
-		i.ValidateLambdas(),
-		i.ValidateRound(),
-		i.AuthMsg(),
-		i.validatePrePrepareMsg(),
-		i.uponPrePrepareMsg(),
-	})
-	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_Prepare, []network.PipelineFunc{
-		MsgTypeCheck(proto.RoundState_Prepare),
-		i.ValidateLambdas(),
-		i.ValidateRound(),
-		i.AuthMsg(),
-		i.validatePrepareMsg(),
-		i.uponPrepareMsg(),
-	})
-	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_Commit, []network.PipelineFunc{
-		MsgTypeCheck(proto.RoundState_Commit),
-		i.ValidateLambdas(),
-		i.ValidateRound(),
-		i.AuthMsg(),
-		i.validateCommitMsg(),
-		i.uponCommitMsg(),
-	})
-	i.network.SetMessagePipeline(i.me.IbftId, proto.RoundState_ChangeRound, []network.PipelineFunc{
-		MsgTypeCheck(proto.RoundState_ChangeRound),
-		i.ValidateLambdas(),
-		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
-		i.AuthMsg(),
-		i.validateChangeRoundMsg(),
-		i.addChangeRoundMessage(),
-		i.uponChangeRoundPartialQuorum(),
-		i.uponChangeRoundFullQuorum(),
-	})
-
+// StartEventLoop - starts the main event loop for the instance.
+// Events are messages our timer that change the behaviour of the instance upon triggering them
+func (i *Instance) StartEventLoop() {
+	msgChan := i.network.ReceivedMsgChan(i.me.IbftId)
 	go func() {
 		for {
 			select {
+			case msg := <-msgChan:
+				i.msgQueue.AddMessage(msg)
 			// When decided is triggered the iBFT instance has concluded and should stop.
 			case <-i.decided:
 				i.logger.Info("iBFT instance decided, exiting..")
@@ -164,6 +135,37 @@ func (i *Instance) StartEventLoopAndMessagePipeline() {
 			// Change round is called when no Quorum was achieved within a time duration
 			case <-i.changeRound:
 				go i.uponChangeRoundTrigger()
+			}
+		}
+	}()
+}
+
+// StartMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
+// each message type has it's own pipeline of checks and actions, called by the networker implementation.
+// Internal chan monitor if the instance reached decision or if a round change is required.
+func (i *Instance) StartMessagePipeline() {
+	go func() {
+		for {
+			msg := i.msgQueue.PopMessage()
+			if msg == nil {
+				time.Sleep(time.Millisecond * 300)
+				continue
+			}
+
+			var err error
+			switch msg.Message.Type {
+			case proto.RoundState_PrePrepare:
+				err = i.prePrepareMsgPipeline().Run(msg)
+			case proto.RoundState_Prepare:
+				err = i.prepareMsgPipeline().Run(msg)
+			case proto.RoundState_Commit:
+				err = i.commitMsgPipeline().Run(msg)
+			case proto.RoundState_ChangeRound:
+				err = i.changeRoundMsgPipeline().Run(msg)
+			}
+
+			if err != nil {
+				i.logger.Error("msg pipeline error", zap.Error(err))
 			}
 		}
 	}()
@@ -223,4 +225,9 @@ func (i *Instance) IsLeader() bool {
 
 func (i *Instance) RoundLeader() uint64 {
 	return i.state.Round % uint64(i.params.CommitteeSize())
+}
+
+func (i *Instance) BumpRound(round uint64) {
+	i.state.Round = round
+	i.msgQueue.SetRound(round)
 }

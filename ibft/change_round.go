@@ -14,6 +14,19 @@ import (
 	"go.uber.org/zap"
 )
 
+func (i *Instance) changeRoundMsgPipeline() network.Pipeline {
+	return []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_ChangeRound),
+		i.ValidateLambdas(),
+		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
+		i.AuthMsg(),
+		i.validateChangeRoundMsg(),
+		i.addChangeRoundMessage(),
+		i.uponChangeRoundPartialQuorum(),
+		i.uponChangeRoundFullQuorum(),
+	}
+}
+
 /**
 ### Algorithm 4 IBFT pseudocode for process pi: message justification
 	Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
@@ -170,7 +183,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 
 func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
-	i.state.Round++
+	i.BumpRound(i.state.Round + 1)
 	i.logger.Info("round timeout, changing round", zap.Uint64("round", i.state.Round))
 
 	// set time for next round change

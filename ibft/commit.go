@@ -11,6 +11,17 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
+func (i *Instance) commitMsgPipeline() network.Pipeline {
+	return []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_Commit),
+		i.ValidateLambdas(),
+		i.ValidateRound(),
+		i.AuthMsg(),
+		i.validateCommitMsg(),
+		i.uponCommitMsg(),
+	}
+}
+
 func (i *Instance) validateCommitMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?

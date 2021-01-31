@@ -10,6 +10,17 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
+func (i *Instance) prePrepareMsgPipeline() network.Pipeline {
+	return []network.PipelineFunc{
+		MsgTypeCheck(proto.RoundState_PrePrepare),
+		i.ValidateLambdas(),
+		i.ValidateRound(),
+		i.AuthMsg(),
+		i.validatePrePrepareMsg(),
+		i.uponPrePrepareMsg(),
+	}
+}
+
 func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.IbftId != i.RoundLeader() {
