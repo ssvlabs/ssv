@@ -13,21 +13,22 @@ import (
 	ikeymanager "github.com/prysmaticlabs/prysm/validator/keymanager"
 )
 
-// SubmitAttestation implements Beacon interface
-func (b *prysmGRPC) SubmitAttestation(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty, keyManager ikeymanager.IKeymanager) error {
-	if len(duty.Committee) == 0 {
-		return errors.New("empty committee for validator duty, not attesting")
-	}
-
+// GetAttestationData implements Beacon interface
+func (b *prysmGRPC) GetAttestationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AttestationData, error) {
 	data, err := b.validatorClient.GetAttestationData(ctx, &ethpb.AttestationDataRequest{
 		Slot:           slot,
-		CommitteeIndex: duty.CommitteeIndex,
+		CommitteeIndex: committeeIndex,
 	})
 	if err != nil {
-		return errors.Wrap(err, "could not request attestation to sign at slot")
+		return nil, errors.Wrap(err, "could not request attestation to sign at slot")
 	}
 
-	sig, signingRoot, err := b.signAtt(ctx, duty.GetPublicKey(), data, keyManager)
+	return data, nil
+}
+
+// SubmitAttestation implements Beacon interface
+func (b *prysmGRPC) SubmitAttestation(ctx context.Context, data *ethpb.AttestationData, duty *ethpb.DutiesResponse_Duty, keyManager ikeymanager.IKeymanager) error {
+	sig, signingRoot, err := b.signAtt(ctx, b.validatorPublicKey, data, keyManager)
 	if err != nil {
 		return errors.Wrap(err, "could not sign attestation")
 	}
@@ -41,6 +42,7 @@ func (b *prysmGRPC) SubmitAttestation(ctx context.Context, slot uint64, duty *et
 			break
 		}
 	}
+
 	if !found {
 		return fmt.Errorf("validator ID %d not found in committee of %v", duty.ValidatorIndex, duty.Committee)
 	}
@@ -61,7 +63,7 @@ func (b *prysmGRPC) SubmitAttestation(ctx context.Context, slot uint64, duty *et
 		Signature: sig,
 	}
 
-	if err := b.slashableAttestationCheck(ctx, indexedAtt, duty.GetPublicKey(), signingRoot); err != nil {
+	if err := b.slashableAttestationCheck(ctx, indexedAtt, b.validatorPublicKey, signingRoot); err != nil {
 		return errors.Wrap(err, "failed attestation slashing protection check")
 	}
 

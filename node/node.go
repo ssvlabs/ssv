@@ -2,8 +2,11 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"time"
+
+	"github.com/bloxapp/ssv/ibft/consensus/validation"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -57,7 +60,7 @@ func New(opts Options) Node {
 
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
-	go n.startSlotQueueListener()
+	go n.startSlotQueueListener(ctx)
 
 	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey)
 	if err != nil {
@@ -92,7 +95,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 }
 
 // startSlotQueueListener starts slot queue listener
-func (n *ssvNode) startSlotQueueListener() {
+func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 	n.logger.Info("start listening slot queue")
 
 	for {
@@ -103,33 +106,81 @@ func (n *ssvNode) startSlotQueueListener() {
 		}
 
 		if !ok {
-			n.logger.Debug("no duties slot scheduled")
+			n.logger.Debug("no duties for slot scheduled")
 			continue
 		}
 
-		logger := n.logger.With(zap.Time("start_time", n.getSlotStartTime(slot)),
-			zap.Uint64("committee_index", duty.GetCommitteeIndex()),
-			zap.Uint64("slot", slot))
+		go func(slot uint64, duty *ethpb.DutiesResponse_Duty) {
+			logger := n.logger.With(zap.Time("start_time", n.getSlotStartTime(slot)),
+				zap.Uint64("committee_index", duty.GetCommitteeIndex()),
+				zap.Uint64("slot", slot))
 
-		logger.Info("starting IBFT instance for slot...")
+			roles, err := n.beacon.RolesAt(ctx, slot, duty)
+			if err != nil {
+				logger.Error("failed to get roles for duty", zap.Error(err))
+				return
+			}
 
-		lambda, val, err := prepareInstanceParams(slot, duty)
-		if err != nil {
-			logger.Error("failed to prepare params to start instance")
-			continue
-		}
+			for _, role := range roles {
+				go func(role beacon.Role) {
+					logger := logger.With(zap.String("role", role.String()))
+					logger.Info("starting IBFT instance...")
 
-		// Resolve role and pass a specific object
-		/*inputValue := &validation.InputValue{
-			Data: &validation.InputValue_AttestationData{
-				AttestationData: &ethpb.AttestationData{},
-			},
-		}
-		*/
-		// TODO: Pass prev lambda
-		if err := n.iBFT.StartInstance(logger, []byte{}, lambda, val); err != nil {
-			logger.Error("failed to start IBFT instance", zap.Error(err))
-		}
+					inputValue := &validation.InputValue{
+						Duty: duty,
+					}
+
+					switch role {
+					case beacon.RoleAttester:
+						attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
+						if err != nil {
+							logger.Error("failed to get attestation data", zap.Error(err))
+							return
+						}
+
+						inputValue.Data = &validation.InputValue_AttestationData{
+							AttestationData: attData,
+						}
+					case beacon.RoleAggregator:
+						aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
+						if err != nil {
+							logger.Error("failed to get aggregation data", zap.Error(err))
+							return
+						}
+
+						inputValue.Data = &validation.InputValue_AggregationData{
+							AggregationData: aggData,
+						}
+					case beacon.RoleProposer:
+						block, err := n.beacon.GetProposalData(ctx, slot)
+						if err != nil {
+							logger.Error("failed to get proposal block", zap.Error(err))
+							return
+						}
+
+						inputValue.Data = &validation.InputValue_BeaconBlock{
+							BeaconBlock: block,
+						}
+					case beacon.RoleUnknown:
+						logger.Warn("unknown role")
+					}
+
+					valBytes, err := json.Marshal(&inputValue)
+					if err != nil {
+						logger.Error("failed to marshal input value", zap.Error(err))
+						return
+					}
+
+					lambda := strconv.Itoa(int(slot))
+					lambdaBytes := []byte(lambda)
+
+					// TODO: Pass prev lambda
+					if err := n.iBFT.StartInstance(logger, []byte{}, lambdaBytes, valBytes); err != nil {
+						logger.Error("failed to start IBFT instance", zap.Error(err))
+					}
+				}(role)
+			}
+		}(slot, duty)
 	}
 }
 
@@ -146,13 +197,4 @@ func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
 	slots = append(slots, duty.GetAttesterSlot())
 	slots = append(slots, duty.GetProposerSlots()...)
 	return slots
-}
-
-func prepareInstanceParams(slot uint64, duty *ethpb.DutiesResponse_Duty) ([]byte, []byte, error) {
-	val, err := duty.Marshal()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return []byte(strconv.Itoa(int(slot))), val, nil
 }

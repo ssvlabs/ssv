@@ -7,12 +7,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/network"
 )
 
-func (i *Instance) commitMsgPipeline() network.Pipeline {
-	return []network.PipelineFunc{
+func (i *Instance) commitMsgPipeline() Pipeline {
+	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_Commit),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
@@ -22,7 +20,7 @@ func (i *Instance) commitMsgPipeline() network.Pipeline {
 	}
 }
 
-func (i *Instance) validateCommitMsg() network.PipelineFunc {
+func (i *Instance) validateCommitMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
@@ -61,7 +59,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *Instance) uponCommitMsg() network.PipelineFunc {
+func (i *Instance) uponCommitMsg() PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *proto.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
