@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/bloxapp/ssv/ibft/proto";
+
+import "github.com/bloxapp/ssv/ibft/proto/msgs.proto";
+
+message State {
+    RoundState stage = 1;
+    bytes lambda = 2;
+    bytes previous_lambda = 3;
+    bytes input_value = 4;
+    uint64 round = 5;
+    uint64 prepared_round = 6;
+    bytes prepared_value = 7;
+}
