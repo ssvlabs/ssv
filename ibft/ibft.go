@@ -61,6 +61,24 @@ func (i *IBFT) StartInstance(logger *zap.Logger, prevInstance []byte, identifier
 	i.instances[hex.EncodeToString(identifier)] = newInstance
 	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
-	_, err := newInstance.Start(prevInstance, identifier, value)
+	stageChan, err := newInstance.Start(prevInstance, identifier, value)
+
+	// Store prepared round and value and decided stage.
+	go func() {
+		for {
+			select {
+			case stage := <-stageChan:
+				switch stage {
+				// TODO - complete values
+				case proto.RoundState_Prepare:
+					i.storage.SavePrepareJustification(identifier, newInstance.State.Round, nil, nil, []uint64{})
+				case proto.RoundState_Commit:
+					i.storage.SaveDecidedRound(identifier, nil, nil, []uint64{})
+					return
+				}
+			}
+		}
+	}()
+
 	return err
 }
