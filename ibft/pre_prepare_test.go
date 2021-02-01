@@ -21,7 +21,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
@@ -97,7 +97,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
@@ -147,7 +147,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
@@ -187,7 +187,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
@@ -232,7 +232,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,

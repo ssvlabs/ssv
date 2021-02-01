@@ -205,7 +205,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 	}
 
 	// mark stage
-	i.state.Stage = proto.RoundState_ChangeRound
+	i.SetStage(proto.RoundState_ChangeRound)
 }
 
 func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
@@ -285,7 +285,7 @@ func (i *Instance) uponChangeRoundFullQuorum() network.PipelineFunc {
 
 		// change round if quorum reached
 		if quorum {
-			i.state.Stage = proto.RoundState_PrePrepare
+			i.SetStage(proto.RoundState_PrePrepare)
 			i.Log("change round quorum received.", false, zap.Uint64("round", signedMessage.Message.Round), zap.Bool("is_leader", isLeader), zap.Bool("round_justified", justifyRound))
 
 			if isLeader && justifyRound {

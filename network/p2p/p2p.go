@@ -136,6 +136,10 @@ func (n *p2pNetwork) SetMessagePipeline(id uint64, roundState proto.RoundState, 
 	n.locks[id].Unlock()
 }
 
+func (n *p2pNetwork) ReceivedMsgChan(id uint64) chan *proto.SignedMessage {
+	return nil
+}
+
 // Broadcast propagates a signed message to all peers
 func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(msg)

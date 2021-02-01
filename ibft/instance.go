@@ -29,7 +29,7 @@ type InstanceOptions struct {
 
 type Instance struct {
 	me               *proto.Node
-	state            *State
+	state            *proto.State
 	network          network.Network
 	consensus        consensus.Consensus
 	params           *proto.InstanceParams
@@ -59,7 +59,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 
 	return &Instance{
 		me:        opts.Me,
-		state:     &State{Stage: proto.RoundState_NotStarted},
+		state:     &proto.State{Stage: proto.RoundState_NotStarted},
 		network:   opts.Network,
 		consensus: opts.Consensus,
 		params:    opts.Params,
@@ -98,7 +98,7 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (deci
 
 	if i.IsLeader() {
 		i.Log("Node is leader for round 1", false)
-		i.state.Stage = proto.RoundState_PrePrepare
+		i.SetStage(proto.RoundState_PrePrepare)
 		msg := &proto.Message{
 			Type:           proto.RoundState_PrePrepare,
 			Round:          i.state.Round,
@@ -222,21 +222,14 @@ func (i *Instance) stopRoundChangeTimer() {
 	}
 }
 
-func (i *Instance) IsLeader() bool {
-	return i.me.IbftId == i.ThisRoundLeader()
-}
-
-func (i *Instance) ThisRoundLeader() uint64 {
-	return i.RoundLeader(i.state.Round)
-}
-
-func (i *Instance) RoundLeader(round uint64) uint64 {
-	return round % uint64(i.params.CommitteeSize())
-}
-
 func (i *Instance) BumpRound(round uint64) {
 	i.state.Round = round
 	i.msgQueue.SetRound(round)
+}
+
+// SetStage set the state's round state and pushed the new state into the state channel
+func (i *Instance) SetStage(stage proto.RoundState) {
+	i.state.Stage = stage
 }
 
 func (i *Instance) Log(msg string, err bool, fields ...zap.Field) {

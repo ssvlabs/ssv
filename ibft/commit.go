@@ -85,7 +85,7 @@ func (i *Instance) uponCommitMsg() network.PipelineFunc {
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// mark stage
-			i.state.Stage = proto.RoundState_Decided
+			i.SetStage(proto.RoundState_Decided)
 
 			i.stopRoundChangeTimer()
 			i.decided <- true

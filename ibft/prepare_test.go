@@ -23,7 +23,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:  1,
 			Lambda: []byte("lambda"),
 		},
@@ -74,7 +74,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round: 1,
 		},
 	}

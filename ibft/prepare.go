@@ -108,7 +108,7 @@ func (i *Instance) uponPrepareMsg() network.PipelineFunc {
 			// set prepared state
 			i.state.PreparedRound = signedMessage.Message.Round
 			i.state.PreparedValue = signedMessage.Message.Value
-			i.state.Stage = proto.RoundState_Prepare
+			i.SetStage(proto.RoundState_Prepare)
 
 			// send commit msg
 			broadcastMsg := &proto.Message{

@@ -102,7 +102,7 @@ func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
 		}
 
 		// mark state
-		i.state.Stage = proto.RoundState_PrePrepare
+		i.SetStage(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
 		broadcastMsg := &proto.Message{

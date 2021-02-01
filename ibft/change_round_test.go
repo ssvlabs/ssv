@@ -40,7 +40,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -108,7 +108,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -382,7 +382,7 @@ func TestRoundChangeJustification(t *testing.T) {
 				3: {IbftId: 3},
 			},
 		},
-		state: &State{
+		state: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
