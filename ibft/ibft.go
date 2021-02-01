@@ -47,7 +47,7 @@ func (i *IBFT) StartInstance(logger *zap.Logger, prevInstance []byte, identifier
 			return errors.New("previous instance not found")
 		}
 		if instance.Stage() != proto.RoundState_Decided {
-			return errors.New("previous instance not decided, can't start new instance")
+			return errors.New("previous instance not decidedChan, can't start new instance")
 		}
 	}
 

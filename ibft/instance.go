@@ -28,8 +28,8 @@ type InstanceOptions struct {
 }
 
 type Instance struct {
-	me               *proto.Node
-	state            *proto.State
+	Me               *proto.Node
+	State            *proto.State
 	network          network.Network
 	consensus        consensus.Consensus
 	params           *proto.InstanceParams
@@ -44,9 +44,9 @@ type Instance struct {
 	commitMessages      *msgcont.MessagesContainer
 	changeRoundMessages *msgcont.MessagesContainer
 
-	// flags
-	decided     chan bool
-	changeRound chan bool
+	// channels
+	changeRoundChan  chan bool
+	stageChangedChan chan proto.RoundState
 }
 
 // NewInstance is the constructor of Instance
@@ -58,8 +58,8 @@ func NewInstance(opts InstanceOptions) *Instance {
 	}
 
 	return &Instance{
-		me:        opts.Me,
-		state:     &proto.State{Stage: proto.RoundState_NotStarted},
+		Me:        opts.Me,
+		State:     &proto.State{Stage: proto.RoundState_NotStarted},
 		network:   opts.Network,
 		consensus: opts.Consensus,
 		params:    opts.Params,
@@ -72,13 +72,13 @@ func NewInstance(opts InstanceOptions) *Instance {
 		commitMessages:      msgcont.NewMessagesContainer(),
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 
-		decided:     make(chan bool),
-		changeRound: make(chan bool),
+		changeRoundChan:  make(chan bool),
+		stageChangedChan: make(chan proto.RoundState),
 	}
 }
 
 /**
-### Algorithm 1 IBFT pseudocode for process pi: constants, state variables, and ancillary procedures
+### Algorithm 1 IBFT pseudocode for process pi: constants, State variables, and ancillary procedures
  procedure Start(λ, value)
  	λi ← λ
  	ri ← 1
@@ -89,51 +89,46 @@ func NewInstance(opts InstanceOptions) *Instance {
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (decided chan bool, err error) {
+func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (stage chan proto.RoundState, err error) {
 	i.Log("Node is starting iBFT instance", false, zap.String("lambda", hex.EncodeToString(lambda)))
 	i.BumpRound(1)
-	i.state.Lambda = lambda
-	i.state.PreviousLambda = previousLambda
-	i.state.InputValue = inputValue
+	i.State.Lambda = lambda
+	i.State.PreviousLambda = previousLambda
+	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
 		i.Log("Node is leader for round 1", false)
 		i.SetStage(proto.RoundState_PrePrepare)
 		msg := &proto.Message{
 			Type:           proto.RoundState_PrePrepare,
-			Round:          i.state.Round,
-			Lambda:         i.state.Lambda,
+			Round:          i.State.Round,
+			Lambda:         i.State.Lambda,
 			PreviousLambda: previousLambda,
-			Value:          i.state.InputValue,
+			Value:          i.State.InputValue,
 		}
 		if err := i.SignAndBroadcast(msg); err != nil {
 			return nil, err
 		}
 	}
 	i.triggerRoundChangeOnTimer()
-	return i.decided, nil
+	return i.stageChangedChan, nil
 }
 
 func (i *Instance) Stage() proto.RoundState {
-	return i.state.Stage
+	return i.State.Stage
 }
 
 // StartEventLoop - starts the main event loop for the instance.
 // Events are messages our timer that change the behaviour of the instance upon triggering them
 func (i *Instance) StartEventLoop() {
-	msgChan := i.network.ReceivedMsgChan(i.me.IbftId)
+	msgChan := i.network.ReceivedMsgChan(i.Me.IbftId)
 	go func() {
 		for {
 			select {
 			case msg := <-msgChan:
 				i.msgQueue.AddMessage(msg)
-			// When decided is triggered the iBFT instance has concluded and should stop.
-			case <-i.decided:
-				i.Log("iBFT instance decided, exiting..", false)
-				//close(msgChan) // TODO - find a safe way to close connection
-				//return
 			// Change round is called when no Quorum was achieved within a time duration
-			case <-i.changeRound:
+			case <-i.changeRoundChan:
 				go i.uponChangeRoundTrigger()
 			}
 		}
@@ -173,7 +168,7 @@ func (i *Instance) StartMessagePipeline() {
 
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	sk := &bls.SecretKey{}
-	if err := sk.Deserialize(i.me.Sk); err != nil { // TODO - cache somewhere
+	if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
 		return err
 	}
 
@@ -185,7 +180,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
-		IbftId:    i.me.IbftId,
+		IbftId:    i.Me.IbftId,
 	}
 	if i.network != nil {
 		return i.network.Broadcast(signedMessage)
@@ -195,22 +190,22 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 
 /**
 "Timer:
-	In addition to the state variables, each correct process pi also maintains a timer represented by timeri,
+	In addition to the State variables, each correct process pi also maintains a timer represented by timeri,
 	which is used to trigger a round change when the algorithm does not sufficiently progress.
 	The timer can be in one of two states: running or expired.
-	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the state changes to expired."
+	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the State changes to expired."
 */
 func (i *Instance) triggerRoundChangeOnTimer() {
 	// make sure previous timer is stopped
 	i.stopRoundChangeTimer()
 
 	// stat new timer
-	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.state.Round)
+	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 	i.Log("started timeout clock", false, zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {
 		<-i.roundChangeTimer.C
-		i.changeRound <- true
+		i.changeRoundChan <- true
 		i.stopRoundChangeTimer()
 	}()
 }
@@ -223,13 +218,18 @@ func (i *Instance) stopRoundChangeTimer() {
 }
 
 func (i *Instance) BumpRound(round uint64) {
-	i.state.Round = round
+	i.State.Round = round
 	i.msgQueue.SetRound(round)
 }
 
-// SetStage set the state's round state and pushed the new state into the state channel
+// SetStage set the State's round State and pushed the new State into the State channel
 func (i *Instance) SetStage(stage proto.RoundState) {
-	i.state.Stage = stage
+	i.State.Stage = stage
+	i.stageChangedChan <- stage
+}
+
+func (i *Instance) GetStageChan() chan proto.RoundState {
+	return i.stageChangedChan
 }
 
 func (i *Instance) Log(msg string, err bool, fields ...zap.Field) {

@@ -21,13 +21,13 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		me: &proto.Node{
+		Me: &proto.Node{
 			IbftId: 0,
 			Pk:     nodes[0].Pk,
 			Sk:     sks[0].Serialize(),
@@ -97,13 +97,13 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		me: &proto.Node{
+		Me: &proto.Node{
 			IbftId: 0,
 			Pk:     nodes[0].Pk,
 			Sk:     sks[0].Serialize(),
@@ -147,13 +147,13 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		me: &proto.Node{
+		Me: &proto.Node{
 			IbftId: 0,
 			Pk:     nodes[0].Pk,
 			Sk:     sks[0].Serialize(),
@@ -172,7 +172,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[0])
-	require.True(t, i.state.Stage == proto.RoundState_PrePrepare)
+	require.True(t, i.State.Stage == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
 	err = i.uponPrePrepareMsg()(&msg)
@@ -187,7 +187,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("lambda"),
 			PreparedRound: 0,
@@ -232,7 +232,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,

@@ -40,7 +40,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -78,8 +78,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte("value"),
 	}))
-	i.state.PreparedRound = 1
-	i.state.PreparedValue = []byte("value")
+	i.State.PreparedRound = 1
+	i.State.PreparedValue = []byte("value")
 
 	// with a prepared round
 	byts, err = i.roundChangeInputValue()
@@ -90,13 +90,13 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.EqualValues(t, []byte("value"), data.PreparedValue)
 
 	// with a different prepared value
-	i.state.PreparedValue = []byte("value2")
+	i.State.PreparedValue = []byte("value2")
 	byts, err = i.roundChangeInputValue()
 	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
 
 	// with different prepared round
-	i.state.PreparedRound = 2
-	i.state.PreparedValue = []byte("value")
+	i.State.PreparedRound = 2
+	i.State.PreparedValue = []byte("value")
 	byts, err = i.roundChangeInputValue()
 	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
 }
@@ -108,7 +108,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -382,7 +382,7 @@ func TestRoundChangeJustification(t *testing.T) {
 				3: {IbftId: 3},
 			},
 		},
-		state: &proto.State{
+		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
 			PreparedValue: nil,
@@ -461,8 +461,8 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.Errorf(t, err, "could not justify round change, did not receive quorum of prepare messages previously")
 	require.False(t, res)
 
-	i.state.PreparedRound = 1
-	i.state.PreparedValue = []byte("hello")
+	i.State.PreparedRound = 1
+	i.State.PreparedValue = []byte("hello")
 
 	// test previously prepared round with round change quorum (with justification)
 	res, err = i.justifyRoundChange(2)

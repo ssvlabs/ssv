@@ -96,26 +96,26 @@ func (i *Instance) uponPrepareMsg() network.PipelineFunc {
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
-		if i.state.Stage == proto.RoundState_Prepare {
+		if i.State.Stage == proto.RoundState_Prepare {
 			return nil // no reason to prepare again
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
 			i.Log("prepared instance",
 				false,
-				zap.String("lambda", hex.EncodeToString(i.state.Lambda)), zap.Uint64("round", i.state.Round),
+				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
-			// set prepared state
-			i.state.PreparedRound = signedMessage.Message.Round
-			i.state.PreparedValue = signedMessage.Message.Value
+			// set prepared State
+			i.State.PreparedRound = signedMessage.Message.Round
+			i.State.PreparedValue = signedMessage.Message.Value
 			i.SetStage(proto.RoundState_Prepare)
 
 			// send commit msg
 			broadcastMsg := &proto.Message{
 				Type:   proto.RoundState_Commit,
-				Round:  i.state.Round,
-				Lambda: i.state.Lambda,
-				Value:  i.state.InputValue,
+				Round:  i.State.Round,
+				Lambda: i.State.Lambda,
+				Value:  i.State.InputValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Log("could not broadcast commit message", true, zap.Error(err))

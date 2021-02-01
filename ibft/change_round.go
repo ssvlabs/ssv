@@ -86,11 +86,11 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 		if data == nil {
 			return true, nil
 		}
-		if !i.state.PreviouslyPrepared() { // no previous prepared round
+		if !i.State.PreviouslyPrepared() { // no previous prepared round
 			return false, errors.Errorf("could not justify round (%d) change, did not received quorum of prepare messages previously", round)
 		}
-		return data.PreparedRound == i.state.PreparedRound &&
-			bytes.Equal(data.PreparedValue, i.state.PreparedValue), nil
+		return data.PreparedRound == i.State.PreparedRound &&
+			bytes.Equal(data.PreparedValue, i.State.PreparedValue), nil
 	}
 }
 
@@ -139,9 +139,9 @@ func (i *Instance) validateChangeRoundMsg() network.PipelineFunc {
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
-	if i.state.PreparedRound != 0 { // TODO is this safe? should we have a flag indicating we prepared?
-		batched := i.batchedPrepareMsgs(i.state.PreparedRound)
-		msgs := batched[hex.EncodeToString(i.state.PreparedValue)]
+	if i.State.PreparedRound != 0 { // TODO is this safe? should we have a flag indicating we prepared?
+		batched := i.batchedPrepareMsgs(i.State.PreparedRound)
+		msgs := batched[hex.EncodeToString(i.State.PreparedValue)]
 
 		// set justificationMsg and sig
 		var justificationMsg *proto.Message
@@ -169,8 +169,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		}
 
 		data := &proto.ChangeRoundData{
-			PreparedRound:    i.state.PreparedRound,
-			PreparedValue:    i.state.PreparedValue,
+			PreparedRound:    i.State.PreparedRound,
+			PreparedValue:    i.State.PreparedValue,
 			JustificationMsg: justificationMsg,
 			JustificationSig: aggregatedSig.Serialize(),
 			SignedIds:        ids,
@@ -183,8 +183,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 
 func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
-	i.BumpRound(i.state.Round + 1)
-	i.Log("round timeout, changing round", false, zap.Uint64("round", i.state.Round))
+	i.BumpRound(i.State.Round + 1)
+	i.Log("round timeout, changing round", false, zap.Uint64("round", i.State.Round))
 
 	// set time for next round change
 	i.triggerRoundChangeOnTimer()
@@ -192,12 +192,12 @@ func (i *Instance) uponChangeRoundTrigger() {
 	// broadcast round change
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		i.Log("failed to create round change data for round", true, zap.Uint64("round", i.state.Round), zap.Error(err))
+		i.Log("failed to create round change data for round", true, zap.Uint64("round", i.State.Round), zap.Error(err))
 	}
 	broadcastMsg := &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
-		Round:  i.state.Round,
-		Lambda: i.state.Lambda,
+		Round:  i.State.Round,
+		Lambda: i.State.Lambda,
 		Value:  data,
 	}
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
@@ -227,10 +227,10 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 
 func (i *Instance) addChangeRoundMessage() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		// TODO - if instance decided should we process round change?
-		if i.state.Stage == proto.RoundState_Decided {
+		// TODO - if instance decidedChan should we process round change?
+		if i.State.Stage == proto.RoundState_Decided {
 			// TODO - can't get here, fails on round verification in pipeline
-			i.Log("received change round after decision, sending decided message", false)
+			i.Log("received change round after decision, sending decidedChan message", false)
 			return nil
 		}
 
@@ -273,7 +273,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 func (i *Instance) uponChangeRoundFullQuorum() network.PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *proto.SignedMessage) error {
-		if i.state.Stage == proto.RoundState_PrePrepare {
+		if i.State.Stage == proto.RoundState_PrePrepare {
 			return nil // no reason to pre-prepare again
 		}
 		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
@@ -299,7 +299,7 @@ func (i *Instance) uponChangeRoundFullQuorum() network.PipelineFunc {
 					i.Log("broadcasting pre-prepare as leader after round change with existing prepared", false, zap.Uint64("round", signedMessage.Message.Round))
 
 				} else {
-					value = i.state.InputValue
+					value = i.State.InputValue
 					i.Log("broadcasting pre-prepare as leader after round change with input value", false, zap.Uint64("round", signedMessage.Message.Round))
 				}
 
@@ -307,7 +307,7 @@ func (i *Instance) uponChangeRoundFullQuorum() network.PipelineFunc {
 				broadcastMsg := &proto.Message{
 					Type:   proto.RoundState_PrePrepare,
 					Round:  signedMessage.Message.Round,
-					Lambda: i.state.Lambda,
+					Lambda: i.State.Lambda,
 					Value:  value,
 				}
 				if err := i.SignAndBroadcast(broadcastMsg); err != nil {

@@ -7,6 +7,9 @@ import (
 )
 
 // MessageQueue is a broker of messages for the ibft instance to process.
+// Messages can come in various times, even next round's messages can come "early" as other nodes can change round before this node.
+// To solve this issue we have a message broker from which the instance pulls new messages, this also reduces concurrency issues as the instance is now single thread.
+// The message queue has internal logic to organize messages by their round.
 type MessageQueue struct {
 	msgMutex          sync.Mutex
 	currentRound      uint64

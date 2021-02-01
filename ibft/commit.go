@@ -74,21 +74,19 @@ func (i *Instance) uponCommitMsg() network.PipelineFunc {
 		i.Log("received valid commit message for round", false, zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
-		if i.state.Stage == proto.RoundState_Decided {
+		if i.State.Stage == proto.RoundState_Decided {
 			return nil // no reason to commit again
 		}
-		quorum, t, n := i.commitQuorum(i.state.PreparedRound, i.state.PreparedValue)
-		if quorum { // if already decided no need to do it again
-			i.Log("decided iBFT instance",
+		quorum, t, n := i.commitQuorum(i.State.PreparedRound, i.State.PreparedValue)
+		if quorum { // if already decidedChan no need to do it again
+			i.Log("decidedChan iBFT instance",
 				false,
-				zap.String("lambda", hex.EncodeToString(i.state.Lambda)), zap.Uint64("round", i.state.Round),
+				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
-			// mark stage
+			// mark instance decided
 			i.SetStage(proto.RoundState_Decided)
-
 			i.stopRoundChangeTimer()
-			i.decided <- true
 		}
 		return nil
 	}

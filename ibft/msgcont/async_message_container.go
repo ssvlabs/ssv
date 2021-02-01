@@ -6,6 +6,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
+// MessagesContainer is a simple container for messages used to count messages and decide if quorum was achieved.
+// TODO - consider moving quorum calculation to MessagesContainer or get rid of it all together
 type MessagesContainer struct {
 	messages map[uint64]map[uint64]proto.SignedMessage
 	lock     sync.Mutex

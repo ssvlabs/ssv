@@ -101,15 +101,15 @@ func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
 			return errors.New("received un-justified pre-prepare message")
 		}
 
-		// mark state
+		// mark State
 		i.SetStage(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
 		broadcastMsg := &proto.Message{
 			Type:   proto.RoundState_Prepare,
-			Round:  i.state.Round,
-			Lambda: i.state.Lambda,
-			Value:  i.state.InputValue,
+			Round:  i.State.Round,
+			Lambda: i.State.Lambda,
+			Value:  i.State.InputValue,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Log("could not broadcast prepare message", true, zap.Error(err))

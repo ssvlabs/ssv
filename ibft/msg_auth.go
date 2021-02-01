@@ -13,11 +13,11 @@ import (
 // ValidateLambdas validates current and previous lambdas
 func (i *Instance) ValidateLambdas() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		if !bytes.Equal(signedMessage.Message.Lambda, i.state.Lambda) {
-			return errors.New("message lambda does not equal state lambda")
+		if !bytes.Equal(signedMessage.Message.Lambda, i.State.Lambda) {
+			return errors.New("message lambda does not equal State lambda")
 		}
-		if !bytes.Equal(signedMessage.Message.PreviousLambda, i.state.PreviousLambda) {
-			return errors.New("message previous lambda does not equal state previous lambda")
+		if !bytes.Equal(signedMessage.Message.PreviousLambda, i.State.PreviousLambda) {
+			return errors.New("message previous lambda does not equal State previous lambda")
 		}
 		return nil
 	}
@@ -25,8 +25,8 @@ func (i *Instance) ValidateLambdas() network.PipelineFunc {
 
 func (i *Instance) ValidateRound() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		if i.state.Round != signedMessage.Message.Round {
-			return errors.Errorf("message round (%d) does not equal state round (%d)", signedMessage.Message.Round, i.state.Round)
+		if i.State.Round != signedMessage.Message.Round {
+			return errors.Errorf("message round (%d) does not equal State round (%d)", signedMessage.Message.Round, i.State.Round)
 		}
 		return nil
 	}
