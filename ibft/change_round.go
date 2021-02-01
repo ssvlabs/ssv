@@ -7,15 +7,13 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/proto"
 
-	"github.com/bloxapp/ssv/network"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-func (i *Instance) changeRoundMsgPipeline() network.Pipeline {
-	return []network.PipelineFunc{
+func (i *Instance) changeRoundMsgPipeline() Pipeline {
+	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_ChangeRound),
 		i.ValidateLambdas(),
 		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
@@ -94,7 +92,7 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 	}
 }
 
-func (i *Instance) validateChangeRoundMsg() network.PipelineFunc {
+func (i *Instance) validateChangeRoundMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
@@ -225,7 +223,7 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	return quorum, len(msgs), i.params.CommitteeSize()
 }
 
-func (i *Instance) addChangeRoundMessage() network.PipelineFunc {
+func (i *Instance) addChangeRoundMessage() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - if instance decidedChan should we process round change?
 		if i.State.Stage == proto.RoundState_Decided {
@@ -255,7 +253,7 @@ upon receiving a set Frc of f + 1 valid ⟨ROUND-CHANGE, λi, rj, −, −⟩ me
 		set timer i to running and expire after t(ri)
 		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
 */
-func (i *Instance) uponChangeRoundPartialQuorum() network.PipelineFunc {
+func (i *Instance) uponChangeRoundPartialQuorum() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		return nil // TODO
 	}
@@ -270,7 +268,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 			let v such that v = inputValue i
 		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
 */
-func (i *Instance) uponChangeRoundFullQuorum() network.PipelineFunc {
+func (i *Instance) uponChangeRoundFullQuorum() PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *proto.SignedMessage) error {
 		if i.State.Stage == proto.RoundState_PrePrepare {

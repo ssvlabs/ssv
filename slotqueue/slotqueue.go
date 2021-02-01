@@ -37,19 +37,22 @@ func New(network core.Network) Queue {
 
 // Next returns the next slot with its duties at its time
 func (q *queue) Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error) {
-	currentSlot := <-q.ticker.C()
-	key := q.getKey(pubKey, currentSlot)
-	dataRaw, ok := q.data.Get(key)
-	if !ok {
-		return 0, nil, false, nil
+	for currentSlot := range q.ticker.C() {
+		key := q.getKey(pubKey, currentSlot)
+		dataRaw, ok := q.data.Get(key)
+		if !ok {
+			continue
+		}
+
+		duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
+		if !ok {
+			continue
+		}
+
+		return currentSlot, duty, true, nil
 	}
 
-	duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
-	if !ok {
-		return 0, nil, false, nil
-	}
-
-	return currentSlot, duty, true, nil
+	return 0, nil, false, nil
 }
 
 // Schedule schedules execution of the given slot and puts it into the queue

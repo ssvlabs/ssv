@@ -14,7 +14,7 @@ type Network struct {
 	c      map[uint64]chan *proto.SignedMessage
 }
 
-func (n *Network) ReceivedMsgChan(id uint64) chan *proto.SignedMessage {
+func (n *Network) ReceivedMsgChan(id uint64) <-chan *proto.SignedMessage {
 	c := make(chan *proto.SignedMessage)
 	n.c[id] = c
 	n.l[id] = &sync.Mutex{}

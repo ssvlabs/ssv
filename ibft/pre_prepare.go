@@ -6,12 +6,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/network"
 )
 
-func (i *Instance) prePrepareMsgPipeline() network.Pipeline {
-	return []network.PipelineFunc{
+func (i *Instance) prePrepareMsgPipeline() Pipeline {
+	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_PrePrepare),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
@@ -21,7 +19,7 @@ func (i *Instance) prePrepareMsgPipeline() network.Pipeline {
 	}
 }
 
-func (i *Instance) validatePrePrepareMsg() network.PipelineFunc {
+func (i *Instance) validatePrePrepareMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.IbftId != i.ThisRoundLeader() {
 			return errors.New("pre-prepare message sender is not the round's leader")
@@ -78,7 +76,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) uponPrePrepareMsg() network.PipelineFunc {
+func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPrePrepareMsg(signedMessage) {

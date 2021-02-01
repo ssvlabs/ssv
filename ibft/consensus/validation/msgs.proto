@@ -4,12 +4,15 @@ package validation;
 
 option go_package = "github.com/bloxapp/ssv/ibft/consensus/validation";
 
+import "eth/v1alpha1/validator.proto";
 import "eth/v1alpha1/attestation.proto";
 import "eth/v1alpha1/beacon_block.proto";
 
 message InputValue {
+  ethereum.eth.v1alpha1.DutiesResponse.Duty duty = 1;
   oneof data {
-    ethereum.eth.v1alpha1.AttestationData attestation_data = 1;
-    ethereum.eth.v1alpha1.BeaconBlock beacon_block = 2;
+    ethereum.eth.v1alpha1.AttestationData attestation_data = 2;
+    ethereum.eth.v1alpha1.SignedAggregateAttestationAndProof aggregation_data = 3;
+    ethereum.eth.v1alpha1.BeaconBlock beacon_block = 4;
   }
 }

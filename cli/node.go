@@ -36,11 +36,12 @@ var startNodeCmd = &cobra.Command{
 		}
 		logger = logger.With(zap.Uint64("leader_id", leaderID))
 
-		network, err := flags.GetNetworkFlagValue(cmd)
+		networkName, err := flags.GetNetworkFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get network flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("network", network))
+		logger = logger.With(zap.String("network", networkName))
+		network := core.NetworkFromString(networkName)
 
 		beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
 		if err != nil {
@@ -69,7 +70,7 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := beacon.NewPrysmGRPC(logger, beaconAddr)
+		beaconClient, err := beacon.NewPrysmGRPC(logger, baseKey, network, validatorKeyBytes, beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
@@ -101,7 +102,7 @@ var startNodeCmd = &cobra.Command{
 			ValidatorPubKey: validatorKeyBytes,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
-			Network:         core.NetworkFromString(network),
+			Network:         network,
 			IBFT: ibft.New(
 				nil, // TODO: Implement DB
 				&proto.Node{

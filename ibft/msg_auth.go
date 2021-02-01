@@ -6,12 +6,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/network"
 )
 
 // ValidateLambdas validates current and previous lambdas
-func (i *Instance) ValidateLambdas() network.PipelineFunc {
+func (i *Instance) ValidateLambdas() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.State.Lambda) {
 			return errors.New("message lambda does not equal State lambda")
@@ -23,7 +21,7 @@ func (i *Instance) ValidateLambdas() network.PipelineFunc {
 	}
 }
 
-func (i *Instance) ValidateRound() network.PipelineFunc {
+func (i *Instance) ValidateRound() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if i.State.Round != signedMessage.Message.Round {
 			return errors.Errorf("message round (%d) does not equal State round (%d)", signedMessage.Message.Round, i.State.Round)
@@ -32,7 +30,7 @@ func (i *Instance) ValidateRound() network.PipelineFunc {
 	}
 }
 
-func (i *Instance) AuthMsg() network.PipelineFunc {
+func (i *Instance) AuthMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		pks, err := i.params.PubKeysById([]uint64{signedMessage.IbftId})
 		if err != nil {
@@ -53,7 +51,7 @@ func (i *Instance) AuthMsg() network.PipelineFunc {
 	}
 }
 
-func MsgTypeCheck(expected proto.RoundState) network.PipelineFunc {
+func MsgTypeCheck(expected proto.RoundState) PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.Message.Type != expected {
 			return errors.New("message type is wrong")

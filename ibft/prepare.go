@@ -8,12 +8,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/network"
 )
 
-func (i *Instance) prepareMsgPipeline() network.Pipeline {
-	return []network.PipelineFunc{
+func (i *Instance) prepareMsgPipeline() Pipeline {
+	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_Prepare),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
@@ -23,7 +21,7 @@ func (i *Instance) prepareMsgPipeline() network.Pipeline {
 	}
 }
 
-func (i *Instance) validatePrepareMsg() network.PipelineFunc {
+func (i *Instance) validatePrepareMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// Validate we received a pre-prepare msg for this round and
 		// that it's value is equal to the prepare msg
@@ -79,7 +77,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *Instance) uponPrepareMsg() network.PipelineFunc {
+func (i *Instance) uponPrepareMsg() PipelineFunc {
 	// TODO - concurrency lock?
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
