@@ -3,6 +3,9 @@ package ibft
 import (
 	"encoding/hex"
 	"testing"
+	"time"
+
+	"github.com/bloxapp/ssv/ibft/consensus/weekday"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 
@@ -10,6 +13,58 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidatePrepareMsg(t *testing.T) {
+	sks, nodes := generateNodes(4)
+	i := &Instance{
+		prepareMessages:    msgcont.NewMessagesContainer(),
+		prePrepareMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		state: &State{
+			Round:  1,
+			Lambda: []byte("lambda"),
+		},
+		consensus: &weekday.Consensus{},
+	}
+
+	// test no valid pre-prepare msg
+	msg := signMsg(1, sks[1], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	require.EqualError(t, i.validatePrepareMsg()(&msg), "no pre-prepare value found")
+
+	// test invalid prepare value
+	msg = signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_PrePrepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	i.prePrepareMessages.AddMessage(msg)
+
+	msg = signMsg(1, sks[1], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte("invalid"),
+	})
+	require.EqualError(t, i.validatePrepareMsg()(&msg), "pre-prepare value not equal to prepare msg value")
+
+	// test valid prepare value
+	msg = signMsg(1, sks[1], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	require.NoError(t, i.validatePrepareMsg()(&msg))
+}
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := generateNodes(4)

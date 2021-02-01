@@ -1,7 +1,9 @@
 package ibft
 
 import (
+	"bytes"
 	"encoding/hex"
+	"errors"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 
@@ -23,10 +25,14 @@ func (i *Instance) prepareMsgPipeline() network.Pipeline {
 
 func (i *Instance) validatePrepareMsg() network.PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		// TODO - prepare should equal pre-prepare value
-
-		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
-			return err
+		// Validate we received a pre-prepare msg for this round and
+		// that it's value is equal to the prepare msg
+		val, err := i.PrePrepareValue(signedMessage.Message.Round)
+		if err != nil {
+			return err // will return error if no valid pre-prepare value was received
+		}
+		if !bytes.Equal(val, signedMessage.Message.Value) {
+			return errors.New("pre-prepare value not equal to prepare msg value")
 		}
 
 		return nil
