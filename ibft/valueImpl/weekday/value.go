@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/bloxapp/ssv/ibft/valueImpl"
 )
 
@@ -26,4 +28,13 @@ func (c *weekdayConsensus) ValidateValue(value []byte) error {
 	}
 
 	return nil
+}
+
+func (c *weekdayConsensus) SignValue(value []byte, skByts []byte) ([]byte, error) {
+	sk := &bls.SecretKey{}
+	if err := sk.Deserialize(skByts); err != nil {
+		return nil, err
+	}
+
+	return sk.SignByte(value).Serialize(), nil
 }

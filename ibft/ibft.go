@@ -71,8 +71,11 @@ func (i *IBFT) StartInstance(logger *zap.Logger, consensus valueImpl.ValueImplem
 				// TODO - complete values
 				case proto.RoundState_Prepare:
 					i.storage.SavePrepareJustification(identifier, newInstance.State.Round, nil, nil, []uint64{})
-				case proto.RoundState_Commit:
+				case proto.RoundState_Decided:
 					i.storage.SaveDecidedRound(identifier, nil, nil, []uint64{})
+					// reconstruct sig
+					//sigs, ids := i.instances[hex.EncodeToString(identifier)].SignedValues()
+					// TODO - reconstruct
 					return
 				}
 			}

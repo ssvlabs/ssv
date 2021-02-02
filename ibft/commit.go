@@ -24,7 +24,7 @@ func (i *Instance) validateCommitMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
-		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
+		if err := i.valueImpl.ValidateValue(signedMessage.Message.Value); err != nil {
 			return err
 		}
 
@@ -90,4 +90,16 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 		}
 		return nil
 	}
+}
+
+// SignedValues returns an array of signatures and corresponding pk ids
+func (i *Instance) SignedValues() ([][]byte, []uint64) {
+	msgs := i.commitMessages.ReadOnlyMessagesByRound(i.State.Round)
+	sigs := make([][]byte, 0)
+	ids := make([]uint64, 0)
+	for id, msg := range msgs {
+		ids = append(ids, id)
+		sigs = append(sigs, msg.Message.SignedValue)
+	}
+	return sigs, ids
 }
