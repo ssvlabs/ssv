@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
@@ -13,6 +14,7 @@ const (
 	validatorKeyFlag = "validator-key"
 	beaconAddrFlag   = "beacon-node-addr"
 	networkFlag      = "network"
+	consensusFlag    = "consensus"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -61,6 +63,21 @@ func AddNetworkFlag(c *cobra.Command) {
 }
 
 // GetNetworkFlagValue gets the network flag from the command
-func GetNetworkFlagValue(c *cobra.Command) (string, error) {
-	return c.Flags().GetString(networkFlag)
+func GetNetworkFlagValue(c *cobra.Command) (core.Network, error) {
+	network, err := c.Flags().GetString(networkFlag)
+	if err != nil {
+		return "", err
+	}
+
+	return core.NetworkFromString(network), nil
+}
+
+// AddConsensusFlag adds the consensus flag to the command
+func AddConsensusFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, consensusFlag, "validation", "The consensus type", false)
+}
+
+// GetConsensusFlagValue gets the consensus flag from the command
+func GetConsensusFlagValue(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(consensusFlag)
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/consensus/validation"
 
-	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -36,12 +35,17 @@ var startNodeCmd = &cobra.Command{
 		}
 		logger = logger.With(zap.Uint64("leader_id", leaderID))
 
-		networkName, err := flags.GetNetworkFlagValue(cmd)
+		network, err := flags.GetNetworkFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get network flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("network", networkName))
-		network := core.NetworkFromString(networkName)
+		logger = logger.With(zap.String("network", string(network)))
+
+		consensusType, err := flags.GetConsensusFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get consensus flag value", zap.Error(err))
+		}
+		logger = logger.With(zap.String("consensus", consensusType))
 
 		beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
 		if err != nil {
@@ -103,6 +107,7 @@ var startNodeCmd = &cobra.Command{
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
 			Network:         network,
+			Consensus:       consensusType,
 			IBFT: ibft.New(
 				nil, // TODO: Implement DB
 				&proto.Node{
@@ -136,6 +141,7 @@ func init() {
 	flags.AddValidatorKeyFlag(startNodeCmd)
 	flags.AddBeaconAddrFlag(startNodeCmd)
 	flags.AddNetworkFlag(startNodeCmd)
+	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddLeaderIDKeyFlag(startNodeCmd)
 

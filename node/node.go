@@ -23,6 +23,7 @@ type Options struct {
 	ValidatorPubKey []byte
 	PrivateKey      *bls.SecretKey
 	Network         core.Network
+	Consensus       string
 	Beacon          beacon.Beacon
 	IBFT            *ibft.IBFT
 	Logger          *zap.Logger
@@ -39,6 +40,7 @@ type ssvNode struct {
 	validatorPubKey []byte
 	privateKey      *bls.SecretKey
 	network         core.Network
+	consensus       string
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
 	iBFT            *ibft.IBFT
@@ -51,6 +53,7 @@ func New(opts Options) Node {
 		validatorPubKey: opts.ValidatorPubKey,
 		privateKey:      opts.PrivateKey,
 		network:         opts.Network,
+		consensus:       opts.Consensus,
 		slotQueue:       slotqueue.New(opts.Network),
 		beacon:          opts.Beacon,
 		iBFT:            opts.IBFT,
@@ -171,11 +174,15 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						return
 					}
 
-					lambda := strconv.Itoa(int(slot))
-					lambdaBytes := []byte(lambda)
+					lambda := []byte(strconv.Itoa(int(slot)))
+
+					// TODO: Refactor this out
+					if n.consensus == "weekday" {
+						valBytes = []byte(time.Now().Weekday().String())
+					}
 
 					// TODO: Pass prev lambda
-					if err := n.iBFT.StartInstance(logger, []byte{}, lambdaBytes, valBytes); err != nil {
+					if err := n.iBFT.StartInstance(logger, []byte{}, lambda, valBytes); err != nil {
 						logger.Error("failed to start IBFT instance", zap.Error(err))
 					}
 				}(role)
