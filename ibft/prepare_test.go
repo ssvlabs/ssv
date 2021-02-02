@@ -25,7 +25,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 			Round:  1,
 			Lambda: []byte("lambda"),
 		},
-		consensus: weekday.New(),
+		valueImpl: weekday.New(),
 	}
 
 	// test no valid pre-prepare msg

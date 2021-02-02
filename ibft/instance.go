@@ -31,7 +31,7 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	consensus        valueImpl.ValueImplementation
+	valueImpl        valueImpl.ValueImplementation
 	params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	logger           *zap.Logger
@@ -61,7 +61,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		Me:        opts.Me,
 		State:     &proto.State{Stage: proto.RoundState_NotStarted},
 		network:   opts.Network,
-		consensus: opts.Consensus,
+		valueImpl: opts.Consensus,
 		params:    opts.Params,
 		logger:    opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
 		msgLock:   sync.Mutex{},
