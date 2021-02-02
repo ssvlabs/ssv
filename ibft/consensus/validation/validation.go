@@ -3,18 +3,19 @@ package validation
 import (
 	"encoding/json"
 
-	"github.com/bloxapp/ssv/ibft/valueImpl"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/consensus"
 )
 
-// validationConsensus implements valueImpl.ValueImplementation interface
+// validationConsensus implements consensus.ValueImplementation interface
 type validationConsensus struct {
 	logger   *zap.Logger
 	inputVal *InputValue
 }
 
 // New is the constructor of validationConsensus
-func New(logger *zap.Logger, inputVal *InputValue) valueImpl.ValueImplementation {
+func New(logger *zap.Logger, inputVal *InputValue) consensus.Consensus {
 	return &validationConsensus{
 		logger:   logger,
 		inputVal: inputVal,

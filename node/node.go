@@ -13,8 +13,8 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/valueImpl/validation"
-	"github.com/bloxapp/ssv/ibft/valueImpl/weekday"
+	"github.com/bloxapp/ssv/ibft/consensus/validation"
+	"github.com/bloxapp/ssv/ibft/consensus/weekday"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 

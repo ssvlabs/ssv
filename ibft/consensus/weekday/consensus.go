@@ -5,16 +5,16 @@ import (
 	"errors"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/valueImpl"
+	"github.com/bloxapp/ssv/ibft/consensus"
 )
 
-// weekdayConsensus implements valueImpl.ValueImplementation interface
+// weekdayConsensus implements consensus.ValueImplementation interface
 type weekdayConsensus struct {
 	weekday string
 }
 
 // New is the constructor of weekdayConsensus
-func New() valueImpl.ValueImplementation {
+func New() consensus.Consensus {
 	return &weekdayConsensus{
 		weekday: time.Now().Weekday().String(),
 	}

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package validation;
 
-option go_package = "github.com/bloxapp/ssv/ibft/valueImpl/validation";
+option go_package = "github.com/bloxapp/ssv/ibft/consensus/validation";
 
 import "eth/v1alpha1/validator.proto";
 import "eth/v1alpha1/attestation.proto";

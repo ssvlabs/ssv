@@ -41,9 +41,9 @@ var startNodeCmd = &cobra.Command{
 
 		consensusType, err := flags.GetConsensusFlagValue(cmd)
 		if err != nil {
-			logger.Fatal("failed to get valueImpl flag value", zap.Error(err))
+			logger.Fatal("failed to get consensus flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("valueImpl", consensusType))
+		logger = logger.With(zap.String("consensus", consensusType))
 
 		beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
 		if err != nil {
