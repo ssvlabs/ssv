@@ -23,23 +23,21 @@ type IBFT struct {
 	storage   storage.Storage
 	me        *proto.Node
 	network   network.Network
-	consensus consensus.Consensus
 	params    *proto.InstanceParams
 }
 
 // New is the constructor of IBFT
-func New(storage storage.Storage, me *proto.Node, network network.Network, consensus consensus.Consensus, params *proto.InstanceParams) *IBFT {
+func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) *IBFT {
 	return &IBFT{
 		instances: make(map[string]*Instance),
 		storage:   storage,
 		me:        me,
 		network:   network,
-		consensus: consensus,
 		params:    params,
 	}
 }
 
-func (i *IBFT) StartInstance(logger *zap.Logger, prevInstance []byte, identifier, value []byte) error {
+func (i *IBFT) StartInstance(logger *zap.Logger, consensus consensus.Consensus, prevInstance []byte, identifier, value []byte) error {
 	prevId := hex.EncodeToString(prevInstance)
 	if prevId != FirstInstanceIdentifier {
 		instance, found := i.instances[prevId]
@@ -55,7 +53,7 @@ func (i *IBFT) StartInstance(logger *zap.Logger, prevInstance []byte, identifier
 		Logger:    logger,
 		Me:        i.me,
 		Network:   i.network,
-		Consensus: i.consensus,
+		Consensus: consensus,
 		Params:    i.params,
 	})
 	i.instances[hex.EncodeToString(identifier)] = newInstance

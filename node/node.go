@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/consensus/validation"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -15,6 +13,8 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/consensus/validation"
+	"github.com/bloxapp/ssv/ibft/consensus/weekday"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 
@@ -177,12 +177,14 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					lambda := []byte(strconv.Itoa(int(slot)))
 
 					// TODO: Refactor this out
+					consensus := validation.New(inputValue)
 					if n.consensus == "weekday" {
+						consensus = weekday.New()
 						valBytes = []byte(time.Now().Weekday().String())
 					}
 
 					// TODO: Pass prev lambda
-					if err := n.iBFT.StartInstance(logger, []byte{}, lambda, valBytes); err != nil {
+					if err := n.iBFT.StartInstance(logger, consensus, []byte{}, lambda, valBytes); err != nil {
 						logger.Error("failed to start IBFT instance", zap.Error(err))
 					}
 				}(role)

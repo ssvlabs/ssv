@@ -5,13 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-
-	"github.com/bloxapp/ssv/ibft/msgcont"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/ibft/consensus/weekday"
+	"github.com/bloxapp/ssv/ibft/msgcont"
+	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 func TestValidatePrepareMsg(t *testing.T) {
@@ -27,7 +25,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 			Round:  1,
 			Lambda: []byte("lambda"),
 		},
-		consensus: &weekday.Consensus{},
+		consensus: weekday.New(),
 	}
 
 	// test no valid pre-prepare msg

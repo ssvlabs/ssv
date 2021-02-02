@@ -3,11 +3,7 @@ package cli
 import (
 	"encoding/hex"
 
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
-
 	"github.com/bloxapp/ssv/ibft/proto"
-
-	"github.com/bloxapp/ssv/ibft/consensus/validation"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -104,11 +100,6 @@ var startNodeCmd = &cobra.Command{
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
 
-		consensus := validation.New()
-		if consensusType == "weekday" {
-			consensus = &weekday.Consensus{}
-		}
-
 		ssvNode := node.New(node.Options{
 			ValidatorPubKey: validatorKeyBytes,
 			PrivateKey:      baseKey,
@@ -122,7 +113,7 @@ var startNodeCmd = &cobra.Command{
 					Pk:     baseKey.GetPublicKey().Serialize(),
 					Sk:     baseKey.Serialize(),
 				},
-				peer, consensus,
+				peer,
 				&proto.InstanceParams{
 					ConsensusParams: proto.DefaultConsensusParams(),
 					IbftCommittee:   ibftCommittee,
