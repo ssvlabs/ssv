@@ -1,14 +1,14 @@
 package validation
 
-import "github.com/bloxapp/ssv/ibft/valparser"
+import "github.com/bloxapp/ssv/ibft/valueImpl"
 
-// validationConsensus implements valparser.ValueParser interface
+// validationConsensus implements valueImpl.ValueImplementation interface
 type validationConsensus struct {
 	inputVal *InputValue
 }
 
 // New is the constructor of validationConsensus
-func New(inputVal *InputValue) valparser.ValueParser {
+func New(inputVal *InputValue) valueImpl.ValueImplementation {
 	return &validationConsensus{
 		inputVal: inputVal,
 	}

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/valparser/weekday"
+	"github.com/bloxapp/ssv/ibft/valueImpl/weekday"
 
 	"github.com/bloxapp/ssv/network/local"
 

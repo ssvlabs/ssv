@@ -14,7 +14,7 @@ const (
 	validatorKeyFlag = "validator-key"
 	beaconAddrFlag   = "beacon-node-addr"
 	networkFlag      = "network"
-	consensusFlag    = "valparser"
+	consensusFlag    = "valueImpl"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -72,12 +72,12 @@ func GetNetworkFlagValue(c *cobra.Command) (core.Network, error) {
 	return core.NetworkFromString(network), nil
 }
 
-// AddConsensusFlag adds the valparser flag to the command
+// AddConsensusFlag adds the valueImpl flag to the command
 func AddConsensusFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, consensusFlag, "validation", "The valparser type", false)
+	cliflag.AddPersistentStringFlag(c, consensusFlag, "validation", "The valueImpl type", false)
 }
 
-// GetConsensusFlagValue gets the valparser flag from the command
+// GetConsensusFlagValue gets the valueImpl flag from the command
 func GetConsensusFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(consensusFlag)
 }

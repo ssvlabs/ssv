@@ -13,7 +13,7 @@ services:
       - --validator-key ${VALIDATOR_PUBLIC_KEY}
       - --beacon-node-addr ${BEACON_NODE_ADDR}
       - --network ${NETWORK}
-      - --valparser ${CONSENSUS_TYPE}
+      - --valueImpl ${CONSENSUS_TYPE}
     environment:
       DOCKER_COMPOSE: "true"
     networks:
@@ -32,7 +32,7 @@ services:
       - --validator-key ${VALIDATOR_PUBLIC_KEY}
       - --beacon-node-addr ${BEACON_NODE_ADDR}
       - --network ${NETWORK}
-      - --valparser ${CONSENSUS_TYPE}
+      - --valueImpl ${CONSENSUS_TYPE}
     environment:
       DOCKER_COMPOSE: "true"
     networks:
@@ -51,7 +51,7 @@ services:
       - --validator-key ${VALIDATOR_PUBLIC_KEY}
       - --beacon-node-addr ${BEACON_NODE_ADDR}
       - --network ${NETWORK}
-      - --valparser ${CONSENSUS_TYPE}
+      - --valueImpl ${CONSENSUS_TYPE}
     environment:
       DOCKER_COMPOSE: "true"
     networks:

@@ -8,7 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/valparser/weekday"
+	"github.com/bloxapp/ssv/ibft/valueImpl/weekday"
 )
 
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {

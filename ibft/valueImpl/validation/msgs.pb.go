@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.25.0
 // 	protoc        v3.13.0
-// source: github.com/bloxapp/ssv/ibft/valparser/validation/msgs.proto
+// source: github.com/bloxapp/ssv/ibft/valueImpl/validation/msgs.proto
 
 package validation
 

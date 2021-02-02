@@ -10,7 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/valparser"
+	"github.com/bloxapp/ssv/ibft/valueImpl"
 	"github.com/bloxapp/ssv/network"
 )
 
@@ -37,7 +37,7 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(logger *zap.Logger, consensus valparser.ValueParser, prevInstance []byte, identifier, value []byte) error {
+func (i *IBFT) StartInstance(logger *zap.Logger, consensus valueImpl.ValueImplementation, prevInstance []byte, identifier, value []byte) error {
 	prevId := hex.EncodeToString(prevInstance)
 	if prevId != FirstInstanceIdentifier {
 		instance, found := i.instances[prevId]
