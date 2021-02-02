@@ -10,7 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/ibft/valparser"
 	"github.com/bloxapp/ssv/network"
 )
 
@@ -37,7 +37,7 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(logger *zap.Logger, consensus consensus.Consensus, prevInstance []byte, identifier, value []byte) error {
+func (i *IBFT) StartInstance(logger *zap.Logger, consensus valparser.ValueParser, prevInstance []byte, identifier, value []byte) error {
 	prevId := hex.EncodeToString(prevInstance)
 	if prevId != FirstInstanceIdentifier {
 		instance, found := i.instances[prevId]
@@ -59,7 +59,8 @@ func (i *IBFT) StartInstance(logger *zap.Logger, consensus consensus.Consensus, 
 	i.instances[hex.EncodeToString(identifier)] = newInstance
 	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
-	stageChan, err := newInstance.Start(prevInstance, identifier, value)
+	stageChan := newInstance.GetStageChan()
+	go newInstance.Start(prevInstance, identifier, value)
 
 	// Store prepared round and value and decided stage.
 	go func() {
@@ -78,5 +79,5 @@ func (i *IBFT) StartInstance(logger *zap.Logger, consensus consensus.Consensus, 
 		}
 	}()
 
-	return err
+	return nil
 }

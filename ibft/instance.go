@@ -15,7 +15,7 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/ibft/valparser"
 	"github.com/bloxapp/ssv/network"
 )
 
@@ -23,7 +23,7 @@ type InstanceOptions struct {
 	Logger    *zap.Logger
 	Me        *proto.Node
 	Network   network.Network
-	Consensus consensus.Consensus
+	Consensus valparser.ValueParser
 	Params    *proto.InstanceParams
 }
 
@@ -31,7 +31,7 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	consensus        consensus.Consensus
+	consensus        valparser.ValueParser
 	params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	logger           *zap.Logger
@@ -89,7 +89,7 @@ func NewInstance(opts InstanceOptions) *Instance {
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (stage chan proto.RoundState, err error) {
+func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) {
 	i.Log("Node is starting iBFT instance", false, zap.String("lambda", hex.EncodeToString(lambda)))
 	i.BumpRound(1)
 	i.State.Lambda = lambda
@@ -107,15 +107,46 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) (stag
 			Value:          i.State.InputValue,
 		}
 		if err := i.SignAndBroadcast(msg); err != nil {
-			return nil, err
+			i.logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
 		}
 	}
 	i.triggerRoundChangeOnTimer()
-	return i.stageChangedChan, nil
 }
 
 func (i *Instance) Stage() proto.RoundState {
 	return i.State.Stage
+}
+
+func (i *Instance) BumpRound(round uint64) {
+	i.State.Round = round
+	i.msgQueue.SetRound(round)
+}
+
+// SetStage set the State's round State and pushed the new State into the State channel
+func (i *Instance) SetStage(stage proto.RoundState) {
+	i.State.Stage = stage
+
+	// Non blocking send to channel
+	select {
+	case i.stageChangedChan <- stage:
+		return
+	default:
+		return
+	}
+}
+
+func (i *Instance) GetStageChan() chan proto.RoundState {
+	return i.stageChangedChan
+}
+
+func (i *Instance) Log(msg string, err bool, fields ...zap.Field) {
+	if i.logger != nil {
+		if err {
+			i.logger.Error(msg, fields...)
+		} else {
+			i.logger.Info(msg, fields...)
+		}
+	}
 }
 
 // StartEventLoop - starts the main event loop for the instance.
@@ -143,7 +174,7 @@ func (i *Instance) StartMessagePipeline() {
 		for {
 			msg := i.msgQueue.PopMessage()
 			if msg == nil {
-				time.Sleep(time.Millisecond * 300)
+				time.Sleep(time.Millisecond * 100)
 				continue
 			}
 
@@ -214,30 +245,5 @@ func (i *Instance) stopRoundChangeTimer() {
 	if i.roundChangeTimer != nil {
 		i.roundChangeTimer.Stop()
 		i.roundChangeTimer = nil
-	}
-}
-
-func (i *Instance) BumpRound(round uint64) {
-	i.State.Round = round
-	i.msgQueue.SetRound(round)
-}
-
-// SetStage set the State's round State and pushed the new State into the State channel
-func (i *Instance) SetStage(stage proto.RoundState) {
-	i.State.Stage = stage
-	i.stageChangedChan <- stage
-}
-
-func (i *Instance) GetStageChan() chan proto.RoundState {
-	return i.stageChangedChan
-}
-
-func (i *Instance) Log(msg string, err bool, fields ...zap.Field) {
-	if i.logger != nil {
-		if err {
-			i.logger.Error(msg, fields...)
-		} else {
-			i.logger.Info(msg, fields...)
-		}
 	}
 }

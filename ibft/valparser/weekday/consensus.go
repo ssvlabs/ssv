@@ -5,16 +5,16 @@ import (
 	"errors"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/ibft/valparser"
 )
 
-// weekdayConsensus implements consensus.Consensus interface
+// weekdayConsensus implements valparser.ValueParser interface
 type weekdayConsensus struct {
 	weekday string
 }
 
 // New is the constructor of weekdayConsensus
-func New() consensus.Consensus {
+func New() valparser.ValueParser {
 	return &weekdayConsensus{
 		weekday: time.Now().Weekday().String(),
 	}

@@ -4,15 +4,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft/valparser/weekday"
+
 	"github.com/bloxapp/ssv/network/local"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/ibft/consensus/validation"
 )
 
 func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
@@ -43,7 +42,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	}
 
 	// setup scenario
-	replay.StartRound(1).PreventMessages(proto.RoundState_Prepare, []uint64{0, 1}).EndRound()
+	//replay.StartRound(1).PreventMessages(proto.RoundState_Prepare, []uint64{0, 1}).EndRound()
 
 	for i := 0; i < params.CommitteeSize(); i++ {
 		me := &proto.Node{
@@ -55,7 +54,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Logger:    logger,
 			Me:        me,
 			Network:   replay.Network,
-			Consensus: validation.New(),
+			Consensus: weekday.New(),
 			Params:    params,
 		}))
 		instances[i].StartEventLoop()
@@ -63,8 +62,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 	}
 
 	for _, i := range instances {
-		_, err := i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String()))
-		require.NoError(t, err)
+		go i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String()))
 	}
 
 	time.Sleep(time.Minute * 2)

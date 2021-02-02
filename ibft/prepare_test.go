@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/valparser/weekday"
 )
 
 func TestValidatePrepareMsg(t *testing.T) {

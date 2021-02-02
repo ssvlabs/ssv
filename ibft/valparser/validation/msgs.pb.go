@@ -2,17 +2,18 @@
 // versions:
 // 	protoc-gen-go v1.25.0
 // 	protoc        v3.13.0
-// source: github.com/bloxapp/ssv/ibft/consensus/validation/msgs.proto
+// source: github.com/bloxapp/ssv/ibft/valparser/validation/msgs.proto
 
 package validation
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	v1alpha1 "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
