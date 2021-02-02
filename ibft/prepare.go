@@ -108,19 +108,12 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 			i.State.PreparedValue = signedMessage.Message.Value
 			i.SetStage(proto.RoundState_Prepare)
 
-			// sign value
-			valueSig, err := i.valueImpl.SignValue(i.State.PreparedValue, i.Me.Sk)
-			if err != nil {
-				return err
-			}
-
 			// send commit msg
 			broadcastMsg := &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       i.State.PreparedRound,
-				Lambda:      i.State.Lambda,
-				Value:       i.State.PreparedValue,
-				SignedValue: valueSig,
+				Type:   proto.RoundState_Commit,
+				Round:  i.State.Round,
+				Lambda: i.State.Lambda,
+				Value:  i.State.InputValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Log("could not broadcast commit message", true, zap.Error(err))
