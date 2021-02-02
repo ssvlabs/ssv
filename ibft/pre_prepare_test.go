@@ -65,7 +65,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, i.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
+	require.EqualError(t, i.uponPrePrepareMsg()(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
 	msg = signMsg(0, sks[0], &proto.Message{
@@ -85,7 +85,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, i.uponPrePrepareMsg()(&msg))
+	require.NoError(t, i.uponPrePrepareMsg()(msg))
 }
 
 func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
@@ -127,7 +127,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	i.changeRoundMessages.AddMessage(msg)
 
 	// no quorum achived, err
-	require.EqualError(t, i.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
+	require.EqualError(t, i.uponPrePrepareMsg()(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
 	msg = signMsg(2, sks[2], &proto.Message{
@@ -136,7 +136,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Lambda: []byte("lambda"),
 	})
 	i.changeRoundMessages.AddMessage(msg)
-	require.NoError(t, i.uponPrePrepareMsg()(&msg))
+	require.NoError(t, i.uponPrePrepareMsg()(msg))
 }
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
@@ -168,14 +168,14 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err := i.uponPrePrepareMsg()(&msg)
+	err := i.uponPrePrepareMsg()(msg)
 	require.NoError(t, err)
 	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[0])
 	require.True(t, i.State.Stage == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
-	err = i.uponPrePrepareMsg()(&msg)
+	err = i.uponPrePrepareMsg()(msg)
 	require.NoError(t, err)
 }
 
@@ -202,7 +202,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err := i.validatePrePrepareMsg()(&msg)
+	err := i.validatePrePrepareMsg()(msg)
 	require.EqualError(t, err, "msg value is wrong")
 
 	msg = signMsg(2, sks[2], &proto.Message{
@@ -211,7 +211,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err = i.validatePrePrepareMsg()(&msg)
+	err = i.validatePrePrepareMsg()(msg)
 	require.EqualError(t, err, "pre-prepare message sender is not the round's leader")
 
 	msg = signMsg(1, sks[1], &proto.Message{
@@ -220,7 +220,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = i.validatePrePrepareMsg()(&msg)
+	err = i.validatePrePrepareMsg()(msg)
 	require.NoError(t, err)
 }
 

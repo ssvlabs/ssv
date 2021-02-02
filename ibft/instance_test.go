@@ -55,7 +55,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 			Logger:    logger,
 			Me:        me,
 			Network:   replay.Network,
-			Consensus: &validation.Consensus{},
+			Consensus: validation.New(),
 			Params:    params,
 		}))
 		instances[i].StartEventLoop()

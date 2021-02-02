@@ -68,7 +68,7 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 		}
 
 		// add to prepare messages
-		i.commitMessages.AddMessage(*signedMessage)
+		i.commitMessages.AddMessage(signedMessage)
 		i.Log("received valid commit message for round", false, zap.Uint64("sender_ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.

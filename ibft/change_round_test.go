@@ -23,9 +23,9 @@ func bytesToChangeRoundData(input []byte) *proto.ChangeRoundData {
 	return ret
 }
 
-func signMsg(id uint64, sk *bls.SecretKey, msg *proto.Message) proto.SignedMessage {
+func signMsg(id uint64, sk *bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
 	sig, _ := msg.Sign(sk)
-	return proto.SignedMessage{
+	return &proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
 		IbftId:    id,
@@ -394,7 +394,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	//require.EqualError(t, err, "could not justify round change, did not find highest prepared")
 	//require.False(t, res)
 
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -403,7 +403,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -412,7 +412,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -428,7 +428,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.True(t, res)
 
 	i.changeRoundMessages = msgcont.NewMessagesContainer()
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  1,
@@ -437,7 +437,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -446,7 +446,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -485,7 +485,7 @@ func TestHighestPrepared(t *testing.T) {
 			},
 		},
 	}
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
@@ -497,7 +497,7 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
@@ -517,7 +517,7 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 
 	// test 2 equals
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	i.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  3,

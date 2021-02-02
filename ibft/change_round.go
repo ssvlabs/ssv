@@ -238,7 +238,7 @@ func (i *Instance) addChangeRoundMessage() PipelineFunc {
 		}
 
 		// add to prepare messages
-		i.changeRoundMessages.AddMessage(*signedMessage)
+		i.changeRoundMessages.AddMessage(signedMessage)
 		i.Log("received valid change round message for round", false, zap.Uint64("ibft_id", signedMessage.IbftId), zap.Uint64("round", signedMessage.Message.Round))
 		return nil
 	}

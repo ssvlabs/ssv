@@ -1,9 +1,17 @@
 package validation
 
-type Consensus struct {
+import "github.com/bloxapp/ssv/ibft/consensus"
+
+// validationConsensus implements consensus.Consensus interface
+type validationConsensus struct {
 }
 
-func (c *Consensus) ValidateValue(value []byte) error {
+// New is the constructor of validationConsensus
+func New() consensus.Consensus {
+	return &validationConsensus{}
+}
+
+func (c *validationConsensus) ValidateValue(value []byte) error {
 	// TODO: Implement
 	return nil
 }

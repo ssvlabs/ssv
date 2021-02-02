@@ -37,13 +37,13 @@ func (i *Instance) validatePrepareMsg() PipelineFunc {
 	}
 }
 
-func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]proto.SignedMessage {
+func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMessage {
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
-	ret := make(map[string][]proto.SignedMessage)
+	ret := make(map[string][]*proto.SignedMessage)
 	for _, msg := range msgs {
 		valueHex := hex.EncodeToString(msg.Message.Value)
 		if ret[valueHex] == nil {
-			ret[valueHex] = make([]proto.SignedMessage, 0)
+			ret[valueHex] = make([]*proto.SignedMessage, 0)
 		}
 		ret[valueHex] = append(ret[valueHex], msg)
 	}
@@ -87,7 +87,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 		}
 
 		// add to prepare messages
-		i.prepareMessages.AddMessage(*signedMessage)
+		i.prepareMessages.AddMessage(signedMessage)
 		i.Log("received valid prepare message from round",
 			false,
 			zap.Uint64("sender_ibft_id", signedMessage.IbftId),

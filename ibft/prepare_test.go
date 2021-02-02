@@ -37,7 +37,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, i.validatePrepareMsg()(&msg), "no pre-prepare value found")
+	require.EqualError(t, i.validatePrepareMsg()(msg), "no pre-prepare value found")
 
 	// test invalid prepare value
 	msg = signMsg(2, sks[2], &proto.Message{
@@ -54,7 +54,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte("invalid"),
 	})
-	require.EqualError(t, i.validatePrepareMsg()(&msg), "pre-prepare value not equal to prepare msg value")
+	require.EqualError(t, i.validatePrepareMsg()(msg), "pre-prepare value not equal to prepare msg value")
 
 	// test valid prepare value
 	msg = signMsg(1, sks[1], &proto.Message{
@@ -63,7 +63,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, i.validatePrepareMsg()(&msg))
+	require.NoError(t, i.validatePrepareMsg()(msg))
 }
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
@@ -79,7 +79,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 	}
 
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	i.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -88,7 +88,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	i.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -97,7 +97,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	i.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -106,7 +106,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 3,
 	})
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	i.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,

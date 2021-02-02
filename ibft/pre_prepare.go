@@ -84,7 +84,7 @@ func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 		}
 
 		// add to pre-prepare messages
-		i.prePrepareMessages.AddMessage(*signedMessage)
+		i.prePrepareMessages.AddMessage(signedMessage)
 		i.Log("received valid pre-prepare message for round",
 			false,
 			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
