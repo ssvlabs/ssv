@@ -177,7 +177,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					lambda := []byte(strconv.Itoa(int(slot)))
 
 					// TODO: Refactor this out
-					consensus := validation.New(inputValue)
+					consensus := validation.New(logger, inputValue)
 					if n.consensus == "weekday" {
 						consensus = weekday.New()
 						valBytes = []byte(time.Now().Weekday().String())

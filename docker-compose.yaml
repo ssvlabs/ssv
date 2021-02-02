@@ -6,14 +6,14 @@ services:
       context: .
       dockerfile: Dockerfile
     command:
-      - start-node
-      - --node-id 1
-      - --leader-id 1
-      - --private-key ${SSV_NODE_1}
-      - --validator-key ${VALIDATOR_PUBLIC_KEY}
-      - --beacon-node-addr ${BEACON_NODE_ADDR}
-      - --network ${NETWORK}
-      - --valueImpl ${CONSENSUS_TYPE}
+      - "start-node"
+      - "--node-id=1"
+      - "--leader-id=1"
+      - "--private-key=${SSV_NODE_1}"
+      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
+      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
+      - "--network=${NETWORK}"
+      - "--consensus=${CONSENSUS_TYPE}"
     environment:
       DOCKER_COMPOSE: "true"
     networks:
@@ -25,14 +25,14 @@ services:
       context: .
       dockerfile: Dockerfile
     command:
-      - start-node
-      - --node-id 2
-      - --leader-id 1
-      - --private-key ${SSV_NODE_2}
-      - --validator-key ${VALIDATOR_PUBLIC_KEY}
-      - --beacon-node-addr ${BEACON_NODE_ADDR}
-      - --network ${NETWORK}
-      - --valueImpl ${CONSENSUS_TYPE}
+      - "start-node"
+      - "--node-id=2"
+      - "--leader-id=1"
+      - "--private-key=${SSV_NODE_2}"
+      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
+      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
+      - "--network=${NETWORK}"
+      - "--consensus=${CONSENSUS_TYPE}"
     environment:
       DOCKER_COMPOSE: "true"
     networks:
@@ -44,14 +44,14 @@ services:
       context: .
       dockerfile: Dockerfile
     command:
-      - start-node
-      - --node-id 3
-      - --leader-id 1
-      - --private-key ${SSV_NODE_3}
-      - --validator-key ${VALIDATOR_PUBLIC_KEY}
-      - --beacon-node-addr ${BEACON_NODE_ADDR}
-      - --network ${NETWORK}
-      - --valueImpl ${CONSENSUS_TYPE}
+      - "start-node"
+      - "--node-id=3"
+      - "--leader-id=1"
+      - "--private-key=${SSV_NODE_3}"
+      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
+      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
+      - "--network=${NETWORK}"
+      - "--consensus=${CONSENSUS_TYPE}"
     environment:
       DOCKER_COMPOSE: "true"
     networks:
