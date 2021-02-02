@@ -21,7 +21,6 @@ message Message {
   bytes lambda            = 3;
   bytes previous_lambda   = 4; // previous_lambda could be compared to prev block hash, to build instances as a chain
   bytes value             = 5;
-  bytes signed_value      = 6; // signed_value is used to sign the actual value, for example partial signing of beacon chain attestation data. Only used for commit stage
 }
 
 message SignedMessage{

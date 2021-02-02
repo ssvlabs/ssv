@@ -31,7 +31,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     sks[0].Serialize(),
 		},
-		valueImpl: weekday.New(),
+		consensus: weekday.New(),
 	}
 
 	// change round no quorum
@@ -107,7 +107,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     sks[0].Serialize(),
 		},
-		valueImpl: weekday.New(),
+		consensus: weekday.New(),
 	}
 
 	// change round no quorum
@@ -157,7 +157,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     sks[0].Serialize(),
 		},
-		valueImpl: weekday.New(),
+		consensus: weekday.New(),
 	}
 
 	// test happy flow
@@ -192,7 +192,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		valueImpl: weekday.New(),
+		consensus: weekday.New(),
 	}
 
 	msg := signMsg(1, sks[1], &proto.Message{
