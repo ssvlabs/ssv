@@ -101,6 +101,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 	n.logger.Info("start listening slot queue")
 
+	identfier := ibft.FirstInstanceIdentifier
 	for {
 		slot, duty, ok, err := n.slotQueue.Next(n.validatorPubKey)
 		if err != nil {
@@ -174,7 +175,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						return
 					}
 
-					lambda := []byte(strconv.Itoa(int(slot)))
+					newId := strconv.Itoa(int(slot))
 
 					// TODO: Refactor this out
 					consensus := validation.New(logger, inputValue)
@@ -183,16 +184,15 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						valBytes = []byte(time.Now().Weekday().String())
 					}
 
-					if err := n.iBFT.StartInstance(ibft.StartOptions{
+					n.iBFT.StartInstance(ibft.StartOptions{
 						Logger:       logger,
 						Consensus:    consensus,
-						PrevInstance: []byte{}, // TODO: Pass prev lambda
-						Identifier:   lambda,
+						PrevInstance: []byte(identfier),
+						Identifier:   []byte(newId),
 						Value:        valBytes,
-					}); err != nil {
-						logger.Error("failed to start IBFT instance", zap.Error(err))
-						return
-					}
+					})
+
+					identfier = newId // TODO: Fix race condition
 
 					// Here we ensure at least 2/3 instances got a consensus so we can sign data and broadcast signatures
 					logger.Info("--- GOT CONSENSUS ---")
