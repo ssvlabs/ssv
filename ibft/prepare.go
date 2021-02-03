@@ -29,6 +29,7 @@ func (i *Instance) validatePrepareMsg() PipelineFunc {
 		if err != nil {
 			return err // will return error if no valid pre-prepare value was received
 		}
+
 		if !bytes.Equal(val, signedMessage.Message.Value) {
 			return errors.New("pre-prepare value not equal to prepare msg value")
 		}

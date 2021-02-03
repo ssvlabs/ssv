@@ -1,11 +1,10 @@
 package ibft
 
 import (
-	"errors"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
-
-	"go.uber.org/zap"
 )
 
 func (i *Instance) prePrepareMsgPipeline() Pipeline {
@@ -56,10 +55,11 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 
 func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
 	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(round)
+	i.logger.Info("pre prepare value", zap.Uint64("round", round), zap.Uint64("round_leader", i.RoundLeader(round)), zap.Any("messages", msgs))
 	if msg, found := msgs[i.RoundLeader(round)]; found {
 		return msg.Message.Value, nil
 	}
-	return nil, errors.New("no pre-prepare value found")
+	return nil, errors.Errorf("no pre-prepare value found for round %d", round)
 }
 
 func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) bool {
