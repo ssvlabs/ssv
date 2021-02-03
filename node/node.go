@@ -192,7 +192,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						Value:        valBytes,
 					})
 
-					identfier = newId // TODO: Fix race condition
+					// identfier = newId // TODO: Fix race condition
 
 					// Here we ensure at least 2/3 instances got a consensus so we can sign data and broadcast signatures
 					logger.Info("------------------ GOT CONSENSUS -----------------")
