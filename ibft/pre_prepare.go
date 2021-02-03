@@ -105,10 +105,11 @@ func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 
 		// broadcast prepare msg
 		broadcastMsg := &proto.Message{
-			Type:   proto.RoundState_Prepare,
-			Round:  i.State.Round,
-			Lambda: i.State.Lambda,
-			Value:  i.State.InputValue,
+			Type:           proto.RoundState_Prepare,
+			Round:          i.State.Round,
+			Lambda:         i.State.Lambda,
+			PreviousLambda: i.State.PreviousLambda,
+			Value:          i.State.InputValue,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Log("could not broadcast prepare message", true, zap.Error(err))

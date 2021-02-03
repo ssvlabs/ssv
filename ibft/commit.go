@@ -79,7 +79,7 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 		}
 		quorum, t, n := i.commitQuorum(i.State.PreparedRound, i.State.PreparedValue)
 		if quorum { // if already decidedChan no need to do it again
-			i.Log("decidedChan iBFT instance",
+			i.Log("decided iBFT instance",
 				false,
 				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))

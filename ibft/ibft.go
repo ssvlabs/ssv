@@ -24,7 +24,6 @@ type StartOptions struct {
 	PrevInstance []byte
 	Identifier   []byte
 	Value        []byte
-	OnCommit     func()
 }
 
 type IBFT struct {
@@ -46,15 +45,16 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(opts StartOptions) error {
+func (i *IBFT) StartInstance(opts StartOptions) {
+	// If previous instance didn't decide, can't start another instance.
 	prevId := hex.EncodeToString(opts.PrevInstance)
 	if prevId != FirstInstanceIdentifier {
 		instance, found := i.instances[prevId]
 		if !found {
-			return errors.New("previous instance not found")
+			opts.Logger.Fatal("can't start instance", zap.Error(errors.New("previous instance not found")))
 		}
 		if instance.Stage() != proto.RoundState_Decided {
-			return errors.New("previous instance not decidedChan, can't start new instance")
+			opts.Logger.Fatal("can't start instance", zap.Error(errors.New("previous instance not decided, can't start new instance")))
 		}
 	}
 
@@ -79,9 +79,7 @@ func (i *IBFT) StartInstance(opts StartOptions) error {
 			i.storage.SavePrepareJustification(opts.Identifier, newInstance.State.Round, nil, nil, []uint64{})
 		case proto.RoundState_Commit:
 			i.storage.SaveDecidedRound(opts.Identifier, nil, nil, []uint64{})
-			return nil
+			return
 		}
 	}
-
-	return nil
 }

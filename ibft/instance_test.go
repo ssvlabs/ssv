@@ -31,7 +31,7 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 	return sks, nodes
 }
 
-func TestIBFTInstance_Start(t *testing.T) {
+func TestInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
 	sks, nodes := generateNodes(4)

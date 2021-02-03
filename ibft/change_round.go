@@ -193,10 +193,11 @@ func (i *Instance) uponChangeRoundTrigger() {
 		i.Log("failed to create round change data for round", true, zap.Uint64("round", i.State.Round), zap.Error(err))
 	}
 	broadcastMsg := &proto.Message{
-		Type:   proto.RoundState_ChangeRound,
-		Round:  i.State.Round,
-		Lambda: i.State.Lambda,
-		Value:  data,
+		Type:           proto.RoundState_ChangeRound,
+		Round:          i.State.Round,
+		Lambda:         i.State.Lambda,
+		PreviousLambda: i.State.PreviousLambda,
+		Value:          data,
 	}
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 		i.Log("could not broadcast round change message", true, zap.Error(err))
