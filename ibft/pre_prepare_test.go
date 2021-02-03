@@ -13,8 +13,8 @@ import (
 )
 
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instances := &Instance{
 		prePrepareMessages:  msgcont.NewMessagesContainer(),
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
@@ -30,13 +30,13 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Me: &proto.Node{
 			IbftId: 0,
 			Pk:     nodes[0].Pk,
-			Sk:     sks[0].Serialize(),
+			Sk:     secretKeys[0].Serialize(),
 		},
 		consensus: &weekday.Consensus{},
 	}
 
 	// change round no quorum
-	msg := signMsg(0, sks[0], &proto.Message{
+	msg := signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambda"),
@@ -45,9 +45,9 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedValue: []byte(time.Now().Weekday().String()),
 		}),
 	})
-	i.changeRoundMessages.AddMessage(msg)
+	instances.changeRoundMessages.AddMessage(msg)
 
-	msg = signMsg(0, sks[0], &proto.Message{
+	msg = signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambda"),
@@ -56,19 +56,19 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedValue: []byte(time.Now().Weekday().String()),
 		}),
 	})
-	i.changeRoundMessages.AddMessage(msg)
+	instances.changeRoundMessages.AddMessage(msg)
 
-	// no quorum achived, err
-	msg = signMsg(2, sks[2], &proto.Message{
+	// no quorum achieved, err
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, i.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
+	require.EqualError(t, instances.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
 
 	// test justified change round
-	msg = signMsg(0, sks[0], &proto.Message{
+	msg = signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambda"),
@@ -77,20 +77,20 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedValue: []byte(time.Now().Weekday().String()),
 		}),
 	})
-	i.changeRoundMessages.AddMessage(msg)
+	instances.changeRoundMessages.AddMessage(msg)
 
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, i.uponPrePrepareMsg()(&msg))
+	require.NoError(t, instances.uponPrePrepareMsg()(&msg))
 }
 
 func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prePrepareMessages:  msgcont.NewMessagesContainer(),
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
@@ -106,42 +106,42 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Me: &proto.Node{
 			IbftId: 0,
 			Pk:     nodes[0].Pk,
-			Sk:     sks[0].Serialize(),
+			Sk:     secretKeys[0].Serialize(),
 		},
 		consensus: &weekday.Consensus{},
 	}
 
 	// change round no quorum
-	msg := signMsg(0, sks[0], &proto.Message{
+	msg := signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambda"),
 	})
-	i.changeRoundMessages.AddMessage(msg)
+	instance.changeRoundMessages.AddMessage(msg)
 
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambda"),
 	})
-	i.changeRoundMessages.AddMessage(msg)
+	instance.changeRoundMessages.AddMessage(msg)
 
-	// no quorum achived, err
-	require.EqualError(t, i.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
+	// no quorum achieved, err
+	require.EqualError(t, instance.uponPrePrepareMsg()(&msg), "received un-justified pre-prepare message")
 
 	// test justified change round
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambda"),
 	})
-	i.changeRoundMessages.AddMessage(msg)
-	require.NoError(t, i.uponPrePrepareMsg()(&msg))
+	instance.changeRoundMessages.AddMessage(msg)
+	require.NoError(t, instance.uponPrePrepareMsg()(&msg))
 }
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prePrepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -156,32 +156,32 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Me: &proto.Node{
 			IbftId: 0,
 			Pk:     nodes[0].Pk,
-			Sk:     sks[0].Serialize(),
+			Sk:     secretKeys[0].Serialize(),
 		},
 		consensus: &weekday.Consensus{},
 	}
 
 	// test happy flow
-	msg := signMsg(1, sks[1], &proto.Message{
+	msg := signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err := i.uponPrePrepareMsg()(&msg)
+	err := instance.uponPrePrepareMsg()(&msg)
 	require.NoError(t, err)
-	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(1)
+	msgs := instance.prePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[0])
-	require.True(t, i.State.Stage == proto.RoundState_PrePrepare)
+	require.True(t, instance.State.Stage == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
-	err = i.uponPrePrepareMsg()(&msg)
+	err = instance.uponPrePrepareMsg()(&msg)
 	require.NoError(t, err)
 }
 
 func TestValidatePrePrepareValue(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prePrepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -196,37 +196,37 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		consensus: &weekday.Consensus{},
 	}
 
-	msg := signMsg(1, sks[1], &proto.Message{
+	msg := signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err := i.validatePrePrepareMsg()(&msg)
-	require.EqualError(t, err, "msg value is wrong")
+	err := instance.validatePrePrepareMsg()(&msg)
+	require.EqualError(t, err, "message value is wrong")
 
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err = i.validatePrePrepareMsg()(&msg)
+	err = instance.validatePrePrepareMsg()(&msg)
 	require.EqualError(t, err, "pre-prepare message sender is not the round's leader")
 
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = i.validatePrePrepareMsg()(&msg)
+	err = instance.validatePrePrepareMsg()(&msg)
 	require.NoError(t, err)
 }
 
 func TestInstance_JustifyPrePrepare(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -239,7 +239,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		},
 	}
 
-	res, err := i.JustifyPrePrepare(1)
+	res, err := instance.JustifyPrePrepare(1)
 	require.NoError(t, err)
 	require.True(t, res)
 
@@ -249,16 +249,16 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	i.changeRoundMessages.AddMessage(signMsg(0, sks[0], msg))
+	instance.changeRoundMessages.AddMessage(signMsg(0, secretKeys[0], msg))
 
 	msg = &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	i.changeRoundMessages.AddMessage(signMsg(1, sks[1], msg))
+	instance.changeRoundMessages.AddMessage(signMsg(1, secretKeys[1], msg))
 
-	res, err = i.JustifyPrePrepare(2)
+	res, err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 	require.False(t, res)
 
@@ -268,9 +268,9 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	i.changeRoundMessages.AddMessage(signMsg(2, sks[2], msg))
+	instance.changeRoundMessages.AddMessage(signMsg(2, secretKeys[2], msg))
 
-	res, err = i.JustifyPrePrepare(2)
+	res, err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 	require.True(t, res)
 }

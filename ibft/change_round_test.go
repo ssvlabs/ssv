@@ -23,18 +23,18 @@ func bytesToChangeRoundData(input []byte) *proto.ChangeRoundData {
 	return ret
 }
 
-func signMsg(id uint64, sk *bls.SecretKey, msg *proto.Message) proto.SignedMessage {
-	sig, _ := msg.Sign(sk)
+func signMsg(id uint64, secretKey *bls.SecretKey, msg *proto.Message) proto.SignedMessage {
+	signature, _ := msg.Sign(secretKey)
 	return proto.SignedMessage{
 		Message:   msg,
-		Signature: sig.Serialize(),
+		Signature: signature.Serialize(),
 		IbftId:    id,
 	}
 }
 
 func TestRoundChangeInputValue(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -48,18 +48,18 @@ func TestRoundChangeInputValue(t *testing.T) {
 	}
 
 	// no prepared round
-	byts, err := i.roundChangeInputValue()
+	bytes, err := instance.roundChangeInputValue()
 	require.NoError(t, err)
-	require.Nil(t, byts)
+	require.Nil(t, bytes)
 
 	// add votes
-	i.prepareMessages.AddMessage(signMsg(1, sks[1], &proto.Message{
+	instance.prepareMessages.AddMessage(signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("value"),
 	}))
-	i.prepareMessages.AddMessage(signMsg(2, sks[2], &proto.Message{
+	instance.prepareMessages.AddMessage(signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
@@ -67,43 +67,43 @@ func TestRoundChangeInputValue(t *testing.T) {
 	}))
 
 	// with some prepare votes but not enough
-	byts, err = i.roundChangeInputValue()
+	bytes, err = instance.roundChangeInputValue()
 	require.NoError(t, err)
-	require.Nil(t, byts)
+	require.Nil(t, bytes)
 
 	// add more votes
-	i.prepareMessages.AddMessage(signMsg(3, sks[3], &proto.Message{
+	instance.prepareMessages.AddMessage(signMsg(3, secretKeys[3], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("lambda"),
 		Value:  []byte("value"),
 	}))
-	i.State.PreparedRound = 1
-	i.State.PreparedValue = []byte("value")
+	instance.State.PreparedRound = 1
+	instance.State.PreparedValue = []byte("value")
 
 	// with a prepared round
-	byts, err = i.roundChangeInputValue()
+	bytes, err = instance.roundChangeInputValue()
 	require.NoError(t, err)
-	require.NotNil(t, byts)
-	data := bytesToChangeRoundData(byts)
+	require.NotNil(t, bytes)
+	data := bytesToChangeRoundData(bytes)
 	require.EqualValues(t, 1, data.PreparedRound)
 	require.EqualValues(t, []byte("value"), data.PreparedValue)
 
 	// with a different prepared value
-	i.State.PreparedValue = []byte("value2")
-	byts, err = i.roundChangeInputValue()
-	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
+	instance.State.PreparedValue = []byte("value2")
+	bytes, err = instance.roundChangeInputValue()
+	require.EqualError(t, err, "prepared value/round is set but no quorum of prepare messages found")
 
 	// with different prepared round
-	i.State.PreparedRound = 2
-	i.State.PreparedValue = []byte("value")
-	byts, err = i.roundChangeInputValue()
-	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
+	instance.State.PreparedRound = 2
+	instance.State.PreparedValue = []byte("value")
+	bytes, err = instance.roundChangeInputValue()
+	require.EqualError(t, err, "prepared value/round is set but no quorum of prepare messages found")
 }
 
 func TestValidateChangeRoundMessage(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -190,7 +190,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:                "invalid justification msg type",
+			name:                "invalid justification message type",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
@@ -210,7 +210,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					SignedIds:        []uint64{0, 1, 2},
 				}),
 			},
-			expectedError: "change round justification msg type not Prepare",
+			expectedError: "change round justification message type not Prepare",
 		},
 		{
 			name:                "invalid justification round",
@@ -236,7 +236,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "change round justification round lower or equal to message round",
 		},
 		{
-			name:                "invalid prepared and  justification round",
+			name:                "invalid prepared and justification round",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
@@ -302,10 +302,10 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					SignedIds:        []uint64{0, 1, 2},
 				}),
 			},
-			expectedError: "change round prepared value not equal to justification msg value",
+			expectedError: "change round prepared value not equal to justification message value",
 		},
 		{
-			name:                "invalid justification sig",
+			name:                "invalid justification signature",
 			signerId:            1,
 			justificationSigIds: []uint64{0, 1},
 			msg: &proto.Message{
@@ -333,27 +333,27 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// sign if needed
 			if test.msg.Value != nil {
-				var sig *bls.Sign
+				var signature *bls.Sign
 				data := bytesToChangeRoundData(test.msg.Value)
 				for _, id := range test.justificationSigIds {
-					s, err := data.JustificationMsg.Sign(sks[id])
+					sign, err := data.JustificationMsg.Sign(secretKeys[id])
 					require.NoError(t, err)
-					if sig == nil {
-						sig = s
+					if signature == nil {
+						signature = sign
 					} else {
-						sig.Add(s)
+						signature.Add(sign)
 					}
 				}
-				data.JustificationSig = sig.Serialize()
+				data.JustificationSig = signature.Serialize()
 				test.msg.Value = changeRoundDataToBytes(data)
 			}
 
-			sig, err := test.msg.Sign(sks[test.signerId])
+			signature, err := test.msg.Sign(secretKeys[test.signerId])
 			require.NoError(t, err)
 
-			err = i.validateChangeRoundMsg()(&proto.SignedMessage{
+			err = instance.validateChangeRoundMsg()(&proto.SignedMessage{
 				Message:   test.msg,
-				Signature: sig.Serialize(),
+				Signature: signature.Serialize(),
 				IbftId:    test.signerId,
 			})
 			if len(test.expectedError) > 0 {
@@ -371,7 +371,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		PreparedValue: []byte("hello"),
 	})
 
-	i := &Instance{
+	instance := &Instance{
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -390,11 +390,11 @@ func TestRoundChangeJustification(t *testing.T) {
 	}
 
 	// test no previous prepared round and no round change quorum
-	//res, err := i.justifyRoundChange(2)
+	//res, err := instance.justifyRoundChange(2)
 	//require.EqualError(t, err, "could not justify round change, did not find highest prepared")
 	//require.False(t, res)
 
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -403,7 +403,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -412,7 +412,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -423,12 +423,12 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	// test no previous prepared round with round change quorum (no justification)
-	res, err := i.justifyRoundChange(2)
+	res, err := instance.justifyRoundChange(2)
 	require.NoError(t, err)
 	require.True(t, res)
 
-	i.changeRoundMessages = msgcont.NewMessagesContainer()
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages = msgcont.NewMessagesContainer()
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  1,
@@ -437,7 +437,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -446,7 +446,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  2,
@@ -457,15 +457,15 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	// test no previous prepared round with round change quorum (with justification)
-	res, err = i.justifyRoundChange(2)
+	res, err = instance.justifyRoundChange(2)
 	require.Errorf(t, err, "could not justify round change, did not receive quorum of prepare messages previously")
 	require.False(t, res)
 
-	i.State.PreparedRound = 1
-	i.State.PreparedValue = []byte("hello")
+	instance.State.PreparedRound = 1
+	instance.State.PreparedValue = []byte("hello")
 
 	// test previously prepared round with round change quorum (with justification)
-	res, err = i.justifyRoundChange(2)
+	res, err = instance.justifyRoundChange(2)
 	require.NoError(t, err)
 	require.True(t, res)
 }
@@ -473,7 +473,7 @@ func TestRoundChangeJustification(t *testing.T) {
 func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
-	i := &Instance{
+	instance := &Instance{
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -485,7 +485,7 @@ func TestHighestPrepared(t *testing.T) {
 			},
 		},
 	}
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
@@ -497,7 +497,7 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
@@ -511,13 +511,13 @@ func TestHighestPrepared(t *testing.T) {
 	})
 
 	// test one higher than other
-	res, err := i.highestPrepared(3)
+	res, err := instance.highestPrepared(3)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 
-	// test 2 equals
-	i.changeRoundMessages.AddMessage(proto.SignedMessage{
+	// test two equals
+	instance.changeRoundMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
 			Round:  3,
@@ -529,7 +529,7 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	res, err = i.highestPrepared(3)
+	res, err = instance.highestPrepared(3)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)

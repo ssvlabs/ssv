@@ -15,8 +15,8 @@ import (
 )
 
 func TestValidatePrepareMsg(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prepareMessages:    msgcont.NewMessagesContainer(),
 		prePrepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
@@ -31,44 +31,44 @@ func TestValidatePrepareMsg(t *testing.T) {
 	}
 
 	// test no valid pre-prepare msg
-	msg := signMsg(1, sks[1], &proto.Message{
+	msg := signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, i.validatePrepareMsg()(&msg), "no pre-prepare value found")
+	require.EqualError(t, instance.validatePrepareMsg()(&msg), "no pre-prepare value found")
 
 	// test invalid prepare value
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	i.prePrepareMessages.AddMessage(msg)
+	instance.prePrepareMessages.AddMessage(msg)
 
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte("invalid"),
 	})
-	require.EqualError(t, i.validatePrepareMsg()(&msg), "pre-prepare value not equal to prepare msg value")
+	require.EqualError(t, instance.validatePrepareMsg()(&msg), "pre-prepare value not equal to prepare msg value")
 
 	// test valid prepare value
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, i.validatePrepareMsg()(&msg))
+	require.NoError(t, instance.validatePrepareMsg()(&msg))
 }
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := generateNodes(4)
-	i := &Instance{
+	instance := &Instance{
 		prepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -79,7 +79,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 	}
 
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	instance.prepareMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -88,7 +88,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	instance.prepareMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -97,7 +97,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	instance.prepareMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -106,7 +106,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 3,
 	})
-	i.prepareMessages.AddMessage(proto.SignedMessage{
+	instance.prepareMessages.AddMessage(proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -117,19 +117,19 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	})
 
 	// test batch
-	res := i.batchedPrepareMsgs(1)
+	res := instance.batchedPrepareMsgs(1)
 	require.Len(t, res, 2)
 	require.Len(t, res[hex.EncodeToString([]byte("value"))], 3)
 	require.Len(t, res[hex.EncodeToString([]byte("value2"))], 1)
 
 	// test valid quorum
-	quorum, tt, n := i.prepareQuorum(1, []byte("value"))
+	quorum, tt, n := instance.prepareQuorum(1, []byte("value"))
 	require.True(t, quorum)
 	require.EqualValues(t, 3, tt)
 	require.EqualValues(t, 4, n)
 
 	// test invalid quorum
-	quorum, tt, n = i.prepareQuorum(1, []byte("value2"))
+	quorum, tt, n = instance.prepareQuorum(1, []byte("value2"))
 	require.False(t, quorum)
 	require.EqualValues(t, 1, tt)
 	require.EqualValues(t, 4, n)

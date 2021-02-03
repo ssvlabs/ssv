@@ -18,7 +18,7 @@ import (
 func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
 	bls.Init(bls.BLS12_381)
 	nodes := make(map[uint64]*proto.Node)
-	sks := make(map[uint64]*bls.SecretKey)
+	secretKeys := make(map[uint64]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
@@ -27,15 +27,15 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 			IbftId: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[uint64(i)] = sk
+		secretKeys[uint64(i)] = sk
 	}
-	return sks, nodes
+	return secretKeys, nodes
 }
 
 func TestIBFTInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
-	sks, nodes := generateNodes(4)
+	secretKeys, nodes := generateNodes(4)
 	replay := local.NewIBFTReplay(nodes)
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
@@ -49,7 +49,7 @@ func TestIBFTInstance_Start(t *testing.T) {
 		me := &proto.Node{
 			IbftId: uint64(i),
 			Pk:     nodes[uint64(i)].Pk,
-			Sk:     sks[uint64(i)].Serialize(),
+			Sk:     secretKeys[uint64(i)].Serialize(),
 		}
 		instances = append(instances, NewInstance(InstanceOptions{
 			Logger:    logger,
@@ -62,8 +62,8 @@ func TestIBFTInstance_Start(t *testing.T) {
 		instances[i].StartMessagePipeline()
 	}
 
-	for _, i := range instances {
-		_, err := i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String()))
+	for _, instance := range instances {
+		_, err := instance.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String()))
 		require.NoError(t, err)
 	}
 
