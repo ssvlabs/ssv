@@ -99,6 +99,7 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) {
 	if i.IsLeader() {
 		i.Log("Node is leader for round 1", false)
 		i.SetStage(proto.RoundState_PrePrepare)
+
 		msg := &proto.Message{
 			Type:           proto.RoundState_PrePrepare,
 			Round:          i.State.Round,
@@ -106,6 +107,7 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) {
 			PreviousLambda: previousLambda,
 			Value:          i.State.InputValue,
 		}
+
 		if err := i.SignAndBroadcast(msg); err != nil {
 			i.logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
 		}
