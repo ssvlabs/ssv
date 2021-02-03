@@ -16,7 +16,6 @@ type MessagesContainer struct {
 func NewMessagesContainer() *MessagesContainer {
 	return &MessagesContainer{
 		messages: make(map[uint64]map[uint64]*proto.SignedMessage),
-		lock:     sync.Mutex{},
 	}
 }
 

@@ -3,8 +3,6 @@ package cli
 import (
 	"encoding/hex"
 
-	"github.com/bloxapp/ssv/ibft/proto"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -12,8 +10,10 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
+	"github.com/bloxapp/ssv/storage/inmem"
 )
 
 // startNodeCmd is the command to start SSV node
@@ -107,7 +107,7 @@ var startNodeCmd = &cobra.Command{
 			Network:         network,
 			Consensus:       consensusType,
 			IBFT: ibft.New(
-				nil, // TODO: Implement DB
+				inmem.New(),
 				&proto.Node{
 					IbftId: nodeID,
 					Pk:     baseKey.GetPublicKey().Serialize(),

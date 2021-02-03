@@ -219,6 +219,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	if i.network != nil {
 		return i.network.Broadcast(signedMessage)
 	}
+
 	return nil
 }
 

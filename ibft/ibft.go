@@ -2,16 +2,13 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
-
-	"github.com/bloxapp/ssv/storage"
-
-	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/storage"
 )
 
 const (
@@ -51,10 +48,10 @@ func (i *IBFT) StartInstance(opts StartOptions) {
 	if prevId != FirstInstanceIdentifier {
 		instance, found := i.instances[prevId]
 		if !found {
-			opts.Logger.Fatal("can't start instance", zap.Error(errors.New("previous instance not found")))
+			opts.Logger.Fatal("previous instance not found")
 		}
 		if instance.Stage() != proto.RoundState_Decided {
-			opts.Logger.Fatal("can't start instance", zap.Error(errors.New("previous instance not decided, can't start new instance")))
+			opts.Logger.Fatal("previous instance not decided, can't start new instance")
 		}
 	}
 
@@ -79,6 +76,8 @@ func (i *IBFT) StartInstance(opts StartOptions) {
 			i.storage.SavePrepareJustification(opts.Identifier, newInstance.State.Round, nil, nil, []uint64{})
 		case proto.RoundState_Commit:
 			i.storage.SaveDecidedRound(opts.Identifier, nil, nil, []uint64{})
+			return
+		case proto.RoundState_Decided:
 			return
 		}
 	}

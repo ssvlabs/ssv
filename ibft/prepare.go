@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/bloxapp/ssv/ibft/proto"
-
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 func (i *Instance) prepareMsgPipeline() Pipeline {

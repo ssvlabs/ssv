@@ -113,10 +113,10 @@ func (n *p2pNetwork) ReceivedMsgChan(id uint64) <-chan *proto.SignedMessage {
 				}
 
 				// Only forward messages delivered by others
-				if msg.ReceivedFrom == n.hostID {
+				/*if msg.ReceivedFrom == n.hostID {
 					n.logger.Debug("ignore own message")
 					continue
-				}
+				}*/
 
 				var cm proto.SignedMessage
 				if err := json.Unmarshal(msg.Data, &cm); err != nil {

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/inmem"
 )
 
 type Network struct {
@@ -43,21 +45,10 @@ func (n *Network) Broadcast(signed *proto.SignedMessage) error {
 	return nil
 }
 
-type TestInMeStorage struct {
-}
-
-func (s *TestInMeStorage) SavePrepareJustification(lambda []byte, round uint64, msg *proto.Message, signature []byte, signers []uint64) {
-
-}
-
-func (s *TestInMeStorage) SaveDecidedRound(lambda []byte, msg *proto.Message, signature []byte, signers []uint64) {
-
-}
-
 // IBFTReplay allows to script a precise scenario for every ibft node's behaviour each round
 type IBFTReplay struct {
 	Network *Network
-	Storage *TestInMeStorage
+	Storage storage.Storage
 	scripts map[uint64]*RoundScript
 	nodes   []uint64
 }
@@ -68,7 +59,7 @@ func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 			c: make(map[uint64]chan *proto.SignedMessage),
 			l: make(map[uint64]*sync.Mutex),
 		},
-		Storage: &TestInMeStorage{},
+		Storage: inmem.New(),
 		scripts: make(map[uint64]*RoundScript),
 		nodes:   make([]uint64, len(nodes)),
 	}
