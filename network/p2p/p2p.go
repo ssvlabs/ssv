@@ -20,7 +20,7 @@ import (
 
 const (
 	// DiscoveryInterval is how often we re-publish our mDNS records.
-	DiscoveryInterval = time.Hour
+	DiscoveryInterval = time.Second
 
 	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 	DiscoveryServiceTag = "bloxstaking.ssv"

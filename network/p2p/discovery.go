@@ -20,7 +20,6 @@ type discoveryNotifee struct {
 // the PubSub system will automatically start interacting with them if they also
 // support PubSub.
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	n.logger.Info("discovered new peer", zap.String("peer_id", pi.ID.Pretty()))
 	err := n.host.Connect(context.Background(), pi)
 	if err != nil {
 		n.logger.Error("error connecting to peer", zap.String("peer_id", pi.ID.Pretty()), zap.Error(err))

@@ -110,6 +110,7 @@ func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) {
 			i.logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
 		}
 	}
+
 	i.triggerRoundChangeOnTimer()
 }
 

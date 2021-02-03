@@ -183,10 +183,19 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						valBytes = []byte(time.Now().Weekday().String())
 					}
 
-					// TODO: Pass prev lambda
-					if err := n.iBFT.StartInstance(logger, consensus, []byte{}, lambda, valBytes); err != nil {
+					if err := n.iBFT.StartInstance(ibft.StartOptions{
+						Logger:       logger,
+						Consensus:    consensus,
+						PrevInstance: []byte{}, // TODO: Pass prev lambda
+						Identifier:   lambda,
+						Value:        valBytes,
+					}); err != nil {
 						logger.Error("failed to start IBFT instance", zap.Error(err))
+						return
 					}
+
+					// Here we ensure at least 2/3 instances got a consensus so we can sign data and broadcast signatures
+					logger.Info("--- GOT CONSENSUS ---")
 				}(role)
 			}
 		}(slot, duty)

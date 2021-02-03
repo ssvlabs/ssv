@@ -46,10 +46,11 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 	if round == 1 {
 		return true, nil
 	}
-	quorum, _, _ := i.changeRoundQuorum(round)
-	if quorum {
+
+	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
 		return i.justifyRoundChange(round)
 	}
+
 	return false, nil
 }
 

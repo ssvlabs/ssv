@@ -18,6 +18,15 @@ const (
 	FirstInstanceIdentifier = ""
 )
 
+type StartOptions struct {
+	Logger       *zap.Logger
+	Consensus    consensus.Consensus
+	PrevInstance []byte
+	Identifier   []byte
+	Value        []byte
+	OnCommit     func()
+}
+
 type IBFT struct {
 	instances map[string]*Instance // key is the instance identifier
 	storage   storage.Storage
@@ -37,8 +46,8 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(logger *zap.Logger, consensus consensus.Consensus, prevInstance []byte, identifier, value []byte) error {
-	prevId := hex.EncodeToString(prevInstance)
+func (i *IBFT) StartInstance(opts StartOptions) error {
+	prevId := hex.EncodeToString(opts.PrevInstance)
 	if prevId != FirstInstanceIdentifier {
 		instance, found := i.instances[prevId]
 		if !found {
@@ -50,34 +59,29 @@ func (i *IBFT) StartInstance(logger *zap.Logger, consensus consensus.Consensus, 
 	}
 
 	newInstance := NewInstance(InstanceOptions{
-		Logger:    logger,
+		Logger:    opts.Logger,
 		Me:        i.me,
 		Network:   i.network,
-		Consensus: consensus,
+		Consensus: opts.Consensus,
 		Params:    i.params,
 	})
-	i.instances[hex.EncodeToString(identifier)] = newInstance
+	i.instances[hex.EncodeToString(opts.Identifier)] = newInstance
 	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
-	go newInstance.Start(prevInstance, identifier, value)
+	go newInstance.Start(opts.PrevInstance, opts.Identifier, opts.Value)
 
 	// Store prepared round and value and decided stage.
-	go func() {
-		for {
-			select {
-			case stage := <-stageChan:
-				switch stage {
-				// TODO - complete values
-				case proto.RoundState_Prepare:
-					i.storage.SavePrepareJustification(identifier, newInstance.State.Round, nil, nil, []uint64{})
-				case proto.RoundState_Commit:
-					i.storage.SaveDecidedRound(identifier, nil, nil, []uint64{})
-					return
-				}
-			}
+	for {
+		switch stage := <-stageChan; stage {
+		// TODO - complete values
+		case proto.RoundState_Prepare:
+			i.storage.SavePrepareJustification(opts.Identifier, newInstance.State.Round, nil, nil, []uint64{})
+		case proto.RoundState_Commit:
+			i.storage.SaveDecidedRound(opts.Identifier, nil, nil, []uint64{})
+			return nil
 		}
-	}()
+	}
 
 	return nil
 }

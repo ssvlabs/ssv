@@ -76,20 +76,20 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 	quorum := cnt*3 >= i.params.CommitteeSize()*2
 	if quorum { // quorum for prj = ⊥ ∧ pvj = ⊥ found
 		return true, nil
-	} else {
-		data, err := i.highestPrepared(round)
-		if err != nil {
-			return false, err
-		}
-		if data == nil {
-			return true, nil
-		}
-		if !i.State.PreviouslyPrepared() { // no previous prepared round
-			return false, errors.Errorf("could not justify round (%d) change, did not received quorum of prepare messages previously", round)
-		}
-		return data.PreparedRound == i.State.PreparedRound &&
-			bytes.Equal(data.PreparedValue, i.State.PreparedValue), nil
 	}
+
+	data, err := i.highestPrepared(round)
+	if err != nil {
+		return false, err
+	}
+	if data == nil {
+		return true, nil
+	}
+	if !i.State.PreviouslyPrepared() { // no previous prepared round
+		return false, errors.Errorf("could not justify round (%d) change, did not received quorum of prepare messages previously", round)
+	}
+	return data.PreparedRound == i.State.PreparedRound &&
+		bytes.Equal(data.PreparedValue, i.State.PreparedValue), nil
 }
 
 func (i *Instance) validateChangeRoundMsg() PipelineFunc {
