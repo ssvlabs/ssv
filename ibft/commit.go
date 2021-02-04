@@ -69,7 +69,7 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 
 		// add to prepare messages
 		i.commitMessages.AddMessage(signedMessage)
-		i.Log("received valid commit message for round", false,
+		i.logger.Info("received valid commit message for round",
 			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
 			zap.Uint64("round", signedMessage.Message.Round))
 
@@ -79,8 +79,7 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 		}
 		quorum, t, n := i.commitQuorum(i.State.PreparedRound, i.State.PreparedValue)
 		if quorum { // if already decidedChan no need to do it again
-			i.Log("decided iBFT instance",
-				false,
+			i.logger.Info("decided iBFT instance",
 				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 

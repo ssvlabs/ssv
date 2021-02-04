@@ -30,23 +30,24 @@ func TestP2PNetworker(t *testing.T) {
 	peer4, err := New(context.Background(), logger, topic2)
 	require.NoError(t, err)
 
+	lambda := []byte("test-lambda")
 	messageToBroadcast := &proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_PrePrepare,
 			Round:  1,
-			Lambda: []byte("test-lambda"),
+			Lambda: lambda,
 			Value:  []byte("test-value"),
 		},
 	}
 
-	peer1Chan := peer1.ReceivedMsgChan(1)
-	peer2Chan := peer2.ReceivedMsgChan(2)
-	peer3Chan := peer3.ReceivedMsgChan(3)
-	peer4Chan := peer4.ReceivedMsgChan(4)
+	peer1Chan := peer1.ReceivedMsgChan(1, lambda)
+	peer2Chan := peer2.ReceivedMsgChan(2, lambda)
+	peer3Chan := peer3.ReceivedMsgChan(3, lambda)
+	peer4Chan := peer4.ReceivedMsgChan(4, lambda)
 
 	time.Sleep(time.Second)
 
-	err = peer1.Broadcast(messageToBroadcast)
+	err = peer1.Broadcast(lambda, messageToBroadcast)
 	require.NoError(t, err)
 	t.Log("message broadcasted")
 

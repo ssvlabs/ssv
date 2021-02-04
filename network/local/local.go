@@ -16,14 +16,14 @@ type Network struct {
 	c      map[uint64]chan *proto.SignedMessage
 }
 
-func (n *Network) ReceivedMsgChan(id uint64) <-chan *proto.SignedMessage {
+func (n *Network) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage {
 	c := make(chan *proto.SignedMessage)
 	n.c[id] = c
 	n.l[id] = &sync.Mutex{}
 	return c
 }
 
-func (n *Network) Broadcast(signed *proto.SignedMessage) error {
+func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 	go func() {
 
 		// verify node is not prevented from sending msgs

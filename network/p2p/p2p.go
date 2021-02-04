@@ -1,20 +1,20 @@
 package p2p
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/peer"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 )
 
@@ -31,13 +31,25 @@ const (
 	topicFmt = "bloxstaking.ssv.%s"
 )
 
+type message struct {
+	Lambda []byte               `json:"lambda"`
+	Msg    *proto.SignedMessage `json:"msg"`
+}
+
+type listener struct {
+	lambda []byte
+	ch     chan *proto.SignedMessage
+}
+
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx    context.Context
-	hostID peer.ID
-	topic  *pubsub.Topic
-	sub    *pubsub.Subscription
-	logger *zap.Logger
+	ctx           context.Context
+	hostID        peer.ID
+	topic         *pubsub.Topic
+	sub           *pubsub.Subscription
+	listenersLock sync.Locker
+	listeners     []listener
+	logger        *zap.Logger
 }
 
 // New is the constructor of p2pNetworker
@@ -73,18 +85,26 @@ func New(ctx context.Context, logger *zap.Logger, topicName string) (network.Net
 		return nil, errors.Wrap(err, "failed to subscribe on topic")
 	}
 
-	return &p2pNetwork{
-		ctx:    ctx,
-		hostID: host.ID(),
-		topic:  topic,
-		sub:    sub,
-		logger: logger,
-	}, nil
+	n := &p2pNetwork{
+		ctx:           ctx,
+		hostID:        host.ID(),
+		topic:         topic,
+		sub:           sub,
+		listenersLock: &sync.Mutex{},
+		logger:        logger,
+	}
+
+	go n.listen()
+
+	return n, nil
 }
 
 // Broadcast propagates a signed message to all peers
-func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(msg)
+func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
+	msgBytes, err := json.Marshal(message{
+		Lambda: lambda,
+		Msg:    msg,
+	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
@@ -93,43 +113,53 @@ func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
 }
 
 // ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) ReceivedMsgChan(id uint64) <-chan *proto.SignedMessage {
-	msgCh := make(chan *proto.SignedMessage, MsgChanSize)
+func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.SignedMessage {
+	ls := listener{
+		lambda: lambda,
+		ch:     make(chan *proto.SignedMessage, MsgChanSize),
+	}
 
-	go func() {
-		for {
-			select {
-			case <-n.ctx.Done():
-				if err := n.topic.Close(); err != nil {
-					n.logger.Error("failed to close topic", zap.Error(err))
-				}
+	n.listenersLock.Lock()
+	n.listeners = append(n.listeners, ls)
+	n.listenersLock.Unlock()
 
-				n.sub.Cancel()
-			default:
-				msg, err := n.sub.Next(n.ctx)
-				if err != nil {
-					n.logger.Error("failed to get message from subscription topic", zap.Error(err))
-					return
-				}
+	return ls.ch
+}
 
-				// Only forward messages delivered by others
-				/*if msg.ReceivedFrom == n.hostID {
-					n.logger.Debug("ignore own message")
-					continue
-				}*/
+// ReceivedMsgChan return a channel with messages
+func (n *p2pNetwork) listen() {
+	for {
+		select {
+		case <-n.ctx.Done():
+			if err := n.topic.Close(); err != nil {
+				n.logger.Error("failed to close topic", zap.Error(err))
+			}
 
-				var cm proto.SignedMessage
-				if err := json.Unmarshal(msg.Data, &cm); err != nil {
-					n.logger.Error("failed to unmarshal message", zap.Error(err))
-					continue
-				}
+			n.sub.Cancel()
+		default:
+			msg, err := n.sub.Next(n.ctx)
+			if err != nil {
+				n.logger.Error("failed to get message from subscription topic", zap.Error(err))
+				return
+			}
 
-				msgCh <- &cm
+			var cm message
+			if err := json.Unmarshal(msg.Data, &cm); err != nil {
+				n.logger.Error("failed to unmarshal message", zap.Error(err))
+				continue
+			}
+
+			for _, ls := range n.listeners {
+				go func(ls listener) {
+					if !bytes.Equal(ls.lambda, cm.Lambda) {
+						return
+					}
+
+					ls.ch <- cm.Msg
+				}(ls)
 			}
 		}
-	}()
-
-	return msgCh
+	}
 }
 
 func getTopic(topicName string) string {

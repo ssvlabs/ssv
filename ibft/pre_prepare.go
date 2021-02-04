@@ -85,8 +85,7 @@ func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(signedMessage)
-		i.Log("received valid pre-prepare message for round",
-			false,
+		i.logger.Info("received valid pre-prepare message for round",
 			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
 			zap.Uint64("round", signedMessage.Message.Round))
 
@@ -111,7 +110,7 @@ func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 			Value:          i.State.InputValue,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-			i.Log("could not broadcast prepare message", true, zap.Error(err))
+			i.logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err
 		}
 		return nil

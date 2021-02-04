@@ -42,7 +42,7 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(opts StartOptions) {
+func (i *IBFT) StartInstance(opts StartOptions) bool {
 	// If previous instance didn't decide, can't start another instance.
 	prevId := hex.EncodeToString(opts.PrevInstance)
 	if prevId != FirstInstanceIdentifier {
@@ -63,7 +63,7 @@ func (i *IBFT) StartInstance(opts StartOptions) {
 		Params:    i.params,
 	})
 	i.instances[hex.EncodeToString(opts.Identifier)] = newInstance
-	newInstance.StartEventLoop()
+	newInstance.StartEventLoop(opts.Identifier)
 	newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
 	go newInstance.Start(opts.PrevInstance, opts.Identifier, opts.Value)
@@ -76,9 +76,8 @@ func (i *IBFT) StartInstance(opts StartOptions) {
 			i.storage.SavePrepareJustification(opts.Identifier, newInstance.State.Round, nil, nil, []uint64{})
 		case proto.RoundState_Commit:
 			i.storage.SaveDecidedRound(opts.Identifier, nil, nil, []uint64{})
-			return
 		case proto.RoundState_Decided:
-			return
+			return true
 		}
 	}
 }

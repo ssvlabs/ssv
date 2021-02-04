@@ -12,7 +12,7 @@ import (
 func (i *Instance) ValidateLambdas() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.State.Lambda) {
-			return errors.New("message lambda does not equal State lambda")
+			return errors.Errorf("message lambda (%s) does not equal State lambda (%s)", string(signedMessage.Message.Lambda), string(i.State.Lambda))
 		}
 		if !bytes.Equal(signedMessage.Message.PreviousLambda, i.State.PreviousLambda) {
 			return errors.New("message previous lambda does not equal State previous lambda")

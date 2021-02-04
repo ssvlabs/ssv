@@ -89,8 +89,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 
 		// add to prepare messages
 		i.prepareMessages.AddMessage(signedMessage)
-		i.Log("received valid prepare message from round",
-			false,
+		i.logger.Info("received valid prepare message from round",
 			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
 			zap.Uint64("round", signedMessage.Message.Round))
 
@@ -99,8 +98,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 			return nil // no reason to prepare again
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
-			i.Log("prepared instance",
-				false,
+			i.logger.Info("prepared instance",
 				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
@@ -118,7 +116,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 				Value:          i.State.InputValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-				i.Log("could not broadcast commit message", true, zap.Error(err))
+				i.logger.Info("could not broadcast commit message", zap.Error(err))
 				return err
 			}
 			return nil

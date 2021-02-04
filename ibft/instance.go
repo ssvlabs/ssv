@@ -89,15 +89,15 @@ func NewInstance(opts InstanceOptions) *Instance {
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(previousLambda, lambda []byte, inputValue []byte) {
-	i.Log("Node is starting iBFT instance", false, zap.String("lambda", hex.EncodeToString(lambda)))
+func (i *Instance) Start(previousLambda, lambda, inputValue []byte) {
+	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
 	i.BumpRound(1)
 	i.State.Lambda = lambda
 	i.State.PreviousLambda = previousLambda
 	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
-		i.Log("Node is leader for round 1", false)
+		i.logger.Info("Node is leader for round 1")
 		i.SetStage(proto.RoundState_PrePrepare)
 
 		msg := &proto.Message{
@@ -142,20 +142,10 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 	return i.stageChangedChan
 }
 
-func (i *Instance) Log(msg string, err bool, fields ...zap.Field) {
-	if i.logger != nil {
-		if err {
-			i.logger.Error(msg, fields...)
-		} else {
-			i.logger.Info(msg, fields...)
-		}
-	}
-}
-
 // StartEventLoop - starts the main event loop for the instance.
 // Events are messages our timer that change the behaviour of the instance upon triggering them
-func (i *Instance) StartEventLoop() {
-	msgChan := i.network.ReceivedMsgChan(i.Me.IbftId)
+func (i *Instance) StartEventLoop(lambda []byte) {
+	msgChan := i.network.ReceivedMsgChan(i.Me.IbftId, lambda)
 	go func() {
 		for {
 			select {
@@ -194,7 +184,7 @@ func (i *Instance) StartMessagePipeline() {
 			}
 
 			if err != nil {
-				i.Log("msg pipeline error", true, zap.Error(err))
+				i.logger.Error("msg pipeline error", zap.Error(err))
 			}
 		}
 	}()
@@ -217,7 +207,18 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		IbftId:    i.Me.IbftId,
 	}
 	if i.network != nil {
-		return i.network.Broadcast(signedMessage)
+		return i.network.Broadcast(i.State.GetLambda(), signedMessage)
+	}
+
+	switch msg.Type {
+	case proto.RoundState_PrePrepare:
+		i.prePrepareMessages.AddMessage(signedMessage)
+	case proto.RoundState_Prepare:
+		i.prepareMessages.AddMessage(signedMessage)
+	case proto.RoundState_Commit:
+		i.commitMessages.AddMessage(signedMessage)
+	case proto.RoundState_ChangeRound:
+		i.changeRoundMessages.AddMessage(signedMessage)
 	}
 
 	return nil
@@ -237,7 +238,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	// stat new timer
 	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
-	i.Log("started timeout clock", false, zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
+	i.logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {
 		<-i.roundChangeTimer.C
 		i.changeRoundChan <- true

@@ -6,8 +6,9 @@ import (
 
 type Network interface {
 	// Broadcast propagates a signed message to all peers
-	Broadcast(msg *proto.SignedMessage) error
+	Broadcast(lambda []byte, msg *proto.SignedMessage) error
 
 	// ReceivedMsgChan is a channel that forwards new propagated messages to a subscriber
-	ReceivedMsgChan(id uint64) <-chan *proto.SignedMessage
+	// TODO: Get rid of identifier
+	ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage
 }

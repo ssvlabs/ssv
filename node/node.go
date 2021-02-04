@@ -167,6 +167,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						}
 					case beacon.RoleUnknown:
 						logger.Warn("unknown role")
+						return
 					}
 
 					valBytes, err := json.Marshal(&inputValue)
@@ -184,13 +185,18 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						valBytes = []byte(time.Now().Weekday().String())
 					}
 
-					n.iBFT.StartInstance(ibft.StartOptions{
+					decided := n.iBFT.StartInstance(ibft.StartOptions{
 						Logger:       logger,
 						Consensus:    consensus,
 						PrevInstance: []byte(identfier),
 						Identifier:   []byte(newId),
 						Value:        valBytes,
 					})
+
+					if !decided {
+						logger.Warn("not decided")
+						return
+					}
 
 					// identfier = newId // TODO: Fix race condition
 
