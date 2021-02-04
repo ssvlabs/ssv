@@ -7,10 +7,85 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/val/weekday"
 )
+
+func TestPrepareQuorum(t *testing.T) {
+	sks, nodes := generateNodes(4)
+	i := &Instance{
+		prepareMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+	}
+
+	msg := signMsg(0, sks[0], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	i.prepareMessages.AddMessage(msg)
+
+	msg = signMsg(1, sks[1], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	i.prepareMessages.AddMessage(msg)
+
+	// no quorum yet
+	res, tt, n := i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	require.False(t, res)
+	require.EqualValues(t, tt, 2)
+	require.EqualValues(t, n, 4)
+
+	// test adding different value
+	msg = signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte("wrong"),
+	})
+	i.prepareMessages.AddMessage(msg)
+
+	res, tt, n = i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	require.False(t, res)
+	require.EqualValues(t, tt, 2)
+	require.EqualValues(t, n, 4)
+
+	// test adding different round
+	msg = signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  3,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	i.prepareMessages.AddMessage(msg)
+
+	res, tt, n = i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	require.False(t, res)
+	require.EqualValues(t, tt, 2)
+	require.EqualValues(t, n, 4)
+
+	// test valid quorum
+	msg = signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  2,
+		Lambda: []byte("lambda"),
+		Value:  []byte(time.Now().Weekday().String()),
+	})
+	i.prepareMessages.AddMessage(msg)
+
+	res, tt, n = i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	require.True(t, res)
+	require.EqualValues(t, tt, 3)
+	require.EqualValues(t, n, 4)
+}
 
 func TestValidatePrepareMsg(t *testing.T) {
 	sks, nodes := generateNodes(4)

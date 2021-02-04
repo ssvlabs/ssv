@@ -15,7 +15,7 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/ibft/val"
 	"github.com/bloxapp/ssv/network"
 )
 
@@ -23,7 +23,7 @@ type InstanceOptions struct {
 	Logger    *zap.Logger
 	Me        *proto.Node
 	Network   network.Network
-	Consensus consensus.Consensus
+	Consensus val.ValueValidator
 	Params    *proto.InstanceParams
 }
 
@@ -31,7 +31,7 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	consensus        consensus.Consensus
+	consensus        val.ValueValidator
 	params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	logger           *zap.Logger
