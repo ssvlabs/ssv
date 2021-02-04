@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
+	"github.com/bloxapp/ssv/ibft/val/weekday"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"

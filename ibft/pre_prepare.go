@@ -24,7 +24,7 @@ func (i *Instance) validatePrePrepareMsg() PipelineFunc {
 			return errors.New("pre-prepare message sender is not the round's leader")
 		}
 
-		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
+		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
 			return err
 		}
 

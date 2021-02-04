@@ -5,22 +5,22 @@ import (
 	"errors"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/consensus"
+	"github.com/bloxapp/ssv/ibft/val"
 )
 
-// weekdayConsensus implements consensus.ValueImplementation interface
+// weekdayConsensus implements val.ValueImplementation interface
 type weekdayConsensus struct {
 	weekday string
 }
 
 // New is the constructor of weekdayConsensus
-func New() consensus.Consensus {
+func New() val.ValueValidator {
 	return &weekdayConsensus{
 		weekday: time.Now().Weekday().String(),
 	}
 }
 
-func (c *weekdayConsensus) ValidateValue(value []byte) error {
+func (c *weekdayConsensus) Validate(value []byte) error {
 	if !bytes.Equal(value, []byte(c.weekday)) {
 		return errors.New("msg value is wrong")
 	}

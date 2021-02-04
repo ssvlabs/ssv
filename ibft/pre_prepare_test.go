@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/val/weekday"
 )
 
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {

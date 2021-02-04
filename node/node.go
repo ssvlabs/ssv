@@ -13,8 +13,8 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/consensus/validation"
-	"github.com/bloxapp/ssv/ibft/consensus/weekday"
+	"github.com/bloxapp/ssv/ibft/val/validation"
+	"github.com/bloxapp/ssv/ibft/val/weekday"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 
@@ -194,7 +194,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 
 					// identfier = newId // TODO: Fix race condition
 
-					// Here we ensure at least 2/3 instances got a consensus so we can sign data and broadcast signatures
+					// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
 					logger.Info("------------------ GOT CONSENSUS -----------------")
 				}(role)
 			}

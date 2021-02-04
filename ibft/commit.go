@@ -24,7 +24,7 @@ func (i *Instance) validateCommitMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
-		if err := i.consensus.ValidateValue(signedMessage.Message.Value); err != nil {
+		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
 			return err
 		}
 
