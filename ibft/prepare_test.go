@@ -13,8 +13,8 @@ import (
 )
 
 func TestPrepareQuorum(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -22,74 +22,74 @@ func TestPrepareQuorum(t *testing.T) {
 		},
 	}
 
-	msg := signMsg(0, sks[0], &proto.Message{
+	msg := signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	i.prepareMessages.AddMessage(msg)
+	instance.prepareMessages.AddMessage(msg)
 
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	i.prepareMessages.AddMessage(msg)
+	instance.prepareMessages.AddMessage(msg)
 
 	// no quorum yet
-	res, tt, n := i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize := instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
-	require.EqualValues(t, tt, 2)
-	require.EqualValues(t, n, 4)
+	require.EqualValues(t, totalSignedMsgs, 2)
+	require.EqualValues(t, committeeSize, 4)
 
 	// test adding different value
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte("wrong"),
 	})
-	i.prepareMessages.AddMessage(msg)
+	instance.prepareMessages.AddMessage(msg)
 
-	res, tt, n = i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
-	require.EqualValues(t, tt, 2)
-	require.EqualValues(t, n, 4)
+	require.EqualValues(t, totalSignedMsgs, 2)
+	require.EqualValues(t, committeeSize, 4)
 
 	// test adding different round
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  3,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	i.prepareMessages.AddMessage(msg)
+	instance.prepareMessages.AddMessage(msg)
 
-	res, tt, n = i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
-	require.EqualValues(t, tt, 2)
-	require.EqualValues(t, n, 4)
+	require.EqualValues(t, totalSignedMsgs, 2)
+	require.EqualValues(t, committeeSize, 4)
 
 	// test valid quorum
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	i.prepareMessages.AddMessage(msg)
+	instance.prepareMessages.AddMessage(msg)
 
-	res, tt, n = i.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.True(t, res)
-	require.EqualValues(t, tt, 3)
-	require.EqualValues(t, n, 4)
+	require.EqualValues(t, totalSignedMsgs, 3)
+	require.EqualValues(t, committeeSize, 4)
 }
 
 func TestValidatePrepareMsg(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
+	secretKeys, nodes := generateNodes(4)
+	instance := &Instance{
 		prepareMessages:    msgcont.NewMessagesContainer(),
 		prePrepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
@@ -104,44 +104,44 @@ func TestValidatePrepareMsg(t *testing.T) {
 	}
 
 	// test no valid pre-prepare msg
-	msg := signMsg(1, sks[1], &proto.Message{
+	msg := signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, i.validatePrepareMsg()(msg), "no pre-prepare value found")
+	require.EqualError(t, instance.validatePrepareMsg()(msg), "no pre-prepare value found")
 
 	// test invalid prepare value
-	msg = signMsg(2, sks[2], &proto.Message{
+	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	i.prePrepareMessages.AddMessage(msg)
+	instance.prePrepareMessages.AddMessage(msg)
 
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte("invalid"),
 	})
-	require.EqualError(t, i.validatePrepareMsg()(msg), "pre-prepare value not equal to prepare msg value")
+	require.EqualError(t, instance.validatePrepareMsg()(msg), "pre-prepare value not equal to prepare message value")
 
 	// test valid prepare value
-	msg = signMsg(1, sks[1], &proto.Message{
+	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, i.validatePrepareMsg()(msg))
+	require.NoError(t, instance.validatePrepareMsg()(msg))
 }
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := generateNodes(4)
-	i := &Instance{
+	instance := &Instance{
 		prepareMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -152,7 +152,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 	}
 
-	i.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -161,7 +161,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 1,
 	})
-	i.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -170,7 +170,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 2,
 	})
-	i.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -179,7 +179,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		IbftId: 3,
 	})
-	i.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -190,19 +190,19 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	})
 
 	// test batch
-	res := i.batchedPrepareMsgs(1)
+	res := instance.batchedPrepareMsgs(1)
 	require.Len(t, res, 2)
 	require.Len(t, res[hex.EncodeToString([]byte("value"))], 3)
 	require.Len(t, res[hex.EncodeToString([]byte("value2"))], 1)
 
 	// test valid quorum
-	quorum, tt, n := i.prepareQuorum(1, []byte("value"))
+	quorum, tt, n := instance.prepareQuorum(1, []byte("value"))
 	require.True(t, quorum)
 	require.EqualValues(t, 3, tt)
 	require.EqualValues(t, 4, n)
 
 	// test invalid quorum
-	quorum, tt, n = i.prepareQuorum(1, []byte("value2"))
+	quorum, tt, n = instance.prepareQuorum(1, []byte("value2"))
 	require.False(t, quorum)
 	require.EqualValues(t, 1, tt)
 	require.EqualValues(t, 4, n)
