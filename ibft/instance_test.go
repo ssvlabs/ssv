@@ -34,7 +34,7 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 func TestInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
-	sks, nodes := generateNodes(4)
+	secretKeys, nodes := generateNodes(4)
 	replay := local.NewIBFTReplay(nodes)
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
@@ -48,7 +48,7 @@ func TestInstance_Start(t *testing.T) {
 		me := &proto.Node{
 			IbftId: uint64(i),
 			Pk:     nodes[uint64(i)].Pk,
-			Sk:     sks[uint64(i)].Serialize(),
+			Sk:     secretKeys[uint64(i)].Serialize(),
 		}
 		instances = append(instances, NewInstance(InstanceOptions{
 			Logger:    logger,
