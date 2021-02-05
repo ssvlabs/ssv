@@ -20,16 +20,13 @@ There are different working algorithms:
 
 The implementation of BFT. IBFT is a consensus mechanism that ensures a single, agreed-upon ordering of transactions in the blockchain.
 
-IBFT uses a pool of validation nodes - _Validators_ - operating on an Ethereum network to determine if a proposed block is suitable for addition to the chain.
+IBFT uses a pool of validation nodes - _Validators_ - operating on an Ethereum network - ETH 2.0 - for `Attestation` and `Proposal`.
 
-At a very high level point-of-view we can express the main flow as follows:
+At a very high level point-of-view we can be expressed in a **3 phase protocol**:
 
-1. One validator node is selected randomly by the algorithm as the _Proposer_ and is responsible for computing and constructing a block.
-2. The others - committee - checks validity of the block proposed and vote - sign - for this block to be published to the blockchain.
-3. In case the block reaches 2/3 of votes - majority of committees votes and signatures - the block gets promoted and published to the blockchain.
-4. Validators - nodes - selects the new _Proposer_ to receive, compute, and propose the new block to the next block interval.
-
-   In case of block validation/voting failure, the _Proposer_ is changed, and the process starts over again.
+1. `PRE-PREPARE`: a leader is selected from the validators group to propose a value to agree upon.
+1. `PREPARE`: upon receiving a valid pre-prepare, other validators broadcasts the prepare message. 
+1. `COMMIT`: upon receiving 2/3 votes, validators broadcasts a commit message.
 
 _Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/papers/osdi99.pdf)_
 
@@ -37,8 +34,8 @@ _Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/p
 ### IBFT Benefits :
 - **Immediate Block Finality:** The only one block producer can propose a block. Therefore, the chain does not suffer from forks or orphans. Single block is guaranteed on a protocol level.
 - **Reduced Computations:** since every block producer have a chance to add block deterministically, the efforts required to compute and propose a block is reduced significantly, using minimum CPU power and network propagation.
-- **High Data Integrity and Fault Tolerance:**  IBFT uses a group of validators to ensure the integrity of each block being proposed. A super-majority (~66%) of these validators are required to sign the block prior to insertion to the chain, making block forgery very difficult. The "leadership" of the group also rotates over time - ensuring that a faulty node connot exert long term influence over the chain.
-- **Operationally Flexible:** a the group of validators can be modified in time, ensuring the group contains only full-trusted nodes.
+- **High Data Integrity and Fault Tolerance:** IBFT uses a group of validators to ensure the integrity of each block being proposed. A super-majority (~66%) of these validators are required to sign the block prior to insertion to the chain, making block forgery very difficult. The "leadership" of the group also rotates over time - ensuring that a faulty node connot exert long term influence over the chain.
+- **Operationally Flexible:** the group of validators can be modified in time, ensuring the group contains only full-trusted nodes.
 
 
 ### Terminology
@@ -48,7 +45,7 @@ _Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/p
 - **`PROPOSAL`**: a new block generation with an undergoing consensus processing.
 - **`SEQUENCE`**: a sequence number of a proposal. It shall be greater than all previous sequence numbers.
 - **`COMMITTEE`**: group of nodes - validators - responsible for a consensus voting to assure a valid block generated
-- **`SIGNATURES`**:  a vote from a node to confirm a valid proposal
+- **`SIGNATURES`**: a vote from a node to confirm a valid proposal
 
 ### Consensus States
 
@@ -57,27 +54,23 @@ Each validator maintains a state machine replica in order to reach block consens
 
 #### States:
 - **`NEW ROUND`**: proposer sends new block proposal. Validators waits for PRE-PREPARE message
-- **`PRE-PREPARED`**: validator received PRE-PREPARE message and broadcasts PREPARE message. Waits for 2/3 of PREPARE or COMMIT messages
+- **`PRE-PREPARED`**: validator received the PRE-PREPARE message and broadcasts PREPARE message. Waits for 2/3 of PREPARE or COMMIT messages
 - **`PREPARED`**: validator received 2/3 of PREPARE messages and broadcasts COMMIT messages.
 - **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the proposed block into the blockchain
-- **`FINAL COMMITTED`**: new block is successfully inserted into the blockchain and the validator is ready for the next round
 - **`ROUND CHANGE`**: validator is waiting for 2/3 of ROUND CHANGE messages on the same proposed round number
 
 ---
-*_Documentation References:_*
-https://medium.com/loom-network/understanding-blockchain-fundamentals-part-1-byzantine-fault-tolerance-245f46fe8419 - _Understanding Blockchain Fundamentals_
-https://academy.binance.com/en/articles/proof-of-stake-explained - _PoS explained_
-https://academy.binance.com/en/articles/proof-of-authority-explained - _PoA explained_
-https://blockchain4aid.org/consensus-mechanisms/proof-of-authority - _PoA concept_
-https://academy.binance.com/en/articles/byzantine-fault-tolerance-explained - _BFT Explained by Binance_
-http://pmg.csail.mit.edu/papers/osdi99.pdf - _IBFT Paper_
-https://github.com/ethereum/EIPs/issues/650 - _Ethereum Repo IBFT Issue_
-https://media.consensys.net/scaling-consensus-for-enterprise-explaining-the-ibft-algorithm-ba86182ea668 - _IBFT Benefits by Consensys_
-
-_Distributed Ledger References:_
-https://searchcio.techtarget.com/definition/distributed-ledger
-https://en.wikipedia.org/wiki/Distributed_ledger
-https://tradeix.com/distributed-ledger-technology
+**Documentation References:**
+- [Understanding Blockchain Fundamentals](https://medium.com/loom-network/understanding-blockchain-fundamentals-part-1-byzantine-fault-tolerance-245f46fe8419)
+- [PoS explained by Binance](https://academy.binance.com/en/articles/proof-of-stake-explained)
+- [PoA explained by Binance](https://academy.binance.com/en/articles/proof-of-authority-explained)
+- [BFT explained by Binance](https://academy.binance.com/en/articles/byzantine-fault-tolerance-explained)
+- [IBFT Paper](http://pmg.csail.mit.edu/papers/osdi99.pdf)
+- [Ethereum Repo IBFT Issue](https://github.com/ethereum/EIPs/issues/650)
+- [IBFT Benefits by Consensys](https://media.consensys.net/scaling-consensus-for-enterprise-explaining-the-ibft-algorithm-ba86182ea668)
+- [Distributed Ledger Definition](https://searchcio.techtarget.com/definition/distributed-ledger)
+- [Distributed Ledger by Wikipedia](https://en.wikipedia.org/wiki/Distributed_ledger)
+- [Distributed Ledger Technology](https://tradeix.com/distributed-ledger-technology)
 
 
 
