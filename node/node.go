@@ -130,10 +130,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					logger := logger.With(zap.String("role", role.String()))
 					logger.Info("starting IBFT instance...")
 
-					inputValue := &validation.InputValue{
-						Duty: duty,
-					}
-
+					var inputValue validation.InputValue
 					switch role {
 					case beacon.RoleAttester:
 						attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
@@ -179,7 +176,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					newId := strconv.Itoa(int(slot))
 
 					// TODO: Refactor this out
-					consensus := validation.New(logger, inputValue)
+					consensus := validation.New(logger, valBytes)
 					if n.consensus == "weekday" {
 						consensus = weekday.New()
 						valBytes = []byte(time.Now().Weekday().String())
@@ -198,10 +195,48 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						return
 					}
 
+					switch role {
+					case beacon.RoleAttester:
+						signedAttestation, err := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
+						if err != nil {
+							logger.Error("failed to sign attestation data", zap.Error(err))
+							return
+						}
+
+						inputValue.SignedData = &validation.InputValue_Attestation{
+							Attestation: signedAttestation,
+						}
+					case beacon.RoleAggregator:
+						signedAggregation, err := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
+						if err != nil {
+							logger.Error("failed to sign aggregation data", zap.Error(err))
+							return
+						}
+
+						inputValue.SignedData = &validation.InputValue_Aggregation{
+							Aggregation: signedAggregation,
+						}
+					case beacon.RoleProposer:
+						signedProposal, err := n.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
+						if err != nil {
+							logger.Error("failed to sign proposal data", zap.Error(err))
+							return
+						}
+
+						inputValue.SignedData = &validation.InputValue_Block{
+							Block: signedProposal,
+						}
+					case beacon.RoleUnknown:
+						logger.Warn("unknown role")
+						return
+					}
+
+					// 1. Sign attestation and broadcast signature
+
 					// identfier = newId // TODO: Fix race condition
 
 					// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-					logger.Info("------------------ GOT CONSENSUS -----------------")
+					logger.Info("------------------ GOT CONSENSUS -----------------", zap.Any("inputValue", inputValue))
 				}(role)
 			}
 		}(slot, duty)

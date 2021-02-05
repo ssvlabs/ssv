@@ -4,7 +4,6 @@ import (
 	"context"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
-	ikeymanager "github.com/prysmaticlabs/prysm/validator/keymanager"
 )
 
 // Role represents the validator role for a specific duty
@@ -41,14 +40,29 @@ type Beacon interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AttestationData, error)
 
+	// SignAttestation signs the given attestation
+	SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, error)
+
 	// SubmitAttestation submits attestation fo the given slot using the given public key
-	SubmitAttestation(ctx context.Context, data *ethpb.AttestationData, duty *ethpb.DutiesResponse_Duty, keyManager ikeymanager.IKeymanager) error
+	SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64) error
 
 	// GetAggregationData returns aggregation data for the given slot and committee index
-	GetAggregationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.SignedAggregateAttestationAndProof, error)
+	GetAggregationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AggregateAttestationAndProof, error)
+
+	// SignAggregation signs the given aggregation data
+	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof) (*ethpb.SignedAggregateAttestationAndProof, error)
+
+	// SubmitAggregation submits the given signed aggregation data
+	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
 
 	// GetProposalData returns proposal block for the given slot
 	GetProposalData(ctx context.Context, slot uint64) (*ethpb.BeaconBlock, error)
+
+	// SignProposal signs the given proposal block
+	SignProposal(ctx context.Context, block *ethpb.BeaconBlock) (*ethpb.SignedBeaconBlock, error)
+
+	// SubmitProposal submits the given signed block
+	SubmitProposal(ctx context.Context, block *ethpb.SignedBeaconBlock) error
 
 	// RolesAt slot returns the validator roles at the given slot. Returns nil if the
 	// validator is known to not have a roles at the at slot. Returns UNKNOWN if the

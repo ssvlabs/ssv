@@ -9,11 +9,11 @@ import (
 // validationConsensus implements val.ValueImplementation interface
 type validationConsensus struct {
 	logger   *zap.Logger
-	inputVal *InputValue
+	inputVal []byte
 }
 
 // New is the constructor of validationConsensus
-func New(logger *zap.Logger, inputVal *InputValue) val.ValueValidator {
+func New(logger *zap.Logger, inputVal []byte) val.ValueValidator {
 	return &validationConsensus{
 		logger:   logger,
 		inputVal: inputVal,

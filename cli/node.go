@@ -72,7 +72,7 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := beacon.NewPrysmGRPC(logger, baseKey, network, validatorKeyBytes, beaconAddr)
+		beaconClient, err := beacon.NewPrysmGRPC(logger, baseKey, network, validatorKeyBytes, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}

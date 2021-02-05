@@ -21,11 +21,12 @@ type prysmGRPC struct {
 	privateKey         *bls.SecretKey
 	network            core.Network
 	validatorPublicKey []byte
+	graffiti           []byte
 	logger             *zap.Logger
 }
 
 // NewPrysmGRPC is the constructor of prysmGRPC
-func NewPrysmGRPC(logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey []byte, addr string) (Beacon, error) {
+func NewPrysmGRPC(logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (Beacon, error) {
 	conn, err := grpcex.DialConn(addr)
 	if err != nil {
 		return nil, err
@@ -36,6 +37,7 @@ func NewPrysmGRPC(logger *zap.Logger, privateKey *bls.SecretKey, network core.Ne
 		privateKey:         privateKey,
 		network:            network,
 		validatorPublicKey: validatorPublicKey,
+		graffiti:           graffiti,
 		logger:             logger,
 	}, nil
 }
@@ -115,9 +117,9 @@ func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Duties
 }
 
 // domainData returns domain data for the given epoch and domain
-func (b *prysmGRPC) domainData(ctx context.Context, epoch uint64, domain []byte) (*ethpb.DomainResponse, error) {
+func (b *prysmGRPC) domainData(ctx context.Context, slot uint64, domain []byte) (*ethpb.DomainResponse, error) {
 	req := &ethpb.DomainRequest{
-		Epoch:  epoch,
+		Epoch:  b.network.EstimatedEpochAtSlot(slot),
 		Domain: domain,
 	}
 
@@ -134,7 +136,7 @@ func (b *prysmGRPC) domainData(ctx context.Context, epoch uint64, domain []byte)
 }
 
 func (b *prysmGRPC) signSlot(ctx context.Context, slot uint64) ([]byte, error) {
-	domain, err := b.domainData(ctx, b.network.EstimatedEpochAtSlot(slot), params.BeaconConfig().DomainSelectionProof[:])
+	domain, err := b.domainData(ctx, slot, params.BeaconConfig().DomainSelectionProof[:])
 	if err != nil {
 		return nil, err
 	}
