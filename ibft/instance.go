@@ -20,11 +20,13 @@ import (
 )
 
 type InstanceOptions struct {
-	Logger    *zap.Logger
-	Me        *proto.Node
-	Network   network.Network
-	Consensus val.ValueValidator
-	Params    *proto.InstanceParams
+	Logger         *zap.Logger
+	Me             *proto.Node
+	Network        network.Network
+	Consensus      val.ValueValidator
+	Params         *proto.InstanceParams
+	Lambda         []byte
+	PreviousLambda []byte
 }
 
 type Instance struct {
@@ -58,8 +60,12 @@ func NewInstance(opts InstanceOptions) *Instance {
 	}
 
 	return &Instance{
-		Me:        opts.Me,
-		State:     &proto.State{Stage: proto.RoundState_NotStarted},
+		Me: opts.Me,
+		State: &proto.State{
+			Stage:          proto.RoundState_NotStarted,
+			Lambda:         opts.Lambda,
+			PreviousLambda: opts.PreviousLambda,
+		},
 		network:   opts.Network,
 		consensus: opts.Consensus,
 		params:    opts.Params,
@@ -89,11 +95,16 @@ func NewInstance(opts InstanceOptions) *Instance {
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
  		set timeri to running and expire after t(ri)
 */
-func (i *Instance) Start(previousLambda, lambda, inputValue []byte) {
-	i.logger.Info("Node is starting iBFT instance", zap.String("lambda", hex.EncodeToString(lambda)))
+func (i *Instance) Start(inputValue []byte) {
+	if i.State.Lambda == nil || len(i.State.Lambda) == 0 {
+		i.logger.Fatal("can't start instance with invalid Lambda")
+	}
+	if i.State.PreviousLambda == nil || len(i.State.PreviousLambda) == 0 {
+		i.logger.Fatal("can't start instance with invalid Previous Lambda")
+	}
+
+	i.logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
 	i.BumpRound(1)
-	i.State.Lambda = lambda
-	i.State.PreviousLambda = previousLambda
 	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
@@ -104,7 +115,7 @@ func (i *Instance) Start(previousLambda, lambda, inputValue []byte) {
 			Type:           proto.RoundState_PrePrepare,
 			Round:          i.State.Round,
 			Lambda:         i.State.Lambda,
-			PreviousLambda: previousLambda,
+			PreviousLambda: i.State.PreviousLambda,
 			Value:          i.State.InputValue,
 		}
 
@@ -144,8 +155,8 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 
 // StartEventLoop - starts the main event loop for the instance.
 // Events are messages our timer that change the behaviour of the instance upon triggering them
-func (i *Instance) StartEventLoop(lambda []byte) {
-	msgChan := i.network.ReceivedMsgChan(i.Me.IbftId, lambda)
+func (i *Instance) StartEventLoop() {
+	msgChan := i.network.ReceivedMsgChan(i.Me.IbftId, i.State.Lambda)
 	go func() {
 		for {
 			select {
@@ -204,7 +215,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
-		IbftId:    i.Me.IbftId,
+		SignerIds: []uint64{i.Me.IbftId},
 	}
 	if i.network != nil {
 		return i.network.Broadcast(i.State.GetLambda(), signedMessage)

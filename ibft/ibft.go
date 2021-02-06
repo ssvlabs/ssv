@@ -56,17 +56,19 @@ func (i *IBFT) StartInstance(opts StartOptions) bool {
 	}
 
 	newInstance := NewInstance(InstanceOptions{
-		Logger:    opts.Logger,
-		Me:        i.me,
-		Network:   i.network,
-		Consensus: opts.Consensus,
-		Params:    i.params,
+		Logger:         opts.Logger,
+		Me:             i.me,
+		Network:        i.network,
+		Consensus:      opts.Consensus,
+		Params:         i.params,
+		Lambda:         opts.Identifier,
+		PreviousLambda: opts.PrevInstance,
 	})
 	i.instances[hex.EncodeToString(opts.Identifier)] = newInstance
-	newInstance.StartEventLoop(opts.Identifier)
+	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
-	go newInstance.Start(opts.PrevInstance, opts.Identifier, opts.Value)
+	go newInstance.Start(opts.Value)
 
 	// Store prepared round and value and decided stage.
 	for {
