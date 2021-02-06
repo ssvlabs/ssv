@@ -20,7 +20,11 @@ func (i *Instance) prePrepareMsgPipeline() Pipeline {
 
 func (i *Instance) validatePrePrepareMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		if signedMessage.IbftId != i.ThisRoundLeader() {
+		if len(signedMessage.SignerIds) != 1 {
+			return errors.New("invalid number of signers for pre-prepare message")
+		}
+
+		if signedMessage.SignerIds[0] != i.ThisRoundLeader() {
 			return errors.New("pre-prepare message sender is not the round's leader")
 		}
 
@@ -86,7 +90,7 @@ func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid pre-prepare message for round",
-			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
+			zap.String("sender_ibft_id", signedMessage.SignersIdString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// Pre-prepare justification

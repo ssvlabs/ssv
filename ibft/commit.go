@@ -48,9 +48,12 @@ func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t
 
 func (i *Instance) existingCommitMsg(signedMessage *proto.SignedMessage) bool {
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	if _, found := msgs[signedMessage.IbftId]; found {
-		return true
+	for _, id := range signedMessage.SignerIds {
+		if _, found := msgs[id]; found {
+			return true
+		}
 	}
+
 	return false
 }
 
@@ -70,7 +73,7 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 		// add to prepare messages
 		i.commitMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid commit message for round",
-			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
+			zap.String("sender_ibft_id", signedMessage.SignersIdString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
@@ -80,7 +83,7 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 		quorum, t, n := i.commitQuorum(i.State.PreparedRound, i.State.PreparedValue)
 		if quorum { // if already decidedChan no need to do it again
 			i.logger.Info("decided iBFT instance",
-				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
+				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// mark instance decided

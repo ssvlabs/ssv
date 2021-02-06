@@ -25,7 +25,7 @@ func TestPrepareQuorum(t *testing.T) {
 	msg := signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	instance.prepareMessages.AddMessage(msg)
@@ -33,7 +33,7 @@ func TestPrepareQuorum(t *testing.T) {
 	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	instance.prepareMessages.AddMessage(msg)
@@ -48,7 +48,7 @@ func TestPrepareQuorum(t *testing.T) {
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong"),
 	})
 	instance.prepareMessages.AddMessage(msg)
@@ -62,7 +62,7 @@ func TestPrepareQuorum(t *testing.T) {
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  3,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	instance.prepareMessages.AddMessage(msg)
@@ -76,7 +76,7 @@ func TestPrepareQuorum(t *testing.T) {
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	instance.prepareMessages.AddMessage(msg)
@@ -98,7 +98,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		},
 		State: &proto.State{
 			Round:  1,
-			Lambda: []byte("lambda"),
+			Lambda: []byte("Lambda"),
 		},
 		consensus: weekday.New(),
 	}
@@ -107,16 +107,16 @@ func TestValidatePrepareMsg(t *testing.T) {
 	msg := signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, instance.validatePrepareMsg()(msg), "no pre-prepare value found")
+	require.EqualError(t, instance.validatePrepareMsg()(msg), "no pre-prepare value found for round 2")
 
 	// test invalid prepare value
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	instance.prePrepareMessages.AddMessage(msg)
@@ -124,16 +124,16 @@ func TestValidatePrepareMsg(t *testing.T) {
 	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte("invalid"),
 	})
-	require.EqualError(t, instance.validatePrepareMsg()(msg), "pre-prepare value not equal to prepare message value")
+	require.EqualError(t, instance.validatePrepareMsg()(msg), "pre-prepare value not equal to prepare msg value")
 
 	// test valid prepare value
 	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	require.NoError(t, instance.validatePrepareMsg()(msg))
@@ -156,37 +156,37 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
-			Lambda: []byte("lambda"),
+			Lambda: []byte("Lambda"),
 			Value:  []byte("value"),
 		},
-		IbftId: 1,
+		SignerIds: []uint64{1},
 	})
 	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
-			Lambda: []byte("lambda"),
+			Lambda: []byte("Lambda"),
 			Value:  []byte("value"),
 		},
-		IbftId: 2,
+		SignerIds: []uint64{2},
 	})
 	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
-			Lambda: []byte("lambda"),
+			Lambda: []byte("Lambda"),
 			Value:  []byte("value"),
 		},
-		IbftId: 3,
+		SignerIds: []uint64{3},
 	})
 	instance.prepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
-			Lambda: []byte("lambda"),
+			Lambda: []byte("Lambda"),
 			Value:  []byte("value2"),
 		},
-		IbftId: 4,
+		SignerIds: []uint64{4},
 	})
 
 	// test batch

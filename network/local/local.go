@@ -27,8 +27,10 @@ func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 	go func() {
 
 		// verify node is not prevented from sending msgs
-		if !n.replay.CanSend(signed.Message.Type, signed.Message.Round, signed.IbftId) {
-			return
+		for _, id := range signed.SignerIds {
+			if !n.replay.CanSend(signed.Message.Type, signed.Message.Round, id) {
+				return
+			}
 		}
 
 		for i, c := range n.c {

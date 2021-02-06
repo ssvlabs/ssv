@@ -65,8 +65,10 @@ func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, 
 func (i *Instance) existingPrepareMsg(signedMessage *proto.SignedMessage) bool {
 	// TODO - not sure the spec requires unique votes.
 	msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	if _, found := msgs[signedMessage.IbftId]; found {
-		return true
+	for _, id := range signedMessage.SignerIds {
+		if _, found := msgs[id]; found {
+			return true
+		}
 	}
 	return false
 }
@@ -90,7 +92,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 		// add to prepare messages
 		i.prepareMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid prepare message from round",
-			zap.Uint64("sender_ibft_id", signedMessage.IbftId),
+			zap.String("sender_ibft_id", signedMessage.SignersIdString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
@@ -99,7 +101,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
 			i.logger.Info("prepared instance",
-				zap.String("lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
+				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
 			// set prepared State

@@ -110,7 +110,7 @@ func (i *Instance) validateChangeRoundMsg() PipelineFunc {
 				return errors.New("change round prepared round not equal to justification msg round")
 			}
 			if !bytes.Equal(signedMessage.Message.Lambda, data.JustificationMsg.Lambda) {
-				return errors.New("change round justification msg lambda not equal to msg lambda")
+				return errors.New("change round justification msg Lambda not equal to msg Lambda")
 			}
 			if !bytes.Equal(data.PreparedValue, data.JustificationMsg.Value) {
 				return errors.New("change round prepared value not equal to justification msg value")
@@ -118,7 +118,7 @@ func (i *Instance) validateChangeRoundMsg() PipelineFunc {
 
 			// validate signature
 			// TODO - validate signed ids are unique
-			pks, err := i.params.PubKeysById(data.SignedIds)
+			pks, err := i.params.PubKeysById(data.SignerIds)
 			if err != nil {
 				return err
 			}
@@ -160,7 +160,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 				}
 
 				// add id to list
-				ids = append(ids, msg.IbftId)
+				ids = append(ids, msg.SignerIds...)
 			}
 		} else {
 			return nil, errors.New("prepared value/ round is set but no quorum of prepare messages found")
@@ -171,7 +171,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 			PreparedValue:    i.State.PreparedValue,
 			JustificationMsg: justificationMsg,
 			JustificationSig: aggregatedSig.Serialize(),
-			SignedIds:        ids,
+			SignerIds:        ids,
 		}
 
 		return json.Marshal(data)
@@ -210,8 +210,10 @@ func (i *Instance) uponChangeRoundTrigger() {
 func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
 	// TODO - not sure the spec requires unique votes.
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	if _, found := msgs[signedMessage.IbftId]; found {
-		return true
+	for _, signerId := range signedMessage.SignerIds {
+		if _, found := msgs[signerId]; found {
+			return true
+		}
 	}
 	return false
 }
@@ -241,7 +243,7 @@ func (i *Instance) addChangeRoundMessage() PipelineFunc {
 		// add to prepare messages
 		i.changeRoundMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid change round message for round",
-			zap.Uint64("ibft_id", signedMessage.IbftId),
+			zap.String("ibft_id", signedMessage.SignersIdString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 		return nil
 	}

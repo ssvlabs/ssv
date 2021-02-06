@@ -33,6 +33,10 @@ func (c *MessagesContainer) AddMessage(msg *proto.SignedMessage) {
 	if !found {
 		roundMsgs = make(map[uint64]*proto.SignedMessage)
 	}
-	roundMsgs[msg.IbftId] = msg
-	c.messages[msg.Message.Round] = roundMsgs
+
+	// add messages
+	for _, id := range msg.SignerIds {
+		roundMsgs[id] = msg
+		c.messages[msg.Message.Round] = roundMsgs
+	}
 }

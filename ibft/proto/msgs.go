@@ -5,9 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
+
+func (msg *SignedMessage) SignersIdString() string {
+	ret := ""
+	for _, i := range msg.SignerIds {
+		ret = fmt.Sprintf("%s, %d", ret, i)
+	}
+	return ret
+}
 
 // Compare returns true if both messages are equal.
 // DOES NOT compare signatures

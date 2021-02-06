@@ -12,10 +12,10 @@ import (
 func (i *Instance) ValidateLambdas() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.State.Lambda) {
-			return errors.Errorf("message lambda (%s) does not equal State lambda (%s)", string(signedMessage.Message.Lambda), string(i.State.Lambda))
+			return errors.Errorf("message Lambda (%s) does not equal State Lambda (%s)", string(signedMessage.Message.Lambda), string(i.State.Lambda))
 		}
 		if !bytes.Equal(signedMessage.Message.PreviousLambda, i.State.PreviousLambda) {
-			return errors.New("message previous lambda does not equal State previous lambda")
+			return errors.New("message previous Lambda does not equal State previous Lambda")
 		}
 		return nil
 	}
@@ -32,7 +32,7 @@ func (i *Instance) ValidateRound() PipelineFunc {
 
 func (i *Instance) AuthMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		pks, err := i.params.PubKeysById([]uint64{signedMessage.IbftId})
+		pks, err := i.params.PubKeysById(signedMessage.SignerIds)
 		if err != nil {
 			return err
 		}

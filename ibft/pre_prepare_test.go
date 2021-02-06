@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap/zaptest"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
@@ -22,7 +24,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		},
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("lambda"),
+			Lambda:        []byte("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
@@ -32,13 +34,14 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Sk:     secretKeys[0].Serialize(),
 		},
 		consensus: weekday.New(),
+		logger:    zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
 	msg := signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 			PreparedRound: 1,
 			PreparedValue: []byte(time.Now().Weekday().String()),
@@ -49,7 +52,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	msg = signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 			PreparedRound: 1,
 			PreparedValue: []byte(time.Now().Weekday().String()),
@@ -61,7 +64,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	require.EqualError(t, instance.uponPrePrepareMsg()(msg), "received un-justified pre-prepare message")
@@ -70,7 +73,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	msg = signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 			PreparedRound: 1,
 			PreparedValue: []byte(time.Now().Weekday().String()),
@@ -81,7 +84,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	require.NoError(t, instance.uponPrePrepareMsg()(msg))
@@ -91,6 +94,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
 		prePrepareMessages:  msgcont.NewMessagesContainer(),
+		prepareMessages:     msgcont.NewMessagesContainer(),
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
@@ -98,7 +102,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		},
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("lambda"),
+			Lambda:        []byte("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
@@ -108,20 +112,21 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			Sk:     secretKeys[0].Serialize(),
 		},
 		consensus: weekday.New(),
+		logger:    zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
 	msg := signMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 	})
 	instance.changeRoundMessages.AddMessage(msg)
 
 	msg = signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 	})
 	instance.changeRoundMessages.AddMessage(msg)
 
@@ -132,7 +137,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	msg = signMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 	})
 	instance.changeRoundMessages.AddMessage(msg)
 	require.NoError(t, instance.uponPrePrepareMsg()(msg))
@@ -142,13 +147,14 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
 		prePrepareMessages: msgcont.NewMessagesContainer(),
+		prepareMessages:    msgcont.NewMessagesContainer(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("lambda"),
+			Lambda:        []byte("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
@@ -158,19 +164,20 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Sk:     secretKeys[0].Serialize(),
 		},
 		consensus: weekday.New(),
+		logger:    zaptest.NewLogger(t),
 	}
 
 	// test happy flow
 	msg := signMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	err := instance.uponPrePrepareMsg()(msg)
 	require.NoError(t, err)
 	msgs := instance.prePrepareMessages.ReadOnlyMessagesByRound(1)
-	require.NotNil(t, msgs[0])
+	require.NotNil(t, msgs[1])
 	require.True(t, instance.State.Stage == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
@@ -188,26 +195,54 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		},
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("lambda"),
+			Lambda:        []byte("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
 		consensus: weekday.New(),
 	}
 
-	msg := signMsg(1, sks[1], &proto.Message{
+	// test no signer
+	msg := &proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_PrePrepare,
+			Round:  1,
+			Lambda: []byte("Lambda"),
+			Value:  []byte(time.Now().Weekday().String()),
+		},
+		Signature: []byte{},
+		SignerIds: []uint64{},
+	}
+	err := i.validatePrePrepareMsg()(msg)
+	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
+
+	// test > 1 signer
+	msg = &proto.SignedMessage{
+		Message: &proto.Message{
+			Type:   proto.RoundState_PrePrepare,
+			Round:  1,
+			Lambda: []byte("Lambda"),
+			Value:  []byte(time.Now().Weekday().String()),
+		},
+		Signature: []byte{},
+		SignerIds: []uint64{1, 2},
+	}
+	err = i.validatePrePrepareMsg()(msg)
+	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
+
+	msg = signMsg(1, sks[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err := i.validatePrePrepareMsg()(msg)
-	require.EqualError(t, err, "message value is wrong")
+	err = i.validatePrePrepareMsg()(msg)
+	require.EqualError(t, err, "msg value is wrong")
 
 	msg = signMsg(2, sks[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong value"),
 	})
 	err = i.validatePrePrepareMsg()(msg)
@@ -216,7 +251,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	msg = signMsg(1, sks[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
-		Lambda: []byte("lambda"),
+		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
 	err = i.validatePrePrepareMsg()(msg)

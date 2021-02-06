@@ -51,18 +51,20 @@ func TestInstance_Start(t *testing.T) {
 			Sk:     secretKeys[uint64(i)].Serialize(),
 		}
 		instances = append(instances, NewInstance(InstanceOptions{
-			Logger:    logger,
-			Me:        me,
-			Network:   replay.Network,
-			Consensus: weekday.New(),
-			Params:    params,
+			Logger:         logger,
+			Me:             me,
+			Network:        replay.Network,
+			Consensus:      weekday.New(),
+			Params:         params,
+			Lambda:         []byte("0"),
+			PreviousLambda: []byte{},
 		}))
 		instances[i].StartEventLoop()
 		instances[i].StartMessagePipeline()
 	}
 
 	for _, i := range instances {
-		go i.Start([]byte{}, []byte("0"), []byte(time.Now().Weekday().String()))
+		go i.Start([]byte(time.Now().Weekday().String()))
 	}
 
 	time.Sleep(time.Minute * 2)

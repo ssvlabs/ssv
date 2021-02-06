@@ -26,7 +26,7 @@ message Message {
 message SignedMessage{
   Message message = 1 [(gogoproto.nullable) = false];
   bytes signature = 2 [(gogoproto.nullable) = false];
-  uint64 ibft_id  = 3;
+  repeated uint64 signer_ids  = 3;
 }
 
 message ChangeRoundData{
@@ -34,5 +34,5 @@ message ChangeRoundData{
   bytes prepared_value        = 2 [(gogoproto.nullable) = false];
   Message justification_msg   = 3 [(gogoproto.nullable) = false];
   bytes justification_sig     = 4 [(gogoproto.nullable) = false];
-  repeated uint64 signed_ids  = 5;
+  repeated uint64 signer_ids  = 5;
 }

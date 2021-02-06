@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"errors"
 	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -36,6 +37,8 @@ func (p *InstanceParams) PubKeysById(ids []uint64) (PubKeys, error) {
 				return ret, err
 			}
 			ret = append(ret, pk)
+		} else {
+			return nil, errors.New("pk for id not found")
 		}
 	}
 	return ret, nil
