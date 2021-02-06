@@ -207,3 +207,61 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	require.EqualValues(t, 1, tt)
 	require.EqualValues(t, 4, n)
 }
+
+func TestPreparedAggregatedMsg(t *testing.T) {
+	sks, nodes := generateNodes(4)
+	instance := &Instance{
+		prepareMessages: msgcont.NewMessagesContainer(),
+		params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		State: &proto.State{
+			Round: 1,
+		},
+	}
+
+	// not prepared
+	_, err := instance.PreparedAggregatedMsg()
+	require.EqualError(t, err, "state not prepared")
+
+	// set prepared state
+	instance.State.PreparedRound = 1
+	instance.State.PreparedValue = []byte("value")
+
+	// test prepared but no msgs
+	_, err = instance.PreparedAggregatedMsg()
+	require.EqualError(t, err, "no prepare msgs")
+
+	// test valid aggregation
+
+	instance.prepareMessages.AddMessage(signMsg(0, sks[0], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("Lambda"),
+		Value:  []byte("value"),
+	}))
+	instance.prepareMessages.AddMessage(signMsg(1, sks[1], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("Lambda"),
+		Value:  []byte("value"),
+	}))
+	instance.prepareMessages.AddMessage(signMsg(2, sks[2], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("Lambda"),
+		Value:  []byte("value"),
+	}))
+	instance.prepareMessages.AddMessage(signMsg(3, sks[3], &proto.Message{
+		Type:   proto.RoundState_Prepare,
+		Round:  1,
+		Lambda: []byte("Lambda"),
+		Value:  []byte("value"),
+	}))
+
+	// test batch
+	msg, err := instance.PreparedAggregatedMsg()
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uint64{0, 1, 2, 3}, msg.SignerIds)
+}

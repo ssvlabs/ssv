@@ -75,9 +75,14 @@ func (i *IBFT) StartInstance(opts StartOptions) bool {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			i.storage.SavePrepareJustification(opts.Identifier, newInstance.State.Round, nil, nil, []uint64{})
+			agg, err := newInstance.PreparedAggregatedMsg()
+			if err != nil {
+				newInstance.logger.Fatal("could not get aggregated prepare msg and save to storage")
+				return false
+			}
+			i.storage.SavePrepared(agg)
 		case proto.RoundState_Commit:
-			i.storage.SaveDecidedRound(opts.Identifier, nil, nil, []uint64{})
+			i.storage.SaveDecided(nil)
 		case proto.RoundState_Decided:
 			return true
 		}

@@ -10,14 +10,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-func (msg *SignedMessage) SignersIdString() string {
-	ret := ""
-	for _, i := range msg.SignerIds {
-		ret = fmt.Sprintf("%s, %d", ret, i)
-	}
-	return ret
-}
-
 // Compare returns true if both messages are equal.
 // DOES NOT compare signatures
 func (msg Message) Compare(other Message) bool {
@@ -72,6 +64,52 @@ func (msg *SignedMessage) VerifySig(pk *bls.PublicKey) (bool, error) {
 		return false, err
 	}
 	return sig.VerifyByte(pk, root), nil
+}
+
+func (msg *SignedMessage) SignersIdString() string {
+	ret := ""
+	for _, i := range msg.SignerIds {
+		ret = fmt.Sprintf("%s, %d", ret, i)
+	}
+	return ret
+}
+
+func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
+	// verify same message
+	root, err := msg.Message.SigningRoot()
+	if err != nil {
+		return err
+	}
+	otherRoot, err := other.Message.SigningRoot()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(root, otherRoot) {
+		return errors.New("can't aggregate different messages")
+	}
+
+	// verify not already aggregated
+	for _, id := range msg.SignerIds {
+		for _, otherId := range other.SignerIds {
+			if id == otherId {
+				return errors.New("can't aggregate messages with similar signers")
+			}
+		}
+	}
+
+	// aggregate
+	sig := &bls.Sign{}
+	if err := sig.Deserialize(msg.Signature); err != nil {
+		return err
+	}
+	otherSig := &bls.Sign{}
+	if err := otherSig.Deserialize(other.Signature); err != nil {
+		return err
+	}
+	sig.Add(otherSig)
+	msg.Signature = sig.Serialize()
+	msg.SignerIds = append(msg.SignerIds, other.SignerIds...)
+	return nil
 }
 
 // VerifySig returns true if the justification signed msg verifies against the public key, false if otherwise

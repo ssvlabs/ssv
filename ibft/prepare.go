@@ -10,6 +10,30 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
+// PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
+func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
+	if i.State.PreparedValue == nil {
+		return nil, errors.New("state not prepared")
+	}
+
+	msgs := i.prepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound)
+	if len(msgs) == 0 {
+		return nil, errors.New("no prepare msgs")
+	}
+
+	var ret *proto.SignedMessage
+	for _, msg := range msgs {
+		if ret == nil {
+			ret = msg
+		} else {
+			if err := ret.Aggregate(msg); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return ret, nil
+}
+
 func (i *Instance) prepareMsgPipeline() Pipeline {
 	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_Prepare),

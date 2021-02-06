@@ -14,10 +14,10 @@ func New() storage.Storage {
 	return &inMemStorage{}
 }
 
-func (s *inMemStorage) SavePrepareJustification(lambda []byte, round uint64, msg *proto.Message, signature []byte, signers []uint64) {
+func (s *inMemStorage) SavePrepared(signedMsg *proto.SignedMessage) {
 	// TODO: Implement
 }
 
-func (s *inMemStorage) SaveDecidedRound(lambda []byte, msg *proto.Message, signature []byte, signers []uint64) {
+func (s *inMemStorage) SaveDecided(signedMsg *proto.SignedMessage) {
 	// TODO: Implement
 }

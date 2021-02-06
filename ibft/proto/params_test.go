@@ -24,6 +24,15 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*Node) {
 	return sks, nodes
 }
 
+func signMsg(id uint64, secretKey *bls.SecretKey, msg *Message) *SignedMessage {
+	signature, _ := msg.Sign(secretKey)
+	return &SignedMessage{
+		Message:   msg,
+		Signature: signature.Serialize(),
+		SignerIds: []uint64{id},
+	}
+}
+
 func TestPubKeysById(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	params := &InstanceParams{
