@@ -3,11 +3,43 @@ package ibft
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
 )
+
+// PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
+func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
+	if i.State.PreparedValue == nil {
+		return nil, errors.New("state not prepared")
+	}
+
+	msgs := i.commitMessages.ReadOnlyMessagesByRound(i.State.Round)
+	if len(msgs) == 0 {
+		return nil, errors.New("no commit msgs")
+	}
+
+	var ret *proto.SignedMessage
+	var err error
+	for _, msg := range msgs {
+		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue) {
+			continue
+		}
+		if ret == nil {
+			ret, err = msg.DeepCopy()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if err := ret.Aggregate(msg); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return ret, nil
+}
 
 func (i *Instance) commitMsgPipeline() Pipeline {
 	return []PipelineFunc{

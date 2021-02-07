@@ -82,7 +82,12 @@ func (i *IBFT) StartInstance(opts StartOptions) bool {
 			}
 			i.storage.SavePrepared(agg)
 		case proto.RoundState_Commit:
-			i.storage.SaveDecided(nil)
+			agg, err := newInstance.CommittedAggregatedMsg()
+			if err != nil {
+				newInstance.logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
+				return false
+			}
+			i.storage.SaveDecided(agg)
 		case proto.RoundState_Decided:
 			return true
 		}
