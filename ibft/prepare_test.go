@@ -234,7 +234,6 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "no prepare msgs")
 
 	// test valid aggregation
-
 	instance.prepareMessages.AddMessage(signMsg(0, sks[0], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
@@ -253,15 +252,20 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
+
+	// test aggregation
+	msg, err := instance.PreparedAggregatedMsg()
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uint64{0, 1, 2}, msg.SignerIds)
+
+	// test that doesn't aggregate different value
 	instance.prepareMessages.AddMessage(signMsg(3, sks[3], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
-		Value:  []byte("value"),
+		Value:  []byte("value2"),
 	}))
-
-	// test batch
-	msg, err := instance.PreparedAggregatedMsg()
+	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []uint64{0, 1, 2, 3}, msg.SignerIds)
+	require.ElementsMatch(t, []uint64{0, 1, 2}, msg.SignerIds)
 }

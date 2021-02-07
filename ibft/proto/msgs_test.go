@@ -6,6 +6,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSignedMessage_DeepCopy(t *testing.T) {
+	toCopy := &SignedMessage{
+		Message: &Message{
+			Type:           RoundState_Prepare,
+			Round:          1,
+			Lambda:         []byte("lambda"),
+			PreviousLambda: []byte("prev lambda"),
+			Value:          []byte("value"),
+		},
+		Signature: []byte{1, 2, 3, 4},
+		SignerIds: []uint64{2},
+	}
+
+	copied, err := toCopy.DeepCopy()
+	require.NoError(t, err)
+
+	// test message
+	root, err := toCopy.Message.SigningRoot()
+	require.NoError(t, err)
+	rootCopy, err := copied.Message.SigningRoot()
+	require.NoError(t, err)
+	require.EqualValues(t, rootCopy, root)
+
+	require.EqualValues(t, toCopy.Signature, copied.Signature)
+	require.EqualValues(t, toCopy.SignerIds, copied.SignerIds)
+}
+
 func TestSignedMessage_AggregateSig(t *testing.T) {
 	secretKeys, _ := generateNodes(4)
 

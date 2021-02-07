@@ -112,6 +112,19 @@ func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 	return nil
 }
 
+func (msg *SignedMessage) DeepCopy() (*SignedMessage, error) {
+	byts, err := json.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &SignedMessage{}
+	if err := json.Unmarshal(byts, ret); err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
 // VerifySig returns true if the justification signed msg verifies against the public key, false if otherwise
 func (d *ChangeRoundData) VerifySig(pk bls.PublicKey) (bool, error) {
 	root, err := d.JustificationMsg.SigningRoot()

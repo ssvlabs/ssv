@@ -22,9 +22,16 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 	}
 
 	var ret *proto.SignedMessage
+	var err error
 	for _, msg := range msgs {
+		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue) {
+			continue
+		}
 		if ret == nil {
-			ret = msg
+			ret, err = msg.DeepCopy()
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			if err := ret.Aggregate(msg); err != nil {
 				return nil, err
