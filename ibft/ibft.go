@@ -77,7 +77,7 @@ func (i *IBFT) StartInstance(opts StartOptions) bool {
 		case proto.RoundState_Prepare:
 			agg, err := newInstance.PreparedAggregatedMsg()
 			if err != nil {
-				newInstance.logger.Fatal("could not get aggregated prepare msg and save to storage")
+				newInstance.logger.Fatal("could not get aggregated prepare msg and save to storage", zap.Error(err))
 				return false
 			}
 			i.storage.SavePrepared(agg)
