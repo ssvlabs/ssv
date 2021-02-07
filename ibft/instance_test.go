@@ -57,7 +57,7 @@ func TestInstance_Start(t *testing.T) {
 			Consensus:      weekday.New(),
 			Params:         params,
 			Lambda:         []byte("0"),
-			PreviousLambda: []byte{},
+			PreviousLambda: []byte(""),
 		}))
 		instances[i].StartEventLoop()
 		instances[i].StartMessagePipeline()

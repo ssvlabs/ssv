@@ -96,10 +96,10 @@ func NewInstance(opts InstanceOptions) *Instance {
  		set timeri to running and expire after t(ri)
 */
 func (i *Instance) Start(inputValue []byte) {
-	if i.State.Lambda == nil || len(i.State.Lambda) == 0 {
+	if i.State.Lambda == nil {
 		i.logger.Fatal("can't start instance with invalid Lambda")
 	}
-	if i.State.PreviousLambda == nil || len(i.State.PreviousLambda) == 0 {
+	if i.State.PreviousLambda == nil {
 		i.logger.Fatal("can't start instance with invalid Previous Lambda")
 	}
 
