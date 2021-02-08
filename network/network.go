@@ -11,4 +11,10 @@ type Network interface {
 	// ReceivedMsgChan is a channel that forwards new propagated messages to a subscriber
 	// TODO: Get rid of identifier
 	ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage
+
+	// BroadcastSignature broadcasts the given signature for the given lambda
+	BroadcastSignature(lambda, signature []byte) error
+
+	// ReceivedSignatureChan returns the channel with signatures
+	ReceivedSignatureChan(lambda []byte) <-chan []byte
 }

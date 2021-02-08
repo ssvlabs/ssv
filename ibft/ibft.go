@@ -42,7 +42,7 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(opts StartOptions) bool {
+func (i *IBFT) StartInstance(opts StartOptions) (bool, int) {
 	// If previous instance didn't decide, can't start another instance.
 	prevId := hex.EncodeToString(opts.PrevInstance)
 	if prevId != FirstInstanceIdentifier {
@@ -78,18 +78,24 @@ func (i *IBFT) StartInstance(opts StartOptions) bool {
 			agg, err := newInstance.PreparedAggregatedMsg()
 			if err != nil {
 				newInstance.logger.Fatal("could not get aggregated prepare msg and save to storage", zap.Error(err))
-				return false
+				return false, 0
 			}
 			i.storage.SavePrepared(agg)
 		case proto.RoundState_Commit:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
-				return false
+				return false, 0
 			}
 			i.storage.SaveDecided(agg)
 		case proto.RoundState_Decided:
-			return true
+			agg, err := newInstance.CommittedAggregatedMsg()
+			if err != nil {
+				newInstance.logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
+				return false, 0
+			}
+
+			return true, len(agg.GetSignerIds())
 		}
 	}
 }

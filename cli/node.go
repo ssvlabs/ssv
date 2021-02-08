@@ -104,7 +104,8 @@ var startNodeCmd = &cobra.Command{
 			ValidatorPubKey: validatorKeyBytes,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
-			Network:         network,
+			ETHNetwork:      network,
+			Network:         peer,
 			Consensus:       consensusType,
 			IBFT: ibft.New(
 				inmem.New(),

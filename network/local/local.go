@@ -47,6 +47,18 @@ func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 	return nil
 }
 
+// BroadcastSignature broadcasts the given signature for the given lambda
+func (n *Network) BroadcastSignature(lambda, signature []byte) error {
+	// TODO: Implement
+	return nil
+}
+
+// ReceivedSignatureChan returns the channel with signatures
+func (n *Network) ReceivedSignatureChan(lambda []byte) <-chan []byte {
+	// TODO: Implement
+	return nil
+}
+
 // IBFTReplay allows to script a precise scenario for every ibft node's behaviour each round
 type IBFTReplay struct {
 	Network *Network

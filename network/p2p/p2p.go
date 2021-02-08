@@ -18,6 +18,13 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
+type broadcastingType int
+
+const (
+	messageBroadcastingType = iota + 1
+	signatureBroadcastingType
+)
+
 const (
 	// DiscoveryInterval is how often we re-publish our mDNS records.
 	DiscoveryInterval = time.Second
@@ -32,13 +39,17 @@ const (
 )
 
 type message struct {
-	Lambda []byte               `json:"lambda"`
-	Msg    *proto.SignedMessage `json:"msg"`
+	Lambda    []byte               `json:"lambda"`
+	Msg       *proto.SignedMessage `json:"msg"`
+	Signature []byte               `json:"signature"`
+	Type      broadcastingType     `json:"type"`
 }
 
 type listener struct {
 	lambda []byte
-	ch     chan *proto.SignedMessage
+	msgCh  chan *proto.SignedMessage
+	sigCh  chan []byte
+	tp     broadcastingType
 }
 
 // p2pNetwork implements network.Network interface using P2P
@@ -104,6 +115,7 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(message{
 		Lambda: lambda,
 		Msg:    msg,
+		Type:   messageBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -116,14 +128,42 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.SignedMessage {
 	ls := listener{
 		lambda: lambda,
-		ch:     make(chan *proto.SignedMessage, MsgChanSize),
+		msgCh:  make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()
 	n.listeners = append(n.listeners, ls)
 	n.listenersLock.Unlock()
 
-	return ls.ch
+	return ls.msgCh
+}
+
+// BroadcastSignature broadcasts the given signature for the given lambda
+func (n *p2pNetwork) BroadcastSignature(lambda, signature []byte) error {
+	msgBytes, err := json.Marshal(message{
+		Lambda:    lambda,
+		Signature: signature,
+		Type:      signatureBroadcastingType,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal message")
+	}
+
+	return n.topic.Publish(n.ctx, msgBytes)
+}
+
+// ReceivedSignatureChan returns the channel with signatures
+func (n *p2pNetwork) ReceivedSignatureChan(lambda []byte) <-chan []byte {
+	ls := listener{
+		lambda: lambda,
+		sigCh:  make(chan []byte, MsgChanSize),
+	}
+
+	n.listenersLock.Lock()
+	n.listeners = append(n.listeners, ls)
+	n.listenersLock.Unlock()
+
+	return ls.sigCh
 }
 
 // ReceivedMsgChan return a channel with messages
@@ -155,7 +195,12 @@ func (n *p2pNetwork) listen() {
 						return
 					}
 
-					ls.ch <- cm.Msg
+					switch cm.Type {
+					case messageBroadcastingType:
+						ls.msgCh <- cm.Msg
+					case signatureBroadcastingType:
+						ls.sigCh <- cm.Signature
+					}
 				}(ls)
 			}
 		}

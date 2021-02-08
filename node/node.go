@@ -2,9 +2,12 @@ package node
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"time"
+
+	"github.com/bloxapp/ssv/utils/threshold"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -15,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/val/validation"
 	"github.com/bloxapp/ssv/ibft/val/weekday"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/slotqueue"
 )
 
@@ -22,7 +26,8 @@ import (
 type Options struct {
 	ValidatorPubKey []byte
 	PrivateKey      *bls.SecretKey
-	Network         core.Network
+	ETHNetwork      core.Network
+	Network         network.Network
 	Consensus       string
 	Beacon          beacon.Beacon
 	IBFT            *ibft.IBFT
@@ -39,7 +44,8 @@ type Node interface {
 type ssvNode struct {
 	validatorPubKey []byte
 	privateKey      *bls.SecretKey
-	network         core.Network
+	ethNetwork      core.Network
+	network         network.Network
 	consensus       string
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
@@ -52,9 +58,10 @@ func New(opts Options) Node {
 	return &ssvNode{
 		validatorPubKey: opts.ValidatorPubKey,
 		privateKey:      opts.PrivateKey,
+		ethNetwork:      opts.ETHNetwork,
 		network:         opts.Network,
 		consensus:       opts.Consensus,
-		slotQueue:       slotqueue.New(opts.Network),
+		slotQueue:       slotqueue.New(opts.ETHNetwork),
 		beacon:          opts.Beacon,
 		iBFT:            opts.IBFT,
 		logger:          opts.Logger,
@@ -182,7 +189,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						valBytes = []byte(time.Now().Weekday().String())
 					}
 
-					decided := n.iBFT.StartInstance(ibft.StartOptions{
+					decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
 						Logger:       logger,
 						Consensus:    consensus,
 						PrevInstance: []byte(identfier),
@@ -195,11 +202,18 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						return
 					}
 
+					signaturesChan := n.network.ReceivedSignatureChan([]byte(identfier))
+
 					switch role {
 					case beacon.RoleAttester:
 						signedAttestation, err := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
 						if err != nil {
 							logger.Error("failed to sign attestation data", zap.Error(err))
+							return
+						}
+
+						if err := n.network.BroadcastSignature([]byte(identfier), signedAttestation.GetSignature()); err != nil {
+							logger.Error("failed to broadcast signature", zap.Error(err))
 							return
 						}
 
@@ -213,6 +227,11 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
+						if err := n.network.BroadcastSignature([]byte(identfier), signedAggregation.GetSignature()); err != nil {
+							logger.Error("failed to broadcast signature", zap.Error(err))
+							return
+						}
+
 						inputValue.SignedData = &validation.InputValue_Aggregation{
 							Aggregation: signedAggregation,
 						}
@@ -223,20 +242,58 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
+						if err := n.network.BroadcastSignature([]byte(identfier), signedProposal.GetSignature()); err != nil {
+							logger.Error("failed to broadcast signature", zap.Error(err))
+							return
+						}
+
 						inputValue.SignedData = &validation.InputValue_Block{
 							Block: signedProposal,
 						}
-					case beacon.RoleUnknown:
-						logger.Warn("unknown role")
-						return
 					}
 
-					// 1. Sign attestation and broadcast signature
+					// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
+					logger.Info("GOT CONSENSUS", zap.Any("inputValue", inputValue))
+
+					// Collect signatures from other nodes
+					signatures := make([][]byte, signaturesCount)
+					for i := 0; i < signaturesCount; i++ {
+						signatures[i] = <-signaturesChan
+					}
+					logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
+
+					// Reconstruct signatures
+					signature, err := threshold.ReconstructSignatures(signatures)
+					if err != nil {
+						logger.Error("failed to reconstruct signatures", zap.Error(err))
+						return
+					}
+					logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature)))
+
+					// Submit validation to beacon node
+					switch role {
+					case beacon.RoleAttester:
+						inputValue.GetAttestation().Signature = signature
+						if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex()); err != nil {
+							logger.Error("failed to submit attestation", zap.Error(err))
+							return
+						}
+					case beacon.RoleAggregator:
+						inputValue.GetAggregation().Signature = signature
+						if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
+							logger.Error("failed to submit aggregation", zap.Error(err))
+							return
+						}
+					case beacon.RoleProposer:
+						inputValue.GetBlock().Signature = signature
+						if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
+							logger.Error("failed to submit proposal", zap.Error(err))
+							return
+						}
+					}
+					logger.Info("validation successfully submitted!")
 
 					// identfier = newId // TODO: Fix race condition
-
-					// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-					logger.Info("------------------ GOT CONSENSUS -----------------", zap.Any("inputValue", inputValue))
 				}(role)
 			}
 		}(slot, duty)
@@ -245,8 +302,8 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 
 // getSlotStartTime returns the start time for the given slot
 func (n *ssvNode) getSlotStartTime(slot uint64) time.Time {
-	timeSinceGenesisStart := slot * uint64(n.network.SlotDurationSec().Seconds())
-	start := time.Unix(int64(n.network.MinGenesisTime()+timeSinceGenesisStart), 0)
+	timeSinceGenesisStart := slot * uint64(n.ethNetwork.SlotDurationSec().Seconds())
+	start := time.Unix(int64(n.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
 
