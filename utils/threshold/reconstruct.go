@@ -1,32 +1,49 @@
 package threshold
 
 import (
-	"math/big"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-// ReconstructSignatures reconstructs the given signatures done by threshold private keys
-func ReconstructSignatures(signatures [][]byte) ([]byte, error) {
-	var r bls.G2
-	for i, signature := range signatures {
+// ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
+// It then reconstructs the original threshold signature using lagrange interpolation
+func ReconstructSignatures(signatures map[uint64][]byte) ([]byte, error) {
+	// prepare x and y coordinates
+	x := make([]bls.Fr, 0)
+	y := make([]bls.G2, 0)
+	for index, signature := range signatures {
 		var sigPoint bls.G2
 		if err := sigPoint.Deserialize(signature); err != nil {
 			return nil, err
 		}
 
-		coef := big.NewInt(1)
-		for j := range signatures {
-			if j == i {
-				continue
-			}
-
-			coef := coef.Mul(new(big.Int).Neg(coef), big.NewInt(int64(j+1)))
-			coef = coef.Mul(coef, new(big.Int).Mod(new(big.Int).ModInverse(big.NewInt(int64(i-j)), curveOrder), curveOrder))
-		}
-
-		// TODO: Implement
+		point := bls.Fr{}
+		point.SetInt64(int64(index))
+		x = append(x, point)
+		y = append(y, sigPoint)
 	}
 
-	return r.Serialize(), nil
+	// reconstruct
+	l := ECCG2Polynomial{
+		G2Points: y,
+		XPoints:  x,
+	}
+	g2Point, err := l.Interpolate()
+	if err != nil {
+		return nil, err
+	}
+	return bls.CastToSign(g2Point).Serialize(), nil
+}
+
+type ECCG2Polynomial struct {
+	G2Points []bls.G2
+	XPoints  []bls.Fr
+}
+
+func (p *ECCG2Polynomial) Interpolate() (*bls.G2, error) {
+	res := &bls.G2{}
+	err := bls.G2LagrangeInterpolation(res, p.XPoints, p.G2Points)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
 }

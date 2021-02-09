@@ -263,7 +263,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 					// Reconstruct signatures
-					signature, err := threshold.ReconstructSignatures(signatures)
+					signature, err := threshold.ReconstructSignatures(nil) // TODO - pass signatures as map
 					if err != nil {
 						logger.Error("failed to reconstruct signatures", zap.Error(err))
 						return

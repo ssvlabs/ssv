@@ -31,7 +31,7 @@ var createThresholdCmd = &cobra.Command{
 			Logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		privKeys, err := threshold.Create(privKey, keysCount)
+		privKeys, err := threshold.Create(baseKey.Serialize(), keysCount)
 		if err != nil {
 			Logger.Fatal("failed to turn a private key into a threshold key", zap.Error(err))
 		}
