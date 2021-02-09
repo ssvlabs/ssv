@@ -41,14 +41,14 @@ const (
 type message struct {
 	Lambda    []byte               `json:"lambda"`
 	Msg       *proto.SignedMessage `json:"msg"`
-	Signature []byte               `json:"signature"`
+	Signature map[uint64][]byte    `json:"signature"`
 	Type      broadcastingType     `json:"type"`
 }
 
 type listener struct {
 	lambda []byte
 	msgCh  chan *proto.SignedMessage
-	sigCh  chan []byte
+	sigCh  chan map[uint64][]byte
 	tp     broadcastingType
 }
 
@@ -139,7 +139,7 @@ func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.Sign
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *p2pNetwork) BroadcastSignature(lambda, signature []byte) error {
+func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
 	msgBytes, err := json.Marshal(message{
 		Lambda:    lambda,
 		Signature: signature,
@@ -153,10 +153,10 @@ func (n *p2pNetwork) BroadcastSignature(lambda, signature []byte) error {
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan(lambda []byte) <-chan []byte {
+func (n *p2pNetwork) ReceivedSignatureChan(lambda []byte) <-chan map[uint64][]byte {
 	ls := listener{
 		lambda: lambda,
-		sigCh:  make(chan []byte, MsgChanSize),
+		sigCh:  make(chan map[uint64][]byte, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()

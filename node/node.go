@@ -24,6 +24,7 @@ import (
 
 // Options contains options to create the node
 type Options struct {
+	NodeID          uint64
 	ValidatorPubKey []byte
 	PrivateKey      *bls.SecretKey
 	ETHNetwork      core.Network
@@ -42,6 +43,7 @@ type Node interface {
 
 // ssvNode implements Node interface
 type ssvNode struct {
+	nodeID          uint64
 	validatorPubKey []byte
 	privateKey      *bls.SecretKey
 	ethNetwork      core.Network
@@ -56,6 +58,7 @@ type ssvNode struct {
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &ssvNode{
+		nodeID:          opts.NodeID,
 		validatorPubKey: opts.ValidatorPubKey,
 		privateKey:      opts.PrivateKey,
 		ethNetwork:      opts.ETHNetwork,
@@ -212,7 +215,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						if err := n.network.BroadcastSignature([]byte(identfier), signedAttestation.GetSignature()); err != nil {
+						if err := n.network.BroadcastSignature([]byte(identfier), map[uint64][]byte{n.nodeID: signedAttestation.GetSignature()}); err != nil {
 							logger.Error("failed to broadcast signature", zap.Error(err))
 							return
 						}
@@ -227,7 +230,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						if err := n.network.BroadcastSignature([]byte(identfier), signedAggregation.GetSignature()); err != nil {
+						if err := n.network.BroadcastSignature([]byte(identfier), map[uint64][]byte{n.nodeID: signedAggregation.GetSignature()}); err != nil {
 							logger.Error("failed to broadcast signature", zap.Error(err))
 							return
 						}
@@ -242,7 +245,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						if err := n.network.BroadcastSignature([]byte(identfier), signedProposal.GetSignature()); err != nil {
+						if err := n.network.BroadcastSignature([]byte(identfier), map[uint64][]byte{n.nodeID: signedProposal.GetSignature()}); err != nil {
 							logger.Error("failed to broadcast signature", zap.Error(err))
 							return
 						}
@@ -256,14 +259,17 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					logger.Info("GOT CONSENSUS", zap.Any("inputValue", inputValue))
 
 					// Collect signatures from other nodes
-					signatures := make([][]byte, signaturesCount)
+					signatures := make(map[uint64][]byte, signaturesCount)
 					for i := 0; i < signaturesCount; i++ {
-						signatures[i] = <-signaturesChan
+						sig := <-signaturesChan
+						for index, signature := range sig {
+							signatures[index] = signature
+						}
 					}
 					logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 					// Reconstruct signatures
-					signature, err := threshold.ReconstructSignatures(nil) // TODO - pass signatures as map
+					signature, err := threshold.ReconstructSignatures(signatures)
 					if err != nil {
 						logger.Error("failed to reconstruct signatures", zap.Error(err))
 						return

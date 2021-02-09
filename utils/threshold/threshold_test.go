@@ -20,7 +20,7 @@ func TestSplitAndReconstruct(t *testing.T) {
 	m := make(map[uint64][]byte)
 	for i, s := range shares {
 		partialSig := s.SignByte([]byte("hello"))
-		m[uint64(i+1)] = partialSig.Serialize()
+		m[i] = partialSig.Serialize()
 	}
 
 	// reconstruct

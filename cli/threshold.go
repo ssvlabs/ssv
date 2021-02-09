@@ -39,8 +39,8 @@ var createThresholdCmd = &cobra.Command{
 		fmt.Println("Generating threshold keys for validator", baseKey.GetPublicKey().SerializeToHexStr())
 		for i, pk := range privKeys {
 			fmt.Println()
-			fmt.Println("Public key", i+1, pk.GetPublicKey().SerializeToHexStr())
-			fmt.Println("Private key", i+1, pk.SerializeToHexStr())
+			fmt.Println("Public key", i, pk.GetPublicKey().SerializeToHexStr())
+			fmt.Println("Private key", i, pk.SerializeToHexStr())
 		}
 	},
 }

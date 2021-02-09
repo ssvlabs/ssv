@@ -48,13 +48,13 @@ func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *Network) BroadcastSignature(lambda, signature []byte) error {
+func (n *Network) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
 	// TODO: Implement
 	return nil
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *Network) ReceivedSignatureChan(lambda []byte) <-chan []byte {
+func (n *Network) ReceivedSignatureChan(lambda []byte) <-chan map[uint64][]byte {
 	// TODO: Implement
 	return nil
 }

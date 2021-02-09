@@ -86,21 +86,22 @@ var startNodeCmd = &cobra.Command{
 		ibftCommittee := map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,
-				Pk:     _getBytesFromHex("a50a268aca7be24d4032cd0295db234b3196ed1a0dcd7368b71df73521472db96edf2c822f015cb80f426d4bce5c1229"),
+				Pk:     _getBytesFromHex("89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"),
 			},
 			2: {
 				IbftId: 2,
-				Pk:     _getBytesFromHex("8e075489434c0f7c246c555dba372e8acf3ca55d50652fc2eccd9a2261c54c8fa84873abbc4983acdb4a75e2a4c50db5"),
+				Pk:     _getBytesFromHex("98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"),
 			},
 			3: {
 				IbftId: 3,
-				Pk:     _getBytesFromHex("8e0bc250eb11f80bf57aef6d55d332f3253d01b1a56cb5d75b58d9680abe227b06c82be94891f9d3d32ed3fc60e36b55"),
+				Pk:     _getBytesFromHex("9492358822d8ac4e678a2aa500b7634495ef9efece3a787cd48efe97180f95dda537eaf34d412eb2c42ab2dcf9e1d165"),
 			},
 		}
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
 
 		ssvNode := node.New(node.Options{
+			NodeID:          nodeID,
 			ValidatorPubKey: validatorKeyBytes,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
