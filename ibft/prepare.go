@@ -3,8 +3,8 @@ package ibft
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -44,6 +44,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 func (i *Instance) prepareMsgPipeline() Pipeline {
 	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_Prepare),
+		i.WaitForStage(),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),
@@ -62,7 +63,7 @@ func (i *Instance) validatePrepareMsg() PipelineFunc {
 		}
 
 		if !bytes.Equal(val, signedMessage.Message.Value) {
-			return errors.New("pre-prepare value not equal to prepare msg value")
+			return errors.Errorf("pre-prepare value (%s) not equal to prepare msg value (%s)", string(val), string(signedMessage.Message.Value))
 		}
 
 		return nil

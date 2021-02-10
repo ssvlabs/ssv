@@ -3,6 +3,10 @@ package beacon
 import (
 	"context"
 	"encoding/binary"
+	"time"
+
+	"github.com/prysmaticlabs/prysm/shared/slotutil"
+	"github.com/prysmaticlabs/prysm/shared/timeutils"
 
 	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
 
@@ -15,6 +19,8 @@ import (
 
 // GetAggregationData returns aggregation data
 func (b *prysmGRPC) GetAggregationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AggregateAttestationAndProof, error) {
+	b.waitToSlotTwoThirds(ctx, slot)
+
 	slotSig, err := b.signSlot(ctx, slot)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign slot")
@@ -89,4 +95,28 @@ func (b *prysmGRPC) aggregateAndProofSig(ctx context.Context, agg *ethpb.Aggrega
 	}
 
 	return b.privateKey.SignByte(root[:]).Serialize(), nil
+}
+
+// waitToSlotTwoThirds waits until two third through the current slot period
+// such that any attestations from this slot have time to reach the beacon node
+// before creating the aggregated attestation.
+func (b *prysmGRPC) waitToSlotTwoThirds(ctx context.Context, slot uint64) {
+	oneThird := slotutil.DivideSlotBy(3 /* one third of slot duration */)
+	twoThird := oneThird + oneThird
+	delay := twoThird
+
+	startTime := slotutil.SlotStartTime(b.network.MinGenesisTime(), slot)
+	finalTime := startTime.Add(delay)
+	wait := timeutils.Until(finalTime)
+	if wait <= 0 {
+		return
+	}
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-t.C:
+		return
+	}
 }

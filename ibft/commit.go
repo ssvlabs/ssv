@@ -44,6 +44,7 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 func (i *Instance) commitMsgPipeline() Pipeline {
 	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_Commit),
+		i.WaitForStage(),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),

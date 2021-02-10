@@ -47,8 +47,9 @@ type Instance struct {
 	changeRoundMessages *msgcont.MessagesContainer
 
 	// channels
-	changeRoundChan  chan bool
-	stageChangedChan chan proto.RoundState
+	changeRoundChan       chan bool
+	stageChangedChans     []chan proto.RoundState
+	stageChangedChansLock sync.Mutex
 }
 
 // NewInstance is the constructor of Instance
@@ -78,8 +79,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		commitMessages:      msgcont.NewMessagesContainer(),
 		changeRoundMessages: msgcont.NewMessagesContainer(),
 
-		changeRoundChan:  make(chan bool),
-		stageChangedChan: make(chan proto.RoundState),
+		changeRoundChan: make(chan bool),
 	}
 }
 
@@ -141,16 +141,22 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	i.State.Stage = stage
 
 	// Non blocking send to channel
-	select {
-	case i.stageChangedChan <- stage:
-		return
-	default:
-		return
+	for _, ch := range i.stageChangedChans {
+		select {
+		case ch <- stage:
+			break
+		default:
+			break
+		}
 	}
 }
 
 func (i *Instance) GetStageChan() chan proto.RoundState {
-	return i.stageChangedChan
+	ch := make(chan proto.RoundState)
+	i.stageChangedChansLock.Lock()
+	i.stageChangedChans = append(i.stageChangedChans, ch)
+	i.stageChangedChansLock.Unlock()
+	return ch
 }
 
 // StartEventLoop - starts the main event loop for the instance.
@@ -233,6 +239,10 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	}
 
 	return nil
+}
+
+func (i *Instance) Cleanup() {
+	// TODO: Implement
 }
 
 /**

@@ -10,6 +10,7 @@ import (
 func (i *Instance) prePrepareMsgPipeline() Pipeline {
 	return []PipelineFunc{
 		MsgTypeCheck(proto.RoundState_PrePrepare),
+		i.WaitForStage(),
 		i.ValidateLambdas(),
 		i.ValidateRound(),
 		i.AuthMsg(),

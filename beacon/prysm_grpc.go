@@ -3,13 +3,13 @@ package beacon
 import (
 	"context"
 
-	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
-	"github.com/prysmaticlabs/prysm/shared/params"
-
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/ethereum/go-ethereum/event"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
+	"github.com/prysmaticlabs/prysm/shared/params"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/utils/grpcex"
@@ -18,28 +18,41 @@ import (
 // prysmGRPC implements Beacon interface using Prysm's beacon node via gRPC
 type prysmGRPC struct {
 	validatorClient    ethpb.BeaconNodeValidatorClient
+	beaconClient       ethpb.BeaconChainClient
 	privateKey         *bls.SecretKey
 	network            core.Network
 	validatorPublicKey []byte
 	graffiti           []byte
+	blockFeed          *event.Feed
+	highestValidSlot   uint64
 	logger             *zap.Logger
 }
 
 // NewPrysmGRPC is the constructor of prysmGRPC
-func NewPrysmGRPC(logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (Beacon, error) {
+func NewPrysmGRPC(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (Beacon, error) {
 	conn, err := grpcex.DialConn(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	return &prysmGRPC{
+	b := &prysmGRPC{
 		validatorClient:    ethpb.NewBeaconNodeValidatorClient(conn),
+		beaconClient:       ethpb.NewBeaconChainClient(conn),
 		privateKey:         privateKey,
 		network:            network,
 		validatorPublicKey: validatorPublicKey,
 		graffiti:           graffiti,
+		blockFeed:          &event.Feed{},
 		logger:             logger,
-	}, nil
+	}
+
+	go func() {
+		if err := b.receiveBlocks(ctx); err != nil {
+			logger.Fatal("failed to receive blocks")
+		}
+	}()
+
+	return b, nil
 }
 
 // StreamDuties implements Beacon interface
@@ -114,6 +127,36 @@ func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Duties
 	}
 
 	return roles, nil
+}
+
+// receiveBlocks receives blocks from the beacon node. Upon receiving a block, the service
+// broadcasts it to a feed for other usages to subscribe to.
+func (b *prysmGRPC) receiveBlocks(ctx context.Context) error {
+	stream, err := b.beaconClient.StreamBlocks(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true})
+	if err != nil {
+		return errors.Wrap(err, "failed to open stream blocks")
+	}
+
+	for {
+		if ctx.Err() == context.Canceled {
+			return errors.New("context canceled - shutting down blocks receiver")
+		}
+
+		res, err := stream.Recv()
+		if err != nil {
+			return errors.Wrap(err, "failed to receive blocks from the node")
+		}
+
+		if res == nil || res.Block == nil {
+			continue
+		}
+
+		if res.Block.Slot > b.highestValidSlot {
+			b.highestValidSlot = res.Block.Slot
+		}
+
+		b.blockFeed.Send(res)
+	}
 }
 
 // domainData returns domain data for the given epoch and domain

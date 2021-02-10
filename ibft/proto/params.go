@@ -19,7 +19,7 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 
 func DefaultConsensusParams() *ConsensusParams {
 	return &ConsensusParams{
-		RoundChangeDuration: int64(time.Second * 2),
+		RoundChangeDuration: int64(time.Second * 5),
 	}
 }
 
