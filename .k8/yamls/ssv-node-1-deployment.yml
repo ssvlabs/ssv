@@ -71,6 +71,18 @@ spec:
               name: config-secrets
               key: beacon_node_addr
 
+        - name: PUBKEY_NODE_2
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_2
+
+        - name: PUBKEY_NODE_3
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_3      
+
         - name: NETWORK
           value: "pyrmont" 
 
