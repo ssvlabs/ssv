@@ -5,12 +5,11 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/ibft/val/weekday"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
-	"go.uber.org/zap/zaptest"
+	"github.com/bloxapp/ssv/utils/validator/bytesval"
 )
 
 func TestIBFT(t *testing.T) {
@@ -55,7 +54,7 @@ func TestIBFT(t *testing.T) {
 				newId := time.Now().String()
 				opts := StartOptions{
 					Logger:       logger,
-					Consensus:    weekday.New(),
+					Consensus:    bytesval.New([]byte(time.Now().Weekday().String())),
 					PrevInstance: []byte(instanceIdentifier),
 					Identifier:   []byte(newId),
 					Value:        []byte(time.Now().Weekday().String()),

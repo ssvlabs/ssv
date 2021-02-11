@@ -62,7 +62,7 @@ $ docker-compose up -d
 
 ```bash
 # Build binary
-$ CGO_ENABLED=1 go build -o bin/ssv ./cmd/ssvcli/
+$ CGO_ENABLED=1 go build -o bin/ssv ./cmd/ssvnode/
 
 # Run tool
 $ ./bin/ssv --help

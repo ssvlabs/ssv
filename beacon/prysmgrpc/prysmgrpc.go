@@ -1,7 +1,9 @@
-package beacon
+package prysmgrpc
 
 import (
 	"context"
+
+	"github.com/bloxapp/ssv/beacon"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/event"
@@ -28,8 +30,8 @@ type prysmGRPC struct {
 	logger             *zap.Logger
 }
 
-// NewPrysmGRPC is the constructor of prysmGRPC
-func NewPrysmGRPC(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (Beacon, error) {
+// New is the constructor of prysmGRPC
+func New(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (beacon.Beacon, error) {
 	conn, err := grpcex.DialConn(addr)
 	if err != nil {
 		return nil, err
@@ -94,23 +96,23 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 // RolesAt slot returns the validator roles at the given slot. Returns nil if the
 // validator is known to not have a roles at the at slot. Returns UNKNOWN if the
 // validator assignments are unknown. Otherwise returns a valid validatorRole map.
-func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty) ([]Role, error) {
+func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty) ([]beacon.Role, error) {
 	if duty == nil {
 		return nil, nil
 	}
 
-	var roles []Role
+	var roles []beacon.Role
 
 	if len(duty.ProposerSlots) > 0 {
 		for _, proposerSlot := range duty.ProposerSlots {
 			if proposerSlot != 0 && proposerSlot == slot {
-				roles = append(roles, RoleProposer)
+				roles = append(roles, beacon.RoleProposer)
 				break
 			}
 		}
 	}
 	if duty.AttesterSlot == slot {
-		roles = append(roles, RoleAttester)
+		roles = append(roles, beacon.RoleAttester)
 
 		aggregator, err := b.isAggregator(ctx, slot, len(duty.Committee))
 		if err != nil {
@@ -118,12 +120,12 @@ func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Duties
 		}
 
 		if aggregator {
-			roles = append(roles, RoleAggregator)
+			roles = append(roles, beacon.RoleAggregator)
 		}
 	}
 
 	if len(roles) == 0 {
-		roles = append(roles, RoleUnknown)
+		roles = append(roles, beacon.RoleUnknown)
 	}
 
 	return roles, nil

@@ -4,14 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/val/weekday"
-
-	"github.com/bloxapp/ssv/network/local"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network/local"
+	"github.com/bloxapp/ssv/utils/validator/bytesval"
 )
 
 func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
@@ -54,7 +52,7 @@ func TestInstance_Start(t *testing.T) {
 			Logger:         logger,
 			Me:             me,
 			Network:        replay.Network,
-			Consensus:      weekday.New(),
+			Consensus:      bytesval.New([]byte(time.Now().Weekday().String())),
 			Params:         params,
 			Lambda:         []byte("0"),
 			PreviousLambda: []byte(""),

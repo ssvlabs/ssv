@@ -6,9 +6,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/val"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/utils/validator"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 
 type StartOptions struct {
 	Logger       *zap.Logger
-	Consensus    val.ValueValidator
+	Consensus    validator.Validator
 	PrevInstance []byte
 	Identifier   []byte
 	Value        []byte
