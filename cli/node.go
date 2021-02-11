@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/hex"
+	"os"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -86,15 +87,15 @@ var startNodeCmd = &cobra.Command{
 		ibftCommittee := map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,
-				Pk:     _getBytesFromHex("89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"),
+				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_1")),
 			},
 			2: {
 				IbftId: 2,
-				Pk:     _getBytesFromHex("98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"),
+				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_2")),
 			},
 			3: {
 				IbftId: 3,
-				Pk:     _getBytesFromHex("9492358822d8ac4e678a2aa500b7634495ef9efece3a787cd48efe97180f95dda537eaf34d412eb2c42ab2dcf9e1d165"),
+				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
 			},
 		}
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
