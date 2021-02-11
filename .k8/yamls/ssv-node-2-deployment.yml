@@ -39,6 +39,7 @@ spec:
       - name: ssv-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
+        command: ["/go/bin/ssvcli", "start-node", "--node-id=$(NODE_ID)", "--leader-id=$(LEADER_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_PUBLIC_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(VAL)"]
         ports:
         - containerPort: 5678
           name: port-5678
