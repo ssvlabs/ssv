@@ -1,0 +1,79 @@
+stages:
+  - build
+  - deploy
+
+variables:
+
+  #GLOBAL
+  IMAGE_NAME: ssv-node
+
+  #STAGE
+  ACCOUNT_ID_INFRA_STAGE: 121827225315
+  AWS_REGION_INFRA_STAGE: "us-west-2"
+  DOCKER_REPO_INFRA_STAGE: $ACCOUNT_ID_INFRA_STAGE.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
+  APP_REPLICAS_INFRA_STAGE: "1"
+  ECRLOGIN_INFRA_STAGE: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_STAGE --region $AWS_REGION_INFRA_STAGE --no-include-email"
+
+  #PRODUCTUON
+  ACCOUNT_ID_INFRA_PROD: 764289642555
+  AWS_REGION_INFRA_PROD: "us-west-2"
+  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_PROD.amazonaws.com/$IMAGE_NAME
+  APP_REPLICAS_INFRA_PROD: "1"
+  ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
+
+
+
+Build stage Docker image:
+  stage: build
+  tags:
+    - blox-infra-stage
+  script:
+    - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
+    - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
+    - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
+    - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
+  only:
+    - stage
+
+Deploy to blox-infra-stage cluster:
+  stage: deploy
+  tags:
+    - blox-infra-stage
+  script:
+    - apk add bash
+    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
+    - chmod 755 kubectl
+    - mv kubectl /usr/bin/
+    - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.bloxinfra.com $K8S_API_VERSION
+  only:
+    - stage
+
+
+#blox-infra-prod
+Build prod Docker image:
+  stage: build
+  tags:
+    - blox-infra-prod
+  script:
+    - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
+    - DOCKER_LOGIN_TO_INFRA_PROD_REPO=`$ECRLOGIN_INFRA_PROD`
+    - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
+    - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
+
+  only:
+    - master
+
+Deploy to blox-infra-prod cluster:
+  stage: deploy
+  tags:
+    - blox-infra-prod
+  script:
+    - apk add bash
+    - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
+    - chmod 755 kubectl
+    - mv kubectl /usr/bin/
+    - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod bloxinfra.com $K8S_API_VERSION
+  only:
+    - master
