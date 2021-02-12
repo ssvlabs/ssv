@@ -43,6 +43,9 @@ spec:
         ports:
         - containerPort: 5678
           name: port-5678
+        volumeMounts:
+        - mountPath: "/data/"
+          name: data            
         env:
         - name: NODE_ID
           value: "1"
@@ -77,6 +80,10 @@ spec:
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
+      volumes:
+      - persistentVolumeClaim:
+          claimName: ssv-node-1
+        name: data
       - name: ssv-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
@@ -84,6 +91,9 @@ spec:
         ports:
         - containerPort: 5678
           name: port-5678
+        volumeMounts:
+        - mountPath: "/data/"
+          name: data            
         env:
         - name: NODE_ID
           value: "2"
@@ -118,6 +128,10 @@ spec:
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
+      volumes:
+      - persistentVolumeClaim:
+          claimName: ssv-node-2
+        name: data
       - name: ssv-node-3
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
@@ -125,6 +139,9 @@ spec:
         ports:
         - containerPort: 5678
           name: port-5678
+        volumeMounts:
+        - mountPath: "/data/"
+          name: data            
         env:
         - name: NODE_ID
           value: "3"
@@ -159,3 +176,7 @@ spec:
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
+      volumes:
+      - persistentVolumeClaim:
+          claimName: ssv-node-3
+        name: data
