@@ -9,7 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
-	"github.com/bloxapp/ssv/utils/validator/bytesval"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {

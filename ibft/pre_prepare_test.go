@@ -9,7 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/utils/validator/bytesval"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {

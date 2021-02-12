@@ -16,14 +16,14 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/utils/validator"
+	"github.com/bloxapp/ssv/utils/dataval"
 )
 
 type InstanceOptions struct {
 	Logger         *zap.Logger
 	Me             *proto.Node
 	Network        network.Network
-	Consensus      validator.Validator
+	Consensus      dataval.Validator
 	Params         *proto.InstanceParams
 	Lambda         []byte
 	PreviousLambda []byte
@@ -33,7 +33,7 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	consensus        validator.Validator
+	consensus        dataval.Validator
 	params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	logger           *zap.Logger

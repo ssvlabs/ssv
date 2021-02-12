@@ -8,7 +8,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/utils/validator"
+	"github.com/bloxapp/ssv/utils/dataval"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 
 type StartOptions struct {
 	Logger       *zap.Logger
-	Consensus    validator.Validator
+	Consensus    dataval.Validator
 	PrevInstance []byte
 	Identifier   []byte
 	Value        []byte

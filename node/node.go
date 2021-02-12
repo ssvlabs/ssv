@@ -17,8 +17,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/bloxapp/ssv/utils/validator/bytesval"
 )
 
 // Options contains options to create the node
