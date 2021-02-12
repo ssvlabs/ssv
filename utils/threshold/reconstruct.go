@@ -34,11 +34,13 @@ func ReconstructSignatures(signatures map[uint64][]byte) ([]byte, error) {
 	return bls.CastToSign(g2Point).Serialize(), nil
 }
 
+// ECCG2Polynomial represents ECC G2 polynomial
 type ECCG2Polynomial struct {
 	G2Points []bls.G2
 	XPoints  []bls.Fr
 }
 
+// Interpolate interpolates polynomial and returns G2
 func (p *ECCG2Polynomial) Interpolate() (*bls.G2, error) {
 	res := &bls.G2{}
 	err := bls.G2LagrangeInterpolation(res, p.XPoints, p.G2Points)

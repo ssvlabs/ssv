@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/storage/inmem"
 )
 
+// Network implements network.Network interface
 type Network struct {
 	t      *testing.T
 	replay *IBFTReplay
@@ -16,6 +17,7 @@ type Network struct {
 	c      map[uint64]chan *proto.SignedMessage
 }
 
+// ReceivedMsgChan implements network.Network interface
 func (n *Network) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage {
 	c := make(chan *proto.SignedMessage)
 	n.c[id] = c
@@ -23,6 +25,7 @@ func (n *Network) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.Signed
 	return c
 }
 
+// Broadcast implements network.Network interface
 func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 	go func() {
 
@@ -67,6 +70,7 @@ type IBFTReplay struct {
 	nodes   []uint64
 }
 
+// NewIBFTReplay is the constructor of IBFTReplay
 func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	ret := &IBFTReplay{
 		Network: &Network{
@@ -87,11 +91,13 @@ func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	return ret
 }
 
+// StartRound starts the given round
 func (r *IBFTReplay) StartRound(round uint64) *RoundScript {
 	r.scripts[round] = NewRoundScript(r, r.nodes)
 	return r.scripts[round]
 }
 
+// CanSend returns true if message can be sent
 func (r *IBFTReplay) CanSend(state proto.RoundState, round uint64, node uint64) bool {
 	if v, ok := r.scripts[round]; ok {
 		return v.CanSend(state, node)
@@ -99,6 +105,7 @@ func (r *IBFTReplay) CanSend(state proto.RoundState, round uint64, node uint64) 
 	return true
 }
 
+// CanReceive returns true if the message can be received
 func (r *IBFTReplay) CanReceive(state proto.RoundState, round uint64, node uint64) bool {
 	if v, ok := r.scripts[round]; ok {
 		return v.CanSend(state, node)
@@ -106,11 +113,13 @@ func (r *IBFTReplay) CanReceive(state proto.RoundState, round uint64, node uint6
 	return true
 }
 
+// RoundScript ...
 type RoundScript struct {
 	replay *IBFTReplay
 	rules  map[proto.RoundState]map[uint64]bool // if true the node receives (and sends) all messages. False it doesn't
 }
 
+// NewRoundScript is the constructor of RoundScript
 func NewRoundScript(r *IBFTReplay, nodes []uint64) *RoundScript {
 	rules := make(map[proto.RoundState]map[uint64]bool)
 	for _, t := range []proto.RoundState{proto.RoundState_PrePrepare, proto.RoundState_Prepare, proto.RoundState_Commit, proto.RoundState_ChangeRound} {
@@ -125,14 +134,17 @@ func NewRoundScript(r *IBFTReplay, nodes []uint64) *RoundScript {
 	}
 }
 
+// CanSend ...
 func (r *RoundScript) CanSend(state proto.RoundState, node uint64) bool {
 	return r.rules[state][node]
 }
 
+// CanReceive ...
 func (r *RoundScript) CanReceive(state proto.RoundState, node uint64) bool {
 	return r.rules[state][node]
 }
 
+// PreventMessages ...
 func (r *RoundScript) PreventMessages(state proto.RoundState, nodes []uint64) *RoundScript {
 	for _, id := range nodes {
 		r.rules[state][id] = false
@@ -140,6 +152,7 @@ func (r *RoundScript) PreventMessages(state proto.RoundState, nodes []uint64) *R
 	return r
 }
 
+// EndRound ...
 func (r *RoundScript) EndRound() *IBFTReplay {
 	return r.replay
 }

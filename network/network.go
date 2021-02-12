@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
+// Network represents the behavior of the network
 type Network interface {
 	// Broadcast propagates a signed message to all peers
 	Broadcast(lambda []byte, msg *proto.SignedMessage) error

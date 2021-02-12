@@ -210,8 +210,8 @@ func (i *Instance) uponChangeRoundTrigger() {
 func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
 	// TODO - not sure the spec requires unique votes.
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	for _, signerId := range signedMessage.SignerIds {
-		if _, found := msgs[signerId]; found {
+	for _, signerID := range signedMessage.SignerIds {
+		if _, found := msgs[signerID]; found {
 			return true
 		}
 	}

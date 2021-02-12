@@ -10,6 +10,7 @@ var (
 	curveOrder = new(big.Int)
 )
 
+// Init initializes BLS
 func Init() {
 	bls.Init(bls.BLS12_381)
 	bls.SetETHmode(bls.EthModeDraft07)
@@ -17,9 +18,9 @@ func Init() {
 	curveOrder, _ = curveOrder.SetString(bls.GetCurveOrder(), 10)
 }
 
-// TODO - use bls' SSS functions, no need to re-implement
 // Create receives a bls.SecretKey hex and count.
 // Will split the secret key into count shares
+// TODO - use bls' SSS functions, no need to re-implement
 func Create(skBytes []byte, count uint64) (map[uint64]*bls.SecretKey, error) {
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(skBytes); err != nil {

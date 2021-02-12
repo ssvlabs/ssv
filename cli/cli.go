@@ -1,10 +1,11 @@
 package cli
 
 import (
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // Logger is the default logger

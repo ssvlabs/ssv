@@ -17,6 +17,7 @@ type MessageQueue struct {
 	futureRoundQueue  []*proto.SignedMessage
 }
 
+// New is the constructor of MessageQueue
 func New() *MessageQueue {
 	return &MessageQueue{
 		msgMutex:          sync.Mutex{},
