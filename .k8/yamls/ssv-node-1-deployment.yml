@@ -49,51 +49,41 @@ spec:
         env:
         - name: NODE_ID
           value: "1"
-
         - name: LEADER_ID
           value: "1"
-
         - name: PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_1
-
         - name: VALIDATOR_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: validator_public_key
-
         - name: BEACON_NODE_ADDR
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: beacon_node_addr
-
         - name: PUBKEY_NODE_2
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_2
-
         - name: PUBKEY_NODE_3
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_3      
-
         - name: NETWORK
           value: "pyrmont" 
-
         - name: CONSENSUS_TYPE
           value: "validation"
-
       volumes:
       - persistentVolumeClaim:
           claimName: ssv-node-1
         name: data
-
       - name: ssv-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
@@ -107,51 +97,41 @@ spec:
         env:
         - name: NODE_ID
           value: "2"
-
         - name: LEADER_ID
           value: "1"
-
         - name: PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_2
-
         - name: VALIDATOR_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: validator_public_key
-
         - name: BEACON_NODE_ADDR
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: beacon_node_addr
-
         - name: PUBKEY_NODE_1
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_1
-
         - name: PUBKEY_NODE_3
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_3   
-
         - name: NETWORK
           value: "pyrmont" 
-
         - name: CONSENSUS_TYPE
           value: "validation"
-
       volumes:
       - persistentVolumeClaim:
           claimName: ssv-node-2
         name: data
-
       - name: ssv-node-3
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
@@ -165,46 +145,37 @@ spec:
         env:
         - name: NODE_ID
           value: "3"
-
         - name: LEADER_ID
           value: "1"
-
         - name: PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_2
-
         - name: VALIDATOR_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: validator_public_key
-
         - name: BEACON_NODE_ADDR
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: beacon_node_addr
-
         - name: PUBKEY_NODE_1
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_1
-
         - name: PUBKEY_NODE_2
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_2   
-
         - name: NETWORK
           value: "pyrmont" 
-
         - name: CONSENSUS_TYPE
           value: "validation"
-
       volumes:
       - persistentVolumeClaim:
           claimName: ssv-node-3
