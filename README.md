@@ -42,13 +42,43 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
     - [Blox's eth2 pools research](https://github.com/bloxapp/eth2-staking-pools-research)
     - [ETH DKG](https://github.com/PhilippSchindler/ethdkg)
 
-     
-# How to run
+
+# Getting started
+### Build
+```bash
+# Build binary
+$ CGO_ENABLED=1 go build -o bin/ssv ./cmd/ssvnode/
+
+# Run tool
+$ ./bin/ssv --help
+
+```
+    
+### Preparation
+##### Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
+- Private keys from mnemonic: ` ./bin/ssv export-keys --mnemonic={mnemonic} --index={keyIndex}`        
+
+##### Generate threshold keys
+- `./bin/ssv create-threshold --count {# of ssv nodes} --private-key {privateKey}`
+   
+##### Edit config files
+- .env
+```
+   NETWORK=pyrmont/mainnet
+   BEACON_NODE_ADDR
+   VALIDATOR_PUBLIC_KEY
+   SSV_NODE_{index} - for each threshold created add param(public key {index} from previous step )
+```
+- docker-compose.yaml
+
+  ` PUBKEY_NODE_{index} - add the other public keys as environment for each service`    
+
+### How to run
 
 `docker-compose.yaml` contains definitions of 3 SSV nodes with its own threshold private keys that are generated based on the 
 validator's private key. All needed parameters can be found in `docker-compose.yaml` and `.env` files.
 
-The following commands are useful:
+
 
 ```bash 
 # Build nodes
@@ -56,14 +86,4 @@ $ docker-compose build
 
 # Run nodes
 $ docker-compose up -d
-```
-
-### The following commands are for building and running CLI:
-
-```bash
-# Build binary
-$ CGO_ENABLED=1 go build -o bin/ssv ./cmd/ssvnode/
-
-# Run tool
-$ ./bin/ssv --help
-```
+```    
