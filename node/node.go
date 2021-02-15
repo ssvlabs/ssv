@@ -30,7 +30,7 @@ type Options struct {
 	Network         network.Network
 	Consensus       string
 	Beacon          beacon.Beacon
-	IBFT            *ibft.IBFT
+	IBFT            ibft.IBFT
 	Logger          *zap.Logger
 }
 
@@ -50,7 +50,7 @@ type ssvNode struct {
 	consensus       string
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
-	iBFT            *ibft.IBFT
+	iBFT            ibft.IBFT
 	logger          *zap.Logger
 }
 
