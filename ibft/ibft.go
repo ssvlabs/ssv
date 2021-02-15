@@ -6,24 +6,32 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/val"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/utils/dataval"
 )
 
 const (
+	// FirstInstanceIdentifier is the identifier of the first instance in the DB
 	FirstInstanceIdentifier = ""
 )
 
 type StartOptions struct {
 	Logger       *zap.Logger
-	Consensus    val.ValueValidator
+	Consensus    dataval.Validator
 	PrevInstance []byte
 	Identifier   []byte
 	Value        []byte
 }
 
-type IBFT struct {
+// IBFT represents behavior of the IBFT
+type IBFT interface {
+	// StartInstance starts a new instance by the given options
+	StartInstance(opts StartOptions) (bool, int)
+}
+
+// ibftImpl implements IBFT interface
+type ibftImpl struct {
 	instances map[string]*Instance // key is the instance identifier
 	storage   storage.Storage
 	me        *proto.Node
@@ -32,8 +40,8 @@ type IBFT struct {
 }
 
 // New is the constructor of IBFT
-func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) *IBFT {
-	return &IBFT{
+func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) IBFT {
+	return &ibftImpl{
 		instances: make(map[string]*Instance),
 		storage:   storage,
 		me:        me,
@@ -42,7 +50,7 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 	}
 }
 
-func (i *IBFT) StartInstance(opts StartOptions) (bool, int) {
+func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	// If previous instance didn't decide, can't start another instance.
 	prevId := hex.EncodeToString(opts.PrevInstance)
 	if prevId != FirstInstanceIdentifier {

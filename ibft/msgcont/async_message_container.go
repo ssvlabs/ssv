@@ -13,18 +13,21 @@ type MessagesContainer struct {
 	lock     sync.Mutex
 }
 
+// NewMessagesContainer is the constructor of MessagesContainer
 func NewMessagesContainer() *MessagesContainer {
 	return &MessagesContainer{
 		messages: make(map[uint64]map[uint64]*proto.SignedMessage),
 	}
 }
 
+// ReadOnlyMessagesByRound returns messages by the given round
 func (c *MessagesContainer) ReadOnlyMessagesByRound(round uint64) map[uint64]*proto.SignedMessage {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.messages[round]
 }
 
+// AddMessage adds the given message to the container
 func (c *MessagesContainer) AddMessage(msg *proto.SignedMessage) {
 	c.lock.Lock()
 	defer c.lock.Unlock()

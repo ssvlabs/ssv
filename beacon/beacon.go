@@ -9,6 +9,7 @@ import (
 // Role represents the validator role for a specific duty
 type Role int
 
+// String returns name of the role
 func (r Role) String() string {
 	switch r {
 	case RoleUnknown:

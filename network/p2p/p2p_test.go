@@ -53,12 +53,9 @@ func TestP2PNetworker(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	t.Run("peer 1 ignores message", func(t *testing.T) {
-		select {
-		case <-peer1Chan:
-			t.Error("unexpected own message")
-		default:
-		}
+	t.Run("peer 1 receives message", func(t *testing.T) {
+		msgFromPeer1 := <-peer1Chan
+		require.Equal(t, messageToBroadcast, msgFromPeer1)
 	})
 
 	t.Run("peer 2 receives message", func(t *testing.T) {

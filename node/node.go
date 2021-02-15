@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/threshold"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -16,10 +14,11 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/val/validation"
-	"github.com/bloxapp/ssv/ibft/val/weekday"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 // Options contains options to create the node
@@ -140,7 +139,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					logger := logger.With(zap.String("role", role.String()))
 					logger.Info("starting IBFT instance...")
 
-					var inputValue validation.InputValue
+					var inputValue proto.InputValue
 					switch role {
 					case beacon.RoleAttester:
 						attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
@@ -149,7 +148,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						inputValue.Data = &validation.InputValue_AttestationData{
+						inputValue.Data = &proto.InputValue_AttestationData{
 							AttestationData: attData,
 						}
 					case beacon.RoleAggregator:
@@ -159,7 +158,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						inputValue.Data = &validation.InputValue_AggregationData{
+						inputValue.Data = &proto.InputValue_AggregationData{
 							AggregationData: aggData,
 						}
 					case beacon.RoleProposer:
@@ -169,7 +168,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						inputValue.Data = &validation.InputValue_BeaconBlock{
+						inputValue.Data = &proto.InputValue_BeaconBlock{
 							BeaconBlock: block,
 						}
 					case beacon.RoleUnknown:
@@ -177,26 +176,22 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 						return
 					}
 
-					valBytes, err := json.Marshal(&inputValue)
-					if err != nil {
-						logger.Error("failed to marshal input value", zap.Error(err))
-						return
-					}
-
-					newId := strconv.Itoa(int(slot))
-
-					// TODO: Refactor this out
-					consensus := validation.New(logger, valBytes)
-					if n.consensus == "weekday" {
-						consensus = weekday.New()
+					var valBytes []byte
+					switch n.consensus {
+					case "weekday":
 						valBytes = []byte(time.Now().Weekday().String())
+					default:
+						if valBytes, err = json.Marshal(&inputValue); err != nil {
+							logger.Error("failed to marshal input value", zap.Error(err))
+							return
+						}
 					}
 
 					decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
 						Logger:       logger,
-						Consensus:    consensus,
+						Consensus:    bytesval.New(valBytes),
 						PrevInstance: []byte(identfier),
-						Identifier:   []byte(newId),
+						Identifier:   []byte(strconv.Itoa(int(slot))),
 						Value:        valBytes,
 					})
 
@@ -220,7 +215,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						inputValue.SignedData = &validation.InputValue_Attestation{
+						inputValue.SignedData = &proto.InputValue_Attestation{
 							Attestation: signedAttestation,
 						}
 					case beacon.RoleAggregator:
@@ -235,7 +230,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						inputValue.SignedData = &validation.InputValue_Aggregation{
+						inputValue.SignedData = &proto.InputValue_Aggregation{
 							Aggregation: signedAggregation,
 						}
 					case beacon.RoleProposer:
@@ -250,13 +245,13 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 							return
 						}
 
-						inputValue.SignedData = &validation.InputValue_Block{
+						inputValue.SignedData = &proto.InputValue_Block{
 							Block: signedProposal,
 						}
 					}
 
 					// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-					logger.Info("GOT CONSENSUS", zap.Any("inputValue", inputValue))
+					logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
 
 					// Collect signatures from other nodes
 					signatures := make(map[uint64][]byte, signaturesCount)

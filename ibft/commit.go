@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
+// CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 	if i.State.PreparedValue == nil {
 		return nil, errors.New("state not prepared")
@@ -72,7 +72,7 @@ func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t
 	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
 		if bytes.Equal(inputValue, v.Message.Value) {
-			cnt += 1
+			cnt++
 		}
 	}
 	quorum = cnt*3 >= i.params.CommitteeSize()*2

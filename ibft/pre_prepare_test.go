@@ -4,13 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap/zaptest"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/val/weekday"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
@@ -33,7 +32,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     secretKeys[0].Serialize(),
 		},
-		consensus: weekday.New(),
+		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
 		logger:    zaptest.NewLogger(t),
 	}
 
@@ -111,7 +110,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     secretKeys[0].Serialize(),
 		},
-		consensus: weekday.New(),
+		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
 		logger:    zaptest.NewLogger(t),
 	}
 
@@ -163,7 +162,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     secretKeys[0].Serialize(),
 		},
-		consensus: weekday.New(),
+		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
 		logger:    zaptest.NewLogger(t),
 	}
 
@@ -199,7 +198,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		consensus: weekday.New(),
+		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
 	}
 
 	// test no signer

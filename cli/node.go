@@ -4,11 +4,12 @@ import (
 	"encoding/hex"
 	"os"
 
+	"github.com/bloxapp/ssv/beacon/prysmgrpc"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -73,7 +74,7 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := beacon.NewPrysmGRPC(cmd.Context(), logger, baseKey, network, validatorKeyBytes, []byte("BloxStaking"), beaconAddr)
+		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, network, validatorKeyBytes, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
