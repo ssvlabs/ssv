@@ -62,17 +62,26 @@ func (i *Instance) AuthMsg() PipelineFunc {
 		if err != nil {
 			return err
 		}
-		if len(pks) != 1 {
+		if len(pks) == 0 {
 			return errors.New("could not find public key")
 		}
 
-		res, err := signedMessage.VerifySig(pks[0])
-		if err != nil {
-			return err
+		var foundVerified bool
+		for _, pk := range pks {
+			res, err := signedMessage.VerifySig(pk)
+			if err != nil {
+				return err
+			}
+
+			if res {
+				foundVerified = true
+				break
+			}
 		}
-		if !res {
+		if !foundVerified {
 			return errors.New("could not verify message signature")
 		}
+
 		return nil
 	}
 }
