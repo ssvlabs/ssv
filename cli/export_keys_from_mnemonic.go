@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
 	util "github.com/wealdtech/go-eth2-util"

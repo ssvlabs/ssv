@@ -1,20 +1,19 @@
 package flags
 
 import (
-	"github.com/spf13/cobra"
-
 	"github.com/bloxapp/ssv/utils/cliflag"
+	"github.com/spf13/cobra"
 )
 
 // Flag names.
 const (
 	mnemonicFlag = "mnemonic"
-	indexFlag = "index"
+	indexFlag    = "index"
 )
 
 // AddMnemonicKeyFlag adds the mnemonic key flag to the command
 func AddMnemonicFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, 	mnemonicFlag, "", "24 letter mnemonic phrase", true)
+	cliflag.AddPersistentStringFlag(c, mnemonicFlag, "", "24 letter mnemonic phrase", true)
 }
 
 // GetMnemonicFlagValue gets the mnemonic key flag from the command
