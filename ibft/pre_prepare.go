@@ -4,11 +4,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) prePrepareMsgPipeline() Pipeline {
-	return []PipelineFunc{
+func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
 		MsgTypeCheck(proto.RoundState_PrePrepare),
 		i.WaitForStage(),
 		i.ValidateLambdas(),
@@ -16,11 +17,11 @@ func (i *Instance) prePrepareMsgPipeline() Pipeline {
 		i.AuthMsg(),
 		i.validatePrePrepareMsg(),
 		i.uponPrePrepareMsg(),
-	}
+	)
 }
 
-func (i *Instance) validatePrePrepareMsg() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) validatePrePrepareMsg() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")
 		}
@@ -34,7 +35,7 @@ func (i *Instance) validatePrePrepareMsg() PipelineFunc {
 		}
 
 		return nil
-	}
+	})
 }
 
 /**
@@ -81,8 +82,8 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) uponPrePrepareMsg() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) uponPrePrepareMsg() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPrePrepareMsg(signedMessage) {
 			return nil
@@ -119,5 +120,5 @@ func (i *Instance) uponPrePrepareMsg() PipelineFunc {
 			return err
 		}
 		return nil
-	}
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
@@ -41,8 +42,8 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 	return ret, nil
 }
 
-func (i *Instance) prepareMsgPipeline() Pipeline {
-	return []PipelineFunc{
+func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
 		MsgTypeCheck(proto.RoundState_Prepare),
 		i.WaitForStage(),
 		i.ValidateLambdas(),
@@ -50,11 +51,11 @@ func (i *Instance) prepareMsgPipeline() Pipeline {
 		i.AuthMsg(),
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
-	}
+	)
 }
 
-func (i *Instance) validatePrepareMsg() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		// Validate we received a pre-prepare msg for this round and
 		// that it's value is equal to the prepare msg
 		val, err := i.PrePrepareValue(signedMessage.Message.Round)
@@ -67,7 +68,7 @@ func (i *Instance) validatePrepareMsg() PipelineFunc {
 		}
 
 		return nil
-	}
+	})
 }
 
 func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMessage {
@@ -112,9 +113,9 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *Instance) uponPrepareMsg() PipelineFunc {
+func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return func(signedMessage *proto.SignedMessage) error {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 		// Only 1 prepare per node per round is valid
 		if i.existingPrepareMsg(signedMessage) {
@@ -156,5 +157,5 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 			return nil
 		}
 		return nil
-	}
+	})
 }

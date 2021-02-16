@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
+
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -12,17 +15,17 @@ import (
 	"go.uber.org/zap"
 )
 
-func (i *Instance) changeRoundMsgPipeline() Pipeline {
-	return []PipelineFunc{
+func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
 		MsgTypeCheck(proto.RoundState_ChangeRound),
 		i.ValidateLambdas(),
 		i.ValidateRound(), // TODO - should we validate round? or maybe just higher round?
 		i.AuthMsg(),
-		i.validateChangeRoundMsg(),
-		i.addChangeRoundMessage(),
-		i.uponChangeRoundPartialQuorum(),
+		changeround.Validate(i.params),
+		changeround.AddChangeRoundMessage(i.logger, i.changeRoundMessages, i.State),
+		changeround.UponPartialQuorum(),
 		i.uponChangeRoundFullQuorum(),
-	}
+	)
 }
 
 /**
@@ -92,8 +95,8 @@ func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
 		bytes.Equal(data.PreparedValue, i.State.PreparedValue), nil
 }
 
-func (i *Instance) validateChangeRoundMsg() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) validateChangeRoundMsg() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		// msg.value holds the justification value in a change round message
 		if signedMessage.Message.Value != nil {
 			data := &proto.ChangeRoundData{}
@@ -122,6 +125,7 @@ func (i *Instance) validateChangeRoundMsg() PipelineFunc {
 			if err != nil {
 				return err
 			}
+
 			aggregated := pks.Aggregate()
 			res, err := data.VerifySig(aggregated)
 			if err != nil {
@@ -133,7 +137,7 @@ func (i *Instance) validateChangeRoundMsg() PipelineFunc {
 
 		}
 		return nil
-	}
+	})
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
@@ -207,61 +211,12 @@ func (i *Instance) uponChangeRoundTrigger() {
 	i.SetStage(proto.RoundState_ChangeRound)
 }
 
-func (i *Instance) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
-	// TODO - not sure the spec requires unique votes.
-	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	for _, signerID := range signedMessage.SignerIds {
-		if _, found := msgs[signerID]; found {
-			return true
-		}
-	}
-	return false
-}
-
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	// TODO - should we check the actual change round msg? what if there are no 2/3 change round with the same value?
 	msgs := i.changeRoundMessages.ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
 	return quorum, len(msgs), i.params.CommitteeSize()
-}
-
-func (i *Instance) addChangeRoundMessage() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
-		// TODO - if instance decidedChan should we process round change?
-		if i.State.Stage == proto.RoundState_Decided {
-			// TODO - can't get here, fails on round verification in pipeline
-			i.logger.Info("received change round after decision, sending decidedChan message")
-			return nil
-		}
-
-		// Only 1 prepare per node per round is valid
-		if i.existingChangeRoundMsg(signedMessage) {
-			return nil
-		}
-
-		// add to prepare messages
-		i.changeRoundMessages.AddMessage(signedMessage)
-		i.logger.Info("received valid change round message for round",
-			zap.String("ibft_id", signedMessage.SignersIdString()),
-			zap.Uint64("round", signedMessage.Message.Round))
-		return nil
-	}
-}
-
-/**
-upon receiving a set Frc of f + 1 valid ⟨ROUND-CHANGE, λi, rj, −, −⟩ messages such that:
-	∀⟨ROUND-CHANGE, λi, rj, −, −⟩ ∈ Frc : rj > ri do
-		let ⟨ROUND-CHANGE, hi, rmin, −, −⟩ ∈ Frc such that:
-			∀⟨ROUND-CHANGE, λi, rj, −, −⟩ ∈ Frc : rmin ≤ rj
-		ri ← rmin
-		set timer i to running and expire after t(ri)
-		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
-*/
-func (i *Instance) uponChangeRoundPartialQuorum() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
-		return nil // TODO
-	}
 }
 
 /**
@@ -273,9 +228,9 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 			let v such that v = inputValue i
 		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
 */
-func (i *Instance) uponChangeRoundFullQuorum() PipelineFunc {
+func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return func(signedMessage *proto.SignedMessage) error {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		if i.State.Stage == proto.RoundState_PrePrepare {
 			return nil // no reason to pre-prepare again
 		}
@@ -287,43 +242,47 @@ func (i *Instance) uponChangeRoundFullQuorum() PipelineFunc {
 		isLeader := i.IsLeader()
 
 		// change round if quorum reached
-		if quorum {
-			i.SetStage(proto.RoundState_PrePrepare)
-			i.logger.Info("change round quorum received.",
-				zap.Uint64("round", signedMessage.Message.Round),
-				zap.Bool("is_leader", isLeader),
-				zap.Bool("round_justified", justifyRound))
-
-			if isLeader && justifyRound {
-				var value []byte
-				highest, err := i.highestPrepared(signedMessage.Message.Round)
-				if err != nil {
-					return err
-				}
-				if highest != nil {
-					value = highest.PreparedValue
-					i.logger.Info("broadcasting pre-prepare as leader after round change with existing prepared", zap.Uint64("round", signedMessage.Message.Round))
-
-				} else {
-					value = i.State.InputValue
-					i.logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.Uint64("round", signedMessage.Message.Round))
-				}
-
-				// send pre-prepare msg
-				broadcastMsg := &proto.Message{
-					Type:   proto.RoundState_PrePrepare,
-					Round:  signedMessage.Message.Round,
-					Lambda: i.State.Lambda,
-					Value:  value,
-				}
-				if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-					i.logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
-					return err
-				}
-			}
+		if !quorum {
 			return nil
 		}
 
+		i.SetStage(proto.RoundState_PrePrepare)
+		i.logger.Info("change round quorum received.",
+			zap.Uint64("round", signedMessage.Message.Round),
+			zap.Bool("is_leader", isLeader),
+			zap.Bool("round_justified", justifyRound))
+
+		if !isLeader || !justifyRound {
+			return nil
+		}
+
+		highest, err := i.highestPrepared(signedMessage.Message.Round)
+		if err != nil {
+			return err
+		}
+
+		var value []byte
+		if highest != nil {
+			value = highest.PreparedValue
+			i.logger.Info("broadcasting pre-prepare as leader after round change with existing prepared", zap.Uint64("round", signedMessage.Message.Round))
+
+		} else {
+			value = i.State.InputValue
+			i.logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.Uint64("round", signedMessage.Message.Round))
+		}
+
+		// send pre-prepare msg
+		broadcastMsg := &proto.Message{
+			Type:   proto.RoundState_PrePrepare,
+			Round:  signedMessage.Message.Round,
+			Lambda: i.State.Lambda,
+			Value:  value,
+		}
+		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
+			i.logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
+			return err
+		}
+
 		return nil
-	}
+	})
 }

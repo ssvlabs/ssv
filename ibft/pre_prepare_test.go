@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/ibft/msgcont"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
@@ -15,8 +15,8 @@ import (
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
-		prePrepareMessages:  msgcont.NewMessagesContainer(),
-		changeRoundMessages: msgcont.NewMessagesContainer(),
+		prePrepareMessages:  msgcontinmem.New(),
+		changeRoundMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -66,7 +66,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, instance.uponPrePrepareMsg()(msg), "received un-justified pre-prepare message")
+	require.EqualError(t, instance.uponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
 	msg = signMsg(0, secretKeys[0], &proto.Message{
@@ -86,15 +86,15 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, instance.uponPrePrepareMsg()(msg))
+	require.NoError(t, instance.uponPrePrepareMsg().Run(msg))
 }
 
 func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
-		prePrepareMessages:  msgcont.NewMessagesContainer(),
-		prepareMessages:     msgcont.NewMessagesContainer(),
-		changeRoundMessages: msgcont.NewMessagesContainer(),
+		prePrepareMessages:  msgcontinmem.New(),
+		prepareMessages:     msgcontinmem.New(),
+		changeRoundMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -130,7 +130,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	instance.changeRoundMessages.AddMessage(msg)
 
 	// no quorum achieved, err
-	require.EqualError(t, instance.uponPrePrepareMsg()(msg), "received un-justified pre-prepare message")
+	require.EqualError(t, instance.uponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
 	msg = signMsg(2, secretKeys[2], &proto.Message{
@@ -139,14 +139,14 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Lambda: []byte("Lambda"),
 	})
 	instance.changeRoundMessages.AddMessage(msg)
-	require.NoError(t, instance.uponPrePrepareMsg()(msg))
+	require.NoError(t, instance.uponPrePrepareMsg().Run(msg))
 }
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
-		prePrepareMessages: msgcont.NewMessagesContainer(),
-		prepareMessages:    msgcont.NewMessagesContainer(),
+		prePrepareMessages: msgcontinmem.New(),
+		prepareMessages:    msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -173,21 +173,21 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err := instance.uponPrePrepareMsg()(msg)
+	err := instance.uponPrePrepareMsg().Run(msg)
 	require.NoError(t, err)
 	msgs := instance.prePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[1])
 	require.True(t, instance.State.Stage == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
-	err = instance.uponPrePrepareMsg()(msg)
+	err = instance.uponPrePrepareMsg().Run(msg)
 	require.NoError(t, err)
 }
 
 func TestValidatePrePrepareValue(t *testing.T) {
 	sks, nodes := generateNodes(4)
 	i := &Instance{
-		prePrepareMessages: msgcont.NewMessagesContainer(),
+		prePrepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -212,7 +212,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Signature: []byte{},
 		SignerIds: []uint64{},
 	}
-	err := i.validatePrePrepareMsg()(msg)
+	err := i.validatePrePrepareMsg().Run(msg)
 	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
 
 	// test > 1 signer
@@ -226,7 +226,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Signature: []byte{},
 		SignerIds: []uint64{1, 2},
 	}
-	err = i.validatePrePrepareMsg()(msg)
+	err = i.validatePrePrepareMsg().Run(msg)
 	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
 
 	msg = signMsg(1, sks[1], &proto.Message{
@@ -235,7 +235,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err = i.validatePrePrepareMsg()(msg)
+	err = i.validatePrePrepareMsg().Run(msg)
 	require.EqualError(t, err, "msg value is wrong")
 
 	msg = signMsg(2, sks[2], &proto.Message{
@@ -244,7 +244,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err = i.validatePrePrepareMsg()(msg)
+	err = i.validatePrePrepareMsg().Run(msg)
 	require.EqualError(t, err, "pre-prepare message sender is not the round's leader")
 
 	msg = signMsg(1, sks[1], &proto.Message{
@@ -253,14 +253,14 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = i.validatePrePrepareMsg()(msg)
+	err = i.validatePrePrepareMsg().Run(msg)
 	require.NoError(t, err)
 }
 
 func TestInstance_JustifyPrePrepare(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
-		changeRoundMessages: msgcont.NewMessagesContainer(),
+		changeRoundMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,

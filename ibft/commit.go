@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"go.uber.org/zap"
@@ -41,8 +42,8 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 	return ret, nil
 }
 
-func (i *Instance) commitMsgPipeline() Pipeline {
-	return []PipelineFunc{
+func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
 		MsgTypeCheck(proto.RoundState_Commit),
 		i.WaitForStage(),
 		i.ValidateLambdas(),
@@ -50,11 +51,11 @@ func (i *Instance) commitMsgPipeline() Pipeline {
 		i.AuthMsg(),
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
-	}
+	)
 }
 
-func (i *Instance) validateCommitMsg() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) validateCommitMsg() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
 		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
@@ -62,7 +63,7 @@ func (i *Instance) validateCommitMsg() PipelineFunc {
 		}
 
 		return nil
-	}
+	})
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
@@ -95,9 +96,9 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *Instance) uponCommitMsg() PipelineFunc {
+func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return func(signedMessage *proto.SignedMessage) error {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
 		if i.existingCommitMsg(signedMessage) {
 			return nil
@@ -124,5 +125,5 @@ func (i *Instance) uponCommitMsg() PipelineFunc {
 			i.stopRoundChangeTimer()
 		}
 		return nil
-	}
+	})
 }

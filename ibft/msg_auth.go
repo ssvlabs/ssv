@@ -5,14 +5,15 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 
 	"github.com/pkg/errors"
 )
 
 // WaitForStage waits until the current instance has the same state with signed message
-func (i *Instance) WaitForStage() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) WaitForStage() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		if i.State.Stage+1 >= signedMessage.Message.Type {
 			return nil
 		}
@@ -31,12 +32,12 @@ func (i *Instance) WaitForStage() PipelineFunc {
 		}
 
 		return nil
-	}
+	})
 }
 
 // ValidateLambdas validates current and previous lambdas
-func (i *Instance) ValidateLambdas() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) ValidateLambdas() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, i.State.Lambda) {
 			return errors.Errorf("message Lambda (%s) does not equal State Lambda (%s)", string(signedMessage.Message.Lambda), string(i.State.Lambda))
 		}
@@ -44,20 +45,20 @@ func (i *Instance) ValidateLambdas() PipelineFunc {
 			return errors.New("message previous Lambda does not equal State previous Lambda")
 		}
 		return nil
-	}
+	})
 }
 
-func (i *Instance) ValidateRound() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) ValidateRound() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		if i.State.Round != signedMessage.Message.Round {
 			return errors.Errorf("message round (%d) does not equal State round (%d)", signedMessage.Message.Round, i.State.Round)
 		}
 		return nil
-	}
+	})
 }
 
-func (i *Instance) AuthMsg() PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func (i *Instance) AuthMsg() pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		pks, err := i.params.PubKeysById(signedMessage.SignerIds)
 		if err != nil {
 			return err
@@ -83,14 +84,14 @@ func (i *Instance) AuthMsg() PipelineFunc {
 		}
 
 		return nil
-	}
+	})
 }
 
-func MsgTypeCheck(expected proto.RoundState) PipelineFunc {
-	return func(signedMessage *proto.SignedMessage) error {
+func MsgTypeCheck(expected proto.RoundState) pipeline.Pipeline {
+	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.Message.Type != expected {
 			return errors.New("message type is wrong")
 		}
 		return nil
-	}
+	})
 }

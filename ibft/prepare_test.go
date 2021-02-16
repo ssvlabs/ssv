@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/ibft/msgcont"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
@@ -15,7 +15,7 @@ import (
 func TestPrepareQuorum(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcont.NewMessagesContainer(),
+		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -90,8 +90,8 @@ func TestPrepareQuorum(t *testing.T) {
 func TestValidatePrepareMsg(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	instance := &Instance{
-		prepareMessages:    msgcont.NewMessagesContainer(),
-		prePrepareMessages: msgcont.NewMessagesContainer(),
+		prepareMessages:    msgcontinmem.New(),
+		prePrepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -110,7 +110,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, instance.validatePrepareMsg()(msg), "no pre-prepare value found for round 2")
+	require.EqualError(t, instance.validatePrepareMsg().Run(msg), "no pre-prepare value found for round 2")
 
 	// test invalid prepare value
 	msg = signMsg(2, secretKeys[2], &proto.Message{
@@ -127,7 +127,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("invalid"),
 	})
-	require.EqualError(t, instance.validatePrepareMsg()(msg), "pre-prepare value not equal to prepare msg value")
+	require.EqualError(t, instance.validatePrepareMsg().Run(msg), "pre-prepare value not equal to prepare msg value")
 
 	// test valid prepare value
 	msg = signMsg(1, secretKeys[1], &proto.Message{
@@ -136,13 +136,13 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, instance.validatePrepareMsg()(msg))
+	require.NoError(t, instance.validatePrepareMsg().Run(msg))
 }
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := generateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcont.NewMessagesContainer(),
+		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -211,7 +211,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := generateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcont.NewMessagesContainer(),
+		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
