@@ -151,7 +151,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: ssv_node_2
+              key: ssv_node_3
         - name: VALIDATOR_KEY
           valueFrom:
             secretKeyRef:
