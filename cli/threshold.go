@@ -36,7 +36,7 @@ var createThresholdCmd = &cobra.Command{
 			Logger.Fatal("failed to turn a private key into a threshold key", zap.Error(err))
 		}
 
-		//todo: export to json file
+		// TODO: export to json file
 		fmt.Println("Generating threshold keys for validator", baseKey.GetPublicKey().SerializeToHexStr())
 		for i, pk := range privKeys {
 			fmt.Println()

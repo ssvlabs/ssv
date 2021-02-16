@@ -42,7 +42,6 @@ var exportKeysCmd = &cobra.Command{
 
 		fmt.Println("Private Key:", hex.EncodeToString(key.Marshal()))
 		fmt.Println("Public Key:", hex.EncodeToString(key.PublicKey().Marshal()))
-
 	},
 }
 
