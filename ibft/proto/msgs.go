@@ -66,7 +66,8 @@ func (msg *SignedMessage) VerifySig(pk *bls.PublicKey) (bool, error) {
 	return sig.VerifyByte(pk, root), nil
 }
 
-func (msg *SignedMessage) SignersIdString() string {
+// SignersIDString returns all Signer's Ids as string
+func (msg *SignedMessage) SignersIDString() string {
 	ret := ""
 	for _, i := range msg.SignerIds {
 		ret = fmt.Sprintf("%s, %d", ret, i)
@@ -74,6 +75,7 @@ func (msg *SignedMessage) SignersIdString() string {
 	return ret
 }
 
+// Aggregate serialize and aggregates signature and signer Id to signed message
 func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 	// verify same message
 	root, err := msg.Message.SigningRoot()
@@ -90,8 +92,8 @@ func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 
 	// verify not already aggregated
 	for _, id := range msg.SignerIds {
-		for _, otherId := range other.SignerIds {
-			if id == otherId {
+		for _, otherID := range other.SignerIds {
+			if id == otherID {
 				return errors.New("can't aggregate messages with similar signers")
 			}
 		}
@@ -112,6 +114,7 @@ func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 	return nil
 }
 
+// DeepCopy checks marshalling of SignedMessage and returns it
 func (msg *SignedMessage) DeepCopy() (*SignedMessage, error) {
 	byts, err := json.Marshal(msg)
 	if err != nil {
@@ -125,7 +128,7 @@ func (msg *SignedMessage) DeepCopy() (*SignedMessage, error) {
 	return ret, nil
 }
 
-// VerifySig returns true if the justification signed msg verifies against the public key, false if otherwise
+// VerifySig returns true if the justification signed msg verifies against the public key, false otherwise
 func (d *ChangeRoundData) VerifySig(pk bls.PublicKey) (bool, error) {
 	root, err := d.JustificationMsg.SigningRoot()
 	if err != nil {
