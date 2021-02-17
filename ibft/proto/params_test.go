@@ -40,19 +40,19 @@ func TestPubKeysById(t *testing.T) {
 	}
 
 	// test single
-	pks, err := params.PubKeysById([]uint64{0})
+	pks, err := params.PubKeysByID([]uint64{0})
 	require.NoError(t, err)
 	require.Len(t, pks, 1)
 	require.EqualValues(t, pks[0].Serialize(), secretKeys[0].GetPublicKey().Serialize())
 
 	// test multiple
-	pks, err = params.PubKeysById([]uint64{0, 1})
+	pks, err = params.PubKeysByID([]uint64{0, 1})
 	require.NoError(t, err)
 	require.Len(t, pks, 2)
 	require.EqualValues(t, pks[0].Serialize(), secretKeys[0].GetPublicKey().Serialize())
 	require.EqualValues(t, pks[1].Serialize(), secretKeys[1].GetPublicKey().Serialize())
 
 	// test multiple with invalid
-	pks, err = params.PubKeysById([]uint64{0, 5})
+	pks, err = params.PubKeysByID([]uint64{0, 5})
 	require.EqualError(t, err, "pk for id not found")
 }

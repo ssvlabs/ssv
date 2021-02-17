@@ -47,6 +47,7 @@ func (i *Instance) ValidateLambdas() PipelineFunc {
 	}
 }
 
+// ValidateRound validates the message round against the State round
 func (i *Instance) ValidateRound() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if i.State.Round != signedMessage.Message.Round {
@@ -56,9 +57,10 @@ func (i *Instance) ValidateRound() PipelineFunc {
 	}
 }
 
+// AuthMsg verifies message signature against SignerIds
 func (i *Instance) AuthMsg() PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
-		pks, err := i.params.PubKeysById(signedMessage.SignerIds)
+		pks, err := i.params.PubKeysByID(signedMessage.SignerIds)
 		if err != nil {
 			return err
 		}
@@ -86,6 +88,7 @@ func (i *Instance) AuthMsg() PipelineFunc {
 	}
 }
 
+// MsgTypeCheck checks message type against Round State type
 func MsgTypeCheck(expected proto.RoundState) PipelineFunc {
 	return func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.Message.Type != expected {

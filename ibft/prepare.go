@@ -124,7 +124,7 @@ func (i *Instance) uponPrepareMsg() PipelineFunc {
 		// add to prepare messages
 		i.prepareMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid prepare message from round",
-			zap.String("sender_ibft_id", signedMessage.SignersIdString()),
+			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.

@@ -7,8 +7,10 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
+// PubKeys defines the type for public keys object representation
 type PubKeys []*bls.PublicKey
 
+// Aggregate iterates over public keys and adds them to the bls PublicKey
 func (keys PubKeys) Aggregate() bls.PublicKey {
 	ret := bls.PublicKey{}
 	for _, k := range keys {
@@ -17,18 +19,20 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 	return ret
 }
 
+//DefaultConsensusParams returns the default round change duration time
 func DefaultConsensusParams() *ConsensusParams {
 	return &ConsensusParams{
 		RoundChangeDuration: int64(time.Second * 5),
 	}
 }
 
+// CommitteeSize returns the IBFT committee size
 func (p *InstanceParams) CommitteeSize() int {
 	return len(p.IbftCommittee)
 }
 
-// PubKeysById returns the public keys with the associated ids
-func (p *InstanceParams) PubKeysById(ids []uint64) (PubKeys, error) {
+// PubKeysByID returns the public keys with the associated ids
+func (p *InstanceParams) PubKeysByID(ids []uint64) (PubKeys, error) {
 	ret := make([]*bls.PublicKey, 0)
 	for _, id := range ids {
 		if val, ok := p.IbftCommittee[id]; ok {

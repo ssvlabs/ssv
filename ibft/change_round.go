@@ -118,7 +118,7 @@ func (i *Instance) validateChangeRoundMsg() PipelineFunc {
 
 			// validate signature
 			// TODO - validate signed ids are unique
-			pks, err := i.params.PubKeysById(data.SignerIds)
+			pks, err := i.params.PubKeysByID(data.SignerIds)
 			if err != nil {
 				return err
 			}
@@ -243,7 +243,7 @@ func (i *Instance) addChangeRoundMessage() PipelineFunc {
 		// add to prepare messages
 		i.changeRoundMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid change round message for round",
-			zap.String("ibft_id", signedMessage.SignersIdString()),
+			zap.String("ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 		return nil
 	}
