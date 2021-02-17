@@ -3,15 +3,16 @@ package ibft
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/ibft/msgcont"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/stretchr/testify/require"
+
+	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 func TestCommittedAggregatedMsg(t *testing.T) {
 	sks, nodes := generateNodes(4)
 	instance := &Instance{
-		commitMessages: msgcont.NewMessagesContainer(),
+		commitMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,

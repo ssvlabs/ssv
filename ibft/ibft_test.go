@@ -20,7 +20,7 @@ func TestIBFT(t *testing.T) {
 		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
 	}
-	instances := make([]*IBFT, 0)
+	instances := make([]IBFT, 0)
 
 	for i := 0; i < params.CommitteeSize(); i++ {
 		me := &proto.Node{
@@ -62,7 +62,7 @@ func TestIBFT(t *testing.T) {
 				replay := local.NewIBFTReplay(nodes)
 				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.String("id", newId), zap.String("prev_id", instanceIdentifier))
 				for _, i := range instances {
-					i.network = replay.Network
+					i.(*ibftImpl).network = replay.Network
 					go i.StartInstance(opts)
 				}
 				instanceIdentifier = newId

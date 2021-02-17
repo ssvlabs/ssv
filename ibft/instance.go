@@ -5,16 +5,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/msgqueue"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-
-	"github.com/bloxapp/ssv/ibft/msgcont"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/msgcont"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/msgqueue"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/dataval"
 )
@@ -43,10 +41,10 @@ type Instance struct {
 
 	// messages
 	msgQueue            *msgqueue.MessageQueue
-	prePrepareMessages  *msgcont.MessagesContainer
-	prepareMessages     *msgcont.MessagesContainer
-	commitMessages      *msgcont.MessagesContainer
-	changeRoundMessages *msgcont.MessagesContainer
+	prePrepareMessages  msgcont.MessageContainer
+	prepareMessages     msgcont.MessageContainer
+	commitMessages      msgcont.MessageContainer
+	changeRoundMessages msgcont.MessageContainer
 
 	// channels
 	changeRoundChan       chan bool
@@ -76,10 +74,10 @@ func NewInstance(opts InstanceOptions) *Instance {
 		msgLock:   sync.Mutex{},
 
 		msgQueue:            msgqueue.New(),
-		prePrepareMessages:  msgcont.NewMessagesContainer(),
-		prepareMessages:     msgcont.NewMessagesContainer(),
-		commitMessages:      msgcont.NewMessagesContainer(),
-		changeRoundMessages: msgcont.NewMessagesContainer(),
+		prePrepareMessages:  msgcontinmem.New(),
+		prepareMessages:     msgcontinmem.New(),
+		commitMessages:      msgcontinmem.New(),
+		changeRoundMessages: msgcontinmem.New(),
 
 		changeRoundChan: make(chan bool),
 	}

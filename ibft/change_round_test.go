@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bloxapp/ssv/ibft/proto"
-
-	"github.com/bloxapp/ssv/ibft/msgcont"
+	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"github.com/stretchr/testify/require"
+
+	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
@@ -35,7 +35,7 @@ func signMsg(id uint64, secretKey *bls.SecretKey, msg *proto.Message) *proto.Sig
 func TestRoundChangeInputValue(t *testing.T) {
 	secretKey, nodes := generateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcont.NewMessagesContainer(),
+		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -351,7 +351,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			signature, err := test.msg.Sign(secretKeys[test.signerId])
 			require.NoError(t, err)
 
-			err = instance.validateChangeRoundMsg()(&proto.SignedMessage{
+			err = changeround.Validate(instance.params).Run(&proto.SignedMessage{
 				Message:   test.msg,
 				Signature: signature.Serialize(),
 				SignerIds: []uint64{test.signerId},
@@ -372,7 +372,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	instance := &Instance{
-		changeRoundMessages: msgcont.NewMessagesContainer(),
+		changeRoundMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee: map[uint64]*proto.Node{
@@ -427,7 +427,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res)
 
-	instance.changeRoundMessages = msgcont.NewMessagesContainer()
+	instance.changeRoundMessages = msgcontinmem.New()
 	instance.changeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
@@ -474,7 +474,7 @@ func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
 	instance := &Instance{
-		changeRoundMessages: msgcont.NewMessagesContainer(),
+		changeRoundMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee: map[uint64]*proto.Node{
@@ -511,7 +511,7 @@ func TestHighestPrepared(t *testing.T) {
 	})
 
 	// test one higher than other
-	res, err := instance.highestPrepared(3)
+	res, err := highestPrepared(3, instance.changeRoundMessages)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
@@ -529,7 +529,7 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		SignerIds: []uint64{2},
 	})
-	res, err = instance.highestPrepared(3)
+	res, err = highestPrepared(3, instance.changeRoundMessages)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
