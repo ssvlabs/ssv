@@ -3,9 +3,10 @@ package ibft
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/stretchr/testify/require"
 )
 
 func TestCommittedAggregatedMsg(t *testing.T) {
