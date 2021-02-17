@@ -41,7 +41,7 @@ func (p *addChangeRoundMessage) Run(signedMessage *proto.SignedMessage) error {
 	// add to prepare messages
 	p.changeRoundMessages.AddMessage(signedMessage)
 	p.logger.Info("received valid change round message for round",
-		zap.String("ibft_id", signedMessage.SignersIdString()),
+		zap.String("ibft_id", signedMessage.SignersIDString()),
 		zap.Uint64("round", signedMessage.Message.Round))
 
 	return nil
