@@ -16,6 +16,7 @@ const (
 	FirstInstanceIdentifier = ""
 )
 
+// StartOptions defines type for IBFT instance options
 type StartOptions struct {
 	Logger       *zap.Logger
 	Consensus    dataval.Validator
@@ -52,9 +53,9 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	// If previous instance didn't decide, can't start another instance.
-	prevId := hex.EncodeToString(opts.PrevInstance)
-	if prevId != FirstInstanceIdentifier {
-		instance, found := i.instances[prevId]
+	prevID := hex.EncodeToString(opts.PrevInstance)
+	if prevID != FirstInstanceIdentifier {
+		instance, found := i.instances[prevID]
 		if !found {
 			opts.Logger.Fatal("previous instance not found")
 		}

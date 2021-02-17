@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/utils/dataval"
 )
 
+// InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
 	Logger         *zap.Logger
 	Me             *proto.Node
@@ -27,6 +28,7 @@ type InstanceOptions struct {
 	PreviousLambda []byte
 }
 
+// Instance defines the instance attributes
 type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
@@ -82,7 +84,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 }
 
 /**
-### Algorithm 1 IBFT pseudocode for process pi: constants, State variables, and ancillary procedures
+// Start implements the Algorithm 1 IBFT pseudocode for process pi: constants, State variables, and ancillary procedures
  procedure Start(λ, value)
  	λi ← λ
  	ri ← 1
@@ -91,7 +93,7 @@ func NewInstance(opts InstanceOptions) *Instance {
  	inputV aluei ← value
  	if leader(hi, ri) = pi then
  		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
- 		set timeri to running and expire after t(ri)
+ 		set timer to running and expire after t(ri)
 */
 func (i *Instance) Start(inputValue []byte) {
 	if i.State.Lambda == nil {
@@ -125,10 +127,12 @@ func (i *Instance) Start(inputValue []byte) {
 	i.triggerRoundChangeOnTimer()
 }
 
+// Stage returns the instance message state
 func (i *Instance) Stage() proto.RoundState {
 	return i.State.Stage
 }
 
+// BumpRound is used to set round in the instance's queue - the message broker
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
 	i.msgQueue.SetRound(round)
@@ -149,6 +153,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	}
 }
 
+// GetStageChan returns a RoundState channel added to the stateChangesChans array
 func (i *Instance) GetStageChan() chan proto.RoundState {
 	ch := make(chan proto.RoundState)
 	i.stageChangedChansLock.Lock()
@@ -205,6 +210,7 @@ func (i *Instance) StartMessagePipeline() {
 	}()
 }
 
+// SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
@@ -239,6 +245,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	return nil
 }
 
+// Cleanup -- TODO: describe
 func (i *Instance) Cleanup() {
 	// TODO: Implement
 }

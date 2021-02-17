@@ -40,6 +40,7 @@ func (i *Instance) validatePrePrepareMsg() pipeline.Pipeline {
 }
 
 /**
+// JustifyPrePrepare -- TODO
 predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
 	return
 		round = 1
@@ -60,6 +61,7 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 	return false, nil
 }
 
+// PrePrepareValue checks round and returns message value
 func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
 	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(round)
 	if msg, found := msgs[i.RoundLeader(round)]; found {
@@ -93,7 +95,7 @@ func (i *Instance) uponPrePrepareMsg() pipeline.Pipeline {
 		// add to pre-prepare messages
 		i.prePrepareMessages.AddMessage(signedMessage)
 		i.logger.Info("received valid pre-prepare message for round",
-			zap.String("sender_ibft_id", signedMessage.SignersIdString()),
+			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// Pre-prepare justification
