@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
@@ -44,11 +45,11 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 
 func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		MsgTypeCheck(proto.RoundState_Prepare),
 		i.WaitForStage(),
-		i.ValidateLambdas(),
-		i.ValidateRound(),
-		i.AuthMsg(),
+		auth.MsgTypeCheck(proto.RoundState_Prepare),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.AuthMsg(i.params),
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	)

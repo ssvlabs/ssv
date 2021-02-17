@@ -5,16 +5,17 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		MsgTypeCheck(proto.RoundState_PrePrepare),
 		i.WaitForStage(),
-		i.ValidateLambdas(),
-		i.ValidateRound(),
-		i.AuthMsg(),
+		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.AuthMsg(i.params),
 		i.validatePrePrepareMsg(),
 		i.uponPrePrepareMsg(),
 	)

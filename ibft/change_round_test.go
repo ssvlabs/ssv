@@ -511,7 +511,7 @@ func TestHighestPrepared(t *testing.T) {
 	})
 
 	// test one higher than other
-	res, err := instance.highestPrepared(3)
+	res, err := highestPrepared(3, instance.changeRoundMessages)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
@@ -529,7 +529,7 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		SignerIds: []uint64{2},
 	})
-	res, err = instance.highestPrepared(3)
+	res, err = highestPrepared(3, instance.changeRoundMessages)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)

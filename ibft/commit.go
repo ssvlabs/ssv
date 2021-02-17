@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/proto"
-
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
@@ -44,11 +45,11 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		MsgTypeCheck(proto.RoundState_Commit),
 		i.WaitForStage(),
-		i.ValidateLambdas(),
-		i.ValidateRound(),
-		i.AuthMsg(),
+		auth.MsgTypeCheck(proto.RoundState_Commit),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.AuthMsg(i.params),
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
 	)
