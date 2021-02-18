@@ -10,7 +10,7 @@ import (
 // AuthMsg is the pipeline to authorize message
 func AuthMsg(params *proto.InstanceParams) pipeline.Pipeline {
 	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
-		pks, err := params.PubKeysById(signedMessage.SignerIds)
+		pks, err := params.PubKeysByID(signedMessage.SignerIds)
 		if err != nil {
 			return err
 		}

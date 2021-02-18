@@ -50,7 +50,7 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 
 	// validate signature
 	// TODO - validate signed ids are unique
-	pks, err := p.params.PubKeysById(data.SignerIds)
+	pks, err := p.params.PubKeysByID(data.SignerIds)
 	if err != nil {
 		return err
 	}
