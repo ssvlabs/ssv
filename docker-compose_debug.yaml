@@ -1,0 +1,48 @@
+version: '3.5'
+
+services:
+  ssv-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.debug
+    command: "--listen=:2345 --headless=true --log=true --log-output=debugger,debuglineerr,gdbwire,lldbout,rpc --accept-multiclient --api-version=2 exec ./cmd/ssvnode -- start-node --node-id=1 --leader-id=1 --private-key=${SSV_NODE_1} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}"
+    environment:
+      DOCKER_COMPOSE: "true"
+      PUBKEY_NODE_2: "a833135e368cf9c90efbe17a7d4ca33772ef7c27a9ff1b818b5070e496be8e18bd921f8912521dce91556bab1263992f"
+      PUBKEY_NODE_3: "85ee43bbab6f09704a4c18ed24431ef84c528f2d7d3910c214c8a7638453e2bc487d62f046d8ba04fff5cf302d1e0622"
+    ports:
+      - "2345:2345"
+      - "40000:40000"
+      - "9191:9090"
+    security_opt:
+      - "seccomp:unconfined"
+    networks:
+      - bloxapp-docker
+    volumes:
+      - ./:/cmd/ssvnode
+    restart: always
+  ssv-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "start-node"
+      - "--node-id=2"
+      - "--leader-id=1"
+      - "--private-key=${SSV_NODE_2}"
+      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
+      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
+      - "--network=${NETWORK}"
+      - "--val=${CONSENSUS_TYPE}"
+    environment:
+      DOCKER_COMPOSE: "true"
+      PUBKEY_NODE_1: "834c57dd7f9893a5a3266dabc4808509c758ce63e8822a543f73e9c274ca095efdc6f31b9dbd4ce4576747c266473d3b"
+      PUBKEY_NODE_3: "85ee43bbab6f09704a4c18ed24431ef84c528f2d7d3910c214c8a7638453e2bc487d62f046d8ba04fff5cf302d1e0622"
+    networks:
+      - bloxapp-docker
+    restart: always
+
+networks:
+  bloxapp-docker:
+    driver: bridge
+    name: bloxapp-docker
