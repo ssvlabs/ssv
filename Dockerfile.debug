@@ -55,7 +55,7 @@ COPY ./cmd/ssvnode/main.go .
 ENTRYPOINT ["/go/bin/ssvnode"]
 
 # Copy Delve debugger to ssvnode path
-FROM scratch
+FROM debugger
 COPY --from=debugger go/bin/dlv /dlv
 ENTRYPOINT ["/dlv"]
 
