@@ -1,7 +1,7 @@
 version: '3.5'
 
 services:
-  ssv-node-1:
+  ssv-node-debug:
     build:
       context: .
       dockerfile: Dockerfile.debug
@@ -20,7 +20,7 @@ services:
     volumes:
       - ./:/cmd/ssvnode
     restart: always
-  ssv-node-2:
+  ssv-node-1:
     build:
       context: .
       dockerfile: Dockerfile
@@ -40,6 +40,26 @@ services:
     networks:
       - bloxapp-docker
     restart: always
+  ssv-node-2:
+      build:
+        context: .
+        dockerfile: Dockerfile
+      command:
+        - "start-node"
+        - "--node-id=3"
+        - "--leader-id=1"
+        - "--private-key=${SSV_NODE_3}"
+        - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
+        - "--beacon-node-addr=${BEACON_NODE_ADDR}"
+        - "--network=${NETWORK}"
+        - "--val=${CONSENSUS_TYPE}"
+      environment:
+        DOCKER_COMPOSE: "true"
+        PUBKEY_NODE_1: "89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"
+        PUBKEY_NODE_2: "98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"
+      networks:
+        - bloxapp-docker
+      restart: always
 
 networks:
   bloxapp-docker:
