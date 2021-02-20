@@ -14,7 +14,6 @@ bin = "tmp/cmd/ssvnode"
 # Customize binary.
 # This is how you start to run your application. Since my application will works like CLI, so to run it, like to make a CLI call.
 full_bin = "./tmp/cmd/ssvnode start-node -node-id=1 --private-key=${SSV_NODE_1} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}"
-#full_bin = "docker run start-node -node-id=1 --private-key=${SSV_NODE_1} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}"
 
 # This log file places in your tmp_dir.
 log = "air_errors.log"

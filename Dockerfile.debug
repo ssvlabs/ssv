@@ -58,6 +58,3 @@ ENTRYPOINT ["/go/bin/ssvnode"]
 FROM debugger
 COPY --from=debugger go/bin/dlv /dlv
 ENTRYPOINT ["/dlv"]
-
-
-
