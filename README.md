@@ -87,3 +87,14 @@ $ docker-compose build
 # Run nodes
 $ docker-compose up -d
 ```    
+
+### Contribute
+#### Debug(TODO)
+#### Lint
+```bash 
+# install linter
+$ make lint-prepare
+
+# Run nodes
+$ make lint
+```
