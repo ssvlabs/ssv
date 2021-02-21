@@ -462,11 +462,12 @@ linters:
     - gocyclo
     - goconst
     - unconvert
+    - gosec
 
 #  disable:
 #    - maligned
 #    - prealloc
-#  disable-all: false
+  disable-all: false
 #  presets:
 #    - bugs
 #    - unused
