@@ -86,7 +86,7 @@ validator's private key. All needed parameters can be found in `docker-compose.y
 # Run 3 nodes (prod mode)
 $ make docker
 
-# Run 3 nodes (debug & hot reload mode) 
+# Run 3 nodes (debug & live reload mode) 
 $ make docker-debug
 ```    
 
