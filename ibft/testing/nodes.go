@@ -8,7 +8,7 @@ import (
 
 // GenerateNodes generates randomly nodes
 func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
-	bls.Init(bls.BLS12_381)
+	_ = bls.Init(bls.BLS12_381)
 	nodes := make(map[uint64]*proto.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
