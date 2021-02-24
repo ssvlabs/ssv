@@ -69,14 +69,14 @@ NODES="ssv-node-1 ssv-node-2 ssv-node-3"
 .PHONY: docker
 docker:
 	@echo "nodes $(NODES)"
-	@docker-compose -f docker-compose-debug.yaml up --build "$(NODES)"
+	@docker-compose up --build "$(NODES)"
 
 DEBUG_NODES="ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev"
 
 .PHONY: docker-debug
 docker-debug:
-	@docker-compose -f docker-compose-debug.yaml up --build "$(DEBUG_NODES)"
+	@docker-compose up --build "$(DEBUG_NODES)"
 
 .PHONY: stop
 stop:
-	@docker-compose -f docker-compose-debug.yaml  down
+	@docker-compose  down
