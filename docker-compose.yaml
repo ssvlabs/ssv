@@ -1,68 +1,106 @@
 version: '3.5'
 
+x-base:
+  &default-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: ssvnode:latest
+  command: make BUILD_PATH=/go/bin/ssvnode start-node
+  networks:
+    - bloxapp-docker
+  restart: always
+
+x-base-dev:
+  &default-dev
+  << : *default-base
+  image: ssvnode-debug:latest
+  build:
+    context: .
+    dockerfile: dev.Dockerfile
+  command:  air
+  security_opt:
+    - "seccomp:unconfined"
+  cap_add:
+    - SYS_PTRACE
+  volumes:
+    - ./:/go/src/github.com/bloxapp/ssv
+
+
 services:
   ssv-node-1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command:
-      - "start-node"
-      - "--node-id=1"
-      - "--leader-id=1"
-      - "--private-key=${SSV_NODE_1}"
-      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
-      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
-      - "--network=${NETWORK}"
-      - "--val=${CONSENSUS_TYPE}"
+    <<: *default-base
+    container_name: ssv-node-1
     environment:
       DOCKER_COMPOSE: "true"
+      NODE_ID: 1
+      SSV_PRIVATE_KEY: ${SSV_NODE_1}
       PUBKEY_NODE_2: "98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"
       PUBKEY_NODE_3: "9492358822d8ac4e678a2aa500b7634495ef9efece3a787cd48efe97180f95dda537eaf34d412eb2c42ab2dcf9e1d165"
-    networks:
-      - bloxapp-docker
-    restart: always
 
   ssv-node-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command:
-      - "start-node"
-      - "--node-id=2"
-      - "--leader-id=1"
-      - "--private-key=${SSV_NODE_2}"
-      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
-      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
-      - "--network=${NETWORK}"
-      - "--val=${CONSENSUS_TYPE}"
+    <<: *default-base
+    container_name: ssv-node-2
     environment:
       DOCKER_COMPOSE: "true"
+      NODE_ID: 2
+      SSV_PRIVATE_KEY: ${SSV_NODE_2}
       PUBKEY_NODE_1: "89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"
       PUBKEY_NODE_3: "9492358822d8ac4e678a2aa500b7634495ef9efece3a787cd48efe97180f95dda537eaf34d412eb2c42ab2dcf9e1d165"
-    networks:
-      - bloxapp-docker
-    restart: always
 
   ssv-node-3:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command:
-      - "start-node"
-      - "--node-id=3"
-      - "--leader-id=1"
-      - "--private-key=${SSV_NODE_3}"
-      - "--validator-key=${VALIDATOR_PUBLIC_KEY}"
-      - "--beacon-node-addr=${BEACON_NODE_ADDR}"
-      - "--network=${NETWORK}"
-      - "--val=${CONSENSUS_TYPE}"
+    <<: *default-base
+    container_name: ssv-node-3
     environment:
       DOCKER_COMPOSE: "true"
+      NODE_ID: 3
+      SSV_PRIVATE_KEY: ${SSV_NODE_3}
       PUBKEY_NODE_1: "89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"
       PUBKEY_NODE_2: "98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"
-    networks:
-      - bloxapp-docker
-    restart: always
+
+
+  ssv-node-1-dev:
+    << : *default-dev
+    container_name: ssv-node-1-dev
+    ports:
+      - 40005:40005
+    environment:
+      BUILD_PATH: /bin/tmp/ssv
+      DOCKER_COMPOSE: "true"
+      NODE_ID: 1
+      SSV_PRIVATE_KEY: ${SSV_NODE_1}
+      PUBKEY_NODE_2: "98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"
+      PUBKEY_NODE_3: "9492358822d8ac4e678a2aa500b7634495ef9efece3a787cd48efe97180f95dda537eaf34d412eb2c42ab2dcf9e1d165"
+      DEBUG_PORT: 40005
+
+  ssv-node-2-dev:
+    << : *default-dev
+    container_name: ssv-node-2-dev
+    ports:
+      - 40006:40006
+    environment:
+      BUILD_PATH: /bin/tmp/ssv
+      DOCKER_COMPOSE: "true"
+      NODE_ID: 2
+      SSV_PRIVATE_KEY: ${SSV_NODE_2}
+      PUBKEY_NODE_1: "89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"
+      PUBKEY_NODE_3: "9492358822d8ac4e678a2aa500b7634495ef9efece3a787cd48efe97180f95dda537eaf34d412eb2c42ab2dcf9e1d165"
+      DEBUG_PORT: 40006
+
+  ssv-node-3-dev:
+    << : *default-dev
+    container_name: ssv-node-3-dev
+    ports:
+      - 40007:40007
+    environment:
+      BUILD_PATH: /bin/tmp/ssv
+      DOCKER_COMPOSE: "true"
+      NODE_ID: 3
+      SSV_PRIVATE_KEY: ${SSV_NODE_3}
+      PUBKEY_NODE_1: "89791f38daa4ba0288035e6e12f11dd7c6e68651f2ae81f40a5bc5002e32281cab7b16e0ce12084619a2ce3d23d9f357"
+      PUBKEY_NODE_2: "98090f5ace3818b27b6ea2d38524556ec8c39d568a1595adb00964415eae62998c12ef015eda17f8d590f22b1778ec02"
+      DEBUG_PORT: 40007
+
 
 networks:
   bloxapp-docker:

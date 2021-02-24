@@ -25,7 +25,7 @@ FROM preparer AS builder
 COPY . .
 
 RUN go get -d -v ./...
-RUN CGO_ENABLED=1 GOOS=linux go install -a -tags blst_enabled -ldflags "-linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
+RUN CGO_ENABLED=1 GOOS=linux go install -tags blst_enabled -ldflags "-linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
 
 #
 # STEP 3: Prepare image to run the binary
@@ -33,12 +33,14 @@ RUN CGO_ENABLED=1 GOOS=linux go install -a -tags blst_enabled -ldflags "-linkmod
 FROM alpine:3.12 AS runner
 
 # Install ca-certificates, bash
-RUN apk -v --update add ca-certificates bash && \
+RUN apk -v --update add ca-certificates bash make && \
     rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
+COPY ./Makefile .env* ./
+
 
 # Expose port for load balancing
 EXPOSE 5678
 
-ENTRYPOINT ["/go/bin/ssvnode"]
+#ENTRYPOINT ["/go/bin/ssvnode"]
