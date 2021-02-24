@@ -7,9 +7,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-// AuthMsg is the pipeline to authorize message
-func AuthMsg(params *proto.InstanceParams) pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+// AuthorizeMsg is the pipeline to authorize message
+func AuthorizeMsg(params *proto.InstanceParams) pipeline.Pipeline {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		pks, err := params.PubKeysByID(signedMessage.SignerIds)
 		if err != nil {
 			return err

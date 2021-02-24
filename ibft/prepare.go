@@ -49,14 +49,14 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
-		auth.AuthMsg(i.params),
+		auth.AuthorizeMsg(i.params),
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	)
 }
 
 func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// Validate we received a pre-prepare msg for this round and
 		// that it's value is equal to the prepare msg
 		val, err := i.PrePrepareValue(signedMessage.Message.Round)
@@ -116,7 +116,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 */
 func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
 		// Only 1 prepare per node per round is valid
 		if i.existingPrepareMsg(signedMessage) {

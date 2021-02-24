@@ -9,7 +9,7 @@ import (
 
 // MsgTypeCheck is the pipeline to check message type
 func MsgTypeCheck(expected proto.RoundState) pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.Message.Type != expected {
 			return errors.New("message type is wrong")
 		}

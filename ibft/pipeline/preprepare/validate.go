@@ -10,7 +10,7 @@ import (
 
 // ValidatePrePrepareMsg validates pre-prepare message
 func ValidatePrePrepareMsg(consensus dataval.Validator, state *proto.State, params *proto.InstanceParams) pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")
 		}

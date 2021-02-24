@@ -41,8 +41,8 @@ type pipelineFunc struct {
 	fn func(signedMessage *proto.SignedMessage) error
 }
 
-// PipelineFunc represents the given function as a pipeline implementor
-func PipelineFunc(fn func(signedMessage *proto.SignedMessage) error) Pipeline {
+// WrapFunc represents the given function as a pipeline implementor
+func WrapFunc(fn func(signedMessage *proto.SignedMessage) error) Pipeline {
 	return &pipelineFunc{
 		fn: fn,
 	}
