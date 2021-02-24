@@ -2,6 +2,12 @@ package pipeline
 
 import "github.com/bloxapp/ssv/ibft/proto"
 
+// SetStage sets the given stage
+type SetStage func(stage proto.RoundState)
+
+// SignAndBroadcast is the function to sign and broadcast message
+type SignAndBroadcast func(msg *proto.Message) error
+
 // Pipeline represents the behavior of round pipeline
 type Pipeline interface {
 	// Run runs the pipeline

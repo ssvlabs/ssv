@@ -7,10 +7,11 @@ import (
 
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
 )
 
 func TestCommittedAggregatedMsg(t *testing.T) {
-	sks, nodes := generateNodes(4)
+	sks, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		commitMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
@@ -35,19 +36,19 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "no commit msgs")
 
 	// test valid aggregation
-	instance.commitMessages.AddMessage(signMsg(0, sks[0], &proto.Message{
+	instance.commitMessages.AddMessage(ibfttesting.SignMsg(0, sks[0], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.commitMessages.AddMessage(signMsg(1, sks[1], &proto.Message{
+	instance.commitMessages.AddMessage(ibfttesting.SignMsg(1, sks[1], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.commitMessages.AddMessage(signMsg(2, sks[2], &proto.Message{
+	instance.commitMessages.AddMessage(ibfttesting.SignMsg(2, sks[2], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),
@@ -60,7 +61,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{0, 1, 2}, msg.SignerIds)
 
 	// test that doesn't aggregate different value
-	instance.commitMessages.AddMessage(signMsg(3, sks[3], &proto.Message{
+	instance.commitMessages.AddMessage(ibfttesting.SignMsg(3, sks[3], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),

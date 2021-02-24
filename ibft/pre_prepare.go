@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/pipeline/preprepare"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -16,27 +17,9 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthMsg(i.params),
-		i.validatePrePrepareMsg(),
+		preprepare.ValidatePrePrepareMsg(i.consensus, i.State, i.params),
 		i.uponPrePrepareMsg(),
 	)
-}
-
-func (i *Instance) validatePrePrepareMsg() pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
-		if len(signedMessage.SignerIds) != 1 {
-			return errors.New("invalid number of signers for pre-prepare message")
-		}
-
-		if signedMessage.SignerIds[0] != i.ThisRoundLeader() {
-			return errors.New("pre-prepare message sender is not the round's leader")
-		}
-
-		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
-			return err
-		}
-
-		return nil
-	})
 }
 
 /**

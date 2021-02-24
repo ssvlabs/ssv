@@ -1,6 +1,7 @@
 version: '3.5'
 
 services:
+
   ssv-node-debug:
     build:
       context: .
@@ -20,6 +21,7 @@ services:
     volumes:
       - ./:/cmd/ssvnode
     restart: always
+
   ssv-node-1:
     build:
       context: .
@@ -40,6 +42,7 @@ services:
     networks:
       - bloxapp-docker
     restart: always
+
   ssv-node-2:
       build:
         context: .
