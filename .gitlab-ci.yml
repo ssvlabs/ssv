@@ -9,6 +9,7 @@ variables:
 
   #GLOBAL
   IMAGE_NAME: ssv-node
+  GO_IMAGE: golang:1.15
 
   #STAGE
   ACCOUNT_ID_INFRA_STAGE: 121827225315
@@ -27,6 +28,7 @@ variables:
 # Common pipelines
 Security check:
   stage: gosec
+  image: $GO_IMAGE
   tags:
     - blox-infra-stage
   script:
@@ -35,6 +37,7 @@ Security check:
 
 Run linter:
   stage: lint
+  image: $GO_IMAGE
   tags:
     - blox-infra-stage
   script:
@@ -44,6 +47,7 @@ Run linter:
 
 Run tests:
   stage: test
+  image: $GO_IMAGE
   tags:
     - blox-infra-stage
   script:
