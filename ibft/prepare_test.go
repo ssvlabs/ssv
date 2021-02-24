@@ -9,11 +9,12 @@ import (
 
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestPrepareQuorum(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
@@ -22,7 +23,7 @@ func TestPrepareQuorum(t *testing.T) {
 		},
 	}
 
-	msg := signMsg(0, secretKeys[0], &proto.Message{
+	msg := ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -30,7 +31,7 @@ func TestPrepareQuorum(t *testing.T) {
 	})
 	instance.prepareMessages.AddMessage(msg)
 
-	msg = signMsg(1, secretKeys[1], &proto.Message{
+	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -45,7 +46,7 @@ func TestPrepareQuorum(t *testing.T) {
 	require.EqualValues(t, committeeSize, 4)
 
 	// test adding different value
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -59,7 +60,7 @@ func TestPrepareQuorum(t *testing.T) {
 	require.EqualValues(t, committeeSize, 4)
 
 	// test adding different round
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  3,
 		Lambda: []byte("Lambda"),
@@ -73,7 +74,7 @@ func TestPrepareQuorum(t *testing.T) {
 	require.EqualValues(t, committeeSize, 4)
 
 	// test valid quorum
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -88,7 +89,7 @@ func TestPrepareQuorum(t *testing.T) {
 }
 
 func TestValidatePrepareMsg(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prepareMessages:    msgcontinmem.New(),
 		prePrepareMessages: msgcontinmem.New(),
@@ -104,7 +105,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 	}
 
 	// test no valid pre-prepare msg
-	msg := signMsg(1, secretKeys[1], &proto.Message{
+	msg := ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -113,7 +114,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 	require.EqualError(t, instance.validatePrepareMsg().Run(msg), "no pre-prepare value found for round 2")
 
 	// test invalid prepare value
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -121,7 +122,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 	})
 	instance.prePrepareMessages.AddMessage(msg)
 
-	msg = signMsg(1, secretKeys[1], &proto.Message{
+	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -130,7 +131,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 	require.EqualError(t, instance.validatePrepareMsg().Run(msg), "pre-prepare value not equal to prepare msg value")
 
 	// test valid prepare value
-	msg = signMsg(1, secretKeys[1], &proto.Message{
+	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -140,7 +141,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 }
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
-	_, nodes := generateNodes(4)
+	_, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
@@ -209,7 +210,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 }
 
 func TestPreparedAggregatedMsg(t *testing.T) {
-	sks, nodes := generateNodes(4)
+	sks, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
@@ -234,19 +235,19 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "no prepare msgs")
 
 	// test valid aggregation
-	instance.prepareMessages.AddMessage(signMsg(0, sks[0], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(0, sks[0], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.prepareMessages.AddMessage(signMsg(1, sks[1], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(1, sks[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.prepareMessages.AddMessage(signMsg(2, sks[2], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(2, sks[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
@@ -259,7 +260,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{0, 1, 2}, msg.SignerIds)
 
 	// test that doesn't aggregate different value
-	instance.prepareMessages.AddMessage(signMsg(3, sks[3], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(3, sks[3], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),

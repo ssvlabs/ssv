@@ -49,14 +49,14 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
-		auth.AuthMsg(i.params),
+		auth.AuthorizeMsg(i.params),
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
 	)
 }
 
 func (i *Instance) validateCommitMsg() pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
 		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
@@ -99,7 +99,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// Only 1 prepare per peer per round is valid
 		if i.existingCommitMsg(signedMessage) {
 			return nil

@@ -57,11 +57,11 @@ start-node:
 ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
-	 ${BUILD_PATH} start-node -- --node-id=${NODE_ID} --leader-id=1 --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}
+	 ${BUILD_PATH} start-node -- --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}
 
 else
 	@echo "Running node (${NODE_ID})"
-	${BUILD_PATH} start-node --node-id=${NODE_ID} --leader-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}
+	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}
 endif
 
 NODES="ssv-node-1 ssv-node-2 ssv-node-3"

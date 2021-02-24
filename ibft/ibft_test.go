@@ -8,13 +8,14 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/proto"
+	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestIBFT(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	replay := local.NewIBFTReplay(nodes)
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),

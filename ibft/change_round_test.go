@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	"github.com/bloxapp/ssv/ibft/proto"
+	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
 )
 
 func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
@@ -23,17 +23,8 @@ func bytesToChangeRoundData(input []byte) *proto.ChangeRoundData {
 	return ret
 }
 
-func signMsg(id uint64, secretKey *bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
-	signature, _ := msg.Sign(secretKey)
-	return &proto.SignedMessage{
-		Message:   msg,
-		Signature: signature.Serialize(),
-		SignerIds: []uint64{id},
-	}
-}
-
 func TestRoundChangeInputValue(t *testing.T) {
-	secretKey, nodes := generateNodes(4)
+	secretKey, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prepareMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
@@ -53,13 +44,13 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.Nil(t, byts)
 
 	// add votes
-	instance.prepareMessages.AddMessage(signMsg(1, secretKey[1], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(1, secretKey[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.prepareMessages.AddMessage(signMsg(2, secretKey[2], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(2, secretKey[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
@@ -72,7 +63,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.Nil(t, byts)
 
 	// add more votes
-	instance.prepareMessages.AddMessage(signMsg(3, secretKey[3], &proto.Message{
+	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(3, secretKey[3], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
@@ -102,7 +93,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 }
 
 func TestValidateChangeRoundMessage(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),

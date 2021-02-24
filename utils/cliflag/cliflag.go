@@ -16,7 +16,7 @@ func AddPersistentStringFlag(c *cobra.Command, flag string, value string, descri
 	c.PersistentFlags().String(flag, value, fmt.Sprintf("%s%s", description, req))
 
 	if isRequired {
-		c.MarkPersistentFlagRequired(flag)
+		_ = c.MarkPersistentFlagRequired(flag)
 	}
 }
 
@@ -30,6 +30,6 @@ func AddPersistentIntFlag(c *cobra.Command, flag string, value uint64, descripti
 	c.PersistentFlags().Uint64(flag, value, fmt.Sprintf("%s%s", description, req))
 
 	if isRequired {
-		c.MarkPersistentFlagRequired(flag)
+		_ = c.MarkPersistentFlagRequired(flag)
 	}
 }

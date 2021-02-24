@@ -6,6 +6,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/ibft/pipeline/preprepare"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
@@ -15,40 +16,20 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
-		auth.AuthMsg(i.params),
-		i.validatePrePrepareMsg(),
+		auth.AuthorizeMsg(i.params),
+		preprepare.ValidatePrePrepareMsg(i.consensus, i.State, i.params),
 		i.uponPrePrepareMsg(),
 	)
 }
 
-func (i *Instance) validatePrePrepareMsg() pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
-		if len(signedMessage.SignerIds) != 1 {
-			return errors.New("invalid number of signers for pre-prepare message")
-		}
-
-		if signedMessage.SignerIds[0] != i.ThisRoundLeader() {
-			return errors.New("pre-prepare message sender is not the round's leader")
-		}
-
-		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
-			return err
-		}
-
-		return nil
-	})
-}
-
-/**
 // JustifyPrePrepare -- TODO
-predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
-	return
-		round = 1
-		∨ received a quorum Qrc of valid <ROUND-CHANGE, λi, round, prj , pvj> messages such that:
-			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
-			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
-				(pr, value) = HighestPrepared(Qrc)
-*/
+// predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
+// 	return
+// 		round = 1
+// 		∨ received a quorum Qrc of valid <ROUND-CHANGE, λi, round, prj , pvj> messages such that:
+// 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
+// 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
+// 				(pr, value) = HighestPrepared(Qrc)
 func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 	if round == 1 {
 		return true, nil
@@ -86,7 +67,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
 func (i *Instance) uponPrePrepareMsg() pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPrePrepareMsg(signedMessage) {
 			return nil

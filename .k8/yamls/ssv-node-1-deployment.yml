@@ -39,14 +39,12 @@ spec:
       - name: ssv-node-1
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--leader-id=$(LEADER_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
+        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
         ports:
         - containerPort: 5678
           name: port-5678
         env:
         - name: NODE_ID
-          value: "1"
-        - name: LEADER_ID
           value: "1"
         - name: PRIVATE_KEY
           valueFrom:
@@ -80,15 +78,13 @@ spec:
       - name: ssv-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--leader-id=$(LEADER_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
+        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
         ports:
         - containerPort: 5678
           name: port-5678
         env:
         - name: NODE_ID
           value: "2"
-        - name: LEADER_ID
-          value: "1"
         - name: PRIVATE_KEY
           valueFrom:
             secretKeyRef:
@@ -121,15 +117,13 @@ spec:
       - name: ssv-node-3
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--leader-id=$(LEADER_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
+        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
         ports:
         - containerPort: 5678
           name: port-5678
         env:
         - name: NODE_ID
           value: "3"
-        - name: LEADER_ID
-          value: "1"
         - name: PRIVATE_KEY
           valueFrom:
             secretKeyRef:

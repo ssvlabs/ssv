@@ -1,6 +1,6 @@
 stages:
-#  - gosec
-#  - lint
+  - gosec
+  - lint
 #  - test
   - build
   - deploy
@@ -9,6 +9,7 @@ variables:
 
   #GLOBAL
   IMAGE_NAME: ssv-node
+  GO_IMAGE: golang:1.15
 
   #STAGE
   ACCOUNT_ID_INFRA_STAGE: 121827225315
@@ -25,28 +26,28 @@ variables:
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
 
 # Common pipelines
-#Security check:
-#  stage: gosec
-#  image: $STAGE_GO_IMAGE
-#  tags:
-#    - blox-infra-stage
-#  script:
-#    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s v2.5.0
-#    - ./bin/gosec -exclude G404 ./...
+Security check:
+  stage: gosec
+  image: $GO_IMAGE
+  tags:
+    - blox-infra-stage
+  script:
+    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s v2.5.0
+    - ./bin/gosec -exclude G404 ./...
 
-#Run linter:
-#  stage: lint
-#  image: $STAGE_GO_IMAGE
-#  tags:
-#    - blox-infra-stage
-#  script:
-#    - go get -u golang.org/x/lint/golint
-#    - go get -u golang.org/x/tools/cmd/goimports
-#    - ./scripts/lint.sh .
+Run linter:
+  stage: lint
+  image: $GO_IMAGE
+  tags:
+    - blox-infra-stage
+  script:
+    - go get -u golang.org/x/lint/golint
+    - go get -u golang.org/x/tools/cmd/goimports
+    - ./scripts/lint.sh .
 
 #Run tests:
 #  stage: test
-#  image: $STAGE_GO_IMAGE
+#  image: $GO_IMAGE
 #  tags:
 #    - blox-infra-stage
 #  script:
