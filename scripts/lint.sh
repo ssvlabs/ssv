@@ -20,7 +20,7 @@ for PACKAGE in $PACKAGES; do
   golint -set_exit_status $FILES || RC=1
 
   echo "==> goimports $PACKAGE"
-  BADLY_FORMATTED=$(goimports -l -local "github.com/bloxapp/ssv" $PACKAGE || true)
+  BADLY_FORMATTED=$(goimports -l -local "github.com/bloxapp/ssv" $FILES || true)
   if [[ -n $BADLY_FORMATTED ]]; then
     RC=1
     echo "Error: These files are badly formatted: $BADLY_FORMATTED"
