@@ -9,11 +9,12 @@ import (
 
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prePrepareMessages:  msgcontinmem.New(),
 		changeRoundMessages: msgcontinmem.New(),
@@ -37,7 +38,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	}
 
 	// change round no quorum
-	msg := signMsg(0, secretKeys[0], &proto.Message{
+	msg := ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -48,7 +49,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	})
 	instance.changeRoundMessages.AddMessage(msg)
 
-	msg = signMsg(0, secretKeys[0], &proto.Message{
+	msg = ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -60,7 +61,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	instance.changeRoundMessages.AddMessage(msg)
 
 	// no quorum achieved, err
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -69,7 +70,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	require.EqualError(t, instance.uponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
-	msg = signMsg(0, secretKeys[0], &proto.Message{
+	msg = ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -80,7 +81,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	})
 	instance.changeRoundMessages.AddMessage(msg)
 
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -90,7 +91,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 }
 
 func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prePrepareMessages:  msgcontinmem.New(),
 		prepareMessages:     msgcontinmem.New(),
@@ -115,14 +116,14 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	}
 
 	// change round no quorum
-	msg := signMsg(0, secretKeys[0], &proto.Message{
+	msg := ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
 	})
 	instance.changeRoundMessages.AddMessage(msg)
 
-	msg = signMsg(1, secretKeys[1], &proto.Message{
+	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -133,7 +134,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	require.EqualError(t, instance.uponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
-	msg = signMsg(2, secretKeys[2], &proto.Message{
+	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
@@ -143,7 +144,7 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 }
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		prePrepareMessages: msgcontinmem.New(),
 		prepareMessages:    msgcontinmem.New(),
@@ -167,7 +168,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	}
 
 	// test happy flow
-	msg := signMsg(1, secretKeys[1], &proto.Message{
+	msg := ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
@@ -184,81 +185,8 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestValidatePrePrepareValue(t *testing.T) {
-	sks, nodes := generateNodes(4)
-	i := &Instance{
-		prePrepareMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
-		},
-		State: &proto.State{
-			Round:         1,
-			Lambda:        []byte("Lambda"),
-			PreparedRound: 0,
-			PreparedValue: nil,
-		},
-		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
-	}
-
-	// test no signer
-	msg := &proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_PrePrepare,
-			Round:  1,
-			Lambda: []byte("Lambda"),
-			Value:  []byte(time.Now().Weekday().String()),
-		},
-		Signature: []byte{},
-		SignerIds: []uint64{},
-	}
-	err := i.validatePrePrepareMsg().Run(msg)
-	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
-
-	// test > 1 signer
-	msg = &proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_PrePrepare,
-			Round:  1,
-			Lambda: []byte("Lambda"),
-			Value:  []byte(time.Now().Weekday().String()),
-		},
-		Signature: []byte{},
-		SignerIds: []uint64{1, 2},
-	}
-	err = i.validatePrePrepareMsg().Run(msg)
-	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
-
-	msg = signMsg(1, sks[1], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  1,
-		Lambda: []byte("Lambda"),
-		Value:  []byte("wrong value"),
-	})
-	err = i.validatePrePrepareMsg().Run(msg)
-	require.EqualError(t, err, "msg value is wrong")
-
-	msg = signMsg(2, sks[2], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  1,
-		Lambda: []byte("Lambda"),
-		Value:  []byte("wrong value"),
-	})
-	err = i.validatePrePrepareMsg().Run(msg)
-	require.EqualError(t, err, "pre-prepare message sender is not the round's leader")
-
-	msg = signMsg(1, sks[1], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  1,
-		Lambda: []byte("Lambda"),
-		Value:  []byte(time.Now().Weekday().String()),
-	})
-	err = i.validatePrePrepareMsg().Run(msg)
-	require.NoError(t, err)
-}
-
 func TestInstance_JustifyPrePrepare(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
+	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
 		changeRoundMessages: msgcontinmem.New(),
 		params: &proto.InstanceParams{
@@ -282,14 +210,14 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	instance.changeRoundMessages.AddMessage(signMsg(0, secretKeys[0], msg))
+	instance.changeRoundMessages.AddMessage(ibfttesting.SignMsg(0, secretKeys[0], msg))
 
 	msg = &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	instance.changeRoundMessages.AddMessage(signMsg(1, secretKeys[1], msg))
+	instance.changeRoundMessages.AddMessage(ibfttesting.SignMsg(1, secretKeys[1], msg))
 
 	res, err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
@@ -301,7 +229,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	instance.changeRoundMessages.AddMessage(signMsg(2, secretKeys[2], msg))
+	instance.changeRoundMessages.AddMessage(ibfttesting.SignMsg(2, secretKeys[2], msg))
 
 	res, err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)

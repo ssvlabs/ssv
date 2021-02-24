@@ -83,18 +83,16 @@ func NewInstance(opts InstanceOptions) *Instance {
 	}
 }
 
-/**
 // Start implements the Algorithm 1 IBFT pseudocode for process pi: constants, State variables, and ancillary procedures
- procedure Start(λ, value)
- 	λi ← λ
- 	ri ← 1
- 	pri ← ⊥
- 	pvi ← ⊥
- 	inputV aluei ← value
- 	if leader(hi, ri) = pi then
- 		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
- 		set timer to running and expire after t(ri)
-*/
+// procedure Start(λ, value)
+// 	λi ← λ
+// 	ri ← 1
+// 	pri ← ⊥
+// 	pvi ← ⊥
+// 	inputV aluei ← value
+// 	if leader(hi, ri) = pi then
+// 		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
+// 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) {
 	if i.State.Lambda == nil {
 		i.logger.Fatal("can't start instance with invalid Lambda")

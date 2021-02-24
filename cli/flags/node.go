@@ -27,16 +27,6 @@ func GetNodeIDKeyFlagValue(c *cobra.Command) (uint64, error) {
 	return c.Flags().GetUint64(nodeIDKeyFlag)
 }
 
-// AddLeaderIDKeyFlag adds the leader ID flag to the command
-func AddLeaderIDKeyFlag(c *cobra.Command) {
-	cliflag.AddPersistentIntFlag(c, leaderIDFlag, 0, "SSV node leader ID", true)
-}
-
-// GetLeaderIDKeyFlagValue gets the leader ID flag from the command
-func GetLeaderIDKeyFlagValue(c *cobra.Command) (uint64, error) {
-	return c.Flags().GetUint64(leaderIDFlag)
-}
-
 // AddValidatorKeyFlag adds the validator key flag to the command
 func AddValidatorKeyFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, validatorKeyFlag, "", "Hex encoded public key of the validator", true)

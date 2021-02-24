@@ -9,7 +9,7 @@ import (
 
 // WaitForStage waits until the current instance has the same state with signed message
 func (i *Instance) WaitForStage() pipeline.Pipeline {
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		if i.State.Stage+1 >= signedMessage.Message.Type {
 			return nil
 		}

@@ -21,7 +21,7 @@ func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State), // TODO - should we validate round? or maybe just higher round?
-		auth.AuthMsg(i.params),
+		auth.AuthorizeMsg(i.params),
 		changeround.Validate(i.params),
 		changeround.AddChangeRoundMessage(i.logger, i.changeRoundMessages, i.State),
 		changeround.UponPartialQuorum(),
@@ -40,7 +40,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 */
 func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return pipeline.PipelineFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		if i.State.Stage == proto.RoundState_PrePrepare {
 			return nil // no reason to pre-prepare again
 		}

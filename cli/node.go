@@ -29,12 +29,6 @@ var startNodeCmd = &cobra.Command{
 		}
 		logger := Logger.With(zap.Uint64("node_id", nodeID))
 
-		leaderID, err := flags.GetLeaderIDKeyFlagValue(cmd)
-		if err != nil {
-			logger.Fatal("failed to get leader ID flag value", zap.Error(err))
-		}
-		logger = logger.With(zap.Uint64("leader_id", leaderID))
-
 		network, err := flags.GetNetworkFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get network flag value", zap.Error(err))
@@ -144,7 +138,6 @@ func init() {
 	flags.AddNetworkFlag(startNodeCmd)
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
-	flags.AddLeaderIDKeyFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }
