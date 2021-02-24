@@ -27,7 +27,6 @@ variables:
 # Common pipelines
 Security check:
   stage: gosec
-  image: $STAGE_GO_IMAGE
   tags:
     - blox-infra-stage
   script:
@@ -36,7 +35,6 @@ Security check:
 
 Run linter:
   stage: lint
-  image: $STAGE_GO_IMAGE
   tags:
     - blox-infra-stage
   script:
@@ -46,7 +44,6 @@ Run linter:
 
 Run tests:
   stage: test
-  image: $STAGE_GO_IMAGE
   tags:
     - blox-infra-stage
   script:
