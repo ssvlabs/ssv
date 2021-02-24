@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="node-3" type="GoRemoteDebugConfigurationType" factoryName="Go Remote" port="40007">
+    <method v="2" />
+  </configuration>
+</component>
