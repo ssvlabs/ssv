@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/pipeline"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
@@ -14,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/msgqueue"
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/dataval"
