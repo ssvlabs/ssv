@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft/pipeline"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
@@ -181,31 +183,31 @@ func (i *Instance) StartEventLoop() {
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
-	go func() {
-		for {
-			msg := i.msgQueue.PopMessage()
-			if msg == nil {
-				time.Sleep(time.Millisecond * 100)
-				continue
-			}
-
-			var err error
-			switch msg.Message.Type {
-			case proto.RoundState_PrePrepare:
-				err = i.prePrepareMsgPipeline().Run(msg)
-			case proto.RoundState_Prepare:
-				err = i.prepareMsgPipeline().Run(msg)
-			case proto.RoundState_Commit:
-				err = i.commitMsgPipeline().Run(msg)
-			case proto.RoundState_ChangeRound:
-				err = i.changeRoundMsgPipeline().Run(msg)
-			}
-
-			if err != nil {
-				i.logger.Error("msg pipeline error", zap.Error(err))
-			}
+	i.msgQueue.Subscribe(func(msg *proto.SignedMessage) {
+		if msg == nil {
+			time.Sleep(time.Millisecond * 100)
+			return
 		}
-	}()
+
+		var pp pipeline.Pipeline
+		switch msg.Message.Type {
+		case proto.RoundState_PrePrepare:
+			pp = i.prePrepareMsgPipeline()
+		case proto.RoundState_Prepare:
+			pp = i.prepareMsgPipeline()
+		case proto.RoundState_Commit:
+			pp = i.commitMsgPipeline()
+		case proto.RoundState_ChangeRound:
+			pp = i.changeRoundMsgPipeline()
+		default:
+			i.logger.Warn("undefined message type", zap.Any("msg", msg))
+			return
+		}
+
+		if err := pp.Run(msg); err != nil {
+			i.logger.Error("msg pipeline error", zap.Error(err))
+		}
+	})
 }
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
