@@ -59,10 +59,10 @@ $ make NODE_ID=1  BUILD_PATH="./bin/ssvnode"  start-node
     
 ### Preparation
 ##### Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
-- Private keys from mnemonic: ` ./bin/ssv export-keys --mnemonic={mnemonic} --index={keyIndex}`        
+- Private keys from mnemonic: ` ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}`
 
 ##### Generate threshold keys
-- `./bin/ssv create-threshold --count {# of ssv nodes} --private-key {privateKey}`
+- `./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}`
    
 ##### Edit config files
 - .env
@@ -78,15 +78,15 @@ $ make NODE_ID=1  BUILD_PATH="./bin/ssvnode"  start-node
 
 ### How to run
 
-`docker-compose.yaml` contains definitions for 2 sets (prod & debug) of 3 SSV nodes with its own threshold private keys that are generated based on the 
+`docker-compose.yaml` contains definitions for 2 sets (prod & debug) of 4 SSV nodes with its own threshold private keys that are generated based on the 
 validator's private key. All needed parameters can be found in `docker-compose.yaml` and `.env` files.
 
 
 ```bash 
-# Run 3 nodes (prod mode)
+# Run 4 nodes (prod mode)
 $ make docker
 
-# Run 3 nodes (debug & live reload mode) 
+# Run 4 nodes (debug & live reload mode) 
 $ make docker-debug
 ```    
 
