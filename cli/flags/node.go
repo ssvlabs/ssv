@@ -10,7 +10,6 @@ import (
 // Flag names.
 const (
 	nodeIDKeyFlag    = "node-id"
-	leaderIDFlag     = "leader-id"
 	validatorKeyFlag = "validator-key"
 	beaconAddrFlag   = "beacon-node-addr"
 	networkFlag      = "network"

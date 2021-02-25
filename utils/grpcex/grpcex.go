@@ -68,9 +68,6 @@ func constructDialOptions(
 		),
 	}
 
-	for _, opt := range extraOpts {
-		dialOpts = append(dialOpts, opt)
-	}
-
+	dialOpts = append(dialOpts, extraOpts...)
 	return dialOpts, nil
 }

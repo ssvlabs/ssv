@@ -52,21 +52,21 @@ func TestIBFT(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				newId := time.Now().String()
+				newID := time.Now().String()
 				opts := StartOptions{
 					Logger:       logger,
 					Consensus:    bytesval.New([]byte(time.Now().Weekday().String())),
 					PrevInstance: []byte(instanceIdentifier),
-					Identifier:   []byte(newId),
+					Identifier:   []byte(newID),
 					Value:        []byte(time.Now().Weekday().String()),
 				}
 				replay := local.NewIBFTReplay(nodes)
-				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.String("id", newId), zap.String("prev_id", instanceIdentifier))
+				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.String("id", newID), zap.String("prev_id", instanceIdentifier))
 				for _, i := range instances {
 					i.(*ibftImpl).network = replay.Network
 					go i.StartInstance(opts)
 				}
-				instanceIdentifier = newId
+				instanceIdentifier = newID
 			case <-quit:
 				ticker.Stop()
 				return

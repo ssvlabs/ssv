@@ -53,10 +53,7 @@ func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
 
 func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) bool {
 	val, _ := i.PrePrepareValue(signedMessage.Message.Round)
-	if len(val) > 0 {
-		return true
-	}
-	return false
+	return len(val) > 0
 }
 
 /**

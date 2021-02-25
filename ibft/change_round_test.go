@@ -82,13 +82,13 @@ func TestRoundChangeInputValue(t *testing.T) {
 
 	// with a different prepared value
 	instance.State.PreparedValue = []byte("value2")
-	byts, err = instance.roundChangeInputValue()
+	_, err = instance.roundChangeInputValue()
 	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
 
 	// with different prepared round
 	instance.State.PreparedRound = 2
 	instance.State.PreparedValue = []byte("value")
-	byts, err = instance.roundChangeInputValue()
+	_, err = instance.roundChangeInputValue()
 	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
 }
 
@@ -109,13 +109,13 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	tests := []struct {
 		name                string
 		msg                 *proto.Message
-		signerId            uint64
+		signerID            uint64
 		justificationSigIds []uint64
 		expectedError       string
 	}{
 		{
 			name:     "valid",
-			signerId: 1,
+			signerID: 1,
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
 				Round:  1,
@@ -126,7 +126,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:     "valid",
-			signerId: 1,
+			signerID: 1,
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
 				Round:  2,
@@ -137,7 +137,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:     "valid",
-			signerId: 1,
+			signerID: 1,
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
@@ -148,7 +148,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:     "valid",
-			signerId: 1,
+			signerID: 1,
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
 				Round:  3,
@@ -159,7 +159,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "valid justification",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -182,7 +182,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification msg type",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -205,7 +205,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification round",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -228,7 +228,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid prepared and justification round",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -251,7 +251,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification instance",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -274,7 +274,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "valid justification",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1, 2},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -297,7 +297,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification sig",
-			signerId:            1,
+			signerID:            1,
 			justificationSigIds: []uint64{0, 1},
 			msg: &proto.Message{
 				Type:   proto.RoundState_ChangeRound,
@@ -339,13 +339,13 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				test.msg.Value = changeRoundDataToBytes(data)
 			}
 
-			signature, err := test.msg.Sign(secretKeys[test.signerId])
+			signature, err := test.msg.Sign(secretKeys[test.signerID])
 			require.NoError(t, err)
 
 			err = changeround.Validate(instance.params).Run(&proto.SignedMessage{
 				Message:   test.msg,
 				Signature: signature.Serialize(),
-				SignerIds: []uint64{test.signerId},
+				SignerIds: []uint64{test.signerID},
 			})
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)

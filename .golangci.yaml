@@ -480,7 +480,7 @@ issues:
   # it can be disabled by `exclude-use-default: false`. To list all
   # excluded by default patterns execute `golangci-lint run --help`
   exclude:
-    - abcdef
+    -  'declaration of "(err|ctx|logger)" shadows declaration at'
 
   # Excluding configuration per-path, per-linter, per-text and per-source
   exclude-rules:

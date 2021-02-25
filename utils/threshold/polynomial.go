@@ -49,10 +49,11 @@ func (p *Polynomial) GenerateRandom() error {
 }
 
 // toString converts polynomial to string
+//nolint:unused
 func (p *Polynomial) toString() string {
 	ret := "y = "
 	for i := int(p.Degree) - 1; i >= 0; i-- {
-		ret += p.Coefficients[i].GetString(10) + "x^" + strconv.Itoa(int(i)) + " "
+		ret += p.Coefficients[i].GetString(10) + "x^" + strconv.Itoa(i) + " "
 		if i > 0 {
 			ret += "+ "
 		}
