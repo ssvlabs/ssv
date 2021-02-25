@@ -46,12 +46,12 @@ spec:
         env:
         - name: NODE_ID
           value: "1"
-        - name: PRIVATE_KEY
+        - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_1
-        - name: VALIDATOR_KEY
+        - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
@@ -90,12 +90,12 @@ spec:
         env:
         - name: NODE_ID
           value: "2"
-        - name: PRIVATE_KEY
+        - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_2
-        - name: VALIDATOR_KEY
+        - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
@@ -134,12 +134,12 @@ spec:
         env:
         - name: NODE_ID
           value: "3"
-        - name: PRIVATE_KEY
+        - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_3
-        - name: VALIDATOR_KEY
+        - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
@@ -178,12 +178,12 @@ spec:
         env:
           - name: NODE_ID
             value: "4"
-          - name: PRIVATE_KEY
+          - name: SSV_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
                 name: config-secrets
                 key: ssv_node_4
-          - name: VALIDATOR_KEY
+          - name: VALIDATOR_PUBLIC_KEY
             valueFrom:
               secretKeyRef:
                 name: config-secrets
