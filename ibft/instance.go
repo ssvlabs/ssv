@@ -34,18 +34,18 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	consensus        dataval.Validator
-	params           *proto.InstanceParams
+	Consensus        dataval.Validator
+	Params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
-	logger           *zap.Logger
+	Logger           *zap.Logger
 	msgLock          sync.Mutex
 
 	// messages
 	msgQueue            *msgqueue.MessageQueue
-	prePrepareMessages  msgcont.MessageContainer
-	prepareMessages     msgcont.MessageContainer
+	PrePrepareMessages  msgcont.MessageContainer
+	PrepareMessages     msgcont.MessageContainer
 	commitMessages      msgcont.MessageContainer
-	changeRoundMessages msgcont.MessageContainer
+	ChangeRoundMessages msgcont.MessageContainer
 
 	// channels
 	changeRoundChan       chan bool
@@ -69,16 +69,16 @@ func NewInstance(opts InstanceOptions) *Instance {
 			PreviousLambda: opts.PreviousLambda,
 		},
 		network:   opts.Network,
-		consensus: opts.Consensus,
-		params:    opts.Params,
-		logger:    opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
+		Consensus: opts.Consensus,
+		Params:    opts.Params,
+		Logger:    opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
 		msgLock:   sync.Mutex{},
 
 		msgQueue:            msgqueue.New(),
-		prePrepareMessages:  msgcontinmem.New(),
-		prepareMessages:     msgcontinmem.New(),
+		PrePrepareMessages:  msgcontinmem.New(),
+		PrepareMessages:     msgcontinmem.New(),
 		commitMessages:      msgcontinmem.New(),
-		changeRoundMessages: msgcontinmem.New(),
+		ChangeRoundMessages: msgcontinmem.New(),
 
 		changeRoundChan: make(chan bool),
 	}
@@ -96,18 +96,18 @@ func NewInstance(opts InstanceOptions) *Instance {
 // 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) {
 	if i.State.Lambda == nil {
-		i.logger.Fatal("can't start instance with invalid Lambda")
+		i.Logger.Fatal("can't start instance with invalid Lambda")
 	}
 	if i.State.PreviousLambda == nil {
-		i.logger.Fatal("can't start instance with invalid Previous Lambda")
+		i.Logger.Fatal("can't start instance with invalid Previous Lambda")
 	}
 
-	i.logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
 	i.BumpRound(1)
 	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
-		i.logger.Info("Node is leader for round 1")
+		i.Logger.Info("Node is leader for round 1")
 		i.SetStage(proto.RoundState_PrePrepare)
 
 		msg := &proto.Message{
@@ -119,7 +119,7 @@ func (i *Instance) Start(inputValue []byte) {
 		}
 
 		if err := i.SignAndBroadcast(msg); err != nil {
-			i.logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
+			i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
 		}
 	}
 
@@ -199,12 +199,12 @@ func (i *Instance) StartMessagePipeline() {
 		case proto.RoundState_ChangeRound:
 			pp = i.changeRoundMsgPipeline()
 		default:
-			i.logger.Warn("undefined message type", zap.Any("msg", msg))
+			i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 			return
 		}
 
 		if err := pp.Run(msg); err != nil {
-			i.logger.Error("msg pipeline error", zap.Error(err))
+			i.Logger.Error("msg pipeline error", zap.Error(err))
 		}
 	})
 }
@@ -232,13 +232,13 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 
 	switch msg.Type {
 	case proto.RoundState_PrePrepare:
-		i.prePrepareMessages.AddMessage(signedMessage)
+		i.PrePrepareMessages.AddMessage(signedMessage)
 	case proto.RoundState_Prepare:
-		i.prepareMessages.AddMessage(signedMessage)
+		i.PrepareMessages.AddMessage(signedMessage)
 	case proto.RoundState_Commit:
 		i.commitMessages.AddMessage(signedMessage)
 	case proto.RoundState_ChangeRound:
-		i.changeRoundMessages.AddMessage(signedMessage)
+		i.ChangeRoundMessages.AddMessage(signedMessage)
 	}
 
 	return nil
@@ -261,9 +261,9 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	i.stopRoundChangeTimer()
 
 	// stat new timer
-	roundTimeout := uint64(i.params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
+	roundTimeout := uint64(i.Params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
-	i.logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {
 		<-i.roundChangeTimer.C
 		i.changeRoundChan <- true

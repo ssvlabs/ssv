@@ -49,7 +49,7 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.params),
+		auth.AuthorizeMsg(i.Params),
 		i.validateCommitMsg(),
 		i.uponCommitMsg(),
 	)
@@ -59,7 +59,7 @@ func (i *Instance) validateCommitMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// TODO - should we test prepared round as well?
 
-		if err := i.consensus.Validate(signedMessage.Message.Value); err != nil {
+		if err := i.Consensus.Validate(signedMessage.Message.Value); err != nil {
 			return err
 		}
 
@@ -77,8 +77,8 @@ func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t
 			cnt++
 		}
 	}
-	quorum = cnt*3 >= i.params.CommitteeSize()*2
-	return quorum, cnt, i.params.CommitteeSize()
+	quorum = cnt*3 >= i.Params.CommitteeSize()*2
+	return quorum, cnt, i.Params.CommitteeSize()
 }
 
 func (i *Instance) existingCommitMsg(signedMessage *proto.SignedMessage) bool {
@@ -107,7 +107,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 
 		// add to prepare messages
 		i.commitMessages.AddMessage(signedMessage)
-		i.logger.Info("received valid commit message for round",
+		i.Logger.Info("received valid commit message for round",
 			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
@@ -117,7 +117,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		}
 		quorum, t, n := i.commitQuorum(i.State.PreparedRound, i.State.PreparedValue)
 		if quorum { // if already decidedChan no need to do it again
-			i.logger.Info("decided iBFT instance",
+			i.Logger.Info("decided iBFT instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 

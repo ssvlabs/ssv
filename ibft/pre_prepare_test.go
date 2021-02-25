@@ -16,9 +16,9 @@ import (
 func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prePrepareMessages:  msgcontinmem.New(),
-		changeRoundMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrePrepareMessages:  msgcontinmem.New(),
+		ChangeRoundMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -33,8 +33,8 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     secretKeys[0].Serialize(),
 		},
-		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
-		logger:    zaptest.NewLogger(t),
+		Consensus: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:    zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
@@ -47,7 +47,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedValue: []byte(time.Now().Weekday().String()),
 		}),
 	})
-	instance.changeRoundMessages.AddMessage(msg)
+	instance.ChangeRoundMessages.AddMessage(msg)
 
 	msg = ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
@@ -58,7 +58,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedValue: []byte(time.Now().Weekday().String()),
 		}),
 	})
-	instance.changeRoundMessages.AddMessage(msg)
+	instance.ChangeRoundMessages.AddMessage(msg)
 
 	// no quorum achieved, err
 	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
@@ -67,7 +67,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.EqualError(t, instance.uponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
+	require.EqualError(t, instance.UponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
 	msg = ibfttesting.SignMsg(0, secretKeys[0], &proto.Message{
@@ -79,7 +79,7 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedValue: []byte(time.Now().Weekday().String()),
 		}),
 	})
-	instance.changeRoundMessages.AddMessage(msg)
+	instance.ChangeRoundMessages.AddMessage(msg)
 
 	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
@@ -87,16 +87,16 @@ func TestUponPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	require.NoError(t, instance.uponPrePrepareMsg().Run(msg))
+	require.NoError(t, instance.UponPrePrepareMsg().Run(msg))
 }
 
 func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prePrepareMessages:  msgcontinmem.New(),
-		prepareMessages:     msgcontinmem.New(),
-		changeRoundMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrePrepareMessages:  msgcontinmem.New(),
+		PrepareMessages:     msgcontinmem.New(),
+		ChangeRoundMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -111,8 +111,8 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     secretKeys[0].Serialize(),
 		},
-		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
-		logger:    zaptest.NewLogger(t),
+		Consensus: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:    zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
@@ -121,17 +121,17 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("Lambda"),
 	})
-	instance.changeRoundMessages.AddMessage(msg)
+	instance.ChangeRoundMessages.AddMessage(msg)
 
 	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("Lambda"),
 	})
-	instance.changeRoundMessages.AddMessage(msg)
+	instance.ChangeRoundMessages.AddMessage(msg)
 
 	// no quorum achieved, err
-	require.EqualError(t, instance.uponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
+	require.EqualError(t, instance.UponPrePrepareMsg().Run(msg), "received un-justified pre-prepare message")
 
 	// test justified change round
 	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
@@ -139,16 +139,16 @@ func TestUponPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("Lambda"),
 	})
-	instance.changeRoundMessages.AddMessage(msg)
-	require.NoError(t, instance.uponPrePrepareMsg().Run(msg))
+	instance.ChangeRoundMessages.AddMessage(msg)
+	require.NoError(t, instance.UponPrePrepareMsg().Run(msg))
 }
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prePrepareMessages: msgcontinmem.New(),
-		prepareMessages:    msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrePrepareMessages: msgcontinmem.New(),
+		PrepareMessages:    msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -163,8 +163,8 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Pk:     nodes[0].Pk,
 			Sk:     secretKeys[0].Serialize(),
 		},
-		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
-		logger:    zaptest.NewLogger(t),
+		Consensus: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:    zaptest.NewLogger(t),
 	}
 
 	// test happy flow
@@ -174,22 +174,22 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err := instance.uponPrePrepareMsg().Run(msg)
+	err := instance.UponPrePrepareMsg().Run(msg)
 	require.NoError(t, err)
-	msgs := instance.prePrepareMessages.ReadOnlyMessagesByRound(1)
+	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[1])
 	require.True(t, instance.State.Stage == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
-	err = instance.uponPrePrepareMsg().Run(msg)
+	err = instance.UponPrePrepareMsg().Run(msg)
 	require.NoError(t, err)
 }
 
 func TestInstance_JustifyPrePrepare(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		changeRoundMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		ChangeRoundMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -210,14 +210,14 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	instance.changeRoundMessages.AddMessage(ibfttesting.SignMsg(0, secretKeys[0], msg))
+	instance.ChangeRoundMessages.AddMessage(ibfttesting.SignMsg(0, secretKeys[0], msg))
 
 	msg = &proto.Message{
 		Type:   proto.RoundState_ChangeRound,
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	instance.changeRoundMessages.AddMessage(ibfttesting.SignMsg(1, secretKeys[1], msg))
+	instance.ChangeRoundMessages.AddMessage(ibfttesting.SignMsg(1, secretKeys[1], msg))
 
 	res, err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		Round:  2,
 		Lambda: []byte("lambdas"),
 	}
-	instance.changeRoundMessages.AddMessage(ibfttesting.SignMsg(2, secretKeys[2], msg))
+	instance.ChangeRoundMessages.AddMessage(ibfttesting.SignMsg(2, secretKeys[2], msg))
 
 	res, err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)

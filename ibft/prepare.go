@@ -18,7 +18,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.prepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound)
+	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound)
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
@@ -49,7 +49,7 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.params),
+		auth.AuthorizeMsg(i.Params),
 		i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	)
@@ -73,7 +73,7 @@ func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
 }
 
 func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMessage {
-	msgs := i.prepareMessages.ReadOnlyMessagesByRound(round)
+	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(round)
 	ret := make(map[string][]*proto.SignedMessage)
 	for _, msg := range msgs {
 		valueHex := hex.EncodeToString(msg.Message.Value)
@@ -89,16 +89,16 @@ func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMe
 func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	batched := i.batchedPrepareMsgs(round)
 	if msgs, ok := batched[hex.EncodeToString(inputValue)]; ok {
-		quorum = len(msgs)*3 >= i.params.CommitteeSize()*2
-		return quorum, len(msgs), i.params.CommitteeSize()
+		quorum = len(msgs)*3 >= i.Params.CommitteeSize()*2
+		return quorum, len(msgs), i.Params.CommitteeSize()
 	}
 
-	return false, 0, i.params.CommitteeSize()
+	return false, 0, i.Params.CommitteeSize()
 }
 
 func (i *Instance) existingPrepareMsg(signedMessage *proto.SignedMessage) bool {
 	// TODO - not sure the spec requires unique votes.
-	msgs := i.prepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
+	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
 	for _, id := range signedMessage.SignerIds {
 		if _, found := msgs[id]; found {
 			return true
@@ -124,8 +124,8 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 		}
 
 		// add to prepare messages
-		i.prepareMessages.AddMessage(signedMessage)
-		i.logger.Info("received valid prepare message from round",
+		i.PrepareMessages.AddMessage(signedMessage)
+		i.Logger.Info("received valid prepare message from round",
 			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
@@ -134,7 +134,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			return nil // no reason to prepare again
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
-			i.logger.Info("prepared instance",
+			i.Logger.Info("prepared instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
 
@@ -152,7 +152,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 				Value:          i.State.InputValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-				i.logger.Info("could not broadcast commit message", zap.Error(err))
+				i.Logger.Info("could not broadcast commit message", zap.Error(err))
 				return err
 			}
 			return nil
