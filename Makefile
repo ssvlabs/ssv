@@ -64,18 +64,16 @@ else
 	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}
 endif
 
-NODES="ssv-node-1 ssv-node-2 ssv-node-3"
-
+NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker
 docker:
 	@echo "nodes $(NODES)"
-	@docker-compose up --build "$(NODES)"
+	@docker-compose up --build $(NODES)
 
-DEBUG_NODES="ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev"
-
+DEBUG_NODES=ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev ssv-node-4-dev
 .PHONY: docker-debug
 docker-debug:
-	@docker-compose up --build "$(DEBUG_NODES)"
+	@docker-compose up --build $(DEBUG_NODES)
 
 .PHONY: stop
 stop:

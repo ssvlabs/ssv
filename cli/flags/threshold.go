@@ -24,7 +24,7 @@ func GetPrivKeyFlagValue(c *cobra.Command) (string, error) {
 
 // AddKeysCountFlag adds the keys count flag to the command
 func AddKeysCountFlag(c *cobra.Command) {
-	cliflag.AddPersistentIntFlag(c, keysCountFlag, 5, "Count of threshold keys to be generated", false)
+	cliflag.AddPersistentIntFlag(c, keysCountFlag, 4, "Count of threshold keys to be generated", false)
 }
 
 // GetKeysCountFlagValue gets the keys count flag from the command

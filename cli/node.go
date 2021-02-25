@@ -92,6 +92,10 @@ var startNodeCmd = &cobra.Command{
 				IbftId: 3,
 				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
 			},
+			4: {
+				IbftId: 4,
+				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
+			},
 		}
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()

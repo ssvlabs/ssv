@@ -25,7 +25,6 @@ variables:
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
 
 # Common pipelines
-
 Run linter:
   stage: lint
   image: $GO_IMAGE
@@ -34,7 +33,6 @@ Run linter:
   script:
     - make lint-prepare
     - make lint
-
 #Run tests:
 #  stage: test
 #  image: $GO_IMAGE

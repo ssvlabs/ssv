@@ -39,19 +39,19 @@ spec:
       - name: ssv-node-1
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
+        command: ["make", "start-node"]
         ports:
         - containerPort: 5678
           name: port-5678
         env:
         - name: NODE_ID
           value: "1"
-        - name: PRIVATE_KEY
+        - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_1
-        - name: VALIDATOR_KEY
+        - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
@@ -70,7 +70,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: pubkey_node_3      
+              key: pubkey_node_3
+        - name: PUBKEY_NODE_4
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_4
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
@@ -78,19 +83,19 @@ spec:
       - name: ssv-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
+        command: ["make", "start-node"]
         ports:
         - containerPort: 5678
           name: port-5678
         env:
         - name: NODE_ID
           value: "2"
-        - name: PRIVATE_KEY
+        - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_2
-        - name: VALIDATOR_KEY
+        - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
@@ -109,7 +114,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: pubkey_node_3   
+              key: pubkey_node_3
+        - name: PUBKEY_NODE_4
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_4
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
@@ -117,19 +127,19 @@ spec:
       - name: ssv-node-3
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["/go/bin/ssvnode", "start-node", "--node-id=$(NODE_ID)", "--private-key=$(PRIVATE_KEY)", "--validator-key=$(VALIDATOR_KEY)", "--beacon-node-addr=$(BEACON_NODE_ADDR)", "--network=$(NETWORK)", "--val=$(CONSENSUS_TYPE)"]
+        command: ["make", "start-node"]
         ports:
         - containerPort: 5678
           name: port-5678
         env:
         - name: NODE_ID
           value: "3"
-        - name: PRIVATE_KEY
+        - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: ssv_node_3
-        - name: VALIDATOR_KEY
+        - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
@@ -148,8 +158,57 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: pubkey_node_2   
+              key: pubkey_node_2
+        - name: PUBKEY_NODE_4
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_4
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
+      - name: ssv-node-4
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        imagePullPolicy: Always
+        command: ["make", "start-node"]
+        ports:
+          - containerPort: 5678
+            name: port-5678
+        env:
+          - name: NODE_ID
+            value: "4"
+          - name: SSV_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: ssv_node_4
+          - name: VALIDATOR_PUBLIC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: validator_public_key
+          - name: BEACON_NODE_ADDR
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: beacon_node_addr
+          - name: PUBKEY_NODE_1
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: pubkey_node_1
+          - name: PUBKEY_NODE_2
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: pubkey_node_2
+          - name: PUBKEY_NODE_3
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: pubkey_node_3
+          - name: NETWORK
+            value: "pyrmont"
+          - name: CONSENSUS_TYPE
+            value: "validation"
