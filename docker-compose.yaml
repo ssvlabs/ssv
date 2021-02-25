@@ -37,6 +37,7 @@ services:
       SSV_PRIVATE_KEY: ${SSV_NODE_1}
       PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
       PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
+      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
 
   ssv-node-2:
     <<: *default-base
@@ -47,6 +48,7 @@ services:
       SSV_PRIVATE_KEY: ${SSV_NODE_2}
       PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
       PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
+      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
 
   ssv-node-3:
     <<: *default-base
@@ -57,6 +59,18 @@ services:
       SSV_PRIVATE_KEY: ${SSV_NODE_3}
       PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
       PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
+      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
+
+  ssv-node-4:
+    <<: *default-base
+    container_name: ssv-node-4
+    environment:
+      DOCKER_COMPOSE: "true"
+      NODE_ID: 4
+      SSV_PRIVATE_KEY: ${SSV_NODE_4}
+      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
+      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
+      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
 
 
   ssv-node-1-dev:
@@ -71,6 +85,7 @@ services:
       SSV_PRIVATE_KEY: ${SSV_NODE_1}
       PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
       PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
+      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
       DEBUG_PORT: 40005
 
   ssv-node-2-dev:
@@ -85,6 +100,7 @@ services:
       SSV_PRIVATE_KEY: ${SSV_NODE_2}
       PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
       PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
+      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
       DEBUG_PORT: 40006
 
   ssv-node-3-dev:
@@ -99,7 +115,23 @@ services:
       SSV_PRIVATE_KEY: ${SSV_NODE_3}
       PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
       PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
+      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
       DEBUG_PORT: 40007
+
+  ssv-node-4-dev:
+    << : *default-dev
+    container_name: ssv-node-4-dev
+    ports:
+      - 40008:40008
+    environment:
+      BUILD_PATH: /bin/tmp/ssv
+      DOCKER_COMPOSE: "true"
+      NODE_ID: 4
+      SSV_PRIVATE_KEY: ${SSV_NODE_4}
+      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
+      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
+      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
+      DEBUG_PORT: 40008
 
 networks:
   bloxapp-docker:
