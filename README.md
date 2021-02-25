@@ -47,10 +47,13 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 ### Build
 ```bash
 # Build binary
-$ CGO_ENABLED=1 go build -o bin/ssv ./cmd/ssvnode/
+$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
 # Run tool
-$ ./bin/ssv --help
+$ ./bin/ssvnode --help
+
+# Run node
+$ make NODE_ID=1  BUILD_PATH="./bin/ssvnode"  start-node
 
 ```
     
@@ -75,15 +78,25 @@ $ ./bin/ssv --help
 
 ### How to run
 
-`docker-compose.yaml` contains definitions of 3 SSV nodes with its own threshold private keys that are generated based on the 
+`docker-compose.yaml` contains definitions for 2 sets (prod & debug) of 3 SSV nodes with its own threshold private keys that are generated based on the 
 validator's private key. All needed parameters can be found in `docker-compose.yaml` and `.env` files.
 
 
-
 ```bash 
-# Build nodes
-$ docker-compose build
+# Run 3 nodes (prod mode)
+$ make docker
+
+# Run 3 nodes (debug & live reload mode) 
+$ make docker-debug
+```    
+
+### Contribute
+#### Debug(TODO)
+#### Lint
+```bash 
+# install linter
+$ make lint-prepare
 
 # Run nodes
-$ docker-compose up -d
-```    
+$ make lint
+```

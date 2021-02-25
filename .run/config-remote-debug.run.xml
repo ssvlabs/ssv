@@ -1,7 +1,0 @@
-<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="config-remote-debug-run" type="GoRemoteDebugConfigurationType" factoryName="Go Remote" show_console_on_std_err="true" show_console_on_std_out="true">
-    <output_file path="_remoteDebug" is_save="true" />
-    <option name="disconnectOption" value="ASK" />
-    <method v="2" />
-  </configuration>
-</component>
