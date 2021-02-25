@@ -1,6 +1,6 @@
 stages:
-  - gosec
-  - lint
+#  - gosec
+#  - lint
 #  - test
   - build
   - deploy
