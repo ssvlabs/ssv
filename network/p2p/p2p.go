@@ -49,7 +49,6 @@ type listener struct {
 	lambda []byte
 	msgCh  chan *proto.SignedMessage
 	sigCh  chan map[uint64][]byte
-	tp     broadcastingType
 }
 
 // p2pNetwork implements network.Network interface using P2P
