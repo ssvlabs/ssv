@@ -34,7 +34,7 @@ func Create(skBytes []byte, count uint64) (map[uint64]*bls.SecretKey, error) {
 	}
 
 	// evaluate
-	ret := make(map[uint64]*bls.SecretKey, 0)
+	ret := make(map[uint64]*bls.SecretKey)
 	for i := uint64(1); i <= count; i++ { // we can't split share on index 0
 		shareFr, err := p.EvaluateUint64(i)
 		if err != nil {

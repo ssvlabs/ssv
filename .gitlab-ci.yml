@@ -1,6 +1,5 @@
 stages:
-#  - gosec
-#  - lint
+  - lint
 #  - test
   - build
   - deploy
@@ -26,25 +25,14 @@ variables:
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
 
 # Common pipelines
-#Security check:
-#  stage: gosec
-#  image: $GO_IMAGE
-#  tags:
-#    - blox-infra-stage
-#  script:
-#    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s v2.5.0
-#    - ./bin/gosec -exclude G404 ./...
-#
-#Run linter:
-#  stage: lint
-#  image: $GO_IMAGE
-#  tags:
-#    - blox-infra-stage
-#  script:
-#    - go get -u golang.org/x/lint/golint
-#    - go get -u golang.org/x/tools/cmd/goimports
-#    - ./scripts/lint.sh .
-
+Run linter:
+  stage: lint
+  image: $GO_IMAGE
+  tags:
+    - blox-infra-stage
+  script:
+    - make lint-prepare
+    - make lint
 #Run tests:
 #  stage: test
 #  image: $GO_IMAGE

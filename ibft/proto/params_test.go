@@ -53,6 +53,6 @@ func TestPubKeysById(t *testing.T) {
 	require.EqualValues(t, pks[1].Serialize(), secretKeys[1].GetPublicKey().Serialize())
 
 	// test multiple with invalid
-	pks, err = params.PubKeysByID([]uint64{0, 5})
+	_, err = params.PubKeysByID([]uint64{0, 5})
 	require.EqualError(t, err, "pk for id not found")
 }

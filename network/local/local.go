@@ -2,7 +2,6 @@ package local
 
 import (
 	"sync"
-	"testing"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage"
@@ -11,7 +10,6 @@ import (
 
 // Network implements network.Network interface
 type Network struct {
-	t      *testing.T
 	replay *IBFTReplay
 	l      map[uint64]*sync.Mutex
 	c      map[uint64]chan *proto.SignedMessage

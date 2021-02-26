@@ -193,9 +193,9 @@ linters-settings:
         unnamedResult:
         # whether to check exported functions
         checkExported: true
-  gocyclo:
-    # minimal code complexity to report, 30 by default (but we recommend 10-20)
-    min-complexity: 10
+#  gocyclo:
+#    # minimal code complexity to report, 30 by default (but we recommend 10-20)
+#    min-complexity: 10
 
   cyclop:
     # the maximal code complexity to report
@@ -459,7 +459,7 @@ linters-settings:
 linters:
   enable:
     - golint
-    - gocyclo
+#    - gocyclo
     - goconst
     - unconvert
     - gosec
@@ -480,14 +480,14 @@ issues:
   # it can be disabled by `exclude-use-default: false`. To list all
   # excluded by default patterns execute `golangci-lint run --help`
   exclude:
-    - abcdef
+    -  'declaration of "(err|ctx|logger)" shadows declaration at'
 
   # Excluding configuration per-path, per-linter, per-text and per-source
   exclude-rules:
     # Exclude some linters from running on tests files.
     - path: _test\.go
       linters:
-        - gocyclo
+#        - gocyclo
         - errcheck
         - dupl
         - gosec

@@ -145,9 +145,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	for _, ch := range i.stageChangedChans {
 		select {
 		case ch <- stage:
-			break
 		default:
-			break
 		}
 	}
 }
