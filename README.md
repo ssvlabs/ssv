@@ -24,7 +24,8 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 
 
 ### Research
-
+- Secret Shared Validators on Eth2
+    - [Litepaper](https://medium.com/coinmonks/eth2-secret-shared-validators-85824df8cbc0)
 - iBTF
     - [Paper](https://arxiv.org/pdf/2002.03613.pdf)
     - [EIP650](https://github.com/ethereum/EIPs/issues/650)
