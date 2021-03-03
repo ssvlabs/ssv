@@ -13,7 +13,7 @@ func (i *Instance) WaitForStage() pipeline.Pipeline {
 		if i.State.Stage+1 >= signedMessage.Message.Type {
 			return nil
 		}
-		i.logger.Info("got non-broadcasted message",
+		i.Logger.Info("got non-broadcasted message",
 			zap.String("message_stage", signedMessage.Message.Type.String()),
 			zap.String("current_stage", i.State.Stage.String()))
 
@@ -21,7 +21,7 @@ func (i *Instance) WaitForStage() pipeline.Pipeline {
 		dif := signedMessage.Message.Type - i.State.Stage + 1
 		for j := 0; j < int(dif); j++ {
 			st := <-ch
-			i.logger.Info("got changed state", zap.String("state", st.String()))
+			i.Logger.Info("got changed state", zap.String("state", st.String()))
 			if st >= signedMessage.Message.Type || i.State.Stage+1 >= signedMessage.Message.Type {
 				break
 			}

@@ -9,15 +9,15 @@ import (
 
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
-	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
+	ibfttesting "github.com/bloxapp/ssv/ibft/spec_testing"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestPrepareQuorum(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrepareMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -29,7 +29,7 @@ func TestPrepareQuorum(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	instance.prepareMessages.AddMessage(msg)
+	instance.PrepareMessages.AddMessage(msg)
 
 	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
@@ -37,7 +37,7 @@ func TestPrepareQuorum(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	instance.prepareMessages.AddMessage(msg)
+	instance.PrepareMessages.AddMessage(msg)
 
 	// no quorum yet
 	res, totalSignedMsgs, committeeSize := instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
@@ -52,7 +52,7 @@ func TestPrepareQuorum(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong"),
 	})
-	instance.prepareMessages.AddMessage(msg)
+	instance.PrepareMessages.AddMessage(msg)
 
 	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
@@ -66,7 +66,7 @@ func TestPrepareQuorum(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	instance.prepareMessages.AddMessage(msg)
+	instance.PrepareMessages.AddMessage(msg)
 
 	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
@@ -80,7 +80,7 @@ func TestPrepareQuorum(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	instance.prepareMessages.AddMessage(msg)
+	instance.PrepareMessages.AddMessage(msg)
 
 	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.True(t, res)
@@ -91,9 +91,9 @@ func TestPrepareQuorum(t *testing.T) {
 func TestValidatePrepareMsg(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prepareMessages:    msgcontinmem.New(),
-		prePrepareMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrepareMessages:    msgcontinmem.New(),
+		PrePrepareMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -101,7 +101,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 			Round:  1,
 			Lambda: []byte("Lambda"),
 		},
-		consensus: bytesval.New([]byte(time.Now().Weekday().String())),
+		Consensus: bytesval.New([]byte(time.Now().Weekday().String())),
 	}
 
 	// test no valid pre-prepare msg
@@ -120,7 +120,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	instance.prePrepareMessages.AddMessage(msg)
+	instance.PrePrepareMessages.AddMessage(msg)
 
 	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
@@ -143,8 +143,8 @@ func TestValidatePrepareMsg(t *testing.T) {
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	_, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrepareMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -153,7 +153,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 	}
 
-	instance.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.PrepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -162,7 +162,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		SignerIds: []uint64{1},
 	})
-	instance.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.PrepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -171,7 +171,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		SignerIds: []uint64{2},
 	})
-	instance.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.PrepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -180,7 +180,7 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 		},
 		SignerIds: []uint64{3},
 	})
-	instance.prepareMessages.AddMessage(&proto.SignedMessage{
+	instance.PrepareMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_Prepare,
 			Round:  1,
@@ -212,8 +212,8 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := ibfttesting.GenerateNodes(4)
 	instance := &Instance{
-		prepareMessages: msgcontinmem.New(),
-		params: &proto.InstanceParams{
+		PrepareMessages: msgcontinmem.New(),
+		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
 		},
@@ -235,19 +235,19 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "no prepare msgs")
 
 	// test valid aggregation
-	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(0, sks[0], &proto.Message{
+	instance.PrepareMessages.AddMessage(ibfttesting.SignMsg(0, sks[0], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(1, sks[1], &proto.Message{
+	instance.PrepareMessages.AddMessage(ibfttesting.SignMsg(1, sks[1], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(2, sks[2], &proto.Message{
+	instance.PrepareMessages.AddMessage(ibfttesting.SignMsg(2, sks[2], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
@@ -260,7 +260,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{0, 1, 2}, msg.SignerIds)
 
 	// test that doesn't aggregate different value
-	instance.prepareMessages.AddMessage(ibfttesting.SignMsg(3, sks[3], &proto.Message{
+	instance.PrepareMessages.AddMessage(ibfttesting.SignMsg(3, sks[3], &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),

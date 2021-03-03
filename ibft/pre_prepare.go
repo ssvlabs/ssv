@@ -16,9 +16,9 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.params),
-		preprepare.ValidatePrePrepareMsg(i.consensus, i.State, i.params),
-		i.uponPrePrepareMsg(),
+		auth.AuthorizeMsg(i.Params),
+		preprepare.ValidatePrePrepareMsg(i.Consensus, i.State, i.Params),
+		i.UponPrePrepareMsg(),
 	)
 }
 
@@ -44,7 +44,7 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 
 // PrePrepareValue checks round and returns message value
 func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
-	msgs := i.prePrepareMessages.ReadOnlyMessagesByRound(round)
+	msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round)
 	if msg, found := msgs[i.RoundLeader(round)]; found {
 		return msg.Message.Value, nil
 	}
@@ -63,7 +63,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) uponPrePrepareMsg() pipeline.Pipeline {
+func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// Only 1 pre-prepare per round is valid
 		if i.existingPrePrepareMsg(signedMessage) {
@@ -71,8 +71,8 @@ func (i *Instance) uponPrePrepareMsg() pipeline.Pipeline {
 		}
 
 		// add to pre-prepare messages
-		i.prePrepareMessages.AddMessage(signedMessage)
-		i.logger.Info("received valid pre-prepare message for round",
+		i.PrePrepareMessages.AddMessage(signedMessage)
+		i.Logger.Info("received valid pre-prepare message for round",
 			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
@@ -97,7 +97,7 @@ func (i *Instance) uponPrePrepareMsg() pipeline.Pipeline {
 			Value:          i.State.InputValue,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-			i.logger.Error("could not broadcast prepare message", zap.Error(err))
+			i.Logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err
 		}
 		return nil
