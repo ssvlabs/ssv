@@ -7,7 +7,7 @@ import (
 
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
-	ibfttesting "github.com/bloxapp/ssv/ibft/testing"
+	ibfttesting "github.com/bloxapp/ssv/ibft/spec_testing"
 )
 
 func TestCommittedAggregatedMsg(t *testing.T) {
