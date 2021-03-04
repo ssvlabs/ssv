@@ -40,7 +40,7 @@ func TestPrepareQuorum(t *testing.T) {
 	instance.PrepareMessages.AddMessage(msg)
 
 	// no quorum yet
-	res, totalSignedMsgs, committeeSize := instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize := instance.PrepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
 	require.EqualValues(t, totalSignedMsgs, 2)
 	require.EqualValues(t, committeeSize, 4)
@@ -54,7 +54,7 @@ func TestPrepareQuorum(t *testing.T) {
 	})
 	instance.PrepareMessages.AddMessage(msg)
 
-	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize = instance.PrepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
 	require.EqualValues(t, totalSignedMsgs, 2)
 	require.EqualValues(t, committeeSize, 4)
@@ -68,7 +68,7 @@ func TestPrepareQuorum(t *testing.T) {
 	})
 	instance.PrepareMessages.AddMessage(msg)
 
-	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize = instance.PrepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.False(t, res)
 	require.EqualValues(t, totalSignedMsgs, 2)
 	require.EqualValues(t, committeeSize, 4)
@@ -82,7 +82,7 @@ func TestPrepareQuorum(t *testing.T) {
 	})
 	instance.PrepareMessages.AddMessage(msg)
 
-	res, totalSignedMsgs, committeeSize = instance.prepareQuorum(2, []byte(time.Now().Weekday().String()))
+	res, totalSignedMsgs, committeeSize = instance.PrepareQuorum(2, []byte(time.Now().Weekday().String()))
 	require.True(t, res)
 	require.EqualValues(t, totalSignedMsgs, 3)
 	require.EqualValues(t, committeeSize, 4)
@@ -197,13 +197,13 @@ func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {
 	require.Len(t, res[hex.EncodeToString([]byte("value2"))], 1)
 
 	// test valid quorum
-	quorum, tt, n := instance.prepareQuorum(1, []byte("value"))
+	quorum, tt, n := instance.PrepareQuorum(1, []byte("value"))
 	require.True(t, quorum)
 	require.EqualValues(t, 3, tt)
 	require.EqualValues(t, 4, n)
 
 	// test invalid quorum
-	quorum, tt, n = instance.prepareQuorum(1, []byte("value2"))
+	quorum, tt, n = instance.PrepareQuorum(1, []byte("value2"))
 	require.False(t, quorum)
 	require.EqualValues(t, 1, tt)
 	require.EqualValues(t, 4, n)

@@ -86,7 +86,7 @@ func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMe
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+func (i *Instance) PrepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	batched := i.batchedPrepareMsgs(round)
 	if msgs, ok := batched[hex.EncodeToString(inputValue)]; ok {
 		quorum = len(msgs)*3 >= i.Params.CommitteeSize()*2
@@ -133,7 +133,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 		if i.State.Stage == proto.RoundState_Prepare {
 			return nil // no reason to prepare again
 		}
-		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
+		if quorum, t, n := i.PrepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
 			i.Logger.Info("prepared instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))

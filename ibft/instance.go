@@ -44,7 +44,7 @@ type Instance struct {
 	msgQueue            *msgqueue.MessageQueue
 	PrePrepareMessages  msgcont.MessageContainer
 	PrepareMessages     msgcont.MessageContainer
-	commitMessages      msgcont.MessageContainer
+	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
 
 	// channels
@@ -77,7 +77,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		msgQueue:            msgqueue.New(),
 		PrePrepareMessages:  msgcontinmem.New(),
 		PrepareMessages:     msgcontinmem.New(),
-		commitMessages:      msgcontinmem.New(),
+		CommitMessages:      msgcontinmem.New(),
 		ChangeRoundMessages: msgcontinmem.New(),
 
 		changeRoundChan: make(chan bool),
@@ -234,7 +234,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	case proto.RoundState_Prepare:
 		i.PrepareMessages.AddMessage(signedMessage)
 	case proto.RoundState_Commit:
-		i.commitMessages.AddMessage(signedMessage)
+		i.CommitMessages.AddMessage(signedMessage)
 	case proto.RoundState_ChangeRound:
 		i.ChangeRoundMessages.AddMessage(signedMessage)
 	}
