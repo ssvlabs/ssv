@@ -11,36 +11,51 @@ import (
 )
 
 // IBFT ALGORITHM 2: Happy flow - a normal case operation
-func TestUponPrePrepareMessagesBroadcastsPrepare(t *testing.T) {
+func TestAlgorithmTwoHappyFlow(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := prepareInstance(t, nodes, secretKeys)
 
-	// Upon receiving valid PRE-PREPARE messages - 1, 2, 3
-	message := setupMessage(1, secretKeys[1], proto.RoundState_PrePrepare)
-	instance.PrePrepareMessages.AddMessage(message)
+	// UPON receiving valid PRE-PREPARE messages - 1, 2, 3
+	instance.PrePrepareMessages.AddMessage(setupMessage(0, secretKeys[0], proto.RoundState_PrePrepare, 1))
+	instance.PrePrepareMessages.AddMessage(setupMessage(1, secretKeys[1], proto.RoundState_PrePrepare, 1))
+	instance.PrePrepareMessages.AddMessage(setupMessage(2, secretKeys[2], proto.RoundState_PrePrepare, 1))
 
-	message = setupMessage(1, secretKeys[2], proto.RoundState_PrePrepare)
-	instance.PrePrepareMessages.AddMessage(message)
-
-	message = setupMessage(1, secretKeys[3], proto.RoundState_PrePrepare)
-	instance.PrePrepareMessages.AddMessage(message)
-
-	require.NoError(t, instance.UponPrePrepareMsg().Run(message))
+	require.NoError(t, instance.UponPrePrepareMsg().Run(setupMessage(2, secretKeys[2], proto.RoundState_PrePrepare, 1)))
 
 	// ...such that JUSTIFY PREPARE is true
 	res, err := instance.JustifyPrePrepare(1)
 	require.NoError(t, err)
 	require.True(t, res)
 
-	// broadcasts PREPARE message
-	prepareMessage := setupMessage(1, secretKeys[3], proto.RoundState_Prepare)
-	instance.PrepareMessages.AddMessage(prepareMessage)
+	// broadcasts PREPARE messages - 1, 2, 3
+	instance.PrepareMessages.AddMessage(setupMessage(0, secretKeys[0], proto.RoundState_Prepare, 1))
+	instance.PrepareMessages.AddMessage(setupMessage(1, secretKeys[1], proto.RoundState_Prepare, 1))
+	instance.PrepareMessages.AddMessage(setupMessage(2, secretKeys[2], proto.RoundState_Prepare, 1))
+
+	// UPON receiving a quorum of valid PREPARE messages
+	res, totalSignedMsgs, committeeSize := instance.PrepareQuorum(1, []byte(time.Now().Weekday().String()))
+	require.True(t, res)
+	require.EqualValues(t, totalSignedMsgs, 3)
+	require.EqualValues(t, committeeSize, 4)
+
+	// broadcasts COMMIT messages - 1, 2, 3
+	instance.CommitMessages.AddMessage(setupMessage(0, secretKeys[0], proto.RoundState_Commit, 1))
+	instance.CommitMessages.AddMessage(setupMessage(1, secretKeys[1], proto.RoundState_Commit, 1))
+	instance.CommitMessages.AddMessage(setupMessage(2, secretKeys[2], proto.RoundState_Commit, 1))
+
+	// UPON receiving a quorum of valid COMMIT messages
+	res, totalSignedMsgs, committeeSize = instance.PrepareQuorum(1, []byte(time.Now().Weekday().String()))
+	require.True(t, res)
+	require.EqualValues(t, totalSignedMsgs, 3)
+	require.EqualValues(t, committeeSize, 4)
+
+	//TODO: add DECIDE(λi, value,Qcommit)
 }
 
-func setupMessage(id uint64, secretKey *bls.SecretKey, roundState proto.RoundState) *proto.SignedMessage {
+func setupMessage(id uint64, secretKey *bls.SecretKey, roundState proto.RoundState, round uint64) *proto.SignedMessage {
 	return SignMsg(id, secretKey, &proto.Message{
 		Type:   roundState,
-		Round:  1,
+		Round:  round,
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
