@@ -15,11 +15,7 @@ func TestAlgorithmTwoHappyFlow(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := prepareInstance(t, nodes, secretKeys)
 
-	// UPON receiving valid PRE-PREPARE messages - 1, 2, 3
-	instance.PrePrepareMessages.AddMessage(setupMessage(0, secretKeys[0], proto.RoundState_PrePrepare, 1))
-	instance.PrePrepareMessages.AddMessage(setupMessage(1, secretKeys[1], proto.RoundState_PrePrepare, 1))
-	instance.PrePrepareMessages.AddMessage(setupMessage(2, secretKeys[2], proto.RoundState_PrePrepare, 1))
-
+	//// UPON receiving valid PRE-PREPARE message
 	require.NoError(t, instance.UponPrePrepareMsg().Run(setupMessage(2, secretKeys[2], proto.RoundState_PrePrepare, 1)))
 
 	// ...such that JUSTIFY PREPARE is true
@@ -39,9 +35,9 @@ func TestAlgorithmTwoHappyFlow(t *testing.T) {
 	require.EqualValues(t, committeeSize, 4)
 
 	// broadcasts COMMIT messages - 1, 2, 3
-	instance.CommitMessages.AddMessage(setupMessage(0, secretKeys[0], proto.RoundState_Commit, 1))
-	instance.CommitMessages.AddMessage(setupMessage(1, secretKeys[1], proto.RoundState_Commit, 1))
-	instance.CommitMessages.AddMessage(setupMessage(2, secretKeys[2], proto.RoundState_Commit, 1))
+	//instance.CommitMessages.AddMessage(setupMessage(0, secretKeys[0], proto.RoundState_Commit, 1))
+	//instance.CommitMessages.AddMessage(setupMessage(1, secretKeys[1], proto.RoundState_Commit, 1))
+	//instance.CommitMessages.AddMessage(setupMessage(2, secretKeys[2], proto.RoundState_Commit, 1))
 
 	// UPON receiving a quorum of valid COMMIT messages
 	res, totalSignedMsgs, committeeSize = instance.PrepareQuorum(1, []byte(time.Now().Weekday().String()))
