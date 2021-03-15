@@ -39,7 +39,7 @@ spec:
       - name: ssv-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["start-boot-node"]
+        command: ["make", "start-boot-node"]
         ports:
         - containerPort: 5678
           name: port-5678
