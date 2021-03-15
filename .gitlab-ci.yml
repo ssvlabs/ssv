@@ -1,5 +1,5 @@
 stages:
-  - lint
+#  - lint
 #  - test
   - build
   - deploy
@@ -25,14 +25,14 @@ variables:
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
 
 # Common pipelines
-Run linter:
-  stage: lint
-  image: $GO_IMAGE
-  tags:
-    - blox-infra-stage
-  script:
-    - make lint-prepare
-    - make lint
+#Run linter:
+#  stage: lint
+#  image: $GO_IMAGE
+#  tags:
+#    - blox-infra-stage
+#  script:
+#    - make lint-prepare
+#    - make lint
 #Run tests:
 #  stage: test
 #  image: $GO_IMAGE
