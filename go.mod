@@ -17,6 +17,7 @@ require (
 	github.com/herumi/bls-eth-go-binary v0.0.0-20210102080045-a126987eca2b
 	github.com/libp2p/go-libp2p v0.12.1-0.20201208224947-3155ff3089c0
 	github.com/libp2p/go-libp2p-core v0.7.0
+	github.com/libp2p/go-libp2p-crypto v0.1.0
 	github.com/libp2p/go-libp2p-pubsub v0.4.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
@@ -29,11 +30,13 @@ require (
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/spf13/cobra v1.1.1
 	github.com/stretchr/testify v1.6.1
+	github.com/wealdtech/go-bytesutil v1.1.1
 	github.com/wealdtech/go-eth2-util v1.6.2
 	go.opencensus.io v0.22.5
 	go.uber.org/zap v1.16.0
 	google.golang.org/grpc v1.33.1
 	google.golang.org/protobuf v1.25.0
+	gopkg.in/src-d/go-log.v1 v1.0.1
 )
 
 replace github.com/ethereum/go-ethereum => github.com/prysmaticlabs/bazel-go-ethereum v0.0.0-20201113091623-013fd65b3791
