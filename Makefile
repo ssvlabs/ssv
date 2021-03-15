@@ -78,3 +78,9 @@ docker-debug:
 .PHONY: stop
 stop:
 	@docker-compose  down
+
+
+.PHONY: start-boot-node
+start-boot-node:
+	@echo "Running start-boot-node"
+	${BUILD_PATH} start-boot-node
