@@ -1,0 +1,45 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-2-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-2
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5678
+      protocol: TCP
+      targetPort: 5678
+      name: port-5678
+  selector:
+    app: ssv-node-2
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-2
+  name: ssv-node-2
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-2
+  template:
+    metadata:
+      labels:
+        app: ssv-node-2
+    spec:
+      containers:
+      - name: ssv-node-2
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        command: ["start-boot-node"]
+        ports:
+        - containerPort: 5678
+          name: port-5678
