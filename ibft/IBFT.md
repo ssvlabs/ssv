@@ -41,11 +41,12 @@ _Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/p
 ### Terminology
 - **`VALIDATOR`**: block validation participant - a.k.a. node.
 - **`PROPOSER`**: a block validation participant - node - chosen to propose a block in a consensus round.
-- **`ROUND`**: a consensus turn. Starts with a proposer creating a block proposal and ends with a block commitment or a round change.
+- **`ROUND`**: a consensus turn. Starts with a proposer creating a block proposal and ends with a block attestation - or a round change.
 - **`PROPOSAL`**: a new block generation with an undergoing consensus processing.
+- **`ATTESTATION`**: votes by validators which confirm the validity of a block.
 - **`SEQUENCE`**: a sequence number of a proposal. It shall be greater than all previous sequence numbers.
-- **`COMMITTEE`**: group of nodes - validators - responsible for a consensus voting to assure a valid block generated
-- **`SIGNATURES`**: a vote from a node to confirm a valid proposal
+- **`COMMITTEE`**: group of nodes - validators - responsible for a consensus voting to assure a valid block generated.
+- **`SIGNATURES`**: a technical signature from a node to attest messages broadcast for a given block.
 
 ### Consensus States
 
@@ -53,10 +54,10 @@ Istanbul BFT is a [state machine replication](https://en.wikipedia.org/wiki/Stat
 Each validator maintains a state machine replica in order to reach block consensus.
 
 #### States:
-- **`NEW ROUND`**: proposer sends new block proposal. Validators waits for PRE-PREPARE message
+- **`NEW ROUND`**: proposer sends new block proposal or attestation. Validators waits for PRE-PREPARE message
 - **`PRE-PREPARED`**: validator received the PRE-PREPARE message and broadcasts PREPARE message. Waits for 2/3 of PREPARE or COMMIT messages
 - **`PREPARED`**: validator received 2/3 of PREPARE messages and broadcasts COMMIT messages.
-- **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the proposed block into the blockchain
+- **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the proposed block or attestation into the blockchain
 - **`ROUND CHANGE`**: validator is waiting for 2/3 of ROUND CHANGE messages on the same proposed round number
 
 ---
