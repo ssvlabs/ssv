@@ -18,7 +18,7 @@ There are different working algorithms:
 
 ## Istanbul Byzantine Fault Tolerance (IBFT)
 
-The implementation of BFT. IBFT is a consensus mechanism that ensures a single, agreed-upon ordering of transactions in the blockchain.
+IBFT - implementation of BFT - is a consensus mechanism that ensures a single, agreed-upon ordering of transactions in the blockchain.
 
 IBFT uses a pool of validation nodes - _Validators_ - operating on an Ethereum network - ETH 2.0 - for `Attestation` and `Proposal`.
 
