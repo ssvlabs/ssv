@@ -41,6 +41,6 @@ COPY ./Makefile .env* ./
 
 
 # Expose port for load balancing
-EXPOSE 5678
+EXPOSE 5678 5000 4000/udp
 
 #ENTRYPOINT ["/go/bin/ssvnode"]
