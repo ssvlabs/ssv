@@ -1,4 +1,37 @@
 ---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: boot-node
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ssv.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - boot-node
+  http:
+  - route:
+    - destination:
+        host: boot-node-svc
+        port:
+          number: 5000
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: boot-node
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ssv.REPLACE_DOMAIN_SUFFIX"
+---
 apiVersion: v1
 kind: Service
 metadata:
