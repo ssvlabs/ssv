@@ -235,5 +235,13 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	localNode.SetFallbackIP(external)
 	localNode.SetFallbackUDP(port)
 
+	ipEntry := enr.IP(ipAddr)
+	udpEntry := enr.UDP(port)
+	tcpEntry := enr.TCP(5000)
+
+	localNode.Set(ipEntry)
+	localNode.Set(udpEntry)
+	localNode.Set(tcpEntry)
+
 	return localNode, nil
 }
