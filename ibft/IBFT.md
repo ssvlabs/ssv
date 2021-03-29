@@ -40,9 +40,9 @@ _Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/p
 
 ### Terminology
 - **`VALIDATOR`**: block validation participant - a.k.a. node.
-- **`DUTY BLOCK`**: data that represents the validator's duty on the beacon chain network - e.g. block proposal, attestation, aggregation
+- **`DUTY BLOCK`**: data that represents the validator's duty on the beacon chain network - e.g. block proposal, consensus, aggregation
 - **`LEADER`**: a duty block validation participant - node - chosen to propose a duty block in a consensus round.
-- **`ROUND`**: a consensus turn. Starts with a proposer creating a duty block proposal and ends with a duty block attestation - or a round change.
+- **`ROUND`**: a consensus turn. Starts with a leader creating a duty block proposal and ends with a duty block consensus - or a round change.
 - **`PROPOSAL`**: a new duty block generation with an undergoing consensus processing.
 - **`COMMITMENT`**: votes by validators which confirm the validity of a duty block.
 - **`SEQUENCE`**: a sequence number of a proposal. It shall be greater than all previous sequence numbers.
