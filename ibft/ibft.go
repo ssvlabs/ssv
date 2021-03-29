@@ -3,6 +3,8 @@ package ibft
 import (
 	"encoding/hex"
 
+	"github.com/bloxapp/ssv/ibft/leader"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -33,21 +35,23 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	instances map[string]*Instance // key is the instance identifier
-	storage   storage.Storage
-	me        *proto.Node
-	network   network.Network
-	params    *proto.InstanceParams
+	instances      map[string]*Instance // key is the instance identifier
+	storage        storage.Storage
+	me             *proto.Node
+	network        network.Network
+	params         *proto.InstanceParams
+	leaderSelector leader.Selector
 }
 
 // New is the constructor of IBFT
 func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) IBFT {
 	return &ibftImpl{
-		instances: make(map[string]*Instance),
-		storage:   storage,
-		me:        me,
-		network:   network,
-		params:    params,
+		instances:      make(map[string]*Instance),
+		storage:        storage,
+		me:             me,
+		network:        network,
+		params:         params,
+		leaderSelector: &leader.RoundRobin{},
 	}
 }
 
@@ -69,6 +73,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 		Me:             i.me,
 		Network:        i.network,
 		Consensus:      opts.Consensus,
+		LeaderSelector: i.leaderSelector,
 		Params:         i.params,
 		Lambda:         opts.Identifier,
 		PreviousLambda: opts.PrevInstance,

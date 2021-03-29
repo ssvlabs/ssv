@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft/leader"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
@@ -24,6 +26,7 @@ type InstanceOptions struct {
 	Me             *proto.Node
 	Network        network.Network
 	Consensus      dataval.Validator
+	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
 	Lambda         []byte
 	PreviousLambda []byte
@@ -35,6 +38,7 @@ type Instance struct {
 	State            *proto.State
 	network          network.Network
 	Consensus        dataval.Validator
+	LeaderSelection  leader.Selector
 	Params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	Logger           *zap.Logger
@@ -68,11 +72,12 @@ func NewInstance(opts InstanceOptions) *Instance {
 			Lambda:         opts.Lambda,
 			PreviousLambda: opts.PreviousLambda,
 		},
-		network:   opts.Network,
-		Consensus: opts.Consensus,
-		Params:    opts.Params,
-		Logger:    opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
-		msgLock:   sync.Mutex{},
+		network:         opts.Network,
+		Consensus:       opts.Consensus,
+		LeaderSelection: opts.LeaderSelector,
+		Params:          opts.Params,
+		Logger:          opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
+		msgLock:         sync.Mutex{},
 
 		msgQueue:            msgqueue.New(),
 		PrePrepareMessages:  msgcontinmem.New(),
@@ -135,6 +140,7 @@ func (i *Instance) Stage() proto.RoundState {
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
 	i.msgQueue.SetRound(round)
+	i.LeaderSelection.BumpLeader()
 }
 
 // SetStage set the State's round State and pushed the new State into the State channel
