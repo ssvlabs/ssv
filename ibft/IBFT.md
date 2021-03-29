@@ -55,7 +55,7 @@ Istanbul BFT is a [state machine replication](https://en.wikipedia.org/wiki/Stat
 Each validator maintains a state machine replica in order to reach block consensus.
 
 #### States:
-- **`NEW ROUND`**: proposer sends new duty block. Validators waits for PRE-PREPARE message
+- **`NEW ROUND`**: leader sends new duty block. Validators waits for PRE-PREPARE message
 - **`PRE-PREPARED`**: validator received the PRE-PREPARE message and broadcasts PREPARE message. Waits for 2/3 of PREPARE or COMMIT messages
 - **`PREPARED`**: validator received 2/3 of PREPARE messages and broadcasts COMMIT messages.
 - **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the block into the blockchain
