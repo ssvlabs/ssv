@@ -24,7 +24,7 @@ IBFT uses a pool of validation nodes - _Validators_ - operating on an Ethereum n
 
 At a very high level point-of-view we can be expressed in a **3 phase protocol**:
 
-1. `PRE-PREPARE`: a leader is selected from the validators group to propose a value to agree upon.
+1. `PRE-PREPARE`: a [leader is selected](./leader/README.md) from the validators group to propose a value to agree upon.
 1. `PREPARE`: upon receiving a valid pre-prepare, other validators broadcasts the prepare message. 
 1. `COMMIT`: upon receiving 2/3 votes, validators broadcasts a commit message.
 
