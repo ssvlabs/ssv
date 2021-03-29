@@ -17,6 +17,15 @@ func TestIBFT(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	replay := local.NewIBFTReplay(nodes)
+	//
+	//s := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
+	//s.PreventMessages(proto.RoundState_PrePrepare, []uint64{0})
+	//replay.SetScript(1, s)
+	//
+	//s1 := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
+	//s1.PreventMessages(proto.RoundState_PrePrepare, []uint64{1})
+	//replay.SetScript(2, s1)
+
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
@@ -32,16 +41,6 @@ func TestIBFT(t *testing.T) {
 
 		ibft := New(replay.Storage, me, replay.Network, params)
 		instances = append(instances, ibft)
-
-		//instances = append(instances, NewInstance(InstanceOptions{
-		//	Logger:    logger,
-		//	Me:        me,
-		//	Network:   replay.Network,
-		//	Consensus: weekday.New(),
-		//	Params:    params,
-		//}))
-		//instances[i].StartEventLoop()
-		//instances[i].StartMessagePipeline()
 	}
 
 	// start repeated timer
@@ -60,10 +59,8 @@ func TestIBFT(t *testing.T) {
 					Identifier:   []byte(newID),
 					Value:        []byte(time.Now().Weekday().String()),
 				}
-				replay := local.NewIBFTReplay(nodes)
 				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.String("id", newID), zap.String("prev_id", instanceIdentifier))
 				for _, i := range instances {
-					i.(*ibftImpl).network = replay.Network
 					go i.StartInstance(opts)
 				}
 				instanceIdentifier = newID

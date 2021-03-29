@@ -95,20 +95,14 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 				return false, 0
 			}
 			i.storage.SavePrepared(agg)
-		case proto.RoundState_Commit:
-			agg, err := newInstance.CommittedAggregatedMsg()
-			if err != nil {
-				newInstance.Logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
-				return false, 0
-			}
-			i.storage.SaveDecided(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0
 			}
-
+			i.storage.SaveDecided(agg)
+			i.leaderSelector.Bump() // important for next instance
 			return true, len(agg.GetSignerIds())
 		}
 	}

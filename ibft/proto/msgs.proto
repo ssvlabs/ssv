@@ -10,9 +10,9 @@ enum RoundState {
   NotStarted    = 0;
   PrePrepare    = 1;
   Prepare       = 2;
-  Commit        = 3;
+  Commit        = 3; // Commit is when an instance receives a qualified quorum of prepare msgs, then sends a commit msg.
   ChangeRound   = 4;
-  Decided       = 5;
+  Decided       = 5; // Decided is when an instance receives a qualified quorum of commit msgs
 }
 
 message Message {

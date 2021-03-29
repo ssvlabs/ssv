@@ -89,6 +89,10 @@ func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	return ret
 }
 
+func (r *IBFTReplay) SetScript(round uint64, script *RoundScript) {
+	r.scripts[round] = script
+}
+
 // StartRound starts the given round
 func (r *IBFTReplay) StartRound(round uint64) *RoundScript {
 	r.scripts[round] = NewRoundScript(r, r.nodes)
