@@ -18,7 +18,7 @@ There are different working algorithms:
 
 ## Istanbul Byzantine Fault Tolerance (IBFT)
 
-The implementation of BFT. IBFT is a consensus mechanism that ensures a single, agreed-upon ordering of transactions in the blockchain.
+IBFT - implementation of BFT - is a consensus mechanism that ensures a single, agreed-upon ordering of transactions in the blockchain.
 
 IBFT uses a pool of validation nodes - _Validators_ - operating on an Ethereum network - ETH 2.0 - for `Attestation` and `Proposal`.
 
@@ -40,12 +40,14 @@ _Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/p
 
 ### Terminology
 - **`VALIDATOR`**: block validation participant - a.k.a. node.
-- **`PROPOSER`**: a block validation participant - node - chosen to propose a block in a consensus round.
-- **`ROUND`**: a consensus turn. Starts with a proposer creating a block proposal and ends with a block commitment or a round change.
-- **`PROPOSAL`**: a new block generation with an undergoing consensus processing.
+- **`DUTY BLOCK`**: data that represents the validator's duty on the beacon chain network - e.g. block proposal, attestation, aggregation
+- **`LEADER`**: a duty block validation participant - node - chosen to propose a duty block in a consensus round.
+- **`ROUND`**: a consensus turn. Starts with a leader creating a duty block proposal and ends with a duty block consensus - or a round change.
+- **`PROPOSAL`**: a new duty block generation with an undergoing consensus processing.
+- **`COMMITMENT`**: votes by validators which confirm the validity of a duty block.
 - **`SEQUENCE`**: a sequence number of a proposal. It shall be greater than all previous sequence numbers.
-- **`COMMITTEE`**: group of nodes - validators - responsible for a consensus voting to assure a valid block generated
-- **`SIGNATURES`**: a vote from a node to confirm a valid proposal
+- **`COMMITTEE`**: group of nodes - validators - responsible for a consensus voting to assure a valid duty block generated.
+- **`SIGNATURES`**: a technical signature from a node to attest messages broadcast for a given duty block.
 
 ### Consensus States
 
@@ -53,10 +55,10 @@ Istanbul BFT is a [state machine replication](https://en.wikipedia.org/wiki/Stat
 Each validator maintains a state machine replica in order to reach block consensus.
 
 #### States:
-- **`NEW ROUND`**: proposer sends new block proposal. Validators waits for PRE-PREPARE message
+- **`NEW ROUND`**: leader sends new duty block. Validators waits for PRE-PREPARE message
 - **`PRE-PREPARED`**: validator received the PRE-PREPARE message and broadcasts PREPARE message. Waits for 2/3 of PREPARE or COMMIT messages
 - **`PREPARED`**: validator received 2/3 of PREPARE messages and broadcasts COMMIT messages.
-- **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the proposed block into the blockchain
+- **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the block into the blockchain
 - **`ROUND CHANGE`**: validator is waiting for 2/3 of ROUND CHANGE messages on the same proposed round number
 
 ---
