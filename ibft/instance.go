@@ -108,7 +108,8 @@ func (i *Instance) Start(inputValue []byte) {
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
-	i.BumpRound(1)
+	i.State.Round = 1      // start from 1
+	i.msgQueue.SetRound(1) // start from 1
 	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
@@ -140,7 +141,7 @@ func (i *Instance) Stage() proto.RoundState {
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
 	i.msgQueue.SetRound(round)
-	i.LeaderSelection.BumpLeader()
+	i.LeaderSelection.Bump()
 }
 
 // SetStage set the State's round State and pushed the new State into the State channel

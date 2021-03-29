@@ -11,13 +11,13 @@ import (
 )
 
 // ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(consensus dataval.Validator, leaderSelector leader.Selector) pipeline.Pipeline {
+func ValidatePrePrepareMsg(consensus dataval.Validator, leaderSelector leader.Selector, params *proto.InstanceParams) pipeline.Pipeline {
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")
 		}
 
-		if signedMessage.SignerIds[0] != leaderSelector.GetLeader() {
+		if signedMessage.SignerIds[0] != leaderSelector.Current(uint64(params.CommitteeSize())) {
 			return errors.New("pre-prepare message sender is not the round's leader")
 		}
 

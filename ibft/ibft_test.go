@@ -45,7 +45,7 @@ func TestIBFT(t *testing.T) {
 	}
 
 	// start repeated timer
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	quit := make(chan struct{})
 	instanceIdentifier := FirstInstanceIdentifier
 	go func() {

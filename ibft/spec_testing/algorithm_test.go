@@ -27,6 +27,12 @@ package spec_testing
 //	instance.PrepareMessages.AddMessage(prepareMessage)
 //}
 
+//func TestRoundRobinLeaderChange(t *testing.T) {
+//	// should bump between instances
+//	// should bump between round changes
+//	t.Fail()
+//}
+
 //func setupMessage(id uint64, secretKey *bls.SecretKey, roundState proto.RoundState) *proto.SignedMessage {
 //	return SignMsg(id, secretKey, &proto.Message{
 //		Type:   roundState,
