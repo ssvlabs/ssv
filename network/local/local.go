@@ -1,6 +1,8 @@
 package local
 
 import (
+	"encoding/hex"
+	"fmt"
 	"sync"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -10,13 +12,16 @@ import (
 
 // Network implements network.Network interface
 type Network struct {
-	replay *IBFTReplay
-	l      map[uint64]*sync.Mutex
-	c      map[uint64]chan *proto.SignedMessage
+	replay             *IBFTReplay
+	l                  map[uint64]*sync.Mutex
+	c                  map[uint64]chan *proto.SignedMessage
+	createChannelMutex sync.Mutex
 }
 
 // ReceivedMsgChan implements network.Network interface
 func (n *Network) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage {
+	n.createChannelMutex.Lock()
+	defer n.createChannelMutex.Unlock()
 	c := make(chan *proto.SignedMessage)
 	n.c[id] = c
 	n.l[id] = &sync.Mutex{}
@@ -29,13 +34,14 @@ func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 
 		// verify node is not prevented from sending msgs
 		for _, id := range signed.SignerIds {
-			if !n.replay.CanSend(signed.Message.Type, signed.Message.Round, id) {
+			if !n.replay.CanSend(signed.Message.Type, signed.Message.Lambda, signed.Message.Round, id) {
 				return
 			}
 		}
 
 		for i, c := range n.c {
-			if !n.replay.CanReceive(signed.Message.Type, signed.Message.Round, i) {
+			if !n.replay.CanReceive(signed.Message.Type, signed.Message.Lambda, signed.Message.Round, i) {
+				fmt.Printf("can't receive, node %d, lambda %s\n", i, hex.EncodeToString(signed.Message.Lambda))
 				continue
 			}
 
@@ -64,7 +70,7 @@ func (n *Network) ReceivedSignatureChan(lambda []byte) <-chan map[uint64][]byte 
 type IBFTReplay struct {
 	Network *Network
 	Storage storage.Storage
-	scripts map[uint64]*RoundScript
+	scripts map[string]map[uint64]*RoundScript
 	nodes   []uint64
 }
 
@@ -76,7 +82,7 @@ func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 			l: make(map[uint64]*sync.Mutex),
 		},
 		Storage: inmem.New(),
-		scripts: make(map[uint64]*RoundScript),
+		scripts: make(map[string]map[uint64]*RoundScript),
 		nodes:   make([]uint64, len(nodes)),
 	}
 	ret.Network.replay = ret
@@ -89,23 +95,30 @@ func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	return ret
 }
 
+func (r *IBFTReplay) SetScript(identifier []byte, round uint64, script *RoundScript) {
+	if r.scripts[hex.EncodeToString(identifier)] == nil {
+		r.scripts[hex.EncodeToString(identifier)] = make(map[uint64]*RoundScript)
+	}
+	r.scripts[hex.EncodeToString(identifier)][round] = script
+}
+
 // StartRound starts the given round
-func (r *IBFTReplay) StartRound(round uint64) *RoundScript {
-	r.scripts[round] = NewRoundScript(r, r.nodes)
-	return r.scripts[round]
+func (r *IBFTReplay) StartRound(identifier []byte, round uint64) *RoundScript {
+	r.scripts[hex.EncodeToString(identifier)][round] = NewRoundScript(r, r.nodes)
+	return r.scripts[hex.EncodeToString(identifier)][round]
 }
 
 // CanSend returns true if message can be sent
-func (r *IBFTReplay) CanSend(state proto.RoundState, round uint64, node uint64) bool {
-	if v, ok := r.scripts[round]; ok {
+func (r *IBFTReplay) CanSend(state proto.RoundState, identifier []byte, round uint64, node uint64) bool {
+	if v, ok := r.scripts[hex.EncodeToString(identifier)][round]; ok {
 		return v.CanSend(state, node)
 	}
 	return true
 }
 
 // CanReceive returns true if the message can be received
-func (r *IBFTReplay) CanReceive(state proto.RoundState, round uint64, node uint64) bool {
-	if v, ok := r.scripts[round]; ok {
+func (r *IBFTReplay) CanReceive(state proto.RoundState, identifier []byte, round uint64, node uint64) bool {
+	if v, ok := r.scripts[hex.EncodeToString(identifier)][round]; ok {
 		return v.CanSend(state, node)
 	}
 	return true

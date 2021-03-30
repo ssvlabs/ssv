@@ -1,7 +1,10 @@
 package ibft
 
 import (
+	"bytes"
 	"encoding/hex"
+
+	"github.com/bloxapp/ssv/ibft/leader"
 
 	"go.uber.org/zap"
 
@@ -11,10 +14,10 @@ import (
 	"github.com/bloxapp/ssv/utils/dataval"
 )
 
-const (
-	// FirstInstanceIdentifier is the identifier of the first instance in the DB
-	FirstInstanceIdentifier = ""
-)
+// FirstInstanceIdentifier is the identifier of the first instance in the DB
+func FirstInstanceIdentifier() []byte {
+	return []byte{0, 0, 0, 0, 0, 0, 0, 0}
+}
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
@@ -33,34 +36,35 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	instances map[string]*Instance // key is the instance identifier
-	storage   storage.Storage
-	me        *proto.Node
-	network   network.Network
-	params    *proto.InstanceParams
+	instances      map[string]*Instance // key is the instance identifier
+	storage        storage.Storage
+	me             *proto.Node
+	network        network.Network
+	params         *proto.InstanceParams
+	leaderSelector leader.Selector
 }
 
 // New is the constructor of IBFT
 func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) IBFT {
 	return &ibftImpl{
-		instances: make(map[string]*Instance),
-		storage:   storage,
-		me:        me,
-		network:   network,
-		params:    params,
+		instances:      make(map[string]*Instance),
+		storage:        storage,
+		me:             me,
+		network:        network,
+		params:         params,
+		leaderSelector: &leader.Deterministic{},
 	}
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	// If previous instance didn't decide, can't start another instance.
-	prevID := hex.EncodeToString(opts.PrevInstance)
-	if prevID != FirstInstanceIdentifier {
-		instance, found := i.instances[prevID]
+	if !bytes.Equal(opts.PrevInstance, FirstInstanceIdentifier()) {
+		instance, found := i.instances[hex.EncodeToString(opts.PrevInstance)]
 		if !found {
-			opts.Logger.Fatal("previous instance not found")
+			opts.Logger.Error("previous instance not found")
 		}
 		if instance.Stage() != proto.RoundState_Decided {
-			opts.Logger.Fatal("previous instance not decided, can't start new instance")
+			opts.Logger.Error("previous instance not decided, can't start new instance")
 		}
 	}
 
@@ -69,6 +73,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 		Me:             i.me,
 		Network:        i.network,
 		Consensus:      opts.Consensus,
+		LeaderSelector: i.leaderSelector,
 		Params:         i.params,
 		Lambda:         opts.Identifier,
 		PreviousLambda: opts.PrevInstance,
@@ -77,6 +82,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
+	i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection
 	go newInstance.Start(opts.Value)
 
 	// Store prepared round and value and decided stage.
@@ -90,21 +96,19 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 				return false, 0
 			}
 			i.storage.SavePrepared(agg)
-		case proto.RoundState_Commit:
-			agg, err := newInstance.CommittedAggregatedMsg()
-			if err != nil {
-				newInstance.Logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
-				return false, 0
-			}
-			i.storage.SaveDecided(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Fatal("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0
 			}
-
+			i.storage.SaveDecided(agg)
 			return true, len(agg.GetSignerIds())
 		}
 	}
+}
+
+// resetLeaderSelection resets leader selection with seed and round 1
+func (i *ibftImpl) resetLeaderSelection(seed []byte) {
+	i.leaderSelector.SetSeed(seed, 1)
 }
