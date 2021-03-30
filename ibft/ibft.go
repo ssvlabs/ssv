@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"bytes"
 	"encoding/hex"
 
 	"github.com/bloxapp/ssv/ibft/leader"
@@ -13,10 +14,10 @@ import (
 	"github.com/bloxapp/ssv/utils/dataval"
 )
 
-const (
-	// FirstInstanceIdentifier is the identifier of the first instance in the DB
-	FirstInstanceIdentifier = ""
-)
+// FirstInstanceIdentifier is the identifier of the first instance in the DB
+func FirstInstanceIdentifier() []byte {
+	return []byte{0, 0, 0, 0, 0, 0, 0, 0}
+}
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
@@ -51,15 +52,14 @@ func New(storage storage.Storage, me *proto.Node, network network.Network, param
 		me:             me,
 		network:        network,
 		params:         params,
-		leaderSelector: &leader.RoundRobin{},
+		leaderSelector: &leader.Deterministic{},
 	}
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	// If previous instance didn't decide, can't start another instance.
-	prevID := hex.EncodeToString(opts.PrevInstance)
-	if prevID != FirstInstanceIdentifier {
-		instance, found := i.instances[prevID]
+	if !bytes.Equal(opts.PrevInstance, FirstInstanceIdentifier()) {
+		instance, found := i.instances[hex.EncodeToString(opts.PrevInstance)]
 		if !found {
 			opts.Logger.Fatal("previous instance not found")
 		}
@@ -82,6 +82,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
+	i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection
 	go newInstance.Start(opts.Value)
 
 	// Store prepared round and value and decided stage.
@@ -102,8 +103,12 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 				return false, 0
 			}
 			i.storage.SaveDecided(agg)
-			i.leaderSelector.Bump() // important for next instance
 			return true, len(agg.GetSignerIds())
 		}
 	}
+}
+
+// resetLeaderSelection resets leader selection with seed and round 1
+func (i *ibftImpl) resetLeaderSelection(seed []byte) {
+	i.leaderSelector.SetSeed(seed, 1)
 }

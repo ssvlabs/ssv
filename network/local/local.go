@@ -10,13 +10,16 @@ import (
 
 // Network implements network.Network interface
 type Network struct {
-	replay *IBFTReplay
-	l      map[uint64]*sync.Mutex
-	c      map[uint64]chan *proto.SignedMessage
+	replay             *IBFTReplay
+	l                  map[uint64]*sync.Mutex
+	c                  map[uint64]chan *proto.SignedMessage
+	createChannelMutex sync.Mutex
 }
 
 // ReceivedMsgChan implements network.Network interface
 func (n *Network) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage {
+	n.createChannelMutex.Lock()
+	defer n.createChannelMutex.Unlock()
 	c := make(chan *proto.SignedMessage)
 	n.c[id] = c
 	n.l[id] = &sync.Mutex{}

@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func TestIBFT(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	replay := local.NewIBFTReplay(nodes)
-	//
+
 	//s := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
 	//s.PreventMessages(proto.RoundState_PrePrepare, []uint64{0})
 	//replay.SetScript(1, s)
@@ -44,22 +45,22 @@ func TestIBFT(t *testing.T) {
 	}
 
 	// start repeated timer
-	ticker := time.NewTicker(20 * time.Second)
+	ticker := time.NewTicker(11 * time.Second)
 	quit := make(chan struct{})
-	instanceIdentifier := FirstInstanceIdentifier
+	instanceIdentifier := FirstInstanceIdentifier()
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				newID := time.Now().String()
+				newID := Int64ToBytes(time.Now().Unix())
 				opts := StartOptions{
 					Logger:       logger,
 					Consensus:    bytesval.New([]byte(time.Now().Weekday().String())),
-					PrevInstance: []byte(instanceIdentifier),
-					Identifier:   []byte(newID),
+					PrevInstance: instanceIdentifier,
+					Identifier:   newID,
 					Value:        []byte(time.Now().Weekday().String()),
 				}
-				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.String("id", newID), zap.String("prev_id", instanceIdentifier))
+				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.Binary("id", newID), zap.Binary("prev_id", instanceIdentifier))
 				for _, i := range instances {
 					go i.StartInstance(opts)
 				}
@@ -73,4 +74,10 @@ func TestIBFT(t *testing.T) {
 
 	// wait
 	time.Sleep(time.Minute * 2)
+}
+
+func Int64ToBytes(i int64) []byte {
+	var buf = make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, uint64(i))
+	return buf
 }
