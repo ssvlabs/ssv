@@ -12,5 +12,5 @@ func (i *Instance) ThisRoundLeader() uint64 {
 
 // RoundLeader checks the round leader
 func (i *Instance) RoundLeader(round uint64) uint64 {
-	return i.LeaderSelection.Current(uint64(i.Params.CommitteeSize()))
+	return i.LeaderSelector.Current(uint64(i.Params.CommitteeSize()))
 }

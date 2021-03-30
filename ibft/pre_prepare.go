@@ -17,7 +17,7 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		preprepare.ValidatePrePrepareMsg(i.Consensus, i.LeaderSelection, i.Params),
+		preprepare.ValidatePrePrepareMsg(i.Consensus, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),
 	)
 }

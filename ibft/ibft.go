@@ -61,10 +61,10 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	if !bytes.Equal(opts.PrevInstance, FirstInstanceIdentifier()) {
 		instance, found := i.instances[hex.EncodeToString(opts.PrevInstance)]
 		if !found {
-			opts.Logger.Fatal("previous instance not found")
+			opts.Logger.Error("previous instance not found")
 		}
 		if instance.Stage() != proto.RoundState_Decided {
-			opts.Logger.Fatal("previous instance not decided, can't start new instance")
+			opts.Logger.Error("previous instance not decided, can't start new instance")
 		}
 	}
 

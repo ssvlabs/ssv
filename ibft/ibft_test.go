@@ -19,14 +19,6 @@ func TestIBFT(t *testing.T) {
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
 	replay := local.NewIBFTReplay(nodes)
 
-	//s := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
-	//s.PreventMessages(proto.RoundState_PrePrepare, []uint64{0})
-	//replay.SetScript(1, s)
-	//
-	//s1 := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
-	//s1.PreventMessages(proto.RoundState_PrePrepare, []uint64{1})
-	//replay.SetScript(2, s1)
-
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
@@ -48,6 +40,7 @@ func TestIBFT(t *testing.T) {
 	ticker := time.NewTicker(11 * time.Second)
 	quit := make(chan struct{})
 	instanceIdentifier := FirstInstanceIdentifier()
+	instanceCount := 0
 	go func() {
 		for {
 			select {
@@ -60,11 +53,30 @@ func TestIBFT(t *testing.T) {
 					Identifier:   newID,
 					Value:        []byte(time.Now().Weekday().String()),
 				}
+
+				/**
+					replay config
+				 */
+				//if instanceCount == 0 {
+				//	s := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
+				//	s.PreventMessages(proto.RoundState_PrePrepare, []uint64{0})
+				//	replay.SetScript(newID, 1, s)
+				//}
+
+				//s1 := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
+				//s1.PreventMessages(proto.RoundState_PrePrepare, []uint64{1})
+				//replay.SetScript(2, s1)
+				/**
+					replay config
+				*/
+
+
 				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.Binary("id", newID), zap.Binary("prev_id", instanceIdentifier))
 				for _, i := range instances {
 					go i.StartInstance(opts)
 				}
-				instanceIdentifier = newID
+				instanceCount ++
+				//instanceIdentifier = newID
 			case <-quit:
 				ticker.Stop()
 				return

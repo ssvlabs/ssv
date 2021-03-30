@@ -38,7 +38,7 @@ type Instance struct {
 	State            *proto.State
 	network          network.Network
 	Consensus        dataval.Validator
-	LeaderSelection  leader.Selector
+	LeaderSelector   leader.Selector
 	Params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	Logger           *zap.Logger
@@ -72,12 +72,12 @@ func NewInstance(opts InstanceOptions) *Instance {
 			Lambda:         opts.Lambda,
 			PreviousLambda: opts.PreviousLambda,
 		},
-		network:         opts.Network,
-		Consensus:       opts.Consensus,
-		LeaderSelection: opts.LeaderSelector,
-		Params:          opts.Params,
-		Logger:          opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
-		msgLock:         sync.Mutex{},
+		network:        opts.Network,
+		Consensus:      opts.Consensus,
+		LeaderSelector: opts.LeaderSelector,
+		Params:         opts.Params,
+		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
+		msgLock:        sync.Mutex{},
 
 		msgQueue:            msgqueue.New(),
 		PrePrepareMessages:  msgcontinmem.New(),
@@ -141,7 +141,7 @@ func (i *Instance) Stage() proto.RoundState {
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
 	i.msgQueue.SetRound(round)
-	i.LeaderSelection.Bump()
+	i.LeaderSelector.Bump()
 }
 
 // SetStage set the State's round State and pushed the new State into the State channel
