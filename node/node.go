@@ -110,7 +110,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 	n.logger.Info("start listening slot queue")
 
-	identfier := ibft.FirstInstanceIdentifier
+	identfier := ibft.FirstInstanceIdentifier()
 	for {
 		slot, duty, ok, err := n.slotQueue.Next(n.validatorPubKey)
 		if err != nil {
@@ -190,7 +190,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 					decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
 						Logger:       logger,
 						Consensus:    bytesval.New(valBytes),
-						PrevInstance: []byte(identfier),
+						PrevInstance: identfier,
 						Identifier:   []byte(strconv.Itoa(int(slot))),
 						Value:        valBytes,
 					})
