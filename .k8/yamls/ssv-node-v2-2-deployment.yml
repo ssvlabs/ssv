@@ -1,0 +1,89 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-v2-2-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-v2-2
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12000
+      protocol: UDP
+      targetPort: 12000
+      name: port-12000
+    - port: 13000
+      protocol: TCP
+      targetPort: 13000
+      name: port-13000 
+  selector:
+    app: ssv-node-v2-2
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-v2-2
+  name: ssv-node-v2-2
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-v2-2
+  template:
+    metadata:
+      labels:
+        app: ssv-node-v2-2
+    spec:
+      containers:
+      - name: ssv-node-v2-2
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12000
+          name: port-12000
+          protocol: UDP
+        - containerPort: 13000
+          name: port-13000
+        env:
+        - name: NODE_ID
+          value: "1"
+        - name: SSV_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: ssv_node_v2_2
+        - name: VALIDATOR_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: validator_public_key
+        - name: BEACON_NODE_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: beacon_node_addr
+        - name: PUBKEY_NODE_1
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_1
+        - name: PUBKEY_NODE_3
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_3
+        - name: PUBKEY_NODE_4
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_4
+        - name: NETWORK
+          value: "pyrmont" 
+        - name: CONSENSUS_TYPE
+          value: "validation"

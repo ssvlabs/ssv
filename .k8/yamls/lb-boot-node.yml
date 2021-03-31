@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: boot-node-lb-svc
+  namespace: ssv
+  annotations:
+    "external-dns.alpha.kubernetes.io/hostname": ssv-lb.stage.bloxinfra.com
+    "service.beta.kubernetes.io/aws-load-balancer-internal": "0.0.0.0/0"
+  labels:
+    app: boot-node
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 5000
+      protocol: TCP
+      targetPort: 5000
+      name: port-5000
+  selector:
+    app: boot-node
