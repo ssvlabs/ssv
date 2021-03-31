@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/pkg/errors"
-	"github.com/prometheus/common/log"
-	"strconv"
-	"time"
-
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/pkg/errors"
+	"strconv"
 
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -20,18 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-
-func (n *ssvNode) postConsensusSignatureAndAggregation(
+// signDuty signs the duty after iBFT came to consensus
+func (n *ssvNode) signDuty(
 	ctx context.Context,
-	logger *zap.Logger,
-	identifier []byte,
 	inputValue proto.InputValue,
-	signaturesCount int,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) {
-	signaturesChan := n.network.ReceivedSignatureChan(identifier)
-
+) ([]byte, error){
 	// sign input value
 	var sig []byte
 	var err error
@@ -58,6 +50,64 @@ func (n *ssvNode) postConsensusSignatureAndAggregation(
 		err = e
 		sig = signedProposal.GetSignature()
 	}
+	return sig, err
+}
+
+// reconstructAndBroadcastSignature reconstructs the received signatures from other
+// nodes and broadcasts the reconstructed signature to the beacon-chain
+func (n *ssvNode) reconstructAndBroadcastSignature(
+	ctx context.Context,
+	logger *zap.Logger,
+	signatures map[uint64][]byte,
+	inputValue proto.InputValue,
+	role beacon.Role,
+	duty *ethpb.DutiesResponse_Duty,
+) error {
+	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
+
+	// Reconstruct signatures
+	signature, err := threshold.ReconstructSignatures(signatures)
+	if err != nil {
+		return errors.Wrap(err, "failed to reconstruct signatures")
+	}
+	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature)))
+
+	// Submit validation to beacon node
+	switch role {
+	case beacon.RoleAttester:
+		inputValue.GetAttestation().Signature = signature
+		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex()); err != nil {
+			return errors.Wrap(err, "failed to broadcast attestation")
+		}
+	case beacon.RoleAggregator:
+		inputValue.GetAggregation().Signature = signature
+		if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
+			return errors.Wrap(err, "failed to broadcast aggregation")
+		}
+	case beacon.RoleProposer:
+		inputValue.GetBlock().Signature = signature
+		if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
+			return errors.Wrap(err, "failed to broadcast proposal")
+		}
+	}
+	return nil
+}
+
+// postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
+// waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
+func (n *ssvNode) postConsensusDutyExecution(
+	ctx context.Context,
+	logger *zap.Logger,
+	identifier []byte,
+	inputValue proto.InputValue,
+	signaturesCount int,
+	role beacon.Role,
+	duty *ethpb.DutiesResponse_Duty,
+) {
+	signaturesChan := n.network.ReceivedSignatureChan(identifier)
+
+	// sign input value
+	sig, err := n.signDuty(ctx, inputValue, role, duty)
 
 	// broadcast
 	if err != nil {
@@ -80,38 +130,14 @@ func (n *ssvNode) postConsensusSignatureAndAggregation(
 	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	signature, err := threshold.ReconstructSignatures(signatures)
-	if err != nil {
-		logger.Error("failed to reconstruct signatures", zap.Error(err))
+	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, inputValue, role, duty); err != nil {
+		logger.Error("", zap.Error(err))
 		return
-	}
-	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature)))
-
-	// Submit validation to beacon node
-	switch role {
-	case beacon.RoleAttester:
-		inputValue.GetAttestation().Signature = signature
-		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex()); err != nil {
-			logger.Error("failed to submit attestation", zap.Error(err))
-			return
-		}
-	case beacon.RoleAggregator:
-		inputValue.GetAggregation().Signature = signature
-		if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
-			logger.Error("failed to submit aggregation", zap.Error(err))
-			return
-		}
-	case beacon.RoleProposer:
-		inputValue.GetBlock().Signature = signature
-		if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
-			logger.Error("failed to submit proposal", zap.Error(err))
-			return
-		}
 	}
 	logger.Info("Successfully submitted role!")
 }
 
-func (n *ssvNode) getConsensusOnInputValue(
+func (n *ssvNode) comeToConsensusOnInputValue(
 	ctx context.Context,
 	logger *zap.Logger,
 	identifier []byte,
@@ -155,15 +181,9 @@ func (n *ssvNode) getConsensusOnInputValue(
 		return 0, nil, errors.New("unknown role")
 	}
 
-	var valBytes []byte
-	var err error
-	switch n.consensus {
-	case "weekday":
-		valBytes = []byte(time.Now().Weekday().String())
-	default:
-		if valBytes, err = json.Marshal(&inputValue); err != nil {
-			return 0, nil, errors.Wrap(err, "failed to marshal input value")
-		}
+	valBytes, err := json.Marshal(&inputValue)
+	if err != nil {
+		return 0, nil, errors.Wrap(err, "failed to marshal input value")
 	}
 
 	decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
@@ -200,9 +220,9 @@ func (n *ssvNode) executeDuty(
 		go func() {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, inputValue, err := n.getConsensusOnInputValue(ctx, logger, identifier, slot, role, duty)
+			signaturesCount, inputValue, err := n.comeToConsensusOnInputValue(ctx, logger, identifier, slot, role, duty)
 			if err != nil {
-				log.Error(zap.Error(err))
+				logger.Error("", zap.Error(err))
 				return
 			}
 
@@ -210,7 +230,7 @@ func (n *ssvNode) executeDuty(
 			logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
 
 			// Sign, aggregate and broadcast signature
-			n.postConsensusSignatureAndAggregation(
+			n.postConsensusDutyExecution(
 				ctx,
 				l,
 				identifier,
