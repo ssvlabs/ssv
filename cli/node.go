@@ -73,7 +73,18 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		peer, err := p2p.New(cmd.Context(), logger, validatorKey)
+		cfg := p2p.Config{
+			Local:               false,
+			BootstrapNodeAddr:   nil,
+			Discv5BootStrapAddr: nil,
+			UdpPort:             0,
+			TcpPort:             0,
+			HostID:              "",
+			TopicName:           validatorKey,
+			Topic:               nil,
+			Sub:                 nil,
+		}
+		peer, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
 			logger.Fatal("failed to create peer", zap.Error(err))
 		}

@@ -3,13 +3,19 @@ package p2p
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	p2pHost "github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
+	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
+	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
+	"log"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -54,55 +60,140 @@ type listener struct {
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
 	ctx           context.Context
-	hostID        peer.ID
-	topic         *pubsub.Topic
-	sub           *pubsub.Subscription
+	cfg           *Config
 	listenersLock sync.Locker
+	dv5Listener   Listener
 	listeners     []listener
 	logger        *zap.Logger
+	privKey       *ecdsa.PrivateKey
+	peers         *peers.Status
+	host          p2pHost.Host
+	pubsub                *pubsub.PubSub
 }
 
 // New is the constructor of p2pNetworker
-func New(ctx context.Context, logger *zap.Logger, topicName string) (network.Network, error) {
-	// Create a new libp2p Host that listens on a random TCP port
-	host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create a new P2P host")
+func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
+
+	n := &p2pNetwork{
+		ctx:           ctx,
+		cfg:           cfg,
+		listenersLock: &sync.Mutex{},
+		logger:        logger,
 	}
-	logger = logger.With(zap.String("id", host.ID().String()), zap.String("topic", topicName))
-	logger.Info("created a new peer")
+	if cfg.Local { // use mdns discovery
+		// Create a new libp2p Host that listens on a random TCP port
+		host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create a new P2P host")
+		}
+		n.host = host
+		n.cfg.HostID = host.ID()
+
+		logger = logger.With(zap.String("id", host.ID().String()), zap.String("Topic", n.cfg.TopicName))
+		logger.Info("created a new peer")
+	} else {
+		dv5Nodes := parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
+		n.cfg.Discv5BootStrapAddr = dv5Nodes
+		ipAddr := ipAddr()
+		ipAddr = net.ParseIP("127.0.0.1")
+		log.Print("TEST ip ---", ipAddr)
+		privKey, err := privKey()
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed to generate p2p private key")
+		}
+		n.privKey = privKey
+		opts := n.buildOptions(ipAddr, privKey)
+		host, err := libp2p.New(ctx, opts...)
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed to create p2p host")
+		}
+		n.host = host
+		host.RemoveStreamHandler(identify.IDDelta)
+	}
+
+	// Gossipsub registration is done before we add in any new peers
+	// due to libp2p's gossipsub implementation not taking into
+	// account previously added peers when creating the gossipsub
+	// object.
+	psOpts := []pubsub.Option{
+		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		//pubsub.WithNoAuthor(),
+		//pubsub.WithMessageIdFn(msgIDFunction),
+		//pubsub.WithSubscriptionFilter(s),
+		//pubsub.WithPeerOutboundQueueSize(2560),
+		//pubsub.WithValidateQueueSize(2560),
+	}
+
+	setPubSubParameters()
 
 	// Create a new PubSub service using the GossipSub router
-	ps, err := pubsub.NewGossipSub(ctx, host)
+	gs, err := pubsub.NewGossipSub(ctx, n.host, psOpts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create PubSub service")
+		logger.Error("Failed to start pubsub")
+		return nil, err
+	}
+	n.pubsub = gs
+
+	if n.cfg.Local {
+		// Setup Local mDNS discovery
+		if err := setupDiscovery(ctx, logger, n.host); err != nil {
+			return nil, errors.Wrap(err, "failed to setup discovery")
+		}
+	} else {
+		n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
+			PeerLimit: 45,
+			ScorerParams: &scorers.Config{
+				BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
+					Threshold:     5,
+					DecayInterval: time.Hour,
+				},
+			},
+		})
+
+		listener, err := n.startDiscoveryV5(ipAddr(), n.privKey)
+		if err != nil {
+			log.Print("Failed to start discovery")
+			//s.startupErr = err
+			return nil, err
+		}
+		err = n.connectToBootnodes()
+		if err != nil {
+			log.Print("Could not add bootnode to the exclusion list")
+			//s.startupErr = err
+			return nil, err
+		}
+
+		n.dv5Listener = listener
+		go n.listenForNewNodes()
+
+		if n.cfg.HostAddress != "" {
+			//logExternalIPAddr(s.host.ID(), p2pHostAddress, p2pTCPPort)
+			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TcpPort))
+			conn, err := net.DialTimeout("tcp", a, time.Second*10)
+			if err != nil {
+				log.Print("IP address is not accessible", err)
+			}
+			if err := conn.Close(); err != nil {
+				log.Print("Could not close connection", err)
+			}
+		}
 	}
 
-	// Setup local mDNS discovery
-	if err := setupDiscovery(ctx, logger, host); err != nil {
-		return nil, errors.Wrap(err, "failed to setup discovery")
+	// Join the pubsub Topic
+	topic, err := n.pubsub.Join(getTopic(n.cfg.TopicName))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to join to Topic")
 	}
 
-	// Join the pubsub topic
-	topic, err := ps.Join(getTopic(topicName))
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to join to topic")
-	}
+	n.cfg.Topic = topic
 
 	// And subscribe to it
 	sub, err := topic.Subscribe()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to subscribe on topic")
+		return nil, errors.Wrap(err, "failed to subscribe on Topic")
 	}
 
-	n := &p2pNetwork{
-		ctx:           ctx,
-		hostID:        host.ID(),
-		topic:         topic,
-		sub:           sub,
-		listenersLock: &sync.Mutex{},
-		logger:        logger,
-	}
+	n.cfg.Sub = sub
 
 	go n.listen()
 
@@ -120,7 +211,7 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
-	return n.topic.Publish(n.ctx, msgBytes)
+	return n.cfg.Topic.Publish(n.ctx, msgBytes)
 }
 
 // ReceivedMsgChan return a channel with messages
@@ -148,7 +239,7 @@ func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]by
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
-	return n.topic.Publish(n.ctx, msgBytes)
+	return n.cfg.Topic.Publish(n.ctx, msgBytes)
 }
 
 // ReceivedSignatureChan returns the channel with signatures
@@ -170,15 +261,15 @@ func (n *p2pNetwork) listen() {
 	for {
 		select {
 		case <-n.ctx.Done():
-			if err := n.topic.Close(); err != nil {
-				n.logger.Error("failed to close topic", zap.Error(err))
+			if err := n.cfg.Topic.Close(); err != nil {
+				n.logger.Error("failed to close Topic", zap.Error(err))
 			}
 
-			n.sub.Cancel()
+			n.cfg.Sub.Cancel()
 		default:
-			msg, err := n.sub.Next(n.ctx)
+			msg, err := n.cfg.Sub.Next(n.ctx)
 			if err != nil {
-				n.logger.Error("failed to get message from subscription topic", zap.Error(err))
+				n.logger.Error("failed to get message from subscription Topic", zap.Error(err))
 				return
 			}
 
