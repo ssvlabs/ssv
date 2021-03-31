@@ -197,14 +197,14 @@ func (n *ssvNode) processRole(
 
 	// Sign, aggregate and broadcast signature
 	n.postConsensusSignatureAndAggregation(
-			ctx,
-			l,
-			identifier,
-			inputValue,
-			signaturesCount,
-			role,
-			duty,
-		)
+		ctx,
+		l,
+		identifier,
+		inputValue,
+		signaturesCount,
+		role,
+		duty,
+	)
 
 	//identfier = newId // TODO: Fix race condition
 }
@@ -226,8 +226,6 @@ func (n *ssvNode) executeDuty(
 	}
 
 	for _, role := range roles {
-		go func(role beacon.Role) {
-
-		}(role)
+		go n.processRole(ctx, logger, identifier, slot, role, duty)
 	}
 }
