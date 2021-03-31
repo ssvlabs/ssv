@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/pkg/errors"
+	"github.com/prometheus/common/log"
 	"strconv"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"go.uber.org/zap"
 )
 
+
 func (n *ssvNode) postConsensusSignatureAndAggregation(
 	ctx context.Context,
 	logger *zap.Logger,
@@ -29,56 +32,42 @@ func (n *ssvNode) postConsensusSignatureAndAggregation(
 ) {
 	signaturesChan := n.network.ReceivedSignatureChan(identifier)
 
+	// sign input value
+	var sig []byte
+	var err error
 	switch role {
 	case beacon.RoleAttester:
-		signedAttestation, err := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
-		if err != nil {
-			logger.Error("failed to sign attestation data", zap.Error(err))
-			return
-		}
-
-		if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: signedAttestation.GetSignature()}); err != nil {
-			logger.Error("failed to broadcast signature", zap.Error(err))
-			return
-		}
-
+		signedAttestation, e := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
 		inputValue.SignedData = &proto.InputValue_Attestation{
 			Attestation: signedAttestation,
 		}
+		err = e
+		sig = signedAttestation.GetSignature()
 	case beacon.RoleAggregator:
-		signedAggregation, err := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
-		if err != nil {
-			logger.Error("failed to sign aggregation data", zap.Error(err))
-			return
-		}
-
-		if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: signedAggregation.GetSignature()}); err != nil {
-			logger.Error("failed to broadcast signature", zap.Error(err))
-			return
-		}
-
+		signedAggregation, e := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
 		inputValue.SignedData = &proto.InputValue_Aggregation{
 			Aggregation: signedAggregation,
 		}
+		err = e
+		sig = signedAggregation.GetSignature()
 	case beacon.RoleProposer:
-		signedProposal, err := n.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
-		if err != nil {
-			logger.Error("failed to sign proposal data", zap.Error(err))
-			return
-		}
-
-		if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: signedProposal.GetSignature()}); err != nil {
-			logger.Error("failed to broadcast signature", zap.Error(err))
-			return
-		}
-
+		signedProposal, e := n.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
 		inputValue.SignedData = &proto.InputValue_Block{
 			Block: signedProposal,
 		}
+		err = e
+		sig = signedProposal.GetSignature()
 	}
 
-	// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-	logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
+	// broadcast
+	if err != nil {
+		logger.Error("failed to sign input data", zap.Error(err))
+		return
+	}
+	if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: sig}); err != nil {
+		logger.Error("failed to broadcast signature", zap.Error(err))
+		return
+	}
 
 	// Collect signatures from other nodes
 	signatures := make(map[uint64][]byte, signaturesCount)
@@ -119,27 +108,26 @@ func (n *ssvNode) postConsensusSignatureAndAggregation(
 			return
 		}
 	}
-	logger.Info("validation successfully submitted!")
+	logger.Info("Successfully submitted role!")
 }
 
-func (n *ssvNode) processRole(
+func (n *ssvNode) getConsensusOnInputValue(
 	ctx context.Context,
 	logger *zap.Logger,
 	identifier []byte,
 	slot uint64,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) {
+) (int, *proto.InputValue, error) {
 	l := logger.With(zap.String("role", role.String()))
 	l.Info("starting IBFT instance...")
 
-	var inputValue proto.InputValue
+	inputValue := &proto.InputValue{}
 	switch role {
 	case beacon.RoleAttester:
 		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
 		if err != nil {
-			l.Error("failed to get attestation data", zap.Error(err))
-			return
+			return 0, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 
 		inputValue.Data = &proto.InputValue_AttestationData{
@@ -148,8 +136,7 @@ func (n *ssvNode) processRole(
 	case beacon.RoleAggregator:
 		aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
 		if err != nil {
-			l.Error("failed to get aggregation data", zap.Error(err))
-			return
+			return 0, nil, errors.Wrap(err, "failed to get aggregation data")
 		}
 
 		inputValue.Data = &proto.InputValue_AggregationData{
@@ -158,16 +145,14 @@ func (n *ssvNode) processRole(
 	case beacon.RoleProposer:
 		block, err := n.beacon.GetProposalData(ctx, slot)
 		if err != nil {
-			l.Error("failed to get proposal block", zap.Error(err))
-			return
+			return 0, nil, errors.Wrap(err, "failed to get proposal block")
 		}
 
 		inputValue.Data = &proto.InputValue_BeaconBlock{
 			BeaconBlock: block,
 		}
 	case beacon.RoleUnknown:
-		l.Warn("unknown role")
-		return
+		return 0, nil, errors.New("unknown role")
 	}
 
 	var valBytes []byte
@@ -177,8 +162,7 @@ func (n *ssvNode) processRole(
 		valBytes = []byte(time.Now().Weekday().String())
 	default:
 		if valBytes, err = json.Marshal(&inputValue); err != nil {
-			l.Error("failed to marshal input value", zap.Error(err))
-			return
+			return 0, nil, errors.Wrap(err, "failed to marshal input value")
 		}
 	}
 
@@ -191,22 +175,9 @@ func (n *ssvNode) processRole(
 	})
 
 	if !decided {
-		l.Warn("not decided")
-		return
+		return 0, nil, errors.New("ibft did not decide, not executing role")
 	}
-
-	// Sign, aggregate and broadcast signature
-	n.postConsensusSignatureAndAggregation(
-		ctx,
-		l,
-		identifier,
-		inputValue,
-		signaturesCount,
-		role,
-		duty,
-	)
-
-	//identfier = newId // TODO: Fix race condition
+	return signaturesCount, inputValue, nil
 }
 
 func (n *ssvNode) executeDuty(
@@ -226,6 +197,30 @@ func (n *ssvNode) executeDuty(
 	}
 
 	for _, role := range roles {
-		go n.processRole(ctx, logger, identifier, slot, role, duty)
+		go func() {
+			l := logger.With(zap.String("role", role.String()))
+
+			signaturesCount, inputValue, err := n.getConsensusOnInputValue(ctx, logger, identifier, slot, role, duty)
+			if err != nil {
+				log.Error(zap.Error(err))
+				return
+			}
+
+			// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
+			logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
+
+			// Sign, aggregate and broadcast signature
+			n.postConsensusSignatureAndAggregation(
+				ctx,
+				l,
+				identifier,
+				*inputValue,
+				signaturesCount,
+				role,
+				duty,
+			)
+
+			//identfier = newId // TODO: Fix race condition
+		}()
 	}
 }
