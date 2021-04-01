@@ -27,38 +27,47 @@ func (n *ssvNode) postConsensusDutyExecution(
 	signaturesCount int,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) {
-	signaturesChan := n.network.ReceivedSignatureChan(identifier)
+) error {
+	// TODO - closing receive sig channel
+	// TODO - id is meaningless
+	signaturesChan := n.network.ReceivedSignatureChan(0, identifier)
 
 	// sign input value
-	sig, err := n.signDuty(ctx, inputValue, role, duty)
+	sig, root, err := n.signDuty(ctx, inputValue, role, duty)
 
 	// broadcast
 	if err != nil {
-		logger.Error("failed to sign input data", zap.Error(err))
-		return
+		return errors.Wrap(err,"failed to sign input data" )
 	}
 	if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: sig}); err != nil {
-		logger.Error("failed to broadcast signature", zap.Error(err))
-		return
+		return errors.Wrap(err,"failed to broadcast signature" )
 	}
 
 	// Collect signatures from other nodes
+	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
 	signatures := make(map[uint64][]byte, signaturesCount)
-	for i := 0; i < signaturesCount; i++ {
+	foundCnt := 0
+	for {
 		sig := <-signaturesChan
 		for index, signature := range sig {
+			if _, found := signatures[index]; found {
+				continue
+			}
 			signatures[index] = signature
+			foundCnt ++
+		}
+		if foundCnt >= signaturesCount {
+			break
 		}
 	}
 	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, inputValue, role, duty); err != nil {
-		logger.Error("failed to reconstruct and broadcast signature", zap.Error(err))
-		return
+	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, inputValue, role, duty); err != nil {
+		return errors.Wrap(err,"failed to reconstruct and broadcast signature" )
 	}
 	logger.Info("Successfully submitted role!")
+	return nil
 }
 
 func (n *ssvNode) comeToConsensusOnInputValue(
@@ -146,7 +155,7 @@ func (n *ssvNode) executeDuty(
 
 			signaturesCount, inputValue, err := n.comeToConsensusOnInputValue(ctx, logger, identifier, slot, role, duty)
 			if err != nil {
-				logger.Error("", zap.Error(err))
+				logger.Error("could not come to consensus", zap.Error(err))
 				return
 			}
 
@@ -154,7 +163,7 @@ func (n *ssvNode) executeDuty(
 			logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
 
 			// Sign, aggregate and broadcast signature
-			n.postConsensusDutyExecution(
+			if err := n.postConsensusDutyExecution(
 				ctx,
 				l,
 				identifier,
@@ -162,7 +171,10 @@ func (n *ssvNode) executeDuty(
 				signaturesCount,
 				role,
 				duty,
-			)
+			); err != nil {
+				logger.Error("could not execute duty", zap.Error(err))
+				return
+			}
 
 			//identfier = newId // TODO: Fix race condition
 		}()

@@ -152,7 +152,7 @@ func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]by
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan(lambda []byte) <-chan map[uint64][]byte {
+func (n *p2pNetwork) ReceivedSignatureChan(_ uint64, lambda []byte) <-chan map[uint64][]byte {
 	ls := listener{
 		lambda: lambda,
 		sigCh:  make(chan map[uint64][]byte, MsgChanSize),
@@ -197,7 +197,7 @@ func (n *p2pNetwork) listen() {
 					switch cm.Type {
 					case messageBroadcastingType:
 						ls.msgCh <- cm.Msg
-					case signatureBroadcastingType:
+					case signatureBroadcastingType: // TODO - verification of message
 						ls.sigCh <- cm.Signature
 					}
 				}(ls)

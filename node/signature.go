@@ -18,18 +18,20 @@ func (n *ssvNode) signDuty(
 	inputValue *proto.InputValue,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) ([]byte, error){
+) ([]byte, []byte, error){
 	// sign input value
 	var sig []byte
+	var root []byte
 	var err error
 	switch role {
 	case beacon.RoleAttester:
-		signedAttestation, e := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
+		signedAttestation, r, e := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
 		inputValue.SignedData = &proto.InputValue_Attestation{
 			Attestation: signedAttestation,
 		}
 		err = e
 		sig = signedAttestation.GetSignature()
+		root = r
 	case beacon.RoleAggregator:
 		signedAggregation, e := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
 		inputValue.SignedData = &proto.InputValue_Aggregation{
@@ -45,7 +47,7 @@ func (n *ssvNode) signDuty(
 		err = e
 		sig = signedProposal.GetSignature()
 	}
-	return sig, err
+	return sig, root, err
 }
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
@@ -54,6 +56,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 	ctx context.Context,
 	logger *zap.Logger,
 	signatures map[uint64][]byte,
+	root []byte,
 	inputValue *proto.InputValue,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
@@ -65,24 +68,29 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 	if err != nil {
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
-	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature)))
+	// verify reconstructed sig
+	if res := signature.VerifyByte(n.validatorPubKey, root); !res {
+		return errors.New("could not reconstruct a valid signature.")
+	}
+
+	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())))
 
 	// Submit validation to beacon node
 	switch role {
 	case beacon.RoleAttester:
 		logger.Info("submitting attestation")
-		inputValue.GetAttestation().Signature = signature
+		inputValue.GetAttestation().Signature = signature.Serialize()
 		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.GetValidatorIndex())
 		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex()); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	case beacon.RoleAggregator:
-		inputValue.GetAggregation().Signature = signature
+		inputValue.GetAggregation().Signature = signature.Serialize()
 		if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
 			return errors.Wrap(err, "failed to broadcast aggregation")
 		}
 	case beacon.RoleProposer:
-		inputValue.GetBlock().Signature = signature
+		inputValue.GetBlock().Signature = signature.Serialize()
 		if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal")
 		}

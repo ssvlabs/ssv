@@ -16,7 +16,7 @@ func TestInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
-	replay := local.NewIBFTReplay(nodes)
+	replay := local.NewReplay(nodes)
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
