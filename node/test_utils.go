@@ -14,6 +14,8 @@ import (
 
 var (
 	refAttestationDataByts = _byteArray("1a203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b2222122000000000000000000000000000000000000000000000000000000000000000002a24080212203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b")
+	refSk = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
+	refPk = _byteArray("a9cf360aa15fb1d1d30ee2b578dc5884823c19661886ae8b892775ccb3bd96b7d7345569a2aa0b14e4d015c54a6a0c54")
 	refSplitShares = [][]byte{ // sk split to 4: 2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c
 		_byteArray("1a1b411e54ebb0973dc0f133c8b192cc4320fd464cbdcfe3be38b77f821f30bc"),
 		_byteArray("6a93d37661cfe9cbaff9f051f2dd1d1995905932375e09357be1a50f7f4de323"),
@@ -21,7 +23,7 @@ var (
 		_byteArray("62ff0c0cac676cd9e866377f4772d63f403b5734c02351701712a308d4d8e632"),
 	}
 
-	refAttestationSigs = [][]byte{
+	refAttestationSplitSigs = [][]byte{
 		_byteArray("90d44ba2e926c07a71086d3edd04d433746a80335c828f415c0dcb505a1357a454e94338a2139b201d031e4aa6294f3110caa5f2f9ecdd3727fcc9b3ea733e1819993ba06d175cfc55525515d46ef035d1c8bf5c9dab7536b51d936708aeaa22"),
 		_byteArray("8edac629489ceda10b88d4241615cbf5fc8727daba4978276af62fd93069b5d4a8264f3881e0151d364ecef292fd8930114f59c98b1794b546399e48882573024d6237092807a21a45afd2baa1e43c81690997cb0b38f6bc10a74b7e18ed1ff5"),
 		_byteArray("b28d49731ba2c7dd227ffcea5755e3126ae1101f7c014fb837777ba61c07c7bf1e0a8560f4867691badb0e9bb87ed026199ceecfa7618b0f05acf7c7bbfed66a524b5bb3417e3e25b68dfc2c55f8f3d9f9b12c3967d7742059453324f8b3e46f"),
@@ -29,6 +31,7 @@ var (
 	}
 
 	refAttestationSig = _byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776")
+	refSigRoot = _byteArray("ae1f95e7f59eb99862ba7b3666a71a01facf4524e5922c6cb8f3b964a5041962")
 )
 
 
@@ -74,12 +77,12 @@ func (t *testBeacon) GetAttestationData(ctx context.Context, slot, committeeInde
 	return t.refAttestationData, nil
 }
 
-func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, error) {
+func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, []byte, error) {
 	return &ethpb.Attestation{
-		AggregationBits:      nil,
-		Data:                 data,
-		Signature:            refAttestationSigs[0],
-	}, nil
+		AggregationBits: nil,
+		Data:            data,
+		Signature:       refAttestationSplitSigs[0],
+	}, refSigRoot, nil
 }
 
 func (t *testBeacon) SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64) error {
@@ -121,9 +124,15 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 	ret.logger = zap.L()
 	ret.iBFT = &testIBFT{decided: decided, signaturesCount:signaturesCount}
 
+	// nodes
 	_, nodes := GenerateNodes(4)
 	ret.network = local.NewReplay(nodes).Network
 	ret.nodeID = 1
+
+	// validator pk
+	pk := &bls.PublicKey{}
+	pk.Deserialize(refPk)
+	ret.validatorPubKey = pk
 	return ret
 }
 

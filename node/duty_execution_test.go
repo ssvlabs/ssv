@@ -64,23 +64,57 @@ func TestConsensusOnInputValue(t *testing.T) {
 func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 	tests := []struct{
 		name string
-		sigs [][]byte
+		sigs map[uint64][]byte
+		expectedSignaturesCount int
 		expectedAttestationDataByts []byte
+		expectedReconstructedSig []byte
 		expectedError string
 	}{
 		{
 
-			"valid",
-			refAttestationSigs,
+			"valid 4/4",
+			map[uint64][]byte{
+				1: refAttestationSplitSigs[0],
+				2: refAttestationSplitSigs[1],
+				3: refAttestationSplitSigs[2],
+				4: refAttestationSplitSigs[3],
+			},
+			4,
 			refAttestationDataByts,
+			refAttestationSig,
 			"",
+		},
+		{
+
+			"valid 3/4",
+			map[uint64][]byte{
+				1: refAttestationSplitSigs[0],
+				2: refAttestationSplitSigs[1],
+				3: refAttestationSplitSigs[2],
+			},
+			3,
+			refAttestationDataByts,
+			refAttestationSig,
+			"",
+		},
+		{
+
+			"invalid 3/4",
+			map[uint64][]byte{
+				1: refAttestationSplitSigs[0],
+				2: refAttestationSplitSigs[0],
+				3: refAttestationSplitSigs[2],
+			},
+			3,
+			refAttestationDataByts,
+			refAttestationSig,
+			"failed to reconstruct and broadcast signature: could not reconstruct a valid signature.",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			signaturesCount := len(test.sigs)
-			node := testingSSVNode(true, signaturesCount)
+			node := testingSSVNode(true, test.expectedSignaturesCount)
 
 
 			// construct value
@@ -109,13 +143,18 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				<-ticker.C
 				for index, sig := range test.sigs {
 					node.network.BroadcastSignature([]byte{}, map[uint64][]byte{
-						uint64(index+1): sig,
+						index: sig,
 					})
 				}
 			}()
 
-			require.NoError(t, node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), inputValue, signaturesCount, beacon.RoleAttester, duty))
-			require.EqualValues(t, refAttestationSig, node.beacon.(*testBeacon).LastSubmittedAttestation.GetSignature())
+			err := node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), inputValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
+			if len(test.expectedError) > 0 {
+				require.EqualError(t, err, test.expectedError)
+			} else {
+				require.NoError(t, err)
+				require.EqualValues(t, test.expectedReconstructedSig, node.beacon.(*testBeacon).LastSubmittedAttestation.GetSignature())
+			}
 		})
 	}
 }

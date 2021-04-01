@@ -33,7 +33,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	signaturesChan := n.network.ReceivedSignatureChan(0, identifier)
 
 	// sign input value
-	sig, err := n.signDuty(ctx, inputValue, role, duty)
+	sig, root, err := n.signDuty(ctx, inputValue, role, duty)
 
 	// broadcast
 	if err != nil {
@@ -44,6 +44,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	}
 
 	// Collect signatures from other nodes
+	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
 	signatures := make(map[uint64][]byte, signaturesCount)
 	foundCnt := 0
 	for {
@@ -62,7 +63,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, inputValue, role, duty); err != nil {
+	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, inputValue, role, duty); err != nil {
 		return errors.Wrap(err,"failed to reconstruct and broadcast signature" )
 	}
 	logger.Info("Successfully submitted role!")

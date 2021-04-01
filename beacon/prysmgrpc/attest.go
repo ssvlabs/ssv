@@ -32,10 +32,10 @@ func (b *prysmGRPC) GetAttestationData(ctx context.Context, slot, committeeIndex
 }
 
 // SignAttestation implements Beacon interface
-func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, error) {
-	sig, err := b.signAtt(ctx, data)
+func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, []byte, error) {
+	sig, root, err := b.signAtt(ctx, data)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not sign attestation")
+		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}
 
 	var indexInCommittee uint64
@@ -49,7 +49,7 @@ func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.Attestation
 	}
 
 	if !found {
-		return nil, fmt.Errorf("validator ID %d not found in committee of %v", validatorIndex, committee)
+		return nil, nil, fmt.Errorf("validator ID %d not found in committee of %v", validatorIndex, committee)
 	}
 
 	aggregationBitfield := bitfield.NewBitlist(uint64(len(committee)))
@@ -59,7 +59,7 @@ func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.Attestation
 		Data:            data,
 		AggregationBits: aggregationBitfield,
 		Signature:       sig,
-	}, nil
+	}, root, nil
 }
 
 // SubmitAttestation implements Beacon interface
@@ -87,13 +87,13 @@ func (b *prysmGRPC) SubmitAttestation(ctx context.Context, attestation *ethpb.At
 }
 
 // signAtt returns the signature of an attestation data and its signing root.
-func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData) ([]byte, error) {
+func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData) ([]byte, []byte, error) {
 	root, err := b.getSigningRoot(ctx, data)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get signing root")
+		return nil, nil, errors.Wrap(err, "failed to get signing root")
 	}
 
-	return b.privateKey.SignByte(root[:]).Serialize(), nil
+	return b.privateKey.SignByte(root[:]).Serialize(), root[:], nil
 }
 
 // getSigningRoot returns signing root
