@@ -32,6 +32,9 @@ type StartOptions struct {
 type IBFT interface {
 	// StartInstance starts a new instance by the given options
 	StartInstance(opts StartOptions) (bool, int)
+
+	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
+	GetIBFTCommittee() map[uint64]*proto.Node
 }
 
 // ibftImpl implements IBFT interface
@@ -106,6 +109,11 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 			return true, len(agg.GetSignerIds())
 		}
 	}
+}
+
+// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
+func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
+	return i.params.IbftCommittee
 }
 
 // resetLeaderSelection resets leader selection with seed and round 1

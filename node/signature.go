@@ -6,11 +6,38 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 	"log"
 )
+
+func (n *ssvNode) verifyPartialSignature(
+	signature []byte,
+	root []byte,
+	ibftId uint64,
+) error {
+	committee := n.iBFT.GetIBFTCommittee()
+	if val, found := committee[ibftId]; found {
+		pk := &bls.PublicKey{}
+		if err := pk.Deserialize(val.Pk); err != nil {
+			return errors.Wrap(err, "could not deserialized pk")
+		}
+		sig := &bls.Sign{}
+		if err := sig.Deserialize(signature); err != nil {
+			return errors.Wrap(err, "could not deserialized signature")
+		}
+
+		// verify
+		if !sig.VerifyByte(pk, root) {
+			return errors.Errorf("could not verify signature from iBFT member %d", ibftId)
+		}
+		return nil
+	} else {
+		return errors.Errorf("could not find iBFT member %d", ibftId)
+	}
+}
 
 // signDuty signs the duty after iBFT came to consensus
 func (n *ssvNode) signDuty(

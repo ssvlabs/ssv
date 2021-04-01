@@ -197,7 +197,7 @@ func (n *p2pNetwork) listen() {
 					switch cm.Type {
 					case messageBroadcastingType:
 						ls.msgCh <- cm.Msg
-					case signatureBroadcastingType: // TODO - verification of message
+					case signatureBroadcastingType:
 						ls.sigCh <- cm.Signature
 					}
 				}(ls)

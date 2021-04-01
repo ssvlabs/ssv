@@ -17,15 +17,16 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NodeID          uint64
-	ValidatorPubKey *bls.PublicKey
-	PrivateKey      *bls.SecretKey
-	ETHNetwork      core.Network
-	Network         network.Network
-	Consensus       string
-	Beacon          beacon.Beacon
-	IBFT            ibft.IBFT
-	Logger          *zap.Logger
+	NodeID                     uint64
+	ValidatorPubKey            *bls.PublicKey
+	PrivateKey                 *bls.SecretKey
+	ETHNetwork                 core.Network
+	Network                    network.Network
+	Consensus                  string
+	Beacon                     beacon.Beacon
+	IBFT                       ibft.IBFT
+	Logger                     *zap.Logger
+	SignatureCollectionTimeout time.Duration
 }
 
 // Node represents the behavior of SSV node
@@ -46,21 +47,25 @@ type ssvNode struct {
 	beacon          beacon.Beacon
 	iBFT            ibft.IBFT
 	logger          *zap.Logger
+
+	// timeouts
+	signatureCollectionTimeout time.Duration
 }
 
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &ssvNode{
-		nodeID:          opts.NodeID,
-		validatorPubKey: opts.ValidatorPubKey,
-		privateKey:      opts.PrivateKey,
-		ethNetwork:      opts.ETHNetwork,
-		network:         opts.Network,
-		consensus:       opts.Consensus,
-		slotQueue:       slotqueue.New(opts.ETHNetwork),
-		beacon:          opts.Beacon,
-		iBFT:            opts.IBFT,
-		logger:          opts.Logger,
+		nodeID:                     opts.NodeID,
+		validatorPubKey:            opts.ValidatorPubKey,
+		privateKey:                 opts.PrivateKey,
+		ethNetwork:                 opts.ETHNetwork,
+		network:                    opts.Network,
+		consensus:                  opts.Consensus,
+		slotQueue:                  slotqueue.New(opts.ETHNetwork),
+		beacon:                     opts.Beacon,
+		iBFT:                       opts.IBFT,
+		logger:                     opts.Logger,
+		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
 	}
 }
 

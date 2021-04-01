@@ -11,12 +11,12 @@ import (
 )
 
 func TestConsensusOnInputValue(t *testing.T) {
-	tests := []struct{
-		name string
-		decided bool
-		signaturesCount int
+	tests := []struct {
+		name                        string
+		decided                     bool
+		signaturesCount             int
 		expectedAttestationDataByts []byte
-		expectedError string
+		expectedError               string
 	}{
 		{
 			"valid consensus",
@@ -38,13 +38,13 @@ func TestConsensusOnInputValue(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(test.decided, test.signaturesCount)
 			signaturesCount, inputValue, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, beacon.RoleAttester, &ethpb.DutiesResponse_Duty{
-				Committee:            nil,
-				CommitteeIndex:       0,
-				AttesterSlot:         0,
-				ProposerSlots:        nil,
-				PublicKey:            nil,
-				Status:               0,
-				ValidatorIndex:       0,
+				Committee:      nil,
+				CommitteeIndex: 0,
+				AttesterSlot:   0,
+				ProposerSlots:  nil,
+				PublicKey:      nil,
+				Status:         0,
+				ValidatorIndex: 0,
 			})
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
@@ -62,16 +62,15 @@ func TestConsensusOnInputValue(t *testing.T) {
 }
 
 func TestPostConsensusSignatureAndAggregation(t *testing.T) {
-	tests := []struct{
-		name string
-		sigs map[uint64][]byte
-		expectedSignaturesCount int
+	tests := []struct {
+		name                        string
+		sigs                        map[uint64][]byte
+		expectedSignaturesCount     int
 		expectedAttestationDataByts []byte
-		expectedReconstructedSig []byte
-		expectedError string
+		expectedReconstructedSig    []byte
+		expectedError               string
 	}{
 		{
-
 			"valid 4/4",
 			map[uint64][]byte{
 				1: refAttestationSplitSigs[0],
@@ -85,7 +84,6 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			"",
 		},
 		{
-
 			"valid 3/4",
 			map[uint64][]byte{
 				1: refAttestationSplitSigs[0],
@@ -98,7 +96,6 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			"",
 		},
 		{
-
 			"invalid 3/4",
 			map[uint64][]byte{
 				1: refAttestationSplitSigs[0],
@@ -108,7 +105,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			3,
 			refAttestationDataByts,
 			refAttestationSig,
-			"failed to reconstruct and broadcast signature: could not reconstruct a valid signature.",
+			"timed out waiting for post consensus signatures",
 		},
 	}
 
@@ -116,25 +113,24 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(true, test.expectedSignaturesCount)
 
-
 			// construct value
 			attData := &ethpb.AttestationData{}
 			require.NoError(t, attData.Unmarshal(test.expectedAttestationDataByts))
 			inputValue := &proto.InputValue{
-				Data:       &proto.InputValue_AttestationData{
+				Data: &proto.InputValue_AttestationData{
 					AttestationData: attData,
 				},
 				SignedData: nil,
 			}
 
 			duty := &ethpb.DutiesResponse_Duty{
-				Committee:            nil,
-				CommitteeIndex:       0,
-				AttesterSlot:         0,
-				ProposerSlots:        nil,
-				PublicKey:            nil,
-				Status:               0,
-				ValidatorIndex:       0,
+				Committee:      nil,
+				CommitteeIndex: 0,
+				AttesterSlot:   0,
+				ProposerSlots:  nil,
+				PublicKey:      nil,
+				Status:         0,
+				ValidatorIndex: 0,
 			}
 
 			// received sigs

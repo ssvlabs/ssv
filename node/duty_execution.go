@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/pkg/errors"
 	"strconv"
+	"time"
 
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -14,8 +15,6 @@ import (
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 )
-
-
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
@@ -37,34 +36,55 @@ func (n *ssvNode) postConsensusDutyExecution(
 
 	// broadcast
 	if err != nil {
-		return errors.Wrap(err,"failed to sign input data" )
+		return errors.Wrap(err, "failed to sign input data")
 	}
 	if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: sig}); err != nil {
-		return errors.Wrap(err,"failed to broadcast signature" )
+		return errors.Wrap(err, "failed to broadcast signature")
 	}
 
 	// Collect signatures from other nodes
 	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
 	signatures := make(map[uint64][]byte, signaturesCount)
 	foundCnt := 0
+	done := false
 	for {
-		sig := <-signaturesChan
-		for index, signature := range sig {
-			if _, found := signatures[index]; found {
-				continue
-			}
-			signatures[index] = signature
-			foundCnt ++
-		}
-		if foundCnt >= signaturesCount {
+		if done {
 			break
 		}
+		select {
+		case sig := <-signaturesChan:
+			for index, signature := range sig {
+				if _, found := signatures[index]; found {
+					continue
+				}
+				// verify sig
+				if err := n.verifyPartialSignature(signature, root, index); err != nil {
+					logger.Error("received invalid signature", zap.Error(err))
+					continue
+				}
+
+				signatures[index] = signature
+				foundCnt++
+			}
+			if foundCnt >= signaturesCount {
+				done = true
+				break
+			}
+		case <-time.After(n.signatureCollectionTimeout):
+			err = errors.New("timed out waiting for post consensus signatures")
+			done = true
+			break
+		}
+	}
+
+	if err != nil {
+		return err
 	}
 	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
 	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, inputValue, role, duty); err != nil {
-		return errors.Wrap(err,"failed to reconstruct and broadcast signature" )
+		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
 	logger.Info("Successfully submitted role!")
 	return nil

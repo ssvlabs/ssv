@@ -3,17 +3,19 @@ package flags
 import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
+	"time"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
 
 // Flag names.
 const (
-	nodeIDKeyFlag    = "node-id"
-	validatorKeyFlag = "validator-key"
-	beaconAddrFlag   = "beacon-node-addr"
-	networkFlag      = "network"
-	consensusFlag    = "val"
+	nodeIDKeyFlag        = "node-id"
+	validatorKeyFlag     = "validator-key"
+	beaconAddrFlag       = "beacon-node-addr"
+	networkFlag          = "network"
+	consensusFlag        = "val"
+	sigCollectionTimeout = "sigCollectionTimeout"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -69,4 +71,18 @@ func AddConsensusFlag(c *cobra.Command) {
 // GetConsensusFlagValue gets the val flag from the command
 func GetConsensusFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(consensusFlag)
+}
+
+// AddNodeIDKeyFlag adds the node ID flag to the command
+func AddSignatureCollectionTimeFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, sigCollectionTimeout, 5, "Timeout after consensus for signature collection", true)
+}
+
+// GetNodeIDKeyFlagValue gets the node ID flag from the command
+func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
+	v, err := c.Flags().GetInt64(sigCollectionTimeout)
+	if err != nil {
+		return 0, err
+	}
+	return time.Second * time.Duration(v), nil
 }
