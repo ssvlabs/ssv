@@ -17,5 +17,6 @@ type Network interface {
 	BroadcastSignature(lambda []byte, signature map[uint64][]byte) error
 
 	// ReceivedSignatureChan returns the channel with signatures
-	ReceivedSignatureChan(lambda []byte) <-chan map[uint64][]byte
+	// TODO: Get rid of identifier
+	ReceivedSignatureChan(id uint64, lambda []byte) <-chan map[uint64][]byte
 }
