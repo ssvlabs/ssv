@@ -15,7 +15,7 @@ const (
 	beaconAddrFlag       = "beacon-node-addr"
 	networkFlag          = "network"
 	consensusFlag        = "val"
-	sigCollectionTimeout = "sigCollectionTimeout"
+	sigCollectionTimeout = "sig-collection-timeout"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -75,12 +75,12 @@ func GetConsensusFlagValue(c *cobra.Command) (string, error) {
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
 func AddSignatureCollectionTimeFlag(c *cobra.Command) {
-	cliflag.AddPersistentIntFlag(c, sigCollectionTimeout, 5, "Timeout after consensus for signature collection", true)
+	cliflag.AddPersistentIntFlag(c, sigCollectionTimeout, 5, "Timeout after consensus for signature collection", false)
 }
 
 // GetNodeIDKeyFlagValue gets the node ID flag from the command
 func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
-	v, err := c.Flags().GetInt64(sigCollectionTimeout)
+	v, err := c.Flags().GetUint64(sigCollectionTimeout)
 	if err != nil {
 		return 0, err
 	}
