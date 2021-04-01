@@ -10,17 +10,25 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
+	"time"
 )
 
 var (
 	refAttestationDataByts = _byteArray("1a203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b2222122000000000000000000000000000000000000000000000000000000000000000002a24080212203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b")
-	refSk = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
-	refPk = _byteArray("a9cf360aa15fb1d1d30ee2b578dc5884823c19661886ae8b892775ccb3bd96b7d7345569a2aa0b14e4d015c54a6a0c54")
+	refSk                  = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
+	refPk                  = _byteArray("a9cf360aa15fb1d1d30ee2b578dc5884823c19661886ae8b892775ccb3bd96b7d7345569a2aa0b14e4d015c54a6a0c54")
+
 	refSplitShares = [][]byte{ // sk split to 4: 2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c
 		_byteArray("1a1b411e54ebb0973dc0f133c8b192cc4320fd464cbdcfe3be38b77f821f30bc"),
 		_byteArray("6a93d37661cfe9cbaff9f051f2dd1d1995905932375e09357be1a50f7f4de323"),
 		_byteArray("3596a78e633ad5071c0a77bb16b1a391b21ab47fb32ba1ba442a48e89ae11f9f"),
 		_byteArray("62ff0c0cac676cd9e866377f4772d63f403b5734c02351701712a308d4d8e632"),
+	}
+	refSplitSharesPubKeys = [][]byte{
+		_byteArray("84d90424a5511e3741ac3c99ee1dba39007a290410e805049d0ae40cde74191d785d7848f08b2dfb99b742ebfe846e3b"),
+		_byteArray("b6ac738a09a6b7f3fb4f85bac26d8965f6329d431f484e8b43633f7b7e9afce0085bb592ea90df6176b2f2bd97dfd7f3"),
+		_byteArray("a261c25548320f1aabfc2aac5da3737a0b8bbc992a5f4f937259d22d39fbf6ebf8ec561720de3a04f661c9772fcace96"),
+		_byteArray("85dd2d89a3e320995507c46320f371dc85eb16f349d1c56d71b58663b5b6a5fd390fcf41cf9098471eb5437fd95be1ac"),
 	}
 
 	refAttestationSplitSigs = [][]byte{
@@ -31,32 +39,53 @@ var (
 	}
 
 	refAttestationSig = _byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776")
-	refSigRoot = _byteArray("ae1f95e7f59eb99862ba7b3666a71a01facf4524e5922c6cb8f3b964a5041962")
+	refSigRoot        = _byteArray("ae1f95e7f59eb99862ba7b3666a71a01facf4524e5922c6cb8f3b964a5041962")
 )
-
 
 func _byteArray(input string) []byte {
 	res, _ := hex.DecodeString(input)
 	return res
 }
 
-
 /**
 testIBFT
 */
 type testIBFT struct {
-	decided bool
+	decided         bool
 	signaturesCount int
 }
+
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int) {
 	return t.decided, t.signaturesCount
+}
+
+// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
+func (i *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
+	return map[uint64]*proto.Node{
+		1: {
+			IbftId: 1,
+			Pk:     refSplitSharesPubKeys[0],
+		},
+		2: {
+			IbftId: 2,
+			Pk:     refSplitSharesPubKeys[1],
+		},
+		3: {
+			IbftId: 3,
+			Pk:     refSplitSharesPubKeys[2],
+		},
+		4: {
+			IbftId: 4,
+			Pk:     refSplitSharesPubKeys[3],
+		},
+	}
 }
 
 /**
 testBeacon
 */
 type testBeacon struct {
-	refAttestationData *ethpb.AttestationData
+	refAttestationData       *ethpb.AttestationData
 	LastSubmittedAttestation *ethpb.Attestation
 }
 
@@ -122,7 +151,7 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 	ret := &ssvNode{}
 	ret.beacon = newTestBeacon()
 	ret.logger = zap.L()
-	ret.iBFT = &testIBFT{decided: decided, signaturesCount:signaturesCount}
+	ret.iBFT = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 
 	// nodes
 	_, nodes := GenerateNodes(4)
@@ -133,12 +162,15 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 	pk := &bls.PublicKey{}
 	pk.Deserialize(refPk)
 	ret.validatorPubKey = pk
+
+	// timeout
+	ret.signatureCollectionTimeout = time.Second
 	return ret
 }
 
 /**
 utils
- */
+*/
 // GenerateNodes generates randomly nodes
 func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
 	_ = bls.Init(bls.BLS12_381)
