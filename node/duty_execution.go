@@ -112,24 +112,24 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 		inputValue.Data = &proto.InputValue_AttestationData{
 			AttestationData: attData,
 		}
-	case beacon.RoleAggregator:
-		aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
-		if err != nil {
-			return 0, nil, errors.Wrap(err, "failed to get aggregation data")
-		}
-
-		inputValue.Data = &proto.InputValue_AggregationData{
-			AggregationData: aggData,
-		}
-	case beacon.RoleProposer:
-		block, err := n.beacon.GetProposalData(ctx, slot)
-		if err != nil {
-			return 0, nil, errors.Wrap(err, "failed to get proposal block")
-		}
-
-		inputValue.Data = &proto.InputValue_BeaconBlock{
-			BeaconBlock: block,
-		}
+	//case beacon.RoleAggregator:
+	//	aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
+	//	if err != nil {
+	//		return 0, nil, errors.Wrap(err, "failed to get aggregation data")
+	//	}
+	//
+	//	inputValue.Data = &proto.InputValue_AggregationData{
+	//		AggregationData: aggData,
+	//	}
+	//case beacon.RoleProposer:
+	//	block, err := n.beacon.GetProposalData(ctx, slot)
+	//	if err != nil {
+	//		return 0, nil, errors.Wrap(err, "failed to get proposal block")
+	//	}
+	//
+	//	inputValue.Data = &proto.InputValue_BeaconBlock{
+	//		BeaconBlock: block,
+	//	}
 	case beacon.RoleUnknown:
 		return 0, nil, errors.New("unknown role")
 	}
