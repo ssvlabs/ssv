@@ -99,7 +99,6 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	duty *ethpb.DutiesResponse_Duty,
 ) (int, *proto.InputValue, error) {
 	l := logger.With(zap.String("role", role.String()))
-	l.Info("starting IBFT instance...")
 
 	inputValue := &proto.InputValue{}
 	switch role {

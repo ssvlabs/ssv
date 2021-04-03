@@ -11,17 +11,20 @@ import (
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
+type testLeaderSelector struct {
+
+}
+func (s *testLeaderSelector) Current(committeeSize uint64) uint64 {
+	return 1
+}
+func (s *testLeaderSelector) Bump() {}
+func (s *testLeaderSelector) SetSeed(seed []byte, index uint64) error {return nil}
+
 func TestValidatePrePrepareValue(t *testing.T) {
 	sks, nodes := ibfttesting.GenerateNodes(4)
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
-	}
-	state := &proto.State{
-		Round:         1,
-		Lambda:        []byte("Lambda"),
-		PreparedRound: 0,
-		PreparedValue: nil,
 	}
 	consensus := bytesval.New([]byte(time.Now().Weekday().String()))
 
@@ -36,7 +39,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Signature: []byte{},
 		SignerIds: []uint64{},
 	}
-	err := ValidatePrePrepareMsg(consensus, state, params).Run(msg)
+	err := ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
 	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
 
 	// test > 1 signer
@@ -50,7 +53,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Signature: []byte{},
 		SignerIds: []uint64{1, 2},
 	}
-	err = ValidatePrePrepareMsg(consensus, state, params).Run(msg)
+	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
 	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
 
 	msg = ibfttesting.SignMsg(1, sks[1], &proto.Message{
@@ -59,7 +62,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err = ValidatePrePrepareMsg(consensus, state, params).Run(msg)
+	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
 	require.EqualError(t, err, "msg value is wrong")
 
 	msg = ibfttesting.SignMsg(2, sks[2], &proto.Message{
@@ -68,7 +71,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("wrong value"),
 	})
-	err = ValidatePrePrepareMsg(consensus, state, params).Run(msg)
+	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
 	require.EqualError(t, err, "pre-prepare message sender is not the round's leader")
 
 	msg = ibfttesting.SignMsg(1, sks[1], &proto.Message{
@@ -77,6 +80,6 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = ValidatePrePrepareMsg(consensus, state, params).Run(msg)
+	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
 	require.NoError(t, err)
 }
