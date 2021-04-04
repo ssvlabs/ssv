@@ -299,6 +299,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		}
 	}
 	if n.cfg.HostDNS != "" {
+		log.Print(" ------- TEST HOST DNS------", n.cfg.HostDNS)
 		_host := n.cfg.HostDNS
 		ips, err := net.LookupIP(_host)
 		if err != nil {
