@@ -89,7 +89,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 
 			for _, slot := range slots {
 				go func(slot uint64) {
-					n.logger.Info("scheduling IBFT instance start for slot",
+					n.logger.Info("scheduling duty processing start for slot",
 						zap.Time("start_time", n.getSlotStartTime(slot)),
 						zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 						zap.Uint64("slot", slot))

@@ -83,10 +83,11 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		// send pre-prepare msg
 		broadcastMsg := &proto.Message{
-			Type:   proto.RoundState_PrePrepare,
-			Round:  signedMessage.Message.Round,
-			Lambda: i.State.Lambda,
-			Value:  value,
+			Type:           proto.RoundState_PrePrepare,
+			Round:          signedMessage.Message.Round,
+			Lambda:         i.State.Lambda,
+			PreviousLambda: i.State.PreviousLambda,
+			Value:          value,
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))

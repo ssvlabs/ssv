@@ -128,7 +128,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	//		BeaconBlock: block,
 	//	}
 	default:
-		return 0, nil, nil, errors.New("unknown role")
+		return 0, nil, nil, errors.Errorf("unknown role: %s", role.String())
 	}
 
 	l := logger.With(zap.String("role", role.String()))
@@ -168,6 +168,8 @@ func (n *ssvNode) executeDuty(
 		logger.Error("failed to get roles for duty", zap.Error(err))
 		return
 	}
+
+	logger.Info("number of roles", zap.Int("#", len(roles)))
 
 	for _, role := range roles {
 		go func() {
