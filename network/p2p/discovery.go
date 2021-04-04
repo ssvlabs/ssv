@@ -299,11 +299,13 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		}
 	}
 	if n.cfg.HostDNS != "" {
-		host := n.cfg.HostDNS
-		ips, err := net.LookupIP(host)
+		log.Print(" ------- TEST HOST DNS------", n.cfg.HostDNS)
+		_host := n.cfg.HostDNS
+		ips, err := net.LookupIP(_host)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not resolve host address")
 		}
+		log.Print(" ------- TEST HOST DNS IPS------", ips)
 		if len(ips) > 0 {
 			// Use first IP returned from the
 			// resolver.
