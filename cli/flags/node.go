@@ -14,6 +14,7 @@ const (
 	validatorKeyFlag     = "validator-key"
 	beaconAddrFlag       = "beacon-node-addr"
 	networkFlag          = "network"
+	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
 )
@@ -61,6 +62,16 @@ func GetNetworkFlagValue(c *cobra.Command) (core.Network, error) {
 	}
 
 	return core.NetworkFromString(network), nil
+}
+
+// AddDiscoveryFlag adds the discovery flag to the command
+func AddDiscoveryFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, discoveryFlag, "discv5", "The discovery type [mdns, discv5]", false)
+}
+
+// GetDiscoveryFlagValue gets the discovery flag from the command
+func GetDiscoveryFlagValue(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(discoveryFlag)
 }
 
 // AddConsensusFlag adds the val flag to the command

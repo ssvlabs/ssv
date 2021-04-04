@@ -82,7 +82,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	var _ipAddr net.IP
 
-	if cfg.Local { // use mdns discovery
+	if cfg.DiscoveryType == "mdns" { // use mdns discovery
 		// Create a new libp2p Host that listens on a random TCP port
 		host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 		if err != nil {
@@ -93,7 +93,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 		logger = logger.With(zap.String("id", host.ID().String()), zap.String("Topic", n.cfg.TopicName))
 		logger.Info("created a new peer")
-	} else {
+	} else if cfg.DiscoveryType == "discv5" {
 		dv5Nodes := parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
 		n.cfg.Discv5BootStrapAddr = dv5Nodes
 
@@ -113,6 +113,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		}
 		host.RemoveStreamHandler(identify.IDDelta)
 		n.host = host
+	} else {
+		logger.Error("Unsupported discovery flag")
+		return nil, errors.New("Unsupported discovery flag")
 	}
 
 	// Gossipsub registration is done before we add in any new peers
@@ -138,12 +141,12 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.pubsub = gs
 
-	if n.cfg.Local {
+	if cfg.DiscoveryType == "mdns" { // use mdns discovery {
 		// Setup Local mDNS discovery
 		if err := setupDiscovery(ctx, logger, n.host); err != nil {
 			return nil, errors.Wrap(err, "failed to setup discovery")
 		}
-	} else {
+	} else if cfg.DiscoveryType == "discv5" {
 		n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
 			PeerLimit: 45,
 			ScorerParams: &scorers.Config{

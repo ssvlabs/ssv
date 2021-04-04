@@ -35,6 +35,12 @@ var startNodeCmd = &cobra.Command{
 		}
 		logger = logger.With(zap.String("network", string(network)))
 
+		discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get val flag value", zap.Error(err))
+		}
+		logger = logger.With(zap.String("discovery-type", discoveryType))
+
 		consensusType, err := flags.GetConsensusFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get val flag value", zap.Error(err))
@@ -79,7 +85,7 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		cfg := p2p.Config{
-			Local:             false,
+			DiscoveryType:             discoveryType,
 			BootstrapNodeAddr: []string{"enr:-LK4QBEZXm0QMAZREBPNB1FpPeIhpdFUCStO1beZ6XKDPZE2ahOn1K0BH8Iv53oh2s1bjRKAPpma7aKlrsyHFl2Wu-4Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__gmlkgnY0gmlwhArCIRuJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"},
 			UdpPort:           12000 + int(nodeID),
 			TcpPort:           13000 + int(nodeID),

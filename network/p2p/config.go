@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	Local               bool
+	DiscoveryType       string
 	BootstrapNodeAddr   []string
 	Discv5BootStrapAddr []string
 	UdpPort             int
