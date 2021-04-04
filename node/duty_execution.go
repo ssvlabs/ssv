@@ -100,6 +100,8 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 ) (int, *proto.InputValue, error) {
 	l := logger.With(zap.String("role", role.String()))
 
+	l.Info("new version without aggregator and proposal")
+
 	inputValue := &proto.InputValue{}
 	switch role {
 	case beacon.RoleAttester:
