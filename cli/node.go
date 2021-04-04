@@ -89,8 +89,6 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		hostDNS = "" // TODO need to be removed
-
 		cfg := p2p.Config{
 			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
