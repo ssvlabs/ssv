@@ -172,6 +172,7 @@ func init() {
 	flags.AddValidatorKeyFlag(startNodeCmd)
 	flags.AddBeaconAddrFlag(startNodeCmd)
 	flags.AddNetworkFlag(startNodeCmd)
+	flags.AddDiscoveryFlag(startNodeCmd)
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
