@@ -41,6 +41,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: sig}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
+	logger.Info("broadcasted partial signature post consensus")
 
 	// Collect signatures from other nodes
 	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
@@ -71,7 +72,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 				break
 			}
 		case <-time.After(n.signatureCollectionTimeout):
-			err = errors.New("timed out waiting for post consensus signatures")
+			err = errors.Errorf("timed out waiting for post consensus signatures", zap.Int("received sigs", len(signatures)))
 			done = true
 			break
 		}
@@ -169,10 +170,8 @@ func (n *ssvNode) executeDuty(
 		return
 	}
 
-	logger.Info("number of roles", zap.Int("#", len(roles)))
-
 	for _, role := range roles {
-		go func() {
+		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
 
 			signaturesCount, inputValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
@@ -199,6 +198,6 @@ func (n *ssvNode) executeDuty(
 			}
 
 			//identfier = newId // TODO: Fix race condition
-		}()
+		}(role)
 	}
 }

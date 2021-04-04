@@ -45,7 +45,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 
 func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		i.WaitForStage(),
+		//i.WaitForStage(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
@@ -129,8 +129,9 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))
 
-		// check if quorum achieved, act upon it.
-		if i.State.Stage == proto.RoundState_Prepare {
+		// If already prepared (or moved forward to commit) no reason to prepare again.
+		if i.State.Stage == proto.RoundState_Prepare ||
+			i.State.Stage == proto.RoundState_Decided {
 			return nil // no reason to prepare again
 		}
 		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {

@@ -187,6 +187,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
 	i.BumpRound(i.State.Round + 1)
+	// mark stage
+	i.SetStage(proto.RoundState_ChangeRound)
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round))
 
 	// set time for next round change
@@ -207,9 +209,6 @@ func (i *Instance) uponChangeRoundTrigger() {
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 		i.Logger.Error("could not broadcast round change message", zap.Error(err))
 	}
-
-	// mark stage
-	i.SetStage(proto.RoundState_ChangeRound)
 }
 
 /**

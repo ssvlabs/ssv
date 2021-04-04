@@ -37,11 +37,12 @@ func (q *MessageQueue) AddMessage(msg *proto.SignedMessage) {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	if msg.Message.Round < q.currentRound {
+	if q.currentRound > msg.Message.Round {
 		return // not adding previous round messages
 	}
 
-	if q.currentRound != msg.Message.Round {
+	// msgs from future rounds will be processed later
+	if q.currentRound < msg.Message.Round {
 		q.futureRoundQueue = append(q.futureRoundQueue, msg)
 		return
 	}

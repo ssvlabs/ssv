@@ -10,25 +10,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-// CanAcceptMsgsFromStage will return true if the other stage (corresponding to a msg) can be accepted for processing.
-// False if not
-func (s RoundState) CanAcceptMsgsFromStage(other RoundState) bool {
-	switch s {
-	case RoundState_NotStarted:
-		return other == RoundState_PrePrepare
-	case RoundState_PrePrepare:
-		return other == RoundState_ChangeRound
-	case RoundState_Prepare:
-		return other == RoundState_Prepare || other == RoundState_Commit || other == RoundState_ChangeRound
-	// RoundState_Commit is not a stage but a msg type
-	case RoundState_Decided:
-		return other == RoundState_Commit
-	case RoundState_ChangeRound:
-		return other == RoundState_PrePrepare || other == RoundState_ChangeRound
-	}
-	return false
-}
-
 // Compare returns true if both messages are equal.
 // DOES NOT compare signatures
 func (msg *Message) Compare(other *Message) bool {
