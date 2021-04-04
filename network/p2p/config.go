@@ -12,6 +12,7 @@ type Config struct {
 	UdpPort             int
 	TcpPort             int
 	HostAddress         string
+	HostDNS				string
 	HostID              peer.ID
 	TopicName           string
 	Topic               *pubsub.Topic

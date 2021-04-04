@@ -62,6 +62,11 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get signature timeout key flag value", zap.Error(err))
 		}
 
+		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
+		}
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -84,7 +89,7 @@ var startNodeCmd = &cobra.Command{
 			UdpPort:           12000 + int(nodeID),
 			TcpPort:           13000 + int(nodeID),
 			TopicName:         validatorKey,
-			//HostAddress:       "127.0.0.1",
+			HostDNS:           hostDNS,
 		}
 		peer, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
@@ -157,6 +162,7 @@ func init() {
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
+	flags.AddHostDNSFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }
