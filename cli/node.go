@@ -85,7 +85,7 @@ var startNodeCmd = &cobra.Command{
 
 		cfg := p2p.Config{
 			Local:             false,
-			BootstrapNodeAddr: []string{"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"},
+			BootstrapNodeAddr: []string{"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"},
 			UdpPort:           12000,
 			TcpPort:           13000,
 			TopicName:         validatorKey,
