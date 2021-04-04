@@ -62,7 +62,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: validator_public_key
+              key: validator_public_key_v2
         - name: BEACON_NODE_ADDR
           valueFrom:
             secretKeyRef:
