@@ -57,8 +57,13 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get validator public key flag value", zap.Error(err))
 		}
 
-		validatorKeyBytes, err := hex.DecodeString(validatorKey)
+		sigCollectionTimeout, err := flags.GetSignatureCollectionTimeValue(cmd)
 		if err != nil {
+			logger.Fatal("failed to get signature timeout key flag value", zap.Error(err))
+		}
+
+		validatorPk := &bls.PublicKey{}
+		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
 		}
 		logger = logger.With(zap.String("validator", "0x"+validatorKey[:12]+"..."))
@@ -68,7 +73,7 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, network, validatorKeyBytes, []byte("BloxStaking"), beaconAddr)
+		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
@@ -102,7 +107,7 @@ var startNodeCmd = &cobra.Command{
 
 		ssvNode := node.New(node.Options{
 			NodeID:          nodeID,
-			ValidatorPubKey: validatorKeyBytes,
+			ValidatorPubKey: validatorPk,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
 			ETHNetwork:      network,
@@ -121,7 +126,8 @@ var startNodeCmd = &cobra.Command{
 					IbftCommittee:   ibftCommittee,
 				},
 			),
-			Logger: logger,
+			Logger:                     logger,
+			SignatureCollectionTimeout: sigCollectionTimeout,
 		})
 
 		if err := ssvNode.Start(cmd.Context()); err != nil {
@@ -142,6 +148,7 @@ func init() {
 	flags.AddNetworkFlag(startNodeCmd)
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
+	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

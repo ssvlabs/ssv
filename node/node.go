@@ -17,15 +17,16 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NodeID          uint64
-	ValidatorPubKey []byte
-	PrivateKey      *bls.SecretKey
-	ETHNetwork      core.Network
-	Network         network.Network
-	Consensus       string
-	Beacon          beacon.Beacon
-	IBFT            ibft.IBFT
-	Logger          *zap.Logger
+	NodeID                     uint64
+	ValidatorPubKey            *bls.PublicKey
+	PrivateKey                 *bls.SecretKey
+	ETHNetwork                 core.Network
+	Network                    network.Network
+	Consensus                  string
+	Beacon                     beacon.Beacon
+	IBFT                       ibft.IBFT
+	Logger                     *zap.Logger
+	SignatureCollectionTimeout time.Duration
 }
 
 // Node represents the behavior of SSV node
@@ -37,7 +38,7 @@ type Node interface {
 // ssvNode implements Node interface
 type ssvNode struct {
 	nodeID          uint64
-	validatorPubKey []byte
+	validatorPubKey *bls.PublicKey
 	privateKey      *bls.SecretKey
 	ethNetwork      core.Network
 	network         network.Network
@@ -46,21 +47,25 @@ type ssvNode struct {
 	beacon          beacon.Beacon
 	iBFT            ibft.IBFT
 	logger          *zap.Logger
+
+	// timeouts
+	signatureCollectionTimeout time.Duration
 }
 
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &ssvNode{
-		nodeID:          opts.NodeID,
-		validatorPubKey: opts.ValidatorPubKey,
-		privateKey:      opts.PrivateKey,
-		ethNetwork:      opts.ETHNetwork,
-		network:         opts.Network,
-		consensus:       opts.Consensus,
-		slotQueue:       slotqueue.New(opts.ETHNetwork),
-		beacon:          opts.Beacon,
-		iBFT:            opts.IBFT,
-		logger:          opts.Logger,
+		nodeID:                     opts.NodeID,
+		validatorPubKey:            opts.ValidatorPubKey,
+		privateKey:                 opts.PrivateKey,
+		ethNetwork:                 opts.ETHNetwork,
+		network:                    opts.Network,
+		consensus:                  opts.Consensus,
+		slotQueue:                  slotqueue.New(opts.ETHNetwork),
+		beacon:                     opts.Beacon,
+		iBFT:                       opts.IBFT,
+		logger:                     opts.Logger,
+		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
 	}
 }
 
@@ -68,7 +73,7 @@ func New(opts Options) Node {
 func (n *ssvNode) Start(ctx context.Context) error {
 	go n.startSlotQueueListener(ctx)
 
-	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey)
+	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey.Serialize())
 	if err != nil {
 		n.logger.Fatal("failed to open duties stream", zap.Error(err))
 	}
@@ -89,7 +94,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 						zap.Uint64("slot", slot))
 
-					if err := n.slotQueue.Schedule(n.validatorPubKey, slot, duty); err != nil {
+					if err := n.slotQueue.Schedule(n.validatorPubKey.Serialize(), slot, duty); err != nil {
 						n.logger.Error("failed to schedule slot")
 					}
 				}(slot)
@@ -106,7 +111,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 
 	identfier := ibft.FirstInstanceIdentifier()
 	for {
-		slot, duty, ok, err := n.slotQueue.Next(n.validatorPubKey)
+		slot, duty, ok, err := n.slotQueue.Next(n.validatorPubKey.Serialize())
 		if err != nil {
 			n.logger.Error("failed to get next slot data", zap.Error(err))
 			continue

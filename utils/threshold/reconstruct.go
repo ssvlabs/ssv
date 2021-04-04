@@ -6,7 +6,7 @@ import (
 
 // ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
 // It then reconstructs the original threshold signature using lagrange interpolation
-func ReconstructSignatures(signatures map[uint64][]byte) ([]byte, error) {
+func ReconstructSignatures(signatures map[uint64][]byte) (*bls.Sign, error) {
 	// prepare x and y coordinates
 	x := make([]bls.Fr, 0)
 	y := make([]bls.G2, 0)
@@ -31,7 +31,7 @@ func ReconstructSignatures(signatures map[uint64][]byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return bls.CastToSign(g2Point).Serialize(), nil
+	return bls.CastToSign(g2Point), nil
 }
 
 // ECCG2Polynomial represents ECC G2 polynomial

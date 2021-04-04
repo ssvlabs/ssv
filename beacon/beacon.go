@@ -42,7 +42,7 @@ type Beacon interface {
 	GetAttestationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AttestationData, error)
 
 	// SignAttestation signs the given attestation
-	SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, error)
+	SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, []byte, error)
 
 	// SubmitAttestation submits attestation fo the given slot using the given public key
 	SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64) error

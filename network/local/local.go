@@ -10,26 +10,45 @@ import (
 	"github.com/bloxapp/ssv/storage/inmem"
 )
 
-// Network implements network.Network interface
-type Network struct {
-	replay             *IBFTReplay
+// Local implements network.Local interface
+type Local struct {
+	replay             *Replay
 	l                  map[uint64]*sync.Mutex
-	c                  map[uint64]chan *proto.SignedMessage
+	msgC               map[uint64]chan *proto.SignedMessage
+	sigC   			   map[uint64] chan map[uint64][]byte
 	createChannelMutex sync.Mutex
 }
 
-// ReceivedMsgChan implements network.Network interface
-func (n *Network) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage {
+func NewLocalNetwork() *Local {
+	return &Local{
+		msgC: make(map[uint64]chan *proto.SignedMessage),
+		sigC: make(map[uint64]chan map[uint64][]byte),
+		l:    make(map[uint64]*sync.Mutex),
+	}
+}
+
+// ReceivedMsgChan implements network.Local interface
+func (n *Local) ReceivedMsgChan(id uint64, lambda []byte) <-chan *proto.SignedMessage {
 	n.createChannelMutex.Lock()
 	defer n.createChannelMutex.Unlock()
 	c := make(chan *proto.SignedMessage)
-	n.c[id] = c
+	n.msgC[id] = c
 	n.l[id] = &sync.Mutex{}
 	return c
 }
 
-// Broadcast implements network.Network interface
-func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
+// ReceivedSignatureChan returns the channel with signatures
+func (n *Local) ReceivedSignatureChan(id uint64, lambda []byte) <-chan map[uint64][]byte {
+	n.createChannelMutex.Lock()
+	defer n.createChannelMutex.Unlock()
+	c := make(chan map[uint64][]byte)
+	n.sigC[id] = c
+	n.l[id] = &sync.Mutex{}
+	return c
+}
+
+// Broadcast implements network.Local interface
+func (n *Local) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 	go func() {
 
 		// verify node is not prevented from sending msgs
@@ -39,7 +58,7 @@ func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 			}
 		}
 
-		for i, c := range n.c {
+		for i, c := range n.msgC {
 			if !n.replay.CanReceive(signed.Message.Type, signed.Message.Lambda, signed.Message.Round, i) {
 				fmt.Printf("can't receive, node %d, lambda %s\n", i, hex.EncodeToString(signed.Message.Lambda))
 				continue
@@ -55,32 +74,29 @@ func (n *Network) Broadcast(lambda []byte, signed *proto.SignedMessage) error {
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *Network) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
-	// TODO: Implement
+func (n *Local) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
+	go func() {
+		for i, c := range n.sigC {
+			n.l[i].Lock()
+			c <- signature
+			n.l[i].Unlock()
+		}
+	}()
 	return nil
 }
 
-// ReceivedSignatureChan returns the channel with signatures
-func (n *Network) ReceivedSignatureChan(lambda []byte) <-chan map[uint64][]byte {
-	// TODO: Implement
-	return nil
-}
-
-// IBFTReplay allows to script a precise scenario for every ibft node's behaviour each round
-type IBFTReplay struct {
-	Network *Network
+// Replay allows to script a precise scenario for every ibft node's behaviour each round
+type Replay struct {
+	Network *Local
 	Storage storage.Storage
 	scripts map[string]map[uint64]*RoundScript
 	nodes   []uint64
 }
 
-// NewIBFTReplay is the constructor of IBFTReplay
-func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
-	ret := &IBFTReplay{
-		Network: &Network{
-			c: make(map[uint64]chan *proto.SignedMessage),
-			l: make(map[uint64]*sync.Mutex),
-		},
+// NewReplay is the constructor of Replay
+func NewReplay(nodes map[uint64]*proto.Node) *Replay {
+	ret := &Replay{
+		Network: NewLocalNetwork(),
 		Storage: inmem.New(),
 		scripts: make(map[string]map[uint64]*RoundScript),
 		nodes:   make([]uint64, len(nodes)),
@@ -88,14 +104,14 @@ func NewIBFTReplay(nodes map[uint64]*proto.Node) *IBFTReplay {
 	ret.Network.replay = ret
 
 	// set ids
-	for k, v := range nodes {
-		ret.nodes[k] = v.IbftId
+	for _, v := range nodes {
+		ret.nodes = append(ret.nodes, v.IbftId)
 	}
 
 	return ret
 }
 
-func (r *IBFTReplay) SetScript(identifier []byte, round uint64, script *RoundScript) {
+func (r *Replay) SetScript(identifier []byte, round uint64, script *RoundScript) {
 	if r.scripts[hex.EncodeToString(identifier)] == nil {
 		r.scripts[hex.EncodeToString(identifier)] = make(map[uint64]*RoundScript)
 	}
@@ -103,13 +119,13 @@ func (r *IBFTReplay) SetScript(identifier []byte, round uint64, script *RoundScr
 }
 
 // StartRound starts the given round
-func (r *IBFTReplay) StartRound(identifier []byte, round uint64) *RoundScript {
+func (r *Replay) StartRound(identifier []byte, round uint64) *RoundScript {
 	r.scripts[hex.EncodeToString(identifier)][round] = NewRoundScript(r, r.nodes)
 	return r.scripts[hex.EncodeToString(identifier)][round]
 }
 
 // CanSend returns true if message can be sent
-func (r *IBFTReplay) CanSend(state proto.RoundState, identifier []byte, round uint64, node uint64) bool {
+func (r *Replay) CanSend(state proto.RoundState, identifier []byte, round uint64, node uint64) bool {
 	if v, ok := r.scripts[hex.EncodeToString(identifier)][round]; ok {
 		return v.CanSend(state, node)
 	}
@@ -117,7 +133,7 @@ func (r *IBFTReplay) CanSend(state proto.RoundState, identifier []byte, round ui
 }
 
 // CanReceive returns true if the message can be received
-func (r *IBFTReplay) CanReceive(state proto.RoundState, identifier []byte, round uint64, node uint64) bool {
+func (r *Replay) CanReceive(state proto.RoundState, identifier []byte, round uint64, node uint64) bool {
 	if v, ok := r.scripts[hex.EncodeToString(identifier)][round]; ok {
 		return v.CanSend(state, node)
 	}
@@ -126,12 +142,12 @@ func (r *IBFTReplay) CanReceive(state proto.RoundState, identifier []byte, round
 
 // RoundScript ...
 type RoundScript struct {
-	replay *IBFTReplay
+	replay *Replay
 	rules  map[proto.RoundState]map[uint64]bool // if true the node receives (and sends) all messages. False it doesn't
 }
 
 // NewRoundScript is the constructor of RoundScript
-func NewRoundScript(r *IBFTReplay, nodes []uint64) *RoundScript {
+func NewRoundScript(r *Replay, nodes []uint64) *RoundScript {
 	rules := make(map[proto.RoundState]map[uint64]bool)
 	for _, t := range []proto.RoundState{proto.RoundState_PrePrepare, proto.RoundState_Prepare, proto.RoundState_Commit, proto.RoundState_ChangeRound} {
 		rules[t] = make(map[uint64]bool)
@@ -164,6 +180,6 @@ func (r *RoundScript) PreventMessages(state proto.RoundState, nodes []uint64) *R
 }
 
 // EndRound ...
-func (r *RoundScript) EndRound() *IBFTReplay {
+func (r *RoundScript) EndRound() *Replay {
 	return r.replay
 }

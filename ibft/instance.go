@@ -113,20 +113,26 @@ func (i *Instance) Start(inputValue []byte) {
 	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
-		i.Logger.Info("Node is leader for round 1")
-		i.SetStage(proto.RoundState_PrePrepare)
+		go func() {
+			i.Logger.Info("Node is leader for round 1")
+			i.SetStage(proto.RoundState_PrePrepare)
 
-		msg := &proto.Message{
-			Type:           proto.RoundState_PrePrepare,
-			Round:          i.State.Round,
-			Lambda:         i.State.Lambda,
-			PreviousLambda: i.State.PreviousLambda,
-			Value:          i.State.InputValue,
-		}
+			// LeaderPreprepareDelay waits to let other nodes complete their instance start or round change.
+			// Waiting will allow a more stable msg receiving for all parties.
+			time.Sleep(time.Duration(i.Params.ConsensusParams.LeaderPreprepareDelay))
 
-		if err := i.SignAndBroadcast(msg); err != nil {
-			i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
-		}
+			msg := &proto.Message{
+				Type:           proto.RoundState_PrePrepare,
+				Round:          i.State.Round,
+				Lambda:         i.State.Lambda,
+				PreviousLambda: i.State.PreviousLambda,
+				Value:          i.State.InputValue,
+			}
+			//
+			if err := i.SignAndBroadcast(msg); err != nil {
+				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
+			}
+		}()
 	}
 
 	i.triggerRoundChangeOnTimer()
