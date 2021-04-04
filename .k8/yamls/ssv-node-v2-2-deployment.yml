@@ -87,3 +87,5 @@ spec:
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
+        - name: HOST_DNS
+          value: "ssv-lb.stage.bloxinfra.com"
