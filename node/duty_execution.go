@@ -3,8 +3,8 @@ package node
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/pkg/errors"
-	"strconv"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft"
@@ -93,11 +93,11 @@ func (n *ssvNode) postConsensusDutyExecution(
 func (n *ssvNode) comeToConsensusOnInputValue(
 	ctx context.Context,
 	logger *zap.Logger,
-	identifier []byte,
+	prevIdentifier []byte,
 	slot uint64,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) (int, *proto.InputValue, error) {
+) (int, *proto.InputValue, []byte, error) {
 	l := logger.With(zap.String("role", role.String()))
 
 	l.Info("new version without aggregator and proposal")
@@ -107,7 +107,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	case beacon.RoleAttester:
 		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
 		if err != nil {
-			return 0, nil, errors.Wrap(err, "failed to get attestation data")
+			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 
 		inputValue.Data = &proto.InputValue_AttestationData{
@@ -132,31 +132,32 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	//		BeaconBlock: block,
 	//	}
 	case beacon.RoleUnknown:
-		return 0, nil, errors.New("unknown role")
+		return 0, nil, nil, errors.New("unknown role")
 	}
 
 	valBytes, err := json.Marshal(&inputValue)
 	if err != nil {
-		return 0, nil, errors.Wrap(err, "failed to marshal input value")
+		return 0, nil, nil, errors.Wrap(err, "failed to marshal input value")
 	}
 
+	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
 	decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
 		Logger:       l,
 		Consensus:    bytesval.New(valBytes),
-		PrevInstance: identifier,
-		Identifier:   []byte(strconv.Itoa(int(slot))),
+		PrevInstance: prevIdentifier,
+		Identifier:   identifier,
 		Value:        valBytes,
 	})
 
 	if !decided {
-		return 0, nil, errors.New("ibft did not decide, not executing role")
+		return 0, nil, nil, errors.New("ibft did not decide, not executing role")
 	}
-	return signaturesCount, inputValue, nil
+	return signaturesCount, inputValue, identifier, nil
 }
 
 func (n *ssvNode) executeDuty(
 	ctx context.Context,
-	identifier []byte,
+	prevIdentifier []byte,
 	slot uint64,
 	duty *ethpb.DutiesResponse_Duty,
 ) {
@@ -174,7 +175,7 @@ func (n *ssvNode) executeDuty(
 		go func() {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, inputValue, err := n.comeToConsensusOnInputValue(ctx, logger, identifier, slot, role, duty)
+			signaturesCount, inputValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
 			if err != nil {
 				logger.Error("could not come to consensus", zap.Error(err))
 				return

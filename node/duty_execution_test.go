@@ -37,7 +37,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(test.decided, test.signaturesCount)
-			signaturesCount, inputValue, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, beacon.RoleAttester, &ethpb.DutiesResponse_Duty{
+			signaturesCount, inputValue, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, beacon.RoleAttester, &ethpb.DutiesResponse_Duty{
 				Committee:      nil,
 				CommitteeIndex: 0,
 				AttesterSlot:   0,
