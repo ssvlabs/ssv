@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
@@ -15,12 +14,13 @@ import (
 func TestP2PNetworker(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	topic1 := uuid.New()
-	topic2 := uuid.New()
+	//topic1 := uuid.New()
+	topic1 := "test"
+	//topic2 := uuid.New()
 
 	peer1, err := New(context.Background(), logger, &Config{
 		Local:               false,
-		BootstrapNodeAddr:   []string{"enr:-LK4QGne1xswEew-5Ehhba0gCYxWIlVaxnUDqE_IXeJnhakXK_N9W5QWBOP8jpC5aTt9QTrpeImfNi9vvVa2nRpSwJwBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQISN_B6Xr352Nrluj-jVUmnyQLZylx0okIkTwIsjV5sTYN0Y3CCE4iDdWRwgg-g"},
+		BootstrapNodeAddr:   []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
 		UdpPort:             12000,
 		TcpPort:             13000,
 		TopicName:           topic1,
@@ -29,10 +29,10 @@ func TestP2PNetworker(t *testing.T) {
 
 	peer2, err := New(context.Background(), logger, &Config{
 		Local:               false,
-		BootstrapNodeAddr:   []string{"enr:-LK4QGne1xswEew-5Ehhba0gCYxWIlVaxnUDqE_IXeJnhakXK_N9W5QWBOP8jpC5aTt9QTrpeImfNi9vvVa2nRpSwJwBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQISN_B6Xr352Nrluj-jVUmnyQLZylx0okIkTwIsjV5sTYN0Y3CCE4iDdWRwgg-g"},
+		BootstrapNodeAddr:   []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
 		UdpPort:             12001,
 		TcpPort:             13001,
-		TopicName:           topic2,
+		TopicName:           topic1,
 	})
 	require.NoError(t, err)
 

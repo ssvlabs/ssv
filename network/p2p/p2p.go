@@ -73,13 +73,15 @@ type p2pNetwork struct {
 
 // New is the constructor of p2pNetworker
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
-
 	n := &p2pNetwork{
 		ctx:           ctx,
 		cfg:           cfg,
 		listenersLock: &sync.Mutex{},
 		logger:        logger,
 	}
+
+	var _ipAddr net.IP
+
 	if cfg.Local { // use mdns discovery
 		// Create a new libp2p Host that listens on a random TCP port
 		host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
@@ -94,21 +96,23 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	} else {
 		dv5Nodes := parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
 		n.cfg.Discv5BootStrapAddr = dv5Nodes
-		ipAddr := ipAddr()
-		ipAddr = net.ParseIP("127.0.0.1")
-		log.Print("TEST ip ---", ipAddr)
+
+		_ipAddr = ipAddr()
+		_ipAddr = net.ParseIP("127.0.0.1")
+		log.Print("TEST ip ---", _ipAddr)
+
 		privKey, err := privKey()
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to generate p2p private key")
 		}
 		n.privKey = privKey
-		opts := n.buildOptions(ipAddr, privKey)
+		opts := n.buildOptions(_ipAddr, privKey)
 		host, err := libp2p.New(ctx, opts...)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to create p2p host")
 		}
-		n.host = host
 		host.RemoveStreamHandler(identify.IDDelta)
+		n.host = host
 	}
 
 	// Gossipsub registration is done before we add in any new peers
@@ -150,12 +154,14 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			},
 		})
 
-		listener, err := n.startDiscoveryV5(ipAddr(), n.privKey)
+		listener, err := n.startDiscoveryV5(_ipAddr, n.privKey)
 		if err != nil {
 			log.Print("Failed to start discovery")
 			//s.startupErr = err
 			return nil, err
 		}
+		n.dv5Listener = listener
+
 		err = n.connectToBootnodes()
 		if err != nil {
 			log.Print("Could not add bootnode to the exclusion list")
@@ -163,7 +169,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			return nil, err
 		}
 
-		n.dv5Listener = listener
+
 		go n.listenForNewNodes()
 
 		if n.cfg.HostAddress != "" {
@@ -211,6 +217,8 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
+	log.Print("------ TEST Broadcasting to peers -------", n.cfg.Topic.ListPeers())
+	log.Print("------ TEST Broadcasting Topic -------", n.cfg.Sub.Topic())
 	return n.cfg.Topic.Publish(n.ctx, msgBytes)
 }
 
@@ -272,6 +280,7 @@ func (n *p2pNetwork) listen() {
 				n.logger.Error("failed to get message from subscription Topic", zap.Error(err))
 				return
 			}
+			log.Print("--------- TEST GOT MSG ------")
 
 			var cm message
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
