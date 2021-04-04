@@ -52,7 +52,7 @@ spec:
           name: port-13000
         env:
         - name: NODE_ID
-          value: "1"
+          value: "4"
         - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
@@ -62,7 +62,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: validator_public_key
+              key: validator_public_key_v2
         - name: BEACON_NODE_ADDR
           valueFrom:
             secretKeyRef:
@@ -87,3 +87,5 @@ spec:
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
+        - name: HOST_DNS
+          value: "ssv-lb.stage.bloxinfra.com"

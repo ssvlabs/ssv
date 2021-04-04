@@ -15,15 +15,20 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/herumi/bls-eth-go-binary v0.0.0-20210102080045-a126987eca2b
+	github.com/ipfs/go-ipfs-addr v0.0.1
 	github.com/libp2p/go-libp2p v0.12.1-0.20201208224947-3155ff3089c0
 	github.com/libp2p/go-libp2p-core v0.7.0
 	github.com/libp2p/go-libp2p-crypto v0.1.0
+	github.com/libp2p/go-libp2p-noise v0.1.2
 	github.com/libp2p/go-libp2p-pubsub v0.4.0
+	github.com/libp2p/go-tcp-transport v0.2.1
+	github.com/multiformats/go-multiaddr v0.3.1
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/common v0.15.0
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20210107162333-9e9cf77d4921
 	github.com/prysmaticlabs/prysm v1.1.0

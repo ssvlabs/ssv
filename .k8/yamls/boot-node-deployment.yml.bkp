@@ -89,3 +89,9 @@ spec:
           name: port-5000          
         - containerPort: 5678
           name: port-5678
+        env:
+          - name: BOOT_NODE_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node_private_key

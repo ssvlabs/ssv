@@ -61,7 +61,7 @@ ifdef DEBUG_PORT
 
 else
 	@echo "Running node (${NODE_ID})"
-	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE}
+	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS}
 endif
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
@@ -83,4 +83,4 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node
+	${BUILD_PATH} start-boot-node --private-key=${BOOT_NODE_PRIVATE_KEY}

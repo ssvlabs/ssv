@@ -28,7 +28,6 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NodeID     uint64
 	Logger     *zap.Logger
 	PrivateKey string
 }
@@ -41,7 +40,6 @@ type Node interface {
 
 // bootNode implements Node interface
 type bootNode struct {
-	nodeID      uint64
 	logger      *zap.Logger
 	privateKey  string
 	discv5port  int
@@ -52,7 +50,6 @@ type bootNode struct {
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &bootNode{
-		nodeID:      opts.NodeID,
 		logger:      opts.Logger,
 		privateKey:  opts.PrivateKey,
 		discv5port:  4000,
@@ -81,7 +78,7 @@ func (h *handler) httpHandler(w http.ResponseWriter, _ *http.Request) {
 		write(w, []byte("Node ID: "+n.ID().String()+"\n"))
 		write(w, []byte("IP: "+n.IP().String()+"\n"))
 		write(w, []byte(fmt.Sprintf("UDP Port: %d", n.UDP())+"\n"))
-		write(w, []byte(fmt.Sprintf("TCP Port: %d", n.UDP())+"\n\n"))
+		write(w, []byte(fmt.Sprintf("TCP Port: %d", n.TCP())+"\n\n"))
 	}
 }
 
@@ -92,6 +89,8 @@ func (n *bootNode) Start(ctx context.Context) error {
 		PrivateKey: privKey,
 	}
 	ipAddr, err := iputils.ExternalIP()
+	//ipAddr = "127.0.0.1"
+	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
 		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))
 	}

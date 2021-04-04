@@ -35,6 +35,12 @@ var startNodeCmd = &cobra.Command{
 		}
 		logger = logger.With(zap.String("network", string(network)))
 
+		discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get val flag value", zap.Error(err))
+		}
+		logger = logger.With(zap.String("discovery-type", discoveryType))
+
 		consensusType, err := flags.GetConsensusFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get val flag value", zap.Error(err))
@@ -62,6 +68,11 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get signature timeout key flag value", zap.Error(err))
 		}
 
+		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
+		}
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -78,7 +89,22 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		peer, err := p2p.New(cmd.Context(), logger, validatorKey)
+		hostDNS = "" // TODO need to be removed
+
+		cfg := p2p.Config{
+			DiscoveryType:             discoveryType,
+			BootstrapNodeAddr: []string{
+				// deployemnt
+				//"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+				// ssh
+				"enr:-LK4QPmq1kISuw1aSD_81AlY2A2s8Q5Z19Dh0SD6odfkrgelePx0z7-8hTui1Bv656LcUyB1EOS7V4L4f_HKDH9KzuQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQI5OQPFowv2KjMgA9QXwz0RxiQgKRhjKUS8o8ROJ0S3zYN0Y3CCE4iDdWRwgg-g"},
+			UdpPort:   12000 + int(nodeID),
+			TcpPort:   13000 + int(nodeID),
+			TopicName: validatorKey,
+			HostDNS:   hostDNS,
+			//HostAddress:       "127.0.0.1",
+		}
+		peer, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
 			logger.Fatal("failed to create peer", zap.Error(err))
 		}
@@ -146,9 +172,11 @@ func init() {
 	flags.AddValidatorKeyFlag(startNodeCmd)
 	flags.AddBeaconAddrFlag(startNodeCmd)
 	flags.AddNetworkFlag(startNodeCmd)
+	flags.AddDiscoveryFlag(startNodeCmd)
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
+	flags.AddHostDNSFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

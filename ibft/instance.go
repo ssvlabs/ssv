@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
+	"log"
 	"sync"
 	"time"
 
@@ -179,6 +180,7 @@ func (i *Instance) StartEventLoop() {
 		for {
 			select {
 			case msg := <-msgChan:
+				log.Print("------ TEST GOT MSG CHANNEL -------")
 				i.msgQueue.AddMessage(msg)
 			// Change round is called when no Quorum was achieved within a time duration
 			case <-i.changeRoundChan:
