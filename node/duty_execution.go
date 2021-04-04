@@ -98,10 +98,6 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
 ) (int, *proto.InputValue, []byte, error) {
-	l := logger.With(zap.String("role", role.String()))
-
-	l.Info("new version without aggregator and proposal")
-
 	inputValue := &proto.InputValue{}
 	switch role {
 	case beacon.RoleAttester:
@@ -131,9 +127,11 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	//	inputValue.Data = &proto.InputValue_BeaconBlock{
 	//		BeaconBlock: block,
 	//	}
-	case beacon.RoleUnknown:
+	default:
 		return 0, nil, nil, errors.New("unknown role")
 	}
+
+	l := logger.With(zap.String("role", role.String()))
 
 	valBytes, err := json.Marshal(&inputValue)
 	if err != nil {
