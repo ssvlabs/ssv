@@ -83,15 +83,19 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		hostDNS = ""  // TODO need to be removed
+		hostDNS = "" // TODO need to be removed
 
 		cfg := p2p.Config{
-			Local:             false,
-			BootstrapNodeAddr: []string{"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"},
-			UdpPort:           12000 + int(nodeID),
-			TcpPort:           13000 + int(nodeID),
-			TopicName:         validatorKey,
-			HostDNS:           hostDNS,
+			Local: false,
+			BootstrapNodeAddr: []string{
+				// deployemnt
+				//"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+				// ssh
+				"enr:-LK4QNURntDwx_H95zT8m1thdqQngH9eyOCf5XSythpJLFqeEu2TUDxAnnUCTOWeDYHrdzoJyaFWHeTOvP2E0c2POYIBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMq__qdtoY7RKCK4BhaFeG4U9ETqnqKeGL1qpXMPEzaNYN0Y3CCE4iDdWRwgg-g"},
+			UdpPort:   12000 + int(nodeID),
+			TcpPort:   13000 + int(nodeID),
+			TopicName: validatorKey,
+			HostDNS:   hostDNS,
 		}
 		peer, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
