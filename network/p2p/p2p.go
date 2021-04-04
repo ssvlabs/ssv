@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"encoding/json"
@@ -293,9 +292,6 @@ func (n *p2pNetwork) listen() {
 
 			for _, ls := range n.listeners {
 				go func(ls listener) {
-					if !bytes.Equal(ls.lambda, cm.Lambda) {
-						return
-					}
 
 					switch cm.Type {
 					case messageBroadcastingType:

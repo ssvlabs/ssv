@@ -46,7 +46,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	// Collect signatures from other nodes
 	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
 	signatures := make(map[uint64][]byte, signaturesCount)
-	foundCnt := 0
+	signedIndxes := make([]uint64, 0)
 	done := false
 	for {
 		if done {
@@ -65,14 +65,14 @@ func (n *ssvNode) postConsensusDutyExecution(
 				}
 
 				signatures[index] = signature
-				foundCnt++
+				signedIndxes = append(signedIndxes, index)
 			}
-			if foundCnt >= signaturesCount {
+			if len(signedIndxes) >= signaturesCount {
 				done = true
 				break
 			}
 		case <-time.After(n.signatureCollectionTimeout):
-			err = errors.Errorf("timed out waiting for post consensus signatures", zap.Int("received sigs", len(signatures)))
+			err = errors.Errorf("timed out waiting for post consensus signatures", zap.Uint64s("received sigs", signedIndxes), zap.Int("expected signatures count", signaturesCount))
 			done = true
 			break
 		}
