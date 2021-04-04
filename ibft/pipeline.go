@@ -13,7 +13,7 @@ func (i *Instance) WaitForStage() pipeline.Pipeline {
 		if i.State.Stage+1 >= signedMessage.Message.Type {
 			return nil
 		}
-		i.Logger.Info("got non-broadcasted message",
+		i.Logger.Info("got message for wrong stage",
 			zap.String("message_stage", signedMessage.Message.Type.String()),
 			zap.String("current_stage", i.State.Stage.String()))
 

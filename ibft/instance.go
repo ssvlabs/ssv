@@ -135,7 +135,6 @@ func (i *Instance) Start(inputValue []byte) {
 			}
 		}()
 	}
-
 	i.triggerRoundChangeOnTimer()
 }
 

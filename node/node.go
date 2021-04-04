@@ -89,7 +89,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 
 			for _, slot := range slots {
 				go func(slot uint64) {
-					n.logger.Info("scheduling IBFT instance start for slot",
+					n.logger.Info("scheduling duty processing start for slot",
 						zap.Time("start_time", n.getSlotStartTime(slot)),
 						zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 						zap.Uint64("slot", slot))
@@ -109,7 +109,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 	n.logger.Info("start listening slot queue")
 
-	identfier := ibft.FirstInstanceIdentifier()
+	prevIdentifier := ibft.FirstInstanceIdentifier()
 	for {
 		slot, duty, ok, err := n.slotQueue.Next(n.validatorPubKey.Serialize())
 		if err != nil {
@@ -121,8 +121,7 @@ func (n *ssvNode) startSlotQueueListener(ctx context.Context) {
 			n.logger.Debug("no duties for slot scheduled")
 			continue
 		}
-
-		go n.executeDuty(ctx, identfier, slot, duty)
+		go n.executeDuty(ctx, prevIdentifier, slot, duty)
 	}
 }
 

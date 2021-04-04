@@ -15,6 +15,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 		name                        string
 		decided                     bool
 		signaturesCount             int
+		role                        beacon.Role
 		expectedAttestationDataByts []byte
 		expectedError               string
 	}{
@@ -22,6 +23,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"valid consensus",
 			true,
 			3,
+			beacon.RoleAttester,
 			refAttestationDataByts,
 			"",
 		},
@@ -29,15 +31,24 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"not decided",
 			false,
 			3,
+			beacon.RoleAttester,
 			refAttestationDataByts,
 			"ibft did not decide, not executing role",
+		},
+		{
+			"non supported role",
+			false,
+			3,
+			beacon.RoleAggregator,
+			refAttestationDataByts,
+			"unknown role",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(test.decided, test.signaturesCount)
-			signaturesCount, inputValue, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, beacon.RoleAttester, &ethpb.DutiesResponse_Duty{
+			signaturesCount, inputValue, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, &ethpb.DutiesResponse_Duty{
 				Committee:      nil,
 				CommitteeIndex: 0,
 				AttesterSlot:   0,

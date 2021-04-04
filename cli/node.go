@@ -92,14 +92,15 @@ var startNodeCmd = &cobra.Command{
 		hostDNS = "" // TODO need to be removed
 
 		cfg := p2p.Config{
-			DiscoveryType:             discoveryType,
+			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
 				// deployemnt
-				//"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+				"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
 				// ssh
-				"enr:-LK4QNURntDwx_H95zT8m1thdqQngH9eyOCf5XSythpJLFqeEu2TUDxAnnUCTOWeDYHrdzoJyaFWHeTOvP2E0c2POYIBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMq__qdtoY7RKCK4BhaFeG4U9ETqnqKeGL1qpXMPEzaNYN0Y3CCE4iDdWRwgg-g"},
-			UdpPort:   12000 + int(nodeID),
-			TcpPort:   13000 + int(nodeID),
+				//"enr:-LK4QG_q3ygTeNs_YgjPK2tpr624X6YVi1156A8teyeeLcnSFNGp0GN0CLeNA7aNz6JN6KW1nAVAsowojpKkH6DW9XEBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQLh6LjwnHfAdgoNkGbhixdtFxIrdt1UDwXNNhUpRPLMk4N0Y3CCE4iDdWRwgg-g"
+			},
+			UdpPort:   12000,
+			TcpPort:   13000,
 			TopicName: validatorKey,
 			HostDNS:   hostDNS,
 			//HostAddress:       "127.0.0.1",
