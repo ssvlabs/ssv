@@ -97,7 +97,7 @@ var startNodeCmd = &cobra.Command{
 				// deployemnt
 				//"enr:-LK4QETbiRb0mw8HOE_3f92KRisgIH0XZWaThL8MMhQ1egK6XfD77ER1jm1Z9fVRIQEeXAgdEblLqYKtdzqPuUFCGm8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCg3GJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
 				// ssh
-				"enr:-LK4QNURntDwx_H95zT8m1thdqQngH9eyOCf5XSythpJLFqeEu2TUDxAnnUCTOWeDYHrdzoJyaFWHeTOvP2E0c2POYIBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMq__qdtoY7RKCK4BhaFeG4U9ETqnqKeGL1qpXMPEzaNYN0Y3CCE4iDdWRwgg-g"},
+				"enr:-LK4QPmq1kISuw1aSD_81AlY2A2s8Q5Z19Dh0SD6odfkrgelePx0z7-8hTui1Bv656LcUyB1EOS7V4L4f_HKDH9KzuQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQI5OQPFowv2KjMgA9QXwz0RxiQgKRhjKUS8o8ROJ0S3zYN0Y3CCE4iDdWRwgg-g"},
 			UdpPort:   12000 + int(nodeID),
 			TcpPort:   13000 + int(nodeID),
 			TopicName: validatorKey,
