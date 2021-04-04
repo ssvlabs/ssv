@@ -292,7 +292,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 	if n.cfg.HostAddress != "" {
 		hostIP := net.ParseIP(n.cfg.HostAddress)
 		if hostIP.To4() == nil && hostIP.To16() == nil {
-			log.Print("Invalid host address given: %s", hostIP.String())
+			log.Printf("Invalid host address given: %s", hostIP.String())
 		} else {
 			localNode.SetFallbackIP(hostIP)
 			localNode.SetStaticIP(hostIP)
