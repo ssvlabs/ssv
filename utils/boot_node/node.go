@@ -92,7 +92,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 		PrivateKey: privKey,
 	}
 	ipAddr, err := iputils.ExternalIP()
-	ipAddr = "127.0.0.1"
+	//ipAddr = "127.0.0.1"
 	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
 		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))

@@ -98,7 +98,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		n.cfg.Discv5BootStrapAddr = dv5Nodes
 
 		_ipAddr = ipAddr()
-		_ipAddr = net.ParseIP("127.0.0.1")
+		//_ipAddr = net.ParseIP("127.0.0.1")
 		log.Print("TEST ip ---", _ipAddr)
 
 		privKey, err := privKey()
