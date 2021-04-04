@@ -28,7 +28,6 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NodeID     uint64
 	Logger     *zap.Logger
 	PrivateKey string
 }
@@ -41,7 +40,6 @@ type Node interface {
 
 // bootNode implements Node interface
 type bootNode struct {
-	nodeID      uint64
 	logger      *zap.Logger
 	privateKey  string
 	discv5port  int
@@ -52,7 +50,6 @@ type bootNode struct {
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &bootNode{
-		nodeID:      opts.NodeID,
 		logger:      opts.Logger,
 		privateKey:  opts.PrivateKey,
 		discv5port:  4000,
