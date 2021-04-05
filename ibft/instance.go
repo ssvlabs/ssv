@@ -14,10 +14,10 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
-	"github.com/bloxapp/ssv/ibft/msgqueue"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval"
 )
 

@@ -23,12 +23,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
-type broadcastingType int
-
-const (
-	messageBroadcastingType = iota + 1
-	signatureBroadcastingType
-)
 
 const (
 	// DiscoveryInterval is how often we re-publish our mDNS records.
@@ -43,12 +37,6 @@ const (
 	topicFmt = "bloxstaking.ssv.%s"
 )
 
-type message struct {
-	Lambda    []byte               `json:"lambda"`
-	Msg       *proto.SignedMessage `json:"msg"`
-	Signature map[uint64][]byte    `json:"signature"`
-	Type      broadcastingType     `json:"type"`
-}
 
 type listener struct {
 	lambda []byte
@@ -210,10 +198,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 // Broadcast propagates a signed message to all peers
 func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(message{
+	msgBytes, err := json.Marshal(network.Message{
 		Lambda: lambda,
 		Msg:    msg,
-		Type:   messageBroadcastingType,
+		Type:   network.MessageBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -240,10 +228,10 @@ func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.Sign
 
 // BroadcastSignature broadcasts the given signature for the given lambda
 func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
-	msgBytes, err := json.Marshal(message{
+	msgBytes, err := json.Marshal(network.Message{
 		Lambda:    lambda,
 		Signature: signature,
-		Type:      signatureBroadcastingType,
+		Type:      network.SignatureBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -284,7 +272,7 @@ func (n *p2pNetwork) listen() {
 			}
 			log.Print("--------- TEST GOT MSG ------")
 
-			var cm message
+			var cm network.Message
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
@@ -294,9 +282,9 @@ func (n *p2pNetwork) listen() {
 				go func(ls listener) {
 
 					switch cm.Type {
-					case messageBroadcastingType:
+					case network.MessageBroadcastingType:
 						ls.msgCh <- cm.Msg
-					case signatureBroadcastingType:
+					case network.SignatureBroadcastingType:
 						ls.sigCh <- cm.Signature
 					}
 				}(ls)
