@@ -55,6 +55,8 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 	)
 }
 
+// TODO - we sholdn't condition prepare msg processing on pre-prepare. As soon as we have 2/3 of prepare we move on
+//  even if we didn't receive a previous pre-prepare or do not agree on the value
 func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// Validate we received a pre-prepare msg for this round and
