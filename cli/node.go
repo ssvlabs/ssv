@@ -93,7 +93,7 @@ var startNodeCmd = &cobra.Command{
 			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
 				// deployemnt
-				"enr:-LK4QCrPykfsLSf9tetrPaSmdiKXLLRc15aVpQMkospO8bQ_Jp2jhuaHsF1-Ae2sTuccGTWuMDfugW-XAucAjtkT78gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqBFmJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+				"enr:-LK4QLeAok4EzHnP8s28sNQgbNEjXUKYabb4r4BipePM-06EU8xBusy9QkgapIiYgbA4sJ6RfmLcV7ZrAiNRZ-PpF-0Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArCIQOJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
 				// ssh
 				//"enr:-LK4QG_q3ygTeNs_YgjPK2tpr624X6YVi1156A8teyeeLcnSFNGp0GN0CLeNA7aNz6JN6KW1nAVAsowojpKkH6DW9XEBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQLh6LjwnHfAdgoNkGbhixdtFxIrdt1UDwXNNhUpRPLMk4N0Y3CCE4iDdWRwgg-g"
 			},
