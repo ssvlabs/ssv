@@ -1,100 +1,92 @@
 package msgqueue
 
 import (
-	"sync"
-
+	"github.com/bloxapp/ssv/network"
 	"github.com/pborman/uuid"
-
-	"github.com/bloxapp/ssv/ibft/proto"
+	"sync"
 )
 
-// SubscribeFunc is the function that triggers once new message received
-type SubscribeFunc func(*proto.SignedMessage)
+// IndexFunc is the function that indexes messages to be later pulled by those indexes
+type IndexFunc func(msg *network.Message) []string
+
+type messageContainer struct {
+	id      string
+	msg     *network.Message
+	indexes []string
+}
 
 // MessageQueue is a broker of messages for the IBFT instance to process.
 // Messages can come in various times, even next round's messages can come "early" as other nodes can change round before this node.
 // To solve this issue we have a message broker from which the instance pulls new messages, this also reduces concurrency issues as the instance is now single threaded.
 // The message queue has internal logic to organize messages by their round.
 type MessageQueue struct {
-	msgMutex         sync.Mutex
-	subscriptions    map[string]SubscribeFunc
-	currentRound     uint64
-	futureRoundQueue []*proto.SignedMessage
+	msgMutex   sync.Mutex
+	indexFuncs []IndexFunc
+	queue      map[string][]*messageContainer // = map[index][messageContainer.id]messageContainer
 }
 
 // New is the constructor of MessageQueue
 func New() *MessageQueue {
 	return &MessageQueue{
-		msgMutex:         sync.Mutex{},
-		subscriptions:    make(map[string]SubscribeFunc),
-		futureRoundQueue: make([]*proto.SignedMessage, 0),
+		msgMutex: sync.Mutex{},
+		queue:    make(map[string][]*messageContainer),
+		indexFuncs: []IndexFunc{
+			iBFTMessageIndex(),
+		},
 	}
+}
+
+func (q *MessageQueue) AddIndexFunc(f IndexFunc) {
+	q.indexFuncs = append(q.indexFuncs, f)
 }
 
 // AddMessage adds a message the queue based on the message round.
 // AddMessage is thread safe
-func (q *MessageQueue) AddMessage(msg *proto.SignedMessage) {
+func (q *MessageQueue) AddMessage(msg *network.Message) {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	if q.currentRound > msg.Message.Round {
-		return // not adding previous round messages
+	// index msg
+	indexes := make([]string, 0)
+	for _, f := range q.indexFuncs {
+		indexes = append(indexes, f(msg)...)
 	}
 
-	// msgs from future rounds will be processed later
-	if q.currentRound < msg.Message.Round {
-		q.futureRoundQueue = append(q.futureRoundQueue, msg)
-		return
+	// add it to queue
+	msgContainer := &messageContainer{
+		id:      uuid.New(),
+		msg:     msg,
+		indexes: indexes,
 	}
 
-	if q.subscriptions == nil {
-		return
-	}
-
-	for _, sub := range q.subscriptions {
-		go sub(msg)
+	for _, idx := range indexes {
+		if q.queue[idx] == nil {
+			q.queue[idx] = make([]*messageContainer, 0)
+		}
+		q.queue[idx] = append(q.queue[idx], msgContainer)
 	}
 }
 
-// Subscribe creates a new subscription and puts it to the list
-func (q *MessageQueue) Subscribe(fn SubscribeFunc) func() {
+// PopMessage will return a message by its index if found, will also delete all other index occurrences of that message
+func (q *MessageQueue) PopMessage(index string) *network.Message {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	if q.subscriptions == nil {
-		q.subscriptions = make(map[string]SubscribeFunc)
-	}
+	var ret *network.Message
+	if len(q.queue[index]) > 0 {
+		c := q.queue[index][0]
+		ret = c.msg
 
-	id := uuid.New()
-	q.subscriptions[id] = fn
-
-	return func() {
-		q.msgMutex.Lock()
-		delete(q.subscriptions, id)
-		q.msgMutex.Unlock()
-	}
-}
-
-// SetRound validates and sets round depending on message current and future round
-func (q *MessageQueue) SetRound(newRound uint64) {
-	q.msgMutex.Lock()
-	defer q.msgMutex.Unlock()
-
-	// set round
-	q.currentRound = newRound
-
-	// move from future round to current round, also remove dead messages
-	newFutureRoundQueue := make([]*proto.SignedMessage, 0)
-	for _, msg := range q.futureRoundQueue {
-		if msg.Message.Round < q.currentRound {
-			// do nothing, will delete this message
-		} else if msg.Message.Round == q.currentRound {
-			for _, sub := range q.subscriptions {
-				go sub(msg)
+		// delete all indexes
+		for _, indx := range c.indexes {
+			newIndexQ := make([]*messageContainer, 0)
+			for _, msg := range q.queue[indx] {
+				if msg.id != c.id {
+					newIndexQ = append(newIndexQ, msg)
+				}
 			}
-		} else { //  msg.Message.Round > q.currentRound
-			newFutureRoundQueue = append(newFutureRoundQueue, msg)
+			q.queue[indx] = newIndexQ
 		}
 	}
-	q.futureRoundQueue = newFutureRoundQueue
+	return ret
 }

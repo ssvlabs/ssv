@@ -109,8 +109,7 @@ func (i *Instance) Start(inputValue []byte) {
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
-	i.State.Round = 1      // start from 1
-	i.msgQueue.SetRound(1) // start from 1
+	i.State.Round = 1 // start from 1
 	i.State.InputValue = inputValue
 
 	if i.IsLeader() {
@@ -146,7 +145,6 @@ func (i *Instance) Stage() proto.RoundState {
 // BumpRound is used to set round in the instance's queue - the message broker
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
-	i.msgQueue.SetRound(round)
 	i.LeaderSelector.Bump()
 }
 
@@ -181,7 +179,12 @@ func (i *Instance) StartEventLoop() {
 			select {
 			case msg := <-msgChan:
 				log.Print("------ TEST GOT MSG CHANNEL -------")
-				i.msgQueue.AddMessage(msg)
+				i.msgQueue.AddMessage(&network.Message{
+					Lambda:    i.State.Lambda,
+					Msg:       msg,
+					Signature: nil,
+					Type:      network.IBFTBroadcastingType,
+				})
 			// Change round is called when no Quorum was achieved within a time duration
 			case <-i.changeRoundChan:
 				go i.uponChangeRoundTrigger()
@@ -194,31 +197,37 @@ func (i *Instance) StartEventLoop() {
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
-	i.msgQueue.Subscribe(func(msg *proto.SignedMessage) {
-		if msg == nil {
-			time.Sleep(time.Millisecond * 100)
-			return
-		}
+	go func() {
+		for {
+			if netMsg := i.msgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
+				var pp pipeline.Pipeline
+				switch netMsg.Msg.Message.Type {
+				case proto.RoundState_PrePrepare:
+					pp = i.prePrepareMsgPipeline()
+				case proto.RoundState_Prepare:
+					pp = i.prepareMsgPipeline()
+				case proto.RoundState_Commit:
+					pp = i.commitMsgPipeline()
+				case proto.RoundState_ChangeRound:
+					pp = i.changeRoundMsgPipeline()
+				default:
+					i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.Msg))
+					return
+				}
 
-		var pp pipeline.Pipeline
-		switch msg.Message.Type {
-		case proto.RoundState_PrePrepare:
-			pp = i.prePrepareMsgPipeline()
-		case proto.RoundState_Prepare:
-			pp = i.prepareMsgPipeline()
-		case proto.RoundState_Commit:
-			pp = i.commitMsgPipeline()
-		case proto.RoundState_ChangeRound:
-			pp = i.changeRoundMsgPipeline()
-		default:
-			i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-			return
-		}
+				if err := pp.Run(netMsg.Msg); err != nil {
+					i.Logger.Error("msg pipeline error", zap.Error(err))
+				}
+			} else {
+				time.Sleep(time.Millisecond * 100)
+			}
 
-		if err := pp.Run(msg); err != nil {
-			i.Logger.Error("msg pipeline error", zap.Error(err))
+			// In case instance was decided, exit message pipeline
+			if i.State.Stage == proto.RoundState_Decided {
+				break
+			}
 		}
-	})
+	}()
 }
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type

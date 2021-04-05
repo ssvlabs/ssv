@@ -5,10 +5,9 @@ import "github.com/bloxapp/ssv/ibft/proto"
 type BroadcastingType int
 
 const (
-	MessageBroadcastingType = iota + 1
+	IBFTBroadcastingType = iota + 1
 	SignatureBroadcastingType
 )
-
 
 type Message struct {
 	Lambda    []byte               `json:"lambda"`
@@ -16,4 +15,3 @@ type Message struct {
 	Signature map[uint64][]byte    `json:"signature"`
 	Type      BroadcastingType     `json:"type"`
 }
-

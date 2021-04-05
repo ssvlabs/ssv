@@ -23,7 +23,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
-
 const (
 	// DiscoveryInterval is how often we re-publish our mDNS records.
 	DiscoveryInterval = time.Second
@@ -36,7 +35,6 @@ const (
 
 	topicFmt = "bloxstaking.ssv.%s"
 )
-
 
 type listener struct {
 	lambda []byte
@@ -55,7 +53,7 @@ type p2pNetwork struct {
 	privKey       *ecdsa.PrivateKey
 	peers         *peers.Status
 	host          p2pHost.Host
-	pubsub                *pubsub.PubSub
+	pubsub        *pubsub.PubSub
 }
 
 // New is the constructor of p2pNetworker
@@ -159,7 +157,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			return nil, err
 		}
 
-
 		go n.listenForNewNodes()
 
 		if n.cfg.HostAddress != "" {
@@ -201,7 +198,7 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
 		Lambda: lambda,
 		Msg:    msg,
-		Type:   network.MessageBroadcastingType,
+		Type:   network.IBFTBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -282,7 +279,7 @@ func (n *p2pNetwork) listen() {
 				go func(ls listener) {
 
 					switch cm.Type {
-					case network.MessageBroadcastingType:
+					case network.IBFTBroadcastingType:
 						ls.msgCh <- cm.Msg
 					case network.SignatureBroadcastingType:
 						ls.sigCh <- cm.Signature

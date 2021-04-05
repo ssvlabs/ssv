@@ -2,42 +2,123 @@ package msgqueue
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network"
 	"github.com/stretchr/testify/require"
 	"testing"
-	"time"
 )
 
-func TestMessageQueue(t *testing.T) {
+func TestMessageQueue_AddMessage(t *testing.T) {
 	msgQ := New()
-
-	receivedFirstMsg, receivedSecondMsg := false, false
-	msgQ.Subscribe(func(message *proto.SignedMessage) {
-		if message.Message.Round == 1 {
-			receivedFirstMsg = true
-		}
-		if message.Message.Round == 2 {
-			receivedSecondMsg = true
-		}
-	})
-	msgQ.SetRound(1)
-
-	// send current and future round message
-	msgQ.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Round: 1,
+	msgQ.AddMessage(&network.Message{
+		Lambda: []byte{1, 2, 3, 4},
+		Msg: &proto.SignedMessage{
+			Message: &proto.Message{
+				Round: 1,
+			},
 		},
+		Signature: nil,
+		Type:      network.IBFTBroadcastingType,
 	})
-	msgQ.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Round: 2,
-		},
-	})
-	time.Sleep(time.Millisecond * 200)
-	require.True(t, receivedFirstMsg)
-	require.False(t, receivedSecondMsg)
+	require.NotNil(t, msgQ.queue["lambda_01020304_round_1"])
 
-	// move stage
-	msgQ.SetRound(2)
-	time.Sleep(time.Millisecond * 200)
-	require.True(t, receivedSecondMsg)
+	msgQ.AddMessage(&network.Message{
+		Lambda: []byte{1, 2, 3, 5},
+		Msg: &proto.SignedMessage{
+			Message: &proto.Message{
+				Round: 7,
+			},
+		},
+		Signature: nil,
+		Type:      network.IBFTBroadcastingType,
+	})
+	require.NotNil(t, msgQ.queue["lambda_01020305_round_7"])
+
+	// custom index
+	msgQ.indexFuncs = append(msgQ.indexFuncs, func(msg *network.Message) []string {
+		return []string{"a", "b", "c"}
+	})
+	msgQ.AddMessage(&network.Message{
+		Lambda: []byte{1, 2, 3, 5},
+		Msg: &proto.SignedMessage{
+			Message: &proto.Message{
+				Round: 3,
+			},
+		},
+		Signature: nil,
+		Type:      network.IBFTBroadcastingType,
+	})
+
+	require.NotNil(t, msgQ.queue["a"])
+	require.NotNil(t, msgQ.queue["b"])
+	require.NotNil(t, msgQ.queue["c"])
+	require.Nil(t, msgQ.PopMessage("d"))
 }
+
+func TestMessageQueue_PopMessage(t *testing.T) {
+	msgQ := New()
+	msgQ.indexFuncs = []IndexFunc{
+		func(msg *network.Message) []string {
+			return []string{"a", "b", "c"}
+		},
+	}
+	msgQ.AddMessage(&network.Message{
+		Lambda: []byte{1, 2, 3, 4},
+		Msg: &proto.SignedMessage{
+			Message: &proto.Message{
+				Round: 1,
+			},
+		},
+		Signature: nil,
+		Type:      network.IBFTBroadcastingType,
+	})
+
+	require.NotNil(t, msgQ.PopMessage("a"))
+	require.Nil(t, msgQ.PopMessage("a"))
+	require.Nil(t, msgQ.PopMessage("b"))
+	require.Nil(t, msgQ.PopMessage("c"))
+}
+
+//func TestMessageQueue(t *testing.T) {
+//	msgQ := New()
+//
+//	receivedFirstMsg, receivedSecondMsg := false, false
+//
+//	msgQ.Subscribe(func(message *proto.SignedMessage) {
+//		if message.Message.Round == 1 {
+//			receivedFirstMsg = true
+//		}
+//		if message.Message.Round == 2 {
+//			receivedSecondMsg = true
+//		}
+//	})
+//
+//	// send current and future round message
+//	msgQ.AddMessage(&network.Message{
+//		Lambda: []byte{1, 2, 3, 4},
+//		Msg: &proto.SignedMessage{
+//			Message: &proto.Message{
+//				Round: 1,
+//			},
+//		},
+//		Signature: nil,
+//		Type:      network.IBFTBroadcastingType,
+//	})
+//	msgQ.AddMessage(&network.Message{
+//		Lambda: []byte{1, 2, 3, 4},
+//		Msg: &proto.SignedMessage{
+//			Message: &proto.Message{
+//				Round: 2,
+//			},
+//		},
+//		Signature: nil,
+//		Type:      network.IBFTBroadcastingType,
+//	})
+//	time.Sleep(time.Millisecond * 200)
+//	require.True(t, receivedFirstMsg)
+//	require.False(t, receivedSecondMsg)
+//
+//	// move stage
+//	msgQ.SetRound(2)
+//	time.Sleep(time.Millisecond * 200)
+//	require.True(t, receivedSecondMsg)
+//}
