@@ -104,25 +104,25 @@ $ make lint
 
 # Phase 1 Testnet deployment
 
-### ssh file
-1, Download ssh key file in a proper folder
-
-2, Go into ssh folder - 
+### Server Preparation
+1. Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
+2. Enable SSH access and download ssh file
+3. Go into the folder where the ssh file is store - 
 ```
 $ cd ./{path to the ssh folder}
 ```
-
-3, Gives user permissions -
+4. provides user permissions -
 ```
 chmod 400 {ssh file name}
 ```
-
-4, ssh -i {ssh file name} ubuntu@{server ip}
-
-5, run ```sudo su``` command 
-
-6, ```cd ssv```
-
+5. connect to server -
+```
+ssh -i {ssh file name} ubuntu@{server ip}
+```
+6. run ```sudo su``` command 
+7. ```cd ssv```
+8, install Git, and Git clone the project command
+ 
 ### GoLang installation
 1, `rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz`
 

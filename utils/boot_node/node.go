@@ -173,18 +173,18 @@ func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) 
 		log.Fatal(err)
 	}
 
-	_host := "ssv.stage.bloxinfra.com"
-	ips, err := net.LookupIP(_host)
-	if err != nil {
-		log.Print("could not resolve host address - ", err)
-	}
-	if len(ips) > 0 {
-		// Use first IP returned from the
-		// resolver.
-		firstIP := ips[0]
-		log.Print(" ------- TEST HOST DNS first ip------", firstIP)
-		localNode.SetFallbackIP(firstIP)
-	}
+	//_host := "ssv.stage.bloxinfra.com"
+	//ips, err := net.LookupIP(_host)
+	//if err != nil {
+	//	log.Print("could not resolve host address - ", err)
+	//}
+	//if len(ips) > 0 {
+	//	// Use first IP returned from the
+	//	// resolver.
+	//	firstIP := ips[0]
+	//	log.Print(" ------- TEST HOST DNS first ip------", firstIP)
+	//	localNode.SetFallbackIP(firstIP)
+	//}
 
 	network, err := discover.ListenV5(conn, localNode, cfg)
 	if err != nil {

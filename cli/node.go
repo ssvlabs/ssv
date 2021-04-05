@@ -94,9 +94,9 @@ var startNodeCmd = &cobra.Command{
 			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
 				// deployemnt
-				"enr:-LK4QMoN2TuFWhied0KXcHl-4TOSnSAaZNLbaK5-tx3E2XQQJwFJ1bKoeByjqDxUS8FVMFRU_4jM8zzQFq1DKa77jI8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCObQC-Jc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+				//"enr:-LK4QMoN2TuFWhied0KXcHl-4TOSnSAaZNLbaK5-tx3E2XQQJwFJ1bKoeByjqDxUS8FVMFRU_4jM8zzQFq1DKa77jI8Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCObQC-Jc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
 				// ssh
-				//"enr:-LK4QG_q3ygTeNs_YgjPK2tpr624X6YVi1156A8teyeeLcnSFNGp0GN0CLeNA7aNz6JN6KW1nAVAsowojpKkH6DW9XEBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQLh6LjwnHfAdgoNkGbhixdtFxIrdt1UDwXNNhUpRPLMk4N0Y3CCE4iDdWRwgg-g"
+				"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
 			UDPPort:   12000,
 			TCPPort:   13000,

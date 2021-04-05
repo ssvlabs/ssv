@@ -76,22 +76,32 @@ spec:
       labels:
         app: boot-node
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/role
+                operator: In
+                values:
+                - ssv-boot-node
       containers:
       - name: boot-node
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
         command: ["make", "start-boot-node"]
         ports:
-        - containerPort: 4000
-          name: port-4000
-          protocol: UDP
         - containerPort: 5000
           name: port-5000          
-        - containerPort: 5678
-          name: port-5678
+          hostPort: 5000
         env:
           - name: BOOT_NODE_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
                 name: config-secrets
                 key: boot_node_private_key
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/role
+        operator: Exists         
+      hostNetwork: true          
