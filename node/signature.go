@@ -16,10 +16,10 @@ import (
 func (n *ssvNode) verifyPartialSignature(
 	signature []byte,
 	root []byte,
-	ibftId uint64,
+	ibftID uint64,
 ) error {
 	committee := n.iBFT.GetIBFTCommittee()
-	if val, found := committee[ibftId]; found {
+	if val, found := committee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
 			return errors.Wrap(err, "could not deserialized pk")
@@ -31,12 +31,11 @@ func (n *ssvNode) verifyPartialSignature(
 
 		// verify
 		if !sig.VerifyByte(pk, root) {
-			return errors.Errorf("could not verify signature from iBFT member %d", ibftId)
+			return errors.Errorf("could not verify signature from iBFT member %d", ibftID)
 		}
 		return nil
-	} else {
-		return errors.Errorf("could not find iBFT member %d", ibftId)
 	}
+	return errors.Errorf("could not find iBFT member %d", ibftID)
 }
 
 // signDuty signs the duty after iBFT came to consensus
@@ -97,7 +96,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 	}
 	// verify reconstructed sig
 	if res := signature.VerifyByte(n.validatorPubKey, root); !res {
-		return errors.New("could not reconstruct a valid signature.")
+		return errors.New("could not reconstruct a valid signature")
 	}
 
 	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())))

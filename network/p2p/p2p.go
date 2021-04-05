@@ -62,7 +62,7 @@ type p2pNetwork struct {
 	ctx           context.Context
 	cfg           *Config
 	listenersLock sync.Locker
-	dv5Listener   Listener
+	dv5Listener   iListener
 	listeners     []listener
 	logger        *zap.Logger
 	privKey       *ecdsa.PrivateKey
@@ -177,7 +177,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 		if n.cfg.HostAddress != "" {
 			//logExternalIPAddr(s.host.ID(), p2pHostAddress, p2pTCPPort)
-			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TcpPort))
+			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
 			conn, err := net.DialTimeout("tcp", a, time.Second*10)
 			if err != nil {
 				log.Print("IP address is not accessible", err)

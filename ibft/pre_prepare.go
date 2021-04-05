@@ -56,8 +56,8 @@ func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) boo
 	return len(val) > 0
 }
 
-/**
-### Algorithm 2 IBFT pseudocode for process pi: normal case operation
+/*
+UponPrePrepareMsg Algorithm 2 IBFT pseudocode for process pi: normal case operation
 upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(λi, round) such that:
 	JustifyPrePrepare(m) do
 		set timer i to running and expire after t(ri)

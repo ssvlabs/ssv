@@ -42,7 +42,8 @@ type discoveryNotifee struct {
 	logger *zap.Logger
 }
 
-type Listener interface {
+
+type iListener interface {
 	Self() *enode.Node
 	Close()
 	Lookup(enode.ID) []*enode.Node
@@ -128,7 +129,7 @@ func ipAddr() net.IP {
 // Determines a private key for p2p networking from the p2p service's
 // configuration struct. If no key is found, it generates a new one.
 func privKey() (*ecdsa.PrivateKey, error) {
-	defaultKeyPath := DefaultDataDir()
+	defaultKeyPath := defaultDataDir()
 
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	if err != nil {
@@ -153,7 +154,7 @@ func privKey() (*ecdsa.PrivateKey, error) {
 // buildOptions for the libp2p host.
 func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.Option {
 	//cfg := s.cfg
-	listen, err := multiAddressBuilder(ip.String(), uint(n.cfg.TcpPort))
+	listen, err := multiAddressBuilder(ip.String(), uint(n.cfg.TCPPort))
 	if err != nil {
 		log.Fatalf("Failed to p2p listen: %v", err)
 	}
@@ -270,7 +271,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 	//}
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
-		Port: n.cfg.UdpPort,
+		Port: n.cfg.UDPPort,
 	}
 	// Listen to all network interfaces
 	// for both ip protocols.
@@ -283,8 +284,8 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 	localNode, err := createLocalNode(
 		privKey,
 		ipAddr,
-		n.cfg.UdpPort,
-		n.cfg.TcpPort,
+		n.cfg.UDPPort,
+		n.cfg.TCPPort,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create Local node")
@@ -583,7 +584,7 @@ func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, ma.Multiaddr, error) {
 	return info, multiAddr, nil
 }
 
-func DefaultDataDir() string {
+func defaultDataDir() string {
 	// Try to place the data folder in the user's home dir
 	home := fileutil.HomeDir()
 	if home != "" {

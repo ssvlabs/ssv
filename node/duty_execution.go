@@ -68,7 +68,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 				break doneLoop
 			}
 		case <-time.After(n.signatureCollectionTimeout):
-			err = errors.Errorf("timed out waiting for post consensus signatures", zap.Int("received sigs", len(signatures)))
+			err = errors.Errorf("timed out waiting for post consensus signatures, received sigs - %d", len(signatures))
 			break doneLoop
 		}
 	}

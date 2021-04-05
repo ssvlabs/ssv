@@ -89,8 +89,6 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		hostDNS = "" // TODO need to be removed
-
 		cfg := p2p.Config{
 			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
@@ -99,8 +97,8 @@ var startNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QG_q3ygTeNs_YgjPK2tpr624X6YVi1156A8teyeeLcnSFNGp0GN0CLeNA7aNz6JN6KW1nAVAsowojpKkH6DW9XEBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQLh6LjwnHfAdgoNkGbhixdtFxIrdt1UDwXNNhUpRPLMk4N0Y3CCE4iDdWRwgg-g"
 			},
-			UdpPort:   12000,
-			TcpPort:   13000,
+			UDPPort:   12000,
+			TCPPort:   13000,
 			TopicName: validatorKey,
 			HostDNS:   hostDNS,
 			//HostAddress:       "127.0.0.1",
