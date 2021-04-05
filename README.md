@@ -107,10 +107,18 @@ $ make lint
 #### Server Preparation
 1. Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
 - create server gif
-![setup port permissions](/github/resources/permissions.gif)
+
+    ![launch_ec2_server](/github/resources/permissions.gif)
+
+-  Expose all ports
+
+    ![setup port permissions](/github/resources/permissions.gif)
+    
 -  Enable SSH access and download ssh file gif
 
-2. Enable SHH access and login to server-  
+    ![setup port permissions](/github/resources/permissions.gif)
+
+2. SHH permissions and login to server-  
 ```
 $ cd ./{path to the ssh folder}
 
@@ -145,33 +153,29 @@ $ apt-get update                                                        && \
       && rm -rf /var/lib/apt/lists/*
 ```
 
-### .env file
-1, create env file - 
-```
-touch .env
-```
+#### .env file
 
-2, fill `.env` file as follows -
-* If you'r node 1, need to fill the other nodes (2,3,4) and so on... 
-* run each line separately
-``` 
-echo "CONSENSUS_TYPE=validation" > .env
-echo "NETWORK=pyrmont" > .env
-echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" > .env
-echo "VALIDATOR_PUBLIC_KEY={validator public key}" > .env
-echo "SSV_NODE_1={your ssv node private key}" > .env
-echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" > .env
-echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" > .env
-echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" > .env
-echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" > .env
+ - Create env file 
+ - Fill `.env` file with params
+    * If you'r node 1, need to fill the other nodes (2,3,4) and so on...     
+```
+$ touch .env
+ 
+$ echo "CONSENSUS_TYPE=validation" > .env
+$ echo "NETWORK=pyrmont" > .env
+$ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" > .env
+$ echo "VALIDATOR_PUBLIC_KEY={validator public key}" > .env
+$ echo "SSV_NODE_1={your ssv node private key}" > .env
+$ echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" > .env
+$ echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" > .env
+$ echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" > .env
+$ echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" > .env
 ```
 
 ### Build & Run
 1, build  
 ```
-CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+
+$ BUILD_PATH="~/goasda/bin/ssvnode" make start-node
 ```  
-2, run 
-```
-BUILD_PATH="~/goasda/bin/ssvnode" make start-node
-```
