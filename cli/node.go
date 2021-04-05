@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"os"
 
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
@@ -29,11 +30,11 @@ var startNodeCmd = &cobra.Command{
 		}
 		logger := Logger.With(zap.Uint64("node_id", nodeID))
 
-		network, err := flags.GetNetworkFlagValue(cmd)
+		eth2Network, err := flags.GetNetworkFlagValue(cmd)
 		if err != nil {
-			logger.Fatal("failed to get network flag value", zap.Error(err))
+			logger.Fatal("failed to get eth2Network flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("network", string(network)))
+		logger = logger.With(zap.String("eth2Network", string(eth2Network)))
 
 		discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
 		if err != nil {
@@ -84,7 +85,7 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
+		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, eth2Network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
@@ -103,9 +104,9 @@ var startNodeCmd = &cobra.Command{
 			HostDNS:   hostDNS,
 			//HostAddress:       "127.0.0.1",
 		}
-		peer, err := p2p.New(cmd.Context(), logger, &cfg)
+		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
-			logger.Fatal("failed to create peer", zap.Error(err))
+			logger.Fatal("failed to create network", zap.Error(err))
 		}
 
 		// TODO: Refactor that
@@ -130,13 +131,16 @@ var startNodeCmd = &cobra.Command{
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
 
+		msgQ := msgqueue.New()
+
 		ssvNode := node.New(node.Options{
 			NodeID:          nodeID,
 			ValidatorPubKey: validatorPk,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
-			ETHNetwork:      network,
-			Network:         peer,
+			ETHNetwork:      eth2Network,
+			Network:         network,
+			Queue:           msgQ,
 			Consensus:       consensusType,
 			IBFT: ibft.New(
 				inmem.New(),
@@ -145,7 +149,8 @@ var startNodeCmd = &cobra.Command{
 					Pk:     baseKey.GetPublicKey().Serialize(),
 					Sk:     baseKey.Serialize(),
 				},
-				peer,
+				network,
+				msgQ,
 				&proto.InstanceParams{
 					ConsensusParams: proto.DefaultConsensusParams(),
 					IbftCommittee:   ibftCommittee,

@@ -10,7 +10,6 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibfttesting "github.com/bloxapp/ssv/ibft/spectesting"
-	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 
 func TestPrepareQuorum(t *testing.T) {
@@ -86,58 +85,6 @@ func TestPrepareQuorum(t *testing.T) {
 	require.True(t, res)
 	require.EqualValues(t, totalSignedMsgs, 3)
 	require.EqualValues(t, committeeSize, 4)
-}
-
-func TestValidatePrepareMsg(t *testing.T) {
-	secretKeys, nodes := ibfttesting.GenerateNodes(4)
-	instance := &Instance{
-		PrepareMessages:    msgcontinmem.New(),
-		PrePrepareMessages: msgcontinmem.New(),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
-		},
-		State: &proto.State{
-			Round:  1,
-			Lambda: []byte("Lambda"),
-		},
-		Consensus: bytesval.New([]byte(time.Now().Weekday().String())),
-	}
-
-	// test no valid pre-prepare msg
-	msg := ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
-		Type:   proto.RoundState_Prepare,
-		Round:  2,
-		Lambda: []byte("Lambda"),
-		Value:  []byte(time.Now().Weekday().String()),
-	})
-	require.EqualError(t, instance.validatePrepareMsg().Run(msg), "no pre-prepare value found for round 2")
-
-	// test invalid prepare value
-	msg = ibfttesting.SignMsg(2, secretKeys[2], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  2,
-		Lambda: []byte("Lambda"),
-		Value:  []byte(time.Now().Weekday().String()),
-	})
-	instance.PrePrepareMessages.AddMessage(msg)
-
-	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
-		Type:   proto.RoundState_Prepare,
-		Round:  2,
-		Lambda: []byte("Lambda"),
-		Value:  []byte("invalid"),
-	})
-	require.EqualError(t, instance.validatePrepareMsg().Run(msg), "pre-prepare value not equal to prepare msg value")
-
-	// test valid prepare value
-	msg = ibfttesting.SignMsg(1, secretKeys[1], &proto.Message{
-		Type:   proto.RoundState_Prepare,
-		Round:  2,
-		Lambda: []byte("Lambda"),
-		Value:  []byte(time.Now().Weekday().String()),
-	})
-	require.NoError(t, instance.validatePrepareMsg().Run(msg))
 }
 
 func TestBatchedPrepareMsgsAndQuorum(t *testing.T) {

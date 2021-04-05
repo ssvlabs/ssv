@@ -50,27 +50,29 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		i.validatePrepareMsg(),
+		//i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	)
 }
 
-func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-		// Validate we received a pre-prepare msg for this round and
-		// that it's value is equal to the prepare msg
-		val, err := i.PrePrepareValue(signedMessage.Message.Round)
-		if err != nil {
-			return err // will return error if no valid pre-prepare value was received
-		}
-
-		if !bytes.Equal(val, signedMessage.Message.Value) {
-			return errors.Errorf("pre-prepare value (%s) not equal to prepare msg value (%s)", string(val), string(signedMessage.Message.Value))
-		}
-
-		return nil
-	})
-}
+// TODO - we sholdn't condition prepare msg processing on pre-prepare. As soon as we have 2/3 of prepare we move on
+//  even if we didn't receive a previous pre-prepare or do not agree on the value
+//func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
+//	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+//		// Validate we received a pre-prepare msg for this round and
+//		// that it's value is equal to the prepare msg
+//		val, err := i.PrePrepareValue(signedMessage.Message.Round)
+//		if err != nil {
+//			return err // will return error if no valid pre-prepare value was received
+//		}
+//
+//		if !bytes.Equal(val, signedMessage.Message.Value) {
+//			return errors.Errorf("pre-prepare value (%s) not equal to prepare msg value (%s)", string(val), string(signedMessage.Message.Value))
+//		}
+//
+//		return nil
+//	})
+//}
 
 func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMessage {
 	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(round)

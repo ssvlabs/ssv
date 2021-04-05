@@ -16,7 +16,7 @@ func TestInstance_Start(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	instances := make([]*Instance, 0)
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
-	replay := local.NewReplay(nodes)
+	network := local.NewLocalNetwork()
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
 		IbftCommittee:   nodes,
@@ -34,14 +34,14 @@ func TestInstance_Start(t *testing.T) {
 		instances = append(instances, NewInstance(InstanceOptions{
 			Logger:         logger,
 			Me:             me,
-			Network:        replay.Network,
+			Network:        network,
 			Consensus:      bytesval.New([]byte(time.Now().Weekday().String())),
 			Params:         params,
 			Lambda:         []byte("0"),
 			PreviousLambda: []byte(""),
 		}))
-		instances[i].StartEventLoop()
-		instances[i].StartMessagePipeline()
+		go instances[i].StartEventLoop()
+		go instances[i].StartMessagePipeline()
 	}
 
 	for _, i := range instances {

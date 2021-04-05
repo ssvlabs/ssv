@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -22,6 +23,7 @@ type Options struct {
 	PrivateKey                 *bls.SecretKey
 	ETHNetwork                 core.Network
 	Network                    network.Network
+	Queue                      *msgqueue.MessageQueue
 	Consensus                  string
 	Beacon                     beacon.Beacon
 	IBFT                       ibft.IBFT
@@ -42,6 +44,7 @@ type ssvNode struct {
 	privateKey      *bls.SecretKey
 	ethNetwork      core.Network
 	network         network.Network
+	queue           *msgqueue.MessageQueue
 	consensus       string
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
@@ -60,6 +63,7 @@ func New(opts Options) Node {
 		privateKey:                 opts.PrivateKey,
 		ethNetwork:                 opts.ETHNetwork,
 		network:                    opts.Network,
+		queue:                      opts.Queue,
 		consensus:                  opts.Consensus,
 		slotQueue:                  slotqueue.New(opts.ETHNetwork),
 		beacon:                     opts.Beacon,
@@ -72,6 +76,7 @@ func New(opts Options) Node {
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
 	go n.startSlotQueueListener(ctx)
+	go n.listenToNetworkMessages()
 
 	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey.Serialize())
 	if err != nil {
@@ -103,6 +108,17 @@ func (n *ssvNode) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (n *ssvNode) listenToNetworkMessages() {
+	sigChan := n.network.ReceivedSignatureChan()
+	for sigMsg := range sigChan {
+		n.queue.AddMessage(&network.Message{
+			Lambda: sigMsg.Message.Lambda,
+			Msg:    sigMsg,
+			Type:   network.SignatureBroadcastingType,
+		})
+	}
 }
 
 // startSlotQueueListener starts slot queue listener

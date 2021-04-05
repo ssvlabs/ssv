@@ -23,13 +23,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
-type broadcastingType int
-
-const (
-	messageBroadcastingType = iota + 1
-	signatureBroadcastingType
-)
-
 const (
 	// DiscoveryInterval is how often we re-publish our mDNS records.
 	DiscoveryInterval = time.Second
@@ -43,17 +36,9 @@ const (
 	topicFmt = "bloxstaking.ssv.%s"
 )
 
-type message struct {
-	Lambda    []byte               `json:"lambda"`
-	Msg       *proto.SignedMessage `json:"msg"`
-	Signature map[uint64][]byte    `json:"signature"`
-	Type      broadcastingType     `json:"type"`
-}
-
 type listener struct {
-	lambda []byte
-	msgCh  chan *proto.SignedMessage
-	sigCh  chan map[uint64][]byte
+	msgCh chan *proto.SignedMessage
+	sigCh chan *proto.SignedMessage
 }
 
 // p2pNetwork implements network.Network interface using P2P
@@ -67,7 +52,7 @@ type p2pNetwork struct {
 	privKey       *ecdsa.PrivateKey
 	peers         *peers.Status
 	host          p2pHost.Host
-	pubsub                *pubsub.PubSub
+	pubsub        *pubsub.PubSub
 }
 
 // New is the constructor of p2pNetworker
@@ -171,7 +156,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			return nil, err
 		}
 
-
 		go n.listenForNewNodes()
 
 		if n.cfg.HostAddress != "" {
@@ -209,11 +193,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 // Broadcast propagates a signed message to all peers
-func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(message{
-		Lambda: lambda,
+func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
+	msgBytes, err := json.Marshal(network.Message{
+		Lambda: msg.Message.Lambda,
 		Msg:    msg,
-		Type:   messageBroadcastingType,
+		Type:   network.IBFTBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -225,10 +209,9 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 }
 
 // ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.SignedMessage {
+func (n *p2pNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
 	ls := listener{
-		lambda: lambda,
-		msgCh:  make(chan *proto.SignedMessage, MsgChanSize),
+		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()
@@ -239,11 +222,11 @@ func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.Sign
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
-	msgBytes, err := json.Marshal(message{
-		Lambda:    lambda,
-		Signature: signature,
-		Type:      signatureBroadcastingType,
+func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
+	msgBytes, err := json.Marshal(network.Message{
+		Lambda: msg.Message.Lambda,
+		Msg:    msg,
+		Type:   network.SignatureBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -253,10 +236,9 @@ func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]by
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan(_ uint64, lambda []byte) <-chan map[uint64][]byte {
+func (n *p2pNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
 	ls := listener{
-		lambda: lambda,
-		sigCh:  make(chan map[uint64][]byte, MsgChanSize),
+		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()
@@ -284,7 +266,7 @@ func (n *p2pNetwork) listen() {
 			}
 			log.Print("--------- TEST GOT MSG ------")
 
-			var cm message
+			var cm network.Message
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
@@ -294,10 +276,10 @@ func (n *p2pNetwork) listen() {
 				go func(ls listener) {
 
 					switch cm.Type {
-					case messageBroadcastingType:
+					case network.IBFTBroadcastingType:
 						ls.msgCh <- cm.Msg
-					case signatureBroadcastingType:
-						ls.sigCh <- cm.Signature
+					case network.SignatureBroadcastingType:
+						ls.sigCh <- cm.Msg
 					}
 				}(ls)
 			}

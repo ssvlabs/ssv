@@ -2,6 +2,8 @@ package ibft
 
 import (
 	"encoding/binary"
+	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/storage/inmem"
 	"testing"
 	"time"
 
@@ -17,7 +19,8 @@ import (
 func TestIBFT(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	secretKeys, nodes := ibfttesting.GenerateNodes(4)
-	replay := local.NewReplay(nodes)
+	network := local.NewLocalNetwork()
+	storage := inmem.New()
 
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
@@ -32,7 +35,7 @@ func TestIBFT(t *testing.T) {
 			Sk:     secretKeys[uint64(i)].Serialize(),
 		}
 
-		ibft := New(replay.Storage, me, replay.Network, params)
+		ibft := New(storage, me, network, msgqueue.New(), params)
 		instances = append(instances, ibft)
 	}
 
@@ -55,8 +58,8 @@ func TestIBFT(t *testing.T) {
 				}
 
 				/**
-					replay config
-				 */
+				replay config
+				*/
 				//if instanceCount == 0 {
 				//	s := local.NewRoundScript(replay, []uint64{0, 1, 2, 3})
 				//	s.PreventMessages(proto.RoundState_PrePrepare, []uint64{0})
@@ -67,15 +70,14 @@ func TestIBFT(t *testing.T) {
 				//s1.PreventMessages(proto.RoundState_PrePrepare, []uint64{1})
 				//replay.SetScript(2, s1)
 				/**
-					replay config
+				replay config
 				*/
-
 
 				opts.Logger.Info("\n\n\nStarting new instance\n\n\n", zap.Binary("id", newID), zap.Binary("prev_id", instanceIdentifier))
 				for _, i := range instances {
 					go i.StartInstance(opts)
 				}
-				instanceCount ++
+				instanceCount++
 				//instanceIdentifier = newID
 			case <-quit:
 				ticker.Stop()
