@@ -91,13 +91,9 @@ spec:
         imagePullPolicy: Always
         command: ["make", "start-boot-node"]
         ports:
-        - containerPort: 4000
-          name: port-4000
-          protocol: UDP
         - containerPort: 5000
           name: port-5000          
-        - containerPort: 5678
-          name: port-5678
+          hostPort: 5000
         env:
           - name: BOOT_NODE_PRIVATE_KEY
             valueFrom:
@@ -107,4 +103,5 @@ spec:
       tolerations:
       - effect: NoSchedule
         key: kubernetes.io/role
-        operator: Exists          
+        operator: Exists         
+      hostNetwork: true          
