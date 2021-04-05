@@ -46,32 +46,33 @@ func (n *ssvNode) postConsensusDutyExecution(
 	// Collect signatures from other nodes
 	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
 	signatures := make(map[uint64][]byte, signaturesCount)
-	foundCnt := 0
+	signedIndxes := make([]uint64, 0)
+
 	doneLoop:
 		for {
-		select {
-		case sig := <-signaturesChan:
-			for index, signature := range sig {
-				if _, found := signatures[index]; found {
-					continue
-				}
-				// verify sig
-				if err := n.verifyPartialSignature(signature, root, index); err != nil {
-					logger.Error("received invalid signature", zap.Error(err))
-					continue
-				}
+			select {
+			case sig := <-signaturesChan:
+				for index, signature := range sig {
+					if _, found := signatures[index]; found {
+						continue
+					}
+					// verify sig
+					if err := n.verifyPartialSignature(signature, root, index); err != nil {
+						logger.Error("received invalid signature", zap.Error(err))
+						continue
+					}
 
-				signatures[index] = signature
-				foundCnt++
-			}
-			if foundCnt >= signaturesCount {
+					signatures[index] = signature
+					signedIndxes = append(signedIndxes, index)
+				}
+				if len(signedIndxes) >= signaturesCount {
+					break doneLoop
+				}
+			case <-time.After(n.signatureCollectionTimeout):
+				err = errors.Errorf("timed out waiting for post consensus signatures", zap.Uint64s("received sigs", signedIndxes), zap.Int("expected signatures count", signaturesCount))
 				break doneLoop
 			}
-		case <-time.After(n.signatureCollectionTimeout):
-			err = errors.Errorf("timed out waiting for post consensus signatures", zap.Int("received sigs", len(signatures)))
-			break doneLoop
 		}
-	}
 
 	if err != nil {
 		return err

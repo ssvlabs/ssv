@@ -309,6 +309,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 			// Use first IP returned from the
 			// resolver.
 			firstIP := ips[0]
+			log.Print(" ------- TEST HOST DNS first ip------", firstIP)
 			localNode.SetFallbackIP(firstIP)
 		}
 	}
