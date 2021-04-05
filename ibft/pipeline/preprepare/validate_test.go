@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/ibft/proto"
-	ibfttesting "github.com/bloxapp/ssv/ibft/spec_testing"
+	ibfttesting "github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 )
 

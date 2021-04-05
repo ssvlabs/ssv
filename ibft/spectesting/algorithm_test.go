@@ -1,4 +1,4 @@
-package spec_testing
+package spectesting
 
 //// IBFT ALGORITHM 2: Happy flow - a normal case operation
 //func TestUponPrePrepareMessagesBroadcastsPrepare(t *testing.T) {

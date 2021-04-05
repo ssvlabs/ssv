@@ -1,5 +1,6 @@
 package leader
 
+// Selector is interface to implement the leader selection logic
 type Selector interface {
 	// Current returns the current leader as calculated by the implementation.
 	Current(committeeSize uint64) uint64

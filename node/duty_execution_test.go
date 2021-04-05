@@ -47,7 +47,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(test.decided, test.signaturesCount)
+			node := testingSSVNode(t, test.decided, test.signaturesCount)
 			signaturesCount, inputValue, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, &ethpb.DutiesResponse_Duty{
 				Committee:      nil,
 				CommitteeIndex: 0,
@@ -122,7 +122,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(true, test.expectedSignaturesCount)
+			node := testingSSVNode(t,true, test.expectedSignaturesCount)
 
 			// construct value
 			attData := &ethpb.AttestationData{}
