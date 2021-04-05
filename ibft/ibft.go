@@ -72,15 +72,12 @@ func New(
 func (i *ibftImpl) listenToNetworkMessages() {
 	msgChan := i.network.ReceivedMsgChan()
 	go func() {
-		for {
-			select {
-			case msg := <-msgChan:
-				i.msgQueue.AddMessage(&network.Message{
-					Lambda: msg.Message.Lambda,
-					Msg:    msg,
-					Type:   network.IBFTBroadcastingType,
-				})
-			}
+		for msg := range msgChan {
+			i.msgQueue.AddMessage(&network.Message{
+				Lambda: msg.Message.Lambda,
+				Msg:    msg,
+				Type:   network.IBFTBroadcastingType,
+			})
 		}
 	}()
 }
@@ -109,8 +106,8 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 		PreviousLambda: opts.PrevInstance,
 	})
 	i.instances[hex.EncodeToString(opts.Identifier)] = newInstance
-	newInstance.StartEventLoop()
-	newInstance.StartMessagePipeline()
+	go newInstance.StartEventLoop()
+	go newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
 
 	err := i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection

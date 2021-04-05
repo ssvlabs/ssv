@@ -112,15 +112,12 @@ func (n *ssvNode) Start(ctx context.Context) error {
 
 func (n *ssvNode) listenToNetworkMessages() {
 	sigChan := n.network.ReceivedSignatureChan()
-	for {
-		select {
-		case sigMsg := <-sigChan:
-			n.queue.AddMessage(&network.Message{
-				Lambda: sigMsg.Message.Lambda,
-				Msg:    sigMsg,
-				Type:   network.SignatureBroadcastingType,
-			})
-		}
+	for sigMsg := range sigChan {
+		n.queue.AddMessage(&network.Message{
+			Lambda: sigMsg.Message.Lambda,
+			Msg:    sigMsg,
+			Type:   network.SignatureBroadcastingType,
+		})
 	}
 }
 

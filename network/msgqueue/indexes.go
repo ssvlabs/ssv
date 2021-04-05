@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
+// IBFTRoundIndexKey is the ibft index key
 func IBFTRoundIndexKey(lambda []byte, round uint64) string {
 	return fmt.Sprintf("lambda_%s_round_%d", hex.EncodeToString(lambda), round)
 }
@@ -17,6 +18,7 @@ func iBFTMessageIndex() IndexFunc {
 	}
 }
 
+// SigRoundIndexKey is the SSV node signature collection index key
 func SigRoundIndexKey(lambda []byte) string {
 	return fmt.Sprintf("sig_lambda_%s", hex.EncodeToString(lambda))
 }

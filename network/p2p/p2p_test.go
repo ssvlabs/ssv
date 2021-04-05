@@ -52,14 +52,14 @@ func TestP2PNetworker(t *testing.T) {
 		},
 	}
 
-	peer1Chan := peer1.ReceivedMsgChan(1, lambda)
-	peer2Chan := peer2.ReceivedMsgChan(2, lambda)
+	peer1Chan := peer1.ReceivedMsgChan()
+	peer2Chan := peer2.ReceivedMsgChan()
 	//peer3Chan := peer3.ReceivedMsgChan(3, lambda)
 	//peer4Chan := peer4.ReceivedMsgChan(4, lambda)
 
 	time.Sleep(time.Second)
 
-	err = peer1.Broadcast(lambda, messageToBroadcast)
+	err = peer1.Broadcast(messageToBroadcast)
 	require.NoError(t, err)
 	t.Log("message broadcasted")
 

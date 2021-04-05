@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/binary"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/inmem"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestIBFT(t *testing.T) {
 			Sk:     secretKeys[uint64(i)].Serialize(),
 		}
 
-		ibft := New(storage, me, network, params)
+		ibft := New(storage, me, network, msgqueue.New(), params)
 		instances = append(instances, ibft)
 	}
 

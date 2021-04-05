@@ -40,8 +40,8 @@ func TestInstance_Start(t *testing.T) {
 			Lambda:         []byte("0"),
 			PreviousLambda: []byte(""),
 		}))
-		instances[i].StartEventLoop()
-		instances[i].StartMessagePipeline()
+		go instances[i].StartEventLoop()
+		go instances[i].StartMessagePipeline()
 	}
 
 	for _, i := range instances {
