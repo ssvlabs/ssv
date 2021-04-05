@@ -76,6 +76,15 @@ spec:
       labels:
         app: boot-node
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/role
+                operator: In
+                values:
+                - ssv-boot-node
       containers:
       - name: boot-node
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
@@ -95,3 +104,7 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: boot_node_private_key
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/role
+        operator: Exists          
