@@ -154,8 +154,7 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 	ret.iBFT = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 
 	// nodes
-	_, nodes := GenerateNodes(4)
-	ret.network = local.NewReplay(nodes).Network
+	ret.network = local.NewLocalNetwork()
 	ret.nodeID = 1
 
 	// validator pk

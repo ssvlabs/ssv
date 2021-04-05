@@ -29,7 +29,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 ) error {
 	// TODO - closing receive sig channel
 	// TODO - id is meaningless
-	signaturesChan := n.network.ReceivedSignatureChan(0, identifier)
+	signaturesChan := n.network.ReceivedSignatureChan()
 
 	// sign input value
 	sig, root, err := n.signDuty(ctx, inputValue, role, duty)

@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"encoding/hex"
-	"log"
 	"sync"
 	"time"
 
@@ -26,6 +25,7 @@ type InstanceOptions struct {
 	Logger         *zap.Logger
 	Me             *proto.Node
 	Network        network.Network
+	Queue          *msgqueue.MessageQueue
 	Consensus      dataval.Validator
 	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
@@ -80,7 +80,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
 		msgLock:        sync.Mutex{},
 
-		msgQueue:            msgqueue.New(),
+		msgQueue:            opts.Queue,
 		PrePrepareMessages:  msgcontinmem.New(),
 		PrepareMessages:     msgcontinmem.New(),
 		commitMessages:      msgcontinmem.New(),
@@ -142,7 +142,7 @@ func (i *Instance) Stage() proto.RoundState {
 	return i.State.Stage
 }
 
-// BumpRound is used to set round in the instance's queue - the message broker
+// BumpRound is used to set round in the instance's msgQueue - the message broker
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
 	i.LeaderSelector.Bump()
@@ -173,18 +173,9 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 // StartEventLoop - starts the main event loop for the instance.
 // Events are messages our timer that change the behaviour of the instance upon triggering them
 func (i *Instance) StartEventLoop() {
-	msgChan := i.network.ReceivedMsgChan(i.Me.IbftId, i.State.Lambda)
 	go func() {
 		for {
 			select {
-			case msg := <-msgChan:
-				log.Print("------ TEST GOT MSG CHANNEL -------")
-				i.msgQueue.AddMessage(&network.Message{
-					Lambda:    i.State.Lambda,
-					Msg:       msg,
-					Signature: nil,
-					Type:      network.IBFTBroadcastingType,
-				})
 			// Change round is called when no Quorum was achieved within a time duration
 			case <-i.changeRoundChan:
 				go i.uponChangeRoundTrigger()
@@ -248,7 +239,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		SignerIds: []uint64{i.Me.IbftId},
 	}
 	if i.network != nil {
-		return i.network.Broadcast(i.State.GetLambda(), signedMessage)
+		return i.network.Broadcast(signedMessage)
 	}
 
 	switch msg.Type {

@@ -37,9 +37,8 @@ const (
 )
 
 type listener struct {
-	lambda []byte
-	msgCh  chan *proto.SignedMessage
-	sigCh  chan map[uint64][]byte
+	msgCh chan *proto.SignedMessage
+	sigCh chan map[uint64][]byte
 }
 
 // p2pNetwork implements network.Network interface using P2P
@@ -194,9 +193,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 // Broadcast propagates a signed message to all peers
-func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
+func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
-		Lambda: lambda,
+		Lambda: msg.Message.Lambda,
 		Msg:    msg,
 		Type:   network.IBFTBroadcastingType,
 	})
@@ -210,10 +209,9 @@ func (n *p2pNetwork) Broadcast(lambda []byte, msg *proto.SignedMessage) error {
 }
 
 // ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) ReceivedMsgChan(_ uint64, lambda []byte) <-chan *proto.SignedMessage {
+func (n *p2pNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
 	ls := listener{
-		lambda: lambda,
-		msgCh:  make(chan *proto.SignedMessage, MsgChanSize),
+		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()
@@ -238,10 +236,9 @@ func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]by
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan(_ uint64, lambda []byte) <-chan map[uint64][]byte {
+func (n *p2pNetwork) ReceivedSignatureChan() <-chan map[uint64][]byte {
 	ls := listener{
-		lambda: lambda,
-		sigCh:  make(chan map[uint64][]byte, MsgChanSize),
+		sigCh: make(chan map[uint64][]byte, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()

@@ -3,8 +3,8 @@ package ibft
 import (
 	"bytes"
 	"encoding/hex"
-
 	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/network/msgqueue"
 
 	"go.uber.org/zap"
 
@@ -43,20 +43,41 @@ type ibftImpl struct {
 	storage        storage.Storage
 	me             *proto.Node
 	network        network.Network
+	msgQueue       *msgqueue.MessageQueue
 	params         *proto.InstanceParams
 	leaderSelector leader.Selector
 }
 
 // New is the constructor of IBFT
 func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) IBFT {
-	return &ibftImpl{
+	ret := &ibftImpl{
 		instances:      make(map[string]*Instance),
 		storage:        storage,
 		me:             me,
 		network:        network,
+		msgQueue:       msgqueue.New(),
 		params:         params,
 		leaderSelector: &leader.Deterministic{},
 	}
+	ret.listenToNetworkMessages()
+	return ret
+}
+
+func (i *ibftImpl) listenToNetworkMessages() {
+	msgChan := i.network.ReceivedMsgChan()
+	go func() {
+		for {
+			select {
+			case msg := <-msgChan:
+				i.msgQueue.AddMessage(&network.Message{
+					Lambda:    msg.Message.Lambda,
+					Msg:       msg,
+					Signature: nil,
+					Type:      network.IBFTBroadcastingType,
+				})
+			}
+		}
+	}()
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
@@ -75,6 +96,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 		Logger:         opts.Logger,
 		Me:             i.me,
 		Network:        i.network,
+		Queue:          i.msgQueue,
 		Consensus:      opts.Consensus,
 		LeaderSelector: i.leaderSelector,
 		Params:         i.params,
