@@ -173,7 +173,7 @@ func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) 
 		log.Fatal(err)
 	}
 
-	_host := "ssv.stage.bloxnfra.com"
+	_host := "ssv.stage.bloxnifra.com"
 	ips, err := net.LookupIP(_host)
 	if err != nil {
 		log.Print("could not resolve host address - ", err)
