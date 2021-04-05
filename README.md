@@ -104,38 +104,45 @@ $ make lint
 
 # Phase 1 Testnet deployment
 
-### Server Preparation
+#### Server Preparation
 1. Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
-2. Enable SSH access and download ssh file
-3. Go into the folder where the ssh file is store - 
+- create server gif
+![setup port permissions](/github/resources/permissions.gif)
+-  Enable SSH access and download ssh file gif
+
+2. Enable SHH access and login to server-  
 ```
 $ cd ./{path to the ssh folder}
+
+$ sudo chmod 400 {ssh file name}
+
+$ sudo ssh -i {ssh file name} ubuntu@{server ip}
 ```
-4. provides user permissions -
+3. Clone ssv project 
 ```
-chmod 400 {ssh file name}
+$ git --version
+
+// If no git run install command
+$ sudo apt install git
+
+$ git clone https://github.com/bloxapp/ssv.git
+
+$ cd ssv
 ```
-5. connect to server -
-```
-ssh -i {ssh file name} ubuntu@{server ip}
-```
-6. run ```sudo su``` command 
-7. ```cd ssv```
-8, install Git, and Git clone the project command
  
-### GoLang installation
-1, `rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz`
-
-2, `export PATH=$PATH:/usr/local/go/bin`
-
-3, `go version` - if version returned - all good :)
-
-4, install go dependencies - 
+4. Install Golang dependencies 
 ```
-apt-get update                                                        && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-      curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
-    && rm -rf /var/lib/apt/lists/*
+$ rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
+
+$ export PATH=$PATH:/usr/local/go/bin
+
+// if version returned - all good :)
+$ go version
+
+$ apt-get update                                                        && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+        curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
+      && rm -rf /var/lib/apt/lists/*
 ```
 
 ### .env file
