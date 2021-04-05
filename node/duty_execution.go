@@ -87,6 +87,9 @@ func (n *ssvNode) postConsensusDutyExecution(
 		}
 	}
 
+	// clean queue for messages, we don't need them anymore.
+	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
+
 	if err != nil {
 		return err
 	}

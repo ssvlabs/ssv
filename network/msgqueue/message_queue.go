@@ -80,15 +80,27 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 		ret = c.msg
 
 		// delete all indexes
-		for _, indx := range c.indexes {
-			newIndexQ := make([]*messageContainer, 0)
-			for _, msg := range q.queue[indx] {
-				if msg.id != c.id {
-					newIndexQ = append(newIndexQ, msg)
-				}
-			}
-			q.queue[indx] = newIndexQ
-		}
+		q.deleteMessageFromAllIndexes(c.indexes, c.id)
 	}
 	return ret
+}
+
+func (q *MessageQueue) deleteMessageFromAllIndexes(indexes []string, id string) {
+	for _, indx := range indexes {
+		newIndexQ := make([]*messageContainer, 0)
+		for _, msg := range q.queue[indx] {
+			if msg.id != id {
+				newIndexQ = append(newIndexQ, msg)
+			}
+		}
+		q.queue[indx] = newIndexQ
+	}
+}
+
+// PurgeIndexedMessages will delete all indexed messages for the given index
+func (q *MessageQueue) PurgeIndexedMessages(index string) {
+	q.msgMutex.Lock()
+	defer q.msgMutex.Unlock()
+
+	q.queue[index] = make([]*messageContainer, 0)
 }

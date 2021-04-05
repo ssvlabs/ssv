@@ -152,6 +152,11 @@ func (i *Instance) BumpRound(round uint64) {
 func (i *Instance) SetStage(stage proto.RoundState) {
 	i.State.Stage = stage
 
+	// Delete all queue messages when decided, we do not need them anymore.
+	for j := uint64(1); j <= i.State.Round; j++ {
+		i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, j))
+	}
+
 	// Non blocking send to channel
 	for _, ch := range i.stageChangedChans {
 		select {
