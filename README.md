@@ -101,3 +101,70 @@ $ make lint-prepare
 # Run nodes
 $ make lint
 ```
+
+# Phase 1 Testnet deployment
+
+### ssh file
+1, Download ssh key file in a proper folder
+
+2, Go into ssh folder - 
+```
+$ cd ./{path to the ssh folder}
+```
+
+3, Gives user permissions -
+```
+chmod 400 {ssh file name}
+```
+
+4, ssh -i {ssh file name} ubuntu@{server ip}
+
+5, run ```sudo su``` command 
+
+6, ```cd ssv```
+
+### GoLang installation
+1, `rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz`
+
+2, `export PATH=$PATH:/usr/local/go/bin`
+
+3, `go version` - if version returned - all good :)
+
+4, install go dependencies - 
+```
+apt-get update                                                        && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+      curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+### .env file
+1, create env file - 
+```
+touch .env
+```
+
+2, fill `.env` file as follows -
+* If you'r node 1, need to fill the other nodes (2,3,4) and so on... 
+* run each line separately
+``` 
+echo "CONSENSUS_TYPE=validation" > .env
+echo "NETWORK=pyrmont" > .env
+echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" > .env
+echo "VALIDATOR_PUBLIC_KEY={validator public key}" > .env
+echo "SSV_NODE_1={your ssv node private key}" > .env
+echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" > .env
+echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" > .env
+echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" > .env
+echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" > .env
+```
+
+### Build & Run
+1, build  
+```
+CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+```  
+2, run 
+```
+BUILD_PATH="~/goasda/bin/ssvnode" make start-node
+```
