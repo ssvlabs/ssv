@@ -112,7 +112,12 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	newInstance.StartEventLoop()
 	newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
-	i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection
+
+	err := i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection
+	if err != nil {
+		newInstance.Logger.Error("could not reset leader selection", zap.Error(err))
+		return false, 0
+	}
 	go newInstance.Start(opts.Value)
 
 	// Store prepared round and value and decided stage.
@@ -144,6 +149,6 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 }
 
 // resetLeaderSelection resets leader selection with seed and round 1
-func (i *ibftImpl) resetLeaderSelection(seed []byte) {
-	i.leaderSelector.SetSeed(seed, 1)
+func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
+	return i.leaderSelector.SetSeed(seed, 1)
 }

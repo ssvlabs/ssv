@@ -26,6 +26,6 @@ func TestSplitAndReconstruct(t *testing.T) {
 	// reconstruct
 	sig, _ := ReconstructSignatures(m)
 	originalSig := bls.Sign{}
-	require.NoError(t, originalSig.Deserialize(sig))
+	require.NoError(t, originalSig.Deserialize(sig.Serialize()))
 	require.True(t, originalSig.VerifyByte(sk.GetPublicKey(), []byte("hello")))
 }

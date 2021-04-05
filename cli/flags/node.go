@@ -85,12 +85,12 @@ func GetConsensusFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(consensusFlag)
 }
 
-// AddNodeIDKeyFlag adds the node ID flag to the command
+// AddSignatureCollectionTimeFlag adds the timeout for signatures flag to the command
 func AddSignatureCollectionTimeFlag(c *cobra.Command) {
 	cliflag.AddPersistentIntFlag(c, sigCollectionTimeout, 5, "Timeout after consensus for signature collection", false)
 }
 
-// GetNodeIDKeyFlagValue gets the node ID flag from the command
+// GetSignatureCollectionTimeValue gets the max timeout to wait for signatures flag from the command
 func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
 	v, err := c.Flags().GetUint64(sigCollectionTimeout)
 	if err != nil {
@@ -99,12 +99,12 @@ func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
 	return time.Second * time.Duration(v), nil
 }
 
-// GetHostDNSFlagValue gets the val flag from the command
+// GetHostDNSFlagValue gets the host dns flag from the command
 func GetHostDNSFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(hostDNS)
 }
 
-// AddNodeIDKeyFlag adds the node ID flag to the command
+// AddHostDNSFlag adds the host dns flag to the command
 func AddHostDNSFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, hostDNS, "", "host dns", false)
 }

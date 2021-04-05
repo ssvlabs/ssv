@@ -11,13 +11,15 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"testing"
 	"time"
 )
 
 var (
 	refAttestationDataByts = _byteArray("1a203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b2222122000000000000000000000000000000000000000000000000000000000000000002a24080212203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b")
-	refSk                  = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
+	//refSk                  = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
 	refPk                  = _byteArray("a9cf360aa15fb1d1d30ee2b578dc5884823c19661886ae8b892775ccb3bd96b7d7345569a2aa0b14e4d015c54a6a0c54")
 
 	refSplitShares = [][]byte{ // sk split to 4: 2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c
@@ -62,7 +64,7 @@ func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int) {
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
+func (t *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
 	return map[uint64]*proto.Node{
 		1: {
 			IbftId: 1,
@@ -91,12 +93,12 @@ type testBeacon struct {
 	LastSubmittedAttestation *ethpb.Attestation
 }
 
-func newTestBeacon() *testBeacon {
+func newTestBeacon(t *testing.T) *testBeacon {
 	ret := &testBeacon{}
 	// parse ref att. data
 	ret.refAttestationData = &ethpb.AttestationData{}
-	ret.refAttestationData.Unmarshal(refAttestationDataByts) // ignore error
-
+	err := ret.refAttestationData.Unmarshal(refAttestationDataByts) // ignore error
+	require.NoError(t, err)
 	return ret
 }
 
@@ -149,9 +151,9 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Dutie
 	return nil, nil
 }
 
-func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
+func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
 	ret := &ssvNode{}
-	ret.beacon = newTestBeacon()
+	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
 	ret.iBFT = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 
@@ -163,8 +165,9 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 	// validator pk
 	threshold.Init()
 	pk := &bls.PublicKey{}
-	pk.Deserialize(refPk)
+	err := pk.Deserialize(refPk)
 	ret.validatorPubKey = pk
+	require.NoError(t, err)
 
 	// timeout
 	ret.signatureCollectionTimeout = time.Second * 2
@@ -173,9 +176,6 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 	return ret
 }
 
-/**
-utils
-*/
 // GenerateNodes generates randomly nodes
 func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
 	_ = bls.Init(bls.BLS12_381)

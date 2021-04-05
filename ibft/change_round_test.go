@@ -10,7 +10,7 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	"github.com/bloxapp/ssv/ibft/proto"
-	ibfttesting "github.com/bloxapp/ssv/ibft/spec_testing"
+	ibfttesting "github.com/bloxapp/ssv/ibft/spectesting"
 )
 
 func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {

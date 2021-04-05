@@ -12,7 +12,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 		skByts []byte
 		root []byte
 		useWrongRoot bool
-		ibftId uint64
+		ibftID uint64
 		expectedError string
 	}{
 		{
@@ -59,7 +59,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(true, 4)
+			node := testingSSVNode(t,true, 4)
 
 			sk := &bls.SecretKey{}
 			require.NoError(t, sk.Deserialize(test.skByts))
@@ -71,7 +71,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 				usedRoot = []byte{0,0,0,0,0,0,0}
 			}
 
-			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftId)
+			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
