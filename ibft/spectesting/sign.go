@@ -1,4 +1,4 @@
-package spec_testing
+package spectesting
 
 import (
 	"github.com/herumi/bls-eth-go-binary/bls"

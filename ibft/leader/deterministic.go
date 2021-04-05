@@ -5,17 +5,18 @@ import (
 	"encoding/binary"
 )
 
-// Round robin leader selection is a fair and sequential leader selection.
+// Deterministic Round robin leader selection is a fair and sequential leader selection.
 // Each instance/ round change the next leader is selected one-by-one.
 type Deterministic struct {
 	index   uint64
 	baseInt uint64
 }
-
+// Current returns the current leader
 func (rr *Deterministic) Current(committeeSize uint64) uint64 {
 	return (rr.baseInt + rr.index) % committeeSize
 }
 
+// Bump to the index
 func (rr *Deterministic) Bump() {
 	rr.index++
 }

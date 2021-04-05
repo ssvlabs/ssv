@@ -19,7 +19,7 @@ type Local struct {
 	createChannelMutex sync.Mutex
 }
 
-func NewLocalNetwork() *Local {
+func newLocalNetwork() *Local {
 	return &Local{
 		msgC: make(map[uint64]chan *proto.SignedMessage),
 		sigC: make(map[uint64]chan map[uint64][]byte),
@@ -96,7 +96,7 @@ type Replay struct {
 // NewReplay is the constructor of Replay
 func NewReplay(nodes map[uint64]*proto.Node) *Replay {
 	ret := &Replay{
-		Network: NewLocalNetwork(),
+		Network: newLocalNetwork(),
 		Storage: inmem.New(),
 		scripts: make(map[string]map[uint64]*RoundScript),
 		nodes:   make([]uint64, len(nodes)),
@@ -111,6 +111,7 @@ func NewReplay(nodes map[uint64]*proto.Node) *Replay {
 	return ret
 }
 
+// SetScript sets the script config
 func (r *Replay) SetScript(identifier []byte, round uint64, script *RoundScript) {
 	if r.scripts[hex.EncodeToString(identifier)] == nil {
 		r.scripts[hex.EncodeToString(identifier)] = make(map[uint64]*RoundScript)

@@ -1,4 +1,4 @@
-package spec_testing
+package spectesting
 
 //func prepareInstance(t *testing.T, nodes map[uint64]*proto.Node, secretKeys map[uint64]*bls.SecretKey) *Instance {
 //	return &Instance{
