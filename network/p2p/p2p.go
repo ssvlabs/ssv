@@ -38,7 +38,7 @@ const (
 
 type listener struct {
 	msgCh chan *proto.SignedMessage
-	sigCh chan map[uint64][]byte
+	sigCh chan *proto.SignedMessage
 }
 
 // p2pNetwork implements network.Network interface using P2P
@@ -222,11 +222,11 @@ func (n *p2pNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
+func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
-		Lambda:    lambda,
-		Signature: signature,
-		Type:      network.SignatureBroadcastingType,
+		Lambda: msg.Message.Lambda,
+		Msg:    msg,
+		Type:   network.SignatureBroadcastingType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
@@ -236,9 +236,9 @@ func (n *p2pNetwork) BroadcastSignature(lambda []byte, signature map[uint64][]by
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan() <-chan map[uint64][]byte {
+func (n *p2pNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
 	ls := listener{
-		sigCh: make(chan map[uint64][]byte, MsgChanSize),
+		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
 	n.listenersLock.Lock()
@@ -279,7 +279,7 @@ func (n *p2pNetwork) listen() {
 					case network.IBFTBroadcastingType:
 						ls.msgCh <- cm.Msg
 					case network.SignatureBroadcastingType:
-						ls.sigCh <- cm.Signature
+						ls.sigCh <- cm.Msg
 					}
 				}(ls)
 			}

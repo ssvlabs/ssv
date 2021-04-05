@@ -32,6 +32,7 @@ func New() *MessageQueue {
 		queue:    make(map[string][]*messageContainer),
 		indexFuncs: []IndexFunc{
 			iBFTMessageIndex(),
+			sigMessageIndex(),
 		},
 	}
 }

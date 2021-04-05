@@ -41,7 +41,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleAggregator,
 			refAttestationDataByts,
-			"unknown role",
+			"unknown role: AGGREGATOR",
 		},
 	}
 
@@ -116,13 +116,15 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			3,
 			refAttestationDataByts,
 			refAttestationSig,
-			"timed out waiting for post consensus signatures",
+			"timed out waiting for post consensus signatures, received 2",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(true, test.expectedSignaturesCount)
+			// wait for for listeners to spin up
+			time.Sleep(time.Millisecond * 100)
 
 			// construct value
 			attData := &ethpb.AttestationData{}
@@ -144,16 +146,16 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				ValidatorIndex: 0,
 			}
 
-			// received sigs
-			go func() {
-				ticker := time.NewTicker(300 * time.Millisecond)
-				<-ticker.C
-				for index, sig := range test.sigs {
-					node.network.BroadcastSignature([]byte{}, map[uint64][]byte{
-						index: sig,
-					})
-				}
-			}()
+			// send sigs
+			for index, sig := range test.sigs {
+				node.network.BroadcastSignature(&proto.SignedMessage{
+					Message: &proto.Message{
+						Lambda: []byte("id"),
+					},
+					Signature: sig,
+					SignerIds: []uint64{index},
+				})
+			}
 
 			err := node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), inputValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
 			if len(test.expectedError) > 0 {

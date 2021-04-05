@@ -10,8 +10,7 @@ const (
 )
 
 type Message struct {
-	Lambda    []byte               `json:"lambda"`
-	Msg       *proto.SignedMessage `json:"msg"`
-	Signature map[uint64][]byte    `json:"signature"`
-	Type      BroadcastingType     `json:"type"`
+	Lambda []byte               `json:"lambda"`
+	Msg    *proto.SignedMessage `json:"msg"`
+	Type   BroadcastingType     `json:"type"`
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
 	"time"
 
@@ -27,54 +28,62 @@ func (n *ssvNode) postConsensusDutyExecution(
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
 ) error {
-	// TODO - closing receive sig channel
-	// TODO - id is meaningless
-	signaturesChan := n.network.ReceivedSignatureChan()
-
-	// sign input value
+	// sign input value and broadcast
 	sig, root, err := n.signDuty(ctx, inputValue, role, duty)
-
-	// broadcast
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
-	if err := n.network.BroadcastSignature(identifier, map[uint64][]byte{n.nodeID: sig}); err != nil {
+
+	// TODO - should we construct it better?
+	if err := n.network.BroadcastSignature(&proto.SignedMessage{
+		Message: &proto.Message{
+			Lambda: identifier,
+		},
+		Signature: sig,
+		SignerIds: []uint64{n.nodeID},
+	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasted partial signature post consensus")
 
 	// Collect signatures from other nodes
-	// TODO - waiting timeout, when should we stop waiting for the sigs and just move on?
+	// TODO - change signature count to min threshold
 	signatures := make(map[uint64][]byte, signaturesCount)
 	signedIndxes := make([]uint64, 0)
 	done := false
+
+	// start timeout
+	go func() {
+		<-time.After(n.signatureCollectionTimeout)
+		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
+		done = true
+	}()
+	// loop through messages until timeout
 	for {
 		if done {
 			break
 		}
-		select {
-		case sig := <-signaturesChan:
-			for index, signature := range sig {
-				if _, found := signatures[index]; found {
-					continue
-				}
-				// verify sig
-				if err := n.verifyPartialSignature(signature, root, index); err != nil {
-					logger.Error("received invalid signature", zap.Error(err))
-					continue
-				}
-
-				signatures[index] = signature
-				signedIndxes = append(signedIndxes, index)
+		if msg := n.queue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
+			if len(msg.Msg.SignerIds) == 0 { // no signer, empty sig
+				continue
 			}
+			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
+				continue
+			}
+			// verify sig
+			if err := n.verifyPartialSignature(msg.Msg.Signature, root, msg.Msg.SignerIds[0]); err != nil {
+				logger.Error("received invalid signature", zap.Error(err))
+				continue
+			}
+
+			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
+			signedIndxes = append(signedIndxes, msg.Msg.SignerIds[0])
 			if len(signedIndxes) >= signaturesCount {
 				done = true
 				break
 			}
-		case <-time.After(n.signatureCollectionTimeout):
-			err = errors.Errorf("timed out waiting for post consensus signatures", zap.Uint64s("received sigs", signedIndxes), zap.Int("expected signatures count", signaturesCount))
-			done = true
-			break
+		} else {
+			time.Sleep(time.Millisecond * 100)
 		}
 	}
 

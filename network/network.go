@@ -13,8 +13,8 @@ type Network interface {
 	ReceivedMsgChan() <-chan *proto.SignedMessage
 
 	// BroadcastSignature broadcasts the given signature for the given lambda
-	BroadcastSignature(lambda []byte, signature map[uint64][]byte) error
+	BroadcastSignature(msg *proto.SignedMessage) error
 
 	// ReceivedSignatureChan returns the channel with signatures
-	ReceivedSignatureChan() <-chan map[uint64][]byte
+	ReceivedSignatureChan() <-chan *proto.SignedMessage
 }

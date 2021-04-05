@@ -49,13 +49,19 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(storage storage.Storage, me *proto.Node, network network.Network, params *proto.InstanceParams) IBFT {
+func New(
+	storage storage.Storage,
+	me *proto.Node,
+	network network.Network,
+	queue *msgqueue.MessageQueue,
+	params *proto.InstanceParams,
+) IBFT {
 	ret := &ibftImpl{
 		instances:      make(map[string]*Instance),
 		storage:        storage,
 		me:             me,
 		network:        network,
-		msgQueue:       msgqueue.New(),
+		msgQueue:       queue,
 		params:         params,
 		leaderSelector: &leader.Deterministic{},
 	}
@@ -70,10 +76,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 			select {
 			case msg := <-msgChan:
 				i.msgQueue.AddMessage(&network.Message{
-					Lambda:    msg.Message.Lambda,
-					Msg:       msg,
-					Signature: nil,
-					Type:      network.IBFTBroadcastingType,
+					Lambda: msg.Message.Lambda,
+					Msg:    msg,
+					Type:   network.IBFTBroadcastingType,
 				})
 			}
 		}

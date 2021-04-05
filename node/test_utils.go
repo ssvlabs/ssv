@@ -7,6 +7,8 @@ import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
+	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
@@ -155,15 +157,19 @@ func testingSSVNode(decided bool, signaturesCount int) *ssvNode {
 
 	// nodes
 	ret.network = local.NewLocalNetwork()
+	ret.queue = msgqueue.New()
 	ret.nodeID = 1
 
 	// validator pk
+	threshold.Init()
 	pk := &bls.PublicKey{}
 	pk.Deserialize(refPk)
 	ret.validatorPubKey = pk
 
 	// timeout
-	ret.signatureCollectionTimeout = time.Second
+	ret.signatureCollectionTimeout = time.Second * 2
+
+	go ret.listenToNetworkMessages()
 	return ret
 }
 

@@ -16,8 +16,7 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 				Round: 1,
 			},
 		},
-		Signature: nil,
-		Type:      network.IBFTBroadcastingType,
+		Type: network.IBFTBroadcastingType,
 	})
 	require.NotNil(t, msgQ.queue["lambda_01020304_round_1"])
 
@@ -28,8 +27,7 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 				Round: 7,
 			},
 		},
-		Signature: nil,
-		Type:      network.IBFTBroadcastingType,
+		Type: network.IBFTBroadcastingType,
 	})
 	require.NotNil(t, msgQ.queue["lambda_01020305_round_7"])
 
@@ -44,8 +42,7 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 				Round: 3,
 			},
 		},
-		Signature: nil,
-		Type:      network.IBFTBroadcastingType,
+		Type: network.IBFTBroadcastingType,
 	})
 
 	require.NotNil(t, msgQ.queue["a"])
@@ -68,8 +65,7 @@ func TestMessageQueue_PopMessage(t *testing.T) {
 				Round: 1,
 			},
 		},
-		Signature: nil,
-		Type:      network.IBFTBroadcastingType,
+		Type: network.IBFTBroadcastingType,
 	})
 
 	require.NotNil(t, msgQ.PopMessage("a"))
@@ -77,48 +73,3 @@ func TestMessageQueue_PopMessage(t *testing.T) {
 	require.Nil(t, msgQ.PopMessage("b"))
 	require.Nil(t, msgQ.PopMessage("c"))
 }
-
-//func TestMessageQueue(t *testing.T) {
-//	msgQ := New()
-//
-//	receivedFirstMsg, receivedSecondMsg := false, false
-//
-//	msgQ.Subscribe(func(message *proto.SignedMessage) {
-//		if message.Message.Round == 1 {
-//			receivedFirstMsg = true
-//		}
-//		if message.Message.Round == 2 {
-//			receivedSecondMsg = true
-//		}
-//	})
-//
-//	// send current and future round message
-//	msgQ.AddMessage(&network.Message{
-//		Lambda: []byte{1, 2, 3, 4},
-//		Msg: &proto.SignedMessage{
-//			Message: &proto.Message{
-//				Round: 1,
-//			},
-//		},
-//		Signature: nil,
-//		Type:      network.IBFTBroadcastingType,
-//	})
-//	msgQ.AddMessage(&network.Message{
-//		Lambda: []byte{1, 2, 3, 4},
-//		Msg: &proto.SignedMessage{
-//			Message: &proto.Message{
-//				Round: 2,
-//			},
-//		},
-//		Signature: nil,
-//		Type:      network.IBFTBroadcastingType,
-//	})
-//	time.Sleep(time.Millisecond * 200)
-//	require.True(t, receivedFirstMsg)
-//	require.False(t, receivedSecondMsg)
-//
-//	// move stage
-//	msgQ.SetRound(2)
-//	time.Sleep(time.Millisecond * 200)
-//	require.True(t, receivedSecondMsg)
-//}

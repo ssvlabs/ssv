@@ -16,3 +16,14 @@ func iBFTMessageIndex() IndexFunc {
 		}
 	}
 }
+
+func SigRoundIndexKey(lambda []byte) string {
+	return fmt.Sprintf("sig_lambda_%s", hex.EncodeToString(lambda))
+}
+func sigMessageIndex() IndexFunc {
+	return func(msg *network.Message) []string {
+		return []string{
+			SigRoundIndexKey(msg.Lambda),
+		}
+	}
+}

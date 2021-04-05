@@ -9,14 +9,14 @@ import (
 // Local implements network.Local interface
 type Local struct {
 	msgC               []chan *proto.SignedMessage
-	sigC               []chan map[uint64][]byte
+	sigC               []chan *proto.SignedMessage
 	createChannelMutex sync.Mutex
 }
 
 func NewLocalNetwork() *Local {
 	return &Local{
 		msgC: make([]chan *proto.SignedMessage, 0),
-		sigC: make([]chan map[uint64][]byte, 0),
+		sigC: make([]chan *proto.SignedMessage, 0),
 	}
 }
 
@@ -30,10 +30,10 @@ func (n *Local) ReceivedMsgChan() <-chan *proto.SignedMessage {
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *Local) ReceivedSignatureChan() <-chan map[uint64][]byte {
+func (n *Local) ReceivedSignatureChan() <-chan *proto.SignedMessage {
 	n.createChannelMutex.Lock()
 	defer n.createChannelMutex.Unlock()
-	c := make(chan map[uint64][]byte)
+	c := make(chan *proto.SignedMessage)
 	n.sigC = append(n.sigC, c)
 	return c
 }
@@ -63,10 +63,10 @@ func (n *Local) Broadcast(signed *proto.SignedMessage) error {
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *Local) BroadcastSignature(lambda []byte, signature map[uint64][]byte) error {
+func (n *Local) BroadcastSignature(msg *proto.SignedMessage) error {
 	go func() {
 		for _, c := range n.sigC {
-			c <- signature
+			c <- msg
 		}
 	}()
 	return nil
