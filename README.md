@@ -104,9 +104,6 @@ $ make lint
 
 # Phase 1 Testnet deployment  ![ethereum](/github/resources/ethereum.gif)
 
-![ethereum](/github/resources/blox_logo.gif)
-
-
 #### Server Preparation
 ##### Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
 (AWS example below)
@@ -159,23 +156,20 @@ $ cd ssv
 ```
 
 #### .env file
-
- - Create env file 
- - Fill `.env` file with params
+ 
+ - Export all required params
     * If you'r node 1, need to fill the other nodes (2,3,4) and so on...     
 ```
-$ touch .env
- 
-$ echo "CONSENSUS_TYPE=validation" >> .env
-$ echo "NETWORK=pyrmont" >> .env
-$ echo "BEACON_NODE_ADDR=eth2-4000-prysm-ext.stage.bloxinfra.com:80" >> .env
-$ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
-$ echo "NODE_ID={Your node index}" >> .env
-$ echo "SSV_PRIVATE_KEY={your ssv node private key}" >> .env
-$ echo "PUBKEY_NODE_1={your ssv node public key}" >> .env
-$ echo "PUBKEY_NODE_2={seconde ssv node public key}" >> .env
-$ echo "PUBKEY_NODE_3={third ssv node public key}" >> .env
-$ echo "PUBKEY_NODE_4={forth ssv node public key}" >> .env
+$ export CONSENSUS_TYPE=validation
+$ export NETWORK=pyrmont"
+$ export BEACON_NODE_ADDR=eth2-4000-prysm-ext.stage.bloxinfra.com:80
+$ export VALIDATOR_PUBLIC_KEY={validator public key}
+$ export NODE_ID={Your node index}
+$ export SSV_PRIVATE_KEY={your ssv node private key}
+$ export PUBKEY_NODE_1={your ssv node public key}
+$ export PUBKEY_NODE_2={seconde ssv node public key}
+$ export PUBKEY_NODE_3={third ssv node public key}
+$ export PUBKEY_NODE_4={forth ssv node public key}
 ```
 
 ### Build & Run
