@@ -104,6 +104,9 @@ $ make lint
 
 # Phase 1 Testnet deployment  ![ethereum](/github/resources/ethereum.gif)
 
+![ethereum](/github/resources/blox_logo.gif)
+
+
 #### Server Preparation
 ##### Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
 (AWS example below)

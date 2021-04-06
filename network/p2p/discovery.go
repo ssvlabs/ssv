@@ -379,10 +379,10 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 	if err := n.host.Connect(ctx, info); err != nil {
 		//s.Peers().Scorers().BadResponsesScorer().Increment(info.ID)
-		//log.Print("TEST peer connect error ------------", err)
+		log.Print("TEST peer connect error ------------", err)
 		return err
 	}
-	//log.Print("Connected to peer!!!!  ", info)
+	log.Print("Connected to peer!!!!  ", info)
 	return nil
 }
 
