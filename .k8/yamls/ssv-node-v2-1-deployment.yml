@@ -90,3 +90,5 @@ spec:
         - name: HOST_DNS
 #          value: "ssv-lb.stage.bloxinfra.com"
           value: ""
+        - name: HOST_ADDRESS
+          value: "ssv-lb.stage.bloxinfra.com"
