@@ -112,7 +112,7 @@ $ make lint
 - choose "ubuntu server 20.04"
 - choose "t2.micro" (free tire)
 - skip to "security group" section
-- make sure you have 3 rules, udp,tcp and ssh -
+- make sure you have 3 rules. UDP,TCP and SSH -
 ![security_permission](/github/resources/security_permission.png)
 - when promote, add new key pair and download the ssh file 
 - launch instance
@@ -167,11 +167,11 @@ $ echo "CONSENSUS_TYPE=validation" >> .env
 $ echo "NETWORK=pyrmont" >> .env
 $ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" >> .env
 $ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
-$ echo "SSV_NODE_1={your ssv node private key}" >> .env
-$ echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" >> .env
-$ echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" >> .env
-$ echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" >> .env
-$ echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" >> .env
+$ echo "SSV_PRIVATE_KEY={your ssv node private key}" >> .env
+$ echo "PUBKEY_NODE_1={your ssv node public key}" >> .env
+$ echo "PUBKEY_NODE_2={seconde ssv node public key}" >> .env
+$ echo "PUBKEY_NODE_3={third ssv node public key}" >> .env
+$ echo "PUBKEY_NODE_4={forth ssv node public key}" >> .env
 ```
 
 ### Build & Run
