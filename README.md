@@ -137,10 +137,10 @@ $ export PATH=$PATH:/usr/local/go/bin
 // if version returned - all good :)
 $ go version
 
-$ sudo apt-get update                                                        && \
-    DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
-      bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
-    && rm -rf /var/lib/apt/lists/*
+$ sudo apt-get update && \
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
+  bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
+  && rm -rf /var/lib/apt/lists/*
 ```
 
 ##### Clone ssv project 
