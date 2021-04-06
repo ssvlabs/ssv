@@ -2,6 +2,7 @@ package proto
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -34,7 +35,7 @@ func (p *InstanceParams) CommitteeSize() int {
 
 // ThresholdSize returns the minimum IBFT committee members that needs to sign for a quorum
 func (p *InstanceParams) ThresholdSize() int {
-	return len(p.IbftCommittee) * 2 / 3
+	return int(math.Ceil(float64(len(p.IbftCommittee)) * 2 / 3))
 }
 
 // PubKeysByID returns the public keys with the associated ids

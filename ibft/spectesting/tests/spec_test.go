@@ -17,7 +17,8 @@ type SpecTest interface {
 
 var tests = []SpecTest{
 	&ValidSimpleRun{},
-	//&ChangeRoundAndDecide{},
+	&ChangeRoundAndDecide{},
+	&PrepapreChangeRoundAndDecide{},
 }
 
 func TestAllSpecTests(t *testing.T) {

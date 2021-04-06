@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
@@ -45,13 +46,44 @@ func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, i
 }
 
 func ChangeRoundMsg(t *testing.T, sk, lambda, prevLambda []byte, round, id uint64) *proto.SignedMessage {
+	return ChangeRoundMsgWithPrepared(t, sk, lambda, prevLambda, nil, nil, round, 0, id)
+}
+
+func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedValue []byte, signers map[uint64][]byte, round, preparedRound, id uint64) *proto.SignedMessage {
 	crData := &proto.ChangeRoundData{
-		PreparedRound:    0,
-		PreparedValue:    nil,
+		PreparedRound:    preparedRound,
+		PreparedValue:    preparedValue,
 		JustificationMsg: nil,
 		JustificationSig: nil,
 		SignerIds:        nil,
 	}
+
+	if preparedValue != nil {
+		crData.JustificationMsg = &proto.Message{
+			Type:           proto.RoundState_Prepare,
+			Round:          preparedRound,
+			Lambda:         lambda,
+			PreviousLambda: prevLambda,
+			Value:          preparedValue,
+		}
+		var aggregatedSig *bls.Sign
+		SignerIds := make([]uint64, 0)
+		for signerId, skByts := range signers {
+			SignerIds = append(SignerIds, signerId)
+			signed := SignMsg(t, signerId, skByts, crData.JustificationMsg)
+			sig := &bls.Sign{}
+			require.NoError(t, sig.Deserialize(signed.Signature))
+
+			if aggregatedSig == nil {
+				aggregatedSig = sig
+			} else {
+				aggregatedSig.Add(sig)
+			}
+		}
+		crData.JustificationSig = aggregatedSig.Serialize()
+		crData.SignerIds = SignerIds
+	}
+
 	byts, err := json.Marshal(crData)
 	require.NoError(t, err)
 

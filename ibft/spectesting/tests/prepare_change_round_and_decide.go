@@ -9,18 +9,18 @@ import (
 	"testing"
 )
 
-type ChangeRoundAndDecide struct {
+type PrepapreChangeRoundAndDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 	prevLambda []byte
 }
 
-func (test *ChangeRoundAndDecide) Name() string {
-	return "pre-prepare -> change round -> pre-prepare -> prepare -> decide"
+func (test *PrepapreChangeRoundAndDecide) Name() string {
+	return "pre-prepare -> prepare -> change round -> prepare -> decide"
 }
 
-func (test *ChangeRoundAndDecide) Prepare(t *testing.T) {
+func (test *PrepapreChangeRoundAndDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
 	test.inputValue = spectesting.TestInputValue()
@@ -38,14 +38,26 @@ func (test *ChangeRoundAndDecide) Prepare(t *testing.T) {
 	}
 }
 
-func (test *ChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *PrepapreChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+	signersMap := map[uint64][]byte{
+		1: spectesting.TestSKs()[0],
+		2: spectesting.TestSKs()[1],
+		3: spectesting.TestSKs()[2],
+		4: spectesting.TestSKs()[3],
+	}
+
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
 
-		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, 2, 1),
-		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, 2, 2),
-		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, 2, 3),
-		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, 2, 4),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, test.inputValue, 1, 2),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, test.inputValue, 1, 3),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, test.inputValue, 1, 4),
+
+		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, signersMap, 2, 1, 1),
+		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, test.inputValue, signersMap, 2, 1, 2),
+		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, test.inputValue, signersMap, 2, 1, 3),
+		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, test.inputValue, signersMap, 2, 1, 4),
 
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 2, 1),
 
@@ -61,8 +73,14 @@ func (test *ChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.Signed
 	}
 }
 
-func (test *ChangeRoundAndDecide) Run(t *testing.T) {
+func (test *PrepapreChangeRoundAndDecide) Run(t *testing.T) {
 	// pre-prepare
+	require.True(t, test.instance.ProcessMessage())
+
+	// prepare
+	require.True(t, test.instance.ProcessMessage())
+	require.True(t, test.instance.ProcessMessage())
+	require.True(t, test.instance.ProcessMessage())
 	require.True(t, test.instance.ProcessMessage())
 	spectesting.SimulateTimeout(test.instance, 2)
 
@@ -75,10 +93,11 @@ func (test *ChangeRoundAndDecide) Run(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, justified)
 
-	// check pre-prepare justification
+	// justify pre-prepare
 	justified, err = test.instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 	require.True(t, justified)
+	require.True(t, test.instance.ProcessMessage())
 
 	// process all messages
 	for {
