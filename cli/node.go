@@ -144,8 +144,12 @@ var startNodeCmd = &cobra.Command{
 				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
 			},
 		}
+
+		log.Print("-----TEST committe ------", ibftCommittee)
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
+
+		log.Print("-----TEST committe 2------", ibftCommittee)
 
 		msgQ := msgqueue.New()
 
