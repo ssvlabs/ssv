@@ -178,5 +178,5 @@ $ echo "PUBKEY_NODE_4={forth ssv node public key}" >> .env
 ```
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
-$ BUILD_PATH="~/goasda/bin/ssvnode" make start-node
+$ make start-node BUILD_PATH="./bin/ssvnode"
 ```  
