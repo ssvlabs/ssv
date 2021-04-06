@@ -165,7 +165,7 @@ $ touch .env
  
 $ echo "CONSENSUS_TYPE=validation" >> .env
 $ echo "NETWORK=pyrmont" >> .env
-$ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" >> .env
+$ echo "BEACON_NODE_ADDR=eth2-4000-prysm-ext.stage.bloxinfra.com:80" >> .env
 $ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
 $ echo "NODE_ID={Your node index}" >> .env
 $ echo "SSV_PRIVATE_KEY={your ssv node private key}" >> .env
