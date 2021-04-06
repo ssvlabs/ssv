@@ -83,4 +83,4 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node --private-key=${BOOT_NODE_PRIVATE_KEY}
+	${BUILD_PATH} start-boot-node --private-key=${BOOT_NODE_PRIVATE_KEY} --external-ip=${BOOT_NODE_EXTERNAL_IP}
