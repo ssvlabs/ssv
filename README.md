@@ -121,9 +121,9 @@ $ make lint
 ```
 $ cd ./{path to where the ssh downloaded}
 
-$ sudo chmod 400 {ssh file name}
+$ chmod 400 {ssh file name}
 
-$ sudo ssh -i {ssh file name} ubuntu@{server public ip}
+$ ssh -i {ssh file name} ubuntu@{server public ip}
 ```
 
 ##### Install Golang dependencies 
