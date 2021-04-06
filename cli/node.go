@@ -76,6 +76,11 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
 		}
 
+		hostAddress, err := flags.GetHostAddressFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get hostAddress key flag value", zap.Error(err))
+		}
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -101,11 +106,11 @@ var startNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
-			UDPPort:   12000,
-			TCPPort:   13000,
-			TopicName: validatorKey,
-			HostDNS:   hostDNS,
-			//HostAddress:       "127.0.0.1",
+			UDPPort:     12000,
+			TCPPort:     13000,
+			TopicName:   validatorKey,
+			HostDNS:     hostDNS,
+			HostAddress: hostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
@@ -192,6 +197,7 @@ func init() {
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
 	flags.AddHostDNSFlag(startNodeCmd)
+	flags.AddHostAddressFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

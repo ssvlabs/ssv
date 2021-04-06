@@ -17,7 +17,8 @@ const (
 	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
-	hostDNS        = "host-dns"
+	hostDNS              = "host-dns"
+	hostAddress          = "host-address"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -107,4 +108,14 @@ func GetHostDNSFlagValue(c *cobra.Command) (string, error) {
 // AddHostDNSFlag adds the host dns flag to the command
 func AddHostDNSFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, hostDNS, "", "host dns", false)
+}
+
+// GetHostAddressFlagValue gets the host address flag from the command
+func GetHostAddressFlagValue(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(hostAddress)
+}
+
+// AddHostDNSFlag adds the host address flag to the command
+func AddHostAddressFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, hostAddress, "", "host address", false)
 }
