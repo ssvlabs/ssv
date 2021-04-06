@@ -130,7 +130,7 @@ $ sudo ssh -i {ssh file name} ubuntu@{server public ip}
 ```
 $ sudo wget https://golang.org/dl/go1.16.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
 
-$ rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
+$ sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
 
 $ export PATH=$PATH:/usr/local/go/bin
 
@@ -167,17 +167,17 @@ $ echo "CONSENSUS_TYPE=validation" >> .env
 $ echo "NETWORK=pyrmont" >> .env
 $ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" >> .env
 $ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
+$ echo "NODE_ID={Your node index}" >> .env
 $ echo "SSV_PRIVATE_KEY={your ssv node private key}" >> .env
 $ echo "PUBKEY_NODE_1={your ssv node public key}" >> .env
 $ echo "PUBKEY_NODE_2={seconde ssv node public key}" >> .env
 $ echo "PUBKEY_NODE_3={third ssv node public key}" >> .env
 $ echo "PUBKEY_NODE_4={forth ssv node public key}" >> .env
-$ echo "NODE_ID={Your node index}" >> .env
 ```
 
 ### Build & Run
 ```
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
-$ BUILD_PATH="~/goasda/bin/ssvnode" make start-node
+$ make start-node BUILD_PATH="./bin/ssvnode"
 ```  
