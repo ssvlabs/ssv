@@ -335,7 +335,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					SignerIds:        []uint64{1, 2},
 				}),
 			},
-			expectedError: "",
+			expectedError: "change round justification does not constitute a quorum",
 		},
 		{
 			name:                "valid justification",
