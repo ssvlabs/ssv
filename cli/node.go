@@ -3,7 +3,9 @@ package cli
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"log"
 	"os"
+	"time"
 
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 
@@ -108,6 +110,14 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
+
+		go func() {
+			time.Sleep(2 * time.Second)
+			for i := 0; i < 5; i++ {
+				log.Print("-------- Peers Check ----- ", network.GetCfg().Topic.ListPeers())
+				time.Sleep(2 * time.Second)
+			}
+		}()
 
 		// TODO: Refactor that
 		ibftCommittee := map[uint64]*proto.Node{

@@ -2,6 +2,7 @@ package network
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network/p2p"
 )
 
 // Network represents the behavior of the network
@@ -17,4 +18,6 @@ type Network interface {
 
 	// ReceivedSignatureChan returns the channel with signatures
 	ReceivedSignatureChan() <-chan *proto.SignedMessage
+
+	GetCfg() p2p.Config
 }
