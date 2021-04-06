@@ -30,6 +30,7 @@ import (
 type Options struct {
 	Logger     *zap.Logger
 	PrivateKey string
+	ExternalIP string
 }
 
 // Node represents the behavior of boot node
@@ -54,7 +55,7 @@ func New(opts Options) Node {
 		privateKey:  opts.PrivateKey,
 		discv5port:  4000,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
-		externalIP:  "54.212.29.204",
+		externalIP:  opts.ExternalIP,
 	}
 }
 
@@ -188,6 +189,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	external := net.ParseIP(n.externalIP)
 	if n.externalIP == "" {
 		external = ipAddr
+		n.logger.Info("Running with IP", zap.String("ip", ipAddr.String()))
+	} else {
+		n.logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
 	//fVersion := params.BeaconConfig().GenesisForkVersion
