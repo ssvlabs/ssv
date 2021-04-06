@@ -3,6 +3,11 @@ ifndef $(GOPATH)
     export GOPATH
 endif
 
+ifndef $(EXTERNAL_IP)
+    EXTERNAL_IP=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
+#    export EXTERNAL_IP
+endif
+
 ifndef $(BUILD_PATH)
     BUILD_PATH="/go/bin/ssvnode"
     export BUILD_PATH
@@ -61,7 +66,7 @@ ifdef DEBUG_PORT
 
 else
 	@echo "Running node (${NODE_ID})"
-	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS} --host-address=${HOST_ADDRESS}
+	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
 endif
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
