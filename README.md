@@ -106,16 +106,14 @@ $ make lint
 
 #### Server Preparation
 ##### Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
+(AWS example below)
 - In the search bar search for "ec2"
 - Launch new instance
 - choose "ubuntu server 20.04"
 - choose "t2.micro" (free tire)
 - skip to "security group" section
 - make sure you have 2 rules, if not add them
-```
-Type = All trafic  | Source = 0.0.0.0
-Type = All trafic  | Source = ::/0
-```
+![security_permission](/github/resources/security_permission.png)
 - when promote, add new key pair and download the ssh file 
 - launch instance
 
