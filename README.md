@@ -112,7 +112,7 @@ $ make lint
 - choose "ubuntu server 20.04"
 - choose "t2.micro" (free tire)
 - skip to "security group" section
-- make sure you have 2 rules, if not add them
+- make sure you have 3 rules, udp,tcp and ssh -
 ![security_permission](/github/resources/security_permission.png)
 - when promote, add new key pair and download the ssh file 
 - launch instance
@@ -123,8 +123,26 @@ $ cd ./{path to where the ssh downloaded}
 
 $ sudo chmod 400 {ssh file name}
 
-$ sudo ssh -i {ssh file name} ubuntu@{server external ip}
+$ sudo ssh -i {ssh file name} ubuntu@{server public ip}
 ```
+
+##### Install Golang dependencies 
+```
+$ sudo wget https://golang.org/dl/go1.16.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
+
+$ rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
+
+$ export PATH=$PATH:/usr/local/go/bin
+
+// if version returned - all good :)
+$ go version
+
+$ sudo apt-get update                                                        && \
+    DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
+      bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
+    && rm -rf /var/lib/apt/lists/*
+```
+
 ##### Clone ssv project 
 ```
 $ git --version
@@ -136,21 +154,6 @@ $ git clone https://github.com/bloxapp/ssv.git
 
 $ cd ssv
 ```
- 
-##### Install Golang dependencies 
-```
-$ rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
-
-$ export PATH=$PATH:/usr/local/go/bin
-
-// if version returned - all good :)
-$ go version
-
-$ apt-get update                                                        && \
-      DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-        curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
-      && rm -rf /var/lib/apt/lists/*
-```
 
 #### .env file
 
@@ -160,15 +163,15 @@ $ apt-get update                                                        && \
 ```
 $ touch .env
  
-$ echo "CONSENSUS_TYPE=validation" > .env
-$ echo "NETWORK=pyrmont" > .env
-$ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" > .env
-$ echo "VALIDATOR_PUBLIC_KEY={validator public key}" > .env
-$ echo "SSV_NODE_1={your ssv node private key}" > .env
-$ echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" > .env
-$ echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" > .env
-$ echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" > .env
-$ echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" > .env
+$ echo "CONSENSUS_TYPE=validation" >> .env
+$ echo "NETWORK=pyrmont" >> .env
+$ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" >> .env
+$ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
+$ echo "SSV_NODE_1={your ssv node private key}" >> .env
+$ echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" >> .env
+$ echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" >> .env
+$ echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" >> .env
+$ echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" >> .env
 ```
 
 ### Build & Run
