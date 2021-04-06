@@ -102,31 +102,32 @@ $ make lint-prepare
 $ make lint
 ```
 
-# Phase 1 Testnet deployment
+# Phase 1 Testnet deployment  ![ethereum](/github/resources/port_permissions.gif)
 
 #### Server Preparation
-1. Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
-- create server gif
-
-    ![launch_ec2_server](/github/resources/permissions.gif)
-
--  Expose all ports
-
-    ![setup port permissions](/github/resources/permissions.gif)
-    
--  Enable SSH access and download ssh file gif
-
-    ![setup port permissions](/github/resources/permissions.gif)
-
-2. SHH permissions and login to server-  
+##### Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
+- In the search bar search for "ec2"
+- Launch new instance
+- choose "ubuntu server 20.04"
+- choose "t2.micro" (free tire)
+- skip to "security group" section
+- make sure you have 2 rules, if not add them
 ```
-$ cd ./{path to the ssh folder}
+Type = All trafic  | Source = 0.0.0.0
+Type = All trafic  | Source = ::/0
+```
+- when promote, add new key pair and download the ssh file 
+- launch instance
+
+##### SHH permissions and login to server-  
+```
+$ cd ./{path to where the ssh downloaded}
 
 $ sudo chmod 400 {ssh file name}
 
-$ sudo ssh -i {ssh file name} ubuntu@{server ip}
+$ sudo ssh -i {ssh file name} ubuntu@{server external ip}
 ```
-3. Clone ssv project 
+##### Clone ssv project 
 ```
 $ git --version
 
@@ -138,7 +139,7 @@ $ git clone https://github.com/bloxapp/ssv.git
 $ cd ssv
 ```
  
-4. Install Golang dependencies 
+##### Install Golang dependencies 
 ```
 $ rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
 
@@ -173,7 +174,6 @@ $ echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" > .env
 ```
 
 ### Build & Run
-1, build  
 ```
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
