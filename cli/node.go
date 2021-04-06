@@ -114,7 +114,7 @@ var startNodeCmd = &cobra.Command{
 		go func() {
 			time.Sleep(2 * time.Second)
 			for i := 0; i < 5; i++ {
-				log.Print("-------- Peers Check ----- ", network.GetCfg().Topic.ListPeers())
+				log.Print("-------- Peers Check ----- ", network.GetTopic().ListPeers())
 				time.Sleep(2 * time.Second)
 			}
 		}()
