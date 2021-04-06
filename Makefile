@@ -65,7 +65,7 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --discovery-type=${DISCOVERY_TYPE} --val=${CONSENSUS_TYPE}
 
 else
-	@echo "Running node (${NODE_ID})"
+	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
 	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
 endif
 
