@@ -150,11 +150,8 @@ var startNodeCmd = &cobra.Command{
 		log.Print("-----TEST pk 3 ------", os.Getenv("PUBKEY_NODE_3"))
 		log.Print("-----TEST pk 4 ------", os.Getenv("PUBKEY_NODE_4"))
 
-		log.Print("-----TEST committe ------", ibftCommittee)
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
-
-		log.Print("-----TEST committe 2------", ibftCommittee)
 
 		msgQ := msgqueue.New()
 
