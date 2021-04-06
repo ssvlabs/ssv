@@ -121,9 +121,9 @@ $ make lint
 ```
 $ cd ./{path to where the ssh downloaded}
 
-$ sudo chmod 400 {ssh file name}
+$ chmod 400 {ssh file name}
 
-$ sudo ssh -i {ssh file name} ubuntu@{server public ip}
+$ ssh -i {ssh file name} ubuntu@{server public ip}
 ```
 
 ##### Install Golang dependencies 
@@ -137,10 +137,10 @@ $ export PATH=$PATH:/usr/local/go/bin
 // if version returned - all good :)
 $ go version
 
-$ sudo apt-get update                                                        && \
-    DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
-      bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
-    && rm -rf /var/lib/apt/lists/*
+$ sudo apt-get update && \
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
+  bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
+  && rm -rf /var/lib/apt/lists/*
 ```
 
 ##### Clone ssv project 
@@ -165,7 +165,7 @@ $ touch .env
  
 $ echo "CONSENSUS_TYPE=validation" >> .env
 $ echo "NETWORK=pyrmont" >> .env
-$ echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" >> .env
+$ echo "BEACON_NODE_ADDR=eth2-4000-prysm-ext.stage.bloxinfra.com:80" >> .env
 $ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
 $ echo "NODE_ID={Your node index}" >> .env
 $ echo "SSV_PRIVATE_KEY={your ssv node private key}" >> .env
