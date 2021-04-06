@@ -60,13 +60,19 @@ func (test *ChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.Signed
 }
 
 func (test *ChangeRoundAndDecide) Run(t *testing.T) {
+	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())
 	spectesting.SimulateTimeout(test.instance, 2)
 
+	// change round
 	require.True(t, test.instance.ProcessMessage())
 	require.True(t, test.instance.ProcessMessage())
 	require.True(t, test.instance.ProcessMessage())
 	require.True(t, test.instance.ProcessMessage())
+	justified, err := test.instance.JustifyRoundChange(2)
+	require.NoError(t, err)
+	require.True(t, justified)
+
 	// process all messages
 	for {
 		if !test.instance.ProcessMessage() {

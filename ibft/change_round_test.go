@@ -449,7 +449,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	}
 
 	// test no previous prepared round and no round change quorum
-	//res, err := instance.justifyRoundChange(2)
+	//res, err := instance.JustifyRoundChange(2)
 	//require.EqualError(t, err, "could not justify round change, did not find highest prepared")
 	//require.False(t, res)
 
@@ -482,7 +482,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	// test no previous prepared round with round change quorum (no justification)
-	res, err := instance.justifyRoundChange(2)
+	res, err := instance.JustifyRoundChange(2)
 	require.NoError(t, err)
 	require.True(t, res)
 
@@ -516,7 +516,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	// test no previous prepared round with round change quorum (with justification)
-	res, err = instance.justifyRoundChange(2)
+	res, err = instance.JustifyRoundChange(2)
 	require.False(t, res)
 
 	instance.State.PreparedRound = 1

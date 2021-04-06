@@ -55,11 +55,28 @@ func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessag
 }
 
 func (test *ValidSimpleRun) Run(t *testing.T) {
-	// process all messages
-	for {
-		if !test.instance.ProcessMessage() {
-			break
-		}
-	}
+	// pre-prepare
+	require.True(t, test.instance.ProcessMessage())
+	// non qualified prepare quorum
+	require.True(t, test.instance.ProcessMessage())
+	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
+	require.False(t, quorum)
+	// qualified prepare quorum
+	require.True(t, test.instance.ProcessMessage())
+	require.True(t, test.instance.ProcessMessage())
+	require.True(t, test.instance.ProcessMessage())
+	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
+	require.True(t, quorum)
+	// non qualified commit quorum
+	require.True(t, test.instance.ProcessMessage())
+	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
+	require.False(t, quorum)
+	// qualified commit quorum
+	require.True(t, test.instance.ProcessMessage())
+	require.True(t, test.instance.ProcessMessage())
+	require.False(t, test.instance.ProcessMessage()) // we purge all messages after decided was reached
+	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
+	require.True(t, quorum)
+
 	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage)
 }

@@ -1,6 +1,7 @@
 package spectesting
 
 import (
+	"encoding/json"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/leader"
@@ -8,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
 )
@@ -43,22 +45,22 @@ func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, i
 }
 
 func ChangeRoundMsg(t *testing.T, sk, lambda, prevLambda []byte, round, id uint64) *proto.SignedMessage {
-	//crData := &proto.ChangeRoundData{
-	//	PreparedRound:        0,
-	//	PreparedValue:        nil,
-	//	JustificationMsg:     nil,
-	//	JustificationSig:     nil,
-	//	SignerIds:            nil,
-	//}
-	//byts, err := json.Marshal(crData)
-	//require.NoError(t, err)
+	crData := &proto.ChangeRoundData{
+		PreparedRound:    0,
+		PreparedValue:    nil,
+		JustificationMsg: nil,
+		JustificationSig: nil,
+		SignerIds:        nil,
+	}
+	byts, err := json.Marshal(crData)
+	require.NoError(t, err)
 
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:           proto.RoundState_ChangeRound,
 		Round:          round,
 		Lambda:         lambda,
 		PreviousLambda: prevLambda,
-		Value:          nil, // not previously prepared
+		Value:          byts,
 	})
 }
 

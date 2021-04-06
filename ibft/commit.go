@@ -18,7 +18,7 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.commitMessages.ReadOnlyMessagesByRound(i.State.Round)
+	msgs := i.CommitMessages.ReadOnlyMessagesByRound(i.State.Round)
 	if len(msgs) == 0 {
 		return nil, errors.New("no commit msgs")
 	}
@@ -71,7 +71,7 @@ func (i *Instance) validateCommitMsg() pipeline.Pipeline {
 func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	// TODO - do we need to validate round?
 	cnt := 0
-	msgs := i.commitMessages.ReadOnlyMessagesByRound(round)
+	msgs := i.CommitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
 		if bytes.Equal(inputValue, v.Message.Value) {
 			cnt++
@@ -90,7 +90,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// add to prepare messages
-		i.commitMessages.AddMessage(signedMessage)
+		i.CommitMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid commit message for round",
 			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
 			zap.Uint64("round", signedMessage.Message.Round))

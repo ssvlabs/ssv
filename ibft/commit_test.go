@@ -12,7 +12,7 @@ import (
 func TestCommittedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
-		commitMessages: msgcontinmem.New(3),
+		CommitMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   nodes,
@@ -35,19 +35,19 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "no commit msgs")
 
 	// test valid aggregation
-	instance.commitMessages.AddMessage(SignMsg(t, 1, sks[1], &proto.Message{
+	instance.CommitMessages.AddMessage(SignMsg(t, 1, sks[1], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.commitMessages.AddMessage(SignMsg(t, 2, sks[2], &proto.Message{
+	instance.CommitMessages.AddMessage(SignMsg(t, 2, sks[2], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.commitMessages.AddMessage(SignMsg(t, 3, sks[3], &proto.Message{
+	instance.CommitMessages.AddMessage(SignMsg(t, 3, sks[3], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),
@@ -60,7 +60,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.SignerIds)
 
 	// test that doesn't aggregate different value
-	instance.commitMessages.AddMessage(SignMsg(t, 3, sks[3], &proto.Message{
+	instance.CommitMessages.AddMessage(SignMsg(t, 3, sks[3], &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  3,
 		Lambda: []byte("Lambda"),

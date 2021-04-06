@@ -43,7 +43,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			return nil // no reason to pre-prepare again
 		}
 		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
-		justifyRound, err := i.justifyRoundChange(signedMessage.Message.Round)
+		justifyRound, err := i.JustifyRoundChange(signedMessage.Message.Round)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ predicate JustifyRoundChange(Qrc) return
 	∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
 		(pr, pv) = HighestPrepared(Qrc)
 */
-func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
+func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 	if quorum, _, _ := i.changeRoundQuorum(round); !quorum {
 		return false, nil
 	}
