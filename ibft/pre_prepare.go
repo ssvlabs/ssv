@@ -38,16 +38,19 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
 		return i.justifyRoundChange(round)
 	}
-
 	return false, nil
 }
 
 // PrePrepareValue checks round and returns message value
 func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
-	msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round)
-	if msg, found := msgs[i.RoundLeader(round)]; found {
-		return msg.Message.Value, nil
+	if msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round); msgs != nil {
+		for _, msg := range msgs {
+			if i.RoundLeader(round) == msg.SignerIds[0] {
+				return msg.Message.Value, nil
+			}
+		}
 	}
+
 	return nil, errors.Errorf("no pre-prepare value found for round %d", round)
 }
 

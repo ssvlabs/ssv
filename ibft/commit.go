@@ -81,17 +81,6 @@ func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t
 	return quorum, cnt, i.Params.CommitteeSize()
 }
 
-func (i *Instance) existingCommitMsg(signedMessage *proto.SignedMessage) bool {
-	msgs := i.commitMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	for _, id := range signedMessage.SignerIds {
-		if _, found := msgs[id]; found {
-			return true
-		}
-	}
-
-	return false
-}
-
 /**
 upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ messages do:
 	set timer i to stopped
@@ -100,11 +89,6 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-		// Only 1 prepare per peer per round is valid
-		if i.existingCommitMsg(signedMessage) {
-			return nil
-		}
-
 		// add to prepare messages
 		i.commitMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid commit message for round",

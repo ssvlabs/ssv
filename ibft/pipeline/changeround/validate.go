@@ -23,14 +23,15 @@ func Validate(params *proto.InstanceParams) pipeline.Pipeline {
 
 // Run implements pipeline.Pipeline interface
 func (p *validate) Run(signedMessage *proto.SignedMessage) error {
-	// msg.value holds the justification value in a change round message
 	if signedMessage.Message.Value == nil {
-		return nil
+		return errors.New("change round justification msg invalid")
 	}
-
 	data := &proto.ChangeRoundData{}
 	if err := json.Unmarshal(signedMessage.Message.Value, data); err != nil {
 		return err
+	}
+	if data.PreparedValue == nil { // no justification
+		return nil
 	}
 	if data.JustificationMsg.Type != proto.RoundState_Prepare {
 		return errors.New("change round justification msg type not Prepare")
@@ -42,13 +43,16 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 		return errors.New("change round prepared round not equal to justification msg round")
 	}
 	if !bytes.Equal(signedMessage.Message.Lambda, data.JustificationMsg.Lambda) {
-		return errors.New("change round justification msg Lambda not equal to msg Lambda")
+		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
 	}
 	if !bytes.Equal(data.PreparedValue, data.JustificationMsg.Value) {
 		return errors.New("change round prepared value not equal to justification msg value")
 	}
+	if len(data.SignerIds) < p.params.ThresholdSize() {
+		return errors.New("change round justification does not constitute a quorum")
+	}
 
-	// validate signature
+	// validate justification sig signature
 	// TODO - validate signed ids are unique
 	pks, err := p.params.PubKeysByID(data.SignerIds)
 	if err != nil {

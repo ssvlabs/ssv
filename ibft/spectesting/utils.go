@@ -42,6 +42,26 @@ func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, i
 	})
 }
 
+func ChangeRoundMsg(t *testing.T, sk, lambda, prevLambda []byte, round, id uint64) *proto.SignedMessage {
+	//crData := &proto.ChangeRoundData{
+	//	PreparedRound:        0,
+	//	PreparedValue:        nil,
+	//	JustificationMsg:     nil,
+	//	JustificationSig:     nil,
+	//	SignerIds:            nil,
+	//}
+	//byts, err := json.Marshal(crData)
+	//require.NoError(t, err)
+
+	return SignMsg(t, id, sk, &proto.Message{
+		Type:           proto.RoundState_ChangeRound,
+		Round:          round,
+		Lambda:         lambda,
+		PreviousLambda: prevLambda,
+		Value:          nil, // not previously prepared
+	})
+}
+
 func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Instance {
 	opts := ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
@@ -106,4 +126,9 @@ func TestSKs() [][]byte {
 
 func TestInputValue() []byte {
 	return []byte("testing value")
+}
+
+func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
+	instance.BumpRound(toRound)
+	instance.SetStage(proto.RoundState_ChangeRound)
 }

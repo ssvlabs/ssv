@@ -80,10 +80,10 @@ func NewInstance(opts InstanceOptions) *Instance {
 		msgLock:        sync.Mutex{},
 
 		MsgQueue:            opts.Queue,
-		PrePrepareMessages:  msgcontinmem.New(),
-		PrepareMessages:     msgcontinmem.New(),
-		commitMessages:      msgcontinmem.New(),
-		ChangeRoundMessages: msgcontinmem.New(),
+		PrePrepareMessages:  msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		PrepareMessages:     msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		commitMessages:      msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		ChangeRoundMessages: msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
 
 		changeRoundChan: make(chan bool),
 	}
