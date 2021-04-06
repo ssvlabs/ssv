@@ -112,7 +112,7 @@ $ make lint
 - choose "ubuntu server 20.04"
 - choose "t2.micro" (free tire)
 - skip to "security group" section
-- make sure you have 3 rules. UDP,TCP and SSH -
+- make sure you have 3 rules. UDP, TCP and SSH -
 ![security_permission](/github/resources/security_permission.png)
 - when promote, add new key pair and download the ssh file 
 - launch instance
@@ -172,6 +172,7 @@ $ echo "PUBKEY_NODE_1={your ssv node public key}" >> .env
 $ echo "PUBKEY_NODE_2={seconde ssv node public key}" >> .env
 $ echo "PUBKEY_NODE_3={third ssv node public key}" >> .env
 $ echo "PUBKEY_NODE_4={forth ssv node public key}" >> .env
+$ echo "NODE_ID={Your node index}" >> .env
 ```
 
 ### Build & Run
