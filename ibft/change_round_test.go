@@ -72,7 +72,14 @@ func TestRoundChangeInputValue(t *testing.T) {
 	// no prepared round
 	byts, err := instance.roundChangeInputValue()
 	require.NoError(t, err)
-	require.Nil(t, byts)
+	require.NotNil(t, byts)
+	noPrepareChangeRoundData := proto.ChangeRoundData{}
+	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
+	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
+	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
+	require.Nil(t, noPrepareChangeRoundData.JustificationSig)
+	require.Nil(t, noPrepareChangeRoundData.JustificationMsg)
+	require.Len(t, noPrepareChangeRoundData.SignerIds, 0)
 
 	// add votes
 	instance.PrepareMessages.AddMessage(SignMsg(t, 1, secretKey[1], &proto.Message{
@@ -91,7 +98,14 @@ func TestRoundChangeInputValue(t *testing.T) {
 	// with some prepare votes but not enough
 	byts, err = instance.roundChangeInputValue()
 	require.NoError(t, err)
-	require.Nil(t, byts)
+	require.NotNil(t, byts)
+	noPrepareChangeRoundData = proto.ChangeRoundData{}
+	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
+	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
+	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
+	require.Nil(t, noPrepareChangeRoundData.JustificationSig)
+	require.Nil(t, noPrepareChangeRoundData.JustificationMsg)
+	require.Len(t, noPrepareChangeRoundData.SignerIds, 0)
 
 	// add more votes
 	instance.PrepareMessages.AddMessage(SignMsg(t, 3, secretKey[3], &proto.Message{
@@ -110,17 +124,6 @@ func TestRoundChangeInputValue(t *testing.T) {
 	data := bytesToChangeRoundData(byts)
 	require.EqualValues(t, 1, data.PreparedRound)
 	require.EqualValues(t, []byte("value"), data.PreparedValue)
-
-	// with a different prepared value
-	instance.State.PreparedValue = []byte("value2")
-	_, err = instance.roundChangeInputValue()
-	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
-
-	// with different prepared round
-	instance.State.PreparedRound = 2
-	instance.State.PreparedValue = []byte("value")
-	_, err = instance.roundChangeInputValue()
-	require.EqualError(t, err, "prepared value/ round is set but no quorum of prepare messages found")
 }
 
 func TestValidateChangeRoundMessage(t *testing.T) {

@@ -2,9 +2,8 @@ package ibft
 
 import (
 	"encoding/json"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
@@ -126,47 +125,42 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
-	if i.State.PreparedValue != nil { // TODO is this safe? should we have a flag indicating we prepared?
-		quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue)
+	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue)
 
-		// prepare justificationMsg and sig
-		var justificationMsg *proto.Message
-		var aggSig []byte
-		ids := make([]uint64, 0)
-		if quorum {
-			var aggregatedSig *bls.Sign
-			justificationMsg = msgs[0].Message
-			for _, msg := range msgs {
-				// add sig to aggregate
-				sig := &bls.Sign{}
-				if err := sig.Deserialize(msg.Signature); err != nil {
-					return nil, err
-				}
-				if aggregatedSig == nil {
-					aggregatedSig = sig
-				} else {
-					aggregatedSig.Add(sig)
-				}
-
-				// add id to list
-				ids = append(ids, msg.SignerIds...)
+	// prepare justificationMsg and sig
+	var justificationMsg *proto.Message
+	var aggSig []byte
+	ids := make([]uint64, 0)
+	if quorum {
+		var aggregatedSig *bls.Sign
+		justificationMsg = msgs[0].Message
+		for _, msg := range msgs {
+			// add sig to aggregate
+			sig := &bls.Sign{}
+			if err := sig.Deserialize(msg.Signature); err != nil {
+				return nil, err
 			}
-			aggSig = aggregatedSig.Serialize()
-		} else {
-			return nil, errors.New("prepared value/ round is set but no quorum of prepare messages found")
-		}
+			if aggregatedSig == nil {
+				aggregatedSig = sig
+			} else {
+				aggregatedSig.Add(sig)
+			}
 
-		data := &proto.ChangeRoundData{
-			PreparedRound:    i.State.PreparedRound,
-			PreparedValue:    i.State.PreparedValue,
-			JustificationMsg: justificationMsg,
-			JustificationSig: aggSig,
-			SignerIds:        ids,
+			// add id to list
+			ids = append(ids, msg.SignerIds...)
 		}
-
-		return json.Marshal(data)
+		aggSig = aggregatedSig.Serialize()
 	}
-	return nil, nil // not previously prepared
+
+	data := &proto.ChangeRoundData{
+		PreparedRound:    i.State.PreparedRound,
+		PreparedValue:    i.State.PreparedValue,
+		JustificationMsg: justificationMsg,
+		JustificationSig: aggSig,
+		SignerIds:        ids,
+	}
+
+	return json.Marshal(data)
 }
 
 func (i *Instance) uponChangeRoundTrigger() {

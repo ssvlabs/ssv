@@ -24,7 +24,7 @@ func Validate(params *proto.InstanceParams) pipeline.Pipeline {
 // Run implements pipeline.Pipeline interface
 func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 	if signedMessage.Message.Value == nil {
-		return errors.New("change round justification msg invalid")
+		return errors.New("change round justification msg is nil")
 	}
 	data := &proto.ChangeRoundData{}
 	if err := json.Unmarshal(signedMessage.Message.Value, data); err != nil {
