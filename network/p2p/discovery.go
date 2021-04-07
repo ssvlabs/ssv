@@ -104,10 +104,11 @@ func parseGenericAddrs(addrs []string) (enodeString, multiAddrString []string) {
 			multiAddrString = append(multiAddrString, addr)
 			continue
 		}
-		//logger.Error("Invalid address of %s provided: %v", addr, err)
+		log.Print("Invalid address of %s provided: %v", addr, err)
 	}
 	return enodeString, multiAddrString
 }
+
 
 func multiAddrFromString(address string) (ma.Multiaddr, error) {
 	addr, err := iaddr.ParseString(address)
@@ -315,19 +316,6 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		}
 	}
 
-	//if s.cfg.HostDNS != "" {
-	//	host := s.cfg.HostDNS
-	//	ips, err := net.LookupIP(host)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "could not resolve host address")
-	//	}
-	//	if len(ips) > 0 {
-	//		// Use first IP returned from the
-	//		// resolver.
-	//		firstIP := ips[0]
-	//		localNode.SetFallbackIP(firstIP)
-	//	}
-	//}
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
 	}
