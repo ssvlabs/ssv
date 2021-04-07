@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
+	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft"
@@ -16,6 +17,66 @@ import (
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 )
+
+// waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
+func (n *ssvNode) waitForSignatureCollection(
+	logger *zap.Logger,
+	identifier []byte,
+	sigRoot []byte,
+	signaturesCount int,
+) (map[uint64][]byte, error) {
+	// Collect signatures from other nodes
+	// TODO - change signature count to min threshold
+	signatures := make(map[uint64][]byte, signaturesCount)
+	signedIndxes := make([]uint64, 0)
+	lock := sync.Mutex{}
+	done := false
+	var err error
+
+	// start timeout
+	go func() {
+		<-time.After(n.signatureCollectionTimeout)
+		lock.Lock()
+		defer lock.Unlock()
+		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
+		done = true
+	}()
+	// loop through messages until timeout
+	for {
+		lock.Lock()
+		if done {
+			lock.Unlock()
+			break
+		} else {
+			lock.Unlock()
+		}
+		if msg := n.queue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
+			if len(msg.Msg.SignerIds) == 0 { // no signer, empty sig
+				continue
+			}
+			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
+				continue
+			}
+			// verify sig
+			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0]); err != nil {
+				logger.Error("received invalid signature", zap.Error(err))
+				continue
+			}
+
+			lock.Lock()
+			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
+			signedIndxes = append(signedIndxes, msg.Msg.SignerIds[0])
+			if len(signedIndxes) >= signaturesCount {
+				done = true
+				break
+			}
+			lock.Unlock()
+		} else {
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
+	return signatures, err
+}
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
@@ -46,46 +107,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	}
 	logger.Info("broadcasted partial signature post consensus")
 
-	// Collect signatures from other nodes
-	// TODO - change signature count to min threshold
-	signatures := make(map[uint64][]byte, signaturesCount)
-	signedIndxes := make([]uint64, 0)
-	done := false
-
-	// start timeout
-	go func() {
-		<-time.After(n.signatureCollectionTimeout)
-		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
-		done = true
-	}()
-	// loop through messages until timeout
-	for {
-		if done {
-			break
-		}
-		if msg := n.queue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
-			if len(msg.Msg.SignerIds) == 0 { // no signer, empty sig
-				continue
-			}
-			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
-				continue
-			}
-			// verify sig
-			if err := n.verifyPartialSignature(msg.Msg.Signature, root, msg.Msg.SignerIds[0]); err != nil {
-				logger.Error("received invalid signature", zap.Error(err))
-				continue
-			}
-
-			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
-			signedIndxes = append(signedIndxes, msg.Msg.SignerIds[0])
-			if len(signedIndxes) >= signaturesCount {
-				done = true
-				break
-			}
-		} else {
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
+	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount)
 
 	// clean queue for messages, we don't need them anymore.
 	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
