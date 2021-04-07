@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	"go.uber.org/zap"
@@ -59,8 +60,12 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			zap.Bool("is_leader", isLeader),
 			zap.Bool("round_justified", justifyRound))
 
-		if !isLeader && !justifyRound {
+		if !isLeader {
 			return nil
+		}
+
+		if !justifyRound {
+			return errors.New("could not justify round change: tried to broadcast pre-prepare as leader after change round")
 		}
 
 		_, highest, err := highestPrepared(signedMessage.Message.Round, i.ChangeRoundMessages)
@@ -71,7 +76,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 		var value []byte
 		if highest != nil {
 			value = highest.PreparedValue
-			i.Logger.Info("broadcasting pre-prepare as leader after round change with existing prepared", zap.Uint64("round", signedMessage.Message.Round))
+			i.Logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.Uint64("round", signedMessage.Message.Round))
 
 		} else {
 			value = i.State.InputValue
