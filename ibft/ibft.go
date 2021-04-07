@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 
 	"go.uber.org/zap"
@@ -11,7 +12,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/utils/dataval"
 )
 
 // FirstInstanceIdentifier is the identifier of the first instance in the DB
@@ -22,7 +22,7 @@ func FirstInstanceIdentifier() []byte {
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
 	Logger       *zap.Logger
-	Consensus    dataval.Validator
+	ValueCheck   valcheck.ValueCheck
 	PrevInstance []byte
 	Identifier   []byte
 	Value        []byte
@@ -99,7 +99,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 		Me:             i.me,
 		Network:        i.network,
 		Queue:          i.msgQueue,
-		Consensus:      opts.Consensus,
+		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: i.leaderSelector,
 		Params:         i.params,
 		Lambda:         opts.Identifier,

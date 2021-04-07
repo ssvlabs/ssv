@@ -12,12 +12,11 @@ import (
 
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		//i.WaitForStage(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		preprepare.ValidatePrePrepareMsg(i.Consensus, i.LeaderSelector, i.Params),
+		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),
 	)
 }
@@ -34,8 +33,6 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 	if round == 1 {
 		return true, nil
 	}
-
-	// If previously prepared
 
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
 		return i.JustifyRoundChange(round)

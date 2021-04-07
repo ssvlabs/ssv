@@ -94,7 +94,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		Value:  []byte("wrong value"),
 	})
 	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
-	require.EqualError(t, err, "msg value is wrong")
+	require.EqualError(t, err, "failed while validating pre-prepare: msg value is wrong")
 
 	msg = SignMsg(t, 2, sks[2], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,

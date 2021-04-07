@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/ibft/valcheck"
 	"sync"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/utils/dataval"
 )
 
 // InstanceOptions defines option attributes for the Instance
@@ -25,7 +25,7 @@ type InstanceOptions struct {
 	Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
-	Consensus      dataval.Validator
+	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
 	Lambda         []byte
@@ -37,7 +37,7 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	Consensus        dataval.Validator
+	ValueCheck       valcheck.ValueCheck
 	LeaderSelector   leader.Selector
 	Params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
@@ -73,7 +73,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 			PreviousLambda: opts.PreviousLambda,
 		},
 		network:        opts.Network,
-		Consensus:      opts.Consensus,
+		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Params:         opts.Params,
 		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),

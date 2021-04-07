@@ -102,7 +102,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Inst
 		Me:             TestNodes()[1],
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
-		Consensus:      bytesval.New(TestInputValue()),
+		ValueCheck:     bytesval.New(TestInputValue()),
 		LeaderSelector: &leader.Constant{LeaderIndex: 1},
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),

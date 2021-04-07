@@ -34,7 +34,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Pk:     nodes[1].Pk,
 			Sk:     secretKeys[1].Serialize(),
 		},
-		Consensus:      bytesval.New(value),
+		ValueCheck:     bytesval.New(value),
 		LeaderSelector: &leader.Constant{},
 		Logger:         zaptest.NewLogger(t),
 	}
@@ -112,7 +112,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			Pk:     nodes[1].Pk,
 			Sk:     secretKeys[1].Serialize(),
 		},
-		Consensus:      bytesval.New(value),
+		ValueCheck:     bytesval.New(value),
 		LeaderSelector: &leader.Constant{},
 		Logger:         zaptest.NewLogger(t),
 	}
@@ -174,7 +174,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Pk:     nodes[1].Pk,
 			Sk:     secretKeys[1].Serialize(),
 		},
-		Consensus:      bytesval.New([]byte(time.Now().Weekday().String())),
+		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
 		LeaderSelector: &leader.Constant{},
 		Logger:         zaptest.NewLogger(t),
 	}

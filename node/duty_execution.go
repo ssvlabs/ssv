@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/node/valcheck"
 	"github.com/pkg/errors"
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/utils/dataval/bytesval"
-
-	"github.com/bloxapp/ssv/beacon"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 )
@@ -133,7 +133,10 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
 ) (int, *proto.InputValue, []byte, error) {
+	var inputByts []byte
 	inputValue := &proto.InputValue{}
+	var err error
+	var valCheckInstance valcheck2.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
 		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
@@ -141,9 +144,12 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 
-		inputValue.Data = &proto.InputValue_AttestationData{
+		d := &proto.InputValue_AttestationData{
 			AttestationData: attData,
 		}
+		inputValue.Data = d
+		inputByts, err = json.Marshal(d)
+		valCheckInstance = &valcheck.AttestationValueCheck{}
 	//case beacon.RoleAggregator:
 	//	aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
 	//	if err != nil {
@@ -168,7 +174,6 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 
 	l := logger.With(zap.String("role", role.String()))
 
-	valBytes, err := json.Marshal(&inputValue)
 	if err != nil {
 		return 0, nil, nil, errors.Wrap(err, "failed to marshal input value")
 	}
@@ -176,10 +181,10 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
 	decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
 		Logger:       l,
-		Consensus:    bytesval.New(valBytes),
+		ValueCheck:   valCheckInstance,
 		PrevInstance: prevIdentifier,
 		Identifier:   identifier,
-		Value:        valBytes,
+		Value:        inputByts,
 	})
 
 	if !decided {
