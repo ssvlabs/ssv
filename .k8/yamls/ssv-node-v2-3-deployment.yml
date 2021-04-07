@@ -39,6 +39,36 @@ spec:
       labels:
         app: ssv-node-v2-3
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-1
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-2
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-4
+              topologyKey: kubernetes.io/hostname
+            weight: 1      
       containers:
       - name: ssv-node-v2-3
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
@@ -48,8 +78,10 @@ spec:
         - containerPort: 12000
           name: port-12000
           protocol: UDP
+          hostPort: 12000            
         - containerPort: 13000
           name: port-13000
+          hostPort: 13000
         env:
         - name: NODE_ID
           value: "3"
@@ -90,3 +122,4 @@ spec:
         - name: HOST_DNS
 #          value: "ssv-lb.stage.bloxinfra.com"
           value: ""
+      hostNetwork: true            

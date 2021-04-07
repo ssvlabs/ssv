@@ -104,10 +104,11 @@ func parseGenericAddrs(addrs []string) (enodeString, multiAddrString []string) {
 			multiAddrString = append(multiAddrString, addr)
 			continue
 		}
-		//logger.Error("Invalid address of %s provided: %v", addr, err)
+		log.Print("Invalid address of %s provided: %v", addr, err)
 	}
 	return enodeString, multiAddrString
 }
+
 
 func multiAddrFromString(address string) (ma.Multiaddr, error) {
 	addr, err := iaddr.ParseString(address)
@@ -187,7 +188,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	// Disable relay if it has not been set.
 	options = append(options, libp2p.DisableRelay())
 	//}
-	//if cfg.HostAddress != "" {
+	//if cfg.HostAddress != "" {  TODO check if needed
 	//	options = append(options, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 	//		external, err := multiAddressBuilder(cfg.HostAddress, cfg.TCPPort)
 	//		if err != nil {
@@ -198,7 +199,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	//		return addrs
 	//	}))
 	//}
-	//if cfg.HostDNS != "" {
+	//if cfg.HostDNS != "" {  TODO check if needed
 	//	options = append(options, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 	//		external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", cfg.HostDNS, cfg.TCPPort))
 	//		if err != nil {
@@ -238,6 +239,8 @@ func (n *p2pNetwork) connectToBootnodes() error {
 				log.Print(err)
 				//log.WithError(err).Error("Could not retrieve tcp port")
 			}
+
+			log.Printf("Could not retrieve tcp port - %v", err)
 			continue
 		}
 		nodes = append(nodes, bootNode)
@@ -315,19 +318,6 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		}
 	}
 
-	//if s.cfg.HostDNS != "" {
-	//	host := s.cfg.HostDNS
-	//	ips, err := net.LookupIP(host)
-	//	if err != nil {
-	//		return nil, errors.Wrap(err, "could not resolve host address")
-	//	}
-	//	if len(ips) > 0 {
-	//		// Use first IP returned from the
-	//		// resolver.
-	//		firstIP := ips[0]
-	//		localNode.SetFallbackIP(firstIP)
-	//	}
-	//}
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
 	}
@@ -350,10 +340,12 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
 	if err != nil {
-		//log.Errorf("Could not convert to peer address info's from multiaddresses: %v", err)
+		log.Printf("Could not convert to peer address info's from multiaddresses: %v", err)
 		return
 	}
+	log.Print("-----TEST addeInfos ---", addrInfos)
 	for _, info := range addrInfos {
+		log.Print("-----TEST Info ---", info)
 		// make each dial non-blocking
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
@@ -369,6 +361,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	defer span.End()
 
 	if info.ID == n.host.ID() {
+		log.Print("-----TEST same id error ---")
 		return nil
 	}
 	if n.peers.IsBad(info.ID) {
@@ -379,10 +372,10 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 	if err := n.host.Connect(ctx, info); err != nil {
 		//s.Peers().Scorers().BadResponsesScorer().Increment(info.ID)
-		//log.Print("TEST peer connect error ------------", err)
+		log.Printf("TEST peer %v connect error ------------ %v", info, err)
 		return err
 	}
-	//log.Print("Connected to peer!!!!  ", info)
+	log.Print("Connected to peer!!!!  ", info)
 	return nil
 }
 
@@ -487,11 +480,12 @@ func convertToMultiAddr(nodes []*enode.Node) []ma.Multiaddr {
 	for _, node := range nodes {
 		// ignore nodes with no ip address stored
 		if node.IP() == nil {
+			log.Printf("ignore nodes with no ip address stored - %v", node)
 			continue
 		}
 		multiAddr, err := convertToSingleMultiAddr(node)
 		if err != nil {
-			//log.WithError(err).Error("Could not convert to multiAddr")
+			log.Printf("Could not convert to multiAddr - %v", err)
 			continue
 		}
 		multiAddrs = append(multiAddrs, multiAddr)

@@ -112,8 +112,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		//pubsub.WithNoAuthor(),
 		//pubsub.WithMessageIdFn(msgIDFunction),
 		//pubsub.WithSubscriptionFilter(s),
-		//pubsub.WithPeerOutboundQueueSize(2560),
-		//pubsub.WithValidateQueueSize(2560),
+		pubsub.WithPeerOutboundQueueSize(256),
+		pubsub.WithValidateQueueSize(256),
 	}
 
 	setPubSubParameters()
