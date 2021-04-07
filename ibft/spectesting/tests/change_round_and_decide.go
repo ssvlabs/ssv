@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// ChangeRoundAndDecide tests coming to consensus after a non prepared change round
 type ChangeRoundAndDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte

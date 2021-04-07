@@ -9,18 +9,19 @@ import (
 	"testing"
 )
 
-type PrepapreChangeRoundAndDecide struct {
+// PrepareChangeRoundAndDecide tests coming to consensus after preparing and then changing round.
+type PrepareChangeRoundAndDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 	prevLambda []byte
 }
 
-func (test *PrepapreChangeRoundAndDecide) Name() string {
+func (test *PrepareChangeRoundAndDecide) Name() string {
 	return "pre-prepare -> prepare -> change round -> prepare -> decide"
 }
 
-func (test *PrepapreChangeRoundAndDecide) Prepare(t *testing.T) {
+func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
 	test.inputValue = spectesting.TestInputValue()
@@ -38,7 +39,7 @@ func (test *PrepapreChangeRoundAndDecide) Prepare(t *testing.T) {
 	}
 }
 
-func (test *PrepapreChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	signersMap := map[uint64][]byte{
 		1: spectesting.TestSKs()[0],
 		2: spectesting.TestSKs()[1],
@@ -73,7 +74,7 @@ func (test *PrepapreChangeRoundAndDecide) MessagesSequence(t *testing.T) []*prot
 	}
 }
 
-func (test *PrepapreChangeRoundAndDecide) Run(t *testing.T) {
+func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())
 

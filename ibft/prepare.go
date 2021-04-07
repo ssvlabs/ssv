@@ -50,7 +50,6 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		//i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	)
 }
@@ -92,7 +91,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 				Round:          i.State.Round,
 				Lambda:         i.State.Lambda,
 				PreviousLambda: i.State.PreviousLambda,
-				Value:          i.State.InputValue,
+				Value:          i.State.PreparedValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Logger.Info("could not broadcast commit message", zap.Error(err))

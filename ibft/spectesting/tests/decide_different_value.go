@@ -9,19 +9,22 @@ import (
 	"testing"
 )
 
-// PrepareAtDifferentRound is a simple happy flow of iBFT
-type ValidSimpleRun struct {
+// DecideDifferentValue tests that a different commit value can be accepted than the prepared value.
+// This is a byzantine behaviour by 2/3 of the nodes as the iBFT protocol dictates broadcasting a commit
+// message with the prepared value
+// TODO - should we allow this?
+type DecideDifferentValue struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 	prevLambda []byte
 }
 
-func (test *ValidSimpleRun) Name() string {
-	return "Valid simple test"
+func (test *DecideDifferentValue) Name() string {
+	return "pre-prepare -> prepare -> try to commit with different value"
 }
 
-func (test *ValidSimpleRun) Prepare(t *testing.T) {
+func (test *DecideDifferentValue) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
 	test.inputValue = spectesting.TestInputValue()
@@ -39,7 +42,7 @@ func (test *ValidSimpleRun) Prepare(t *testing.T) {
 	}
 }
 
-func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *DecideDifferentValue) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
 
@@ -48,14 +51,14 @@ func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessag
 		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, test.inputValue, 1, 3),
 		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, test.inputValue, 1, 4),
 
-		spectesting.CommitMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, test.inputValue, 1, 2),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, test.inputValue, 1, 3),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, test.inputValue, 1, 4),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, []byte("wrong value"), 1, 1),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, []byte("wrong value"), 1, 2),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, []byte("wrong value"), 1, 3),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, []byte("wrong value"), 1, 4),
 	}
 }
 
-func (test *ValidSimpleRun) Run(t *testing.T) {
+func (test *DecideDifferentValue) Run(t *testing.T) {
 	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())
 	// non qualified prepare quorum
@@ -76,7 +79,7 @@ func (test *ValidSimpleRun) Run(t *testing.T) {
 	require.True(t, test.instance.ProcessMessage())
 	require.True(t, test.instance.ProcessMessage())
 	require.False(t, test.instance.ProcessMessage()) // we purge all messages after decided was reached
-	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
+	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, []byte("wrong value"))
 	require.True(t, quorum)
 
 	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage)

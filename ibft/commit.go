@@ -50,21 +50,8 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		i.validateCommitMsg(),
 		i.uponCommitMsg(),
 	)
-}
-
-func (i *Instance) validateCommitMsg() pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-		// TODO - should we test prepared round as well?
-
-		if err := i.Consensus.Validate(signedMessage.Message.Value); err != nil {
-			return err
-		}
-
-		return nil
-	})
 }
 
 // TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
@@ -99,7 +86,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		if i.State.Stage == proto.RoundState_Decided {
 			return nil // no reason to commit again
 		}
-		quorum, t, n := i.commitQuorum(i.State.PreparedRound, i.State.PreparedValue)
+		quorum, t, n := i.commitQuorum(signedMessage.Message.Round, signedMessage.Message.Value)
 		if quorum { // if already decidedChan no need to do it again
 			i.Logger.Info("decided iBFT instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
