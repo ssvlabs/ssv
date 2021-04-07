@@ -188,7 +188,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	// Disable relay if it has not been set.
 	options = append(options, libp2p.DisableRelay())
 	//}
-	//if cfg.HostAddress != "" {
+	//if cfg.HostAddress != "" {  TODO check if needed
 	//	options = append(options, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 	//		external, err := multiAddressBuilder(cfg.HostAddress, cfg.TCPPort)
 	//		if err != nil {
@@ -199,7 +199,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	//		return addrs
 	//	}))
 	//}
-	//if cfg.HostDNS != "" {
+	//if cfg.HostDNS != "" {  TODO check if needed
 	//	options = append(options, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 	//		external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", cfg.HostDNS, cfg.TCPPort))
 	//		if err != nil {

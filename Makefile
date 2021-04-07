@@ -69,9 +69,14 @@ else
 	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
 endif
 
-NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker
 docker:
+	@echo "node ${NODES_ID}"
+	@docker build -t test-docker . && docker run -it test-docker make BUILD_PATH=/go/bin/ssvnode start-node
+
+NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
+.PHONY: docker-all
+docker-all:
 	@echo "nodes $(NODES)"
 	@docker-compose up --build $(NODES)
 
