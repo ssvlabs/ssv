@@ -343,9 +343,7 @@ func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 		log.Printf("Could not convert to peer address info's from multiaddresses: %v", err)
 		return
 	}
-	log.Print("-----TEST addeInfos ---", addrInfos)
 	for _, info := range addrInfos {
-		log.Print("-----TEST Info ---", info)
 		// make each dial non-blocking
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
@@ -372,10 +370,10 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 	if err := n.host.Connect(ctx, info); err != nil {
 		//s.Peers().Scorers().BadResponsesScorer().Increment(info.ID)
-		log.Printf("TEST peer %v connect error ------------ %v", info, err)
+		//log.Printf("TEST peer %v connect error ------------ %v", info, err)
 		return err
 	}
-	log.Print("Connected to peer!!!!  ", info)
+	//log.Print("Connected to peer!!!!  ", info)
 	return nil
 }
 
