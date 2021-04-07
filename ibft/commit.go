@@ -54,9 +54,7 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	)
 }
 
-// TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
-	// TODO - do we need to validate round?
 	cnt := 0
 	msgs := i.CommitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {
@@ -74,7 +72,6 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	Decide(λi , value, Qcommit)
 */
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
-	// TODO - concurrency lock?
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		// add to prepare messages
 		i.CommitMessages.AddMessage(signedMessage)
@@ -87,7 +84,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 			return nil // no reason to commit again
 		}
 		quorum, t, n := i.commitQuorum(signedMessage.Message.Round, signedMessage.Message.Value)
-		if quorum { // if already decidedChan no need to do it again
+		if quorum {
 			i.Logger.Info("decided iBFT instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", t), zap.Int("total_votes", n))
