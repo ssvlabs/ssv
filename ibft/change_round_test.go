@@ -521,6 +521,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	// test no previous prepared round with round change quorum (with justification)
 	res, err = instance.JustifyRoundChange(2)
 	require.False(t, res)
+	require.NoError(t, err)
 
 	instance.State.PreparedRound = 1
 	instance.State.PreparedValue = []byte("hello")

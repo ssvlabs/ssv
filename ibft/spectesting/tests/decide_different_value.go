@@ -20,10 +20,12 @@ type DecideDifferentValue struct {
 	prevLambda []byte
 }
 
+// Name returns test name
 func (test *DecideDifferentValue) Name() string {
 	return "pre-prepare -> prepare -> try to commit with different value"
 }
 
+// Prepare prepares test
 func (test *DecideDifferentValue) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
@@ -42,6 +44,7 @@ func (test *DecideDifferentValue) Prepare(t *testing.T) {
 	}
 }
 
+// MessagesSequence includes all test messages
 func (test *DecideDifferentValue) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
@@ -58,6 +61,7 @@ func (test *DecideDifferentValue) MessagesSequence(t *testing.T) []*proto.Signed
 	}
 }
 
+// Run runs the test
 func (test *DecideDifferentValue) Run(t *testing.T) {
 	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())

@@ -6,9 +6,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AttestationValueCheck checks for an Attestation type value
 type AttestationValueCheck struct {
 }
 
+// Check returns error if value is invalid
 func (v *AttestationValueCheck) Check(value []byte) error {
 	// try and parse to attestation data
 	inputValue := &proto.InputValue_Attestation{}

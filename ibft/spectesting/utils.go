@@ -15,6 +15,7 @@ import (
 	"testing"
 )
 
+// PrePrepareMsg constructs and signs a pre-prepare msg
 func PrePrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:           proto.RoundState_PrePrepare,
@@ -25,6 +26,7 @@ func PrePrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, roun
 	})
 }
 
+// PrepareMsg constructs and signs a prepare msg
 func PrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:           proto.RoundState_Prepare,
@@ -35,6 +37,7 @@ func PrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, 
 	})
 }
 
+// CommitMsg constructs and signs a commit msg
 func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:           proto.RoundState_Commit,
@@ -45,10 +48,12 @@ func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, i
 	})
 }
 
+// ChangeRoundMsg constructs and signs a change round msg
 func ChangeRoundMsg(t *testing.T, sk, lambda, prevLambda []byte, round, id uint64) *proto.SignedMessage {
 	return ChangeRoundMsgWithPrepared(t, sk, lambda, prevLambda, nil, nil, round, 0, id)
 }
 
+// ChangeRoundMsgWithPrepared constructs and signs a change round msg
 func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedValue []byte, signers map[uint64][]byte, round, preparedRound, id uint64) *proto.SignedMessage {
 	crData := &proto.ChangeRoundData{
 		PreparedRound:    preparedRound,
@@ -68,9 +73,9 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedVa
 		}
 		var aggregatedSig *bls.Sign
 		SignerIds := make([]uint64, 0)
-		for signerId, skByts := range signers {
-			SignerIds = append(SignerIds, signerId)
-			signed := SignMsg(t, signerId, skByts, crData.JustificationMsg)
+		for signerID, skByts := range signers {
+			SignerIds = append(SignerIds, signerID)
+			signed := SignMsg(t, signerID, skByts, crData.JustificationMsg)
 			sig := &bls.Sign{}
 			require.NoError(t, sig.Deserialize(signed.Signature))
 
@@ -96,6 +101,7 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedVa
 	})
 }
 
+// TestIBFTInstance returns a test iBFT instance
 func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Instance {
 	opts := ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
@@ -115,6 +121,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Inst
 	return ibft.NewInstance(opts)
 }
 
+// TestNodes generates test nodes for SSV
 func TestNodes() map[uint64]*proto.Node {
 	return map[uint64]*proto.Node{
 		1: {
@@ -140,6 +147,7 @@ func TestNodes() map[uint64]*proto.Node {
 	}
 }
 
+// TestPKs PKS for TestSKs
 func TestPKs() [][]byte {
 	return [][]byte{
 		fixtures.RefSplitSharesPubKeys[0],
@@ -149,6 +157,7 @@ func TestPKs() [][]byte {
 	}
 }
 
+// TestSKs returns reference test shares for SSV
 func TestSKs() [][]byte {
 	return [][]byte{
 		fixtures.RefSplitShares[0],
@@ -158,10 +167,12 @@ func TestSKs() [][]byte {
 	}
 }
 
+// TestInputValue a const input test value
 func TestInputValue() []byte {
 	return []byte("testing value")
 }
 
+// SimulateTimeout simulates instance timeout
 func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 	instance.BumpRound(toRound)
 	instance.SetStage(proto.RoundState_ChangeRound)

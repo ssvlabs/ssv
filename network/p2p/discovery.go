@@ -104,11 +104,10 @@ func parseGenericAddrs(addrs []string) (enodeString, multiAddrString []string) {
 			multiAddrString = append(multiAddrString, addr)
 			continue
 		}
-		log.Print("Invalid address of %s provided: %v", addr, err)
+		log.Printf("Invalid address of %s provided: %s", addr, err.Error())
 	}
 	return enodeString, multiAddrString
 }
-
 
 func multiAddrFromString(address string) (ma.Multiaddr, error) {
 	addr, err := iaddr.ParseString(address)
