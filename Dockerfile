@@ -33,7 +33,7 @@ RUN CGO_ENABLED=1 GOOS=linux go install -tags blst_enabled -ldflags "-linkmode e
 FROM alpine:3.12 AS runner
 
 # Install ca-certificates, bash
-RUN apk -v --update add ca-certificates bash make && \
+RUN apk -v --update add ca-certificates bash make  bind-tools && \
     rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode

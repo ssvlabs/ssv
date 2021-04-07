@@ -102,69 +102,79 @@ $ make lint-prepare
 $ make lint
 ```
 
-# Phase 1 Testnet deployment
+# Phase 1 Testnet deployment  ![ethereum](/github/resources/ethereum.gif)
 
-### Server Preparation
-1. Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
-2. Enable SSH access and download ssh file
-3. Go into the folder where the ssh file is store - 
+#### Server Preparation
+##### Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
+(AWS example below)
+- In the search bar search for "ec2"
+- Launch new instance
+- choose "ubuntu server 20.04"
+- choose "t2.micro" (free tire)
+- skip to "security group" section
+- make sure you have 3 rules. UDP, TCP and SSH -
+![security_permission](/github/resources/security_permission.png)
+- when promote, add new key pair and download the ssh file 
+- launch instance
+
+##### SHH permissions and login to server-  
 ```
-$ cd ./{path to the ssh folder}
+$ cd ./{path to where the ssh downloaded}
+
+$ chmod 400 {ssh file name}
+
+$ ssh -i {ssh file name} ubuntu@{server public ip}
 ```
-4. provides user permissions -
+
+##### Install Golang dependencies 
 ```
-chmod 400 {ssh file name}
+$ sudo wget https://golang.org/dl/go1.16.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
+
+$ sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
+
+$ export PATH=$PATH:/usr/local/go/bin
+
+// if version returned - all good :)
+$ go version
+
+$ sudo apt-get update && \
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
+  bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
+  && rm -rf /var/lib/apt/lists/*
 ```
-5. connect to server -
+
+##### Clone ssv project 
 ```
-ssh -i {ssh file name} ubuntu@{server ip}
+$ git --version
+
+// If no git run install command
+$ sudo apt install git
+
+$ git clone https://github.com/bloxapp/ssv.git
+
+$ cd ssv
 ```
-6. run ```sudo su``` command 
-7. ```cd ssv```
-8, install Git, and Git clone the project command
+
+#### .env file
  
-### GoLang installation
-1, `rm -rf /usr/local/go && tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz`
-
-2, `export PATH=$PATH:/usr/local/go/bin`
-
-3, `go version` - if version returned - all good :)
-
-4, install go dependencies - 
+ - Export all required params
+    * If you'r node 1, need to fill the other nodes (2,3,4) and so on...     
 ```
-apt-get update                                                        && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-      curl git zip unzip wget g++ python gcc-aarch64-linux-gnu                 \
-    && rm -rf /var/lib/apt/lists/*
-```
-
-### .env file
-1, create env file - 
-```
-touch .env
-```
-
-2, fill `.env` file as follows -
-* If you'r node 1, need to fill the other nodes (2,3,4) and so on... 
-* run each line separately
-``` 
-echo "CONSENSUS_TYPE=validation" > .env
-echo "NETWORK=pyrmont" > .env
-echo "BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80" > .env
-echo "VALIDATOR_PUBLIC_KEY={validator public key}" > .env
-echo "SSV_NODE_1={your ssv node private key}" > .env
-echo "SSV_NODE_PUB_KEY_1={your ssv node public key}" > .env
-echo "SSV_NODE_PUB_KEY_2={seconde ssv node public key}" > .env
-echo "SSV_NODE_PUB_KEY_3={third ssv node public key}" > .env
-echo "SSV_NODE_PUB_KEY_4={forth ssv node public key}" > .env
+$ export CONSENSUS_TYPE=validation
+$ export NETWORK=pyrmont"
+$ export BEACON_NODE_ADDR=eth2-4000-prysm-ext.stage.bloxinfra.com:80
+$ export VALIDATOR_PUBLIC_KEY={validator public key}
+$ export NODE_ID={Your node index}
+$ export SSV_PRIVATE_KEY={your ssv node private key}
+$ export PUBKEY_NODE_1={your ssv node public key}
+$ export PUBKEY_NODE_2={seconde ssv node public key}
+$ export PUBKEY_NODE_3={third ssv node public key}
+$ export PUBKEY_NODE_4={forth ssv node public key}
 ```
 
 ### Build & Run
-1, build  
 ```
-CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+
+$ make start-node BUILD_PATH="./bin/ssvnode"
 ```  
-2, run 
-```
-BUILD_PATH="~/goasda/bin/ssvnode" make start-node
-```

@@ -30,6 +30,7 @@ import (
 type Options struct {
 	Logger     *zap.Logger
 	PrivateKey string
+	ExternalIP string
 }
 
 // Node represents the behavior of boot node
@@ -54,7 +55,7 @@ func New(opts Options) Node {
 		privateKey:  opts.PrivateKey,
 		discv5port:  4000,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
-		externalIP:  "",
+		externalIP:  opts.ExternalIP,
 	}
 }
 
@@ -173,19 +174,6 @@ func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) 
 		log.Fatal(err)
 	}
 
-	//_host := "ssv.stage.bloxinfra.com"
-	//ips, err := net.LookupIP(_host)
-	//if err != nil {
-	//	log.Print("could not resolve host address - ", err)
-	//}
-	//if len(ips) > 0 {
-	//	// Use first IP returned from the
-	//	// resolver.
-	//	firstIP := ips[0]
-	//	log.Print(" ------- TEST HOST DNS first ip------", firstIP)
-	//	localNode.SetFallbackIP(firstIP)
-	//}
-
 	network, err := discover.ListenV5(conn, localNode, cfg)
 	if err != nil {
 		log.Fatal(err)
@@ -201,6 +189,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	external := net.ParseIP(n.externalIP)
 	if n.externalIP == "" {
 		external = ipAddr
+		n.logger.Info("Running with IP", zap.String("ip", ipAddr.String()))
+	} else {
+		n.logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
 	//fVersion := params.BeaconConfig().GenesisForkVersion
@@ -247,7 +238,7 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	localNode.SetFallbackIP(external)
 	localNode.SetFallbackUDP(port)
 
-	ipEntry := enr.IP(ipAddr)
+	ipEntry := enr.IP(external)
 	udpEntry := enr.UDP(port)
 	tcpEntry := enr.TCP(5000)
 

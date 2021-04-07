@@ -9,6 +9,7 @@ import (
 // Flag names.
 const (
 	bootNodePrivateKeyFlag = "private-key"
+	bootNodeExternalIPFlag = "external-ip"
 )
 
 // AddBootNodePrivateKeyFlag adds the boot node private key flag to the command
@@ -19,4 +20,14 @@ func AddBootNodePrivateKeyFlag(c *cobra.Command) {
 // GetBootNodePrivateKeyFlagValue get the boot node private key flag to the command
 func GetBootNodePrivateKeyFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(bootNodePrivateKeyFlag)
+}
+
+// GetExternalIPFlagValue gets the external ip flag from the command
+func GetExternalIPFlagValue(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(bootNodeExternalIPFlag)
+}
+
+// AddExternalIPFlag adds the external ip flag to the command
+func AddExternalIPFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, bootNodeExternalIPFlag, "", "external ip", false)
 }

@@ -20,9 +20,15 @@ var startBootNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get private key flag value", zap.Error(err))
 		}
 
+		externalIP, err := flags.GetExternalIPFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get external ip flag value", zap.Error(err))
+		}
+
 		bootNode := bootnode.New(bootnode.Options{
 			Logger:     logger,
 			PrivateKey: privateKey,
+			ExternalIP: externalIP,
 		})
 
 		if err := bootNode.Start(cmd.Context()); err != nil {
@@ -33,5 +39,6 @@ var startBootNodeCmd = &cobra.Command{
 
 func init() {
 	flags.AddBootNodePrivateKeyFlag(startBootNodeCmd)
+	flags.AddExternalIPFlag(startBootNodeCmd)
 	RootCmd.AddCommand(startBootNodeCmd)
 }

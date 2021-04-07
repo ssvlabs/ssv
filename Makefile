@@ -3,6 +3,11 @@ ifndef $(GOPATH)
     export GOPATH
 endif
 
+ifndef $(EXTERNAL_IP)
+    EXTERNAL_IP=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
+#    export EXTERNAL_IP
+endif
+
 ifndef $(BUILD_PATH)
     BUILD_PATH="/go/bin/ssvnode"
     export BUILD_PATH
@@ -60,8 +65,8 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --discovery-type=${DISCOVERY_TYPE} --val=${CONSENSUS_TYPE}
 
 else
-	@echo "Running node (${NODE_ID})"
-	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS}
+	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
+	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
 endif
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
@@ -83,4 +88,4 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node --private-key=${BOOT_NODE_PRIVATE_KEY}
+	${BUILD_PATH} start-boot-node --private-key=${BOOT_NODE_PRIVATE_KEY} --external-ip=${BOOT_NODE_EXTERNAL_IP}

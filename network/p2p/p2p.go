@@ -55,6 +55,7 @@ type p2pNetwork struct {
 	pubsub        *pubsub.PubSub
 }
 
+
 // New is the constructor of p2pNetworker
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	n := &p2pNetwork{
@@ -191,6 +192,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	return n, nil
 }
+
+func (n *p2pNetwork) GetTopic() *pubsub.Topic {
+	return n.cfg.Topic
+}
+
 
 // Broadcast propagates a signed message to all peers
 func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {

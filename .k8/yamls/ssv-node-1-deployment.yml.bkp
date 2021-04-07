@@ -13,6 +13,14 @@ spec:
       protocol: TCP
       targetPort: 5678
       name: port-5678
+    - port: 4000
+      protocol: UDP
+      targetPort: 4000
+      name: port-4000
+    - port: 5000
+      protocol: TCP
+      targetPort: 5000
+      name: port-5000        
   selector:
     app: ssv-node-1
 ---
@@ -41,6 +49,11 @@ spec:
         imagePullPolicy: Always
         command: ["make", "start-node"]
         ports:
+        - containerPort: 4000
+          name: port-4000
+          protocol: UDP
+        - containerPort: 5000
+          name: port-5000
         - containerPort: 5678
           name: port-5678
         env:
@@ -85,6 +98,11 @@ spec:
         imagePullPolicy: Always
         command: ["make", "start-node"]
         ports:
+        - containerPort: 4000
+          name: port-4000
+          protocol: UDP
+        - containerPort: 5000
+          name: port-5000
         - containerPort: 5678
           name: port-5678
         env:
@@ -129,6 +147,11 @@ spec:
         imagePullPolicy: Always
         command: ["make", "start-node"]
         ports:
+        - containerPort: 4000
+          name: port-4000
+          protocol: UDP
+        - containerPort: 5000
+          name: port-5000          
         - containerPort: 5678
           name: port-5678
         env:
@@ -173,8 +196,13 @@ spec:
         imagePullPolicy: Always
         command: ["make", "start-node"]
         ports:
-          - containerPort: 5678
-            name: port-5678
+        - containerPort: 4000
+          name: port-4000
+          protocol: UDP
+        - containerPort: 5000
+          name: port-5000
+        - containerPort: 5678
+          name: port-5678
         env:
           - name: NODE_ID
             value: "4"
