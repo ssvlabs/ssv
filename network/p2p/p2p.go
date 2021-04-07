@@ -81,6 +81,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	} else if cfg.DiscoveryType == "discv5" {
 		dv5Nodes := parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
 		n.cfg.Discv5BootStrapAddr = dv5Nodes
+		log.Print("-------TEST discv5 nodes -------", n.cfg.Discv5BootStrapAddr)
 
 		_ipAddr = ipAddr()
 		//_ipAddr = net.ParseIP("127.0.0.1")
