@@ -2,8 +2,6 @@ package auth
 
 import (
 	"errors"
-	"log"
-
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
@@ -11,7 +9,6 @@ import (
 // AuthorizeMsg is the pipeline to authorize message
 func AuthorizeMsg(params *proto.InstanceParams) pipeline.Pipeline {
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-		log.Print("------- TEST auth msg ------- ", signedMessage)
 		pks, err := params.PubKeysByID(signedMessage.SignerIds)
 		if err != nil {
 			return err
