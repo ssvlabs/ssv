@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssv-node-v2-2-svc
+  name: ssv-node-v2-4-svc
   namespace: REPLACE_NAMESPACE
   labels:
-    app: ssv-node-v2-2
+    app: ssv-node-v2-4
 spec:
   type: ClusterIP
   ports:
@@ -16,16 +16,16 @@ spec:
     - port: 13000
       protocol: TCP
       targetPort: 13000
-      name: port-13000 
+      name: port-13000
   selector:
-    app: ssv-node-v2-2
+    app: ssv-node-v2-4
 ---
 apiVersion: REPLACE_API_VERSION 
 kind: Deployment
 metadata:
   labels:
-    app: ssv-node-v2-2
-  name: ssv-node-v2-2
+    app: ssv-node-v2-4
+  name: ssv-node-v2-4
   namespace: REPLACE_NAMESPACE
 spec:
   replicas: REPLACE_REPLICAS
@@ -33,44 +33,14 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: ssv-node-v2-2
+      app: ssv-node-v2-4
   template:
     metadata:
       labels:
-        app: ssv-node-v2-2
+        app: ssv-node-v2-4
     spec:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-1
-              topologyKey: kubernetes.io/hostname
-            weight: 1
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-3
-              topologyKey: kubernetes.io/hostname
-            weight: 1
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-4
-              topologyKey: kubernetes.io/hostname
-            weight: 1      
       containers:
-      - name: ssv-node-v2-2
+      - name: ssv-node-v2-4
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
         command: ["make", "start-node"]
@@ -78,18 +48,16 @@ spec:
         - containerPort: 12000
           name: port-12000
           protocol: UDP
-          hostPort: 12000            
         - containerPort: 13000
           name: port-13000
-          hostPort: 13000
         env:
         - name: NODE_ID
-          value: "2"
+          value: "4"
         - name: SSV_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: ssv_node_v2_2
+              key: ssv_node_v2_4
         - name: VALIDATOR_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
@@ -105,16 +73,16 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_v2_1
+        - name: PUBKEY_NODE_2
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_2
         - name: PUBKEY_NODE_3
           valueFrom:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_v2_3
-        - name: PUBKEY_NODE_4
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_4
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
@@ -122,4 +90,3 @@ spec:
         - name: HOST_DNS
 #          value: "ssv-lb.stage.bloxinfra.com"
           value: ""
-      hostNetwork: true            
