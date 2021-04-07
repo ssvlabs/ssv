@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -41,39 +42,46 @@ func (n *ssvNode) verifyPartialSignature(
 // signDuty signs the duty after iBFT came to consensus
 func (n *ssvNode) signDuty(
 	ctx context.Context,
-	inputValue *proto.InputValue,
+	decidedValue []byte,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) ([]byte, []byte, error){
+) ([]byte, []byte, *proto.InputValue, error) {
 	// sign input value
 	var sig []byte
 	var root []byte
+	retValueStruct := &proto.InputValue{}
 	var err error
 	switch role {
 	case beacon.RoleAttester:
-		signedAttestation, r, e := n.beacon.SignAttestation(ctx, inputValue.GetAttestationData(), duty.GetValidatorIndex(), duty.GetCommittee())
-		inputValue.SignedData = &proto.InputValue_Attestation{
-			Attestation: signedAttestation,
+		s := &proto.InputValue_Attestation{}
+		if err := json.Unmarshal(decidedValue, s); err != nil {
+			return nil, nil, nil, err
 		}
+		signedAttestation, r, e := n.beacon.SignAttestation(ctx, s.Attestation.Data, duty.GetValidatorIndex(), duty.GetCommittee())
+		retValueStruct.SignedData = s
+		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
+		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
 		err = e
 		sig = signedAttestation.GetSignature()
 		root = r
-	case beacon.RoleAggregator:
-		signedAggregation, e := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
-		inputValue.SignedData = &proto.InputValue_Aggregation{
-			Aggregation: signedAggregation,
-		}
-		err = e
-		sig = signedAggregation.GetSignature()
-	case beacon.RoleProposer:
-		signedProposal, e := n.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
-		inputValue.SignedData = &proto.InputValue_Block{
-			Block: signedProposal,
-		}
-		err = e
-		sig = signedProposal.GetSignature()
+	//case beacon.RoleAggregator:
+	//	signedAggregation, e := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
+	//	inputValue.SignedData = &proto.InputValue_Aggregation{
+	//		Aggregation: signedAggregation,
+	//	}
+	//	err = e
+	//	sig = signedAggregation.GetSignature()
+	//case beacon.RoleProposer:
+	//	signedProposal, e := n.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
+	//	inputValue.SignedData = &proto.InputValue_Block{
+	//		Block: signedProposal,
+	//	}
+	//	err = e
+	//	sig = signedProposal.GetSignature()
+	default:
+		return nil, nil, nil, errors.New("unsupported role, can't sign")
 	}
-	return sig, root, err
+	return sig, root, retValueStruct, err
 }
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
@@ -110,18 +118,18 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex()); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
-	case beacon.RoleAggregator:
-		inputValue.GetAggregation().Signature = signature.Serialize()
-		if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
-			return errors.Wrap(err, "failed to broadcast aggregation")
-		}
-	case beacon.RoleProposer:
-		inputValue.GetBlock().Signature = signature.Serialize()
-		if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
-			return errors.Wrap(err, "failed to broadcast proposal")
-		}
+	//case beacon.RoleAggregator:
+	//	inputValue.GetAggregation().Signature = signature.Serialize()
+	//	if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
+	//		return errors.Wrap(err, "failed to broadcast aggregation")
+	//	}
+	//case beacon.RoleProposer:
+	//	inputValue.GetBlock().Signature = signature.Serialize()
+	//	if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
+	//		return errors.Wrap(err, "failed to broadcast proposal")
+	//	}
 	default:
-		return errors.New("role is undefined")
+		return errors.New("role is undefined, can't reconstruct signature")
 	}
 	return nil
 }

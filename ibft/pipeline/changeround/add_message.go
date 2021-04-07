@@ -33,11 +33,6 @@ func (p *addChangeRoundMessage) Run(signedMessage *proto.SignedMessage) error {
 		return nil
 	}
 
-	// Only 1 prepare per node per round is valid
-	if p.existingChangeRoundMsg(signedMessage) {
-		return nil
-	}
-
 	// add to prepare messages
 	p.changeRoundMessages.AddMessage(signedMessage)
 	p.logger.Info("received valid change round message for round",
@@ -45,15 +40,4 @@ func (p *addChangeRoundMessage) Run(signedMessage *proto.SignedMessage) error {
 		zap.Uint64("round", signedMessage.Message.Round))
 
 	return nil
-}
-
-func (p *addChangeRoundMessage) existingChangeRoundMsg(signedMessage *proto.SignedMessage) bool {
-	// TODO - not sure the spec requires unique votes.
-	msgs := p.changeRoundMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	for _, signerID := range signedMessage.SignerIds {
-		if _, found := msgs[signerID]; found {
-			return true
-		}
-	}
-	return false
 }

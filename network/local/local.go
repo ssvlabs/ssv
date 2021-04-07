@@ -14,6 +14,7 @@ type Local struct {
 	createChannelMutex sync.Mutex
 }
 
+// GetTopic TBD
 func (n *Local) GetTopic() *pubsub.Topic {
 	panic("implement me")
 }
@@ -70,10 +71,12 @@ func (n *Local) Broadcast(signed *proto.SignedMessage) error {
 
 // BroadcastSignature broadcasts the given signature for the given lambda
 func (n *Local) BroadcastSignature(msg *proto.SignedMessage) error {
+	n.createChannelMutex.Lock()
 	go func() {
 		for _, c := range n.sigC {
 			c <- msg
 		}
+		n.createChannelMutex.Unlock()
 	}()
 	return nil
 }

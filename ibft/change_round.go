@@ -1,12 +1,10 @@
 package ibft
 
 import (
-	"bytes"
-	"encoding/hex"
 	"encoding/json"
-
+	"errors"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
@@ -45,7 +43,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			return nil // no reason to pre-prepare again
 		}
 		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
-		justifyRound, err := i.justifyRoundChange(signedMessage.Message.Round)
+		justifyRound, err := i.JustifyRoundChange(signedMessage.Message.Round)
 		if err != nil {
 			return err
 		}
@@ -62,11 +60,15 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			zap.Bool("is_leader", isLeader),
 			zap.Bool("round_justified", justifyRound))
 
-		if !isLeader || !justifyRound {
+		if !isLeader {
 			return nil
 		}
 
-		highest, err := highestPrepared(signedMessage.Message.Round, i.ChangeRoundMessages)
+		if !justifyRound {
+			return errors.New("could not justify round change: tried to broadcast pre-prepare as leader after change round")
+		}
+
+		_, highest, err := highestPrepared(signedMessage.Message.Round, i.ChangeRoundMessages)
 		if err != nil {
 			return err
 		}
@@ -74,7 +76,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 		var value []byte
 		if highest != nil {
 			value = highest.PreparedValue
-			i.Logger.Info("broadcasting pre-prepare as leader after round change with existing prepared", zap.Uint64("round", signedMessage.Message.Round))
+			i.Logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.Uint64("round", signedMessage.Message.Round))
 
 		} else {
 			value = i.State.InputValue
@@ -98,90 +100,72 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 	})
 }
 
-/**
-### Algorithm 4 IBFT pseudocode for process pi: message justification
-predicate JustifyRoundChange(Qrc) return
-	∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
-	∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
-		(pr, pv) = HighestPrepared(Qrc)
-*/
-func (i *Instance) justifyRoundChange(round uint64) (bool, error) {
-	cnt := 0
-	// Find quorum for round change messages with prj = ⊥ ∧ pvj = ⊥
-	for _, msg := range i.ChangeRoundMessages.ReadOnlyMessagesByRound(round) {
-		if msg.Message.Value == nil {
-			cnt++
-		}
-	}
+// JustifyRoundChange see below
+func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
+	// ### Algorithm 4 IBFT pseudocode for process pi: message justification
+	//	predicate JustifyRoundChange(Qrc) return
+	//		∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
+	//		∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
+	//			(pr, pv) = HighestPrepared(Qrc)
 
-	quorum := cnt*3 >= i.Params.CommitteeSize()*2
-	if quorum { // quorum for prj = ⊥ ∧ pvj = ⊥ found
-		return true, nil
+	if quorum, _, _ := i.changeRoundQuorum(round); !quorum {
+		return false, nil
 	}
-
-	data, err := highestPrepared(round, i.ChangeRoundMessages)
+	justifiedNotPrepapred, data, err := highestPrepared(round, i.ChangeRoundMessages)
 	if err != nil {
 		return false, err
 	}
-	if data == nil {
+	if justifiedNotPrepapred || data == nil { // all change round messages have prj = ⊥ ∧ pvj = ⊥
 		return true, nil
 	}
-	if !i.State.PreviouslyPrepared() { // no previous prepared round
-		return false, errors.Errorf("could not justify round (%d) change, did not received quorum of prepare messages previously", round)
-	}
-	return data.PreparedRound == i.State.PreparedRound &&
-		bytes.Equal(data.PreparedValue, i.State.PreparedValue), nil
+
+	// we've received a justification for a prepared round and value.
+	return true, nil
 }
 
-// TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
 func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
-	// TODO - should we check the actual change round msg? what if there are no 2/3 change round with the same value?
 	msgs := i.ChangeRoundMessages.ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.Params.CommitteeSize()*2
 	return quorum, len(msgs), i.Params.CommitteeSize()
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
-	if i.State.PreparedRound != 0 { // TODO is this safe? should we have a flag indicating we prepared?
-		batched := i.batchedPrepareMsgs(i.State.PreparedRound)
-		msgs := batched[hex.EncodeToString(i.State.PreparedValue)]
+	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue)
 
-		// set justificationMsg and sig
-		var justificationMsg *proto.Message
+	// prepare justificationMsg and sig
+	var justificationMsg *proto.Message
+	var aggSig []byte
+	ids := make([]uint64, 0)
+	if quorum {
 		var aggregatedSig *bls.Sign
-		ids := make([]uint64, 0)
-		if len(msgs)*3 >= i.Params.CommitteeSize()*2 {
-			justificationMsg = msgs[0].Message
-			for _, msg := range msgs {
-				// add sig to aggregate
-				sig := &bls.Sign{}
-				if err := sig.Deserialize(msg.Signature); err != nil {
-					return nil, err
-				}
-				if aggregatedSig == nil {
-					aggregatedSig = sig
-				} else {
-					aggregatedSig.Add(sig)
-				}
-
-				// add id to list
-				ids = append(ids, msg.SignerIds...)
+		justificationMsg = msgs[0].Message
+		for _, msg := range msgs {
+			// add sig to aggregate
+			sig := &bls.Sign{}
+			if err := sig.Deserialize(msg.Signature); err != nil {
+				return nil, err
 			}
-		} else {
-			return nil, errors.New("prepared value/ round is set but no quorum of prepare messages found")
-		}
+			if aggregatedSig == nil {
+				aggregatedSig = sig
+			} else {
+				aggregatedSig.Add(sig)
+			}
 
-		data := &proto.ChangeRoundData{
-			PreparedRound:    i.State.PreparedRound,
-			PreparedValue:    i.State.PreparedValue,
-			JustificationMsg: justificationMsg,
-			JustificationSig: aggregatedSig.Serialize(),
-			SignerIds:        ids,
+			// add id to list
+			ids = append(ids, msg.SignerIds...)
 		}
-
-		return json.Marshal(data)
+		aggSig = aggregatedSig.Serialize()
 	}
-	return nil, nil // not previously prepared
+
+	data := &proto.ChangeRoundData{
+		PreparedRound:    i.State.PreparedRound,
+		PreparedValue:    i.State.PreparedValue,
+		JustificationMsg: justificationMsg,
+		JustificationSig: aggSig,
+		SignerIds:        ids,
+	}
+
+	return json.Marshal(data)
 }
 
 func (i *Instance) uponChangeRoundTrigger() {
@@ -220,25 +204,27 @@ func (i *Instance) uponChangeRoundTrigger() {
 			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
-func highestPrepared(round uint64, container msgcont.MessageContainer) (changeData *proto.ChangeRoundData, err error) {
+// highestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
+func highestPrepared(round uint64, container msgcont.MessageContainer) (allNonPrepared bool, changeData *proto.ChangeRoundData, err error) {
+	allNonPrepared = true
 	for _, msg := range container.ReadOnlyMessagesByRound(round) {
-		if msg.Message.Value == nil {
-			continue
-		}
 		candidateChangeData := &proto.ChangeRoundData{}
 		err = json.Unmarshal(msg.Message.Value, candidateChangeData)
 		if err != nil {
-			return nil, err
+			return false, nil, err
 		}
 
-		// compare to highest found
-		if changeData != nil {
-			if candidateChangeData.PreparedRound > changeData.PreparedRound {
+		if candidateChangeData.PreparedValue != nil {
+			allNonPrepared = false
+			// compare to highest found
+			if changeData != nil {
+				if candidateChangeData.PreparedRound > changeData.PreparedRound {
+					changeData = candidateChangeData
+				}
+			} else {
 				changeData = candidateChangeData
 			}
-		} else {
-			changeData = candidateChangeData
 		}
 	}
-	return changeData, nil
+	return allNonPrepared, changeData, nil
 }

@@ -50,63 +50,8 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		//i.validatePrepareMsg(),
 		i.uponPrepareMsg(),
 	)
-}
-
-// TODO - we sholdn't condition prepare msg processing on pre-prepare. As soon as we have 2/3 of prepare we move on
-//  even if we didn't receive a previous pre-prepare or do not agree on the value
-//func (i *Instance) validatePrepareMsg() pipeline.Pipeline {
-//	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-//		// Validate we received a pre-prepare msg for this round and
-//		// that it's value is equal to the prepare msg
-//		val, err := i.PrePrepareValue(signedMessage.Message.Round)
-//		if err != nil {
-//			return err // will return error if no valid pre-prepare value was received
-//		}
-//
-//		if !bytes.Equal(val, signedMessage.Message.Value) {
-//			return errors.Errorf("pre-prepare value (%s) not equal to prepare msg value (%s)", string(val), string(signedMessage.Message.Value))
-//		}
-//
-//		return nil
-//	})
-//}
-
-func (i *Instance) batchedPrepareMsgs(round uint64) map[string][]*proto.SignedMessage {
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(round)
-	ret := make(map[string][]*proto.SignedMessage)
-	for _, msg := range msgs {
-		valueHex := hex.EncodeToString(msg.Message.Value)
-		if ret[valueHex] == nil {
-			ret[valueHex] = make([]*proto.SignedMessage, 0)
-		}
-		ret[valueHex] = append(ret[valueHex], msg)
-	}
-	return ret
-}
-
-// TODO - passing round can be problematic if the node goes down, it might not know which round it is now.
-func (i *Instance) prepareQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
-	batched := i.batchedPrepareMsgs(round)
-	if msgs, ok := batched[hex.EncodeToString(inputValue)]; ok {
-		quorum = len(msgs)*3 >= i.Params.CommitteeSize()*2
-		return quorum, len(msgs), i.Params.CommitteeSize()
-	}
-
-	return false, 0, i.Params.CommitteeSize()
-}
-
-func (i *Instance) existingPrepareMsg(signedMessage *proto.SignedMessage) bool {
-	// TODO - not sure the spec requires unique votes.
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(signedMessage.Message.Round)
-	for _, id := range signedMessage.SignerIds {
-		if _, found := msgs[id]; found {
-			return true
-		}
-	}
-	return false
 }
 
 /**
@@ -119,12 +64,6 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-		// TODO - can we process a prepare msg which has different inputValue than the pre-prepare msg?
-		// Only 1 prepare per node per round is valid
-		if i.existingPrepareMsg(signedMessage) {
-			return nil
-		}
-
 		// add to prepare messages
 		i.PrepareMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid prepare message from round",
@@ -136,10 +75,10 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			i.State.Stage == proto.RoundState_Decided {
 			return nil // no reason to prepare again
 		}
-		if quorum, t, n := i.prepareQuorum(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
+
+		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
 			i.Logger.Info("prepared instance",
-				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
-				zap.Int("got_votes", t), zap.Int("total_votes", n))
+				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round))
 
 			// set prepared State
 			i.State.PreparedRound = signedMessage.Message.Round
@@ -152,7 +91,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 				Round:          i.State.Round,
 				Lambda:         i.State.Lambda,
 				PreviousLambda: i.State.PreviousLambda,
-				Value:          i.State.InputValue,
+				Value:          i.State.PreparedValue,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Logger.Info("could not broadcast commit message", zap.Error(err))

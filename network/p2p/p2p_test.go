@@ -61,7 +61,6 @@ func TestP2PNetworker(t *testing.T) {
 
 	err = peer1.Broadcast(messageToBroadcast)
 	require.NoError(t, err)
-	t.Log("message broadcasted")
 
 	time.Sleep(time.Second)
 

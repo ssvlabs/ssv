@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -9,6 +10,18 @@ import (
 	"testing"
 	"time"
 )
+
+func marshalInputValueStructForAttestation(t *testing.T, attByts []byte) []byte {
+	attData := &ethpb.AttestationData{}
+	require.NoError(t, attData.Unmarshal(attByts))
+
+	iv := &proto.InputValue_Attestation{Attestation: &ethpb.Attestation{
+		Data: attData,
+	}}
+	ret, err := json.Marshal(iv)
+	require.NoError(t, err)
+	return ret
+}
 
 func TestConsensusOnInputValue(t *testing.T) {
 	tests := []struct {
@@ -24,7 +37,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			true,
 			3,
 			beacon.RoleAttester,
-			refAttestationDataByts,
+			marshalInputValueStructForAttestation(t, refAttestationDataByts),
 			"",
 		},
 		{
@@ -48,7 +61,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(t, test.decided, test.signaturesCount)
-			signaturesCount, inputValue, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, &ethpb.DutiesResponse_Duty{
+			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, &ethpb.DutiesResponse_Duty{
 				Committee:      nil,
 				CommitteeIndex: 0,
 				AttesterSlot:   0,
@@ -63,11 +76,9 @@ func TestConsensusOnInputValue(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.EqualValues(t, 3, signaturesCount)
-			require.NotNil(t, inputValue)
+			require.NotNil(t, decidedByts)
 
-			byts, err := inputValue.GetAttestationData().Marshal()
-			require.NoError(t, err)
-			require.EqualValues(t, test.expectedAttestationDataByts, byts)
+			require.EqualValues(t, test.expectedAttestationDataByts, decidedByts)
 		})
 	}
 }
@@ -129,12 +140,15 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			// construct value
 			attData := &ethpb.AttestationData{}
 			require.NoError(t, attData.Unmarshal(test.expectedAttestationDataByts))
-			inputValue := &proto.InputValue{
-				Data: &proto.InputValue_AttestationData{
-					AttestationData: attData,
+
+			// marshal to decidedValue
+			d := &proto.InputValue_Attestation{
+				Attestation: &ethpb.Attestation{
+					Data: attData,
 				},
-				SignedData: nil,
 			}
+			decidedValue, err := json.Marshal(d)
+			require.NoError(t, err)
 
 			duty := &ethpb.DutiesResponse_Duty{
 				Committee:      nil,
@@ -157,7 +171,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				})
 			}
 
-			err := node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), inputValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
+			err = node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), decidedValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {

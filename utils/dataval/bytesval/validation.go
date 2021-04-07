@@ -3,8 +3,7 @@ package bytesval
 import (
 	"bytes"
 	"errors"
-
-	"github.com/bloxapp/ssv/utils/dataval"
+	"github.com/bloxapp/ssv/ibft/valcheck"
 )
 
 // bytesValidation implements val.ValueImplementation interface
@@ -14,14 +13,14 @@ type bytesValidation struct {
 }
 
 // New is the constructor of bytesValidation
-func New(val []byte) dataval.Validator {
+func New(val []byte) valcheck.ValueCheck {
 	return &bytesValidation{
 		val: val,
 	}
 }
 
 // Validate implements dataval.Validator interface
-func (c *bytesValidation) Validate(value []byte) error {
+func (c *bytesValidation) Check(value []byte) error {
 	if !bytes.Equal(value, c.val) {
 		return errors.New("msg value is wrong")
 	}

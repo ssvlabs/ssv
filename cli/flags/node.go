@@ -115,7 +115,7 @@ func GetHostAddressFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(hostAddress)
 }
 
-// AddHostDNSFlag adds the host address flag to the command
+// AddHostAddressFlag adds the host address flag to the command
 func AddHostAddressFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, hostAddress, "", "host address", false)
 }

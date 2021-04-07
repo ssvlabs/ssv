@@ -33,6 +33,17 @@ func signMsg(id uint64, secretKey *bls.SecretKey, msg *Message) *SignedMessage {
 	}
 }
 
+func TestInstanceParams_ThresholdSize(t *testing.T) {
+	for i := 1; i < 50; i++ {
+		p := &InstanceParams{IbftCommittee: make(map[uint64]*Node)}
+		// populate
+		for j := 1; j <= 3*i+1; j++ {
+			p.IbftCommittee[uint64(j)] = &Node{}
+		}
+		require.EqualValues(t, 2*i+1, p.ThresholdSize())
+	}
+}
+
 func TestPubKeysById(t *testing.T) {
 	secretKeys, nodes := generateNodes(4)
 	params := &InstanceParams{

@@ -2,20 +2,82 @@ package node
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/node/valcheck"
 	"github.com/pkg/errors"
+	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/utils/dataval/bytesval"
-
-	"github.com/bloxapp/ssv/beacon"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 )
+
+// waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
+func (n *ssvNode) waitForSignatureCollection(
+	logger *zap.Logger,
+	identifier []byte,
+	sigRoot []byte,
+	signaturesCount int,
+) (map[uint64][]byte, error) {
+	// Collect signatures from other nodes
+	// TODO - change signature count to min threshold
+	signatures := make(map[uint64][]byte, signaturesCount)
+	signedIndxes := make([]uint64, 0)
+	lock := sync.Mutex{}
+	done := false
+	var err error
+
+	// start timeout
+	go func() {
+		<-time.After(n.signatureCollectionTimeout)
+		lock.Lock()
+		defer lock.Unlock()
+		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
+		done = true
+	}()
+	// loop through messages until timeout
+	for {
+		lock.Lock()
+		if done {
+			lock.Unlock()
+			break
+		} else {
+			lock.Unlock()
+		}
+		if msg := n.queue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
+			if len(msg.Msg.SignerIds) == 0 { // no signer, empty sig
+				continue
+			}
+			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
+				continue
+			}
+			// verify sig
+			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0]); err != nil {
+				logger.Error("received invalid signature", zap.Error(err))
+				continue
+			}
+
+			lock.Lock()
+			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
+			signedIndxes = append(signedIndxes, msg.Msg.SignerIds[0])
+			if len(signedIndxes) >= signaturesCount {
+				done = true
+				break
+			}
+			lock.Unlock()
+		} else {
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
+	return signatures, err
+}
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
@@ -23,13 +85,13 @@ func (n *ssvNode) postConsensusDutyExecution(
 	ctx context.Context,
 	logger *zap.Logger,
 	identifier []byte,
-	inputValue *proto.InputValue,
+	decidedValue []byte,
 	signaturesCount int,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
 ) error {
 	// sign input value and broadcast
-	sig, root, err := n.signDuty(ctx, inputValue, role, duty)
+	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
@@ -46,46 +108,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	}
 	logger.Info("broadcasted partial signature post consensus")
 
-	// Collect signatures from other nodes
-	// TODO - change signature count to min threshold
-	signatures := make(map[uint64][]byte, signaturesCount)
-	signedIndxes := make([]uint64, 0)
-	done := false
-
-	// start timeout
-	go func() {
-		<-time.After(n.signatureCollectionTimeout)
-		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
-		done = true
-	}()
-	// loop through messages until timeout
-	for {
-		if done {
-			break
-		}
-		if msg := n.queue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
-			if len(msg.Msg.SignerIds) == 0 { // no signer, empty sig
-				continue
-			}
-			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
-				continue
-			}
-			// verify sig
-			if err := n.verifyPartialSignature(msg.Msg.Signature, root, msg.Msg.SignerIds[0]); err != nil {
-				logger.Error("received invalid signature", zap.Error(err))
-				continue
-			}
-
-			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
-			signedIndxes = append(signedIndxes, msg.Msg.SignerIds[0])
-			if len(signedIndxes) >= signaturesCount {
-				done = true
-				break
-			}
-		} else {
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
+	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount)
 
 	// clean queue for messages, we don't need them anymore.
 	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
@@ -96,7 +119,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, inputValue, role, duty); err != nil {
+	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
 	logger.Info("Successfully submitted role!")
@@ -110,8 +133,10 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	slot uint64,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) (int, *proto.InputValue, []byte, error) {
-	inputValue := &proto.InputValue{}
+) (int, []byte, []byte, error) {
+	var inputByts []byte
+	var err error
+	var valCheckInstance valcheck2.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
 		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
@@ -119,9 +144,16 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 
-		inputValue.Data = &proto.InputValue_AttestationData{
-			AttestationData: attData,
+		d := &proto.InputValue_Attestation{
+			Attestation: &ethpb.Attestation{
+				Data: attData,
+			},
 		}
+		inputByts, err = json.Marshal(d)
+		if err != nil {
+			return 0, nil, nil, errors.Errorf("failed on attestation role: %s", role.String())
+		}
+		valCheckInstance = &valcheck.AttestationValueCheck{}
 	//case beacon.RoleAggregator:
 	//	aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
 	//	if err != nil {
@@ -146,24 +178,23 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 
 	l := logger.With(zap.String("role", role.String()))
 
-	valBytes, err := json.Marshal(&inputValue)
 	if err != nil {
 		return 0, nil, nil, errors.Wrap(err, "failed to marshal input value")
 	}
 
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
-	decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
+	decided, signaturesCount, decidedByts := n.iBFT.StartInstance(ibft.StartOptions{
 		Logger:       l,
-		Consensus:    bytesval.New(valBytes),
+		ValueCheck:   valCheckInstance,
 		PrevInstance: prevIdentifier,
 		Identifier:   identifier,
-		Value:        valBytes,
+		Value:        inputByts,
 	})
 
 	if !decided {
 		return 0, nil, nil, errors.New("ibft did not decide, not executing role")
 	}
-	return signaturesCount, inputValue, identifier, nil
+	return signaturesCount, decidedByts, identifier, nil
 }
 
 func (n *ssvNode) executeDuty(
@@ -186,21 +217,21 @@ func (n *ssvNode) executeDuty(
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, inputValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
+			signaturesCount, decidedValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
 			if err != nil {
 				logger.Error("could not come to consensus", zap.Error(err))
 				return
 			}
 
 			// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-			logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
+			logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
 
 			// Sign, aggregate and broadcast signature
 			if err := n.postConsensusDutyExecution(
 				ctx,
 				l,
 				identifier,
-				inputValue,
+				decidedValue,
 				signaturesCount,
 				role,
 				duty,
