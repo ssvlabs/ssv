@@ -2,6 +2,7 @@ package proto
 
 import (
 	"errors"
+	"math"
 	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -22,7 +23,7 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 //DefaultConsensusParams returns the default round change duration time
 func DefaultConsensusParams() *ConsensusParams {
 	return &ConsensusParams{
-		RoundChangeDuration: int64(time.Second * 3),
+		RoundChangeDuration:   int64(time.Second * 3),
 		LeaderPreprepareDelay: int64(time.Second * 1),
 	}
 }
@@ -30,6 +31,11 @@ func DefaultConsensusParams() *ConsensusParams {
 // CommitteeSize returns the IBFT committee size
 func (p *InstanceParams) CommitteeSize() int {
 	return len(p.IbftCommittee)
+}
+
+// ThresholdSize returns the minimum IBFT committee members that needs to sign for a quorum
+func (p *InstanceParams) ThresholdSize() int {
+	return int(math.Ceil(float64(len(p.IbftCommittee)) * 2 / 3))
 }
 
 // PubKeysByID returns the public keys with the associated ids

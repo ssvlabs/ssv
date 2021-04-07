@@ -2,7 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/ibft/valcheck"
 	"sync"
 	"time"
 
@@ -17,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/utils/dataval"
 )
 
 // InstanceOptions defines option attributes for the Instance
@@ -26,7 +25,7 @@ type InstanceOptions struct {
 	Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
-	Consensus      dataval.Validator
+	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
 	Lambda         []byte
@@ -38,7 +37,7 @@ type Instance struct {
 	Me               *proto.Node
 	State            *proto.State
 	network          network.Network
-	Consensus        dataval.Validator
+	ValueCheck       valcheck.ValueCheck
 	LeaderSelector   leader.Selector
 	Params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
@@ -46,10 +45,10 @@ type Instance struct {
 	msgLock          sync.Mutex
 
 	// messages
-	msgQueue            *msgqueue.MessageQueue
+	MsgQueue            *msgqueue.MessageQueue
 	PrePrepareMessages  msgcont.MessageContainer
 	PrepareMessages     msgcont.MessageContainer
-	commitMessages      msgcont.MessageContainer
+	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
 
 	// channels
@@ -74,17 +73,17 @@ func NewInstance(opts InstanceOptions) *Instance {
 			PreviousLambda: opts.PreviousLambda,
 		},
 		network:        opts.Network,
-		Consensus:      opts.Consensus,
+		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Params:         opts.Params,
 		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
 		msgLock:        sync.Mutex{},
 
-		msgQueue:            opts.Queue,
-		PrePrepareMessages:  msgcontinmem.New(),
-		PrepareMessages:     msgcontinmem.New(),
-		commitMessages:      msgcontinmem.New(),
-		ChangeRoundMessages: msgcontinmem.New(),
+		MsgQueue:            opts.Queue,
+		PrePrepareMessages:  msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		PrepareMessages:     msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		CommitMessages:      msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		ChangeRoundMessages: msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
 
 		changeRoundChan: make(chan bool),
 	}
@@ -142,7 +141,7 @@ func (i *Instance) Stage() proto.RoundState {
 	return i.State.Stage
 }
 
-// BumpRound is used to set round in the instance's msgQueue - the message broker
+// BumpRound is used to set round in the instance's MsgQueue - the message broker
 func (i *Instance) BumpRound(round uint64) {
 	i.State.Round = round
 	i.LeaderSelector.Bump()
@@ -155,7 +154,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if i.State.Stage == proto.RoundState_Decided {
 		for j := uint64(1); j <= i.State.Round; j++ {
-			i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, j))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, j))
 		}
 	}
 
@@ -190,26 +189,7 @@ func (i *Instance) StartEventLoop() {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
 	for {
-		if netMsg := i.msgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
-			var pp pipeline.Pipeline
-			switch netMsg.Msg.Message.Type {
-			case proto.RoundState_PrePrepare:
-				pp = i.prePrepareMsgPipeline()
-			case proto.RoundState_Prepare:
-				pp = i.prepareMsgPipeline()
-			case proto.RoundState_Commit:
-				pp = i.commitMsgPipeline()
-			case proto.RoundState_ChangeRound:
-				pp = i.changeRoundMsgPipeline()
-			default:
-				i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.Msg))
-				return
-			}
-
-			if err := pp.Run(netMsg.Msg); err != nil {
-				i.Logger.Error("msg pipeline error", zap.Error(err))
-			}
-		} else {
+		if !i.ProcessMessage() {
 			time.Sleep(time.Millisecond * 100)
 		}
 
@@ -247,7 +227,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	case proto.RoundState_Prepare:
 		i.PrepareMessages.AddMessage(signedMessage)
 	case proto.RoundState_Commit:
-		i.commitMessages.AddMessage(signedMessage)
+		i.CommitMessages.AddMessage(signedMessage)
 	case proto.RoundState_ChangeRound:
 		i.ChangeRoundMessages.AddMessage(signedMessage)
 	}

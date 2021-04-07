@@ -28,6 +28,7 @@ import (
 	"net"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -41,7 +42,6 @@ type discoveryNotifee struct {
 	host   host.Host
 	logger *zap.Logger
 }
-
 
 type iListener interface {
 	Self() *enode.Node
@@ -548,23 +548,29 @@ func convertToInterfacePrivkey(privkey *ecdsa.PrivateKey) crypto.PrivKey {
 	return typeAssertedKey
 }
 
-func setPubSubParameters() {
-	heartBeatInterval := 700 * time.Millisecond
-	pubsub.GossipSubDlo = 6
-	pubsub.GossipSubD = 8
-	pubsub.GossipSubHeartbeatInterval = heartBeatInterval
-	pubsub.GossipSubHistoryLength = 6
-	pubsub.GossipSubHistoryGossip = 3
-	pubsub.TimeCacheDuration = 550 * heartBeatInterval
+// To avoid data race conditions we only set params once as they are global.
+// A race condition can happen if we try and run 2 peers on the same machine.
+var setParamsOnce sync.Once
 
-	// Set a larger gossip history to ensure that slower
-	// messages have a longer time to be propagated. This
-	// comes with the tradeoff of larger memory usage and
-	// size of the seen message cache.
-	if featureconfig.Get().EnableLargerGossipHistory {
-		pubsub.GossipSubHistoryLength = 12
-		pubsub.GossipSubHistoryLength = 5
-	}
+func setPubSubParameters() {
+	setParamsOnce.Do(func() {
+		heartBeatInterval := 700 * time.Millisecond
+		pubsub.GossipSubDlo = 6
+		pubsub.GossipSubD = 8
+		pubsub.GossipSubHeartbeatInterval = heartBeatInterval
+		pubsub.GossipSubHistoryLength = 6
+		pubsub.GossipSubHistoryGossip = 3
+		pubsub.TimeCacheDuration = 550 * heartBeatInterval
+
+		// Set a larger gossip history to ensure that slower
+		// messages have a longer time to be propagated. This
+		// comes with the tradeoff of larger memory usage and
+		// size of the seen message cache.
+		if featureconfig.Get().EnableLargerGossipHistory {
+			pubsub.GossipSubHistoryLength = 12
+			pubsub.GossipSubHistoryLength = 5
+		}
+	})
 }
 
 func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, ma.Multiaddr, error) {

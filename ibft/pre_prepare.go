@@ -12,12 +12,11 @@ import (
 
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		//i.WaitForStage(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
 		auth.AuthorizeMsg(i.Params),
-		preprepare.ValidatePrePrepareMsg(i.Consensus, i.LeaderSelector, i.Params),
+		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),
 	)
 }
@@ -36,24 +35,9 @@ func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
 	}
 
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
-		return i.justifyRoundChange(round)
+		return i.JustifyRoundChange(round)
 	}
-
 	return false, nil
-}
-
-// PrePrepareValue checks round and returns message value
-func (i *Instance) PrePrepareValue(round uint64) ([]byte, error) {
-	msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round)
-	if msg, found := msgs[i.RoundLeader(round)]; found {
-		return msg.Message.Value, nil
-	}
-	return nil, errors.Errorf("no pre-prepare value found for round %d", round)
-}
-
-func (i *Instance) existingPrePrepareMsg(signedMessage *proto.SignedMessage) bool {
-	val, _ := i.PrePrepareValue(signedMessage.Message.Round)
-	return len(val) > 0
 }
 
 /*
@@ -65,11 +49,6 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
-		// Only 1 pre-prepare per round is valid
-		if i.existingPrePrepareMsg(signedMessage) {
-			return nil
-		}
-
 		// add to pre-prepare messages
 		i.PrePrepareMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid pre-prepare message for round",
