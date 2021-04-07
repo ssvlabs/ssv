@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ProcessMessage pulls messages from the queue to be processed sequentially
 func (i *Instance) ProcessMessage() bool {
 	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
 		var pp pipeline.Pipeline

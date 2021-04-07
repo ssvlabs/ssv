@@ -150,6 +150,9 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 			},
 		}
 		inputByts, err = json.Marshal(d)
+		if err != nil {
+			return 0, nil, nil, errors.Errorf("failed on attestation role: %s", role.String())
+		}
 		valCheckInstance = &valcheck.AttestationValueCheck{}
 	//case beacon.RoleAggregator:
 	//	aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())

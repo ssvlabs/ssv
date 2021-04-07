@@ -100,14 +100,14 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 	})
 }
 
-/**
-### Algorithm 4 IBFT pseudocode for process pi: message justification
-predicate JustifyRoundChange(Qrc) return
-	∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
-	∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
-		(pr, pv) = HighestPrepared(Qrc)
-*/
+// JustifyRoundChange see below
 func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
+	// ### Algorithm 4 IBFT pseudocode for process pi: message justification
+	//	predicate JustifyRoundChange(Qrc) return
+	//		∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
+	//		∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
+	//			(pr, pv) = HighestPrepared(Qrc)
+
 	if quorum, _, _ := i.changeRoundQuorum(round); !quorum {
 		return false, nil
 	}

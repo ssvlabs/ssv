@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// PrepareAtDifferentRound is a simple happy flow of iBFT
+// ValidSimpleRun is a simple happy flow of iBFT
 type ValidSimpleRun struct {
 	instance   *ibft.Instance
 	inputValue []byte
@@ -17,10 +17,12 @@ type ValidSimpleRun struct {
 	prevLambda []byte
 }
 
+// Name returns test name
 func (test *ValidSimpleRun) Name() string {
 	return "Valid simple test"
 }
 
+// Prepare prepares the test
 func (test *ValidSimpleRun) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
@@ -39,6 +41,7 @@ func (test *ValidSimpleRun) Prepare(t *testing.T) {
 	}
 }
 
+// MessagesSequence includes all messages
 func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
@@ -55,6 +58,7 @@ func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessag
 	}
 }
 
+// Run runs the test
 func (test *ValidSimpleRun) Run(t *testing.T) {
 	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())

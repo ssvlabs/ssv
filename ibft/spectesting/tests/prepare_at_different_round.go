@@ -17,10 +17,12 @@ type PrepareAtDifferentRound struct {
 	prevLambda []byte
 }
 
+// Name returns test name
 func (test *PrepareAtDifferentRound) Name() string {
 	return "pre-prepare -> prepare for round 5 -> change round until round 5 -> commit"
 }
 
+// Prepare prepares the test
 func (test *PrepareAtDifferentRound) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
@@ -39,6 +41,7 @@ func (test *PrepareAtDifferentRound) Prepare(t *testing.T) {
 	}
 }
 
+// MessagesSequence includes all test messages
 func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
@@ -55,6 +58,7 @@ func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.Sig
 	}
 }
 
+// Run runs the test
 func (test *PrepareAtDifferentRound) Run(t *testing.T) {
 	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())

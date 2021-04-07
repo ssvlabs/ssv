@@ -10,7 +10,7 @@ import (
 
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, id uint64, skByts []byte, msg *proto.Message) *proto.SignedMessage {
-	bls.Init(bls.BLS12_381)
+	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	sk := &bls.SecretKey{}
 	require.NoError(t, sk.Deserialize(skByts))

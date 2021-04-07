@@ -17,10 +17,12 @@ type PrepareChangeRoundAndDecide struct {
 	prevLambda []byte
 }
 
+// Name returns test name
 func (test *PrepareChangeRoundAndDecide) Name() string {
 	return "pre-prepare -> prepare -> change round -> prepare -> decide"
 }
 
+// Prepare prepares the test
 func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.prevLambda = []byte{0, 0, 0, 0}
@@ -39,6 +41,7 @@ func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
 	}
 }
 
+// MessagesSequence includes test messages
 func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	signersMap := map[uint64][]byte{
 		1: spectesting.TestSKs()[0],
@@ -74,6 +77,7 @@ func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto
 	}
 }
 
+// Run runs the test
 func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	// pre-prepare
 	require.True(t, test.instance.ProcessMessage())

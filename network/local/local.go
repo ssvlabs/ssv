@@ -14,6 +14,7 @@ type Local struct {
 	createChannelMutex sync.Mutex
 }
 
+// GetTopic TBD
 func (n *Local) GetTopic() *pubsub.Topic {
 	panic("implement me")
 }
