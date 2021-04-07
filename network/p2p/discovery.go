@@ -338,7 +338,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
 	if err != nil {
-		//log.Errorf("Could not convert to peer address info's from multiaddresses: %v", err)
+		log.Printf("Could not convert to peer address info's from multiaddresses: %v", err)
 		return
 	}
 	for _, info := range addrInfos {
