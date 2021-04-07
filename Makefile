@@ -3,10 +3,10 @@ ifndef $(GOPATH)
     export GOPATH
 endif
 
-#ifndef $(EXTERNAL_IP)
-#    EXTERNAL_IP=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
-#    export EXTERNAL_IP
-#endif
+ifndef $(EXTERNAL_IP)
+    EXTERNAL_IP=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
+    export EXTERNAL_IP
+endif
 
 ifndef $(BUILD_PATH)
     BUILD_PATH="/go/bin/ssvnode"
