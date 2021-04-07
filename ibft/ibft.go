@@ -31,7 +31,7 @@ type StartOptions struct {
 // IBFT represents behavior of the IBFT
 type IBFT interface {
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (bool, int)
+	StartInstance(opts StartOptions) (bool, int, []byte)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[uint64]*proto.Node
@@ -82,7 +82,7 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	}()
 }
 
-func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
+func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	// If previous instance didn't decide, can't start another instance.
 	if !bytes.Equal(opts.PrevInstance, FirstInstanceIdentifier()) {
 		instance, found := i.instances[hex.EncodeToString(opts.PrevInstance)]
@@ -113,7 +113,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 	err := i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection
 	if err != nil {
 		newInstance.Logger.Error("could not reset leader selection", zap.Error(err))
-		return false, 0
+		return false, 0, nil
 	}
 	go newInstance.Start(opts.Value)
 
@@ -125,17 +125,17 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int) {
 			agg, err := newInstance.PreparedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated prepare msg and save to storage", zap.Error(err))
-				return false, 0
+				return false, 0, nil
 			}
 			i.storage.SavePrepared(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
-				return false, 0
+				return false, 0, nil
 			}
 			i.storage.SaveDecided(agg)
-			return true, len(agg.GetSignerIds())
+			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}
 }

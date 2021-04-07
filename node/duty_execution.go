@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
@@ -84,13 +85,13 @@ func (n *ssvNode) postConsensusDutyExecution(
 	ctx context.Context,
 	logger *zap.Logger,
 	identifier []byte,
-	inputValue *proto.InputValue,
+	decidedValue []byte,
 	signaturesCount int,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
 ) error {
 	// sign input value and broadcast
-	sig, root, err := n.signDuty(ctx, inputValue, role, duty)
+	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
@@ -118,7 +119,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, inputValue, role, duty); err != nil {
+	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
 	logger.Info("Successfully submitted role!")
@@ -132,9 +133,8 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	slot uint64,
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
-) (int, *proto.InputValue, []byte, error) {
+) (int, []byte, []byte, error) {
 	var inputByts []byte
-	inputValue := &proto.InputValue{}
 	var err error
 	var valCheckInstance valcheck2.ValueCheck
 	switch role {
@@ -144,10 +144,11 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 
-		d := &proto.InputValue_AttestationData{
-			AttestationData: attData,
+		d := &proto.InputValue_Attestation{
+			Attestation: &ethpb.Attestation{
+				Data: attData,
+			},
 		}
-		inputValue.Data = d
 		inputByts, err = json.Marshal(d)
 		valCheckInstance = &valcheck.AttestationValueCheck{}
 	//case beacon.RoleAggregator:
@@ -179,7 +180,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	}
 
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
-	decided, signaturesCount := n.iBFT.StartInstance(ibft.StartOptions{
+	decided, signaturesCount, decidedByts := n.iBFT.StartInstance(ibft.StartOptions{
 		Logger:       l,
 		ValueCheck:   valCheckInstance,
 		PrevInstance: prevIdentifier,
@@ -190,7 +191,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	if !decided {
 		return 0, nil, nil, errors.New("ibft did not decide, not executing role")
 	}
-	return signaturesCount, inputValue, identifier, nil
+	return signaturesCount, decidedByts, identifier, nil
 }
 
 func (n *ssvNode) executeDuty(
@@ -213,21 +214,21 @@ func (n *ssvNode) executeDuty(
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, inputValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
+			signaturesCount, decidedValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
 			if err != nil {
 				logger.Error("could not come to consensus", zap.Error(err))
 				return
 			}
 
 			// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-			logger.Info("GOT CONSENSUS", zap.Any("inputValue", &inputValue))
+			logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
 
 			// Sign, aggregate and broadcast signature
 			if err := n.postConsensusDutyExecution(
 				ctx,
 				l,
 				identifier,
-				inputValue,
+				decidedValue,
 				signaturesCount,
 				role,
 				duty,

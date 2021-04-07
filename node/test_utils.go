@@ -50,8 +50,8 @@ type testIBFT struct {
 	signaturesCount int
 }
 
-func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int) {
-	return t.decided, t.signaturesCount
+func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
+	return t.decided, t.signaturesCount, opts.Value
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
