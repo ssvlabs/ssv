@@ -239,6 +239,8 @@ func (n *p2pNetwork) connectToBootnodes() error {
 				log.Print(err)
 				//log.WithError(err).Error("Could not retrieve tcp port")
 			}
+
+			log.Printf("Could not retrieve tcp port - %v", err)
 			continue
 		}
 		nodes = append(nodes, bootNode)
@@ -475,11 +477,12 @@ func convertToMultiAddr(nodes []*enode.Node) []ma.Multiaddr {
 	for _, node := range nodes {
 		// ignore nodes with no ip address stored
 		if node.IP() == nil {
+			log.Printf("ignore nodes with no ip address stored - %v", node)
 			continue
 		}
 		multiAddr, err := convertToSingleMultiAddr(node)
 		if err != nil {
-			//log.WithError(err).Error("Could not convert to multiAddr")
+			log.Printf("Could not convert to multiAddr - %v", err)
 			continue
 		}
 		multiAddrs = append(multiAddrs, multiAddr)
