@@ -20,4 +20,4 @@ jobs:
         run: make lint-prepare
 
       - name: Run make lint
-        run: make lint --timeout 300
+        run: make lint
