@@ -78,7 +78,7 @@ docker:
 .PHONY: docker-image
 docker-image:
 	@echo "node ${NODES_ID}"
-	@docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 make BUILD_PATH=/go/bin/ssvnode  start-node 'bloxstaking/ssv-node:latest'
+	@docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode  start-node
 
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
