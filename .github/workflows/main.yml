@@ -4,11 +4,7 @@ on: push
 
 jobs:
   release:
-￼   runs-on: ${{ matrix.os }}
-
-￼   strategy:
-￼     matrix:
-￼       os: [ubuntu-latest]
+￼   runs-on: ubuntu-latest
 
     steps:
       - name: Check out Git repository
@@ -26,7 +22,6 @@ jobs:
        
       - name: Run lint-prepare 
         run: make lint-prepare
-
 
       - name: Run make lint
         run: make lint
