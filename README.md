@@ -124,35 +124,8 @@ $ cd ./{path to where the ssh downloaded}
 $ chmod 400 {ssh file name}
 
 $ ssh -i {ssh file name} ubuntu@{server public ip}
-```
 
-##### Install Golang dependencies 
-```
-$ sudo wget https://golang.org/dl/go1.16.3.linux-amd64.tar.gz && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
-
-$ sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.16.3.linux-amd64.tar.gz
-
-$ export PATH=$PATH:/usr/local/go/bin
-
-// if version returned - all good :)
-$ go version
-
-$ sudo apt-get update && \
-  DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
-  bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
-  && rm -rf /var/lib/apt/lists/*
-```
-
-##### Clone ssv project 
-```
-$ git --version
-
-// If no git run install command
-$ sudo apt install git
-
-$ git clone https://github.com/bloxapp/ssv.git
-
-$ cd ssv
+$ sudo su
 ```
 
 #### .env file
@@ -160,21 +133,32 @@ $ cd ssv
  - Export all required params
     * If you'r node 1, need to fill the other nodes (2,3,4) and so on...     
 ```
-$ export CONSENSUS_TYPE=validation
-$ export NETWORK=pyrmont"
-$ export BEACON_NODE_ADDR=eth2-4000-prysm-ext.stage.bloxinfra.com:80
-$ export VALIDATOR_PUBLIC_KEY={validator public key}
-$ export NODE_ID={Your node index}
-$ export SSV_PRIVATE_KEY={your ssv node private key}
-$ export PUBKEY_NODE_1={your ssv node public key}
-$ export PUBKEY_NODE_2={seconde ssv node public key}
-$ export PUBKEY_NODE_3={third ssv node public key}
-$ export PUBKEY_NODE_4={forth ssv node public key}
+$ touch .env
+
+$ echo "CONSENSUS_TYPE=validation" >> .env
+$ echo "NETWORK=pyrmont" >> .env
+$ echo "BEACON_NODE_ADDR={ETH 2.0 node}" >> .env
+$ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
+$ echo "NODE_ID={provided node index}" >> .env
+$ echo "SSV_PRIVATE_KEY={provided node private key}" >> .env
+$ echo "PUBKEY_NODE_1={provided node index 1 public key}" >> .env
+$ echo "PUBKEY_NODE_2={provided node index 2 public key}" >> .env
+$ echo "PUBKEY_NODE_3={provided node index 3 public key}" >> .env 
+$ echo "PUBKEY_NODE_4={provided node index 4 public key}" >> .env
 ```
 
-### Build & Run
+##### Download and run install.sh script 
 ```
-$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+$ wget https://raw.githubusercontent.com/bloxapp/ssv/stage/install.sh
 
-$ make start-node BUILD_PATH="./bin/ssvnode"
-```  
+$ chmod +x install.sh
+
+$ ./install.sh
+```
+
+- Install script result with docker container id
+
+- You can watch logs using that cmd - 
+```
+$ docker logs ssv_node --follow
+``` 
