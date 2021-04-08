@@ -11,8 +11,6 @@ $ cd ./{path to where the ssh downloaded}
 $ chmod 400 {ssh file name}
 
 $ ssh -i {ssh file name} ubuntu@{server public ip}
-
-$ sudo su
 ```
 
 #### .env file
@@ -36,6 +34,8 @@ $ echo "PUBKEY_NODE_4={provided node index 4 public key}" >> .env
 
 ##### Download and run install.sh script 
 ```
+$ sudo su
+
 $ wget https://raw.githubusercontent.com/bloxapp/ssv/stage/install.sh
 
 $ chmod +x install.sh
