@@ -72,8 +72,13 @@ endif
 .PHONY: docker
 docker:
 	@echo "node ${NODES_ID}"
-	@docker build -t ssv_node . && docker run -d --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode start-node
+	@docker build -t ssv_node . && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node
 
+
+.PHONY: docker-image
+docker-image:
+	@echo "node ${NODES_ID}"
+	@docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node 'xxx\ssvnode'
 
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
