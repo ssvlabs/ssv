@@ -19,7 +19,7 @@ endif
 
 # node command builder
 NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
---beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --discovery-type=${DISCOVERY_TYPE} --val=${CONSENSUS_TYPE} \
+--beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} \
 --host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
 
 
@@ -31,6 +31,9 @@ ifneq ($(UDP_PORT),)
   NODE_COMMAND+= --udp-port=${UDP_PORT}
 endif
 
+ifneq ($(DISCOVERY_TYPE),)
+  NODE_COMMAND+= --discovery-type=${DISCOVERY_TYPE}
+endif
 
 #Lint
 .PHONY: lint-prepare
