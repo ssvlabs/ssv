@@ -160,6 +160,12 @@ var startNodeCmd = &cobra.Command{
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
 
+		//for id, obj := range ibftCommittee{
+		//	if len(obj.Pk) == 0 {
+		//		errors.New(fmt.Sprint("Missing public key for node index - %v", id))
+		//	}
+		//}
+
 		msgQ := msgqueue.New()
 
 		ssvNode := node.New(node.Options{
