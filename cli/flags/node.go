@@ -19,6 +19,8 @@ const (
 	sigCollectionTimeout = "sig-collection-timeout"
 	hostDNS              = "host-dns"
 	hostAddress          = "host-address"
+	tcpPort              = "tcp-port"
+	udpPort              = "udp-port"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -119,3 +121,25 @@ func GetHostAddressFlagValue(c *cobra.Command) (string, error) {
 func AddHostAddressFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, hostAddress, "", "host address", false)
 }
+// GetTCPPortFlagValue gets the tcp port flag from the command
+func GetTCPPortFlagValue(c *cobra.Command) (int, error) {
+	val, err := c.Flags().GetUint64(tcpPort)
+	return int(val), err
+}
+
+// AddTCPPortFlag adds the tcp port flag to the command
+func AddTCPPortFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, tcpPort, 13000, "tcp port number", false)
+}
+
+// GetUDPPortFlagValue gets the udp port flag from the command
+func GetUDPPortFlagValue(c *cobra.Command) (int, error) {
+	val, err := c.Flags().GetUint64(udpPort)
+	return int(val), err
+}
+
+// AddUDPPortFlag adds the udp port flag to the command
+func AddUDPPortFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, udpPort, 12000, "udp port number", false)
+}
+

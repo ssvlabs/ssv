@@ -81,6 +81,16 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get hostAddress key flag value", zap.Error(err))
 		}
 
+		tcpPort, err := flags.GetTCPPortFlagValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
+		}
+		udpPort, err := flags.GetUDPPortFlagValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get udp port flag value", zap.Error(err))
+		}
+		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -108,8 +118,8 @@ var startNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
-			UDPPort:     12000,
-			TCPPort:     13000,
+			UDPPort:     udpPort,
+			TCPPort:     tcpPort,
 			TopicName:   validatorKey,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
@@ -201,6 +211,8 @@ func init() {
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
 	flags.AddHostDNSFlag(startNodeCmd)
 	flags.AddHostAddressFlag(startNodeCmd)
+	flags.AddTCPPortFlag(startNodeCmd)
+	flags.AddUDPPortFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

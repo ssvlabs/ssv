@@ -17,6 +17,21 @@ ifneq (,$(wildcard ./.env))
     include .env
 endif
 
+# node command builder
+NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
+--beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --discovery-type=${DISCOVERY_TYPE} --val=${CONSENSUS_TYPE} \
+--host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
+
+
+ifneq ($(TCP_PORT),)
+  NODE_COMMAND+= --tcp-port=${TCP_PORT}
+endif
+
+ifneq ($(UDP_PORT),)
+  NODE_COMMAND+= --udp-port=${UDP_PORT}
+endif
+
+
 #Lint
 .PHONY: lint-prepare
 lint-prepare:
@@ -62,11 +77,11 @@ start-node:
 ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
-	 ${BUILD_PATH} start-node -- --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --discovery-type=${DISCOVERY_TYPE} --val=${CONSENSUS_TYPE}
+	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 
 else
 	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
-	${BUILD_PATH} start-node --node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} --host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP}
+	${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
 .PHONY: docker
