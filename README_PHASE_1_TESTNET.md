@@ -1,8 +1,8 @@
 # Phase 1 Testnet deployment  ![ethereum](/github/resources/ethereum.gif)
 
 #### Server Preparation
-##### Create a server of your choice and expose on ports 12000 TCP and 13000 UDP
- * (AWS example below)
+##### Create a server of your choice and expose on ports 12000 UDP and 13000 TCP
+ * (AWS example at the bottom)
 
 ##### SHH permissions and login to server-  
 ```
@@ -59,5 +59,5 @@ $ docker logs ssv_node --follow
 - skip to "security group" section
 - make sure you have 3 rules. UDP, TCP and SSH -
 ![security_permission](/github/resources/security_permission.png)
-- when promote, add new key pair and download the ssh file 
+- after launch, add new key pair and download the ssh file 
 - launch instance
