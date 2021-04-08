@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,4 +20,4 @@ jobs:
         run: make lint-prepare
 
       - name: Run make lint
-        run: make lint
+        run: make lint --timeout 300
