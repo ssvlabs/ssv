@@ -18,7 +18,7 @@ $ sudo su
 #### .env file
  
  - Export all required params
-    * If you'r node 1, need to fill the other nodes (2,3,4) and so on...     
+    * Fill the fields according to your operator provided values        
 ```
 $ touch .env
 
@@ -43,14 +43,14 @@ $ chmod +x install.sh
 $ ./install.sh
 ```
 
-- Install script result with docker container id
+- Expected output - docker container id
 
 - You can watch logs using that cmd - 
 ```
 $ docker logs ssv_node --follow
 ``` 
 
-### Create EC2 server examples
+### Create EC2 server guides
 #### AWS - 
 - In the search bar search for "ec2"
 - Launch new instance
