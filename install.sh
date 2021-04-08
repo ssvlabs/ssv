@@ -20,5 +20,8 @@ sudo apt-get update && \
   bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
   && rm -rf /var/lib/apt/lists/*
 
+# download Nakefile
+wget https://raw.githubusercontent.com/bloxapp/ssv/stage/Makefile
+
 # run make
 make docker-image
