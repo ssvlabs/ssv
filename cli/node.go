@@ -125,9 +125,9 @@ var startNodeCmd = &cobra.Command{
 			HostAddress: hostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
-		//if err != nil {
-		//	logger.Fatal("failed to create network", zap.Error(err))
-		//}
+		if err != nil {
+			logger.Fatal("failed to create network", zap.Error(err))
+		}
 
 		go func() {
 			time.Sleep(2 * time.Second)
