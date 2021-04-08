@@ -1,0 +1,21 @@
+name: Lint
+
+on: push
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/checkout@v2
+
+      - name: Set make
+        run: apt-get update && apt-get install make
+        
+      - name: Run lint prepare 
+        run: make lint-prepare
+
+      - name: Run make lint
+        run: make lint
