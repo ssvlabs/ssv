@@ -14,5 +14,11 @@ echo \
 
 sudo apt-get install docker-ce docker-ce-cli containerd.io
 
-# run docker cmd
-docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node 'bloxstaking/ssv-node:latest'
+# install make
+sudo apt-get update && \
+  DEBIAN_FRONTEND=noninteractive sudo apt-get install -yq --no-install-recommends \
+  bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
+  && rm -rf /var/lib/apt/lists/*
+
+# run make
+make docker-image
