@@ -16,7 +16,7 @@ $ ssh -i {ssh file name} ubuntu@{server public ip}
 #### .env file
  
  - Export all required params
-    * Fill the fields according to your operator provided values        
+    * Fill the fields according to the .env provided for you by Blox         
 ```
 $ touch .env
 
@@ -36,7 +36,7 @@ $ echo "PUBKEY_NODE_4={provided node index 4 public key}" >> .env
 ```
 $ sudo su
 
-$ wget https://raw.githubusercontent.com/bloxapp/ssv/stage/install.sh
+$ wget https://raw.githubusercontent.com/ethereum/eth2-ssv/stage/install.sh
 
 $ chmod +x install.sh
 

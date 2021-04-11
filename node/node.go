@@ -99,8 +99,14 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 						zap.Uint64("slot", slot))
 
-					if err := n.slotQueue.Schedule(n.validatorPubKey.Serialize(), slot, duty); err != nil {
-						n.logger.Error("failed to schedule slot")
+					// execute task if slot already began
+					if slot == uint64(n.getCurrentSlot()) {
+						prevIdentifier := ibft.FirstInstanceIdentifier()
+						go n.executeDuty(ctx, prevIdentifier, slot, duty)
+					} else {
+						if err := n.slotQueue.Schedule(n.validatorPubKey.Serialize(), slot, duty); err != nil {
+							n.logger.Error("failed to schedule slot")
+						}
 					}
 				}(slot)
 			}
@@ -146,6 +152,13 @@ func (n *ssvNode) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(n.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
+}
+
+// getCurrentSlot returns the current beacon node slot
+func (n *ssvNode) getCurrentSlot() int64 {
+	genesisTime := int64(n.ethNetwork.MinGenesisTime())
+	currentTime := time.Now().Unix()
+	return (currentTime - genesisTime) / 12
 }
 
 // collectSlots collects slots from the given duty

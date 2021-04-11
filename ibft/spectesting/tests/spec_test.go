@@ -16,11 +16,12 @@ type SpecTest interface {
 }
 
 var tests = []SpecTest{
-	//&PrepareAtDifferentRound{},
-	//&ChangeRoundAndDecide{},
-	//&PrepareChangeRoundAndDecide{},
-	//&DecideDifferentValue{},
 	&PrepareAtDifferentRound{},
+	&ChangeRoundAndDecide{},
+	&PrepareChangeRoundAndDecide{},
+	&DecideDifferentValue{},
+	&PrepareAtDifferentRound{},
+	&NonJustifiedPrePrepapre{},
 }
 
 func TestAllSpecTests(t *testing.T) {

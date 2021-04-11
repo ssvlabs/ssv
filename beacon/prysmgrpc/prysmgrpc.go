@@ -2,7 +2,6 @@ package prysmgrpc
 
 import (
 	"context"
-
 	"github.com/bloxapp/ssv/beacon"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -74,8 +73,8 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 		for {
 			resp, err := streamDuties.Recv()
 			if err != nil {
-				b.logger.Error("failed to receive duties from stream", zap.Error(err))
-				continue
+				b.logger.Error("failed to receive duties from stream - ")
+				panic(zap.Error(err))
 			}
 
 			duties := resp.GetCurrentEpochDuties()
@@ -89,7 +88,6 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 			}
 		}
 	}()
-
 	return dutiesChan, nil
 }
 

@@ -35,6 +35,7 @@ ifneq ($(DISCOVERY_TYPE),)
   NODE_COMMAND+= --discovery-type=${DISCOVERY_TYPE}
 endif
 
+
 #Lint
 .PHONY: lint-prepare
 lint-prepare:
@@ -90,7 +91,7 @@ endif
 .PHONY: docker
 docker:
 	@echo "node ${NODES_ID}"
-	@docker build -t ssv_node . && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node
+	@docker rm -f ssv_node && docker build -t ssv_node . && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node && docker logs ssv_node --follow
 
 
 .PHONY: docker-image

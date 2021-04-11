@@ -80,6 +80,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 
 		// check if quorum achieved, act upon it.
 		if i.State.Stage == proto.RoundState_Decided {
+			i.Logger.Info("already decided, not processing commit message")
 			return nil // no reason to commit again
 		}
 		quorum, t, n := i.commitQuorum(signedMessage.Message.Round, signedMessage.Message.Value)

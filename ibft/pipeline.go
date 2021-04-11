@@ -8,7 +8,7 @@ import (
 )
 
 // ProcessMessage pulls messages from the queue to be processed sequentially
-func (i *Instance) ProcessMessage() bool {
+func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.Msg.Message.Type {
@@ -22,13 +22,13 @@ func (i *Instance) ProcessMessage() bool {
 			pp = i.changeRoundMsgPipeline()
 		default:
 			i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.Msg))
-			return true
+			return true, nil
 		}
 
 		if err := pp.Run(netMsg.Msg); err != nil {
-			i.Logger.Error("msg pipeline error", zap.Error(err))
+			return true, err
 		}
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
