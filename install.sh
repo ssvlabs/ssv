@@ -24,7 +24,7 @@ sudo apt-get -y update && \
 # remove file to make sure that only one file exist
 rm Makefile
 # download Nakefile
-wget https://raw.githubusercontent.com/bloxapp/ssv/stage/Makefile
+wget https://raw.githubusercontent.com/ethereum/eth2-ssv/stage/Makefile
 
 # run make
 make docker-image
