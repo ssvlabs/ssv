@@ -21,6 +21,8 @@ sudo apt-get -y update && \
   bash make curl git zip unzip wget g++ python gcc-aarch64-linux-gnu \
   && rm -rf /var/lib/apt/lists/*
 
+# remove file to make sure that only one file exist
+rm Makefile
 # download Nakefile
 wget https://raw.githubusercontent.com/bloxapp/ssv/stage/Makefile
 
