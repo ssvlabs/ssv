@@ -5,25 +5,75 @@
 
 # SSV - Secret Shared Validator
 
-SSV is a protocol for distribuiting an eth2 validator key between multiple operators governed by a consensus protocol (Istanbul BFT).
+SSV is a protocol for distributing an eth2 validator key between multiple operators governed by a consensus protocol ([Istanbul BFT](https://arxiv.org/pdf/2002.03613.pdf)).
 
-### TODO
-[\\] Free standing, reference iBFT Go implementation\
-[\\] SSV specific iBFT implementor\
-[\\] Port POC code to Glang\
+
+## ⚠️ Phase 1 testing ⚠️
+Please see [phase 1 testing doc](./PHASE_1_TESTNET.md) for details
+
+
+## Getting started
+```bash
+# Build binary
+$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+
+# Run local 4 node network (requires docker and a .env file as shown below)
+$ make docker-debug 
+
+# Lint
+$ make lint
+
+# Full test
+$ make full-test
+
+```
+
+## Splitting a key
+We split an eth2 BLS validator key into shares via Shamir-Secret-Sharing(SSS) to be used between the SSV nodes. 
+```bash
+# Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
+$ ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}
+
+# Generate threshold keys
+$ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}
+```
+
+## Example .env file 
+```
+   DISCOVERY_TYPE=mdns
+   CONSENSUS_TYPE=validation
+   NETWORK=pyrmont
+   BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80
+   VALIDATOR_PUBLIC_KEY=
+   VALIDATOR_PRIVATE_KEY= # NOT USED FOR NOW
+   SSV_NODE_1=
+   SSV_NODE_PUB_KEY_1=
+   SSV_NODE_2=
+   SSV_NODE_PUB_KEY_2=
+   SSV_NODE_3=
+   SSV_NODE_PUB_KEY_3=
+   SSV_NODE_4=
+   SSV_NODE_PUB_KEY_4=
+```
+
+### Progress
+[X] Free standing, reference iBFT Go implementation\
+[X] SSV specific iBFT implementor\
+[X] Port POC code to Glang\
 [ ] Single standing instance running with Prysm's validator client\
-[ ] Networking and discovery\
+[\\] Networking and discovery\
 [\\] db, persistance and recovery\
 [ ] Multi network support (being part of multiple SSV groups)\
 [X] Key sharing\
-[ ] Documentation\
+[X] Deployment\
+[\\] Documentation\
 [ ] Phase 1 changes\
 [ ] Audit
 
 ** X=done, \\=WIP
 
 
-### Research
+### Research (Deprecated)
 - Secret Shared Validators on Eth2
     - [Litepaper](https://medium.com/coinmonks/eth2-secret-shared-validators-85824df8cbc0)
 - iBTF
@@ -42,62 +92,3 @@ SSV is a protocol for distribuiting an eth2 validator key between multiple opera
 - DKG
     - [Blox's eth2 pools research](https://github.com/bloxapp/eth2-staking-pools-research)
     - [ETH DKG](https://github.com/PhilippSchindler/ethdkg)
-
-
-# Getting started
-### Build
-```bash
-# Build binary
-$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
-
-# Run tool
-$ ./bin/ssvnode --help
-
-# Run node
-$ make NODE_ID=1  BUILD_PATH="./bin/ssvnode"  start-node
-
-```
-    
-### Preparation
-##### Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
-- Private keys from mnemonic: ` ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}`
-
-##### Generate threshold keys
-- `./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}`
-   
-##### Edit config files
-- .env
-```
-   NETWORK=pyrmont/mainnet
-   BEACON_NODE_ADDR
-   VALIDATOR_PUBLIC_KEY
-   SSV_NODE_{index} - for each threshold created add param(public key {index} from previous step )
-```
-- docker-compose.yaml
-
-  ` PUBKEY_NODE_{index} - add the other public keys as environment for each service`    
-
-### How to run
-
-`docker-compose.yaml` contains definitions for 2 sets (prod & debug) of 4 SSV nodes with its own threshold private keys that are generated based on the 
-validator's private key. All needed parameters can be found in `docker-compose.yaml` and `.env` files.
-
-
-```bash 
-# Run 4 nodes (prod mode)
-$ make docker
-
-# Run 4 nodes (debug & live reload mode) 
-$ make docker-debug
-```    
-
-### Contribute
-#### Debug(TODO)
-#### Lint
-```bash 
-# install linter
-$ make lint-prepare
-
-# Run nodes
-$ make lint
-```
