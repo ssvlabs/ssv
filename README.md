@@ -63,6 +63,7 @@ $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {private
 [ ] Single standing instance running with Prysm's validator client\
 [\\] Networking and discovery\
 [\\] db, persistance and recovery\
+[ ] Between instance persistence (pevent starting a new instance if previous not decided)
 [ ] Multi network support (being part of multiple SSV groups)\
 [X] Key sharing\
 [X] Deployment\
