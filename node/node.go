@@ -29,6 +29,7 @@ type Options struct {
 	IBFT                       ibft.IBFT
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration
+	phase1TestGenesis          uint64
 }
 
 // Node represents the behavior of SSV node
@@ -53,6 +54,8 @@ type ssvNode struct {
 
 	// timeouts
 	signatureCollectionTimeout time.Duration
+	// genesis epoch
+	phase1TestGenesis          uint64
 }
 
 // New is the constructor of ssvNode
@@ -70,6 +73,8 @@ func New(opts Options) Node {
 		iBFT:                       opts.IBFT,
 		logger:                     opts.Logger,
 		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
+		// genesis epoch
+		phase1TestGenesis:          opts.phase1TestGenesis,
 	}
 }
 
@@ -93,6 +98,10 @@ func (n *ssvNode) Start(ctx context.Context) error {
 			}
 
 			for _, slot := range slots {
+				if slot < n.getEpochFirstSlot(n.phase1TestGenesis){
+					// wait until genesis epoch starts
+					continue
+				}
 				go func(slot uint64) {
 					n.logger.Info("scheduling duty processing start for slot",
 						zap.Time("start_time", n.getSlotStartTime(slot)),
@@ -159,6 +168,11 @@ func (n *ssvNode) getCurrentSlot() int64 {
 	genesisTime := int64(n.ethNetwork.MinGenesisTime())
 	currentTime := time.Now().Unix()
 	return (currentTime - genesisTime) / 12
+}
+
+// getEpochFirstSlot returns the beacon node first slot in epoch
+func (n *ssvNode) getEpochFirstSlot(epoch uint64) uint64 {
+	return epoch * 32
 }
 
 // collectSlots collects slots from the given duty
