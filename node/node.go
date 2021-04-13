@@ -29,7 +29,7 @@ type Options struct {
 	IBFT                       ibft.IBFT
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration
-	phase1TestGenesis          uint64
+	Phase1TestGenesis          uint64
 }
 
 // Node represents the behavior of SSV node
@@ -74,7 +74,7 @@ func New(opts Options) Node {
 		logger:                     opts.Logger,
 		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
 		// genesis epoch
-		phase1TestGenesis:          opts.phase1TestGenesis,
+		phase1TestGenesis:          opts.Phase1TestGenesis,
 	}
 }
 
@@ -100,6 +100,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 			for _, slot := range slots {
 				if slot < n.getEpochFirstSlot(n.phase1TestGenesis){
 					// wait until genesis epoch starts
+					n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.phase1TestGenesis)), zap.Uint64("slot", slot))
 					continue
 				}
 				go func(slot uint64) {

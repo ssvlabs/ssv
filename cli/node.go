@@ -193,6 +193,7 @@ var startNodeCmd = &cobra.Command{
 			),
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
+			Phase1TestGenesis:			32818,
 		})
 
 		if err := ssvNode.Start(cmd.Context()); err != nil {

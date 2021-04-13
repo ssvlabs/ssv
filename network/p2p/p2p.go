@@ -161,6 +161,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 		if n.cfg.HostAddress != "" {
 			//logExternalIPAddr(s.host.ID(), p2pHostAddress, p2pTCPPort)
+			logger.Debug("TEST host address-----", zap.String("address", n.cfg.HostAddress))
 			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
 			conn, err := net.DialTimeout("tcp", a, time.Second*10)
 			if err != nil {

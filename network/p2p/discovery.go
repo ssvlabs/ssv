@@ -293,6 +293,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
 	if n.cfg.HostAddress != "" {
+		log.Print("-----TEST HostAddress 1 -------", n.cfg.HostAddress)
 		hostIP := net.ParseIP(n.cfg.HostAddress)
 		if hostIP.To4() == nil && hostIP.To16() == nil {
 			log.Printf("Invalid host address given: %s", hostIP.String())
