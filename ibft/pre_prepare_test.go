@@ -216,6 +216,12 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res)
 
+	// try to justify round 2 without round change
+	instance.State.Round = 2
+	res, err = instance.JustifyPrePrepare(2)
+	require.NoError(t, err)
+	require.False(t, res)
+
 	// test no change round quorum
 	msg := &proto.Message{
 		Type:   proto.RoundState_ChangeRound,

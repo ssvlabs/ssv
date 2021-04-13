@@ -29,6 +29,7 @@ type Options struct {
 	IBFT                       ibft.IBFT
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration
+	Phase1TestGenesis          uint64
 }
 
 // Node represents the behavior of SSV node
@@ -53,6 +54,8 @@ type ssvNode struct {
 
 	// timeouts
 	signatureCollectionTimeout time.Duration
+	// genesis epoch
+	phase1TestGenesis          uint64
 }
 
 // New is the constructor of ssvNode
@@ -70,6 +73,8 @@ func New(opts Options) Node {
 		iBFT:                       opts.IBFT,
 		logger:                     opts.Logger,
 		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
+		// genesis epoch
+		phase1TestGenesis:          opts.Phase1TestGenesis,
 	}
 }
 
@@ -93,14 +98,25 @@ func (n *ssvNode) Start(ctx context.Context) error {
 			}
 
 			for _, slot := range slots {
+				if slot < n.getEpochFirstSlot(n.phase1TestGenesis){
+					// wait until genesis epoch starts
+					n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.phase1TestGenesis)), zap.Uint64("slot", slot))
+					continue
+				}
 				go func(slot uint64) {
 					n.logger.Info("scheduling duty processing start for slot",
 						zap.Time("start_time", n.getSlotStartTime(slot)),
 						zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 						zap.Uint64("slot", slot))
 
-					if err := n.slotQueue.Schedule(n.validatorPubKey.Serialize(), slot, duty); err != nil {
-						n.logger.Error("failed to schedule slot")
+					// execute task if slot already began
+					if slot == uint64(n.getCurrentSlot()) {
+						prevIdentifier := ibft.FirstInstanceIdentifier()
+						go n.executeDuty(ctx, prevIdentifier, slot, duty)
+					} else {
+						if err := n.slotQueue.Schedule(n.validatorPubKey.Serialize(), slot, duty); err != nil {
+							n.logger.Error("failed to schedule slot")
+						}
 					}
 				}(slot)
 			}
@@ -146,6 +162,18 @@ func (n *ssvNode) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(n.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
+}
+
+// getCurrentSlot returns the current beacon node slot
+func (n *ssvNode) getCurrentSlot() int64 {
+	genesisTime := int64(n.ethNetwork.MinGenesisTime())
+	currentTime := time.Now().Unix()
+	return (currentTime - genesisTime) / 12
+}
+
+// getEpochFirstSlot returns the beacon node first slot in epoch
+func (n *ssvNode) getEpochFirstSlot(epoch uint64) uint64 {
+	return epoch * 32
 }
 
 // collectSlots collects slots from the given duty

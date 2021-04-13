@@ -68,17 +68,21 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 		i.SetStage(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
-		broadcastMsg := &proto.Message{
-			Type:           proto.RoundState_Prepare,
-			Round:          i.State.Round,
-			Lambda:         i.State.Lambda,
-			PreviousLambda: i.State.PreviousLambda,
-			Value:          i.State.InputValue,
-		}
+		broadcastMsg := i.generatePrepareMessage(signedMessage.Message.Value)
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err
 		}
 		return nil
 	})
+}
+
+func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
+	return &proto.Message{
+		Type:           proto.RoundState_PrePrepare,
+		Round:          i.State.Round,
+		Lambda:         i.State.Lambda,
+		PreviousLambda: i.State.PreviousLambda,
+		Value:          value,
+	}
 }

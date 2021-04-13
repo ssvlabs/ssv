@@ -80,20 +80,20 @@ func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto
 // Run runs the test
 func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	// pre-prepare
-	require.True(t, test.instance.ProcessMessage())
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
 
 	// prepare
-	require.True(t, test.instance.ProcessMessage())
-	require.True(t, test.instance.ProcessMessage())
-	require.True(t, test.instance.ProcessMessage())
-	require.True(t, test.instance.ProcessMessage())
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
 	spectesting.SimulateTimeout(test.instance, 2)
 
 	// change round
-	require.True(t, test.instance.ProcessMessage())
-	require.True(t, test.instance.ProcessMessage())
-	require.True(t, test.instance.ProcessMessage())
-	require.True(t, test.instance.ProcessMessage())
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
 	justified, err := test.instance.JustifyRoundChange(2)
 	require.NoError(t, err)
 	require.True(t, justified)
@@ -102,11 +102,11 @@ func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	justified, err = test.instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 	require.True(t, justified)
-	require.True(t, test.instance.ProcessMessage())
+	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
 
 	// process all messages
 	for {
-		if !test.instance.ProcessMessage() {
+		if res, _ := test.instance.ProcessMessage(); !res {
 			break
 		}
 	}

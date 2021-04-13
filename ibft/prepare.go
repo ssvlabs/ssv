@@ -73,7 +73,8 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 		// If already prepared (or moved forward to commit) no reason to prepare again.
 		if i.State.Stage == proto.RoundState_Prepare ||
 			i.State.Stage == proto.RoundState_Decided {
-			return errors.New("already prepared, not processing prepare message") // no reason to prepare again
+			i.Logger.Info("already prepared, not processing prepare message")
+			return nil // no reason to prepare again
 		}
 
 		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
@@ -101,4 +102,14 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 		}
 		return nil
 	})
+}
+
+func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
+	return &proto.Message{
+		Type:           proto.RoundState_Prepare,
+		Round:          i.State.Round,
+		Lambda:         i.State.Lambda,
+		PreviousLambda: i.State.PreviousLambda,
+		Value:          value,
+	}
 }

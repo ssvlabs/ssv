@@ -120,13 +120,7 @@ func (i *Instance) Start(inputValue []byte) {
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Params.ConsensusParams.LeaderPreprepareDelay))
 
-			msg := &proto.Message{
-				Type:           proto.RoundState_PrePrepare,
-				Round:          i.State.Round,
-				Lambda:         i.State.Lambda,
-				PreviousLambda: i.State.PreviousLambda,
-				Value:          i.State.InputValue,
-			}
+			msg := i.generatePrePrepareMessage(i.State.InputValue)
 			//
 			if err := i.SignAndBroadcast(msg); err != nil {
 				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
@@ -189,7 +183,11 @@ func (i *Instance) StartEventLoop() {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
 	for {
-		if !i.ProcessMessage() {
+		processedMsg, err := i.ProcessMessage()
+		if err != nil {
+			i.Logger.Error("msg pipeline error", zap.Error(err))
+		}
+		if !processedMsg {
 			time.Sleep(time.Millisecond * 100)
 		}
 

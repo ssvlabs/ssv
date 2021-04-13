@@ -37,10 +37,10 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
 */
 func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
-	// TODO - concurrency lock?
 	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
 		if i.State.Stage == proto.RoundState_PrePrepare {
-			return nil // no reason to pre-prepare again
+			i.Logger.Info("already received change round quorum, not processing change-round message")
+			return nil
 		}
 		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
 		justifyRound, err := i.JustifyRoundChange(signedMessage.Message.Round)
@@ -84,13 +84,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 		}
 
 		// send pre-prepare msg
-		broadcastMsg := &proto.Message{
-			Type:           proto.RoundState_PrePrepare,
-			Round:          signedMessage.Message.Round,
-			Lambda:         i.State.Lambda,
-			PreviousLambda: i.State.PreviousLambda,
-			Value:          value,
-		}
+		broadcastMsg := i.generatePrePrepareMessage(value)
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
 			return err
