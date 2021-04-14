@@ -91,6 +91,12 @@ var startNodeCmd = &cobra.Command{
 		}
 		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
 
+		genesisEpoch, err := flags.GetGenesisEpochValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
+		}
+		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -118,11 +124,11 @@ var startNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
-			UDPPort:     udpPort,
-			TCPPort:     tcpPort,
-			TopicName:   validatorKey,
-			HostDNS:     hostDNS,
-			HostAddress: hostAddress,
+			UDPPort:      udpPort,
+			TCPPort:      tcpPort,
+			TopicName:    validatorKey,
+			HostDNS:      hostDNS,
+			HostAddress:  hostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
@@ -193,7 +199,7 @@ var startNodeCmd = &cobra.Command{
 			),
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
-			Phase1TestGenesis:			32818,
+			Phase1TestGenesis:          genesisEpoch,
 		})
 
 		if err := ssvNode.Start(cmd.Context()); err != nil {
@@ -220,6 +226,7 @@ func init() {
 	flags.AddHostAddressFlag(startNodeCmd)
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
+	flags.AddGenesisEpochFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

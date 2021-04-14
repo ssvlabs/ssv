@@ -35,6 +35,10 @@ ifneq ($(DISCOVERY_TYPE),)
   NODE_COMMAND+= --discovery-type=${DISCOVERY_TYPE}
 endif
 
+ifneq ($(GENESIS_EPOCH),)
+  NODE_COMMAND+= --genesis-epoch=${GENESIS_EPOCH}
+endif
+
 
 #Lint
 .PHONY: lint-prepare

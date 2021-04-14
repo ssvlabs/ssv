@@ -21,6 +21,7 @@ const (
 	hostAddress          = "host-address"
 	tcpPort              = "tcp-port"
 	udpPort              = "udp-port"
+	genesisEpoch         = "genesis-epoch"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -121,6 +122,7 @@ func GetHostAddressFlagValue(c *cobra.Command) (string, error) {
 func AddHostAddressFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, hostAddress, "", "host address", false)
 }
+
 // GetTCPPortFlagValue gets the tcp port flag from the command
 func GetTCPPortFlagValue(c *cobra.Command) (int, error) {
 	val, err := c.Flags().GetUint64(tcpPort)
@@ -143,3 +145,13 @@ func AddUDPPortFlag(c *cobra.Command) {
 	cliflag.AddPersistentIntFlag(c, udpPort, 12000, "udp port number", false)
 }
 
+// GetGenesisEpochValue gets the genesis epoch flag from the command
+func GetGenesisEpochValue(c *cobra.Command) (uint64, error) {
+	val, err := c.Flags().GetUint64(genesisEpoch)
+	return val, err
+}
+
+// AddUDPPortFlag adds the udp port flag to the command
+func AddGenesisEpochFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, genesisEpoch, 34500, "genesis epoch number", false)
+}
