@@ -1,4 +1,4 @@
-name: Lint
+name: full-test
 
 on:
   push:
@@ -20,8 +20,5 @@ jobs:
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
-      - name: Run lint-prepare
-        run: make lint-prepare
-
-      - name: Run make lint
-        run: make lint
+      - name: Run make test
+        run: make full-test

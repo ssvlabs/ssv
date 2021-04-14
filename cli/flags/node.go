@@ -151,7 +151,7 @@ func GetGenesisEpochValue(c *cobra.Command) (uint64, error) {
 	return val, err
 }
 
-// AddUDPPortFlag adds the udp port flag to the command
+// AddGenesisEpochFlag adds the udp port flag to the command
 func AddGenesisEpochFlag(c *cobra.Command) {
 	cliflag.AddPersistentIntFlag(c, genesisEpoch, 34500, "genesis epoch number", false)
 }
