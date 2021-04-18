@@ -22,6 +22,7 @@ var tests = []SpecTest{
 	&DecideDifferentValue{},
 	&PrepareAtDifferentRound{},
 	&NonJustifiedPrePrepapre{},
+	&DuplicateMessages{},
 }
 
 func TestAllSpecTests(t *testing.T) {
