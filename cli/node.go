@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/utils/logex"
+	"log"
 	"os"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -23,6 +25,13 @@ var startNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		loggerLevel, err := flags.GetLoggerLevelValue(RootCmd)
+		if err != nil {
+			log.Fatal("failed to get logger level flag value", zap.Error(err))
+		}
+
+		Logger = logex.Build(cmd.Short, loggerLevel)
+
 		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
 		if err != nil {
 			Logger.Fatal("failed to get node ID flag value", zap.Error(err))
@@ -218,6 +227,7 @@ func init() {
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
+	flags.AddLoggerLevelFlag(RootCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

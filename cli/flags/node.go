@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
 	"time"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
@@ -22,6 +23,7 @@ const (
 	tcpPort              = "tcp-port"
 	udpPort              = "udp-port"
 	genesisEpoch         = "genesis-epoch"
+	loggerLevel         = "logger-level"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -154,4 +156,31 @@ func GetGenesisEpochValue(c *cobra.Command) (uint64, error) {
 // AddGenesisEpochFlag adds the udp port flag to the command
 func AddGenesisEpochFlag(c *cobra.Command) {
 	cliflag.AddPersistentIntFlag(c, genesisEpoch, 34500, "genesis epoch number", false)
+}
+
+// GetLoggerLevelValue gets the logger level flag from the command
+func GetLoggerLevelValue(c *cobra.Command) (zapcore.Level, error) {
+	val, err := c.Flags().GetString(loggerLevel)
+	switch val := val; val {
+	case "debug":
+		return zapcore.DebugLevel, err
+	case "info":
+		return zapcore.InfoLevel, err
+	case "warn":
+		return zapcore.WarnLevel, err
+	case "error":
+		return zapcore.ErrorLevel, err
+	case "dpanic":
+		return zapcore.DPanicLevel, err
+	case "panic":
+		return zapcore.PanicLevel, err
+	case "fatal":
+		return zapcore.FatalLevel, err
+	}
+	return zapcore.InfoLevel, err
+}
+
+// AddLoggerLevelFlag adds the logger level flag to the command
+func AddLoggerLevelFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, loggerLevel, "info", "logger level", false)
 }
