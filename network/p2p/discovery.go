@@ -24,7 +24,6 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/iputils"
 	"github.com/prysmaticlabs/prysm/shared/version"
 	"go.opencensus.io/trace"
-	"log"
 	"net"
 	"path/filepath"
 	"runtime"
@@ -80,15 +79,15 @@ func setupDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) err
 	return nil
 }
 
-func parseBootStrapAddrs(addrs []string) (discv5Nodes []string) {
-	discv5Nodes, _ = parseGenericAddrs(addrs)
+func (n *p2pNetwork) parseBootStrapAddrs(addrs []string) (discv5Nodes []string) {
+	discv5Nodes, _ = parseGenericAddrs(n.logger, addrs)
 	if len(discv5Nodes) == 0 {
-		log.Print("No bootstrap addresses supplied")
+		n.logger.Error("No bootstrap addresses supplied")
 	}
 	return discv5Nodes
 }
 
-func parseGenericAddrs(addrs []string) (enodeString, multiAddrString []string) {
+func parseGenericAddrs(logger *zap.Logger, addrs []string) (enodeString, multiAddrString []string) {
 	for _, addr := range addrs {
 		if addr == "" {
 			// Ignore empty entries
@@ -104,7 +103,7 @@ func parseGenericAddrs(addrs []string) (enodeString, multiAddrString []string) {
 			multiAddrString = append(multiAddrString, addr)
 			continue
 		}
-		log.Printf("Invalid address of %s provided: %s", addr, err.Error())
+		logger.Error("Invalid address error", zap.String("address", addr), zap.Error(err))
 	}
 	return enodeString, multiAddrString
 }
@@ -118,10 +117,10 @@ func multiAddrFromString(address string) (ma.Multiaddr, error) {
 }
 
 // Retrieves an external ipv4 address and converts into a libp2p formatted value.
-func ipAddr() net.IP {
+func (n *p2pNetwork) ipAddr() net.IP {
 	ip, err := iputils.ExternalIP()
 	if err != nil {
-		log.Fatalf("Could not get IPv4 address: %v", err)
+		n.logger.Fatal("Could not get IPv4 address", zap.Error(err))
 	}
 	return net.ParseIP(ip)
 }
@@ -156,7 +155,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	//cfg := s.cfg
 	listen, err := multiAddressBuilder(ip.String(), uint(n.cfg.TCPPort))
 	if err != nil {
-		log.Fatalf("Failed to p2p listen: %v", err)
+		n.logger.Fatal("Failed to p2p listen", zap.Error(err))
 	}
 	//if cfg.LocalIP != "" {
 	//	if net.ParseIP(cfg.LocalIP) == nil {
@@ -220,7 +219,7 @@ func (n *p2pNetwork) startDiscoveryV5(addr net.IP, privKey *ecdsa.PrivateKey) (*
 		return nil, errors.Wrap(err, "could not create listener")
 	}
 	record := listener.Self()
-	log.Print("ENR: ", record.String())
+	n.logger.Info("ENR", zap.String("enr", record.String()))
 	return listener, nil
 }
 
@@ -234,17 +233,15 @@ func (n *p2pNetwork) connectToBootnodes() error {
 		// do not dial bootnodes with their tcp ports not set
 		if err := bootNode.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
 			if !enr.IsNotFound(err) {
-				log.Print("Could not retrieve tcp port")
-				log.Print(err)
-				//log.WithError(err).Error("Could not retrieve tcp port")
+				n.logger.Error("Could not retrieve tcp port", zap.Error(err))
 			}
 
-			log.Printf("Could not retrieve tcp port - %v", err)
+			n.logger.Error("Could not retrieve tcp port", zap.Error(err))
 			continue
 		}
 		nodes = append(nodes, bootNode)
 	}
-	multiAddresses := convertToMultiAddr(nodes)
+	multiAddresses := convertToMultiAddr(n.logger, nodes)
 	n.connectWithAllPeers(multiAddresses)
 	return nil
 }
@@ -293,16 +290,18 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
 	if n.cfg.HostAddress != "" {
+		n.logger.Debug("HostAddress received", zap.String("address", n.cfg.HostAddress))
 		hostIP := net.ParseIP(n.cfg.HostAddress)
+		n.logger.Debug("HostAddress IP", zap.String("ip", hostIP.String()))
 		if hostIP.To4() == nil && hostIP.To16() == nil {
-			log.Printf("Invalid host address given: %s", hostIP.String())
+			n.logger.Error("Invalid host address given", zap.String("hostIp", hostIP.String()))
 		} else {
 			localNode.SetFallbackIP(hostIP)
 			localNode.SetStaticIP(hostIP)
 		}
 	}
 	if n.cfg.HostDNS != "" {
-		log.Print(" ------- TEST HOST DNS------", n.cfg.HostDNS)
+		n.logger.Debug("HostDNS received", zap.String("dns", n.cfg.HostDNS))
 		_host := n.cfg.HostDNS
 		ips, err := net.LookupIP(_host)
 		if err != nil {
@@ -312,7 +311,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 			// Use first IP returned from the
 			// resolver.
 			firstIP := ips[0]
-			log.Print(" ------- TEST HOST DNS first ip------", firstIP)
+			n.logger.Debug("HostDNS IP", zap.String("ip", firstIP.String()))
 			localNode.SetFallbackIP(firstIP)
 		}
 	}
@@ -339,7 +338,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
 	if err != nil {
-		log.Printf("Could not convert to peer address info's from multiaddresses: %v", err)
+		n.logger.Error("Could not convert to peer address info's from multiaddresses", zap.Error(err))
 		return
 	}
 	for _, info := range addrInfos {
@@ -347,7 +346,7 @@ func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
 				//log.Print("Could not connect with peer ", info.String(), err)
-				//log.WithError(err).Tracef("Could not connect with peer %s", info.String())
+				//log.WithError(err).Tracef("Could not connect with peer %s", info.String()) TODO need to add log with trace level
 			}
 		}(info)
 	}
@@ -358,7 +357,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	defer span.End()
 
 	if info.ID == n.host.ID() {
-		log.Print("-----TEST same id error ---")
+		//log.Print("-----TEST same id error ---") TODO need to add log with trace level
 		return nil
 	}
 	if n.peers.IsBad(info.ID) {
@@ -369,10 +368,10 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 	if err := n.host.Connect(ctx, info); err != nil {
 		//s.Peers().Scorers().BadResponsesScorer().Increment(info.ID)
-		//log.Printf("TEST peer %v connect error ------------ %v", info, err)
+		//log.Printf("TEST peer %v connect error ------------ %v", info, err) TODO need to add log with trace level
 		return err
 	}
-	//log.Print("Connected to peer!!!!  ", info)
+	//log.Print("Connected to peer!!!!  ", info) TODO need to add log with trace level
 	return nil
 }
 
@@ -406,7 +405,7 @@ func (n *p2pNetwork) listenForNewNodes() {
 		go func(info *peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, *info); err != nil {
 				//log.WithError(err).Tracef("Could not connect with peer %s", info.String())
-				//log.Print(err)
+				//log.Print(err) TODO need to add log with trace level
 			}
 		}(peerInfo)
 	}
@@ -472,17 +471,17 @@ func intializeAttSubnets(node *enode.LocalNode) *enode.LocalNode {
 	return node
 }
 
-func convertToMultiAddr(nodes []*enode.Node) []ma.Multiaddr {
+func convertToMultiAddr(logger *zap.Logger, nodes []*enode.Node) []ma.Multiaddr {
 	var multiAddrs []ma.Multiaddr
 	for _, node := range nodes {
 		// ignore nodes with no ip address stored
 		if node.IP() == nil {
-			log.Printf("ignore nodes with no ip address stored - %v", node)
+			logger.Debug("ignore nodes with no ip address stored", zap.String("enr", node.String()))
 			continue
 		}
 		multiAddr, err := convertToSingleMultiAddr(node)
 		if err != nil {
-			log.Printf("Could not convert to multiAddr - %v", err)
+			logger.Debug("Could not convert to multiAddr", zap.Error(err))
 			continue
 		}
 		multiAddrs = append(multiAddrs, multiAddr)

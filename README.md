@@ -21,6 +21,8 @@ $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 $ make docker-debug 
 
 # Lint
+$ make lint-prepare
+
 $ make lint
 
 # Full test

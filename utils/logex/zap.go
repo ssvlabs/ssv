@@ -11,13 +11,13 @@ import (
 // Build builds the default zap logger, and sets the global zap logger to the configured logger instance.
 func Build(appName string, level zapcore.Level) *zap.Logger {
 	cfg := zap.Config{
-		Encoding:    "json",
+		Encoding:    "console",
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
 			MessageKey:  "message",
 			LevelKey:    "level",
-			EncodeLevel: zapcore.CapitalLevelEncoder,
+			EncodeLevel: zapcore.CapitalColorLevelEncoder,
 			TimeKey:     "time",
 			EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 				enc.AppendString(iso3339CleanTime(t))

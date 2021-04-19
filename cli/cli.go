@@ -3,9 +3,6 @@ package cli
 import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // Logger is the default logger
@@ -19,7 +16,6 @@ var RootCmd = &cobra.Command{
 
 // Execute executes the root command
 func Execute(appName, version string) {
-	Logger = logex.Build(appName, zapcore.DebugLevel)
 	RootCmd.Short = appName
 	RootCmd.Version = version
 
