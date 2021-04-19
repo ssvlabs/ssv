@@ -211,8 +211,7 @@ func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
-	n.logger.Debug("Broadcasting topic", zap.Any("topic", n.cfg.Sub.Topic()))
-	n.logger.Debug("Broadcasting to peers", zap.Any("peers", n.cfg.Topic.ListPeers()))
+	n.logger.Debug("Broadcasting to topic", zap.Any("topic", n.cfg.Sub.Topic()), zap.Any("peers", n.cfg.Topic.ListPeers()))
 	return n.cfg.Topic.Publish(n.ctx, msgBytes)
 }
 
