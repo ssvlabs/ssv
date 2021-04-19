@@ -9,7 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
-	"log"
+	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"net"
 	"sync"
 	"time"
@@ -75,16 +75,13 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		}
 		n.host = host
 		n.cfg.HostID = host.ID()
-
-		logger = logger.With(zap.String("id", host.ID().String()), zap.String("Topic", n.cfg.TopicName))
-		logger.Info("created a new peer")
 	} else if cfg.DiscoveryType == "discv5" {
-		dv5Nodes := parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
+		dv5Nodes := n.parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
 		n.cfg.Discv5BootStrapAddr = dv5Nodes
 
-		_ipAddr = ipAddr()
+		_ipAddr = n.ipAddr()
 		//_ipAddr = net.ParseIP("127.0.0.1")
-		log.Print("TEST ip ---", _ipAddr)
+		logger.Debug("Ip Address", zap.Any("ip", _ipAddr))
 
 		privKey, err := privKey()
 		if err != nil {
@@ -102,6 +99,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		logger.Error("Unsupported discovery flag")
 		return nil, errors.New("Unsupported discovery flag")
 	}
+
+	n.logger = logger.With(zap.String("id", n.host.ID().String()), zap.String("Topic", n.cfg.TopicName))
+	n.logger.Info("New peer created")
 
 	// Gossipsub registration is done before we add in any new peers
 	// due to libp2p's gossipsub implementation not taking into
@@ -121,7 +121,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	// Create a new PubSub service using the GossipSub router
 	gs, err := pubsub.NewGossipSub(ctx, n.host, psOpts...)
 	if err != nil {
-		logger.Error("Failed to start pubsub")
+		n.logger.Error("Failed to start pubsub")
 		return nil, err
 	}
 	n.pubsub = gs
@@ -144,16 +144,14 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 		listener, err := n.startDiscoveryV5(_ipAddr, n.privKey)
 		if err != nil {
-			log.Print("Failed to start discovery")
-			//s.startupErr = err
+			n.logger.Error("Failed to start discovery", zap.Error(err))
 			return nil, err
 		}
 		n.dv5Listener = listener
 
 		err = n.connectToBootnodes()
 		if err != nil {
-			log.Print("Could not add bootnode to the exclusion list")
-			//s.startupErr = err
+			n.logger.Error("Could not add bootnode to the exclusion list", zap.Error(err))
 			return nil, err
 		}
 
@@ -164,10 +162,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
 			conn, err := net.DialTimeout("tcp", a, time.Second*10)
 			if err != nil {
-				log.Print("IP address is not accessible", err)
+				n.logger.Error("IP address is not accessible", zap.Error(err))
 			}
 			if err := conn.Close(); err != nil {
-				log.Print("Could not close connection", err)
+				n.logger.Error("Could not close connection", zap.Error(err))
 			}
 		}
 	}
@@ -190,6 +188,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	go n.listen()
 
+	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		n.logger.Info("Current peers status", zap.Any("peers", n.GetTopic().ListPeers()))
+	})
+
 	return n, nil
 }
 
@@ -209,8 +211,8 @@ func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
-	log.Print("------ TEST Broadcasting to peers -------", n.cfg.Topic.ListPeers())
-	log.Print("------ TEST Broadcasting Topic -------", n.cfg.Sub.Topic())
+	n.logger.Debug("Broadcasting topic", zap.Any("topic", n.cfg.Sub.Topic()))
+	n.logger.Debug("Broadcasting to peers", zap.Any("peers", n.cfg.Topic.ListPeers()))
 	return n.cfg.Topic.Publish(n.ctx, msgBytes)
 }
 
@@ -270,13 +272,14 @@ func (n *p2pNetwork) listen() {
 				n.logger.Error("failed to get message from subscription Topic", zap.Error(err))
 				return
 			}
-			log.Print("--------- TEST GOT MSG ------")
 
 			var cm network.Message
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
+
+			n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm.Msg))
 
 			for _, ls := range n.listeners {
 				go func(ls listener) {
