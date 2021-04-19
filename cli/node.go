@@ -2,12 +2,11 @@ package cli
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/utils/logex"
 	"log"
 	"os"
-	"time"
-
-	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -26,6 +25,13 @@ var startNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		loggerLevel, err := flags.GetLoggerLevelValue(RootCmd)
+		if err != nil {
+			log.Fatal("failed to get logger level flag value", zap.Error(err))
+		}
+
+		Logger = logex.Build(cmd.Short, loggerLevel)
+
 		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
 		if err != nil {
 			Logger.Fatal("failed to get node ID flag value", zap.Error(err))
@@ -36,25 +42,21 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to get eth2Network flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("eth2Network", string(eth2Network)))
 
 		discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get val flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("discovery-type", discoveryType))
 
 		consensusType, err := flags.GetConsensusFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get val flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("val", consensusType))
 
 		beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get beacon node address flag value", zap.Error(err))
 		}
-		logger = logger.With(zap.String("beacon-addr", beaconAddr))
 
 		privKey, err := flags.GetPrivKeyFlagValue(cmd)
 		if err != nil {
@@ -89,19 +91,16 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to get udp port flag value", zap.Error(err))
 		}
-		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
 
 		genesisEpoch, err := flags.GetGenesisEpochValue(cmd)
 		if err != nil {
 			Logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
 		}
-		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
 
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
 		}
-		logger = logger.With(zap.String("validator", "0x"+validatorKey[:12]+"..."))
 
 		baseKey := &bls.SecretKey{}
 		if err := baseKey.SetHexString(privKey); err != nil {
@@ -112,6 +111,15 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
+
+		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
+		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
+		logger.Debug("Node params",
+			zap.String("eth2Network", string(eth2Network)),
+			zap.String("discovery-type", discoveryType),
+			zap.String("val", consensusType),
+			zap.String("beacon-addr", beaconAddr),
+			zap.String("validator", "0x"+validatorKey[:12]+"..."))
 
 		cfg := p2p.Config{
 			DiscoveryType: discoveryType,
@@ -134,14 +142,6 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
-
-		go func() {
-			time.Sleep(2 * time.Second)
-			for i := 0; i < 5; i++ {
-				log.Print("-------- Peers Check ----- ", network.GetTopic().ListPeers())
-				time.Sleep(2 * time.Second)
-			}
-		}()
 
 		// TODO: Refactor that
 		ibftCommittee := map[uint64]*proto.Node{
@@ -227,6 +227,7 @@ func init() {
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
+	flags.AddLoggerLevelFlag(RootCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }
