@@ -30,7 +30,7 @@ var startNodeCmd = &cobra.Command{
 			log.Fatal("failed to get logger level flag value", zap.Error(err))
 		}
 
-		Logger = logex.Build(cmd.Short, loggerLevel)
+		Logger = logex.Build(RootCmd.Short, loggerLevel)
 
 		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
 		if err != nil {

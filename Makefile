@@ -88,8 +88,8 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 
 else
-	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
-	${BUILD_PATH} start-node ${NODE_COMMAND}
+	@echo "Running node (${NODE_ID})"
+	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
 .PHONY: docker
