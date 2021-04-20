@@ -290,18 +290,16 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
 	if n.cfg.HostAddress != "" {
-		n.logger.Debug("HostAddress received", zap.String("address", n.cfg.HostAddress))
 		hostIP := net.ParseIP(n.cfg.HostAddress)
-		n.logger.Debug("HostAddress IP", zap.String("ip", hostIP.String()))
 		if hostIP.To4() == nil && hostIP.To16() == nil {
 			n.logger.Error("Invalid host address given", zap.String("hostIp", hostIP.String()))
 		} else {
+			n.logger.Info("using external IP", zap.String("IP from config", n.cfg.HostAddress), zap.String("IP", hostIP.String()))
 			localNode.SetFallbackIP(hostIP)
 			localNode.SetStaticIP(hostIP)
 		}
 	}
 	if n.cfg.HostDNS != "" {
-		n.logger.Debug("HostDNS received", zap.String("dns", n.cfg.HostDNS))
 		_host := n.cfg.HostDNS
 		ips, err := net.LookupIP(_host)
 		if err != nil {
@@ -311,7 +309,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 			// Use first IP returned from the
 			// resolver.
 			firstIP := ips[0]
-			n.logger.Debug("HostDNS IP", zap.String("ip", firstIP.String()))
+			n.logger.Info("using DNS IP", zap.String("DNS", n.cfg.HostDNS), zap.String("IP", firstIP.String()))
 			localNode.SetFallbackIP(firstIP)
 		}
 	}

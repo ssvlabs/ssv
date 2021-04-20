@@ -81,7 +81,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 		_ipAddr = n.ipAddr()
 		//_ipAddr = net.ParseIP("127.0.0.1")
-		logger.Debug("Ip Address", zap.Any("ip", _ipAddr))
+		logger.Info("Ip Address", zap.Any("ip", _ipAddr))
 
 		privKey, err := privKey()
 		if err != nil {
