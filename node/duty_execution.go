@@ -63,6 +63,7 @@ func (n *ssvNode) waitForSignatureCollection(
 				logger.Error("received invalid signature", zap.Error(err))
 				continue
 			}
+			logger.Info("collected valid signature", zap.Uint64("node_id", msg.Msg.SignerIds[0]))
 
 			lock.Lock()
 			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
@@ -106,7 +107,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
-	logger.Info("broadcasted partial signature post consensus")
+	logger.Info("broadcasting partial signature post consensus")
 
 	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount)
 
@@ -116,7 +117,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	if err != nil {
 		return err
 	}
-	logger.Info("Collected enough signature to reconstruct...", zap.Int("signatures", len(signatures)))
+	logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
 	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
