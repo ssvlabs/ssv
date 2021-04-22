@@ -116,7 +116,7 @@ func (n *ssvNode) postConsensusDutyExecution(
 	if err != nil {
 		return err
 	}
-	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
+	logger.Info("Collected enough signature to reconstruct...", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
 	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
