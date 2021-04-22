@@ -58,6 +58,9 @@ func (n *ssvNode) waitForSignatureCollection(
 			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
 				continue
 			}
+
+			logger.Info("collected valid signature", zap.Uint64("node_id", msg.Msg.SignerIds[0]), zap.Any("msg", msg))
+
 			// verify sig
 			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0]); err != nil {
 				logger.Error("received invalid signature", zap.Error(err))
