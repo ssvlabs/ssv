@@ -85,7 +85,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 
 	streamDuties, err := n.beacon.StreamDuties(ctx, n.validatorPubKey.Serialize())
 	if err != nil {
-		n.logger.Fatal("failed to open duties stream", zap.Error(err))
+		n.logger.Error("failed to open duties stream", zap.Error(err))
 	}
 
 	n.logger.Info("start streaming duties")

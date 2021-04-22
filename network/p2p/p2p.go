@@ -278,7 +278,7 @@ func (n *p2pNetwork) listen() {
 				continue
 			}
 
-			n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm.Msg))
+			n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm))
 
 			for _, ls := range n.listeners {
 				go func(ls listener) {
