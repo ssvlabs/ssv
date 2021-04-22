@@ -95,8 +95,6 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 	role beacon.Role,
 	duty *ethpb.DutiesResponse_Duty,
 ) error {
-	logger.Info("GOT ALL BROADCASTED SIGNATURES", zap.Int("signatures", len(signatures)))
-
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
@@ -107,7 +105,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		return errors.New("could not reconstruct a valid signature")
 	}
 
-	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())))
+	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
 
 	// Submit validation to beacon node
 	switch role {
