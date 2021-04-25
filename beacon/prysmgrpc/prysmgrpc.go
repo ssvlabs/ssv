@@ -2,24 +2,31 @@ package prysmgrpc
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/beacon"
-
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/ethereum/go-ethereum/event"
+	ptypes "github.com/gogo/protobuf/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
 	"github.com/prysmaticlabs/prysm/shared/params"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/status"
+	"time"
 
 	"github.com/bloxapp/ssv/utils/grpcex"
 )
 
 // prysmGRPC implements Beacon interface using Prysm's beacon node via gRPC
 type prysmGRPC struct {
+	conn               *grpc.ClientConn
 	validatorClient    ethpb.BeaconNodeValidatorClient
 	beaconClient       ethpb.BeaconChainClient
+	nodeClient         ethpb.NodeClient
 	privateKey         *bls.SecretKey
 	network            core.Network
 	validatorPublicKey []byte
@@ -29,6 +36,10 @@ type prysmGRPC struct {
 	logger             *zap.Logger
 }
 
+// reconnectPeriod is the frequency that we try to restart our
+// streams when the beacon chain is node does not respond.
+var reconnectPeriod = 5 * time.Second
+
 // New is the constructor of prysmGRPC
 func New(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (beacon.Beacon, error) {
 	conn, err := grpcex.DialConn(addr)
@@ -37,8 +48,10 @@ func New(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, net
 	}
 
 	b := &prysmGRPC{
+		conn:               conn,
 		validatorClient:    ethpb.NewBeaconNodeValidatorClient(conn),
 		beaconClient:       ethpb.NewBeaconChainClient(conn),
+		nodeClient:         ethpb.NewNodeClient(conn),
 		privateKey:         privateKey,
 		network:            network,
 		validatorPublicKey: validatorPublicKey,
@@ -48,8 +61,9 @@ func New(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, net
 	}
 
 	go func() {
+		logger.Info("start receiving blocks")
 		if err := b.receiveBlocks(ctx); err != nil {
-			logger.Fatal("failed to receive blocks")
+			logger.Error("failed to receive blocks", zap.Error(err))
 		}
 	}()
 
@@ -73,8 +87,16 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 		for {
 			resp, err := streamDuties.Recv()
 			if err != nil {
-				b.logger.Error("failed to receive duties from stream - ")
-				panic(zap.Error(err))
+				b.logger.Error("failed to receive duties from stream", zap.Error(err))
+				time.Sleep(reconnectPeriod)
+				b.logger.Info("trying to reconnect duties stream")
+				streamDuties, err = b.validatorClient.StreamDuties(ctx, &ethpb.DutiesRequest{
+					PublicKeys: [][]byte{pubKey},
+				})
+				if err != nil {
+					b.logger.Error("failed to reconnect duties stream", zap.Error(err))
+				}
+				continue
 			}
 
 			duties := resp.GetCurrentEpochDuties()
@@ -141,13 +163,31 @@ func (b *prysmGRPC) receiveBlocks(ctx context.Context) error {
 		if ctx.Err() == context.Canceled {
 			return errors.New("context canceled - shutting down blocks receiver")
 		}
-
 		res, err := stream.Recv()
 		if err != nil {
+			if e, ok := status.FromError(err); ok {
+				switch e.Code() {
+				case codes.Canceled, codes.Internal, codes.Unavailable:
+					b.logger.Info("Trying to restart connection.", zap.Any("rpc status", e.Code()))
+					err = b.restartBeaconConnection(ctx)
+					if err != nil {
+						return errors.Wrap(err, "Could not restart beacon connection")
+					}
+					stream, err = b.beaconClient.StreamBlocks(ctx, &ethpb.StreamBlocksRequest{VerifiedOnly: true} /* Prefers unverified block to catch slashing */)
+					if err != nil {
+						return errors.Wrap(err, "Could not restart block stream")
+					}
+					b.logger.Info("Block stream restarted...")
+					continue // force loop again to recv
+				default:
+					return errors.WithMessagef(err, "Could not receive block from beacon node. rpc status - %v", e.Code())
+				}
+			}
 			return errors.Wrap(err, "failed to receive blocks from the node")
 		}
 
 		if res == nil || res.Block == nil {
+			b.logger.Debug("empty block resp")
 			continue
 		}
 
@@ -155,6 +195,9 @@ func (b *prysmGRPC) receiveBlocks(ctx context.Context) error {
 			b.highestValidSlot = res.Block.Slot
 		}
 
+		b.logger.Info("Received block from beacon node",
+			zap.Any("slot", res.Block.Slot),
+			zap.Any("proposer_index", res.Block.ProposerIndex))
 		b.blockFeed.Send(res)
 	}
 }
@@ -190,4 +233,33 @@ func (b *prysmGRPC) signSlot(ctx context.Context, slot uint64) ([]byte, error) {
 	}
 
 	return b.privateKey.SignByte(root[:]).Serialize(), nil
+}
+
+func (b *prysmGRPC) restartBeaconConnection(ctx context.Context) error {
+	ticker := time.NewTicker(reconnectPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if b.conn.GetState() == connectivity.TransientFailure || b.conn.GetState() == connectivity.Idle {
+				b.logger.Debug("Connection status", zap.Any("status", b.conn.GetState()))
+				b.logger.Info("Beacon node is still down")
+				continue
+			}
+			s, err := b.nodeClient.GetSyncStatus(ctx, &ptypes.Empty{})
+			if err != nil {
+				b.logger.Error("Could not fetch sync status", zap.Error(err))
+				continue
+			}
+			if s == nil || s.Syncing {
+				b.logger.Info("Waiting for beacon node to be fully synced...")
+				continue
+			}
+			b.logger.Info("Beacon node is fully synced")
+			return nil
+		case <-ctx.Done():
+			b.logger.Debug("Context closed, exiting reconnect routine")
+			return errors.New("context closed, no longer attempting to restart stream")
+		}
+	}
 }
