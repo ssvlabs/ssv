@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
+	"github.com/bloxapp/ssv/eth1/goETH"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/logex"
 	"log"
@@ -112,6 +113,16 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
+		eth1Addr, err := flags.GetEth1AddrValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
+		}
+
+		eth1Client, err := goETH.New(cmd.Context(), logger, eth1Addr)
+		if err != nil {
+			logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
+		}
+
 		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
 		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
 		logger.Debug("Node params",
@@ -132,11 +143,11 @@ var startNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
-			UDPPort:      udpPort,
-			TCPPort:      tcpPort,
-			TopicName:    validatorKey,
-			HostDNS:      hostDNS,
-			HostAddress:  hostAddress,
+			UDPPort:     udpPort,
+			TCPPort:     tcpPort,
+			TopicName:   validatorKey,
+			HostDNS:     hostDNS,
+			HostAddress: hostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
@@ -179,6 +190,7 @@ var startNodeCmd = &cobra.Command{
 			ValidatorPubKey: validatorPk,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
+			Eth1:            eth1Client,
 			ETHNetwork:      eth2Network,
 			Network:         network,
 			Queue:           msgQ,
@@ -227,6 +239,7 @@ func init() {
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
+	flags.AddEth1AddrFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
 
 	RootCmd.AddCommand(startNodeCmd)

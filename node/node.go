@@ -2,7 +2,10 @@ package node
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	node "github.com/bloxapp/ssv/node/pubsub"
+	"github.com/bloxapp/ssv/pubsub"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -26,6 +29,7 @@ type Options struct {
 	Queue                      *msgqueue.MessageQueue
 	Consensus                  string
 	Beacon                     beacon.Beacon
+	Eth1                       eth1.Eth1
 	IBFT                       ibft.IBFT
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration
@@ -49,13 +53,14 @@ type ssvNode struct {
 	consensus       string
 	slotQueue       slotqueue.Queue
 	beacon          beacon.Beacon
+	eth1            eth1.Eth1
 	iBFT            ibft.IBFT
 	logger          *zap.Logger
 
 	// timeouts
 	signatureCollectionTimeout time.Duration
 	// genesis epoch
-	phase1TestGenesis          uint64
+	phase1TestGenesis uint64
 }
 
 // New is the constructor of ssvNode
@@ -70,16 +75,18 @@ func New(opts Options) Node {
 		consensus:                  opts.Consensus,
 		slotQueue:                  slotqueue.New(opts.ETHNetwork),
 		beacon:                     opts.Beacon,
+		eth1:                       opts.Eth1,
 		iBFT:                       opts.IBFT,
 		logger:                     opts.Logger,
 		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
 		// genesis epoch
-		phase1TestGenesis:          opts.Phase1TestGenesis,
+		phase1TestGenesis: opts.Phase1TestGenesis,
 	}
 }
 
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
+	go n.startSmartContractStream()
 	go n.startSlotQueueListener(ctx)
 	go n.listenToNetworkMessages()
 
@@ -98,7 +105,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 			}
 
 			for _, slot := range slots {
-				if slot < n.getEpochFirstSlot(n.phase1TestGenesis){
+				if slot < n.getEpochFirstSlot(n.phase1TestGenesis) {
 					// wait until genesis epoch starts
 					n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.phase1TestGenesis)), zap.Uint64("slot", slot))
 					continue
@@ -174,6 +181,26 @@ func (n *ssvNode) getCurrentSlot() int64 {
 // getEpochFirstSlot returns the beacon node first slot in epoch
 func (n *ssvNode) getEpochFirstSlot(epoch uint64) uint64 {
 	return epoch * 32
+}
+
+
+func (n *ssvNode) startSmartContractStream(){
+	if n.eth1 == nil {
+		n.logger.Error("smart contract streaming denied - eth1 client")
+		return
+	}
+	subject, err := n.eth1.StreamSmartContractEvents("0x555fe4a050Bb5f392fD80dCAA2b6FCAf829f21e9")
+	if err != nil {
+		n.logger.Error("Failed to get smart contract observer", zap.Error(err))
+	}
+
+	observer := &node.SmartContractEvent{
+		BaseObserver: pubsub.BaseObserver{
+			Id:     "nodeObserver",
+			Logger: *n.logger,
+		},
+	}
+	subject.Register(observer)
 }
 
 // collectSlots collects slots from the given duty
