@@ -39,6 +39,7 @@ require (
 	github.com/wealdtech/go-eth2-util v1.6.2
 	go.opencensus.io v0.22.5
 	go.uber.org/zap v1.16.0
+	golang.org/x/crypto v0.0.0-20201208171446-5f87f3452ae9 // indirect
 	google.golang.org/grpc v1.33.1
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/src-d/go-log.v1 v1.0.1
