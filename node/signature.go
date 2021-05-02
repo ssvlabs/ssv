@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -93,7 +94,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 	root []byte,
 	inputValue *proto.InputValue,
 	role beacon.Role,
-	duty *ethpb.DutiesResponse_Duty,
+	duty *slotqueue.Duty,
 ) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
@@ -101,7 +102,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
-	if res := signature.VerifyByte(n.validatorPubKey, root); !res {
+	if res := signature.VerifyByte(duty.PublicKey, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}
 
@@ -112,8 +113,8 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 	case beacon.RoleAttester:
 		logger.Info("submitting attestation")
 		inputValue.GetAttestation().Signature = signature.Serialize()
-		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.GetValidatorIndex())
-		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex()); err != nil {
+		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.Duty.GetValidatorIndex())
+		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex()); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	//case beacon.RoleAggregator:

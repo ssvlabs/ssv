@@ -2,6 +2,9 @@ package slotqueue
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -13,16 +16,23 @@ import (
 // Queue represents the behavior of the slot queue
 type Queue interface {
 	// Next returns the next slot with its duties at its time
-	Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error)
+	Next(pubKey []byte) (uint64, *Duty, bool, error)
 
 	// Schedule schedules execution of the given slot and puts it into the queue
-	Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error
+	Schedule(pubKey []byte, slot uint64, duty *Duty) error
 }
 
 // queue implements Queue
 type queue struct {
 	data   *cache.Cache
 	ticker *slotutil.SlotTicker
+}
+
+type Duty struct {
+	Duty       *ethpb.DutiesResponse_Duty
+	PublicKey  *bls.PublicKey
+	PrivateKey *bls.SecretKey
+	Committiee map[uint64]*proto.Node
 }
 
 // New is the constructor of queue
@@ -36,7 +46,7 @@ func New(network core.Network) Queue {
 }
 
 // Next returns the next slot with its duties at its time
-func (q *queue) Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error) {
+func (q *queue) Next(pubKey []byte) (uint64, *Duty, bool, error) {
 	for currentSlot := range q.ticker.C() {
 		key := q.getKey(pubKey, currentSlot)
 		dataRaw, ok := q.data.Get(key)
@@ -44,7 +54,7 @@ func (q *queue) Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, e
 			continue
 		}
 
-		duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
+		duty, ok := dataRaw.(*Duty)
 		if !ok {
 			continue
 		}
@@ -56,7 +66,7 @@ func (q *queue) Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, e
 }
 
 // Schedule schedules execution of the given slot and puts it into the queue
-func (q *queue) Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error {
+func (q *queue) Schedule(pubKey []byte, slot uint64, duty *Duty) error {
 	q.data.SetDefault(q.getKey(pubKey, slot), duty)
 	return nil
 }

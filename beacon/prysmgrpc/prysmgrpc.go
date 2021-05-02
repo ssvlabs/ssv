@@ -195,7 +195,7 @@ func (b *prysmGRPC) receiveBlocks(ctx context.Context) error {
 			b.highestValidSlot = res.Block.Slot
 		}
 
-		b.logger.Info("Received block from beacon node",
+		b.logger.Debug("Received block from beacon node",
 			zap.Any("slot", res.Block.Slot),
 			zap.Any("proposer_index", res.Block.ProposerIndex))
 		b.blockFeed.Send(res)

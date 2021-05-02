@@ -8,6 +8,7 @@ import (
 	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/node/valcheck"
+	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/pkg/errors"
 	"sync"
 	"time"
@@ -85,17 +86,9 @@ func (n *ssvNode) waitForSignatureCollection(
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (n *ssvNode) postConsensusDutyExecution(
-	ctx context.Context,
-	logger *zap.Logger,
-	identifier []byte,
-	decidedValue []byte,
-	signaturesCount int,
-	role beacon.Role,
-	duty *ethpb.DutiesResponse_Duty,
-) error {
+func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *slotqueue.Duty, ) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty)
+	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty.Duty)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
@@ -136,14 +129,14 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	prevIdentifier []byte,
 	slot uint64,
 	role beacon.Role,
-	duty *ethpb.DutiesResponse_Duty,
+	duty *slotqueue.Duty,
 ) (int, []byte, []byte, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance valcheck2.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
-		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
+		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.Duty.GetCommitteeIndex())
 		if err != nil {
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
@@ -193,6 +186,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 		PrevInstance: prevIdentifier,
 		Identifier:   identifier,
 		Value:        inputByts,
+		Duty:         duty,
 	})
 
 	if !decided {
@@ -205,13 +199,13 @@ func (n *ssvNode) executeDuty(
 	ctx context.Context,
 	prevIdentifier []byte,
 	slot uint64,
-	duty *ethpb.DutiesResponse_Duty,
+	duty *slotqueue.Duty,
 ) {
 	logger := n.logger.With(zap.Time("start_time", n.getSlotStartTime(slot)),
-		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
+		zap.Uint64("committee_index", duty.Duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
-	roles, err := n.beacon.RolesAt(ctx, slot, duty)
+	roles, err := n.beacon.RolesAt(ctx, slot, duty.Duty)
 	if err != nil {
 		logger.Error("failed to get roles for duty", zap.Error(err))
 		return

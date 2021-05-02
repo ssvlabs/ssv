@@ -2,7 +2,7 @@ package inmem
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/collections/interfaces"
 )
 
 // inMemStorage implements storage.Storage interface
@@ -10,7 +10,7 @@ type inMemStorage struct {
 }
 
 // New is the constructor of inMemStorage
-func New() storage.Storage {
+func New() interfaces.Iibft {
 	return &inMemStorage{}
 }
 

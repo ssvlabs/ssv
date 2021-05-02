@@ -143,6 +143,7 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Dutie
 }
 
 func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
+
 	ret := &ssvNode{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
@@ -157,7 +158,7 @@ func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
 	threshold.Init()
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
-	ret.validatorPubKey = pk
+	//ret.validatorPubKey = pk TODO now working with validatorStorage - need to adapt 2.5.21
 	require.NoError(t, err)
 
 	// timeout
