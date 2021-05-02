@@ -173,6 +173,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				NodeID: 1,
 				Duty: duty,
 				PublicKey: pk,
+				Committiee: node.iBFT.GetIBFTCommittee(),
 			}
 
 			// send sigs

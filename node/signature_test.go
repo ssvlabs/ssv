@@ -71,7 +71,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 				usedRoot = []byte{0,0,0,0,0,0,0}
 			}
 
-			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID, nil)
+			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID, node.iBFT.GetIBFTCommittee())
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
