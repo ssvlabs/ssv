@@ -18,7 +18,7 @@ type BadgerDb struct {
 func New(logger zap.Logger) (storage.Db, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
-	opt := badger.DefaultOptions("/tmp/badger")
+	opt := badger.DefaultOptions("/data/badger")
 	db, err := badger.Open(opt)
 	if err != nil {
 		return &BadgerDb{}, errors.Wrap(err, "failed to open badger")
