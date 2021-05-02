@@ -42,7 +42,7 @@ type IBFT interface {
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
 	instances      map[string]*Instance // key is the instance identifier
-	ibftStorage    collections.Ibft
+	ibftStorage    collections.IbftStorage
 	network        network.Network
 	msgQueue       *msgqueue.MessageQueue
 	params         *proto.InstanceParams
@@ -50,7 +50,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(storage collections.Ibft, network network.Network, queue *msgqueue.MessageQueue, ) IBFT {
+func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, ) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:    storage,
 		instances:      make(map[string]*Instance),

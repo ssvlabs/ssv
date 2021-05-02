@@ -6,16 +6,16 @@ import (
 	"go.uber.org/zap"
 )
 
-// Ibft struct
-type Ibft struct {
+// IbftStorage struct
+type IbftStorage struct {
 	prefix []byte
 	db     storage.Db
 	logger *zap.Logger
 }
 
 // NewIbft create new ibft storage
-func NewIbft(db storage.Db, logger *zap.Logger) Ibft {
-	ibft := Ibft{
+func NewIbft(db storage.Db, logger *zap.Logger) IbftStorage {
+	ibft := IbftStorage{
 		prefix: []byte("ibft"),
 		db:     db,
 		logger: logger,
@@ -24,11 +24,11 @@ func NewIbft(db storage.Db, logger *zap.Logger) Ibft {
 }
 
 // SavePrepared func implementation
-func (i *Ibft) SavePrepared(signedMsg *proto.SignedMessage) {
+func (i *IbftStorage) SavePrepared(signedMsg *proto.SignedMessage) {
 
 }
 
 // SaveDecided func implementation
-func (i *Ibft) SaveDecided(signedMsg *proto.SignedMessage) {
+func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) {
 
 }

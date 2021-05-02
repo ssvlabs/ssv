@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/collections/interfaces"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 	"log"
@@ -167,12 +168,6 @@ var startNodeCmd = &cobra.Command{
 		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = baseKey.Serialize()
 
-		//for id, obj := range ibftCommittee{
-		//	if len(obj.Pk) == 0 {
-		//		errors.NewValidator(fmt.Sprint("Missing public key for node index - %v", id))
-		//	}
-		//}
-
 		msgQ := msgqueue.New()
 
 		db, err := kv.New(*logger)
@@ -180,12 +175,15 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create db", zap.Error(err))
 		}
 
-		validatorOpts := collections.ValidatorOptions{
-			ValidatorPk: validatorPk,
-			ShareKey:    baseKey,
-			Committiee:  ibftCommittee,
+		validatorStorage := collections.NewValidator(db, logger)
+		if validatorPk != (&bls.PublicKey{}) && baseKey != (&bls.SecretKey{}) && len(ibftCommittee) > 0 {
+			validator := interfaces.Validator{
+				PubKey:     validatorPk,
+				ShareKey:   baseKey,
+				Committiee: ibftCommittee,
+			}
+			validatorStorage.LoadFromConfig(&validator)
 		}
-		validatorStorage := collections.NewValidator(db, logger, validatorOpts)
 
 		ibftStorage := collections.NewIbft(db, logger)
 

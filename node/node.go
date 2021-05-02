@@ -20,7 +20,7 @@ import (
 // Options contains options to create the node
 type Options struct {
 	NodeID                     uint64
-	Validator                  collections.Validator
+	Validator                  collections.ValidatorStorage
 	ETHNetwork                 core.Network
 	Network                    network.Network
 	Queue                      *msgqueue.MessageQueue
@@ -41,7 +41,7 @@ type Node interface {
 // ssvNode implements Node interface
 type ssvNode struct {
 	nodeID     uint64
-	validator  collections.Validator
+	validator  collections.ValidatorStorage
 	ethNetwork core.Network
 	network    network.Network
 	queue      *msgqueue.MessageQueue
@@ -78,15 +78,16 @@ func New(opts Options) Node {
 
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
-	validatorPubKey, privateKey, committiee, err := n.validator.GetValidatorShare()
+	validators, err := n.validator.GetAllValidatorsShare()
+	validator := validators[0]  // TODO: temp getting the :0 from slice. need to support multi valShare
 	if err != nil {
 		n.logger.Fatal("Failed to get validator share", zap.Error(err))
 	}
 
-	go n.startSlotQueueListener(ctx, validatorPubKey)
+	go n.startSlotQueueListener(ctx, validator.PubKey)
 	go n.listenToNetworkMessages()
 
-	streamDuties, err := n.beacon.StreamDuties(ctx, validatorPubKey.Serialize())
+	streamDuties, err := n.beacon.StreamDuties(ctx, validator.PubKey.Serialize())
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
 	}
@@ -115,9 +116,9 @@ func (n *ssvNode) Start(ctx context.Context) error {
 					dutyStruct := slotqueue.Duty{
 						NodeID:     n.nodeID,
 						Duty:       duty,
-						PublicKey:  validatorPubKey,
-						PrivateKey: privateKey,
-						Committiee: committiee,
+						PublicKey:  validator.PubKey,
+						PrivateKey: validator.ShareKey,
+						Committiee: validator.Committiee,
 					}
 
 					// execute task if slot already began
@@ -125,7 +126,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						prevIdentifier := ibft.FirstInstanceIdentifier()
 						go n.executeDuty(ctx, prevIdentifier, slot, &dutyStruct)
 					} else {
-						if err := n.slotQueue.Schedule(validatorPubKey.Serialize(), slot, &dutyStruct); err != nil {
+						if err := n.slotQueue.Schedule(validator.PubKey.Serialize(), slot, &dutyStruct); err != nil {
 							n.logger.Error("failed to schedule slot")
 						}
 					}
