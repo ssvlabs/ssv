@@ -75,7 +75,7 @@ func (msg *SignedMessage) SignersIDString() string {
 	return ret
 }
 
-// Aggregate serialize and aggregates signature and signer Id to signed message
+// Aggregate serialize and aggregates signature and signer ID to signed message
 func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 	// verify same message
 	root, err := msg.Message.SigningRoot()

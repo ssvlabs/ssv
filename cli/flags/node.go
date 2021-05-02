@@ -192,7 +192,7 @@ func GetEth1AddrValue(c *cobra.Command) (string, error) {
 	return val, err
 }
 
-// AddGenesisEpochFlag adds the udp port flag to the command
+// AddEth1AddrFlag adds the udp port flag to the command
 func AddEth1AddrFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
 }

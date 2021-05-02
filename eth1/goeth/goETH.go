@@ -1,4 +1,4 @@
-package goETH
+package goeth
 
 import (
 	"github.com/bloxapp/ssv/eth1"
@@ -18,6 +18,7 @@ type eth1GRPC struct {
 	logger *zap.Logger
 }
 
+// New create new goEth instance
 func New(ctx context.Context, logger *zap.Logger, nodeAddr string) (eth1.Eth1, error) {
 	// Create an IPC based RPC connection to a remote node
 	conn, err := ethclient.Dial(nodeAddr)

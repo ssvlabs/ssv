@@ -2,20 +2,16 @@ package pubsub
 
 import "go.uber.org/zap"
 
+// Observer interface
 type Observer interface {
 	Update(interface{})
-	getID() string
+	GetID() string
 }
 
+// BaseObserver struct
 type BaseObserver struct {
-	Id     string
+	ID     string
 	Logger zap.Logger
 }
 
-func (b *BaseObserver) update(msg interface{}) {
-	b.Logger.Info("observer got updated", zap.Any("msg", msg))
-}
 
-func (b *BaseObserver) getID() string {
-	return b.Id
-}

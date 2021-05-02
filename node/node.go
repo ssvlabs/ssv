@@ -196,7 +196,7 @@ func (n *ssvNode) startSmartContractStream(){
 
 	observer := &node.SmartContractEvent{
 		BaseObserver: pubsub.BaseObserver{
-			Id:     "nodeObserver",
+			ID:     "nodeObserver",
 			Logger: *n.logger,
 		},
 	}

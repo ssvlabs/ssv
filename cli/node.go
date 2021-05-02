@@ -3,7 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
-	"github.com/bloxapp/ssv/eth1/goETH"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/logex"
 	"log"
@@ -118,7 +118,7 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
 		}
 
-		eth1Client, err := goETH.New(cmd.Context(), logger, eth1Addr)
+		eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr)
 		if err != nil {
 			logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
 		}
@@ -179,7 +179,7 @@ var startNodeCmd = &cobra.Command{
 
 		//for id, obj := range ibftCommittee{
 		//	if len(obj.Pk) == 0 {
-		//		errors.New(fmt.Sprint("Missing public key for node index - %v", id))
+		//		errors.new(fmt.Sprint("Missing public key for node index - %v", id))
 		//	}
 		//}
 
