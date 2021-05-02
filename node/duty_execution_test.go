@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -164,8 +165,14 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				ValidatorIndex: 0,
 			}
 
+			pk := &bls.PublicKey{}
+			err = pk.Deserialize(refPk)
+			require.NoError(t, err)
+
 			dutyStruct := &slotqueue.Duty{
+				NodeID: 1,
 				Duty: duty,
+				PublicKey: pk,
 			}
 
 			// send sigs
