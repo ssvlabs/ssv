@@ -10,23 +10,27 @@ import (
 	"go.uber.org/zap"
 )
 
+// ValidatorOptions for Validator struct creation
 type ValidatorOptions struct {
 	ValidatorPk *bls.PublicKey
 	ShareKey    *bls.SecretKey
 	Committiee  map[uint64]*proto.Node
 }
 
+// Validator struct
 type Validator struct {
 	prefix []byte
 	db     storage.Db
 	logger *zap.Logger
 }
 
+//  validatorShare struct
 type validatorShare struct {
 	ShareKey   []byte
 	Committiee map[uint64]*proto.Node
 }
 
+// NewValidator creates new validator storage
 func NewValidator(db storage.Db, logger *zap.Logger, opts ValidatorOptions) Validator {
 	validator := Validator{
 		prefix: []byte("validator"),
@@ -38,6 +42,7 @@ func NewValidator(db storage.Db, logger *zap.Logger, opts ValidatorOptions) Vali
 	return validator
 }
 
+// LoadFromConfig fetch validator share form .env and save it to db
 func (v *Validator) LoadFromConfig(validatorPubKey *bls.PublicKey, sharePrivateKey *bls.SecretKey, committee map[uint64]*proto.Node) {
 	err := v.SaveValidatorShare(validatorPubKey, sharePrivateKey, committee)
 	if err != nil {
@@ -45,6 +50,7 @@ func (v *Validator) LoadFromConfig(validatorPubKey *bls.PublicKey, sharePrivateK
 	}
 }
 
+// SaveValidatorShare save validator share to db
 func (v *Validator) SaveValidatorShare(pubkey *bls.PublicKey, shareKey *bls.SecretKey, committiee map[uint64]*proto.Node) error {
 	value := validatorShare{
 		ShareKey:   shareKey.Serialize(),
@@ -58,6 +64,7 @@ func (v *Validator) SaveValidatorShare(pubkey *bls.PublicKey, shareKey *bls.Secr
 	return v.db.Set(v.prefix, pubkey.Serialize(), b.Bytes())
 }
 
+// GetValidatorShare returns ALL validators shares from db
 func (v *Validator) GetValidatorShare() (*bls.PublicKey, *bls.SecretKey, map[uint64]*proto.Node, error) { // TODO: temp getting the :0 from slice. need to support multi valShare
 	res, err := v.db.GetAllByBucket(v.prefix)
 	if err != nil {

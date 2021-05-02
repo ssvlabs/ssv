@@ -8,11 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// BadgerDb struct
 type BadgerDb struct {
 	db     *badger.DB
 	logger zap.Logger
 }
 
+// New create new instance of Badger db
 func New(logger zap.Logger) (storage.Db, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
@@ -30,6 +32,7 @@ func New(logger zap.Logger) (storage.Db, error) {
 	return &_db, nil
 }
 
+// Set save value with key to storage
 func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		err := txn.Set(append(prefix, key...), value)
@@ -37,6 +40,7 @@ func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 	})
 }
 
+// Get return value for specified key
 func (b *BadgerDb) Get(prefix []byte, key []byte) (storage.Obj, error) {
 	var resValue []byte
 	err := b.db.View(func(txn *badger.Txn) error {
@@ -53,6 +57,7 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (storage.Obj, error) {
 	}, err
 }
 
+// GetAllByBucket return all array of Obj for all keys under specified prefix(bucket)
 func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]storage.Obj, error) {
 	var res []storage.Obj
 	var err error

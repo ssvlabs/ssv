@@ -199,17 +199,8 @@ var startNodeCmd = &cobra.Command{
 			Consensus:  consensusType,
 			IBFT: ibft.New(
 				ibftStorage,
-				&proto.Node{
-					IbftId: nodeID,
-					Pk:     baseKey.GetPublicKey().Serialize(),  // TODO need to use storage instead of passing
-					Sk:     baseKey.Serialize(),  // TODO need to use storage instead of passing
-				},
 				network,
 				msgQ,
-				&proto.InstanceParams{
-					ConsensusParams: proto.DefaultConsensusParams(),
-					IbftCommittee:   ibftCommittee,
-				},
 			),
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,

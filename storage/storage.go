@@ -1,5 +1,6 @@
 package storage
 
+// Db interface for all db kind
 type Db interface {
 	Set(prefix []byte, key []byte, value []byte) error
 	Get(prefix []byte, key []byte) (Obj, error)

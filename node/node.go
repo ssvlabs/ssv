@@ -113,8 +113,9 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						zap.Uint64("slot", slot))
 
 					dutyStruct := slotqueue.Duty{
-						Duty: duty,
-						PublicKey: validatorPubKey,
+						NodeID:     n.nodeID,
+						Duty:       duty,
+						PublicKey:  validatorPubKey,
 						PrivateKey: privateKey,
 						Committiee: committiee,
 					}

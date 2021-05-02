@@ -5,6 +5,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
+// IValidator interface for validator storage
 type IValidator interface {
 	LoadFromConfig(validatorPubKey *bls.PublicKey, sharePrivateKey *bls.SecretKey, committee map[uint64]*proto.Node)
 	SaveValidatorShare(pubkey *bls.PublicKey, shareKey *bls.SecretKey, committiee map[uint64]*proto.Node) error

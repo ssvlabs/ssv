@@ -28,7 +28,9 @@ type queue struct {
 	ticker *slotutil.SlotTicker
 }
 
+// Duty struct
 type Duty struct {
+	NodeID     uint64
 	Duty       *ethpb.DutiesResponse_Duty
 	PublicKey  *bls.PublicKey
 	PrivateKey *bls.SecretKey

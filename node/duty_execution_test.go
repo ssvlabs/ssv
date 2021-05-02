@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/slotqueue"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -61,15 +62,18 @@ func TestConsensusOnInputValue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			node := testingSSVNode(t, test.decided, test.signaturesCount)
-			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, &ethpb.DutiesResponse_Duty{
-				Committee:      nil,
-				CommitteeIndex: 0,
-				AttesterSlot:   0,
-				ProposerSlots:  nil,
-				PublicKey:      nil,
-				Status:         0,
-				ValidatorIndex: 0,
-			})
+			duty := &slotqueue.Duty{
+				Duty: &ethpb.DutiesResponse_Duty{
+					Committee:      nil,
+					CommitteeIndex: 0,
+					AttesterSlot:   0,
+					ProposerSlots:  nil,
+					PublicKey:      nil,
+					Status:         0,
+					ValidatorIndex: 0,
+				},
+			}
+			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, duty)
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
 				return
@@ -160,6 +164,10 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				ValidatorIndex: 0,
 			}
 
+			dutyStruct := &slotqueue.Duty{
+				Duty: duty,
+			}
+
 			// send sigs
 			for index, sig := range test.sigs {
 				node.network.BroadcastSignature(&proto.SignedMessage{
@@ -171,7 +179,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				})
 			}
 
-			err = node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), decidedValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
+			err = node.postConsensusDutyExecution(context.Background(), node.logger, []byte("id"), decidedValue, test.expectedSignaturesCount, beacon.RoleAttester, dutyStruct)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {

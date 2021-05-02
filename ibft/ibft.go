@@ -42,8 +42,7 @@ type IBFT interface {
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
 	instances      map[string]*Instance // key is the instance identifier
-	Ibft           collections.Ibft
-	me             *proto.Node
+	ibftStorage    collections.Ibft
 	network        network.Network
 	msgQueue       *msgqueue.MessageQueue
 	params         *proto.InstanceParams
@@ -51,20 +50,12 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(
-	ibft collections.Ibft,
-	me *proto.Node,
-	network network.Network,
-	queue *msgqueue.MessageQueue,
-	params *proto.InstanceParams,
-) IBFT {
+func New(storage collections.Ibft, network network.Network, queue *msgqueue.MessageQueue, ) IBFT {
 	ret := &ibftImpl{
+		ibftStorage:    storage,
 		instances:      make(map[string]*Instance),
-		Ibft:           ibft,
-		me:             me,
 		network:        network,
 		msgQueue:       queue,
-		params:         params,
 		leaderSelector: &leader.Deterministic{},
 	}
 	ret.listenToNetworkMessages()
@@ -97,13 +88,20 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	}
 
 	newInstance := NewInstance(InstanceOptions{
-		Logger:         opts.Logger,
-		Me:             i.me,
+		Logger: opts.Logger,
+		Me: &proto.Node{
+			IbftId: opts.Duty.NodeID,
+			Pk:     opts.Duty.PrivateKey.GetPublicKey().Serialize(),
+			Sk:     opts.Duty.PrivateKey.Serialize(),
+		},
 		Network:        i.network,
 		Queue:          i.msgQueue,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: i.leaderSelector,
-		Params:         i.params,
+		Params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   opts.Duty.Committiee,
+		},
 		Lambda:         opts.Identifier,
 		PreviousLambda: opts.PrevInstance,
 	})
@@ -129,14 +127,14 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 				newInstance.Logger.Error("could not get aggregated prepare msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.Ibft.SavePrepared(agg)
+			i.ibftStorage.SavePrepared(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.Ibft.SaveDecided(agg)
+			i.ibftStorage.SaveDecided(agg)
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}

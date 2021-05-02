@@ -181,12 +181,12 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
 	decided, signaturesCount, decidedByts := n.iBFT.StartInstance(ibft.StartOptions{
+		Duty:         duty,
 		Logger:       l,
 		ValueCheck:   valCheckInstance,
 		PrevInstance: prevIdentifier,
 		Identifier:   identifier,
 		Value:        inputByts,
-		Duty:         duty,
 	})
 
 	if !decided {
