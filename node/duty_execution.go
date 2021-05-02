@@ -21,12 +21,7 @@ import (
 )
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
-func (n *ssvNode) waitForSignatureCollection(
-	logger *zap.Logger,
-	identifier []byte,
-	sigRoot []byte,
-	signaturesCount int,
-) (map[uint64][]byte, error) {
+func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node, ) (map[uint64][]byte, error) {
 	// Collect signatures from other nodes
 	// TODO - change signature count to min threshold
 	signatures := make(map[uint64][]byte, signaturesCount)
@@ -63,7 +58,7 @@ func (n *ssvNode) waitForSignatureCollection(
 			logger.Info("collected valid signature", zap.Uint64("node_id", msg.Msg.SignerIds[0]), zap.Any("msg", msg))
 
 			// verify sig
-			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0]); err != nil {
+			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0], committiee); err != nil {
 				logger.Error("received invalid signature", zap.Error(err))
 				continue
 			}
@@ -105,7 +100,7 @@ func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Lo
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount)
+	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount, duty.Committiee)
 
 	// clean queue for messages, we don't need them anymore.
 	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))

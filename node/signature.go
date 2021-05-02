@@ -15,13 +15,8 @@ import (
 	"log"
 )
 
-func (n *ssvNode) verifyPartialSignature(
-	signature []byte,
-	root []byte,
-	ibftID uint64,
-) error {
-	committee := n.iBFT.GetIBFTCommittee()
-	if val, found := committee[ibftID]; found {
+func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node, ) error {
+	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
 			return errors.Wrap(err, "could not deserialized pk")
