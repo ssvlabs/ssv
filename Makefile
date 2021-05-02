@@ -108,16 +108,17 @@ NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-all
 docker-all:
 	@echo "nodes $(NODES)"
-	@docker-compose up --build $(NODES)
+	@docker compose up --build $(NODES)
 
 DEBUG_NODES=ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev ssv-node-4-dev
 .PHONY: docker-debug
 docker-debug:
+	@echo $(DEBUG_NODES)
 	@docker-compose up --build $(DEBUG_NODES)
 
 .PHONY: stop
 stop:
-	@docker-compose  down
+	@docker compose  down
 
 
 .PHONY: start-boot-node

@@ -7,8 +7,9 @@ x-base:
     dockerfile: Dockerfile
   image: ssvnode:latest
   command: make BUILD_PATH=/go/bin/ssvnode start-node
-  networks:
-    - bloxapp-docker
+  network_mode: host
+#  networks:
+#    - bloxapp-docker
   restart: always
 
 x-base-dev:
@@ -97,7 +98,7 @@ services:
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40008
 
-networks:
-  bloxapp-docker:
-    driver: bridge
-    name: bloxapp-docker
+#networks:
+#  bloxapp-docker:
+#    driver: bridge
+#    name: bloxapp-docker
