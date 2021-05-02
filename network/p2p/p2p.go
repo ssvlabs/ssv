@@ -81,7 +81,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 		_ipAddr = n.ipAddr()
 		//_ipAddr = net.ParseIP("127.0.0.1")
-		logger.Debug("Ip Address", zap.Any("ip", _ipAddr))
+		logger.Info("Ip Address", zap.Any("ip", _ipAddr))
 
 		privKey, err := privKey()
 		if err != nil {
@@ -278,7 +278,7 @@ func (n *p2pNetwork) listen() {
 				continue
 			}
 
-			n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm.Msg))
+			n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm))
 
 			for _, ls := range n.listeners {
 				go func(ls listener) {
