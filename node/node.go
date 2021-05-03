@@ -115,7 +115,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						Duty:       duty,
 						PublicKey:  validator.PubKey,
 						PrivateKey: validator.ShareKey,
-						Committiee: validator.Committiee,
+						Committee:  validator.Committiee,
 					}
 
 					// execute task if slot already began

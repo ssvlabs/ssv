@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 	"log"
 )
@@ -36,12 +35,7 @@ func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID u
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (n *ssvNode) signDuty(
-	ctx context.Context,
-	decidedValue []byte,
-	role beacon.Role,
-	duty *ethpb.DutiesResponse_Duty,
-) ([]byte, []byte, *proto.InputValue, error) {
+func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *slotqueue.Duty, ) ([]byte, []byte, *proto.InputValue, error) {
 	// sign input value
 	var sig []byte
 	var root []byte
@@ -53,7 +47,7 @@ func (n *ssvNode) signDuty(
 		if err := json.Unmarshal(decidedValue, s); err != nil {
 			return nil, nil, nil, err
 		}
-		signedAttestation, r, e := n.beacon.SignAttestation(ctx, s.Attestation.Data, duty.GetValidatorIndex(), duty.GetCommittee())
+		signedAttestation, r, e := n.beacon.SignAttestation(ctx, s.Attestation.Data, *duty)
 		retValueStruct.SignedData = s
 		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
@@ -109,7 +103,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		logger.Info("submitting attestation")
 		inputValue.GetAttestation().Signature = signature.Serialize()
 		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.Duty.GetValidatorIndex())
-		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex()); err != nil {
+		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex(), duty.PublicKey); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	//case beacon.RoleAggregator:

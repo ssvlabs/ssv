@@ -111,8 +111,7 @@ var startNodeCmd = &cobra.Command{
 		// init storage
 		validatorStorage, ibftStorage := configureStorage(logger, validatorPk, shareKey, nodeID)
 
-		// TODO remove shareKey validatorPk to use validatorStorage
-		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, shareKey, eth2Network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
+		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}

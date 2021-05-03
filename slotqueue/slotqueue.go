@@ -34,7 +34,7 @@ type Duty struct {
 	Duty       *ethpb.DutiesResponse_Duty
 	PublicKey  *bls.PublicKey
 	PrivateKey *bls.SecretKey
-	Committiee map[uint64]*proto.Node
+	Committee  map[uint64]*proto.Node
 }
 
 // New is the constructor of queue

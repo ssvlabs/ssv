@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -101,7 +102,7 @@ func (t *testBeacon) GetAttestationData(ctx context.Context, slot, committeeInde
 	return t.refAttestationData, nil
 }
 
-func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, []byte, error) {
+func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) (*ethpb.Attestation, []byte, error) {
 	return &ethpb.Attestation{
 		AggregationBits: nil,
 		Data:            data,
@@ -109,16 +110,16 @@ func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.Attestatio
 	}, refSigRoot, nil
 }
 
-func (t *testBeacon) SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64) error {
+func (t *testBeacon) SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64, key *bls.PublicKey) error {
 	t.LastSubmittedAttestation = attestation
 	return nil
 }
 
-func (t *testBeacon) GetAggregationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AggregateAttestationAndProof, error) {
+func (t *testBeacon) GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof) (*ethpb.SignedAggregateAttestationAndProof, error) {
+func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error) {
 	return nil, nil
 }
 
@@ -126,11 +127,11 @@ func (t *testBeacon) SubmitAggregation(ctx context.Context, data *ethpb.SignedAg
 	return nil
 }
 
-func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64) (*ethpb.BeaconBlock, error) {
+func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64, duty slotqueue.Duty) (*ethpb.BeaconBlock, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) SignProposal(ctx context.Context, block *ethpb.BeaconBlock) (*ethpb.SignedBeaconBlock, error) {
+func (t *testBeacon) SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) (*ethpb.SignedBeaconBlock, error) {
 	return nil, nil
 }
 
@@ -138,7 +139,7 @@ func (t *testBeacon) SubmitProposal(ctx context.Context, block *ethpb.SignedBeac
 	return nil
 }
 
-func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty) ([]beacon.Role, error) {
+func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *slotqueue.Duty) ([]beacon.Role, error) {
 	return nil, nil
 }
 

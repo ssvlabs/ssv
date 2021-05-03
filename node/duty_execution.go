@@ -83,7 +83,7 @@ func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []by
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
 func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *slotqueue.Duty, ) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty.Duty)
+	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
@@ -100,7 +100,7 @@ func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Lo
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount, duty.Committiee)
+	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount, duty.Committee)
 
 	// clean queue for messages, we don't need them anymore.
 	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
@@ -200,7 +200,7 @@ func (n *ssvNode) executeDuty(
 		zap.Uint64("committee_index", duty.Duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
-	roles, err := n.beacon.RolesAt(ctx, slot, duty.Duty)
+	roles, err := n.beacon.RolesAt(ctx, slot, duty)
 	if err != nil {
 		logger.Error("failed to get roles for duty", zap.Error(err))
 		return

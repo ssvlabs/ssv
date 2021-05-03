@@ -3,6 +3,8 @@ package prysmgrpc
 import (
 	"context"
 	"encoding/binary"
+	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"time"
 
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
@@ -18,18 +20,18 @@ import (
 )
 
 // GetAggregationData returns aggregation data
-func (b *prysmGRPC) GetAggregationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AggregateAttestationAndProof, error) {
-	b.waitToSlotTwoThirds(ctx, slot)
+func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error) {
+	b.waitToSlotTwoThirds(ctx, duty.Duty.AttesterSlot)
 
-	slotSig, err := b.signSlot(ctx, slot)
+	slotSig, err := b.signSlot(ctx, duty.Duty.AttesterSlot, *duty.PrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign slot")
 	}
 
 	res, err := b.validatorClient.SubmitAggregateSelectionProof(ctx, &ethpb.AggregateSelectionRequest{
-		Slot:           slot,
-		CommitteeIndex: committeeIndex,
-		PublicKey:      b.validatorPublicKey,
+		Slot:           duty.Duty.AttesterSlot,
+		CommitteeIndex: duty.Duty.CommitteeIndex,
+		PublicKey:      duty.PublicKey.Serialize(),
 		SlotSignature:  slotSig,
 	})
 	if err != nil {
@@ -40,8 +42,8 @@ func (b *prysmGRPC) GetAggregationData(ctx context.Context, slot, committeeIndex
 }
 
 // SignAggregation signs the given aggregation data
-func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof) (*ethpb.SignedAggregateAttestationAndProof, error) {
-	sig, err := b.aggregateAndProofSig(ctx, data)
+func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error) {
+	sig, err := b.aggregateAndProofSig(ctx, data, duty.PrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign aggregate and proof")
 	}
@@ -65,15 +67,15 @@ func (b *prysmGRPC) SubmitAggregation(ctx context.Context, data *ethpb.SignedAgg
 }
 
 // isAggregator returns true if the given slot is aggregator
-func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen int) (bool, error) {
-	slotSig, err := b.signSlot(ctx, slot)
+func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, duty *slotqueue.Duty) (bool, error) {
+	slotSig, err := b.signSlot(ctx, slot, *duty.PrivateKey)
 	if err != nil {
 		return false, err
 	}
 
 	modulo := uint64(1)
-	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
-		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
+	if len(duty.Committee)/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
+		modulo = uint64(len(duty.Committee)) / params.BeaconConfig().TargetAggregatorsPerCommittee
 	}
 
 	hash := hashutil.Hash(slotSig)
@@ -83,7 +85,7 @@ func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen 
 }
 
 // aggregateAndProofSig returns the signature of validator signing over aggregate and proof object.
-func (b *prysmGRPC) aggregateAndProofSig(ctx context.Context, agg *ethpb.AggregateAttestationAndProof) ([]byte, error) {
+func (b *prysmGRPC) aggregateAndProofSig(ctx context.Context, agg *ethpb.AggregateAttestationAndProof, privateKey *bls.SecretKey) ([]byte, error) {
 	domain, err := b.domainData(ctx, agg.Aggregate.Data.Slot, params.BeaconConfig().DomainAggregateAndProof[:])
 	if err != nil {
 		return nil, err
@@ -94,7 +96,7 @@ func (b *prysmGRPC) aggregateAndProofSig(ctx context.Context, agg *ethpb.Aggrega
 		return nil, err
 	}
 
-	return b.privateKey.SignByte(root[:]).Serialize(), nil
+	return privateKey.SignByte(root[:]).Serialize(), nil
 }
 
 // waitToSlotTwoThirds waits until two third through the current slot period

@@ -100,7 +100,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		LeaderSelector: i.leaderSelector,
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   opts.Duty.Committiee,
+			IbftCommittee:   opts.Duty.Committee,
 		},
 		Lambda:         opts.Identifier,
 		PreviousLambda: opts.PrevInstance,

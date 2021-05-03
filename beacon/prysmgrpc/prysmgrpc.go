@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/ethereum/go-ethereum/event"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -27,9 +28,9 @@ type prysmGRPC struct {
 	validatorClient    ethpb.BeaconNodeValidatorClient
 	beaconClient       ethpb.BeaconChainClient
 	nodeClient         ethpb.NodeClient
-	privateKey         *bls.SecretKey
+	//privateKey         *bls.SecretKey
 	network            core.Network
-	validatorPublicKey []byte
+	//validatorPublicKey []byte
 	graffiti           []byte
 	blockFeed          *event.Feed
 	highestValidSlot   uint64
@@ -41,7 +42,7 @@ type prysmGRPC struct {
 var reconnectPeriod = 5 * time.Second
 
 // New is the constructor of prysmGRPC
-func New(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, network core.Network, validatorPublicKey, graffiti []byte, addr string) (beacon.Beacon, error) {
+func New(ctx context.Context, logger *zap.Logger, network core.Network, graffiti []byte, addr string) (beacon.Beacon, error) {
 	conn, err := grpcex.DialConn(addr)
 	if err != nil {
 		return nil, err
@@ -52,9 +53,7 @@ func New(ctx context.Context, logger *zap.Logger, privateKey *bls.SecretKey, net
 		validatorClient:    ethpb.NewBeaconNodeValidatorClient(conn),
 		beaconClient:       ethpb.NewBeaconChainClient(conn),
 		nodeClient:         ethpb.NewNodeClient(conn),
-		privateKey:         privateKey,
 		network:            network,
-		validatorPublicKey: validatorPublicKey,
 		graffiti:           graffiti,
 		blockFeed:          &event.Feed{},
 		logger:             logger,
@@ -116,25 +115,25 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 // RolesAt slot returns the validator roles at the given slot. Returns nil if the
 // validator is known to not have a roles at the at slot. Returns UNKNOWN if the
 // validator assignments are unknown. Otherwise returns a valid validatorRole map.
-func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty) ([]beacon.Role, error) {
+func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *slotqueue.Duty) ([]beacon.Role, error) {
 	if duty == nil {
 		return nil, nil
 	}
 
 	var roles []beacon.Role
 
-	if len(duty.ProposerSlots) > 0 {
-		for _, proposerSlot := range duty.ProposerSlots {
+	if len(duty.Duty.ProposerSlots) > 0 {
+		for _, proposerSlot := range duty.Duty.ProposerSlots {
 			if proposerSlot != 0 && proposerSlot == slot {
 				roles = append(roles, beacon.RoleProposer)
 				break
 			}
 		}
 	}
-	if duty.AttesterSlot == slot {
+	if duty.Duty.AttesterSlot == slot {
 		roles = append(roles, beacon.RoleAttester)
 
-		aggregator, err := b.isAggregator(ctx, slot, len(duty.Committee))
+		aggregator, err := b.isAggregator(ctx, slot, duty)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not check if a validator is an aggregator")
 		}
@@ -221,7 +220,7 @@ func (b *prysmGRPC) domainData(ctx context.Context, slot uint64, domain []byte) 
 	return res, nil
 }
 
-func (b *prysmGRPC) signSlot(ctx context.Context, slot uint64) ([]byte, error) {
+func (b *prysmGRPC) signSlot(ctx context.Context, slot uint64, privateKey bls.SecretKey) ([]byte, error) {
 	domain, err := b.domainData(ctx, slot, params.BeaconConfig().DomainSelectionProof[:])
 	if err != nil {
 		return nil, err
@@ -232,7 +231,7 @@ func (b *prysmGRPC) signSlot(ctx context.Context, slot uint64) ([]byte, error) {
 		return nil, err
 	}
 
-	return b.privateKey.SignByte(root[:]).Serialize(), nil
+	return privateKey.SignByte(root[:]).Serialize(), nil
 }
 
 func (b *prysmGRPC) restartBeaconConnection(ctx context.Context) error {

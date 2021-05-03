@@ -57,6 +57,9 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 		}
 		err = v.SaveValidatorShare(&validator)
 	}
+	if err == nil {
+		v.logger.Info("validator share has been loaded from config")
+	}
 	return err
 }
 

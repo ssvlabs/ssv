@@ -2,6 +2,7 @@ package prysmgrpc
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/slotqueue"
 
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -10,8 +11,8 @@ import (
 )
 
 // GetProposalData implements Beacon interface
-func (b *prysmGRPC) GetProposalData(ctx context.Context, slot uint64) (*ethpb.BeaconBlock, error) {
-	randaoReveal, err := b.signRandaoReveal(ctx, slot)
+func (b *prysmGRPC) GetProposalData(ctx context.Context, slot uint64, duty slotqueue.Duty) (*ethpb.BeaconBlock, error) {
+	randaoReveal, err := b.signRandaoReveal(ctx, slot, duty)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to sign randao reveal")
 	}
@@ -29,13 +30,13 @@ func (b *prysmGRPC) GetProposalData(ctx context.Context, slot uint64) (*ethpb.Be
 }
 
 // SignProposal implements Beacon interface
-func (b *prysmGRPC) SignProposal(ctx context.Context, block *ethpb.BeaconBlock) (*ethpb.SignedBeaconBlock, error) {
+func (b *prysmGRPC) SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) (*ethpb.SignedBeaconBlock, error) {
 	// TODO: Check this
 	/*if err := b.preBlockSignValidations(ctx, block); err != nil {
 		return nil, errors.Wrapf(err, "failed block safety check for slot %d", block.Slot)
 	}*/
 
-	sig, err := b.signBlock(ctx, block)
+	sig, err := b.signBlock(ctx, block, duty)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign block")
 	}
@@ -61,7 +62,7 @@ func (b *prysmGRPC) SubmitProposal(ctx context.Context, block *ethpb.SignedBeaco
 }
 
 // signRandaoReveal signs randao reveal with randao domain and private key.
-func (b *prysmGRPC) signRandaoReveal(ctx context.Context, slot uint64) ([]byte, error) {
+func (b *prysmGRPC) signRandaoReveal(ctx context.Context, slot uint64, duty slotqueue.Duty) ([]byte, error) {
 	domain, err := b.domainData(ctx, slot, params.BeaconConfig().DomainRandao[:])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get domain data")
@@ -76,10 +77,10 @@ func (b *prysmGRPC) signRandaoReveal(ctx context.Context, slot uint64) ([]byte, 
 		return nil, err
 	}
 
-	return b.privateKey.SignByte(root[:]).Serialize(), nil
+	return duty.PrivateKey.SignByte(root[:]).Serialize(), nil
 }
 
-func (b *prysmGRPC) signBlock(ctx context.Context, block *ethpb.BeaconBlock) ([]byte, error) {
+func (b *prysmGRPC) signBlock(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) ([]byte, error) {
 	domain, err := b.domainData(ctx, b.network.EstimatedEpochAtSlot(block.GetSlot()), params.BeaconConfig().DomainBeaconProposer[:])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get domain data")
@@ -91,5 +92,5 @@ func (b *prysmGRPC) signBlock(ctx context.Context, block *ethpb.BeaconBlock) ([]
 		return nil, errors.Wrap(err, "failed to compute signing root")
 	}
 
-	return b.privateKey.SignByte(root[:]).Serialize(), nil
+	return duty.PrivateKey.SignByte(root[:]).Serialize(), nil
 }
