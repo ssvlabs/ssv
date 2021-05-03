@@ -28,12 +28,12 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 		Type: network.SignatureBroadcastingType,
 	})
 
-	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 2)
-	require.Len(t, msgQ.queue["sig_lambda_01020304"], 2)
+	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 1)
+	require.Len(t, msgQ.queue["sig_lambda_01020304"], 1)
 
 	msgQ.PurgeIndexedMessages(IBFTRoundIndexKey([]byte{1, 2, 3, 4}, 1))
 	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 0)
-	require.Len(t, msgQ.queue["sig_lambda_01020304"], 2)
+	require.Len(t, msgQ.queue["sig_lambda_01020304"], 1)
 
 	msgQ.PurgeIndexedMessages(SigRoundIndexKey([]byte{1, 2, 3, 4}))
 	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 0)

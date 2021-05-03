@@ -4,6 +4,7 @@ go 1.15
 
 require (
 	github.com/bloxapp/eth2-key-manager v1.0.4
+	github.com/dgraph-io/badger/v3 v3.2011.1
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.4.3

@@ -8,6 +8,7 @@ import (
 	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/node/valcheck"
+	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/pkg/errors"
 	"sync"
 	"time"
@@ -20,12 +21,7 @@ import (
 )
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
-func (n *ssvNode) waitForSignatureCollection(
-	logger *zap.Logger,
-	identifier []byte,
-	sigRoot []byte,
-	signaturesCount int,
-) (map[uint64][]byte, error) {
+func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node, ) (map[uint64][]byte, error) {
 	// Collect signatures from other nodes
 	// TODO - change signature count to min threshold
 	signatures := make(map[uint64][]byte, signaturesCount)
@@ -62,7 +58,7 @@ func (n *ssvNode) waitForSignatureCollection(
 			logger.Info("collected valid signature", zap.Uint64("node_id", msg.Msg.SignerIds[0]), zap.Any("msg", msg))
 
 			// verify sig
-			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0]); err != nil {
+			if err := n.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0], committiee); err != nil {
 				logger.Error("received invalid signature", zap.Error(err))
 				continue
 			}
@@ -85,15 +81,7 @@ func (n *ssvNode) waitForSignatureCollection(
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (n *ssvNode) postConsensusDutyExecution(
-	ctx context.Context,
-	logger *zap.Logger,
-	identifier []byte,
-	decidedValue []byte,
-	signaturesCount int,
-	role beacon.Role,
-	duty *ethpb.DutiesResponse_Duty,
-) error {
+func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *slotqueue.Duty, ) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty)
 	if err != nil {
@@ -106,13 +94,13 @@ func (n *ssvNode) postConsensusDutyExecution(
 			Lambda: identifier,
 		},
 		Signature: sig,
-		SignerIds: []uint64{n.nodeID},
+		SignerIds: []uint64{duty.NodeID},
 	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount)
+	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount, duty.Committee)
 
 	// clean queue for messages, we don't need them anymore.
 	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
@@ -136,14 +124,14 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	prevIdentifier []byte,
 	slot uint64,
 	role beacon.Role,
-	duty *ethpb.DutiesResponse_Duty,
+	duty *slotqueue.Duty,
 ) (int, []byte, []byte, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance valcheck2.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
-		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
+		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.Duty.GetCommitteeIndex())
 		if err != nil {
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
@@ -188,6 +176,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
 	decided, signaturesCount, decidedByts := n.iBFT.StartInstance(ibft.StartOptions{
+		Duty:         duty,
 		Logger:       l,
 		ValueCheck:   valCheckInstance,
 		PrevInstance: prevIdentifier,
@@ -205,10 +194,10 @@ func (n *ssvNode) executeDuty(
 	ctx context.Context,
 	prevIdentifier []byte,
 	slot uint64,
-	duty *ethpb.DutiesResponse_Duty,
+	duty *slotqueue.Duty,
 ) {
 	logger := n.logger.With(zap.Time("start_time", n.getSlotStartTime(slot)),
-		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
+		zap.Uint64("committee_index", duty.Duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
 	roles, err := n.beacon.RolesAt(ctx, slot, duty)

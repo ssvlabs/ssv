@@ -5,7 +5,7 @@ FROM golang:1.15 AS preparer
 
 RUN apt-get update && apt upgrade -y && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-    make curl git zip unzip wget g++ gcc-aarch64-linux-gnu                 \
+    make curl git zip unzip wget dnsutils g++ gcc-aarch64-linux-gnu                 \
   && rm -rf /var/lib/apt/lists/*
 
 RUN go version

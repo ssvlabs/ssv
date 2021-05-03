@@ -3,6 +3,8 @@ package prysmgrpc
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"time"
 
 	"github.com/prysmaticlabs/prysm/shared/featureconfig"
@@ -32,16 +34,16 @@ func (b *prysmGRPC) GetAttestationData(ctx context.Context, slot, committeeIndex
 }
 
 // SignAttestation implements Beacon interface
-func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.AttestationData, validatorIndex uint64, committee []uint64) (*ethpb.Attestation, []byte, error) {
-	sig, root, err := b.signAtt(ctx, data)
+func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) (*ethpb.Attestation, []byte, error) {
+	sig, root, err := b.signAtt(ctx, data, duty)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}
 
 	var indexInCommittee uint64
 	var found bool
-	for i, vID := range committee {
-		if vID == validatorIndex {
+	for i, vID := range duty.Duty.GetCommittee() {
+		if vID == duty.Duty.GetValidatorIndex() {
 			indexInCommittee = uint64(i)
 			found = true
 			break
@@ -49,10 +51,10 @@ func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.Attestation
 	}
 
 	if !found {
-		return nil, nil, fmt.Errorf("validator ID %d not found in committee of %v", validatorIndex, committee)
+		return nil, nil, fmt.Errorf("validator ID %d not found in committee of %v", duty.Duty.GetValidatorIndex(), duty.Duty.GetCommittee())
 	}
 
-	aggregationBitfield := bitfield.NewBitlist(uint64(len(committee)))
+	aggregationBitfield := bitfield.NewBitlist(uint64(len(duty.Duty.GetCommittee())))
 	aggregationBitfield.SetBitAt(indexInCommittee, true)
 
 	return &ethpb.Attestation{
@@ -63,7 +65,7 @@ func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.Attestation
 }
 
 // SubmitAttestation implements Beacon interface
-func (b *prysmGRPC) SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64) error {
+func (b *prysmGRPC) SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64, publicKey *bls.PublicKey) error {
 	indexedAtt := &ethpb.IndexedAttestation{
 		AttestingIndices: []uint64{validatorIndex},
 		Data:             attestation.GetData(),
@@ -75,7 +77,7 @@ func (b *prysmGRPC) SubmitAttestation(ctx context.Context, attestation *ethpb.At
 		return errors.Wrap(err, "failed to get signing root")
 	}
 
-	if err := b.slashableAttestationCheck(ctx, indexedAtt, b.validatorPublicKey, signingRoot); err != nil {
+	if err := b.slashableAttestationCheck(ctx, indexedAtt, publicKey.Serialize(), signingRoot); err != nil {
 		return errors.Wrap(err, "failed attestation slashing protection check")
 	}
 
@@ -87,13 +89,13 @@ func (b *prysmGRPC) SubmitAttestation(ctx context.Context, attestation *ethpb.At
 }
 
 // signAtt returns the signature of an attestation data and its signing root.
-func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData) ([]byte, []byte, error) {
+func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) ([]byte, []byte, error) {
 	root, err := b.getSigningRoot(ctx, data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get signing root")
 	}
 
-	return b.privateKey.SignByte(root[:]).Serialize(), root[:], nil
+	return duty.PrivateKey.SignByte(root[:]).Serialize(), root[:], nil
 }
 
 // getSigningRoot returns signing root

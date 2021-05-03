@@ -88,7 +88,7 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 
 else
-	@echo "Running node (${NODE_ID})"
+	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
@@ -113,6 +113,7 @@ docker-all:
 DEBUG_NODES=ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev ssv-node-4-dev
 .PHONY: docker-debug
 docker-debug:
+	@echo $(DEBUG_NODES)
 	@docker-compose up --build $(DEBUG_NODES)
 
 .PHONY: stop

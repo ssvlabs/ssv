@@ -26,6 +26,7 @@ const (
 	genesisEpoch         = "genesis-epoch"
 	loggerLevel          = "logger-level"
 	eth1AddrFlag         = "eth1-addr"
+	storagePath          = "storage-path"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -195,4 +196,14 @@ func GetEth1AddrValue(c *cobra.Command) (string, error) {
 // AddEth1AddrFlag adds the eth1 address flag to the command
 func AddEth1AddrFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
+}
+
+// GetStoragePathValue gets the storage path flag from the command
+func GetStoragePathValue(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(storagePath)
+}
+
+// AddStoragePathFlag adds the storage path flag to the command
+func AddStoragePathFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, storagePath, "/data/db", "storage path", false)
 }
