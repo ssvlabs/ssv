@@ -98,6 +98,11 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
 		}
 
+		storagePath, err := flags.GetStoragePathValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get storage path flag value", zap.Error(err))
+		}
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -109,7 +114,7 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		// init storage
-		validatorStorage, ibftStorage := configureStorage(logger, validatorPk, shareKey, nodeID)
+		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPk, shareKey, nodeID)
 
 		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
@@ -172,8 +177,8 @@ var startNodeCmd = &cobra.Command{
 	},
 }
 
-func configureStorage(logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
-	db, err := kv.New(*logger)
+func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
+	db, err := kv.New(storagePath, *logger)
 	if err != nil {
 		logger.Fatal("failed to create db", zap.Error(err))
 	}
@@ -226,6 +231,7 @@ func init() {
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
+	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
 
 	RootCmd.AddCommand(startNodeCmd)

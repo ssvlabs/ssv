@@ -15,10 +15,10 @@ type BadgerDb struct {
 }
 
 // New create new instance of Badger db
-func New(logger zap.Logger) (storage.Db, error) {
+func New(path string, logger zap.Logger) (storage.Db, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
-	opt := badger.DefaultOptions("/data/badger")
+	opt := badger.DefaultOptions(path)
 	db, err := badger.Open(opt)
 	if err != nil {
 		return &BadgerDb{}, errors.Wrap(err, "failed to open badger")
