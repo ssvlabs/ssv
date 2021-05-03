@@ -28,9 +28,7 @@ type prysmGRPC struct {
 	validatorClient    ethpb.BeaconNodeValidatorClient
 	beaconClient       ethpb.BeaconChainClient
 	nodeClient         ethpb.NodeClient
-	//privateKey         *bls.SecretKey
 	network            core.Network
-	//validatorPublicKey []byte
 	graffiti           []byte
 	blockFeed          *event.Feed
 	highestValidSlot   uint64
