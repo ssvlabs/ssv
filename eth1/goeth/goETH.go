@@ -11,13 +11,14 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/shared/params"
 )
 
 type eth1GRPC struct {
-	ctx    context.Context
-	conn   *ethclient.Client
-	logger *zap.Logger
-	Event  *eth1.Event
+	ctx           context.Context
+	conn          *ethclient.Client
+	logger        *zap.Logger
+	contractEvent *eth1.ContractEvent
 }
 
 // New create new goEth instance
@@ -32,14 +33,19 @@ func New(ctx context.Context, logger *zap.Logger, nodeAddr string) (eth1.Eth1, e
 		ctx:    ctx,
 		conn:   conn,
 		logger: logger,
-		Event: &eth1.Event{},
+	}
+
+	// init the instance which publishes an event when anything happens
+	err = e.streamSmartContractEvents(params.SsvConfig().OperatorContractAddress)
+	if err != nil {
+		logger.Error("Failed to init operator contract address subject", zap.Error(err))
 	}
 
 	return e, nil
 }
 
-// StreamSmartContractEvents implements Eth1 interface
-func (e *eth1GRPC) StreamSmartContractEvents(contractAddr string) error {
+// streamSmartContractEvents implements Eth1 interface
+func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 	contractAddress := common.HexToAddress(contractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -52,7 +58,7 @@ func (e *eth1GRPC) StreamSmartContractEvents(contractAddr string) error {
 		return err
 	}
 
-	e.Event = eth1.NewEvent("smartContractEvent")
+	e.contractEvent = eth1.NewContractEvent("smartContractEvent")
 	go func() {
 		for {
 			select {
@@ -61,14 +67,14 @@ func (e *eth1GRPC) StreamSmartContractEvents(contractAddr string) error {
 				e.logger.Error("Error from logs sub", zap.Error(err))
 
 			case vLog := <-logs:
-				e.Event.Log = vLog
-				e.Event.NotifyAll()
+				e.contractEvent.Log = vLog
+				e.contractEvent.NotifyAll()
 			}
 		}
 	}()
 	return nil
 }
 
-func (e *eth1GRPC) GetEvent() *eth1.Event {
-	return e.Event
+func (e *eth1GRPC) GetContractEvent() *eth1.ContractEvent {
+	return e.contractEvent
 }

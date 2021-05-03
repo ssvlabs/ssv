@@ -6,15 +6,15 @@ import (
 	"github.com/bloxapp/ssv/pubsub"
 )
 
-// Event struct
-type Event struct {
+// ContractEvent struct
+type ContractEvent struct {
 	pubsub.BaseSubject
-	Log          types.Log
+	Log types.Log
 }
 
-// NewEvent create new event observer
-func NewEvent(name string) *Event {
-	return &Event{
+// NewContractEvent create new event subject
+func NewContractEvent(name string) *ContractEvent {
+	return &ContractEvent{
 		BaseSubject: pubsub.BaseSubject{
 			Name: name,
 		},
@@ -22,10 +22,8 @@ func NewEvent(name string) *Event {
 }
 
 // NotifyAll notify all subscribe observables
-func (e *Event) NotifyAll(){
+func (e *ContractEvent) NotifyAll() {
 	for _, observer := range e.ObserverList {
 		observer.Update(e.Log)
 	}
 }
-
-

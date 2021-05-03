@@ -17,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage/inmem"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -179,18 +178,6 @@ var startNodeCmd = &cobra.Command{
 		//	}
 		//}
 
-		// 1. create new eth1 client
-		eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr)
-		if err != nil {
-			logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
-		}
-
-		// 2. init operator contract event subject - (the instance which publishes an event when anything happens)
-		err = eth1Client.StreamSmartContractEvents(params.SsvConfig().OperatorContractAddress)
-		if err != nil {
-			logger.Error("Failed to init operator contract address subject", zap.Error(err))
-		}
-
 		msgQ := msgqueue.New()
 
 		ssvNode := node.New(node.Options{
@@ -221,8 +208,16 @@ var startNodeCmd = &cobra.Command{
 			Phase1TestGenesis:          genesisEpoch,
 		})
 
-		// 3. register ssvNode as observer to operator contract events subject
-		eth1Client.GetEvent().Register(ssvNode)
+		if eth1Addr != "" {
+			// 1. create new eth1 client
+			eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr)
+			if err != nil {
+				logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
+			}
+
+			// 2. register ssvNode as observer to operator contract events subject
+			eth1Client.GetContractEvent().Register(ssvNode)
+		}
 		if err := ssvNode.Start(cmd.Context()); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}

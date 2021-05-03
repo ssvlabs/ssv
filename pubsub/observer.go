@@ -13,5 +13,3 @@ type BaseObserver struct {
 	ID     string
 	Logger zap.Logger
 }
-
-

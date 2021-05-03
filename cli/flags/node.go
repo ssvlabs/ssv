@@ -24,7 +24,7 @@ const (
 	tcpPort              = "tcp-port"
 	udpPort              = "udp-port"
 	genesisEpoch         = "genesis-epoch"
-	loggerLevel         = "logger-level"
+	loggerLevel          = "logger-level"
 	eth1AddrFlag         = "eth1-addr"
 )
 
@@ -189,11 +189,10 @@ func AddLoggerLevelFlag(c *cobra.Command) {
 
 // GetEth1AddrValue gets the eth1 address flag from the command
 func GetEth1AddrValue(c *cobra.Command) (string, error) {
-	val, err := c.Flags().GetString(eth1AddrFlag)
-	return val, err
+	return c.Flags().GetString(eth1AddrFlag)
 }
 
 // AddEth1AddrFlag adds the eth1 address flag to the command
 func AddEth1AddrFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", true)
+	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
 }
