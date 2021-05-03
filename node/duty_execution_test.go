@@ -173,7 +173,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				NodeID:    1,
 				Duty:      duty,
 				PublicKey: pk,
-				Committee: node.iBFT.GetIBFTCommittee(),
+				Committee: node.iBFT.GetIBFTCommittee(),  // TODO need to fetch the committee from storage
 			}
 
 			// send sigs

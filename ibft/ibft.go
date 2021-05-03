@@ -50,12 +50,13 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, ) IBFT {
+func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams, ) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:    storage,
 		instances:      make(map[string]*Instance),
 		network:        network,
 		msgQueue:       queue,
+		params:         params,
 		leaderSelector: &leader.Deterministic{},
 	}
 	ret.listenToNetworkMessages()

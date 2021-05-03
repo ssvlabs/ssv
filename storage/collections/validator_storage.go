@@ -48,7 +48,6 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 	if pubKey != (&bls.PublicKey{}) && shareKey != (&bls.SecretKey{}) && len(ibftCommittee) > 0 {
 		ibftCommittee[nodeID].Pk = shareKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = shareKey.Serialize()
-
 		validator := Validator{
 			NodeID:     nodeID,
 			PubKey:     pubKey,
