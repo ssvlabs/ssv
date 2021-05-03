@@ -152,9 +152,8 @@ func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
 	// nodes
 	ret.network = local.NewLocalNetwork()
 	ret.queue = msgqueue.New()
-	ret.nodeID = 1
 
-	// validator pk
+	// validatorStorage pk
 	threshold.Init()
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)

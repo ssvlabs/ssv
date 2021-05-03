@@ -19,8 +19,7 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	NodeID                     uint64
-	Validator                  collections.ValidatorStorage
+	ValidatorStorage           collections.ValidatorStorage
 	ETHNetwork                 core.Network
 	Network                    network.Network
 	Queue                      *msgqueue.MessageQueue
@@ -40,16 +39,15 @@ type Node interface {
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	nodeID     uint64
-	validator  collections.ValidatorStorage
-	ethNetwork core.Network
-	network    network.Network
-	queue      *msgqueue.MessageQueue
-	consensus  string
-	slotQueue  slotqueue.Queue
-	beacon     beacon.Beacon
-	iBFT       ibft.IBFT
-	logger     *zap.Logger
+	validatorStorage collections.ValidatorStorage
+	ethNetwork       core.Network
+	network          network.Network
+	queue            *msgqueue.MessageQueue
+	consensus        string
+	slotQueue        slotqueue.Queue
+	beacon           beacon.Beacon
+	iBFT             ibft.IBFT
+	logger           *zap.Logger
 
 	// timeouts
 	signatureCollectionTimeout time.Duration
@@ -60,8 +58,7 @@ type ssvNode struct {
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &ssvNode{
-		nodeID:                     opts.NodeID,
-		validator:                  opts.Validator,
+		validatorStorage:           opts.ValidatorStorage,
 		ethNetwork:                 opts.ETHNetwork,
 		network:                    opts.Network,
 		queue:                      opts.Queue,
@@ -78,10 +75,10 @@ func New(opts Options) Node {
 
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
-	validators, err := n.validator.GetAllValidatorsShare()
+	validators, err := n.validatorStorage.GetAllValidatorsShare()
 	validator := validators[0]  // TODO: temp getting the :0 from slice. need to support multi valShare
 	if err != nil {
-		n.logger.Fatal("Failed to get validator share", zap.Error(err))
+		n.logger.Fatal("Failed to get validatorStorage share", zap.Error(err))
 	}
 
 	go n.startSlotQueueListener(ctx, validator.PubKey)
@@ -114,7 +111,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						zap.Uint64("slot", slot))
 
 					dutyStruct := slotqueue.Duty{
-						NodeID:     n.nodeID,
+						NodeID:     validator.NodeID,
 						Duty:       duty,
 						PublicKey:  validator.PubKey,
 						PrivateKey: validator.ShareKey,

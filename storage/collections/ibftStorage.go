@@ -6,6 +6,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Iibft is an interface for persisting chain data
+type Iibft interface {
+	SavePrepared(signedMsg *proto.SignedMessage)
+	SaveDecided(signedMsg *proto.SignedMessage)
+}
+
 // IbftStorage struct
 type IbftStorage struct {
 	prefix []byte

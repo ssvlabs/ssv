@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/collections/interfaces"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 	"log"
@@ -104,12 +103,16 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to decode validator key", zap.Error(err))
 		}
 
-		baseKey := &bls.SecretKey{}
-		if err := baseKey.SetHexString(privKey); err != nil {
+		shareKey := &bls.SecretKey{}
+		if err := shareKey.SetHexString(privKey); err != nil {
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, eth2Network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
+		// init storage
+		validatorStorage, ibftStorage := configureStorage(logger, validatorPk, shareKey, nodeID)
+
+		// TODO remove shareKey validatorPk to use validatorStorage
+		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, shareKey, eth2Network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
@@ -145,56 +148,15 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		// TODO: Refactor that
-		ibftCommittee := map[uint64]*proto.Node{
-			1: {
-				IbftId: 1,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_1")),
-			},
-			2: {
-				IbftId: 2,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_2")),
-			},
-			3: {
-				IbftId: 3,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
-			},
-			4: {
-				IbftId: 4,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
-			},
-		}
-
-		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
-		ibftCommittee[nodeID].Sk = baseKey.Serialize()
-
 		msgQ := msgqueue.New()
 
-		db, err := kv.New(*logger)
-		if err != nil {
-			logger.Fatal("failed to create db", zap.Error(err))
-		}
-
-		validatorStorage := collections.NewValidator(db, logger)
-		if validatorPk != (&bls.PublicKey{}) && baseKey != (&bls.SecretKey{}) && len(ibftCommittee) > 0 {
-			validator := interfaces.Validator{
-				PubKey:     validatorPk,
-				ShareKey:   baseKey,
-				Committiee: ibftCommittee,
-			}
-			validatorStorage.LoadFromConfig(&validator)
-		}
-
-		ibftStorage := collections.NewIbft(db, logger)
-
 		ssvNode := node.New(node.Options{
-			NodeID:     nodeID,
-			Validator:  validatorStorage,
-			Beacon:     beaconClient,
-			ETHNetwork: eth2Network,
-			Network:    network,
-			Queue:      msgQ,
-			Consensus:  consensusType,
+			ValidatorStorage: validatorStorage,
+			Beacon:           beaconClient,
+			ETHNetwork:       eth2Network,
+			Network:          network,
+			Queue:            msgQ,
+			Consensus:        consensusType,
 			IBFT: ibft.New(
 				ibftStorage,
 				network,
@@ -209,6 +171,41 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func configureStorage(logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
+	db, err := kv.New(*logger)
+	if err != nil {
+		logger.Fatal("failed to create db", zap.Error(err))
+	}
+
+	validatorStorage := collections.NewValidator(db, logger)
+	// saves .env validator to storage
+	ibftCommittee := map[uint64]*proto.Node{
+		1: {
+			IbftId: 1,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_1")),
+		},
+		2: {
+			IbftId: 2,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_2")),
+		},
+		3: {
+			IbftId: 3,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
+		},
+		4: {
+			IbftId: 4,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
+		},
+	}
+
+	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
+		logger.Error("Failed to load validator share data from config", zap.Error(err))
+	}
+
+	ibftStorage := collections.NewIbft(db, logger)
+	return validatorStorage, ibftStorage
 }
 
 func _getBytesFromHex(str string) []byte {

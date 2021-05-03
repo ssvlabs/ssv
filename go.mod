@@ -7,7 +7,7 @@ require (
 	github.com/bloxapp/eth2-key-manager v1.0.4
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/dgraph-io/badger/v3 v3.2011.1
-	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf
+	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/go-units v0.4.0 // indirect

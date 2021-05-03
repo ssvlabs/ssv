@@ -94,7 +94,7 @@ func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Lo
 			Lambda: identifier,
 		},
 		Signature: sig,
-		SignerIds: []uint64{n.nodeID},
+		SignerIds: []uint64{duty.NodeID},
 	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
