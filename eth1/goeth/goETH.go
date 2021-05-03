@@ -17,6 +17,7 @@ type eth1GRPC struct {
 	ctx    context.Context
 	conn   *ethclient.Client
 	logger *zap.Logger
+	Event  *eth1.Event
 }
 
 // New create new goEth instance
@@ -31,13 +32,14 @@ func New(ctx context.Context, logger *zap.Logger, nodeAddr string) (eth1.Eth1, e
 		ctx:    ctx,
 		conn:   conn,
 		logger: logger,
+		Event: &eth1.Event{},
 	}
 
 	return e, nil
 }
 
 // StreamSmartContractEvents implements Eth1 interface
-func (e *eth1GRPC) StreamSmartContractEvents(contractAddr string) (*eth1.Event, error) {
+func (e *eth1GRPC) StreamSmartContractEvents(contractAddr string) error {
 	contractAddress := common.HexToAddress(contractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -47,21 +49,26 @@ func (e *eth1GRPC) StreamSmartContractEvents(contractAddr string) (*eth1.Event, 
 	sub, err := e.conn.SubscribeFilterLogs(e.ctx, query, logs)
 	if err != nil {
 		e.logger.Fatal("Failed to subscribe to logs", zap.Error(err))
+		return err
 	}
 
-	event := eth1.NewEvent("smartContractEvent")
+	e.Event = eth1.NewEvent("smartContractEvent")
 	go func() {
 		for {
 			select {
 			case err := <-sub.Err():
-				e.logger.Fatal("Error from logs sub", zap.Error(err))
+				// TODO might fail consider reconnect
+				e.logger.Error("Error from logs sub", zap.Error(err))
+
 			case vLog := <-logs:
-				event.Log = vLog
-				event.NotifyAll()
+				e.Event.Log = vLog
+				e.Event.NotifyAll()
 			}
 		}
 	}()
-
-	return event, nil
+	return nil
 }
 
+func (e *eth1GRPC) GetEvent() *eth1.Event {
+	return e.Event
+}

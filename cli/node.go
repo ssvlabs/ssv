@@ -186,7 +186,7 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		// 2. init operator contract event subject - (the instance which publishes an event when anything happens)
-		subject, err := eth1Client.StreamSmartContractEvents(params.SsvConfig().OperatorContractAddress)
+		err = eth1Client.StreamSmartContractEvents(params.SsvConfig().OperatorContractAddress)
 		if err != nil {
 			logger.Error("Failed to init operator contract address subject", zap.Error(err))
 		}
@@ -222,7 +222,7 @@ var startNodeCmd = &cobra.Command{
 		})
 
 		// 3. register ssvNode as observer to operator contract events subject
-		subject.Register(ssvNode)
+		eth1Client.GetEvent().Register(ssvNode)
 		if err := ssvNode.Start(cmd.Context()); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
