@@ -1,14 +1,14 @@
 package eth1
 
 import (
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/ethereum/go-ethereum/core/types"
+
+	"github.com/bloxapp/ssv/pubsub"
 )
 
 // Event struct
 type Event struct {
 	pubsub.BaseSubject
-	//ObserverList []node.SmartContractEvent
 	Log          types.Log
 }
 

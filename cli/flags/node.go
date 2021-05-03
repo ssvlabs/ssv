@@ -1,9 +1,10 @@
 package flags
 
 import (
+	"time"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
-	"time"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
@@ -192,7 +193,7 @@ func GetEth1AddrValue(c *cobra.Command) (string, error) {
 	return val, err
 }
 
-// AddEth1AddrFlag adds the udp port flag to the command
+// AddEth1AddrFlag adds the eth1 address flag to the command
 func AddEth1AddrFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
+	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", true)
 }

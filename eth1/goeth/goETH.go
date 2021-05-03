@@ -1,15 +1,16 @@
 package goeth
 
 import (
-	"github.com/bloxapp/ssv/eth1"
-	"github.com/pkg/errors"
-
 	"context"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/eth1"
 )
 
 type eth1GRPC struct {

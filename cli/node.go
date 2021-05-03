@@ -2,10 +2,6 @@ package cli
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/beacon/prysmgrpc"
-	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/utils/logex"
 	"log"
 	"os"
 
@@ -13,12 +9,17 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/cli/flags"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
+	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage/inmem"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // startNodeCmd is the command to start SSV node
@@ -118,11 +119,6 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
 		}
 
-		eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr)
-		if err != nil {
-			logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
-		}
-
 		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
 		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
 		logger.Debug("Node params",
@@ -183,6 +179,18 @@ var startNodeCmd = &cobra.Command{
 		//	}
 		//}
 
+		// 1. create new eth1 client
+		eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr)
+		if err != nil {
+			logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
+		}
+
+		// 2. init operator contract event subject - (the instance which publishes an event when anything happens)
+		subject, err := eth1Client.StreamSmartContractEvents(params.SsvConfig().OperatorContractAddress)
+		if err != nil {
+			logger.Error("Failed to init operator contract address subject", zap.Error(err))
+		}
+
 		msgQ := msgqueue.New()
 
 		ssvNode := node.New(node.Options{
@@ -190,7 +198,6 @@ var startNodeCmd = &cobra.Command{
 			ValidatorPubKey: validatorPk,
 			PrivateKey:      baseKey,
 			Beacon:          beaconClient,
-			Eth1:            eth1Client,
 			ETHNetwork:      eth2Network,
 			Network:         network,
 			Queue:           msgQ,
@@ -214,6 +221,8 @@ var startNodeCmd = &cobra.Command{
 			Phase1TestGenesis:          genesisEpoch,
 		})
 
+		// 3. register ssvNode as observer to operator contract events subject
+		subject.Register(ssvNode)
 		if err := ssvNode.Start(cmd.Context()); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
