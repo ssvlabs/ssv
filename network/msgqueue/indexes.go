@@ -12,9 +12,12 @@ func IBFTRoundIndexKey(lambda []byte, round uint64) string {
 }
 func iBFTMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		return []string{
-			IBFTRoundIndexKey(msg.Lambda, msg.Msg.Message.Round),
+		if msg.Type == network.IBFTBroadcastingType {
+			return []string{
+				IBFTRoundIndexKey(msg.Lambda, msg.Msg.Message.Round),
+			}
 		}
+		return []string{}
 	}
 }
 
@@ -24,8 +27,11 @@ func SigRoundIndexKey(lambda []byte) string {
 }
 func sigMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		return []string{
-			SigRoundIndexKey(msg.Lambda),
+		if msg.Type == network.SignatureBroadcastingType {
+			return []string{
+				SigRoundIndexKey(msg.Lambda),
+			}
 		}
+		return []string{}
 	}
 }

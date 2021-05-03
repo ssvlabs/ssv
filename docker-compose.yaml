@@ -7,8 +7,9 @@ x-base:
     dockerfile: Dockerfile
   image: ssvnode:latest
   command: make BUILD_PATH=/go/bin/ssvnode start-node
-  networks:
-    - bloxapp-docker
+  network_mode: host
+#  networks:
+#    - bloxapp-docker
   restart: always
 
 x-base-dev:
@@ -31,46 +32,26 @@ services:
   ssv-node-1:
     <<: *default-base
     container_name: ssv-node-1
-    environment:
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 1
-      SSV_PRIVATE_KEY: ${SSV_NODE_1}
-      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
-      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
-      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
+    env_file:
+      - .env.node.1
 
   ssv-node-2:
     <<: *default-base
     container_name: ssv-node-2
-    environment:
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 2
-      SSV_PRIVATE_KEY: ${SSV_NODE_2}
-      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
-      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
-      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
+    env_file:
+      - .env.node.2
 
   ssv-node-3:
     <<: *default-base
     container_name: ssv-node-3
-    environment:
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 3
-      SSV_PRIVATE_KEY: ${SSV_NODE_3}
-      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
-      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
-      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
+    env_file:
+      - .env.node.3
 
   ssv-node-4:
     <<: *default-base
     container_name: ssv-node-4
-    environment:
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 4
-      SSV_PRIVATE_KEY: ${SSV_NODE_4}
-      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
-      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
-      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
+    env_file:
+      - .env.node.4
 
 
   ssv-node-1-dev:
@@ -78,14 +59,10 @@ services:
     container_name: ssv-node-1-dev
     ports:
       - 40005:40005
+    env_file:
+      - .env.node.1
     environment:
       BUILD_PATH: /bin/tmp/ssv
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 1
-      SSV_PRIVATE_KEY: ${SSV_NODE_1}
-      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
-      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
-      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
       DEBUG_PORT: 40005
 
   ssv-node-2-dev:
@@ -93,14 +70,10 @@ services:
     container_name: ssv-node-2-dev
     ports:
       - 40006:40006
+    env_file:
+      - .env.node.2
     environment:
       BUILD_PATH: /bin/tmp/ssv
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 2
-      SSV_PRIVATE_KEY: ${SSV_NODE_2}
-      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
-      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
-      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
       DEBUG_PORT: 40006
 
   ssv-node-3-dev:
@@ -108,14 +81,10 @@ services:
     container_name: ssv-node-3-dev
     ports:
       - 40007:40007
+    env_file:
+      - .env.node.3
     environment:
       BUILD_PATH: /bin/tmp/ssv
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 3
-      SSV_PRIVATE_KEY: ${SSV_NODE_3}
-      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
-      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
-      PUBKEY_NODE_4: ${SSV_NODE_PUB_KEY_4}
       DEBUG_PORT: 40007
 
   ssv-node-4-dev:
@@ -123,17 +92,13 @@ services:
     container_name: ssv-node-4-dev
     ports:
       - 40008:40008
+    env_file:
+      - .env.node.4
     environment:
       BUILD_PATH: /bin/tmp/ssv
-      DOCKER_COMPOSE: "true"
-      NODE_ID: 4
-      SSV_PRIVATE_KEY: ${SSV_NODE_4}
-      PUBKEY_NODE_1: ${SSV_NODE_PUB_KEY_1}
-      PUBKEY_NODE_2: ${SSV_NODE_PUB_KEY_2}
-      PUBKEY_NODE_3: ${SSV_NODE_PUB_KEY_3}
       DEBUG_PORT: 40008
 
-networks:
-  bloxapp-docker:
-    driver: bridge
-    name: bloxapp-docker
+#networks:
+#  bloxapp-docker:
+#    driver: bridge
+#    name: bloxapp-docker
