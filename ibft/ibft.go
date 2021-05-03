@@ -6,12 +6,13 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/storage/collections"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/storage"
 )
 
 // FirstInstanceIdentifier is the identifier of the first instance in the DB
@@ -26,6 +27,7 @@ type StartOptions struct {
 	PrevInstance []byte
 	Identifier   []byte
 	Value        []byte
+	Duty         *slotqueue.Duty
 }
 
 // IBFT represents behavior of the IBFT
@@ -40,8 +42,7 @@ type IBFT interface {
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
 	instances      map[string]*Instance // key is the instance identifier
-	storage        storage.Storage
-	me             *proto.Node
+	ibftStorage    collections.IbftStorage
 	network        network.Network
 	msgQueue       *msgqueue.MessageQueue
 	params         *proto.InstanceParams
@@ -49,17 +50,10 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(
-	storage storage.Storage,
-	me *proto.Node,
-	network network.Network,
-	queue *msgqueue.MessageQueue,
-	params *proto.InstanceParams,
-) IBFT {
+func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams, ) IBFT {
 	ret := &ibftImpl{
+		ibftStorage:    storage,
 		instances:      make(map[string]*Instance),
-		storage:        storage,
-		me:             me,
 		network:        network,
 		msgQueue:       queue,
 		params:         params,
@@ -95,13 +89,20 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	}
 
 	newInstance := NewInstance(InstanceOptions{
-		Logger:         opts.Logger,
-		Me:             i.me,
+		Logger: opts.Logger,
+		Me: &proto.Node{
+			IbftId: opts.Duty.NodeID,
+			Pk:     opts.Duty.PrivateKey.GetPublicKey().Serialize(),
+			Sk:     opts.Duty.PrivateKey.Serialize(),
+		},
 		Network:        i.network,
 		Queue:          i.msgQueue,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: i.leaderSelector,
-		Params:         i.params,
+		Params: &proto.InstanceParams{
+			ConsensusParams: i.params.ConsensusParams,
+			IbftCommittee:   opts.Duty.Committee,
+		},
 		Lambda:         opts.Identifier,
 		PreviousLambda: opts.PrevInstance,
 	})
@@ -127,14 +128,14 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 				newInstance.Logger.Error("could not get aggregated prepare msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.storage.SavePrepared(agg)
+			i.ibftStorage.SavePrepared(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.storage.SaveDecided(agg)
+			i.ibftStorage.SaveDecided(agg)
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}

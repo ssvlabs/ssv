@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 	"log"
 	"os"
@@ -17,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
-	"github.com/bloxapp/ssv/storage/inmem"
 )
 
 // startNodeCmd is the command to start SSV node
@@ -97,17 +98,25 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
 		}
 
+		storagePath, err := flags.GetStoragePathValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get storage path flag value", zap.Error(err))
+		}
+
 		validatorPk := &bls.PublicKey{}
 		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
 		}
 
-		baseKey := &bls.SecretKey{}
-		if err := baseKey.SetHexString(privKey); err != nil {
+		shareKey := &bls.SecretKey{}
+		if err := shareKey.SetHexString(privKey); err != nil {
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
-		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, baseKey, eth2Network, validatorPk.Serialize(), []byte("BloxStaking"), beaconAddr)
+		// init storage
+		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPk, shareKey, nodeID)
+
+		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
@@ -132,69 +141,32 @@ var startNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
-			UDPPort:      udpPort,
-			TCPPort:      tcpPort,
-			TopicName:    validatorKey,
-			HostDNS:      hostDNS,
-			HostAddress:  hostAddress,
+			UDPPort:     udpPort,
+			TCPPort:     tcpPort,
+			TopicName:   validatorKey,
+			HostDNS:     hostDNS,
+			HostAddress: hostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		// TODO: Refactor that
-		ibftCommittee := map[uint64]*proto.Node{
-			1: {
-				IbftId: 1,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_1")),
-			},
-			2: {
-				IbftId: 2,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_2")),
-			},
-			3: {
-				IbftId: 3,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
-			},
-			4: {
-				IbftId: 4,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
-			},
-		}
-
-		ibftCommittee[nodeID].Pk = baseKey.GetPublicKey().Serialize()
-		ibftCommittee[nodeID].Sk = baseKey.Serialize()
-
-		//for id, obj := range ibftCommittee{
-		//	if len(obj.Pk) == 0 {
-		//		errors.New(fmt.Sprint("Missing public key for node index - %v", id))
-		//	}
-		//}
-
 		msgQ := msgqueue.New()
 
 		ssvNode := node.New(node.Options{
-			NodeID:          nodeID,
-			ValidatorPubKey: validatorPk,
-			PrivateKey:      baseKey,
-			Beacon:          beaconClient,
-			ETHNetwork:      eth2Network,
-			Network:         network,
-			Queue:           msgQ,
-			Consensus:       consensusType,
+			ValidatorStorage: validatorStorage,
+			Beacon:           beaconClient,
+			ETHNetwork:       eth2Network,
+			Network:          network,
+			Queue:            msgQ,
+			Consensus:        consensusType,
 			IBFT: ibft.New(
-				inmem.New(),
-				&proto.Node{
-					IbftId: nodeID,
-					Pk:     baseKey.GetPublicKey().Serialize(),
-					Sk:     baseKey.Serialize(),
-				},
+				ibftStorage,
 				network,
 				msgQ,
 				&proto.InstanceParams{
 					ConsensusParams: proto.DefaultConsensusParams(),
-					IbftCommittee:   ibftCommittee,
 				},
 			),
 			Logger:                     logger,
@@ -206,6 +178,40 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
+	db, err := kv.New(storagePath, *logger)
+	if err != nil {
+		logger.Fatal("failed to create db!", zap.Error(err))
+	}
+
+	validatorStorage := collections.NewValidator(db, logger)
+	// saves .env validator to storage
+	ibftCommittee := map[uint64]*proto.Node{
+		1: {
+			IbftId: 1,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_1")),
+		},
+		2: {
+			IbftId: 2,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_2")),
+		},
+		3: {
+			IbftId: 3,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
+		},
+		4: {
+			IbftId: 4,
+			Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
+		},
+	}
+
+	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
+		logger.Error("Failed to load validator share data from config", zap.Error(err))
+	}
+	ibftStorage := collections.NewIbft(db, logger)
+	return validatorStorage, ibftStorage
 }
 
 func _getBytesFromHex(str string) []byte {
@@ -227,6 +233,7 @@ func init() {
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
+	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
 
 	RootCmd.AddCommand(startNodeCmd)

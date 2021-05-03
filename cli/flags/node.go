@@ -24,6 +24,7 @@ const (
 	udpPort              = "udp-port"
 	genesisEpoch         = "genesis-epoch"
 	loggerLevel         = "logger-level"
+	storagePath         = "storage-path"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -183,4 +184,15 @@ func GetLoggerLevelValue(c *cobra.Command) (zapcore.Level, error) {
 // AddLoggerLevelFlag adds the logger level flag to the command
 func AddLoggerLevelFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, loggerLevel, "info", "logger level", false)
+}
+
+// GetStoragePathValue gets the storage path flag from the command
+func GetStoragePathValue(c *cobra.Command) (string, error) {
+	val, err := c.Flags().GetString(storagePath)
+	return val, err
+}
+
+// AddStoragePathFlag adds the storage path flag to the command
+func AddStoragePathFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, storagePath, "/data/db", "storage path", false)
 }
