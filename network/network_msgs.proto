@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package network;
+
+option go_package = "github.com/bloxapp/ssv/network";
+
+import "msgs.proto";
+
+enum NetworkMsg {
+    // IBFTType are all iBFT related messages
+    IBFTType = 0;
+    // DecidedType is an iBFT specific message for broadcasting post consensus decided message with signatures
+    DecidedType = 1;
+    // SignatureType is an SSV node specific message for broadcasting post consensus signatures on eth2 duties
+    SignatureType = 2;
+    // SyncType is an SSV iBFT specific message that a node uses to sync up with other nodes
+    SyncType = 3;
+}
+
+enum Sync {
+  // GetHighestType is a request from peers to return the highest decided/ prepared instance they know of
+  GetHighestType = 0;
+  // GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
+  GetInstanceRange = 1;
+}
+
+message SyncMessage {
+  repeated proto.SignedMessage SignedMessages = 1;
+  string FromPeerID = 2;
+  Sync Type = 3;
+}
+
+// Message is a wrapper struct for all network message types
+message Message {
+  bytes Lambda = 1;
+  proto.SignedMessage SignedMessage = 2;
+  SyncMessage SyncMessage = 3;
+  NetworkMsg Type = 4;
+}

@@ -11,7 +11,7 @@ import (
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
 		var pp pipeline.Pipeline
-		switch netMsg.Msg.Message.Type {
+		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:
 			pp = i.prePrepareMsgPipeline()
 		case proto.RoundState_Prepare:
@@ -21,11 +21,11 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 		case proto.RoundState_ChangeRound:
 			pp = i.changeRoundMsgPipeline()
 		default:
-			i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.Msg))
+			i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.SignedMessage))
 			return true, nil
 		}
 
-		if err := pp.Run(netMsg.Msg); err != nil {
+		if err := pp.Run(netMsg.SignedMessage); err != nil {
 			return true, err
 		}
 		return true, nil
