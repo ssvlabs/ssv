@@ -42,21 +42,20 @@ $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {private
 
 ## Example .env file 
 ```
-   DISCOVERY_TYPE=mdns
-   CONSENSUS_TYPE=validation
    NETWORK=pyrmont
-   BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80
+   DISCOVERY_TYPE=<mdns for local network, empty for discov5 remote>
+   BOOT_NODE_EXTERNAL_IP=
+   BOOT_NODE_PRIVATE_KEY=
+   BEACON_NODE_ADDR= <can use eth2-4000-prysm-ext.stage.bloxinfra.com:80>
+   NODE_ID=
    VALIDATOR_PUBLIC_KEY=
-   VALIDATOR_PRIVATE_KEY= # NOT USED FOR NOW
-   SSV_NODE_1=
-   SSV_NODE_PUB_KEY_1=
-   SSV_NODE_2=
-   SSV_NODE_PUB_KEY_2=
-   SSV_NODE_3=
-   SSV_NODE_PUB_KEY_3=
-   SSV_NODE_4=
-   SSV_NODE_PUB_KEY_4=
+   SSV_PRIVATE_KEY=
+   PUBKEY_NODE_1=
+   PUBKEY_NODE_2=
+   PUBKEY_NODE_3=
+   PUBKEY_NODE_4=
 ```
+For a 4 node SSV network, 4 .env.node.<1/2/3/4> files need to be created.
 
 ### Progress
 [X] Free standing, reference iBFT Go implementation\
