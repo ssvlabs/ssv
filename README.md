@@ -7,12 +7,10 @@
 
 SSV is a protocol for distributing an eth2 validator key between multiple operators governed by a consensus protocol ([Istanbul BFT](https://arxiv.org/pdf/2002.03613.pdf)).
 
-
-## ⚠️ Phase 1 testing ⚠️
-Please see [phase 1 testing doc](./PHASE_1_TESTNET.md) for details
-
-
 ## Getting started
+An SSV operator's getting started [documentation](./documentation/operator_getting_started.md)
+
+## Common commands
 ```bash
 # Build binary
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
