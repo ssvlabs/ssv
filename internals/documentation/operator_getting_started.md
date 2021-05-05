@@ -35,7 +35,7 @@ $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {private
 3. Create 4 .env files with the names .env.node.1, .env.node.2, .env.node.3, .env.node.4
 4. Use the template .env file for step #3
 ```bash
-    NETWORK=pyrmont
+   NETWORK=pyrmont
    DISCOVERY_TYPE=<mdns for local network, empty for discov5 remote>
    BOOT_NODE_EXTERNAL_IP=
    BOOT_NODE_PRIVATE_KEY=
