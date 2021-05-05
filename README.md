@@ -62,14 +62,15 @@ For a 4 node SSV network, 4 .env.node.<1/2/3/4> files need to be created.
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Glang\
 [ ] Single standing instance running with Prysm's validator client\
-[\\] Networking and discovery\
-[\\] db, persistance and recovery\
-[ ] Between instance persistence (pevent starting a new instance if previous not decided)
+[X] Networking and discovery\
+[X] db, persistance and recovery\
+[ ] Between instance persistence (pevent starting a new instance if previous not decided)\
 [ ] Multi network support (being part of multiple SSV groups)\
+[ ] Aggregation and Proposal support\
 [X] Key sharing\
 [X] Deployment\
 [\\] Documentation\
-[ ] Phase 1 changes\
+[X] Phase 1 testing\
 [ ] Audit
 
 ** X=done, \\=WIP
