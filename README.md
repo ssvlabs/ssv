@@ -8,7 +8,7 @@
 SSV is a protocol for distributing an eth2 validator key between multiple operators governed by a consensus protocol ([Istanbul BFT](https://arxiv.org/pdf/2002.03613.pdf)).
 
 ## Getting started
-An SSV operator's getting started [documentation](./documentation/operator_getting_started.md)
+An SSV operator's getting started [documentation](./internals/documentation/operator_getting_started.md)
 
 ## Common commands
 ```bash
