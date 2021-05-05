@@ -7,3 +7,4 @@ set -eo pipefail
 # It is necessary to delete the vendor dir when we finish
 
 go generate $GOPATH/src/github.com/bloxapp/ssv/ibft/proto/generate.go
+go generate $GOPATH/src/github.com/bloxapp/ssv/network/generate.go

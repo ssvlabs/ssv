@@ -50,7 +50,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams, ) IBFT {
+func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:    storage,
 		instances:      make(map[string]*Instance),
@@ -68,9 +68,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	go func() {
 		for msg := range msgChan {
 			i.msgQueue.AddMessage(&network.Message{
-				Lambda: msg.Message.Lambda,
-				Msg:    msg,
-				Type:   network.IBFTBroadcastingType,
+				Lambda:        msg.Message.Lambda,
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_IBFTType,
 			})
 		}
 	}()
