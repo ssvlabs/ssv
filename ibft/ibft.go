@@ -123,19 +123,20 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			agg, err := newInstance.PreparedAggregatedMsg()
-			if err != nil {
-				newInstance.Logger.Error("could not get aggregated prepare msg and save to storage", zap.Error(err))
+			if err := i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
+				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.ibftStorage.SavePrepared(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.ibftStorage.SaveDecided(agg)
+			if err := i.ibftStorage.SaveDecided(agg); err != nil {
+				newInstance.Logger.Error("could not save aggregated commit msg to storage", zap.Error(err))
+				return false, 0, nil
+			}
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}
