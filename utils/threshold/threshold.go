@@ -1,9 +1,9 @@
 package threshold
 
 import (
-	"math/big"
-
+	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"math/big"
 )
 
 var (
@@ -20,28 +20,41 @@ func Init() {
 
 // Create receives a bls.SecretKey hex and count.
 // Will split the secret key into count shares
-// TODO - use bls' SSS functions, no need to re-implement
-func Create(skBytes []byte, count uint64) (map[uint64]*bls.SecretKey, error) {
+func Create(skBytes []byte, threshold uint64, count uint64) (map[uint64]*bls.SecretKey, error) {
+	// master key Polynomial
+	msk := make([]bls.SecretKey, threshold)
+
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(skBytes); err != nil {
 		return nil, err
 	}
+	msk[0] = *sk
 
 	// construct poly
-	p, err := NewPolynomial(sk, uint32(count-1))
-	if err != nil {
-		return nil, err
+	for i := uint64(1); i < threshold-1; i++ {
+		sk := bls.SecretKey{}
+		sk.SetByCSPRNG()
+		msk[i] = sk
 	}
 
-	// evaluate
-	ret := make(map[uint64]*bls.SecretKey)
-	for i := uint64(1); i <= count; i++ { // we can't split share on index 0
-		shareFr, err := p.EvaluateUint64(i)
+	// evaluate shares - starting from 1 because 0 is master key
+	shares := make(map[uint64]*bls.SecretKey)
+	for i := uint64(1); i <= count; i++ {
+		blsID := bls.ID{}
+
+		err := blsID.SetDecString(fmt.Sprintf("%d", i))
 		if err != nil {
 			return nil, err
 		}
-		ret[i] = bls.CastToSecretKey(shareFr)
-	}
 
-	return ret, nil
+		sk := bls.SecretKey{}
+
+		err = sk.Set(msk, &blsID)
+		if err != nil {
+			return nil, err
+		}
+
+		shares[i] = &sk
+	}
+	return shares, nil
 }

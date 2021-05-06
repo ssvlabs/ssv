@@ -30,8 +30,8 @@ var createThresholdCmd = &cobra.Command{
 		if err := baseKey.SetHexString(privKey); err != nil {
 			Logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
-
-		privKeys, err := threshold.Create(baseKey.Serialize(), keysCount)
+		// https://github.com/ethereum/eth2-ssv/issues/22
+		privKeys, err := threshold.Create(baseKey.Serialize(), keysCount-1, keysCount)
 		if err != nil {
 			Logger.Fatal("failed to turn a private key into a threshold key", zap.Error(err))
 		}
