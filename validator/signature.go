@@ -1,4 +1,4 @@
-package node
+package validator
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"log"
 )
 
-func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node, ) error {
+func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node, ) error {
 	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
@@ -35,7 +35,7 @@ func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID u
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *slotqueue.Duty, ) ([]byte, []byte, *proto.InputValue, error) {
+func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *slotqueue.Duty, ) ([]byte, []byte, *proto.InputValue, error) {
 	// sign input value
 	var sig []byte
 	var root []byte
@@ -47,7 +47,7 @@ func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon
 		if err := json.Unmarshal(decidedValue, s); err != nil {
 			return nil, nil, nil, err
 		}
-		signedAttestation, r, e := n.beacon.SignAttestation(ctx, s.Attestation.Data, *duty)
+		signedAttestation, r, e := v.beacon.SignAttestation(ctx, s.Attestation.Data, *duty)
 		retValueStruct.SignedData = s
 		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
@@ -55,14 +55,14 @@ func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon
 		sig = signedAttestation.GetSignature()
 		root = r
 	//case beacon.RoleAggregator:
-	//	signedAggregation, e := n.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
+	//	signedAggregation, e := v.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
 	//	inputValue.SignedData = &proto.InputValue_Aggregation{
 	//		Aggregation: signedAggregation,
 	//	}
 	//	err = e
 	//	sig = signedAggregation.GetSignature()
 	//case beacon.RoleProposer:
-	//	signedProposal, e := n.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
+	//	signedProposal, e := v.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
 	//	inputValue.SignedData = &proto.InputValue_Block{
 	//		Block: signedProposal,
 	//	}
@@ -76,7 +76,7 @@ func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (n *ssvNode) reconstructAndBroadcastSignature(
+func (v *Validator) reconstructAndBroadcastSignature(
 	ctx context.Context,
 	logger *zap.Logger,
 	signatures map[uint64][]byte,
@@ -103,17 +103,17 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		logger.Info("submitting attestation")
 		inputValue.GetAttestation().Signature = signature.Serialize()
 		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.Duty.GetValidatorIndex())
-		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex(), duty.PublicKey); err != nil {
+		if err := v.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex(), duty.PublicKey); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	//case beacon.RoleAggregator:
 	//	inputValue.GetAggregation().Signature = signature.Serialize()
-	//	if err := n.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
+	//	if err := v.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
 	//		return errors.Wrap(err, "failed to broadcast aggregation")
 	//	}
 	//case beacon.RoleProposer:
 	//	inputValue.GetBlock().Signature = signature.Serialize()
-	//	if err := n.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
+	//	if err := v.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
 	//		return errors.Wrap(err, "failed to broadcast proposal")
 	//	}
 	default:

@@ -38,7 +38,7 @@ const (
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
 	// StreamDuties returns channel with duties stream
-	StreamDuties(ctx context.Context, pubKey []byte) (<-chan *ethpb.DutiesResponse_Duty, error)
+	StreamDuties(ctx context.Context, pubKey [][]byte) (<-chan *ethpb.DutiesResponse_Duty, error)
 
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AttestationData, error)

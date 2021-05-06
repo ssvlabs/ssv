@@ -68,9 +68,9 @@ func New(ctx context.Context, logger *zap.Logger, network core.Network, graffiti
 }
 
 // StreamDuties implements Beacon interface
-func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
+func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKeys [][]byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
 	streamDuties, err := b.validatorClient.StreamDuties(ctx, &ethpb.DutiesRequest{
-		PublicKeys: [][]byte{pubKey},
+		PublicKeys: pubKeys,
 	})
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (b *prysmGRPC) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *et
 				time.Sleep(reconnectPeriod)
 				b.logger.Info("trying to reconnect duties stream")
 				streamDuties, err = b.validatorClient.StreamDuties(ctx, &ethpb.DutiesRequest{
-					PublicKeys: [][]byte{pubKey},
+					PublicKeys: pubKeys,
 				})
 				if err != nil {
 					b.logger.Error("failed to reconnect duties stream", zap.Error(err))
@@ -119,7 +119,6 @@ func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *slotqueue.Du
 	}
 
 	var roles []beacon.Role
-
 	if len(duty.Duty.ProposerSlots) > 0 {
 		for _, proposerSlot := range duty.Duty.ProposerSlots {
 			if proposerSlot != 0 && proposerSlot == slot {
@@ -192,9 +191,9 @@ func (b *prysmGRPC) receiveBlocks(ctx context.Context) error {
 			b.highestValidSlot = res.Block.Slot
 		}
 
-		b.logger.Debug("Received block from beacon node",
-			zap.Any("slot", res.Block.Slot),
-			zap.Any("proposer_index", res.Block.ProposerIndex))
+		//b.logger.Debug("Received block from beacon node", TODO need to set trace level
+		//	zap.Any("slot", res.Block.Slot),
+		//	zap.Any("proposer_index", res.Block.ProposerIndex))
 		b.blockFeed.Send(res)
 	}
 }

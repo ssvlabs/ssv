@@ -35,7 +35,7 @@ type ValidatorStorage struct {
 // NewValidator creates new validator storage
 func NewValidator(db storage.Db, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
-		prefix: []byte("validator"),
+		prefix: []byte("validator-"),
 		db:     db,
 		logger: logger,
 	}
@@ -71,9 +71,18 @@ func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
 	return v.db.Set(v.prefix, validator.PubKey.Serialize(), value)
 }
 
+func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
+	obj, err := v.db.Get(v.prefix, key)
+	if err != nil{
+		return nil, err
+	}
+	return (&Validator{}).Deserialize(obj)
+}
+
 // GetAllValidatorsShare returns ALL validators shares from db
 func (v *ValidatorStorage) GetAllValidatorsShare() ([]*Validator, error) {
 	objs, err := v.db.GetAllByBucket(v.prefix)
+	v.logger.Info("get all validators", zap.Int("size", len(objs)))
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}

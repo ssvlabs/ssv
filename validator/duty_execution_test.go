@@ -1,4 +1,4 @@
-package node
+package validator
 
 import (
 	"context"
@@ -62,7 +62,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(t, test.decided, test.signaturesCount)
+			node := testingValidator(t, test.decided, test.signaturesCount)
 			duty := &slotqueue.Duty{
 				Duty: &ethpb.DutiesResponse_Duty{
 					Committee:      nil,
@@ -138,7 +138,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(t, true, test.expectedSignaturesCount)
+			node := testingValidator(t, true, test.expectedSignaturesCount)
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 
@@ -173,12 +173,12 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				NodeID:    1,
 				Duty:      duty,
 				PublicKey: pk,
-				Committee: node.iBFT.GetIBFTCommittee(),  // TODO need to fetch the committee from storage
+				Committee: node.ibfts[beacon.RoleAttester].GetIBFTCommittee(),  // TODO need to fetch the committee from storage
 			}
 
 			// send sigs
 			for index, sig := range test.sigs {
-				node.network.BroadcastSignature(&proto.SignedMessage{
+				node.network.BroadcastSignature("", &proto.SignedMessage{
 					Message: &proto.Message{
 						Lambda: []byte("id"),
 					},

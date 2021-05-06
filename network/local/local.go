@@ -46,7 +46,7 @@ func (n *Local) ReceivedSignatureChan() <-chan *proto.SignedMessage {
 }
 
 // Broadcast implements network.Local interface
-func (n *Local) Broadcast(signed *proto.SignedMessage) error {
+func (n *Local) Broadcast(topic string, msg *proto.SignedMessage) error {
 	go func() {
 
 		// verify node is not prevented from sending msgs
@@ -62,7 +62,7 @@ func (n *Local) Broadcast(signed *proto.SignedMessage) error {
 			//	continue
 			//}
 
-			c <- signed
+			c <- msg
 		}
 	}()
 
@@ -70,7 +70,7 @@ func (n *Local) Broadcast(signed *proto.SignedMessage) error {
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *Local) BroadcastSignature(msg *proto.SignedMessage) error {
+func (n *Local) BroadcastSignature(topic string, msg *proto.SignedMessage) error {
 	n.createChannelMutex.Lock()
 	go func() {
 		for _, c := range n.sigC {

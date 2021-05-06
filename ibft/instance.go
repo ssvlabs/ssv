@@ -200,6 +200,11 @@ func (i *Instance) StartMessagePipeline() {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
+	pk := &bls.PublicKey{}
+	if err := pk.Deserialize(i.Me.Pk); err != nil { // TODO - cache somewhere
+		return err
+	}
+
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
 		return err
@@ -216,7 +221,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		SignerIds: []uint64{i.Me.IbftId},
 	}
 	if i.network != nil {
-		return i.network.Broadcast(signedMessage)
+		return i.network.Broadcast(pk.SerializeToHexStr(), signedMessage)
 	}
 
 	switch msg.Type {

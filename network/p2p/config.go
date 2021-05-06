@@ -14,7 +14,7 @@ type Config struct {
 	HostAddress         string
 	HostDNS             string
 	HostID              peer.ID
-	TopicName           string
-	Topic               *pubsub.Topic
-	Sub                 *pubsub.Subscription
+	//TopicName           string
+	Topics map[string]*pubsub.Topic
+	Subs   []*pubsub.Subscription
 }

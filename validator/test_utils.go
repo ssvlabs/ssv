@@ -1,4 +1,4 @@
-package node
+package validator
 
 import (
 	"context"
@@ -94,7 +94,7 @@ func newTestBeacon(t *testing.T) *testBeacon {
 	return ret
 }
 
-func (t *testBeacon) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
+func (t *testBeacon) StreamDuties(ctx context.Context, pubKey [][]byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
 	return nil, nil
 }
 
@@ -143,16 +143,16 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *slotqueue.D
 	return nil, nil
 }
 
-func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
+func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validator {
 
-	ret := &ssvNode{}
+	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.iBFT = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 
 	// nodes
 	ret.network = local.NewLocalNetwork()
-	ret.queue = msgqueue.New()
+	ret.msgQueue = msgqueue.New()
 
 	// validatorStorage pk
 	threshold.Init()
@@ -162,7 +162,7 @@ func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
 	require.NoError(t, err)
 
 	// timeout
-	ret.signatureCollectionTimeout = time.Second * 2
+	ret.SignatureCollectionTimeout = time.Second * 2
 
 	go ret.listenToNetworkMessages()
 	return ret

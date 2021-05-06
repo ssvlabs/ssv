@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
-	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -15,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/cli/flags"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
@@ -143,32 +141,21 @@ var startNodeCmd = &cobra.Command{
 			},
 			UDPPort:     udpPort,
 			TCPPort:     tcpPort,
-			TopicName:   validatorKey,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
 		}
-		network, err := p2p.New(cmd.Context(), logger, &cfg)
+		network, err := p2p.New(cmd.Context(), logger, validatorStorage, &cfg)
 		if err != nil {
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		msgQ := msgqueue.New()
-
 		ssvNode := node.New(node.Options{
 			ValidatorStorage: validatorStorage,
+			IbftStorage:      ibftStorage,
 			Beacon:           beaconClient,
 			ETHNetwork:       eth2Network,
 			Network:          network,
-			Queue:            msgQ,
 			Consensus:        consensusType,
-			IBFT: ibft.New(
-				ibftStorage,
-				network,
-				msgQ,
-				&proto.InstanceParams{
-					ConsensusParams: proto.DefaultConsensusParams(),
-				},
-			),
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
 			Phase1TestGenesis:          genesisEpoch,
@@ -207,11 +194,66 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 		},
 	}
 
+
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
+
+	secValidator(&validatorStorage, logger, nodeID)
+
 	ibftStorage := collections.NewIbft(db, logger)
 	return validatorStorage, ibftStorage
+}
+
+func secValidator(validatorStorage *collections.ValidatorStorage, logger *zap.Logger, nodeID uint64) {
+	validatorKey := "b4dbeb61df8d810ff7c3d319716c867ac8d717ac6037413e66f543ec031fd23f10d58cf0f94831ec4963b9dc6d6555ad"
+	pubKey2 := &bls.PublicKey{}
+	if err := pubKey2.DeserializeHexStr(validatorKey); err != nil{
+		logger.Error("failed to deserialize pubkey 2",zap.Error(err))
+	}
+	secrets := make(map[uint64]string)
+	secrets[1] = "6cef8480cc608b428805961b67d8014fbad50dc8863fde24b95acc51b06ea7c4"
+	secrets[2] = "229b3da8e937c2c89a9406256e3852a86ad390ede5b26c89f7042db18536e31f"
+	secrets[3] = "4ebde2ca1f7c1ff3a45a76434ff325d68191ddac4d474c66f0b3dfc7561ceca7"
+	secrets[4] = "097c253e1bf2a8333ee53664f9c4cacf5794abfdbd01c5bda669e2952320c45a"
+	secert2:= &bls.SecretKey{}
+	if err := secert2.SetHexString(secrets[nodeID]); err != nil{
+		logger.Error("failed to deserialize secret 2",zap.Error(err))
+	}
+
+	ibftCommittee2 := map[uint64]*proto.Node{
+		1: {
+			IbftId: 1,
+			Pk:     _getBytesFromHex("a07ade519fe96253491fdef133c2a0368ca16fb9fbba385fd3ee1818d3872c30b05d831c16a0e76150b01d0cf61caf3c"),
+		},
+		2: {
+			IbftId: 2,
+			Pk:     _getBytesFromHex("ab95d4889e37868c3e37d849455f01d0bf7d689258ab243480e32b4fac3e68ec4564518f03481ba4694604ff8814cffe"),
+		},
+		3: {
+			IbftId: 3,
+			Pk:     _getBytesFromHex("b50727d4272969ed51a5de6eca8ffecb0feb55dc5865e9b1a6335f4e80b680757affc08ad06eba0123b68779f7b6d782"),
+		},
+		4: {
+			IbftId: 4,
+			Pk:     _getBytesFromHex("8b28bd9c4d57928e5c67969ea850d2fd14e5f222ce7333e477a9ebd2be0e3c2df3d46b93c30080231dea30dbcf8836fe"),
+		},
+	}
+	ibftCommittee2[nodeID].Pk = secert2.GetPublicKey().Serialize()
+	ibftCommittee2[nodeID].Sk = secert2.Serialize()
+
+	val2 := collections.Validator{
+		NodeID:     nodeID,
+		PubKey:     pubKey2,
+		ShareKey:   secert2,
+		Committiee: ibftCommittee2,
+	}
+
+	if err := validatorStorage.SaveValidatorShare(&val2); err != nil{
+		logger.Error("failed to save validator 2",zap.Error(err))
+	}else {
+		logger.Info("save validator 2 success")
+	}
 }
 
 func _getBytesFromHex(str string) []byte {

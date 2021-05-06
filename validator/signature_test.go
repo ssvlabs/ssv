@@ -1,4 +1,4 @@
-package node
+package validator
 
 import (
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -59,7 +59,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(t,true, 4)
+			node := testingValidator(t,true, 4)
 
 			sk := &bls.SecretKey{}
 			require.NoError(t, sk.Deserialize(test.skByts))

@@ -63,6 +63,7 @@ func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]storage.Obj, error) {
 	var err error
 	err = b.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
+		opt.Prefix = prefix
 		it := txn.NewIterator(opt)
 		defer it.Close()
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
@@ -70,12 +71,15 @@ func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]storage.Obj, error) {
 			resKey := item.Key()
 			trimmedResKey := bytes.TrimPrefix(resKey, prefix)
 			val, err := item.ValueCopy(nil)
+			if err != nil {
+				b.logger.Error("failed to copy value", zap.Error(err))
+				continue
+			}
 			obj := storage.Obj{
 				Key: trimmedResKey,
 				Value: val,
 			}
 			res = append(res, obj)
-			return err
 		}
 		return err
 	})
