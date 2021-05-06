@@ -15,6 +15,8 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
 		auth.AuthorizeMsg(i.Params),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),

@@ -19,6 +19,8 @@ func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State), // TODO - should we validate round? or maybe just higher round?
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
 		auth.AuthorizeMsg(i.Params),
 		changeround.Validate(i.Params),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),

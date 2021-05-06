@@ -4,13 +4,25 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		auth.MsgTypeCheck(proto.RoundState_Commit),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
+		auth.AuthorizeMsg(i.Params),
+		i.uponCommitMsg(),
+	)
+}
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
@@ -41,16 +53,6 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 		}
 	}
 	return ret, nil
-}
-
-func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
-	return pipeline.Combine(
-		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.Params),
-		i.uponCommitMsg(),
-	)
 }
 
 func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {

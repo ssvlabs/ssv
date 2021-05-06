@@ -3,14 +3,27 @@ package ibft
 import (
 	"bytes"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		//i.WaitForStage(),
+		auth.MsgTypeCheck(proto.RoundState_Prepare),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
+		auth.AuthorizeMsg(i.Params),
+		i.uponPrepareMsg(),
+	)
+}
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
 func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
@@ -41,17 +54,6 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 		}
 	}
 	return ret, nil
-}
-
-func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
-	return pipeline.Combine(
-		//i.WaitForStage(),
-		auth.MsgTypeCheck(proto.RoundState_Prepare),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.Params),
-		i.uponPrepareMsg(),
-	)
 }
 
 /**
