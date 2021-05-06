@@ -123,7 +123,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
+			if err := i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
 				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}

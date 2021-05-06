@@ -44,7 +44,7 @@ func NewIbft(db storage.Db, logger *zap.Logger, instanceType string) IbftStorage
 	return ibft
 }
 
-// SavePrepared func implementation
+// SaveCurrentInstance func implementation
 func (i *IbftStorage) SaveCurrentInstance(state *proto.State) error {
 	value, err := json.Marshal(state)
 	if err != nil {
@@ -53,6 +53,7 @@ func (i *IbftStorage) SaveCurrentInstance(state *proto.State) error {
 	return i.save(value, "current", state.ValidatorPk)
 }
 
+// GetCurrentInstance func implementation
 func (i *IbftStorage) GetCurrentInstance(pk []byte) (*proto.State, error) {
 	val, err := i.get("current", pk)
 	if err != nil {
@@ -71,12 +72,12 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 	if err != nil {
 		i.logger.Error("failed serializing decided msg", zap.Error(err))
 	}
-	return i.save(value, "decided", signedMsg.Message.ValidatorPk, UInt64ToByteSlice(signedMsg.Message.SeqNumber))
+	return i.save(value, "decided", signedMsg.Message.ValidatorPk, uInt64ToByteSlice(signedMsg.Message.SeqNumber))
 }
 
 // GetDecided returns a signed message for an ibft instance which decided by identifier
 func (i *IbftStorage) GetDecided(pk []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-	val, err := i.get("decided", pk, UInt64ToByteSlice(seqNumber))
+	val, err := i.get("decided", pk, uInt64ToByteSlice(seqNumber))
 	if err != nil {
 		return nil, err
 	}
@@ -134,12 +135,8 @@ func (i *IbftStorage) key(id string, pk []byte, params ...[]byte) []byte {
 	return ret
 }
 
-func UInt64ToByteSlice(n uint64) []byte {
+func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
-}
-
-func ByteSliceToUInt64(b []byte) uint64 {
-	return binary.LittleEndian.Uint64(b)
 }
