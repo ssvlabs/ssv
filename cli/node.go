@@ -229,7 +229,6 @@ func init() {
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
 	flags.AddStoragePathFlag(startNodeCmd)
-	flags.AddLoggerLevelFlag(RootCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }
