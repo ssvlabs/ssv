@@ -7,11 +7,15 @@ option go_package = "github.com/bloxapp/ssv/ibft/proto";
 import "github.com/bloxapp/ssv/ibft/proto/msgs.proto";
 
 message State {
-    RoundState stage = 1;
-    bytes lambda = 2;
-    bytes previous_lambda = 3;
-    bytes input_value = 4;
-    uint64 round = 5;
-    uint64 prepared_round = 6;
-    bytes prepared_value = 7;
+    RoundState stage        = 1;
+    // lambda is an instance unique identifier, much like a block hash in a blockchain
+    bytes lambda            = 2;
+    // sequence number is an incremental number for each instance, much like a block number would be in a blockchain
+    uint64 seq_number       = 3;
+    bytes previous_lambda   = 4;
+    bytes input_value       = 5;
+    uint64 round            = 6;
+    uint64 prepared_round   = 7;
+    bytes prepared_value    = 8;
+    bytes validator_pk      = 9;
 }

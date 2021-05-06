@@ -255,7 +255,7 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
-	ibftStorage := collections.NewIbft(db, logger)
+	ibftStorage := collections.NewIbft(db, logger, "attestation")
 	return validatorStorage, ibftStorage
 }
 

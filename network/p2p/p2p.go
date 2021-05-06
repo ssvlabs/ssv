@@ -34,11 +34,15 @@ const (
 	MsgChanSize = 128
 
 	topicFmt = "bloxstaking.ssv.%s"
+
+	syncStreamProtocol = "/sync/0.0.1"
 )
 
 type listener struct {
-	msgCh chan *proto.SignedMessage
-	sigCh chan *proto.SignedMessage
+	msgCh     chan *proto.SignedMessage
+	sigCh     chan *proto.SignedMessage
+	decidedCh chan *proto.SignedMessage
+	syncCh    chan *network.SyncChanObj
 }
 
 // p2pNetwork implements network.Network interface using P2P
@@ -54,7 +58,6 @@ type p2pNetwork struct {
 	host          p2pHost.Host
 	pubsub        *pubsub.PubSub
 }
-
 
 // New is the constructor of p2pNetworker
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
@@ -187,72 +190,13 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.cfg.Sub = sub
 
 	go n.listen()
+	n.handleStream()
 
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		n.logger.Info("Current peers status", zap.Any("peers", n.GetTopic().ListPeers()))
+		n.logger.Info("Current peers status", zap.Any("peers", n.pubsub.ListPeers(n.cfg.Topic.String())))
 	})
 
 	return n, nil
-}
-
-func (n *p2pNetwork) GetTopic() *pubsub.Topic {
-	return n.cfg.Topic
-}
-
-
-// Broadcast propagates a signed message to all peers
-func (n *p2pNetwork) Broadcast(msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
-		Lambda: msg.Message.Lambda,
-		Msg:    msg,
-		Type:   network.IBFTBroadcastingType,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal message")
-	}
-
-	n.logger.Debug("Broadcasting to topic", zap.Any("topic", n.cfg.Sub.Topic()), zap.Any("peers", n.cfg.Topic.ListPeers()))
-	return n.cfg.Topic.Publish(n.ctx, msgBytes)
-}
-
-// ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
-	ls := listener{
-		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
-	}
-
-	n.listenersLock.Lock()
-	n.listeners = append(n.listeners, ls)
-	n.listenersLock.Unlock()
-
-	return ls.msgCh
-}
-
-// BroadcastSignature broadcasts the given signature for the given lambda
-func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
-		Lambda: msg.Message.Lambda,
-		Msg:    msg,
-		Type:   network.SignatureBroadcastingType,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal message")
-	}
-
-	return n.cfg.Topic.Publish(n.ctx, msgBytes)
-}
-
-// ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
-	ls := listener{
-		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
-	}
-
-	n.listenersLock.Lock()
-	n.listeners = append(n.listeners, ls)
-	n.listenersLock.Unlock()
-
-	return ls.sigCh
 }
 
 // ReceivedMsgChan return a channel with messages
@@ -278,16 +222,17 @@ func (n *p2pNetwork) listen() {
 				continue
 			}
 
-			n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm))
-
 			for _, ls := range n.listeners {
 				go func(ls listener) {
-
 					switch cm.Type {
-					case network.IBFTBroadcastingType:
-						ls.msgCh <- cm.Msg
-					case network.SignatureBroadcastingType:
-						ls.sigCh <- cm.Msg
+					case network.NetworkMsg_IBFTType:
+						ls.msgCh <- cm.SignedMessage
+					case network.NetworkMsg_SignatureType:
+						ls.sigCh <- cm.SignedMessage
+					case network.NetworkMsg_DecidedType:
+						ls.decidedCh <- cm.SignedMessage
+					default:
+						n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
 					}
 				}(ls)
 			}

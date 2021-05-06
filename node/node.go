@@ -93,7 +93,7 @@ func (n *ssvNode) GetID() string {
 // Start implements Node interface
 func (n *ssvNode) Start(ctx context.Context) error {
 	validators, err := n.validatorStorage.GetAllValidatorsShare()
-	validator := validators[0]  // TODO: temp getting the :0 from slice. need to support multi valShare
+	validator := validators[0] // TODO: temp getting the :0 from slice. need to support multi valShare
 	if err != nil {
 		n.logger.Fatal("Failed to get validatorStorage share", zap.Error(err))
 	}
@@ -156,9 +156,9 @@ func (n *ssvNode) listenToNetworkMessages() {
 	sigChan := n.network.ReceivedSignatureChan()
 	for sigMsg := range sigChan {
 		n.queue.AddMessage(&network.Message{
-			Lambda: sigMsg.Message.Lambda,
-			Msg:    sigMsg,
-			Type:   network.SignatureBroadcastingType,
+			Lambda:        sigMsg.Message.Lambda,
+			SignedMessage: sigMsg,
+			Type:          network.NetworkMsg_SignatureType,
 		})
 	}
 }
