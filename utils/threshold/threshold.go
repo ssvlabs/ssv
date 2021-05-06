@@ -31,7 +31,7 @@ func Create(skBytes []byte, threshold uint64, count uint64) (map[uint64]*bls.Sec
 	msk[0] = *sk
 
 	// construct poly
-	for i := uint64(1); i < threshold-1; i++ {
+	for i := uint64(1); i < threshold; i++ {
 		sk := bls.SecretKey{}
 		sk.SetByCSPRNG()
 		msk[i] = sk
