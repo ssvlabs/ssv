@@ -29,7 +29,7 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
 func (i *ibftImpl) NextSeqNumber() uint64 {
-	return uint64(len(i.instances))
+	return 0 //uint64(len(i.instances)) // TODO - make seq incremental
 }
 
 func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOptions {
