@@ -10,6 +10,7 @@ import (
 type ContractEvent struct {
 	pubsub.BaseSubject
 	Log types.Log
+	Data interface{}
 }
 
 // NewContractEvent create new event subject
@@ -24,6 +25,6 @@ func NewContractEvent(name string) *ContractEvent {
 // NotifyAll notify all subscribe observables
 func (e *ContractEvent) NotifyAll() {
 	for _, observer := range e.ObserverList {
-		observer.Update(e.Log)
+		observer.Update(e.Data)
 	}
 }

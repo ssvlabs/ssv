@@ -2,12 +2,15 @@ package goeth
 
 import (
 	"context"
+	"encoding/hex"
+	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -26,7 +29,7 @@ func New(ctx context.Context, logger *zap.Logger, nodeAddr string) (eth1.Eth1, e
 	// Create an IPC based RPC connection to a remote node
 	conn, err := ethclient.Dial(nodeAddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to connect to the Ethereum client")
+		logger.Error("Failed to connect to the Ethereum client", zap.Error(err))
 	}
 
 	e := &eth1GRPC{
@@ -58,6 +61,11 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 		return err
 	}
 
+	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+	if err != nil {
+		e.logger.Fatal("Failed to parse ABI interface", zap.Error(err))
+	}
+
 	e.contractEvent = eth1.NewContractEvent("smartContractEvent")
 	go func() {
 		for {
@@ -67,8 +75,82 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 				e.logger.Error("Error from logs sub", zap.Error(err))
 
 			case vLog := <-logs:
-				e.contractEvent.Log = vLog
-				e.contractEvent.NotifyAll()
+				eventType, err := contractAbi.EventByID(vLog.Topics[0])
+				if err != nil {
+					e.logger.Error("Failed to get event by topic hash", zap.Error(err))
+					continue
+				}
+
+				switch eventName := eventType.Name; eventName {
+				case "OperatorAdded":
+					operatorAddedEvent := struct {
+						Name           string
+						Pubkey         []byte
+						PaymentAddress common.Address
+					}{}
+					err = contractAbi.UnpackIntoInterface(&operatorAddedEvent, eventType.Name, vLog.Data)
+					if err != nil {
+						e.logger.Error("Failed to unpack event", zap.Error(err))
+						continue
+					}
+					e.contractEvent.Data = operatorAddedEvent
+
+				case "ValidatorAdded":
+					validatorAddedEvent := struct {
+						Pubkey       []byte
+						OwnerAddress common.Address
+						Oess         []byte
+					}{}
+					err = contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventType.Name, vLog.Data)
+					if err != nil {
+						e.logger.Error("Failed to unpack ValidatorAdded event", zap.Error(err))
+						continue
+					}
+
+					oessAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().OessABI))
+					if err != nil {
+						e.logger.Fatal("Failed to parse Oess ABI interface", zap.Error(err))
+						continue
+					}
+
+					oess := struct {
+						OperatorPubKey []byte
+						Index          *big.Int
+						SharePubKey    []byte
+						EncryptedKey   []byte
+					}{}
+
+					oessListEncoded := delete_empty(strings.Split(hex.EncodeToString(validatorAddedEvent.Oess), params.SsvConfig().OessSeparator))
+
+					e.logger.Debug("Validator PubKey:", zap.String("", hex.EncodeToString(validatorAddedEvent.Pubkey)))
+					e.logger.Debug("Owner Address:   ", zap.String("", validatorAddedEvent.OwnerAddress.String()))
+					for i := range oessListEncoded {
+						oessEncoded, err := hex.DecodeString(oessListEncoded[i])
+						if err != nil {
+							e.logger.Error("Failed to HEX decode Oess", zap.Error(err))
+							continue
+						}
+
+						err = oessAbi.UnpackIntoInterface(&oess, "tuple", oessEncoded)
+						if err != nil {
+							e.logger.Error("Failed to unpack Oess struct", zap.Error(err))
+							continue
+						}
+						if strings.ToLower(hex.EncodeToString(oess.OperatorPubKey)) == strings.ToLower(params.SsvConfig().OperatorPublicKey) {
+							e.logger.Debug("Index:           ", zap.Any("", oess.Index))
+							e.logger.Debug("Operator PubKey: ", zap.String("", hex.EncodeToString(oess.OperatorPubKey)))
+							e.logger.Debug("Share PubKey:    ", zap.String("", hex.EncodeToString(oess.SharePubKey)))
+							e.logger.Debug("Encrypted Key:   ", zap.String("", hex.EncodeToString(oess.EncryptedKey)))
+							e.contractEvent.Data = oess
+							e.contractEvent.NotifyAll()
+							break
+						}
+					}
+
+				default:
+					e.logger.Debug("Unknown contract event is received")
+					continue
+				}
 			}
 		}
 	}()
@@ -77,4 +159,14 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 
 func (e *eth1GRPC) GetContractEvent() *eth1.ContractEvent {
 	return e.contractEvent
+}
+
+func delete_empty(s []string) []string {
+	var r []string
+	for _, str := range s {
+		if str != "" {
+			r = append(r, str)
+		}
+	}
+	return r
 }
