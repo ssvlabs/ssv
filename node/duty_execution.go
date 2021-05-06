@@ -181,6 +181,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 		ValueCheck:   valCheckInstance,
 		PrevInstance: prevIdentifier,
 		Identifier:   identifier,
+		SeqNumber:    n.iBFT.NextSeqNumber(),
 		Value:        inputByts,
 	})
 
