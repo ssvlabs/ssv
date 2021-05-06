@@ -95,7 +95,7 @@ func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData, du
 		return nil, nil, errors.Wrap(err, "failed to get signing root")
 	}
 
-	return duty.PrivateKey.SignByte(root[:]).Serialize(), root[:], nil
+	return duty.ShareSK.SignByte(root[:]).Serialize(), root[:], nil
 }
 
 // getSigningRoot returns signing root

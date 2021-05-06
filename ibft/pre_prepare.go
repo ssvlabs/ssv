@@ -82,7 +82,9 @@ func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 		Type:           proto.RoundState_PrePrepare,
 		Round:          i.State.Round,
 		Lambda:         i.State.Lambda,
+		SeqNumber:      i.State.SeqNumber,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
 	}
 }

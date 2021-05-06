@@ -96,3 +96,15 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		return nil
 	})
 }
+
+func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
+	return &proto.Message{
+		Type:           proto.RoundState_Commit,
+		Round:          i.State.Round,
+		Lambda:         i.State.Lambda,
+		SeqNumber:      i.State.SeqNumber,
+		PreviousLambda: i.State.PreviousLambda,
+		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
+	}
+}

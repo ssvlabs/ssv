@@ -37,8 +37,8 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 		Logger: opts.Logger,
 		Me: &proto.Node{
 			IbftId: opts.Duty.NodeID,
-			Pk:     opts.Duty.PrivateKey.GetPublicKey().Serialize(),
-			Sk:     opts.Duty.PrivateKey.Serialize(),
+			Pk:     opts.Duty.ShareSK.GetPublicKey().Serialize(),
+			Sk:     opts.Duty.ShareSK.Serialize(),
 		},
 		Network:        i.network,
 		Queue:          i.msgQueue,
@@ -51,5 +51,6 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 		Lambda:         opts.Identifier,
 		SeqNumber:      opts.SeqNumber,
 		PreviousLambda: opts.PrevInstance,
+		ValidatorPK:    opts.Duty.ValidatorPK.Serialize(),
 	}
 }

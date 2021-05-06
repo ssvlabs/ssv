@@ -87,35 +87,6 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	}
 
 	newInstance := NewInstance(instanceOpts)
-	//// If previous instance didn't decide, can't start another instance.
-	//if !bytes.Equal(opts.PrevInstance, FirstInstanceIdentifier()) {
-	//	instance, found := i.instances[hex.EncodeToString(opts.PrevInstance)]
-	//	if !found {
-	//		opts.Logger.Error("previous instance not found")
-	//	}
-	//	if instance.Stage() != proto.RoundState_Decided {
-	//		opts.Logger.Error("previous instance not decided, can't start new instance")
-	//	}
-	//}
-	//
-	//newInstance := NewInstance(InstanceOptions{
-	//	Logger: opts.Logger,
-	//	Me: &proto.Node{
-	//		IbftId: opts.Duty.NodeID,
-	//		Pk:     opts.Duty.PrivateKey.GetPublicKey().Serialize(),
-	//		Sk:     opts.Duty.PrivateKey.Serialize(),
-	//	},
-	//	Network:        i.network,
-	//	Queue:          i.msgQueue,
-	//	ValueCheck:     opts.ValueCheck,
-	//	LeaderSelector: i.leaderSelector,
-	//	Params: &proto.InstanceParams{
-	//		ConsensusParams: i.params.ConsensusParams,
-	//		IbftCommittee:   opts.Duty.Committee,
-	//	},
-	//	Lambda:         opts.Identifier,
-	//	PreviousLambda: opts.PrevInstance,
-	//})
 	i.instances = append(i.instances, newInstance)
 	go newInstance.StartEventLoop()
 	go newInstance.StartMessagePipeline()

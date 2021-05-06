@@ -87,13 +87,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			i.SetStage(proto.RoundState_Prepare)
 
 			// send commit msg
-			broadcastMsg := &proto.Message{
-				Type:           proto.RoundState_Commit,
-				Round:          i.State.Round,
-				Lambda:         i.State.Lambda,
-				PreviousLambda: i.State.PreviousLambda,
-				Value:          i.State.PreparedValue,
-			}
+			broadcastMsg := i.generateCommitMessage(i.State.PreparedValue)
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Logger.Info("could not broadcast commit message", zap.Error(err))
 				return err
@@ -109,7 +103,9 @@ func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 		Type:           proto.RoundState_Prepare,
 		Round:          i.State.Round,
 		Lambda:         i.State.Lambda,
+		SeqNumber:      i.State.SeqNumber,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
 	}
 }

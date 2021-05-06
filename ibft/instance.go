@@ -31,6 +31,7 @@ type InstanceOptions struct {
 	Lambda         []byte
 	SeqNumber      uint64
 	PreviousLambda []byte
+	ValidatorPK    []byte
 }
 
 // Instance defines the instance attributes
@@ -73,6 +74,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 			Lambda:         opts.Lambda,
 			SeqNumber:      opts.SeqNumber,
 			PreviousLambda: opts.PreviousLambda,
+			ValidatorPk:    opts.ValidatorPK,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,

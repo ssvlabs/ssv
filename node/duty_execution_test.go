@@ -170,10 +170,10 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			require.NoError(t, err)
 
 			dutyStruct := &slotqueue.Duty{
-				NodeID:    1,
-				Duty:      duty,
-				PublicKey: pk,
-				Committee: node.iBFT.GetIBFTCommittee(),  // TODO need to fetch the committee from storage
+				NodeID:      1,
+				Duty:        duty,
+				ValidatorPK: pk,
+				Committee:   node.iBFT.GetIBFTCommittee(), // TODO need to fetch the committee from storage
 			}
 
 			// send sigs
