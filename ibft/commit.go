@@ -73,7 +73,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	Decide(λi , value, Qcommit)
 */
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("upon commit msg", func(signedMessage *proto.SignedMessage) error {
 		// add to prepare messages
 		i.CommitMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid commit message for round",

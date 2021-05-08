@@ -8,7 +8,7 @@ import (
 
 // ValidateSequenceNumber validates msg seq number
 func ValidateSequenceNumber(state *proto.State) pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("sequence", func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.Message.SeqNumber != state.SeqNumber {
 			return errors.New("invalid message sequence number")
 		}

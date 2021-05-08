@@ -48,7 +48,7 @@ func TestAuthorizeMsg(t *testing.T) {
 	tests := []struct {
 		name          string
 		msg           *proto.Message
-		signerId      uint64
+		signerID      uint64
 		sig           []byte
 		expectedError string
 	}{
@@ -87,7 +87,7 @@ func TestAuthorizeMsg(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			sks, committee := GenerateNodes(4)
-			signed := SignMsg(t, test.signerId, sks[test.signerId], test.msg)
+			signed := SignMsg(t, test.signerID, sks[test.signerID], test.msg)
 			if test.sig != nil {
 				signed.Signature = test.sig
 			}

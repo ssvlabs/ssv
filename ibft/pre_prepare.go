@@ -50,7 +50,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
 func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("upon pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
 		// add to pre-prepare messages
 		i.PrePrepareMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid pre-prepare message for round",

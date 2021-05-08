@@ -256,3 +256,19 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res)
 }
+
+func TestPrePreparePipeline(t *testing.T) {
+	_, nodes := GenerateNodes(4)
+	instance := &Instance{
+		PrepareMessages: msgcontinmem.New(3),
+		Params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		State: &proto.State{
+			Round: 1,
+		},
+	}
+	pipeline := instance.prePrepareMsgPipeline()
+	require.EqualValues(t, "combination of: type check, lambda, round, validator PK, sequence, authorize, validate pre-prepare, upon pre-prepare msg, ", pipeline.Name())
+}

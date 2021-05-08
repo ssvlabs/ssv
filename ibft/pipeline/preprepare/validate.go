@@ -11,7 +11,7 @@ import (
 
 // ValidatePrePrepareMsg validates pre-prepare message
 func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, leaderSelector leader.Selector, params *proto.InstanceParams) pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("validate pre-prepare", func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")
 		}

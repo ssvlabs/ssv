@@ -65,7 +65,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 */
 func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("upon prepare msg", func(signedMessage *proto.SignedMessage) error {
 		// add to prepare messages
 		i.PrepareMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid prepare message from round",
