@@ -14,7 +14,7 @@ import (
 	"log"
 )
 
-func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node, ) error {
+func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node) error {
 	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
@@ -35,7 +35,7 @@ func (n *ssvNode) verifyPartialSignature(signature []byte, root []byte, ibftID u
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *slotqueue.Duty, ) ([]byte, []byte, *proto.InputValue, error) {
+func (n *ssvNode) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *slotqueue.Duty) ([]byte, []byte, *proto.InputValue, error) {
 	// sign input value
 	var sig []byte
 	var root []byte
@@ -91,7 +91,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
-	if res := signature.VerifyByte(duty.PublicKey, root); !res {
+	if res := signature.VerifyByte(duty.ValidatorPK, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}
 
@@ -103,7 +103,7 @@ func (n *ssvNode) reconstructAndBroadcastSignature(
 		logger.Info("submitting attestation")
 		inputValue.GetAttestation().Signature = signature.Serialize()
 		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.Duty.GetValidatorIndex())
-		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex(), duty.PublicKey); err != nil {
+		if err := n.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex(), duty.ValidatorPK); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	//case beacon.RoleAggregator:

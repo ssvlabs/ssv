@@ -70,3 +70,19 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.SignerIds)
 }
+
+func TestCommitPipeline(t *testing.T) {
+	_, nodes := GenerateNodes(4)
+	instance := &Instance{
+		PrepareMessages: msgcontinmem.New(3),
+		Params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		State: &proto.State{
+			Round: 1,
+		},
+	}
+	pipeline := instance.commitMsgPipeline()
+	require.EqualValues(t, "combination of: type check, lambda, round, validator PK, sequence, authorize, upon commit msg, ", pipeline.Name())
+}

@@ -111,11 +111,11 @@ func (n *ssvNode) Start(ctx context.Context) error {
 						zap.Uint64("slot", slot))
 
 					dutyStruct := slotqueue.Duty{
-						NodeID:     validator.NodeID,
-						Duty:       duty,
-						PublicKey:  validator.PubKey,
-						PrivateKey: validator.ShareKey,
-						Committee:  validator.Committiee,
+						NodeID:      validator.NodeID,
+						Duty:        duty,
+						ValidatorPK: validator.PubKey,
+						ShareSK:     validator.ShareKey,
+						Committee:   validator.Committiee,
 					}
 
 					// execute task if slot already began

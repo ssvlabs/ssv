@@ -77,7 +77,7 @@ func (b *prysmGRPC) signRandaoReveal(ctx context.Context, slot uint64, duty slot
 		return nil, err
 	}
 
-	return duty.PrivateKey.SignByte(root[:]).Serialize(), nil
+	return duty.ShareSK.SignByte(root[:]).Serialize(), nil
 }
 
 func (b *prysmGRPC) signBlock(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) ([]byte, error) {
@@ -92,5 +92,5 @@ func (b *prysmGRPC) signBlock(ctx context.Context, block *ethpb.BeaconBlock, dut
 		return nil, errors.Wrap(err, "failed to compute signing root")
 	}
 
-	return duty.PrivateKey.SignByte(root[:]).Serialize(), nil
+	return duty.ShareSK.SignByte(root[:]).Serialize(), nil
 }

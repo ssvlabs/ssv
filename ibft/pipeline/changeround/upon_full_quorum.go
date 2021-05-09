@@ -31,3 +31,8 @@ func UponFullQuorum(logger *zap.Logger) pipeline.Pipeline {
 func (p *uponFullQuorum) Run(signedMessage *proto.SignedMessage) error {
 	panic("not implemented yet")
 }
+
+// Name implements pipeline.Pipeline interface
+func (p *uponFullQuorum) Name() string {
+	return "upon full quorum"
+}

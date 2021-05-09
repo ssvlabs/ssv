@@ -4,13 +4,25 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		auth.MsgTypeCheck(proto.RoundState_Commit),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
+		auth.AuthorizeMsg(i.Params),
+		i.uponCommitMsg(),
+	)
+}
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
@@ -43,16 +55,6 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 	return ret, nil
 }
 
-func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
-	return pipeline.Combine(
-		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.Params),
-		i.uponCommitMsg(),
-	)
-}
-
 func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
 	cnt := 0
 	msgs := i.CommitMessages.ReadOnlyMessagesByRound(round)
@@ -71,7 +73,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	Decide(λi , value, Qcommit)
 */
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("upon commit msg", func(signedMessage *proto.SignedMessage) error {
 		// add to prepare messages
 		i.CommitMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid commit message for round",
@@ -95,4 +97,16 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		}
 		return nil
 	})
+}
+
+func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
+	return &proto.Message{
+		Type:           proto.RoundState_Commit,
+		Round:          i.State.Round,
+		Lambda:         i.State.Lambda,
+		SeqNumber:      i.State.SeqNumber,
+		PreviousLambda: i.State.PreviousLambda,
+		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
+	}
 }

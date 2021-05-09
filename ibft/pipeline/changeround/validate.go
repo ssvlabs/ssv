@@ -70,3 +70,8 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 
 	return nil
 }
+
+// Name implements pipeline.Pipeline interface
+func (p *validate) Name() string {
+	return "validate msg"
+}
