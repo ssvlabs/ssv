@@ -28,6 +28,7 @@ type InstanceOptions struct {
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
+	PublicKey      []byte
 	Lambda         []byte
 	PreviousLambda []byte
 }
@@ -71,6 +72,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 			Stage:          proto.RoundState_NotStarted,
 			Lambda:         opts.Lambda,
 			PreviousLambda: opts.PreviousLambda,
+			ValidatorPk:    opts.PublicKey,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
@@ -221,7 +223,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		SignerIds: []uint64{i.Me.IbftId},
 	}
 	if i.network != nil {
-		return i.network.Broadcast(pk.SerializeToHexStr(), signedMessage)
+		return i.network.Broadcast(signedMessage)
 	}
 
 	switch msg.Type {

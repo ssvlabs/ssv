@@ -13,14 +13,14 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
-ifneq (,$(wildcard ./.env))
-    include .env
+ifneq (,$(wildcard ./.env.node.1))
+    include .env.node.1
 endif
 
 # node command builder
 NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
 --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} \
---host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL}
+--host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --storage-path=${STORAGE_PATH}
 
 
 ifneq ($(TCP_PORT),)

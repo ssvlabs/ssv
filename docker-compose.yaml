@@ -27,7 +27,6 @@ x-base-dev:
   volumes:
     - ./:/go/src/github.com/bloxapp/ssv
 
-
 services:
   ssv-node-1:
     <<: *default-base

@@ -19,10 +19,10 @@ type IValidator interface {
 
 // Validator model for ValidatorStorage struct creation
 type Validator struct {
-	NodeID     uint64
-	PubKey     *bls.PublicKey
-	ShareKey   *bls.SecretKey
-	Committiee map[uint64]*proto.Node
+	NodeID    uint64
+	PubKey    *bls.PublicKey
+	ShareKey  *bls.SecretKey
+	Committee map[uint64]*proto.Node
 }
 
 // ValidatorStorage struct
@@ -49,10 +49,10 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 		ibftCommittee[nodeID].Pk = shareKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = shareKey.Serialize()
 		validator := Validator{
-			NodeID:     nodeID,
-			PubKey:     pubKey,
-			ShareKey:   shareKey,
-			Committiee: ibftCommittee,
+			NodeID:    nodeID,
+			PubKey:    pubKey,
+			ShareKey:  shareKey,
+			Committee: ibftCommittee,
 		}
 		err = v.SaveValidatorShare(&validator)
 	}
@@ -71,6 +71,7 @@ func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
 	return v.db.Set(v.prefix, validator.PubKey.Serialize(), value)
 }
 
+// GetValidatorsShare by key
 func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
 	obj, err := v.db.Get(v.prefix, key)
 	if err != nil{
@@ -82,7 +83,6 @@ func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
 // GetAllValidatorsShare returns ALL validators shares from db
 func (v *ValidatorStorage) GetAllValidatorsShare() ([]*Validator, error) {
 	objs, err := v.db.GetAllByBucket(v.prefix)
-	v.logger.Info("get all validators", zap.Int("size", len(objs)))
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}
@@ -110,7 +110,7 @@ func (v *Validator) Serialize() ([]byte, error) {
 	value := serializedValidator{
 		NodeID:     v.NodeID,
 		ShareKey:   v.ShareKey.Serialize(),
-		Committiee: v.Committiee,
+		Committiee: v.Committee,
 	}
 
 	var b bytes.Buffer
@@ -137,9 +137,9 @@ func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
 	return &Validator{
-		NodeID:     valShare.NodeID,
-		PubKey:     pubKey,
-		ShareKey:   shareSecret,
-		Committiee: valShare.Committiee,
+		NodeID:    valShare.NodeID,
+		PubKey:    pubKey,
+		ShareKey:  shareSecret,
+		Committee: valShare.Committiee,
 	}, nil
 }

@@ -103,6 +103,10 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedVa
 
 // TestIBFTInstance returns a test iBFT instance
 func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Instance {
+	//pk := &bls.PublicKey{}
+	//require.NoError(t, pk.Deserialize(TestValidatorPK()))
+
+
 	opts := ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
 		Me:             TestNodes()[1],
@@ -116,9 +120,15 @@ func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Inst
 		},
 		Lambda:         lambda,
 		PreviousLambda: prevLambda,
+		PublicKey:      nil,
 	}
 
 	return ibft.NewInstance(opts)
+}
+
+// TestValidatorPK validator publicKey
+func TestValidatorPK() []byte {
+	return fixtures.RefPk
 }
 
 // TestNodes generates test nodes for SSV

@@ -3,7 +3,6 @@ package prysmgrpc
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"time"
 
@@ -34,16 +33,16 @@ func (b *prysmGRPC) GetAttestationData(ctx context.Context, slot, committeeIndex
 }
 
 // SignAttestation implements Beacon interface
-func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) (*ethpb.Attestation, []byte, error) {
-	sig, root, err := b.signAtt(ctx, data, duty)
+func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty *ethpb.DutiesResponse_Duty, shareKey *bls.SecretKey) (*ethpb.Attestation, []byte, error) {
+	sig, root, err := b.signAtt(ctx, data, shareKey)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}
 
 	var indexInCommittee uint64
 	var found bool
-	for i, vID := range duty.Duty.GetCommittee() {
-		if vID == duty.Duty.GetValidatorIndex() {
+	for i, vID := range duty.GetCommittee() {
+		if vID == duty.GetValidatorIndex() {
 			indexInCommittee = uint64(i)
 			found = true
 			break
@@ -51,10 +50,10 @@ func (b *prysmGRPC) SignAttestation(ctx context.Context, data *ethpb.Attestation
 	}
 
 	if !found {
-		return nil, nil, fmt.Errorf("validator ID %d not found in committee of %v", duty.Duty.GetValidatorIndex(), duty.Duty.GetCommittee())
+		return nil, nil, fmt.Errorf("validator ID %d not found in committee of %v", duty.GetValidatorIndex(), duty.GetCommittee())
 	}
 
-	aggregationBitfield := bitfield.NewBitlist(uint64(len(duty.Duty.GetCommittee())))
+	aggregationBitfield := bitfield.NewBitlist(uint64(len(duty.GetCommittee())))
 	aggregationBitfield.SetBitAt(indexInCommittee, true)
 
 	return &ethpb.Attestation{
@@ -89,13 +88,13 @@ func (b *prysmGRPC) SubmitAttestation(ctx context.Context, attestation *ethpb.At
 }
 
 // signAtt returns the signature of an attestation data and its signing root.
-func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) ([]byte, []byte, error) {
+func (b *prysmGRPC) signAtt(ctx context.Context, data *ethpb.AttestationData, shareKey *bls.SecretKey) ([]byte, []byte, error) {
 	root, err := b.getSigningRoot(ctx, data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get signing root")
 	}
 
-	return duty.PrivateKey.SignByte(root[:]).Serialize(), root[:], nil
+	return shareKey.SignByte(root[:]).Serialize(), root[:], nil
 }
 
 // getSigningRoot returns signing root

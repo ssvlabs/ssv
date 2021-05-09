@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	p2pHost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
@@ -35,17 +36,21 @@ const (
 	MsgChanSize = 128
 
 	topicFmt = "bloxstaking.ssv.%s"
+
+	syncStreamProtocol = "/sync/0.0.1"
 )
 
 type listener struct {
-	msgCh chan *proto.SignedMessage
-	sigCh chan *proto.SignedMessage
+	msgCh     chan *proto.SignedMessage
+	sigCh     chan *proto.SignedMessage
+	decidedCh chan *proto.SignedMessage
+	syncCh    chan *network.SyncChanObj
 }
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
 	ctx              context.Context
-	validatorStorage collections.ValidatorStorage
+	validatorStorage collections.IValidator
 	cfg              *Config
 	listenersLock    sync.Locker
 	dv5Listener      iListener
@@ -58,7 +63,7 @@ type p2pNetwork struct {
 }
 
 // New is the constructor of p2pNetworker
-func New(ctx context.Context, logger *zap.Logger, validatorStorage collections.ValidatorStorage, cfg *Config) (network.Network, error) {
+func New(ctx context.Context, logger *zap.Logger, validatorStorage collections.IValidator, cfg *Config) (network.Network, error) {
 	n := &p2pNetwork{
 		ctx:              ctx,
 		validatorStorage: validatorStorage,
@@ -175,6 +180,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorStorage collections.V
 	n.setupTopics()
 	n.subscribeToTopics()
 	n.listen()
+	n.handleStream()
 
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		for _, topic := range n.cfg.Topics{
@@ -217,65 +223,6 @@ func (n *p2pNetwork) subscribeToTopics() {
 	}
 }
 
-// Broadcast propagates a signed message to all peers
-func (n *p2pNetwork) Broadcast(topic string, msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
-		Lambda: msg.Message.Lambda,
-		Msg:    msg,
-		Type:   network.IBFTBroadcastingType,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal message")
-	}
-
-	if _, ok := n.cfg.Topics[topic]; !ok {
-		n.logger.Error("topic is not exist or registered", zap.String("topic", topic))
-		return errors.New("topic is not exist or registered")
-	}
-	n.logger.Debug("Broadcasting to topic", zap.Any("topic", topic), zap.Any("peers", n.cfg.Topics[topic].ListPeers()))
-	return n.cfg.Topics[topic].Publish(n.ctx, msgBytes)
-}
-
-// ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
-	ls := listener{
-		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
-	}
-
-	n.listenersLock.Lock()
-	n.listeners = append(n.listeners, ls)
-	n.listenersLock.Unlock()
-
-	return ls.msgCh
-}
-
-// BroadcastSignature broadcasts the given signature for the given lambda
-func (n *p2pNetwork) BroadcastSignature(topic string, msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
-		Lambda: msg.Message.Lambda,
-		Msg:    msg,
-		Type:   network.SignatureBroadcastingType,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal message")
-	}
-
-	return n.cfg.Topics[topic].Publish(n.ctx, msgBytes)
-}
-
-// ReceivedSignatureChan returns the channel with signatures
-func (n *p2pNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
-	ls := listener{
-		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
-	}
-
-	n.listenersLock.Lock()
-	n.listeners = append(n.listeners, ls)
-	n.listenersLock.Unlock()
-
-	return ls.sigCh
-}
-
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) listen() {
 	for _, sub := range n.cfg.Subs{
@@ -303,16 +250,20 @@ func (n *p2pNetwork) listen() {
 						continue
 					}
 
-					n.logger.Debug("Got message from peer", zap.String("sender peerId", msg.ReceivedFrom.String()), zap.Any("msg", cm))
+
 
 					for _, ls := range n.listeners {
 						go func(ls listener) {
 
 							switch cm.Type {
-							case network.IBFTBroadcastingType:
-								ls.msgCh <- cm.Msg
-							case network.SignatureBroadcastingType:
-								ls.sigCh <- cm.Msg
+							case network.NetworkMsg_IBFTType:
+								ls.msgCh <- cm.SignedMessage
+							case network.NetworkMsg_SignatureType:
+								ls.sigCh <- cm.SignedMessage
+					case network.NetworkMsg_DecidedType:
+						ls.decidedCh <- cm.SignedMessage
+					default:
+						n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
 							}
 						}(ls)
 					}
@@ -321,6 +272,22 @@ func (n *p2pNetwork) listen() {
 		}(sub)
 	}
 }
+
+func (n *p2pNetwork) GetTopic(msg *proto.SignedMessage) (*pubsub.Topic, error) {
+	if msg.Message == nil || msg.Message.ValidatorPk == nil{
+		return nil, errors.New("missing Message or ValidatorPk in signMsg")
+	}
+	pk := &bls.PublicKey{}
+	if err := pk.Deserialize(msg.Message.GetValidatorPk()); err != nil{
+		return nil, errors.Wrap(err, "failed to deserialize publicKey")
+	}
+	topic := pk.SerializeToHexStr()
+	if _, ok := n.cfg.Topics[topic]; !ok {
+		return nil, errors.New("topic is not exist or registered")
+	}
+	return n.cfg.Topics[topic], nil
+}
+
 
 func getTopic(topicName string) string {
 	return fmt.Sprintf(topicFmt, topicName)

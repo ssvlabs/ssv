@@ -84,5 +84,6 @@ func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 		Lambda:         i.State.Lambda,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
 	}
 }

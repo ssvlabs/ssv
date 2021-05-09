@@ -182,6 +182,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 		Lambda:         i.State.Lambda,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          data,
+		ValidatorPk:    i.State.ValidatorPk,
 	}
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 		i.Logger.Error("could not broadcast round change message", zap.Error(err))

@@ -93,6 +93,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 				Lambda:         i.State.Lambda,
 				PreviousLambda: i.State.PreviousLambda,
 				Value:          i.State.PreparedValue,
+				ValidatorPk:    i.State.ValidatorPk,
 			}
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Logger.Info("could not broadcast commit message", zap.Error(err))
@@ -111,5 +112,6 @@ func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 		Lambda:         i.State.Lambda,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
 	}
 }

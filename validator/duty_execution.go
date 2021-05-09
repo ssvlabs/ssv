@@ -8,7 +8,6 @@ import (
 	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/node/valcheck"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/pkg/errors"
 	"sync"
 	"time"
@@ -21,7 +20,7 @@ import (
 )
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
-func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node, ) (map[uint64][]byte, error) {
+func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
 	// Collect signatures from other nodes
 	// TODO - change signature count to min threshold
 	signatures := make(map[uint64][]byte, signaturesCount)
@@ -48,25 +47,25 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 			lock.Unlock()
 		}
 		if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
-			if len(msg.Msg.SignerIds) == 0 { // no signer, empty sig
+			if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
 				continue
 			}
-			if _, found := signatures[msg.Msg.SignerIds[0]]; found { // sig already exists
+			if _, found := signatures[msg.SignedMessage.SignerIds[0]]; found { // sig already exists
 				continue
 			}
 
-			logger.Info("collected valid signature", zap.Uint64("node_id", msg.Msg.SignerIds[0]), zap.Any("msg", msg))
+			logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]), zap.Any("msg", msg))
 
 			// verify sig
-			if err := v.verifyPartialSignature(msg.Msg.Signature, sigRoot, msg.Msg.SignerIds[0], committiee); err != nil {
+			if err := v.verifyPartialSignature(msg.SignedMessage.Signature, sigRoot, msg.SignedMessage.SignerIds[0], committiee); err != nil {
 				logger.Error("received invalid signature", zap.Error(err))
 				continue
 			}
-			logger.Info("collected valid signature", zap.Uint64("node_id", msg.Msg.SignerIds[0]))
+			logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]))
 
 			lock.Lock()
-			signatures[msg.Msg.SignerIds[0]] = msg.Msg.Signature
-			signedIndxes = append(signedIndxes, msg.Msg.SignerIds[0])
+			signatures[msg.SignedMessage.SignerIds[0]] = msg.SignedMessage.Signature
+			signedIndxes = append(signedIndxes, msg.SignedMessage.SignerIds[0])
 			if len(signedIndxes) >= signaturesCount {
 				done = true
 				break
@@ -81,26 +80,27 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *slotqueue.Duty, ) error {
+func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *ethpb.DutiesResponse_Duty) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := v.signDuty(ctx, decidedValue, role, duty)
+	sig, root, valueStruct, err := v.signDuty(ctx, decidedValue, role, duty, v.ValidatorShare.ShareKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
 
 	// TODO - should we construct it better?
-	if err := v.network.BroadcastSignature(duty.PublicKey.SerializeToHexStr(), &proto.SignedMessage{
+	if err := v.network.BroadcastSignature(&proto.SignedMessage{
 		Message: &proto.Message{
-			Lambda: identifier,
+			Lambda:      identifier,
+			ValidatorPk: duty.PublicKey,
 		},
 		Signature: sig,
-		SignerIds: []uint64{duty.NodeID},
+		SignerIds: []uint64{v.ValidatorShare.NodeID},
 	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := v.waitForSignatureCollection(logger, identifier, root, signaturesCount, duty.Committee)
+	signatures, err := v.waitForSignatureCollection(logger, identifier, root, signaturesCount, v.ValidatorShare.Committee)
 
 	// clean queue for messages, we don't need them anymore.
 	v.msgQueue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
@@ -118,20 +118,13 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 	return nil
 }
 
-func (v *Validator) comeToConsensusOnInputValue(
-	ctx context.Context,
-	logger *zap.Logger,
-	prevIdentifier []byte,
-	slot uint64,
-	role beacon.Role,
-	duty *slotqueue.Duty,
-) (int, []byte, []byte, error) {
+func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap.Logger, prevIdentifier []byte, slot uint64, role beacon.Role, duty *ethpb.DutiesResponse_Duty) (int, []byte, []byte, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance valcheck2.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
-		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.Duty.GetCommitteeIndex())
+		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
 		if err != nil {
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
@@ -181,12 +174,13 @@ func (v *Validator) comeToConsensusOnInputValue(
 	}
 
 	decided, signaturesCount, decidedByts := v.ibfts[role].StartInstance(ibft.StartOptions{
-		Duty:         duty,
-		Logger:       l,
-		ValueCheck:   valCheckInstance,
-		PrevInstance: prevIdentifier,
-		Identifier:   identifier,
-		Value:        inputByts,
+		Duty:           duty,
+		ValidatorShare: *v.ValidatorShare,
+		Logger:         l,
+		ValueCheck:     valCheckInstance,
+		PrevInstance:   prevIdentifier,
+		Identifier:     identifier,
+		Value:          inputByts,
 	})
 
 	if !decided {
@@ -195,20 +189,13 @@ func (v *Validator) comeToConsensusOnInputValue(
 	return signaturesCount, decidedByts, identifier, nil
 }
 
+// ExecuteDuty by slotQueue
 func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot uint64, duty *ethpb.DutiesResponse_Duty, ) {
 	logger := v.logger.With(zap.Time("start_time", v.getSlotStartTime(slot)),
 		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
-	valShareDuty := slotqueue.Duty{
-		NodeID:     v.ValidatorShare.NodeID,
-		Duty:       duty,
-		PublicKey:  v.ValidatorShare.PubKey,
-		PrivateKey: v.ValidatorShare.ShareKey,
-		Committee:  v.ValidatorShare.Committiee,
-	}
-
-	roles, err := v.beacon.RolesAt(ctx, slot, &valShareDuty)
+	roles, err := v.beacon.RolesAt(ctx, slot, duty, v.ValidatorShare.PubKey, v.ValidatorShare.ShareKey)
 	if err != nil {
 		logger.Error("failed to get roles for duty", zap.Error(err))
 		return
@@ -218,7 +205,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, &valShareDuty)
+			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
 			if err != nil {
 				logger.Error("could not come to consensus", zap.Error(err))
 				return
@@ -235,7 +222,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot
 				decidedValue,
 				signaturesCount,
 				role,
-				&valShareDuty,
+				duty,
 			); err != nil {
 				logger.Error("could not execute duty", zap.Error(err))
 				return

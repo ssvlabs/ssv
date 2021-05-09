@@ -194,5 +194,5 @@ func GetStoragePathValue(c *cobra.Command) (string, error) {
 
 // AddStoragePathFlag adds the storage path flag to the command
 func AddStoragePathFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, storagePath, "/data/db", "storage path", false)
+	cliflag.AddPersistentStringFlag(c, storagePath, "./data/db", "storage path", false)
 }

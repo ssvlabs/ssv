@@ -14,11 +14,13 @@ import (
 	"time"
 )
 
+// Options to add in validator struct creation
 type Options struct {
 	SignatureCollectionTimeout time.Duration
 	SlotQueue                  slotqueue.Queue
 }
 
+// Validator struct that manages all ibft wrappers
 type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
@@ -33,6 +35,7 @@ type Validator struct {
 	SignatureCollectionTimeout time.Duration
 }
 
+// New Validator creation
 func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Validator, ibftStorage collections.IbftStorage, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
 	logger = logger.With(zap.String("pubKey", validatorShare.PubKey.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
@@ -61,6 +64,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 	}
 }
 
+// Start validator
 func (v *Validator) Start() {
 	go v.startSlotQueueListener()
 	go v.listenToNetworkMessages()
@@ -90,9 +94,9 @@ func (v *Validator) listenToNetworkMessages() {
 	sigChan := v.network.ReceivedSignatureChan()
 	for sigMsg := range sigChan {
 		v.msgQueue.AddMessage(&network.Message{
-			Lambda: sigMsg.Message.Lambda,
-			Msg:    sigMsg,
-			Type:   network.SignatureBroadcastingType,
+			Lambda:        sigMsg.Message.Lambda,
+			SignedMessage: sigMsg,
+			Type:          network.NetworkMsg_SignatureType,
 		})
 	}
 }

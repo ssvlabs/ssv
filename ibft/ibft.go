@@ -6,8 +6,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/collections"
+	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 
 	"go.uber.org/zap"
 
@@ -22,12 +22,13 @@ func FirstInstanceIdentifier() []byte {
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
-	Logger       *zap.Logger
-	ValueCheck   valcheck.ValueCheck
-	PrevInstance []byte
-	Identifier   []byte
-	Value        []byte
-	Duty         *slotqueue.Duty
+	Logger         *zap.Logger
+	ValueCheck     valcheck.ValueCheck
+	PrevInstance   []byte
+	Identifier     []byte
+	Value          []byte
+	Duty           *ethpb.DutiesResponse_Duty
+	ValidatorShare collections.Validator
 }
 
 // IBFT represents behavior of the IBFT
@@ -50,7 +51,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams, ) IBFT {
+func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:    storage,
 		instances:      make(map[string]*Instance),
@@ -68,9 +69,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	go func() {
 		for msg := range msgChan {
 			i.msgQueue.AddMessage(&network.Message{
-				Lambda: msg.Message.Lambda,
-				Msg:    msg,
-				Type:   network.IBFTBroadcastingType,
+				Lambda:        msg.Message.Lambda,
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_IBFTType,
 			})
 		}
 	}()
@@ -91,9 +92,9 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	newInstance := NewInstance(InstanceOptions{
 		Logger: opts.Logger,
 		Me: &proto.Node{
-			IbftId: opts.Duty.NodeID,
-			Pk:     opts.Duty.PrivateKey.GetPublicKey().Serialize(),
-			Sk:     opts.Duty.PrivateKey.Serialize(),
+			IbftId: opts.ValidatorShare.NodeID,
+			Pk:     opts.ValidatorShare.ShareKey.GetPublicKey().Serialize(),
+			Sk:     opts.ValidatorShare.ShareKey.Serialize(),
 		},
 		Network:        i.network,
 		Queue:          i.msgQueue,
@@ -101,10 +102,11 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		LeaderSelector: i.leaderSelector,
 		Params: &proto.InstanceParams{
 			ConsensusParams: i.params.ConsensusParams,
-			IbftCommittee:   opts.Duty.Committee,
+			IbftCommittee:   opts.ValidatorShare.Committee,
 		},
 		Lambda:         opts.Identifier,
 		PreviousLambda: opts.PrevInstance,
+		PublicKey:      opts.ValidatorShare.PubKey.Serialize(),
 	})
 	i.instances[hex.EncodeToString(opts.Identifier)] = newInstance
 	go newInstance.StartEventLoop()
@@ -123,19 +125,20 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			agg, err := newInstance.PreparedAggregatedMsg()
-			if err != nil {
-				newInstance.Logger.Error("could not get aggregated prepare msg and save to storage", zap.Error(err))
+			if err := i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
+				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.ibftStorage.SavePrepared(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.ibftStorage.SaveDecided(agg)
+			if err := i.ibftStorage.SaveDecided(agg); err != nil {
+				newInstance.Logger.Error("could not save aggregated commit msg to storage", zap.Error(err))
+				return false, 0, nil
+			}
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}

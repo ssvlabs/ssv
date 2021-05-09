@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 	"log"
 )
@@ -35,7 +35,7 @@ func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *slotqueue.Duty, ) ([]byte, []byte, *proto.InputValue, error) {
+func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beacon.Role, duty *ethpb.DutiesResponse_Duty, shareKey *bls.SecretKey, ) ([]byte, []byte, *proto.InputValue, error) {
 	// sign input value
 	var sig []byte
 	var root []byte
@@ -47,7 +47,7 @@ func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beac
 		if err := json.Unmarshal(decidedValue, s); err != nil {
 			return nil, nil, nil, err
 		}
-		signedAttestation, r, e := v.beacon.SignAttestation(ctx, s.Attestation.Data, *duty)
+		signedAttestation, r, e := v.beacon.SignAttestation(ctx, s.Attestation.Data, duty, shareKey)
 		retValueStruct.SignedData = s
 		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
@@ -76,22 +76,14 @@ func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beac
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (v *Validator) reconstructAndBroadcastSignature(
-	ctx context.Context,
-	logger *zap.Logger,
-	signatures map[uint64][]byte,
-	root []byte,
-	inputValue *proto.InputValue,
-	role beacon.Role,
-	duty *slotqueue.Duty,
-) error {
+func (v *Validator) reconstructAndBroadcastSignature(ctx context.Context, logger *zap.Logger, signatures map[uint64][]byte, root []byte, inputValue *proto.InputValue, role beacon.Role, duty *ethpb.DutiesResponse_Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
-	if res := signature.VerifyByte(duty.PublicKey, root); !res {
+	if res := signature.VerifyByte(v.ValidatorShare.PubKey, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}
 
@@ -102,8 +94,8 @@ func (v *Validator) reconstructAndBroadcastSignature(
 	case beacon.RoleAttester:
 		logger.Info("submitting attestation")
 		inputValue.GetAttestation().Signature = signature.Serialize()
-		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.Duty.GetValidatorIndex())
-		if err := v.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.Duty.GetValidatorIndex(), duty.PublicKey); err != nil {
+		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.GetValidatorIndex())
+		if err := v.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex(), v.ValidatorShare.PubKey); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	//case beacon.RoleAggregator:
