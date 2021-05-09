@@ -120,7 +120,7 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 						EncryptedKey   []byte
 					}{}
 
-					oessListEncoded := delete_empty(strings.Split(hex.EncodeToString(validatorAddedEvent.Oess), params.SsvConfig().OessSeparator))
+					oessListEncoded := deleteEmpty(strings.Split(hex.EncodeToString(validatorAddedEvent.Oess), params.SsvConfig().OessSeparator))
 
 					e.logger.Debug("Validator PubKey:", zap.String("", hex.EncodeToString(validatorAddedEvent.Pubkey)))
 					e.logger.Debug("Owner Address:   ", zap.String("", validatorAddedEvent.OwnerAddress.String()))
@@ -136,7 +136,7 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 							e.logger.Error("Failed to unpack Oess struct", zap.Error(err))
 							continue
 						}
-						if strings.ToLower(hex.EncodeToString(oess.OperatorPubKey)) == strings.ToLower(params.SsvConfig().OperatorPublicKey) {
+						if strings.EqualFold(hex.EncodeToString(oess.OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
 							e.logger.Debug("Index:           ", zap.Any("", oess.Index))
 							e.logger.Debug("Operator PubKey: ", zap.String("", hex.EncodeToString(oess.OperatorPubKey)))
 							e.logger.Debug("Share PubKey:    ", zap.String("", hex.EncodeToString(oess.SharePubKey)))
@@ -161,7 +161,7 @@ func (e *eth1GRPC) GetContractEvent() *eth1.ContractEvent {
 	return e.contractEvent
 }
 
-func delete_empty(s []string) []string {
+func deleteEmpty(s []string) []string {
 	var r []string
 	for _, str := range s {
 		if str != "" {

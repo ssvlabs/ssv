@@ -9,7 +9,7 @@ import (
 // ContractEvent struct
 type ContractEvent struct {
 	pubsub.BaseSubject
-	Log types.Log
+	Log  types.Log
 	Data interface{}
 }
 
