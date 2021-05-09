@@ -13,8 +13,8 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
-ifneq (,$(wildcard ./.env.node.1))
-    include .env.node.1
+ifneq (,$(wildcard ./.env))
+    include .env
 endif
 
 # node command builder
