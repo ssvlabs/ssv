@@ -12,6 +12,7 @@ type SignAndBroadcast func(msg *proto.Message) error
 type Pipeline interface {
 	// Run runs the pipeline
 	Run(signedMessage *proto.SignedMessage) error
+	Name() string
 }
 
 // pipelinesCombination implements Pipeline interface with multiple pipelines logic.
@@ -36,19 +37,35 @@ func (p *pipelinesCombination) Run(signedMessage *proto.SignedMessage) error {
 	return nil
 }
 
+// Name implements Pipeline interface
+func (p *pipelinesCombination) Name() string {
+	ret := "combination of: "
+	for _, p := range p.pipelines {
+		ret += p.Name() + ", "
+	}
+	return ret
+}
+
 // pipelineFunc implements Pipeline interface using just a function.
 type pipelineFunc struct {
-	fn func(signedMessage *proto.SignedMessage) error
+	fn   func(signedMessage *proto.SignedMessage) error
+	name string
 }
 
 // WrapFunc represents the given function as a pipeline implementor
-func WrapFunc(fn func(signedMessage *proto.SignedMessage) error) Pipeline {
+func WrapFunc(name string, fn func(signedMessage *proto.SignedMessage) error) Pipeline {
 	return &pipelineFunc{
-		fn: fn,
+		fn:   fn,
+		name: name,
 	}
 }
 
 // Run implements Pipeline interface
 func (p *pipelineFunc) Run(signedMessage *proto.SignedMessage) error {
 	return p.fn(signedMessage)
+}
+
+// Name implements Pipeline interface
+func (p *pipelineFunc) Name() string {
+	return p.name
 }

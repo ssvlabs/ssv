@@ -38,13 +38,13 @@ const (
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
 	// StreamDuties returns channel with duties stream
-	StreamDuties(ctx context.Context, pubKey []byte) (<-chan *ethpb.DutiesResponse_Duty, error)
+	StreamDuties(ctx context.Context, pubKey [][]byte) (<-chan *ethpb.DutiesResponse_Duty, error)
 
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AttestationData, error)
 
 	// SignAttestation signs the given attestation
-	SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) (*ethpb.Attestation, []byte, error)
+	SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty *ethpb.DutiesResponse_Duty, key *bls.SecretKey) (*ethpb.Attestation, []byte, error)
 
 	// SubmitAttestation submits attestation fo the given slot using the given public key
 	SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64, key *bls.PublicKey) error
@@ -70,5 +70,5 @@ type Beacon interface {
 	// RolesAt slot returns the validator roles at the given slot. Returns nil if the
 	// validator is known to not have a roles at the at slot. Returns UNKNOWN if the
 	// validator assignments are unknown. Otherwise returns a valid validatorRole map.
-	RolesAt(ctx context.Context, slot uint64, duty *slotqueue.Duty) ([]Role, error)
+	RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) ([]Role, error)
 }

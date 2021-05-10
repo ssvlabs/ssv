@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // BroadcastSignature broadcasts the given signature for the given lambda
@@ -17,8 +18,13 @@ func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
+	topic, err := n.GetTopic(msg)
+	if err != nil {
+		return errors.Wrap(err, "failed to get topic")
+	}
 
-	return n.cfg.Topic.Publish(n.ctx, msgBytes)
+	n.logger.Debug("Broadcasting to topic", zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
+	return topic.Publish(n.ctx, msgBytes)
 }
 
 // ReceivedSignatureChan returns the channel with signatures

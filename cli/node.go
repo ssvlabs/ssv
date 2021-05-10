@@ -12,9 +12,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -73,6 +71,11 @@ var startNodeCmd = &cobra.Command{
 		sigCollectionTimeout, err := flags.GetSignatureCollectionTimeValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get signature timeout key flag value", zap.Error(err))
+		}
+
+		dutySlotsLimit, err := flags.GetDutySlotsLimitValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get duty slots limit key flag value", zap.Error(err))
 		}
 
 		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
@@ -149,7 +152,6 @@ var startNodeCmd = &cobra.Command{
 			},
 			UDPPort:     udpPort,
 			TCPPort:     tcpPort,
-			TopicName:   validatorKey,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
 		}
@@ -158,55 +160,17 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		// TODO: Refactor that
-		ibftCommittee := map[uint64]*proto.Node{
-			1: {
-				IbftId: 1,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_1")),
-			},
-			2: {
-				IbftId: 2,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_2")),
-			},
-			3: {
-				IbftId: 3,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_3")),
-			},
-			4: {
-				IbftId: 4,
-				Pk:     _getBytesFromHex(os.Getenv("PUBKEY_NODE_4")),
-			},
-		}
-
-		ibftCommittee[nodeID].Pk = shareKey.GetPublicKey().Serialize()
-		ibftCommittee[nodeID].Sk = shareKey.Serialize()
-
-		//for id, obj := range ibftCommittee{
-		//	if len(obj.Pk) == 0 {
-		//		errors.new(fmt.Sprint("Missing public key for node index - %v", id))
-		//	}
-		//}
-
-		msgQ := msgqueue.New()
-
 		ssvNode := node.New(node.Options{
-			ValidatorStorage: validatorStorage,
-			Beacon:           beaconClient,
-			ETHNetwork:       eth2Network,
-			Network:          network,
-			Queue:            msgQ,
-			Consensus:        consensusType,
-			IBFT: ibft.New(
-				ibftStorage,
-				network,
-				msgQ,
-				&proto.InstanceParams{
-					ConsensusParams: proto.DefaultConsensusParams(),
-				},
-			),
+			ValidatorStorage:           &validatorStorage,
+			IbftStorage:                &ibftStorage,
+			Beacon:                     beaconClient,
+			ETHNetwork:                 eth2Network,
+			Network:                    network,
+			Consensus:                  consensusType,
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
-			Phase1TestGenesis:          genesisEpoch,
+			GenesisEpoch:               genesisEpoch,
+			DutySlotsLimit:             dutySlotsLimit,
 		})
 
 		if eth1Addr != "" {
@@ -255,6 +219,7 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPubKey *b
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPubKey, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
+
 	ibftStorage := collections.NewIbft(db, logger, "attestation")
 	return validatorStorage, ibftStorage
 }
@@ -273,6 +238,7 @@ func init() {
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
+	flags.AddDutySlotsLimit(startNodeCmd)
 	flags.AddHostDNSFlag(startNodeCmd)
 	flags.AddHostAddressFlag(startNodeCmd)
 	flags.AddTCPPortFlag(startNodeCmd)

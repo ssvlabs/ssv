@@ -16,10 +16,10 @@ import (
 // Queue represents the behavior of the slot queue
 type Queue interface {
 	// Next returns the next slot with its duties at its time
-	Next(pubKey []byte) (uint64, *Duty, bool, error)
+	Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error)
 
 	// Schedule schedules execution of the given slot and puts it into the queue
-	Schedule(pubKey []byte, slot uint64, duty *Duty) error
+	Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error
 }
 
 // queue implements Queue
@@ -30,11 +30,13 @@ type queue struct {
 
 // Duty struct
 type Duty struct {
-	NodeID     uint64
-	Duty       *ethpb.DutiesResponse_Duty
-	PublicKey  *bls.PublicKey
-	PrivateKey *bls.SecretKey
-	Committee  map[uint64]*proto.Node
+	NodeID uint64
+	Duty   *ethpb.DutiesResponse_Duty
+	// ValidatorPK is the validator's public key
+	ValidatorPK *bls.PublicKey
+	// ShareSK is this node's share secret key
+	ShareSK   *bls.SecretKey
+	Committee map[uint64]*proto.Node
 }
 
 // New is the constructor of queue
@@ -48,7 +50,7 @@ func New(network core.Network) Queue {
 }
 
 // Next returns the next slot with its duties at its time
-func (q *queue) Next(pubKey []byte) (uint64, *Duty, bool, error) {
+func (q *queue) Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error) {
 	for currentSlot := range q.ticker.C() {
 		key := q.getKey(pubKey, currentSlot)
 		dataRaw, ok := q.data.Get(key)
@@ -56,7 +58,7 @@ func (q *queue) Next(pubKey []byte) (uint64, *Duty, bool, error) {
 			continue
 		}
 
-		duty, ok := dataRaw.(*Duty)
+		duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
 		if !ok {
 			continue
 		}
@@ -68,7 +70,7 @@ func (q *queue) Next(pubKey []byte) (uint64, *Duty, bool, error) {
 }
 
 // Schedule schedules execution of the given slot and puts it into the queue
-func (q *queue) Schedule(pubKey []byte, slot uint64, duty *Duty) error {
+func (q *queue) Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error {
 	q.data.SetDefault(q.getKey(pubKey, slot), duty)
 	return nil
 }

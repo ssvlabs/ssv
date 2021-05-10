@@ -23,7 +23,7 @@ import (
 func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error) {
 	b.waitToSlotTwoThirds(ctx, duty.Duty.AttesterSlot)
 
-	slotSig, err := b.signSlot(ctx, duty.Duty.AttesterSlot, *duty.PrivateKey)
+	slotSig, err := b.signSlot(ctx, duty.Duty.AttesterSlot, duty.ShareSK)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign slot")
 	}
@@ -31,7 +31,7 @@ func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty slotqueue.Duty)
 	res, err := b.validatorClient.SubmitAggregateSelectionProof(ctx, &ethpb.AggregateSelectionRequest{
 		Slot:           duty.Duty.AttesterSlot,
 		CommitteeIndex: duty.Duty.CommitteeIndex,
-		PublicKey:      duty.PublicKey.Serialize(),
+		PublicKey:      duty.ValidatorPK.Serialize(),
 		SlotSignature:  slotSig,
 	})
 	if err != nil {
@@ -43,7 +43,7 @@ func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty slotqueue.Duty)
 
 // SignAggregation signs the given aggregation data
 func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error) {
-	sig, err := b.aggregateAndProofSig(ctx, data, duty.PrivateKey)
+	sig, err := b.aggregateAndProofSig(ctx, data, duty.ShareSK)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign aggregate and proof")
 	}
@@ -67,20 +67,19 @@ func (b *prysmGRPC) SubmitAggregation(ctx context.Context, data *ethpb.SignedAgg
 }
 
 // isAggregator returns true if the given slot is aggregator
-func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, duty *slotqueue.Duty) (bool, error) {
-	slotSig, err := b.signSlot(ctx, slot, *duty.PrivateKey)
+func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
+	slotSig, err := b.signSlot(ctx, slot, shareKey)
 	if err != nil {
 		return false, err
 	}
 
 	modulo := uint64(1)
-	if len(duty.Committee)/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
-		modulo = uint64(len(duty.Committee)) / params.BeaconConfig().TargetAggregatorsPerCommittee
+	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
+		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
 	}
 
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
-
 	return val, nil
 }
 

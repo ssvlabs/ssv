@@ -1,4 +1,4 @@
-package node
+package validator
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -77,6 +78,10 @@ func (t *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
 	}
 }
 
+func (t *testIBFT) NextSeqNumber() uint64 {
+	return 0
+}
+
 /**
 testBeacon
 */
@@ -94,7 +99,7 @@ func newTestBeacon(t *testing.T) *testBeacon {
 	return ret
 }
 
-func (t *testBeacon) StreamDuties(ctx context.Context, pubKey []byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
+func (t *testBeacon) StreamDuties(ctx context.Context, pubKey [][]byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
 	return nil, nil
 }
 
@@ -102,7 +107,7 @@ func (t *testBeacon) GetAttestationData(ctx context.Context, slot, committeeInde
 	return t.refAttestationData, nil
 }
 
-func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty slotqueue.Duty) (*ethpb.Attestation, []byte, error) {
+func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty *ethpb.DutiesResponse_Duty, key *bls.SecretKey) (*ethpb.Attestation, []byte, error) {
 	return &ethpb.Attestation{
 		AggregationBits: nil,
 		Data:            data,
@@ -139,30 +144,54 @@ func (t *testBeacon) SubmitProposal(ctx context.Context, block *ethpb.SignedBeac
 	return nil
 }
 
-func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *slotqueue.Duty) ([]beacon.Role, error) {
+func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) ([]beacon.Role, error) {
 	return nil, nil
 }
 
-func testingSSVNode(t *testing.T, decided bool, signaturesCount int) *ssvNode {
-
-	ret := &ssvNode{}
+func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validator {
+	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.iBFT = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts = make(map[beacon.Role]ibft.IBFT)
+	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 
 	// nodes
 	ret.network = local.NewLocalNetwork()
-	ret.queue = msgqueue.New()
+	ret.msgQueue = msgqueue.New()
 
 	// validatorStorage pk
 	threshold.Init()
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
-	//ret.validatorPubKey = pk TODO now working with validatorStorage - need to adapt 2.5.21
+
+	ret.ValidatorShare = &collections.Validator{
+		NodeID:      1,
+		ValidatorPK: pk,
+		ShareKey:    nil,
+		Committee: map[uint64]*proto.Node{
+			1: {
+				IbftId: 1,
+				Pk:     refSplitSharesPubKeys[0],
+			},
+			2: {
+				IbftId: 2,
+				Pk:     refSplitSharesPubKeys[1],
+			},
+			3: {
+				IbftId: 3,
+				Pk:     refSplitSharesPubKeys[2],
+			},
+			4: {
+				IbftId: 4,
+				Pk:     refSplitSharesPubKeys[3],
+			},
+		},
+	}
+
 	require.NoError(t, err)
 
 	// timeout
-	ret.signatureCollectionTimeout = time.Second * 2
+	ret.SignatureCollectionTimeout = time.Second * 2
 
 	go ret.listenToNetworkMessages()
 	return ret

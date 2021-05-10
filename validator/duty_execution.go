@@ -1,4 +1,4 @@
-package node
+package validator
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/node/valcheck"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/pkg/errors"
 	"sync"
 	"time"
@@ -21,7 +20,7 @@ import (
 )
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
-func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
+func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
 	// Collect signatures from other nodes
 	// TODO - change signature count to min threshold
 	signatures := make(map[uint64][]byte, signaturesCount)
@@ -32,7 +31,7 @@ func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []by
 
 	// start timeout
 	go func() {
-		<-time.After(n.signatureCollectionTimeout)
+		<-time.After(v.SignatureCollectionTimeout)
 		lock.Lock()
 		defer lock.Unlock()
 		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
@@ -47,7 +46,7 @@ func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []by
 		} else {
 			lock.Unlock()
 		}
-		if msg := n.queue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
+		if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier)); msg != nil {
 			if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
 				continue
 			}
@@ -58,7 +57,7 @@ func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []by
 			logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]), zap.Any("msg", msg))
 
 			// verify sig
-			if err := n.verifyPartialSignature(msg.SignedMessage.Signature, sigRoot, msg.SignedMessage.SignerIds[0], committiee); err != nil {
+			if err := v.verifyPartialSignature(msg.SignedMessage.Signature, sigRoot, msg.SignedMessage.SignerIds[0], committiee); err != nil {
 				logger.Error("received invalid signature", zap.Error(err))
 				continue
 			}
@@ -81,29 +80,30 @@ func (n *ssvNode) waitForSignatureCollection(logger *zap.Logger, identifier []by
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *slotqueue.Duty) error {
+func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *ethpb.DutiesResponse_Duty) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := n.signDuty(ctx, decidedValue, role, duty)
+	sig, root, valueStruct, err := v.signDuty(ctx, decidedValue, role, duty, v.ValidatorShare.ShareKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
 
 	// TODO - should we construct it better?
-	if err := n.network.BroadcastSignature(&proto.SignedMessage{
+	if err := v.network.BroadcastSignature(&proto.SignedMessage{
 		Message: &proto.Message{
-			Lambda: identifier,
+			Lambda:      identifier,
+			ValidatorPk: duty.PublicKey,
 		},
 		Signature: sig,
-		SignerIds: []uint64{duty.NodeID},
+		SignerIds: []uint64{v.ValidatorShare.NodeID},
 	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := n.waitForSignatureCollection(logger, identifier, root, signaturesCount, duty.Committee)
+	signatures, err := v.waitForSignatureCollection(logger, identifier, root, signaturesCount, v.ValidatorShare.Committee)
 
 	// clean queue for messages, we don't need them anymore.
-	n.queue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
+	v.msgQueue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
 
 	if err != nil {
 		return err
@@ -111,27 +111,20 @@ func (n *ssvNode) postConsensusDutyExecution(ctx context.Context, logger *zap.Lo
 	logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	if err := n.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
+	if err := v.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
 	logger.Info("Successfully submitted role!")
 	return nil
 }
 
-func (n *ssvNode) comeToConsensusOnInputValue(
-	ctx context.Context,
-	logger *zap.Logger,
-	prevIdentifier []byte,
-	slot uint64,
-	role beacon.Role,
-	duty *slotqueue.Duty,
-) (int, []byte, []byte, error) {
+func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap.Logger, prevIdentifier []byte, slot uint64, role beacon.Role, duty *ethpb.DutiesResponse_Duty) (int, []byte, []byte, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance valcheck2.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
-		attData, err := n.beacon.GetAttestationData(ctx, slot, duty.Duty.GetCommitteeIndex())
+		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
 		if err != nil {
 			return 0, nil, nil, errors.Wrap(err, "failed to get attestation data")
 		}
@@ -147,7 +140,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 		}
 		valCheckInstance = &valcheck.AttestationValueCheck{}
 	//case beacon.RoleAggregator:
-	//	aggData, err := n.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
+	//	aggData, err := v.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
 	//	if err != nil {
 	//		return 0, nil, errors.Wrap(err, "failed to get aggregation data")
 	//	}
@@ -156,7 +149,7 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	//		AggregationData: aggData,
 	//	}
 	//case beacon.RoleProposer:
-	//	block, err := n.beacon.GetProposalData(ctx, slot)
+	//	block, err := v.beacon.GetProposalData(ctx, slot)
 	//	if err != nil {
 	//		return 0, nil, errors.Wrap(err, "failed to get proposal block")
 	//	}
@@ -175,13 +168,20 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	}
 
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
-	decided, signaturesCount, decidedByts := n.iBFT.StartInstance(ibft.StartOptions{
-		Duty:         duty,
-		Logger:       l,
-		ValueCheck:   valCheckInstance,
-		PrevInstance: prevIdentifier,
-		Identifier:   identifier,
-		Value:        inputByts,
+
+	if _, ok := v.ibfts[role]; !ok {
+		v.logger.Error("no ibft for this role", zap.Any("role", role))
+	}
+
+	decided, signaturesCount, decidedByts := v.ibfts[role].StartInstance(ibft.StartOptions{
+		Duty:           duty,
+		ValidatorShare: *v.ValidatorShare,
+		Logger:         l,
+		ValueCheck:     valCheckInstance,
+		PrevInstance:   prevIdentifier,
+		Identifier:     identifier,
+		SeqNumber:      v.ibfts[role].NextSeqNumber(),
+		Value:          inputByts,
 	})
 
 	if !decided {
@@ -190,17 +190,13 @@ func (n *ssvNode) comeToConsensusOnInputValue(
 	return signaturesCount, decidedByts, identifier, nil
 }
 
-func (n *ssvNode) executeDuty(
-	ctx context.Context,
-	prevIdentifier []byte,
-	slot uint64,
-	duty *slotqueue.Duty,
-) {
-	logger := n.logger.With(zap.Time("start_time", n.getSlotStartTime(slot)),
-		zap.Uint64("committee_index", duty.Duty.GetCommitteeIndex()),
+// ExecuteDuty by slotQueue
+func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot uint64, duty *ethpb.DutiesResponse_Duty, ) {
+	logger := v.logger.With(zap.Time("start_time", v.getSlotStartTime(slot)),
+		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
-	roles, err := n.beacon.RolesAt(ctx, slot, duty)
+	roles, err := v.beacon.RolesAt(ctx, slot, duty, v.ValidatorShare.ValidatorPK, v.ValidatorShare.ShareKey)
 	if err != nil {
 		logger.Error("failed to get roles for duty", zap.Error(err))
 		return
@@ -210,7 +206,7 @@ func (n *ssvNode) executeDuty(
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, decidedValue, identifier, err := n.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
+			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
 			if err != nil {
 				logger.Error("could not come to consensus", zap.Error(err))
 				return
@@ -220,7 +216,7 @@ func (n *ssvNode) executeDuty(
 			logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
 
 			// Sign, aggregate and broadcast signature
-			if err := n.postConsensusDutyExecution(
+			if err := v.postConsensusDutyExecution(
 				ctx,
 				l,
 				identifier,

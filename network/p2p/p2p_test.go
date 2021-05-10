@@ -2,6 +2,11 @@ package p2p
 
 import (
 	"context"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
 
@@ -14,16 +19,11 @@ import (
 func TestP2PNetworker(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	//topic1 := uuid.New()
-	topic1 := "test"
-	//topic2 := uuid.New()
-
 	peer1, err := New(context.Background(), logger, &Config{
 		DiscoveryType:     "mdns",
 		BootstrapNodeAddr: []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
 		UDPPort:           12000,
 		TCPPort:           13000,
-		TopicName:         topic1,
 	})
 	require.NoError(t, err)
 
@@ -32,9 +32,27 @@ func TestP2PNetworker(t *testing.T) {
 		BootstrapNodeAddr: []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
 		UDPPort:           12001,
 		TCPPort:           13001,
-		TopicName:         topic1,
 	})
 	require.NoError(t, err)
+
+	pk := &bls.PublicKey{}
+	require.NoError(t, pk.Deserialize(refPk))
+	validatorShare := &collections.Validator{
+		NodeID:      1,
+		ValidatorPK: pk,
+		ShareKey:    nil,
+		Committee:   nil,
+	}
+
+	opts := validator.Options{
+		SlotQueue: slotqueue.New(core.PyrmontNetwork),
+		SignatureCollectionTimeout: time.Second * time.Duration(4),
+	}
+	validatorWrapper := validator.New(context.Background(), logger, validatorShare, collections.IbftStorage{}, peer1, core.PyrmontNetwork, nil, opts)
+	require.NoError(t, validatorWrapper.Start())
+
+	validatorWrapper2 := validator.New(context.Background(), logger, validatorShare, collections.IbftStorage{}, peer2, core.PyrmontNetwork, nil, opts)
+	require.NoError(t, validatorWrapper2.Start())
 
 	//peer3, err := New(context.Background(), logger)
 	//require.NoError(t, err)
@@ -45,10 +63,11 @@ func TestP2PNetworker(t *testing.T) {
 	lambda := []byte("test-lambda")
 	messageToBroadcast := &proto.SignedMessage{
 		Message: &proto.Message{
-			Type:   proto.RoundState_PrePrepare,
-			Round:  1,
-			Lambda: lambda,
-			Value:  []byte("test-value"),
+			Type:        proto.RoundState_PrePrepare,
+			Round:       1,
+			Lambda:      lambda,
+			Value:       []byte("test-value"),
+			ValidatorPk: refPk,
 		},
 	}
 
