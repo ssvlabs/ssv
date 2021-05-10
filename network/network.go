@@ -2,6 +2,7 @@ package network
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"io"
 )
@@ -58,4 +59,6 @@ type Network interface {
 
 	// ReceivedSyncMsgChan returns the channel for sync messages
 	ReceivedSyncMsgChan() <-chan *SyncChanObj
+
+	SubscribeTopic(validatorPk *bls.PublicKey) error
 }

@@ -5,20 +5,19 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	p2pHost "github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
-	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p"
+	p2pHost "github.com/libp2p/go-libp2p-core/host"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
+	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
+	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -50,7 +49,6 @@ type listener struct {
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
 	ctx              context.Context
-	validatorStorage collections.IValidator
 	cfg              *Config
 	listenersLock    sync.Locker
 	dv5Listener      iListener
@@ -63,10 +61,12 @@ type p2pNetwork struct {
 }
 
 // New is the constructor of p2pNetworker
-func New(ctx context.Context, logger *zap.Logger, validatorStorage collections.IValidator, cfg *Config) (network.Network, error) {
+func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
+	// init empty topics map
+	cfg.Topics =  make(map[string]*pubsub.Topic)
+
 	n := &p2pNetwork{
 		ctx:              ctx,
-		validatorStorage: validatorStorage,
 		cfg:              cfg,
 		listenersLock:    &sync.Mutex{},
 		logger:           logger,
@@ -176,10 +176,6 @@ func New(ctx context.Context, logger *zap.Logger, validatorStorage collections.I
 			}
 		}
 	}
-
-	n.setupTopics()
-	n.subscribeToTopics()
-	n.listen()
 	n.handleStream()
 
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
@@ -191,86 +187,67 @@ func New(ctx context.Context, logger *zap.Logger, validatorStorage collections.I
 	return n, nil
 }
 
-// setupTopics for each validator from storage
-func (n *p2pNetwork) setupTopics() {
-	validatorsShare, err := n.validatorStorage.GetAllValidatorsShare()
+func (n *p2pNetwork) SubscribeTopic(validatorPk *bls.PublicKey) error{
+	topic, err := n.pubsub.Join(getTopic(validatorPk.SerializeToHexStr()))
 	if err != nil {
-		n.logger.Fatal("Failed to get validatorStorage share", zap.Error(err))
+		return errors.Wrap(err, "failed to join to Topics")
 	}
-	n.cfg.Topics = make(map[string]*pubsub.Topic)
+	n.cfg.Topics[validatorPk.SerializeToHexStr()] = topic
 
-	for _, valShare := range validatorsShare{
-		// Join the pubsub Topics
-		topic, err := n.pubsub.Join(getTopic(valShare.PubKey.SerializeToHexStr()))
-		if err != nil {
-			n.logger.Error("failed to join to Topics", zap.String("pubkey", valShare.PubKey.SerializeToHexStr()), zap.Error(err))
-			continue
-		}
-		n.cfg.Topics[valShare.PubKey.SerializeToHexStr()] = topic
+	sub, err := topic.Subscribe()
+	if err != nil {
+		return errors.Wrap(err, "failed to subscribe on Topic")
 	}
+	n.cfg.Subs = append(n.cfg.Subs, sub)
 
-}
-
-// subscribeToTopics for each topic
-func (n *p2pNetwork) subscribeToTopics() {
-	for _, topic := range n.cfg.Topics{
-		sub, err := topic.Subscribe()
-		if err != nil {
-			n.logger.Error("failed to subscribe on Topic", zap.String("pubkey", topic.String()), zap.Error(err))
-			continue
-		}
-		n.cfg.Subs = append(n.cfg.Subs, sub)
-	}
+	// listen to new topic
+	n.listen(sub)
+	return nil
 }
 
 // ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) listen() {
-	for _, sub := range n.cfg.Subs{
-		go func(sub *pubsub.Subscription) {
-			n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
+func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
+	go func(sub *pubsub.Subscription) {
+		n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
 
-			for {
-				select {
-				case <-n.ctx.Done():
-					if err := n.cfg.Topics[sub.Topic()].Close(); err != nil {
-						n.logger.Error("failed to close Topics", zap.Error(err))
-					}
+		for {
+			select {
+			case <-n.ctx.Done():
+				if err := n.cfg.Topics[sub.Topic()].Close(); err != nil {
+					n.logger.Error("failed to close Topics", zap.Error(err))
+				}
 
-					sub.Cancel()
-				default:
-					msg, err := sub.Next(n.ctx)
-					if err != nil {
-						n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
-						return
-					}
+				sub.Cancel()
+			default:
+				msg, err := sub.Next(n.ctx)
+				if err != nil {
+					n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
+					return
+				}
 
-					var cm network.Message
-					if err := json.Unmarshal(msg.Data, &cm); err != nil {
-						n.logger.Error("failed to unmarshal message", zap.Error(err))
-						continue
-					}
+				var cm network.Message
+				if err := json.Unmarshal(msg.Data, &cm); err != nil {
+					n.logger.Error("failed to unmarshal message", zap.Error(err))
+					continue
+				}
 
-
-
-					for _, ls := range n.listeners {
-						go func(ls listener) {
-
-							switch cm.Type {
-							case network.NetworkMsg_IBFTType:
-								ls.msgCh <- cm.SignedMessage
-							case network.NetworkMsg_SignatureType:
-								ls.sigCh <- cm.SignedMessage
-					case network.NetworkMsg_DecidedType:
-						ls.decidedCh <- cm.SignedMessage
-					default:
-						n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
-							}
-						}(ls)
-					}
+				for _, ls := range n.listeners {
+					go func(ls listener) {
+						switch cm.Type {
+						case network.NetworkMsg_IBFTType:
+							ls.msgCh <- cm.SignedMessage
+						case network.NetworkMsg_SignatureType:
+							ls.sigCh <- cm.SignedMessage
+						case network.NetworkMsg_DecidedType:
+							ls.decidedCh <- cm.SignedMessage
+						default:
+							n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
+						}
+					}(ls)
 				}
 			}
-		}(sub)
-	}
+		}
+	}(sub)
 }
 
 func (n *p2pNetwork) GetTopic(msg *proto.SignedMessage) (*pubsub.Topic, error) {

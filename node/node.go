@@ -148,7 +148,10 @@ func (n *ssvNode) setupValidators(ctx context.Context, validatorsShare []*collec
 // startValidators functions (queue streaming, msgQueue listen, etc)
 func (n *ssvNode) startValidators(validators map[string]*validator.Validator) {
 	for _, v := range validators {
-		v.Start()
+		if err := v.Start(); err != nil{
+			n.logger.Error("failed to start validator", zap.Error(err))
+			continue
+		}
 	}
 }
 

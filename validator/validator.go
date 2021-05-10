@@ -2,6 +2,11 @@ package validator
 
 import (
 	"context"
+	"time"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
@@ -10,8 +15,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/collections"
-	"go.uber.org/zap"
-	"time"
 )
 
 // Options to add in validator struct creation
@@ -65,9 +68,13 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 }
 
 // Start validator
-func (v *Validator) Start() {
+func (v *Validator) Start() error {
+	if err := v.network.SubscribeTopic(v.ValidatorShare.PubKey); err != nil{
+		return errors.Wrap(err, "failed to subscribe topic")
+	}
 	go v.startSlotQueueListener()
 	go v.listenToNetworkMessages()
+	return nil
 }
 
 // startSlotQueueListener starts slot queue listener
