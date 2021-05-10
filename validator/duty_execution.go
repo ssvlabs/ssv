@@ -180,6 +180,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		ValueCheck:     valCheckInstance,
 		PrevInstance:   prevIdentifier,
 		Identifier:     identifier,
+		SeqNumber:      v.ibfts[role].NextSeqNumber(),
 		Value:          inputByts,
 	})
 

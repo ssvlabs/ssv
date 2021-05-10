@@ -30,7 +30,9 @@ type InstanceOptions struct {
 	Params         *proto.InstanceParams
 	PublicKey      []byte
 	Lambda         []byte
+	SeqNumber      uint64
 	PreviousLambda []byte
+	ValidatorPK    []byte
 }
 
 // Instance defines the instance attributes
@@ -71,14 +73,15 @@ func NewInstance(opts InstanceOptions) *Instance {
 		State: &proto.State{
 			Stage:          proto.RoundState_NotStarted,
 			Lambda:         opts.Lambda,
+			SeqNumber:      opts.SeqNumber,
 			PreviousLambda: opts.PreviousLambda,
-			ValidatorPk:    opts.PublicKey,
+			ValidatorPk:    opts.ValidatorPK,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Params:         opts.Params,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
+		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId), zap.Uint64("seq_num", opts.SeqNumber)),
 		msgLock:        sync.Mutex{},
 
 		MsgQueue:            opts.Queue,
@@ -202,11 +205,6 @@ func (i *Instance) StartMessagePipeline() {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(i.Me.Pk); err != nil { // TODO - cache somewhere
-		return err
-	}
-
 	sk := &bls.SecretKey{}
 	if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
 		return err

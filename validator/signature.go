@@ -14,7 +14,7 @@ import (
 	"log"
 )
 
-func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node, ) error {
+func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*proto.Node) error {
 	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {

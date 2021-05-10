@@ -78,6 +78,10 @@ func (t *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
 	}
 }
 
+func (t *testIBFT) NextSeqNumber() uint64 {
+	return 0
+}
+
 /**
 testBeacon
 */

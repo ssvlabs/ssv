@@ -3,14 +3,27 @@ package ibft
 import (
 	"bytes"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		//i.WaitForStage(),
+		auth.MsgTypeCheck(proto.RoundState_Prepare),
+		auth.ValidateLambdas(i.State),
+		auth.ValidateRound(i.State),
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
+		auth.AuthorizeMsg(i.Params),
+		i.uponPrepareMsg(),
+	)
+}
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
 func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
@@ -43,17 +56,6 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 	return ret, nil
 }
 
-func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
-	return pipeline.Combine(
-		//i.WaitForStage(),
-		auth.MsgTypeCheck(proto.RoundState_Prepare),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.AuthorizeMsg(i.Params),
-		i.uponPrepareMsg(),
-	)
-}
-
 /**
 ### Algorithm 2 IBFT pseudocode for process pi: normal case operation
 upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
@@ -63,7 +65,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 */
 func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 	// TODO - concurrency lock?
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("upon prepare msg", func(signedMessage *proto.SignedMessage) error {
 		// add to prepare messages
 		i.PrepareMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid prepare message from round",
@@ -87,14 +89,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			i.SetStage(proto.RoundState_Prepare)
 
 			// send commit msg
-			broadcastMsg := &proto.Message{
-				Type:           proto.RoundState_Commit,
-				Round:          i.State.Round,
-				Lambda:         i.State.Lambda,
-				PreviousLambda: i.State.PreviousLambda,
-				Value:          i.State.PreparedValue,
-				ValidatorPk:    i.State.ValidatorPk,
-			}
+			broadcastMsg := i.generateCommitMessage(i.State.PreparedValue)
 			if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 				i.Logger.Info("could not broadcast commit message", zap.Error(err))
 				return err
@@ -110,6 +105,7 @@ func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 		Type:           proto.RoundState_Prepare,
 		Round:          i.State.Round,
 		Lambda:         i.State.Lambda,
+		SeqNumber:      i.State.SeqNumber,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          value,
 		ValidatorPk:    i.State.ValidatorPk,

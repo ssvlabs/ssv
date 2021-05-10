@@ -41,3 +41,8 @@ func (p *addChangeRoundMessage) Run(signedMessage *proto.SignedMessage) error {
 
 	return nil
 }
+
+// Name implements pipeline.Pipeline interface
+func (p *addChangeRoundMessage) Name() string {
+	return "add change round msg"
+}

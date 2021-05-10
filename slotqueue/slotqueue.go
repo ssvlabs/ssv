@@ -30,11 +30,13 @@ type queue struct {
 
 // Duty struct
 type Duty struct {
-	NodeID     uint64
-	Duty       *ethpb.DutiesResponse_Duty
-	PublicKey  *bls.PublicKey
-	PrivateKey *bls.SecretKey
-	Committee  map[uint64]*proto.Node
+	NodeID uint64
+	Duty   *ethpb.DutiesResponse_Duty
+	// ValidatorPK is the validator's public key
+	ValidatorPK *bls.PublicKey
+	// ShareSK is this node's share secret key
+	ShareSK   *bls.SecretKey
+	Committee map[uint64]*proto.Node
 }
 
 // New is the constructor of queue

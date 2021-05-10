@@ -593,3 +593,19 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, 2, res.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 }
+
+func TestChangeRoundPipeline(t *testing.T) {
+	_, nodes := GenerateNodes(4)
+	instance := &Instance{
+		PrepareMessages: msgcontinmem.New(3),
+		Params: &proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   nodes,
+		},
+		State: &proto.State{
+			Round: 1,
+		},
+	}
+	pipeline := instance.changeRoundMsgPipeline()
+	require.EqualValues(t, "combination of: type check, lambda, round, validator PK, sequence, authorize, validate msg, add change round msg, upon partial quorum, upon change round full quorum, ", pipeline.Name())
+}

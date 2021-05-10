@@ -116,7 +116,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Inst
 		},
 		Lambda:         lambda,
 		PreviousLambda: prevLambda,
-		PublicKey:      nil,
+		ValidatorPK:    fixtures.RefPk, // just as a value
 	}
 
 	return ibft.NewInstance(opts)
