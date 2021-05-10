@@ -28,7 +28,6 @@ type InstanceOptions struct {
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
-	PublicKey      []byte
 	Lambda         []byte
 	SeqNumber      uint64
 	PreviousLambda []byte

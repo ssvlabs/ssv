@@ -109,7 +109,7 @@ func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
 
 // AddDutySlotsLimit adds the duty slots limit flag to the command
 func AddDutySlotsLimit(c *cobra.Command) {
-	cliflag.AddPersistentIntFlag(c, dutySlotsLimit, 12, "Duties max slots delay to attest", false)
+	cliflag.AddPersistentIntFlag(c, dutySlotsLimit, 32, "Duties max slots delay to attest", false)
 }
 
 // GetDutySlotsLimitValue gets the duty slots limit flag to  the command

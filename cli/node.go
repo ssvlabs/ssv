@@ -163,7 +163,7 @@ var startNodeCmd = &cobra.Command{
 			Consensus:                  consensusType,
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
-			Phase1TestGenesis:          genesisEpoch,
+			GenesisEpoch:               genesisEpoch,
 			DutySlotsLimit:             dutySlotsLimit,
 		})
 

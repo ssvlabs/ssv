@@ -19,16 +19,19 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	ValidatorStorage           collections.IValidator
-	IbftStorage                collections.Iibft
-	ETHNetwork                 core.Network
-	Network                    network.Network
-	Consensus                  string
-	Beacon                     beacon.Beacon
-	Logger                     *zap.Logger
+	ValidatorStorage collections.IValidator
+	IbftStorage      collections.Iibft
+	ETHNetwork       core.Network
+	Network          network.Network
+	Consensus        string
+	Beacon           beacon.Beacon
+	Logger           *zap.Logger
+	// timeouts
 	SignatureCollectionTimeout time.Duration
-	Phase1TestGenesis          uint64
-	DutySlotsLimit             uint64
+	// genesis epoch
+	GenesisEpoch uint64
+	// max slots for duty to wait
+	DutySlotsLimit uint64
 }
 
 // Node represents the behavior of SSV node
@@ -51,7 +54,7 @@ type ssvNode struct {
 	// timeouts
 	signatureCollectionTimeout time.Duration
 	// genesis epoch
-	phase1TestGenesis uint64
+	genesisEpoch uint64
 	// max slots for duty to wait
 	dutySlotsLimit uint64
 }
@@ -69,8 +72,8 @@ func New(opts Options) Node {
 		logger:                     opts.Logger,
 		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
 		// genesis epoch
-		phase1TestGenesis: opts.Phase1TestGenesis,
-		dutySlotsLimit:    opts.DutySlotsLimit,
+		genesisEpoch:   opts.GenesisEpoch,
+		dutySlotsLimit: opts.DutySlotsLimit,
 	}
 }
 
@@ -102,9 +105,9 @@ func (n *ssvNode) Start(ctx context.Context) error {
 			}
 
 			for _, slot := range slots {
-				if slot < n.getEpochFirstSlot(n.phase1TestGenesis) {
+				if slot < n.getEpochFirstSlot(n.genesisEpoch) {
 					// wait until genesis epoch starts
-					n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.phase1TestGenesis)), zap.Uint64("slot", slot))
+					n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)), zap.Uint64("slot", slot))
 					continue
 				}
 				go func(slot uint64) {
