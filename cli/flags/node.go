@@ -18,6 +18,7 @@ const (
 	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
+	dutySlotsLimit = "duty-slots-limit"
 	hostDNS              = "host-dns"
 	hostAddress          = "host-address"
 	tcpPort              = "tcp-port"
@@ -104,6 +105,16 @@ func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
 		return 0, err
 	}
 	return time.Second * time.Duration(v), nil
+}
+
+// AddDutySlotsLimit adds the duty slots limit flag to the command
+func AddDutySlotsLimit(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, dutySlotsLimit, 12, "Duties max slots delay to attest", false)
+}
+
+// GetDutySlotsLimitValue gets the duty slots limit flag to  the command
+func GetDutySlotsLimitValue(c *cobra.Command) (uint64, error) {
+	return c.Flags().GetUint64(dutySlotsLimit)
 }
 
 // GetHostDNSFlagValue gets the host dns flag from the command

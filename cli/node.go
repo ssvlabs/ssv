@@ -72,6 +72,11 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to get signature timeout key flag value", zap.Error(err))
 		}
 
+		dutySlotsLimit, err := flags.GetDutySlotsLimitValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get duty slots limit key flag value", zap.Error(err))
+		}
+
 		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
@@ -150,15 +155,16 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		ssvNode := node.New(node.Options{
-			ValidatorStorage: validatorStorage,
-			IbftStorage:      ibftStorage,
-			Beacon:           beaconClient,
-			ETHNetwork:       eth2Network,
-			Network:          network,
-			Consensus:        consensusType,
+			ValidatorStorage:           validatorStorage,
+			IbftStorage:                ibftStorage,
+			Beacon:                     beaconClient,
+			ETHNetwork:                 eth2Network,
+			Network:                    network,
+			Consensus:                  consensusType,
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
 			Phase1TestGenesis:          genesisEpoch,
+			DutySlotsLimit:             dutySlotsLimit,
 		})
 
 		if err := ssvNode.Start(cmd.Context()); err != nil {
@@ -194,7 +200,6 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 		},
 	}
 
-
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
@@ -217,6 +222,7 @@ func init() {
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
+	flags.AddDutySlotsLimit(startNodeCmd)
 	flags.AddHostDNSFlag(startNodeCmd)
 	flags.AddHostAddressFlag(startNodeCmd)
 	flags.AddTCPPortFlag(startNodeCmd)

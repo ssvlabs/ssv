@@ -28,6 +28,7 @@ type Options struct {
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration
 	Phase1TestGenesis          uint64
+	DutySlotsLimit             uint64
 }
 
 // Node represents the behavior of SSV node
@@ -51,6 +52,8 @@ type ssvNode struct {
 	signatureCollectionTimeout time.Duration
 	// genesis epoch
 	phase1TestGenesis uint64
+	// max slots for duty to wait
+	dutySlotsLimit uint64
 }
 
 // New is the constructor of ssvNode
@@ -67,6 +70,7 @@ func New(opts Options) Node {
 		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
 		// genesis epoch
 		phase1TestGenesis: opts.Phase1TestGenesis,
+		dutySlotsLimit:    opts.DutySlotsLimit,
 	}
 }
 
@@ -111,7 +115,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 
 					// execute task if slot already began and not pass 1 epoch
 					currentSlot := uint64(n.getCurrentSlot())
-					if slot >= currentSlot && slot - currentSlot <= 12 {
+					if slot >= currentSlot && slot-currentSlot <= n.dutySlotsLimit {
 						prevIdentifier := ibft.FirstInstanceIdentifier()
 						pubKey := &bls.PublicKey{}
 						if err := pubKey.Deserialize(duty.PublicKey); err != nil {
@@ -148,7 +152,7 @@ func (n *ssvNode) setupValidators(ctx context.Context, validatorsShare []*collec
 // startValidators functions (queue streaming, msgQueue listen, etc)
 func (n *ssvNode) startValidators(validators map[string]*validator.Validator) {
 	for _, v := range validators {
-		if err := v.Start(); err != nil{
+		if err := v.Start(); err != nil {
 			n.logger.Error("failed to start validator", zap.Error(err))
 			continue
 		}
