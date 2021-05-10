@@ -40,7 +40,7 @@ type Validator struct {
 
 // New Validator creation
 func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Validator, ibftStorage collections.IbftStorage, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
-	logger = logger.With(zap.String("pubKey", validatorShare.PubKey.SerializeToHexStr()))
+	logger = logger.With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = ibft.New(
@@ -69,7 +69,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 
 // Start validator
 func (v *Validator) Start() error {
-	if err := v.network.SubscribeTopic(v.ValidatorShare.PubKey); err != nil{
+	if err := v.network.SubscribeTopic(v.ValidatorShare.ValidatorPK); err != nil{
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()
@@ -83,7 +83,7 @@ func (v *Validator) startSlotQueueListener() {
 
 	prevIdentifier := ibft.FirstInstanceIdentifier()
 	for {
-		slot, duty, ok, err := v.slotQueue.Next(v.ValidatorShare.PubKey.Serialize())
+		slot, duty, ok, err := v.slotQueue.Next(v.ValidatorShare.ValidatorPK.Serialize())
 		if err != nil {
 			v.logger.Error("failed to get next slot data", zap.Error(err))
 			continue

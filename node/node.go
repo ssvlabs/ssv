@@ -81,7 +81,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 
 	var pubkeys [][]byte
 	for _, val := range validatorsMap {
-		pubkeys = append(pubkeys, val.ValidatorShare.PubKey.Serialize())
+		pubkeys = append(pubkeys, val.ValidatorShare.ValidatorPK.Serialize())
 	}
 	streamDuties, err := n.beacon.StreamDuties(ctx, pubkeys)
 	if err != nil {
@@ -136,7 +136,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 func (n *ssvNode) setupValidators(ctx context.Context, validatorsShare []*collections.Validator) map[string]*validator.Validator {
 	res := make(map[string]*validator.Validator)
 	for _, validatorShare := range validatorsShare {
-		res[validatorShare.PubKey.SerializeToHexStr()] = validator.New(ctx, n.logger, validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
+		res[validatorShare.ValidatorPK.SerializeToHexStr()] = validator.New(ctx, n.logger, validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
 			SlotQueue:                  n.slotQueue,
 			SignatureCollectionTimeout: n.signatureCollectionTimeout,
 		})

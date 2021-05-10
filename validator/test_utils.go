@@ -165,9 +165,9 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	err := pk.Deserialize(refPk)
 
 	ret.ValidatorShare = &collections.Validator{
-		NodeID:    1,
-		PubKey:    pk,
-		ShareKey:  nil,
+		NodeID:      1,
+		ValidatorPK: pk,
+		ShareKey:    nil,
 		Committee: map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,

@@ -38,10 +38,10 @@ func TestP2PNetworker(t *testing.T) {
 	pk := &bls.PublicKey{}
 	require.NoError(t, pk.Deserialize(refPk))
 	validatorShare := &collections.Validator{
-		NodeID:    1,
-		PubKey:    pk,
-		ShareKey:  nil,
-		Committee: nil,
+		NodeID:      1,
+		ValidatorPK: pk,
+		ShareKey:    nil,
+		Committee:   nil,
 	}
 
 	opts := validator.Options{

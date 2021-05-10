@@ -19,10 +19,10 @@ type IValidator interface {
 
 // Validator model for ValidatorStorage struct creation
 type Validator struct {
-	NodeID    uint64
-	PubKey    *bls.PublicKey
-	ShareKey  *bls.SecretKey
-	Committee map[uint64]*proto.Node
+	NodeID      uint64
+	ValidatorPK *bls.PublicKey
+	ShareKey    *bls.SecretKey
+	Committee   map[uint64]*proto.Node
 }
 
 // ValidatorStorage struct
@@ -49,10 +49,10 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 		ibftCommittee[nodeID].Pk = shareKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = shareKey.Serialize()
 		validator := Validator{
-			NodeID:    nodeID,
-			PubKey:    pubKey,
-			ShareKey:  shareKey,
-			Committee: ibftCommittee,
+			NodeID:      nodeID,
+			ValidatorPK: pubKey,
+			ShareKey:    shareKey,
+			Committee:   ibftCommittee,
 		}
 		err = v.SaveValidatorShare(&validator)
 	}
@@ -68,7 +68,7 @@ func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
 	if err != nil {
 		v.logger.Error("failed serialized validator", zap.Error(err))
 	}
-	return v.db.Set(v.prefix, validator.PubKey.Serialize(), value)
+	return v.db.Set(v.prefix, validator.ValidatorPK.Serialize(), value)
 }
 
 // GetValidatorsShare by key
@@ -137,9 +137,9 @@ func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
 	return &Validator{
-		NodeID:    valShare.NodeID,
-		PubKey:    pubKey,
-		ShareKey:  shareSecret,
-		Committee: valShare.Committiee,
+		NodeID:      valShare.NodeID,
+		ValidatorPK: pubKey,
+		ShareKey:    shareSecret,
+		Committee:   valShare.Committiee,
 	}, nil
 }
