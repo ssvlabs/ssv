@@ -82,7 +82,7 @@ func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
 
 // GetAllValidatorsShare returns ALL validators shares from db
 func (v *ValidatorStorage) GetAllValidatorsShare() ([]*Validator, error) {
-	objs, err := v.db.GetAllByBucket(v.prefix)
+	objs, err := v.db.GetAllByCollection(v.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}

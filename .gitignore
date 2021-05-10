@@ -39,3 +39,11 @@ vendor/
 
 bin/
 /data/
+storage/kv/data/db/000001.sst
+storage/kv/data/db/000001.vlog
+storage/kv/data/db/000002.vlog
+storage/kv/data/db/00002.mem
+storage/kv/data/db/DISCARD
+storage/kv/data/db/KEYREGISTRY
+storage/kv/data/db/LOCK
+storage/kv/data/db/MANIFEST
