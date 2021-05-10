@@ -55,9 +55,13 @@ func TestP2PNetworker(t *testing.T) {
 		SlotQueue: slotqueue.New(core.PyrmontNetwork),
 		SignatureCollectionTimeout: time.Second * time.Duration(4),
 	}
+
+
+	pk2 := &bls.PublicKey{}
+	require.NoError(t, pk2.Deserialize(refPk))
 	validatorShare2 := &collections.Validator{
 		NodeID:      1,
-		ValidatorPK: pk,
+		ValidatorPK: pk2,
 		ShareKey:    nil,
 		Committee:   nil,
 	}
