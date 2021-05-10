@@ -28,7 +28,7 @@ type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
 	ValidatorShare             *collections.Validator
-	ibftStorage                collections.IbftStorage
+	ibftStorage                collections.Iibft
 	ethNetwork                 core.Network
 	network                    network.Network
 	beacon                     beacon.Beacon
@@ -39,7 +39,7 @@ type Validator struct {
 }
 
 // New Validator creation
-func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Validator, ibftStorage collections.IbftStorage, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
+func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Validator, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
 	logger = logger.With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.Role]ibft.IBFT)

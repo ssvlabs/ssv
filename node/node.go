@@ -19,8 +19,8 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	ValidatorStorage           collections.ValidatorStorage
-	IbftStorage                collections.IbftStorage
+	ValidatorStorage           collections.IValidator
+	IbftStorage                collections.Iibft
 	ETHNetwork                 core.Network
 	Network                    network.Network
 	Consensus                  string
@@ -39,8 +39,8 @@ type Node interface {
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	validatorStorage collections.ValidatorStorage
-	ibftStorage      collections.IbftStorage
+	validatorStorage collections.IValidator
+	ibftStorage      collections.Iibft
 	ethNetwork       core.Network
 	network          network.Network
 	consensus        string
