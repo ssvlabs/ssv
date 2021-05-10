@@ -104,8 +104,8 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get storage path flag value", zap.Error(err))
 		}
 
-		validatorPk := &bls.PublicKey{}
-		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
+		validatorPubKey := &bls.PublicKey{}
+		if err := validatorPubKey.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
 		}
 
@@ -115,7 +115,7 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		// init storage
-		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPk, shareKey, nodeID)
+		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPubKey, shareKey, nodeID)
 
 		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
@@ -216,8 +216,8 @@ var startNodeCmd = &cobra.Command{
 				logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
 			}
 
-			// 2. register ssvNode as observer to operator contract events subject
-			eth1Client.GetContractEvent().Register(ssvNode)
+			// 2. register validatorStorage as observer to operator contract events subject
+			eth1Client.GetContractEvent().Register(&validatorStorage)
 		}
 		if err := ssvNode.Start(cmd.Context()); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
@@ -225,13 +225,13 @@ var startNodeCmd = &cobra.Command{
 	},
 }
 
-func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
+func configureStorage(storagePath string, logger *zap.Logger, validatorPubKey *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
 	db, err := kv.New(storagePath, *logger)
 	if err != nil {
 		logger.Fatal("failed to create db!", zap.Error(err))
 	}
 
-	validatorStorage := collections.NewValidator(db, logger)
+	validatorStorage := collections.NewValidatorStorage(db, logger)
 	// saves .env validator to storage
 	ibftCommittee := map[uint64]*proto.Node{
 		1: {
@@ -252,7 +252,7 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 		},
 	}
 
-	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
+	if err := validatorStorage.LoadFromConfig(nodeID, validatorPubKey, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
 	ibftStorage := collections.NewIbft(db, logger, "attestation")

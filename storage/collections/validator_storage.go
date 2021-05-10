@@ -3,11 +3,18 @@ package collections
 import (
 	"bytes"
 	"encoding/gob"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage"
+	"encoding/hex"
+	"math/big"
+	"strings"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/pubsub"
+	"github.com/bloxapp/ssv/shared/params"
+	"github.com/bloxapp/ssv/storage"
 )
 
 // IValidator interface for validator storage
@@ -15,6 +22,10 @@ type IValidator interface {
 	LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error
 	SaveValidatorShare(validator *Validator) error
 	GetAllValidatorsShare() ([]*Validator, error)
+	// Update updates observer
+	Update(i interface{})
+	// GetID get the observer id
+	GetID() string
 }
 
 // Validator model for ValidatorStorage struct creation
@@ -30,10 +41,67 @@ type ValidatorStorage struct {
 	prefix []byte
 	db     storage.Db
 	logger *zap.Logger
+	pubsub.BaseObserver
 }
 
-// NewValidator creates new validator storage
-func NewValidator(db storage.Db, logger *zap.Logger) ValidatorStorage {
+// Update updates observer
+func (v *ValidatorStorage) Update(data interface{}) {
+
+	v.logger.Info("Got log from contract", zap.Any("log", data))
+	type oess struct {
+		OperatorPubKey []byte
+		Index          *big.Int
+		SharePubKey    []byte
+		EncryptedKey   []byte
+	}
+
+	validator := Validator{}
+	ibftCommittee := map[uint64]*proto.Node{}
+
+	if oessList, ok := data.([]oess); ok {
+		for i := range oessList {
+			nodeId := oessList[i].Index.Uint64()
+			ibftCommittee[nodeId].IbftId = nodeId
+			ibftCommittee[nodeId].Pk = oessList[i].SharePubKey
+
+			if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
+				validator.NodeID = nodeId
+
+				validator.PubKey = &bls.PublicKey{}
+				if err := validator.PubKey.Deserialize(oessList[i].SharePubKey); err != nil {
+					v.logger.Error("failed to deserialize share public key", zap.Error(err))
+					return
+				}
+
+				// TODO: decrypt share private key using operator private key
+				validator.ShareKey = &bls.SecretKey{}
+				if err := validator.ShareKey.Deserialize(oessList[i].EncryptedKey); err != nil {
+					v.logger.Error("failed to deserialize share private key", zap.Error(err))
+					return
+				}
+				ibftCommittee[nodeId].Sk = oessList[i].EncryptedKey
+
+			}
+		}
+		validator.Committiee = ibftCommittee
+		if err := v.SaveValidatorShare(&validator); err != nil {
+			v.logger.Error("failed to save validator share", zap.Error(err))
+			return
+		}
+
+		validators, _ := v.GetAllValidatorsShare()
+		v.logger.Debug("VALIDATORS", zap.Any("", validators))
+	}
+}
+
+// GetID get the observer id
+func (v *ValidatorStorage) GetID() string {
+	// TODO return proper id for the observer
+	return "ValidatorStorageObserver"
+}
+
+// NewValidatorStorage creates new validator storage
+func NewValidatorStorage(db storage.Db, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
 		prefix: []byte("validator"),
 		db:     db,

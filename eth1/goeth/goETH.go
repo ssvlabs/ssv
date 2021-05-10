@@ -113,14 +113,16 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 						continue
 					}
 
-					oess := struct {
+					type oess struct {
 						OperatorPubKey []byte
 						Index          *big.Int
 						SharePubKey    []byte
 						EncryptedKey   []byte
-					}{}
+					}
 
 					oessListEncoded := deleteEmpty(strings.Split(hex.EncodeToString(validatorAddedEvent.Oess), params.SsvConfig().OessSeparator))
+					oessList := make([]oess, len(oessListEncoded))
+					isEventBelongsToOperator := false
 
 					e.logger.Debug("Validator PubKey:", zap.String("", hex.EncodeToString(validatorAddedEvent.Pubkey)))
 					e.logger.Debug("Owner Address:   ", zap.String("", validatorAddedEvent.OwnerAddress.String()))
@@ -131,20 +133,25 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 							continue
 						}
 
-						err = oessAbi.UnpackIntoInterface(&oess, "tuple", oessEncoded)
+						err = oessAbi.UnpackIntoInterface(&oessList[i], "tuple", oessEncoded)
 						if err != nil {
 							e.logger.Error("Failed to unpack Oess struct", zap.Error(err))
 							continue
 						}
-						if strings.EqualFold(hex.EncodeToString(oess.OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
-							e.logger.Debug("Index:           ", zap.Any("", oess.Index))
-							e.logger.Debug("Operator PubKey: ", zap.String("", hex.EncodeToString(oess.OperatorPubKey)))
-							e.logger.Debug("Share PubKey:    ", zap.String("", hex.EncodeToString(oess.SharePubKey)))
-							e.logger.Debug("Encrypted Key:   ", zap.String("", hex.EncodeToString(oess.EncryptedKey)))
-							e.contractEvent.Data = oess
-							e.contractEvent.NotifyAll()
-							break
+
+						e.logger.Debug("Index:           ", zap.Any("", oessList[i].Index))
+						e.logger.Debug("Operator PubKey: ", zap.String("", hex.EncodeToString(oessList[i].OperatorPubKey)))
+						e.logger.Debug("Share PubKey:    ", zap.String("", hex.EncodeToString(oessList[i].SharePubKey)))
+						e.logger.Debug("Encrypted Key:   ", zap.String("", hex.EncodeToString(oessList[i].EncryptedKey)))
+
+						if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
+							isEventBelongsToOperator = true
 						}
+					}
+
+					if isEventBelongsToOperator {
+						e.contractEvent.Data = oessList
+						e.contractEvent.NotifyAll()
 					}
 
 				default:

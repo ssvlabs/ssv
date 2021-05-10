@@ -13,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 )
@@ -36,10 +35,6 @@ type Options struct {
 type Node interface {
 	// Start starts the SSV node
 	Start(ctx context.Context) error
-	// Update updates observer
-	Update(i interface{})
-	// GetID get the observer id
-	GetID() string
 }
 
 // ssvNode implements Node interface
@@ -58,7 +53,6 @@ type ssvNode struct {
 	signatureCollectionTimeout time.Duration
 	// genesis epoch
 	phase1TestGenesis uint64
-	pubsub.BaseObserver
 }
 
 // New is the constructor of ssvNode
@@ -77,17 +71,6 @@ func New(opts Options) Node {
 		// genesis epoch
 		phase1TestGenesis: opts.Phase1TestGenesis,
 	}
-}
-
-// Update updates observer
-func (n *ssvNode) Update(vLog interface{}) {
-	n.logger.Info("Got log from contract", zap.Any("log", vLog)) // pointer to Event log
-}
-
-// GetID get the observer id
-func (n *ssvNode) GetID() string {
-	// TODO return proper id for the observer
-	return "ssvNode"
 }
 
 // Start implements Node interface
