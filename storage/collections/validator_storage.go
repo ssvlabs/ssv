@@ -62,8 +62,8 @@ func (v *ValidatorStorage) Update(data interface{}) {
 			if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
 				validator.NodeID = nodeID
 
-				validator.PubKey = &bls.PublicKey{}
-				if err := validator.PubKey.Deserialize(validatorToCreate.ValidatorPubKey); err != nil {
+				validator.ValidatorPK = &bls.PublicKey{}
+				if err := validator.ValidatorPK.Deserialize(validatorToCreate.ValidatorPubKey); err != nil {
 					v.logger.Error("failed to deserialize share public key", zap.Error(err))
 					return
 				}
@@ -78,7 +78,7 @@ func (v *ValidatorStorage) Update(data interface{}) {
 
 			}
 		}
-		validator.Committiee = ibftCommittee
+		validator.Committee = ibftCommittee
 		if err := v.SaveValidatorShare(&validator); err != nil {
 			v.logger.Error("failed to save validator share", zap.Error(err))
 			return

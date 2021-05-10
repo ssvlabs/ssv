@@ -48,10 +48,10 @@ func TestP2PNetworker(t *testing.T) {
 		SlotQueue: slotqueue.New(core.PyrmontNetwork),
 		SignatureCollectionTimeout: time.Second * time.Duration(4),
 	}
-	validatorWrapper := validator.New(context.Background(), logger, validatorShare, collections.IbftStorage{}, peer1, core.PyrmontNetwork, nil, opts)
+	validatorWrapper := validator.New(context.Background(), logger, validatorShare, &collections.IbftStorage{}, peer1, core.PyrmontNetwork, nil, opts)
 	require.NoError(t, validatorWrapper.Start())
 
-	validatorWrapper2 := validator.New(context.Background(), logger, validatorShare, collections.IbftStorage{}, peer2, core.PyrmontNetwork, nil, opts)
+	validatorWrapper2 := validator.New(context.Background(), logger, validatorShare, &collections.IbftStorage{}, peer2, core.PyrmontNetwork, nil, opts)
 	require.NoError(t, validatorWrapper2.Start())
 
 	//peer3, err := New(context.Background(), logger)
