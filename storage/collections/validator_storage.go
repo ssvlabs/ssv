@@ -60,12 +60,12 @@ func (v *ValidatorStorage) Update(data interface{}) {
 
 	if oessList, ok := data.([]oess); ok {
 		for i := range oessList {
-			nodeId := oessList[i].Index.Uint64()
-			ibftCommittee[nodeId].IbftId = nodeId
-			ibftCommittee[nodeId].Pk = oessList[i].SharePubKey
+			nodeID := oessList[i].Index.Uint64()
+			ibftCommittee[nodeID].IbftId = nodeID
+			ibftCommittee[nodeID].Pk = oessList[i].SharePubKey
 
 			if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
-				validator.NodeID = nodeId
+				validator.NodeID = nodeID
 
 				validator.PubKey = &bls.PublicKey{}
 				if err := validator.PubKey.Deserialize(oessList[i].SharePubKey); err != nil {
@@ -79,7 +79,7 @@ func (v *ValidatorStorage) Update(data interface{}) {
 					v.logger.Error("failed to deserialize share private key", zap.Error(err))
 					return
 				}
-				ibftCommittee[nodeId].Sk = oessList[i].EncryptedKey
+				ibftCommittee[nodeID].Sk = oessList[i].EncryptedKey
 
 			}
 		}
