@@ -3,7 +3,6 @@ package goeth
 import (
 	"context"
 	"encoding/hex"
-	"math/big"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -83,11 +82,7 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 
 				switch eventName := eventType.Name; eventName {
 				case "OperatorAdded":
-					operatorAddedEvent := struct {
-						Name           string
-						Pubkey         []byte
-						PaymentAddress common.Address
-					}{}
+					operatorAddedEvent := eth1.OperatorAddedEvent{}
 					err = contractAbi.UnpackIntoInterface(&operatorAddedEvent, eventType.Name, vLog.Data)
 					if err != nil {
 						e.logger.Error("Failed to unpack event", zap.Error(err))
@@ -96,11 +91,7 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 					e.contractEvent.Data = operatorAddedEvent
 
 				case "ValidatorAdded":
-					validatorAddedEvent := struct {
-						Pubkey       []byte
-						OwnerAddress common.Address
-						Oess         []byte
-					}{}
+					validatorAddedEvent := eth1.ValidatorAddedEvent{}
 					err = contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventType.Name, vLog.Data)
 					if err != nil {
 						e.logger.Error("Failed to unpack ValidatorAdded event", zap.Error(err))
@@ -113,15 +104,8 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 						continue
 					}
 
-					type oess struct {
-						OperatorPubKey []byte
-						Index          *big.Int
-						SharePubKey    []byte
-						EncryptedKey   []byte
-					}
-
 					oessListEncoded := deleteEmpty(strings.Split(hex.EncodeToString(validatorAddedEvent.Oess), params.SsvConfig().OessSeparator))
-					oessList := make([]oess, len(oessListEncoded))
+					oessList := make([]eth1.Oess, len(oessListEncoded))
 					isEventBelongsToOperator := false
 
 					e.logger.Debug("Validator PubKey:", zap.String("", hex.EncodeToString(validatorAddedEvent.Pubkey)))
@@ -150,7 +134,10 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 					}
 
 					if isEventBelongsToOperator {
-						e.contractEvent.Data = oessList
+						e.contractEvent.Data = eth1.ValidatorEvent{
+							ValidatorPubKey: validatorAddedEvent.Pubkey,
+							OessList:        oessList,
+						}
 						e.contractEvent.NotifyAll()
 					}
 

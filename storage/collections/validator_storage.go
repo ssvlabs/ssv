@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/hex"
-	"math/big"
 	"strings"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
@@ -48,27 +48,22 @@ type ValidatorStorage struct {
 func (v *ValidatorStorage) Update(data interface{}) {
 
 	v.logger.Info("Got log from contract", zap.Any("log", data))
-	type oess struct {
-		OperatorPubKey []byte
-		Index          *big.Int
-		SharePubKey    []byte
-		EncryptedKey   []byte
-	}
 
-	validator := Validator{}
-	ibftCommittee := map[uint64]*proto.Node{}
-
-	if oessList, ok := data.([]oess); ok {
+	if validatorToCreate, ok := data.(eth1.ValidatorEvent); ok {
+		validator := Validator{}
+		ibftCommittee := map[uint64]*proto.Node{}
+		oessList := validatorToCreate.OessList
 		for i := range oessList {
-			nodeID := oessList[i].Index.Uint64()
-			ibftCommittee[nodeID].IbftId = nodeID
-			ibftCommittee[nodeID].Pk = oessList[i].SharePubKey
-
+			nodeID := oessList[i].Index.Uint64() + 1
+			ibftCommittee[nodeID] = &proto.Node{
+				IbftId: nodeID,
+				Pk:     oessList[i].SharePubKey,
+			}
 			if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
 				validator.NodeID = nodeID
 
 				validator.PubKey = &bls.PublicKey{}
-				if err := validator.PubKey.Deserialize(oessList[i].SharePubKey); err != nil {
+				if err := validator.PubKey.Deserialize(validatorToCreate.ValidatorPubKey); err != nil {
 					v.logger.Error("failed to deserialize share public key", zap.Error(err))
 					return
 				}
