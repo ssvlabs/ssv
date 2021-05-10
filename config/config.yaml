@@ -1,3 +1,5 @@
+global:
+  LogLevel: info
 bootnode:
   ExternalIP:
   PrivateKey:

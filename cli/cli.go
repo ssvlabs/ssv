@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/cli/flags"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -14,6 +15,10 @@ var Logger *zap.Logger
 
 type Args struct {
 	ConfigPath string
+}
+
+type GlobalConfig struct {
+	LogLevel string `yaml:"LogLevel" env:"LOG_LEVEL" env-default:"info" env-description:"Defines logger's log level'"`
 }
 
 // ProcessArgs processes and handles CLI arguments
@@ -36,11 +41,11 @@ var RootCmd = &cobra.Command{
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
-		loggerLevel, err := flags.GetLoggerLevelValue(cmd)
-		if err != nil {
-			log.Fatal("failed to get logger level flag value", zap.Error(err))
-		}
+		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
 		Logger = logex.Build(cmd.Parent().Short, loggerLevel)
+		if err != nil {
+			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel),zap.Error(err))
+		}
 	},
 }
 

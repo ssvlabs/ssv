@@ -6,11 +6,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type Config struct {
+type config struct {
+	GlobalConfig `yaml:"global"`
 	Options bootnode.Options `yaml:"bootnode"`
 }
 
-var cfg Config
+var cfg config
 
 var globalArgs Args
 
@@ -19,9 +20,7 @@ var startBootNodeCmd = &cobra.Command{
 	Use:   "start-boot-node",
 	Short: "Starts boot node for discovery based ENR",
 	Run: func(cmd *cobra.Command, args []string) {
-		Logger.Info(globalArgs.ConfigPath)
 		cfg.Options.Logger = Logger
-
 		bootNode := bootnode.New(cfg.Options)
 		if err := bootNode.Start(cmd.Context()); err != nil {
 			Logger.Fatal("failed to start boot node", zap.Error(err))

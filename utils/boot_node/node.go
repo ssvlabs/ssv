@@ -29,8 +29,8 @@ import (
 // Options contains options to create the node
 type Options struct {
 	Logger     *zap.Logger
-	PrivateKey string `env:"BOOT_NODE_PRIVATE_KEY" env-description:"Adds the boot node private key flag"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Total number of database connections"`
+	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
 }
 
 // Node represents the behavior of boot node

@@ -1,6 +1,8 @@
 package logex
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"time"
 
@@ -36,6 +38,27 @@ func Build(appName string, level zapcore.Level) *zap.Logger {
 	logger = logger.With(zap.String("app", appName))
 	zap.ReplaceGlobals(logger)
 	return logger
+}
+
+func GetLoggerLevelValue(loggerLevel string) (zapcore.Level, error) {
+	switch loggerLevel {
+	case "debug":
+		return zapcore.DebugLevel, nil
+	case "info":
+		return zapcore.InfoLevel, nil
+	case "warn":
+		return zapcore.WarnLevel, nil
+	case "error":
+		return zapcore.ErrorLevel, nil
+	case "dpanic":
+		return zapcore.DPanicLevel, nil
+	case "panic":
+		return zapcore.PanicLevel, nil
+	case "fatal":
+		return zapcore.FatalLevel, nil
+	default:
+		return zapcore.InfoLevel, errors.New(fmt.Sprintf("unknown log level - %s", loggerLevel))
+	}
 }
 
 // iso3339CleanTime converts the given time to ISO 3339 format
