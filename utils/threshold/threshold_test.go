@@ -6,33 +6,69 @@ import (
 	"testing"
 )
 
+type shareSet struct {
+	sharesCount uint64
+	threshold   uint64
+	message     []byte
+	sk          bls.SecretKey
+	skSig       *bls.Sign
+	shares      map[uint64]*bls.SecretKey
+}
+
+func generateShares(n uint64, k uint64, message string) (*shareSet, error) {
+	set := shareSet{
+		sharesCount: n,
+		threshold:   k,
+		message:     []byte(message),
+		sk:          bls.SecretKey{},
+	}
+	// generate random secret key
+	set.sk.SetByCSPRNG()
+	set.skSig = set.sk.SignByte(set.message)
+	shares, err := Create(set.sk.Serialize(), set.threshold, set.sharesCount)
+	set.shares = shares
+	return &set, err
+}
 func TestSplitAndReconstruct(t *testing.T) {
 	Init()
-	sharesCount := uint64(4)
-	threshold := uint64(3)
-	message := []byte("bloxRocks!")
-
-	// generate random secret and split
-	sk := bls.SecretKey{}
-	sk.SetByCSPRNG()
-
-	originalSig := sk.SignByte(message)
-
-	shares, err := Create(sk.Serialize(), threshold, sharesCount)
+	shareSet, err := generateShares(4, 3, "bloxRocks!")
 	require.NoError(t, err)
 
 	// partial sigs
 	sigVec := make(map[uint64][]byte)
-	for i, s := range shares {
-		partialSig := s.SignByte(message)
+	for i, s := range shareSet.shares {
+		partialSig := s.SignByte(shareSet.message)
 		sigVec[i] = partialSig.Serialize()
 	}
 
 	// reconstruct
 	sig, _ := ReconstructSignatures(sigVec)
-	require.True(t, originalSig.IsEqual(sig))
-	require.NoError(t, originalSig.Deserialize(sig.Serialize()))
-	require.True(t, originalSig.VerifyByte(sk.GetPublicKey(), message))
+	require.True(t, shareSet.skSig.IsEqual(sig))
+	require.NoError(t, shareSet.skSig.Deserialize(sig.Serialize()))
+	require.True(t, shareSet.skSig.VerifyByte(shareSet.sk.GetPublicKey(), shareSet.message))
+}
+
+func TestIncorrectShare(t *testing.T) {
+	Init()
+	shareSet, err := generateShares(4, 3, "bloxRocks!")
+	require.NoError(t, err)
+
+	// replace one share with random one that was not created from sk
+	randomShare := bls.SecretKey{}
+	randomShare.SetByCSPRNG()
+	shareSet.shares[2] = &randomShare
+
+	// partial sigs
+	sigVec := make(map[uint64][]byte)
+	for i, s := range shareSet.shares {
+		partialSig := s.SignByte(shareSet.message)
+		sigVec[i] = partialSig.Serialize()
+	}
+
+	// reconstruct
+	sig, _ := ReconstructSignatures(sigVec)
+	require.False(t, shareSet.skSig.IsEqual(sig))
+	require.False(t, sig.VerifyByte(shareSet.sk.GetPublicKey(), shareSet.message))
 }
 
 // plain library example

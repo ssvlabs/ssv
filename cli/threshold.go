@@ -30,7 +30,10 @@ var createThresholdCmd = &cobra.Command{
 		if err := baseKey.SetHexString(privKey); err != nil {
 			Logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
+
 		// https://github.com/ethereum/eth2-ssv/issues/22
+		// currently support 4 nodes threshold is keysCount-1(3). need to align based open the issue to
+		// support k(2f+1) and n (3f+1) and allow to pass it as flag
 		privKeys, err := threshold.Create(baseKey.Serialize(), keysCount-1, keysCount)
 		if err != nil {
 			Logger.Fatal("failed to turn a private key into a threshold key", zap.Error(err))
