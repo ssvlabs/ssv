@@ -12,29 +12,31 @@ var (
 )
 
 func validators() []*collections.Validator {
-	pk := &bls.PublicKey{}
-	pk.Deserialize(refPk)
+	//pk := &bls.PublicKey{}
+	//pk.Deserialize(refPk)
 	return []*collections.Validator{
 		{
 			NodeID:      1,
-			ValidatorPK: pk,
+			ValidatorPK: nil,
 			ShareKey:    nil,
 			Committee:   nil,
 		},
 	}
 }
 
+// TestValidatorStorage implementation
 type TestValidatorStorage struct {
 }
 
+// LoadFromConfig implementation
 func (v *TestValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error {
 	return nil
 }
-
+// SaveValidatorShare implementation
 func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.Validator) error {
 	return nil
 }
-
+// GetAllValidatorsShare implementation
 func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*collections.Validator, error) {
 	return validators(), nil
 }

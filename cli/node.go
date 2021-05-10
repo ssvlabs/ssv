@@ -155,8 +155,8 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		ssvNode := node.New(node.Options{
-			ValidatorStorage:           validatorStorage,
-			IbftStorage:                ibftStorage,
+			ValidatorStorage:           &validatorStorage,
+			IbftStorage:                &ibftStorage,
 			Beacon:                     beaconClient,
 			ETHNetwork:                 eth2Network,
 			Network:                    network,
