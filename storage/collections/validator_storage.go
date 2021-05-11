@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -28,15 +28,15 @@ type Validator struct {
 // ValidatorStorage struct
 type ValidatorStorage struct {
 	prefix []byte
-	db     storage.Db
+	db     basedb.IDb
 	logger *zap.Logger
 }
 
 // NewValidator creates new validator storage
-func NewValidator(db storage.Db, logger *zap.Logger) ValidatorStorage {
+func NewValidator(db *basedb.IDb, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
 		prefix: []byte("validator-"),
-		db:     db,
+		db:     *db,
 		logger: logger,
 	}
 	return validator
@@ -122,7 +122,7 @@ func (v *Validator) Serialize() ([]byte, error) {
 }
 
 // Deserialize key/value to ValidatorStorage struct
-func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
+func (v *Validator) Deserialize(obj basedb.Obj) (*Validator, error) {
 	var valShare serializedValidator
 	d := gob.NewDecoder(bytes.NewReader(obj.Value))
 	if err := d.Decode(&valShare); err != nil {
