@@ -19,9 +19,10 @@ import (
 
 // IValidator interface for validator storage
 type IValidator interface {
+	GetDBEvent() *storage.DBEvent
 	LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error
 	SaveValidatorShare(validator *Validator) error
-	GetAllValidatorsShare() ([]*Validator, error)
+	GetAllValidatorShares() ([]*Validator, error)
 	// Update updates observer
 	Update(i interface{})
 	// GetID get the observer id
@@ -41,6 +42,7 @@ type ValidatorStorage struct {
 	prefix []byte
 	db     storage.Db
 	logger *zap.Logger
+	dbEvent *storage.DBEvent
 	pubsub.BaseObserver
 }
 
@@ -49,10 +51,10 @@ func (v *ValidatorStorage) Update(data interface{}) {
 
 	v.logger.Info("Got log from contract", zap.Any("log", data))
 
-	if validatorToCreate, ok := data.(eth1.ValidatorEvent); ok {
+	if validatorEvent, ok := data.(eth1.ValidatorEvent); ok {
 		validator := Validator{}
 		ibftCommittee := map[uint64]*proto.Node{}
-		oessList := validatorToCreate.OessList
+		oessList := validatorEvent.OessList
 		for i := range oessList {
 			nodeID := oessList[i].Index.Uint64() + 1
 			ibftCommittee[nodeID] = &proto.Node{
@@ -63,7 +65,7 @@ func (v *ValidatorStorage) Update(data interface{}) {
 				validator.NodeID = nodeID
 
 				validator.ValidatorPK = &bls.PublicKey{}
-				if err := validator.ValidatorPK.Deserialize(validatorToCreate.ValidatorPubKey); err != nil {
+				if err := validator.ValidatorPK.Deserialize(validatorEvent.ValidatorPubKey); err != nil {
 					v.logger.Error("failed to deserialize share public key", zap.Error(err))
 					return
 				}
@@ -84,8 +86,8 @@ func (v *ValidatorStorage) Update(data interface{}) {
 			return
 		}
 
-		validators, _ := v.GetAllValidatorsShare()
-		v.logger.Debug("VALIDATORS", zap.Any("", validators))
+		v.dbEvent.Data = validator
+		v.dbEvent.NotifyAll()
 	}
 }
 
@@ -101,6 +103,7 @@ func NewValidatorStorage(db storage.Db, logger *zap.Logger) ValidatorStorage {
 		prefix: []byte("validator-"),
 		db:     db,
 		logger: logger,
+		dbEvent: storage.NewDBEvent("dbtEvent"),
 	}
 	return validator
 }
@@ -143,8 +146,8 @@ func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
 	return (&Validator{}).Deserialize(obj)
 }
 
-// GetAllValidatorsShare returns ALL validators shares from db
-func (v *ValidatorStorage) GetAllValidatorsShare() ([]*Validator, error) {
+// GetAllValidatorShares returns ALL validators shares from db
+func (v *ValidatorStorage) GetAllValidatorShares() ([]*Validator, error) {
 	objs, err := v.db.GetAllByBucket(v.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
@@ -205,4 +208,9 @@ func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
 		ShareKey:    shareSecret,
 		Committee:   valShare.Committiee,
 	}, nil
+}
+
+// GetDBEvent returns the dbEvent
+func (v *ValidatorStorage) GetDBEvent() *storage.DBEvent {
+	return v.dbEvent
 }

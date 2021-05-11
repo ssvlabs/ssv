@@ -41,7 +41,7 @@ func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.Validat
 	return nil
 }
 
-// GetAllValidatorsShare function
-func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*collections.Validator, error) {
+// GetAllValidatorShares function
+func (v *TestValidatorStorage) GetAllValidatorShares() ([]*collections.Validator, error) {
 	return validators(), nil
 }

@@ -171,6 +171,7 @@ var startNodeCmd = &cobra.Command{
 			SignatureCollectionTimeout: sigCollectionTimeout,
 			GenesisEpoch:               genesisEpoch,
 			DutySlotsLimit:             dutySlotsLimit,
+			Context: cmd.Context(),
 		})
 
 		if eth1Addr != "" {
@@ -183,7 +184,8 @@ var startNodeCmd = &cobra.Command{
 			// 2. register validatorStorage as observer to operator contract events subject
 			eth1Client.GetContractEvent().Register(&validatorStorage)
 		}
-		if err := ssvNode.Start(cmd.Context()); err != nil {
+		validatorStorage.GetDBEvent().Register(ssvNode)
+		if err := ssvNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
