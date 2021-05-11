@@ -28,7 +28,7 @@ const (
 	loggerLevel          = "logger-level"
 	eth1AddrFlag         = "eth1-addr"
 	storagePath          = "storage-path"
-	operatorPubKeyFlag   = "operator-pubKey"
+	operatorPubKeyFlag   = "operator-pubkey"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
