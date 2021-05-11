@@ -18,6 +18,7 @@ const (
 	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
+	dutySlotsLimit = "duty-slots-limit"
 	hostDNS              = "host-dns"
 	hostAddress          = "host-address"
 	tcpPort              = "tcp-port"
@@ -104,6 +105,16 @@ func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
 		return 0, err
 	}
 	return time.Second * time.Duration(v), nil
+}
+
+// AddDutySlotsLimit adds the max amount of slots to execute duty in delay flag to the command
+func AddDutySlotsLimit(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, dutySlotsLimit, 32, "Duties max slots delay to attest", false)
+}
+
+// GetDutySlotsLimitValue gets the max amount of slots to execute duty in delay flag to  the command
+func GetDutySlotsLimitValue(c *cobra.Command) (uint64, error) {
+	return c.Flags().GetUint64(dutySlotsLimit)
 }
 
 // GetHostDNSFlagValue gets the host dns flag from the command
@@ -194,5 +205,5 @@ func GetStoragePathValue(c *cobra.Command) (string, error) {
 
 // AddStoragePathFlag adds the storage path flag to the command
 func AddStoragePathFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, storagePath, "/data/db", "storage path", false)
+	cliflag.AddPersistentStringFlag(c, storagePath, "./data/db", "storage path", false)
 }

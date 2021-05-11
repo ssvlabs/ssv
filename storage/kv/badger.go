@@ -8,6 +8,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// Options for badger config
+type Options struct {
+	InMemory bool
+}
+
 // BadgerDb struct
 type BadgerDb struct {
 	db     *badger.DB
@@ -15,10 +20,18 @@ type BadgerDb struct {
 }
 
 // New create new instance of Badger db
-func New(path string, logger zap.Logger) (storage.Db, error) {
+func New(path string, logger zap.Logger, opts *Options) (storage.IKvStorage, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(path)
+	if opts.InMemory {
+		opt.InMemory = opts.InMemory
+		opt.Dir = ""
+		opt.ValueDir = ""
+	}
+
+	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
+
 	db, err := badger.Open(opt)
 	if err != nil {
 		return &BadgerDb{}, errors.Wrap(err, "failed to open badger")
@@ -52,17 +65,18 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (storage.Obj, error) {
 		return err
 	})
 	return storage.Obj{
-		Key: key,
+		Key:   key,
 		Value: resValue,
 	}, err
 }
 
-// GetAllByBucket return all array of Obj for all keys under specified prefix(bucket)
-func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]storage.Obj, error) {
+// GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
+func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]storage.Obj, error) {
 	var res []storage.Obj
 	var err error
 	err = b.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
+		opt.Prefix = prefix
 		it := txn.NewIterator(opt)
 		defer it.Close()
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
@@ -70,12 +84,15 @@ func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]storage.Obj, error) {
 			resKey := item.Key()
 			trimmedResKey := bytes.TrimPrefix(resKey, prefix)
 			val, err := item.ValueCopy(nil)
+			if err != nil {
+				b.logger.Error("failed to copy value", zap.Error(err))
+				continue
+			}
 			obj := storage.Obj{
-				Key: trimmedResKey,
+				Key:   trimmedResKey,
 				Value: val,
 			}
 			res = append(res, obj)
-			return err
 		}
 		return err
 	})

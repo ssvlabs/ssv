@@ -173,7 +173,6 @@ func (i *Instance) uponChangeRoundTrigger() {
 
 	// set time for next round change
 	i.triggerRoundChangeOnTimer()
-
 	// broadcast round change
 	broadcastMsg, err := i.generateChangeRoundMessage()
 	if err != nil {

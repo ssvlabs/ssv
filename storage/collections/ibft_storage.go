@@ -29,12 +29,12 @@ type Iibft interface {
 type IbftStorage struct {
 	prefix       []byte
 	instanceType string
-	db           storage.Db
+	db           storage.IKvStorage
 	logger       *zap.Logger
 }
 
 // NewIbft create new ibft storage
-func NewIbft(db storage.Db, logger *zap.Logger, instanceType string) IbftStorage {
+func NewIbft(db storage.IKvStorage, logger *zap.Logger, instanceType string) IbftStorage {
 	ibft := IbftStorage{
 		prefix:       []byte("ibft"),
 		instanceType: instanceType,

@@ -2,6 +2,7 @@ package local
 
 import (
 	"github.com/bloxapp/ssv/network"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"sync"
 
@@ -121,4 +122,9 @@ func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	c := make(chan *network.SyncChanObj)
 	n.syncC = append(n.syncC, c)
 	return c
+}
+
+// SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
+func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error{
+	return nil
 }

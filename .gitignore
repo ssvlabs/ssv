@@ -38,3 +38,4 @@ vendor/
 .DS_Store
 
 bin/
+/data/

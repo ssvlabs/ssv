@@ -4,8 +4,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/collections"
+	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 
 	"go.uber.org/zap"
 
@@ -20,13 +20,14 @@ func FirstInstanceIdentifier() []byte {
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
-	Logger       *zap.Logger
-	ValueCheck   valcheck.ValueCheck
-	PrevInstance []byte
-	Identifier   []byte
+	Logger         *zap.Logger
+	ValueCheck     valcheck.ValueCheck
+	PrevInstance   []byte
+	Identifier     []byte
 	SeqNumber    uint64
-	Value        []byte
-	Duty         *slotqueue.Duty
+	Value          []byte
+	Duty           *ethpb.DutiesResponse_Duty
+	ValidatorShare collections.ValidatorShare
 }
 
 // IBFT represents behavior of the IBFT
@@ -45,7 +46,7 @@ type IBFT interface {
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
 	instances      []*Instance // key is the instance identifier
-	ibftStorage    collections.IbftStorage
+	ibftStorage    collections.Iibft
 	network        network.Network
 	msgQueue       *msgqueue.MessageQueue
 	params         *proto.InstanceParams
@@ -53,7 +54,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(storage collections.IbftStorage, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
+func New(storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:    storage,
 		instances:      make([]*Instance, 0),

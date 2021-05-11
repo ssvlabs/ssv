@@ -1,8 +1,9 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,9 @@ func testIBFTInstance(t *testing.T) *ibftImpl {
 
 func TestCanStartNewInstance(t *testing.T) {
 	threshold.Init()
+	validatorPk := &bls.PublicKey{}
+	require.NoError(t, validatorPk.Deserialize(fixtures.RefPk))
+
 	sk := &bls.SecretKey{}
 	sk.SetByCSPRNG()
 
@@ -32,11 +36,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			StartOptions{
 				PrevInstance: FirstInstanceIdentifier(),
 				Identifier:   []byte{1, 2, 3, 4},
-				Duty: &slotqueue.Duty{
+				Duty: nil,
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
-					Duty:        nil,
-					ValidatorPK: sk.GetPublicKey(),
-					ShareSK:     sk,
+					ValidatorPK: validatorPk,
+					ShareKey:    sk,
 					Committee:   nil,
 				},
 			},
@@ -49,11 +53,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			StartOptions{
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
-				Duty: &slotqueue.Duty{
+				Duty: nil,
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
-					Duty:        nil,
-					ValidatorPK: sk.GetPublicKey(),
-					ShareSK:     sk,
+					ValidatorPK: validatorPk,
+					ShareKey:    sk,
 					Committee:   nil,
 				},
 			},
@@ -66,11 +70,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			StartOptions{
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
-				Duty: &slotqueue.Duty{
+				Duty: nil,
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
-					Duty:        nil,
-					ValidatorPK: sk.GetPublicKey(),
-					ShareSK:     sk,
+					ValidatorPK: validatorPk,
+					ShareKey:    sk,
 					Committee:   nil,
 				},
 			},
@@ -83,11 +87,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			StartOptions{
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
-				Duty: &slotqueue.Duty{
+				Duty: nil,
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
-					Duty:        nil,
-					ValidatorPK: sk.GetPublicKey(),
-					ShareSK:     sk,
+					ValidatorPK: validatorPk,
+					ShareKey:    sk,
 					Committee:   nil,
 				},
 			},
@@ -119,11 +123,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			StartOptions{
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
-				Duty: &slotqueue.Duty{
+				Duty: nil,
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
-					Duty:        nil,
-					ValidatorPK: sk.GetPublicKey(),
-					ShareSK:     sk,
+					ValidatorPK: validatorPk,
+					ShareKey:    sk,
 					Committee:   nil,
 				},
 			},
@@ -143,11 +147,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			StartOptions{
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
-				Duty: &slotqueue.Duty{
+				Duty: nil,
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
-					Duty:        nil,
-					ValidatorPK: sk.GetPublicKey(),
-					ShareSK:     sk,
+					ValidatorPK: validatorPk,
+					ShareKey:    sk,
 					Committee:   nil,
 				},
 			},

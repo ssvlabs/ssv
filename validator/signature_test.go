@@ -1,6 +1,7 @@
-package node
+package validator
 
 import (
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -59,7 +60,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingSSVNode(t,true, 4)
+			node := testingValidator(t,true, 4)
 
 			sk := &bls.SecretKey{}
 			require.NoError(t, sk.Deserialize(test.skByts))
@@ -71,7 +72,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 				usedRoot = []byte{0,0,0,0,0,0,0}
 			}
 
-			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID, node.iBFT.GetIBFTCommittee()) // TODO need to fetch the committee from storage
+			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID, node.ibfts[beacon.RoleAttester].GetIBFTCommittee()) // TODO need to fetch the committee from storage
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {

@@ -36,9 +36,9 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 	return InstanceOptions{
 		Logger: opts.Logger,
 		Me: &proto.Node{
-			IbftId: opts.Duty.NodeID,
-			Pk:     opts.Duty.ShareSK.GetPublicKey().Serialize(),
-			Sk:     opts.Duty.ShareSK.Serialize(),
+			IbftId: opts.ValidatorShare.NodeID,
+			Pk:     opts.ValidatorShare.ShareKey.GetPublicKey().Serialize(),
+			Sk:     opts.ValidatorShare.ShareKey.Serialize(),
 		},
 		Network:        i.network,
 		Queue:          i.msgQueue,
@@ -46,11 +46,11 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 		LeaderSelector: i.leaderSelector,
 		Params: &proto.InstanceParams{
 			ConsensusParams: i.params.ConsensusParams,
-			IbftCommittee:   opts.Duty.Committee,
+			IbftCommittee:   opts.ValidatorShare.Committee,
 		},
 		Lambda:         opts.Identifier,
 		SeqNumber:      opts.SeqNumber,
 		PreviousLambda: opts.PrevInstance,
-		ValidatorPK:    opts.Duty.ValidatorPK.Serialize(),
+		ValidatorPK:    opts.ValidatorShare.ValidatorPK.Serialize(),
 	}
 }

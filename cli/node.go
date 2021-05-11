@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
-	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -15,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/cli/flags"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
@@ -72,6 +70,11 @@ var startNodeCmd = &cobra.Command{
 		sigCollectionTimeout, err := flags.GetSignatureCollectionTimeValue(cmd)
 		if err != nil {
 			logger.Fatal("failed to get signature timeout key flag value", zap.Error(err))
+		}
+
+		dutySlotsLimit, err := flags.GetDutySlotsLimitValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get duty slots limit key flag value", zap.Error(err))
 		}
 
 		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
@@ -143,7 +146,6 @@ var startNodeCmd = &cobra.Command{
 			},
 			UDPPort:     udpPort,
 			TCPPort:     tcpPort,
-			TopicName:   validatorKey,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
 		}
@@ -152,26 +154,17 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		msgQ := msgqueue.New()
-
 		ssvNode := node.New(node.Options{
-			ValidatorStorage: validatorStorage,
-			Beacon:           beaconClient,
-			ETHNetwork:       eth2Network,
-			Network:          network,
-			Queue:            msgQ,
-			Consensus:        consensusType,
-			IBFT: ibft.New(
-				ibftStorage,
-				network,
-				msgQ,
-				&proto.InstanceParams{
-					ConsensusParams: proto.DefaultConsensusParams(),
-				},
-			),
+			ValidatorStorage:           &validatorStorage,
+			IbftStorage:                &ibftStorage,
+			Beacon:                     beaconClient,
+			ETHNetwork:                 eth2Network,
+			Network:                    network,
+			Consensus:                  consensusType,
 			Logger:                     logger,
 			SignatureCollectionTimeout: sigCollectionTimeout,
-			Phase1TestGenesis:          genesisEpoch,
+			GenesisEpoch:               genesisEpoch,
+			DutySlotsLimit:             dutySlotsLimit,
 		})
 
 		if err := ssvNode.Start(cmd.Context()); err != nil {
@@ -181,12 +174,12 @@ var startNodeCmd = &cobra.Command{
 }
 
 func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
-	db, err := kv.New(storagePath, *logger)
+	db, err := kv.New(storagePath, *logger, &kv.Options{})
 	if err != nil {
 		logger.Fatal("failed to create db!", zap.Error(err))
 	}
 
-	validatorStorage := collections.NewValidator(db, logger)
+	validatorStorage := collections.NewValidatorStorage(db, logger)
 	// saves .env validator to storage
 	ibftCommittee := map[uint64]*proto.Node{
 		1: {
@@ -210,6 +203,7 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
+
 	ibftStorage := collections.NewIbft(db, logger, "attestation")
 	return validatorStorage, ibftStorage
 }
@@ -228,6 +222,7 @@ func init() {
 	flags.AddConsensusFlag(startNodeCmd)
 	flags.AddNodeIDKeyFlag(startNodeCmd)
 	flags.AddSignatureCollectionTimeFlag(startNodeCmd)
+	flags.AddDutySlotsLimit(startNodeCmd)
 	flags.AddHostDNSFlag(startNodeCmd)
 	flags.AddHostAddressFlag(startNodeCmd)
 	flags.AddTCPPortFlag(startNodeCmd)
