@@ -19,7 +19,7 @@ const (
 	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
-	dutySlotsLimit = "duty-slots-limit"
+	dutySlotsLimit       = "duty-slots-limit"
 	hostDNS              = "host-dns"
 	hostAddress          = "host-address"
 	tcpPort              = "tcp-port"
@@ -28,6 +28,7 @@ const (
 	loggerLevel          = "logger-level"
 	eth1AddrFlag         = "eth1-addr"
 	storagePath          = "storage-path"
+	operatorPubKeyFlag   = "operator-pubKey"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -199,14 +200,24 @@ func AddLoggerLevelFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, loggerLevel, "info", "logger level", false)
 }
 
+// AddEth1AddrFlag adds the eth1 address flag to the command
+func AddEth1AddrFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
+}
+
 // GetEth1AddrValue gets the eth1 address flag from the command
 func GetEth1AddrValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(eth1AddrFlag)
 }
 
-// AddEth1AddrFlag adds the eth1 address flag to the command
-func AddEth1AddrFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
+// AddOperatorPubKeyFlag adds the operator public key flag to the command
+func AddOperatorPubKeyFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, operatorPubKeyFlag, "", "operator public key", false)
+}
+
+// GetOperatorPubKeyFlag gets the operator public key flag from the command
+func GetOperatorPubKeyFlag(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(operatorPubKeyFlag)
 }
 
 // GetStoragePathValue gets the storage path flag from the command

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/shared/params"
 	"log"
 	"os"
 
@@ -130,6 +131,11 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
 		}
 
+		params.SsvConfig().OperatorPublicKey, err = flags.GetOperatorPubKeyFlag(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get operator public key flag value", zap.Error(err))
+		}
+
 		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
 		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
 		logger.Debug("Node params",
@@ -247,6 +253,7 @@ func init() {
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
 	flags.AddEth1AddrFlag(startNodeCmd)
+	flags.AddOperatorPubKeyFlag(startNodeCmd)
 	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
 
