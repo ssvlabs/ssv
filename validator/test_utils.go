@@ -164,7 +164,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
 
-	ret.ValidatorShare = &collections.Validator{
+	ret.ValidatorShare = &collections.ValidatorShare{
 		NodeID:      1,
 		ValidatorPK: pk,
 		ShareKey:    nil,

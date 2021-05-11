@@ -192,7 +192,7 @@ var startNodeCmd = &cobra.Command{
 }
 
 func configureStorage(storagePath string, logger *zap.Logger, validatorPubKey *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
-	db, err := kv.New(storagePath, *logger)
+	db, err := kv.New(storagePath, *logger, &kv.Options{})
 	if err != nil {
 		logger.Fatal("failed to create db!", zap.Error(err))
 	}

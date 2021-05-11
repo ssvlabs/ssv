@@ -187,8 +187,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) SubscribeTopic(validatorPk *bls.PublicKey) error{
-	topic, err := n.pubsub.Join(getTopic(validatorPk.SerializeToHexStr()))
+func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error{
+	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
 	if err != nil {
 		return errors.Wrap(err, "failed to join to Topics")
 	}
@@ -250,6 +250,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	}(sub)
 }
 
+// GetTopic return topic by validator public key
 func (n *p2pNetwork) GetTopic(msg *proto.SignedMessage) (*pubsub.Topic, error) {
 	if msg.Message == nil || msg.Message.ValidatorPk == nil{
 		return nil, errors.New("missing Message or ValidatorPk in signMsg")
@@ -265,7 +266,7 @@ func (n *p2pNetwork) GetTopic(msg *proto.SignedMessage) (*pubsub.Topic, error) {
 	return n.cfg.Topics[topic], nil
 }
 
-
-func getTopic(topicName string) string {
+// getTopicName return formatted topic name
+func getTopicName(topicName string) string {
 	return fmt.Sprintf(topicFmt, topicName)
 }

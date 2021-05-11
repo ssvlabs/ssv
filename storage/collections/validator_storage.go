@@ -17,20 +17,20 @@ import (
 	"github.com/bloxapp/ssv/storage"
 )
 
-// IValidator interface for validator storage
-type IValidator interface {
+// IValidatorStorage interface for validator storage
+type IValidatorStorage interface {
 	GetDBEvent() *storage.DBEvent
 	LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error
-	SaveValidatorShare(validator *Validator) error
-	GetAllValidatorShares() ([]*Validator, error)
+	SaveValidatorShare(validator *ValidatorShare) error
+	GetAllValidatorShares() ([]*ValidatorShare, error)
 	// Update updates observer
 	Update(i interface{})
 	// GetID get the observer id
 	GetID() string
 }
 
-// Validator model for ValidatorStorage struct creation
-type Validator struct {
+// ValidatorShare model for ValidatorStorage struct creation
+type ValidatorShare struct {
 	NodeID      uint64
 	ValidatorPK *bls.PublicKey
 	ShareKey    *bls.SecretKey
@@ -40,7 +40,7 @@ type Validator struct {
 // ValidatorStorage struct
 type ValidatorStorage struct {
 	prefix []byte
-	db     storage.Db
+	db     storage.IKvStorage
 	logger *zap.Logger
 	dbEvent *storage.DBEvent
 	pubsub.BaseObserver
@@ -52,7 +52,7 @@ func (v *ValidatorStorage) Update(data interface{}) {
 	v.logger.Info("Got log from contract", zap.Any("log", data))
 
 	if validatorEvent, ok := data.(eth1.ValidatorEvent); ok {
-		validator := Validator{}
+		validator := ValidatorShare{}
 		ibftCommittee := map[uint64]*proto.Node{}
 		oessList := validatorEvent.OessList
 		for i := range oessList {
@@ -98,7 +98,7 @@ func (v *ValidatorStorage) GetID() string {
 }
 
 // NewValidatorStorage creates new validator storage
-func NewValidatorStorage(db storage.Db, logger *zap.Logger) ValidatorStorage {
+func NewValidatorStorage(db storage.IKvStorage, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
 		prefix: []byte("validator-"),
 		db:     db,
@@ -114,7 +114,7 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 	if pubKey != (&bls.PublicKey{}) && shareKey != (&bls.SecretKey{}) && len(ibftCommittee) > 0 {
 		ibftCommittee[nodeID].Pk = shareKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = shareKey.Serialize()
-		validator := Validator{
+		validator := ValidatorShare{
 			NodeID:      nodeID,
 			ValidatorPK: pubKey,
 			ShareKey:    shareKey,
@@ -129,7 +129,7 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 }
 
 // SaveValidatorShare save validator share to db
-func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
+func (v *ValidatorStorage) SaveValidatorShare(validator *ValidatorShare) error {
 	value, err := validator.Serialize()
 	if err != nil {
 		v.logger.Error("failed serialized validator", zap.Error(err))
@@ -138,23 +138,23 @@ func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
 }
 
 // GetValidatorsShare by key
-func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
+func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*ValidatorShare, error) {
 	obj, err := v.db.Get(v.prefix, key)
 	if err != nil{
 		return nil, err
 	}
-	return (&Validator{}).Deserialize(obj)
+	return (&ValidatorShare{}).Deserialize(obj)
 }
 
-// GetAllValidatorShares returns ALL validators shares from db
-func (v *ValidatorStorage) GetAllValidatorShares() ([]*Validator, error) {
-	objs, err := v.db.GetAllByBucket(v.prefix)
+// GetAllValidatorShares returns ALL validator shares from db
+func (v *ValidatorStorage) GetAllValidatorShares() ([]*ValidatorShare, error) {
+	objs, err := v.db.GetAllByCollection(v.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}
-	var res []*Validator
+	var res []*ValidatorShare
 	for _, obj := range objs {
-		val, err := (&Validator{}).Deserialize(obj)
+		val, err := (&ValidatorShare{}).Deserialize(obj)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to deserialized validator")
 		}
@@ -164,16 +164,16 @@ func (v *ValidatorStorage) GetAllValidatorShares() ([]*Validator, error) {
 	return res, nil
 }
 
-//  serializedValidator struct
-type serializedValidator struct {
+//  validatorSerializer struct
+type validatorSerializer struct {
 	NodeID     uint64
 	ShareKey   []byte
 	Committiee map[uint64]*proto.Node
 }
 
 // Serialize ValidatorStorage to []byte for db purposes
-func (v *Validator) Serialize() ([]byte, error) {
-	value := serializedValidator{
+func (v *ValidatorShare) Serialize() ([]byte, error) {
+	value := validatorSerializer{
 		NodeID:     v.NodeID,
 		ShareKey:   v.ShareKey.Serialize(),
 		Committiee: v.Committee,
@@ -182,14 +182,14 @@ func (v *Validator) Serialize() ([]byte, error) {
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	if err := e.Encode(value); err != nil {
-		return nil, errors.Wrap(err, "Failed to encode serializedValidator")
+		return nil, errors.Wrap(err, "Failed to encode validatorSerializer")
 	}
 	return b.Bytes(), nil
 }
 
 // Deserialize key/value to ValidatorStorage struct
-func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
-	var valShare serializedValidator
+func (v *ValidatorShare) Deserialize(obj storage.Obj) (*ValidatorShare, error) {
+	var valShare validatorSerializer
 	d := gob.NewDecoder(bytes.NewReader(obj.Value))
 	if err := d.Decode(&valShare); err != nil {
 		return nil, errors.Wrap(err, "Failed to get val value")
@@ -202,7 +202,7 @@ func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
 	if err := pubKey.Deserialize(obj.Key); err != nil {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
-	return &Validator{
+	return &ValidatorShare{
 		NodeID:      valShare.NodeID,
 		ValidatorPK: pubKey,
 		ShareKey:    shareSecret,

@@ -28,7 +28,7 @@ type queue struct {
 	ticker *slotutil.SlotTicker
 }
 
-// Duty struct
+// Duty struct  TODO: need to remove
 type Duty struct {
 	NodeID uint64
 	Duty   *ethpb.DutiesResponse_Duty

@@ -27,7 +27,7 @@ type Options struct {
 type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
-	ValidatorShare             *collections.Validator
+	ValidatorShare             *collections.ValidatorShare
 	ibftStorage                collections.Iibft
 	ethNetwork                 core.Network
 	network                    network.Network
@@ -39,7 +39,7 @@ type Validator struct {
 }
 
 // New Validator creation
-func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Validator, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
+func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.ValidatorShare, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
 	logger = logger.With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.Role]ibft.IBFT)
@@ -69,7 +69,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 
 // Start validator
 func (v *Validator) Start() error {
-	if err := v.network.SubscribeTopic(v.ValidatorShare.ValidatorPK); err != nil{
+	if err := v.network.SubscribeToValidatorNetwork(v.ValidatorShare.ValidatorPK); err != nil{
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()

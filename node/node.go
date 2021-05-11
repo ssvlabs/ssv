@@ -20,7 +20,7 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	ValidatorStorage collections.IValidator
+	ValidatorStorage collections.IValidatorStorage
 	IbftStorage      collections.Iibft
 	ETHNetwork       core.Network
 	Network          network.Network
@@ -48,7 +48,7 @@ type Node interface {
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	validatorStorage collections.IValidator
+	validatorStorage collections.IValidatorStorage
 	ibftStorage      collections.Iibft
 	ethNetwork       core.Network
 	network          network.Network
@@ -92,7 +92,7 @@ func New(opts Options) Node {
 func (n *ssvNode) Update(data interface{}) {
 	n.logger.Info("Got event from validator storage", zap.Any("log", data))
 
-	if validatorShare, ok := data.(collections.Validator); ok {
+	if validatorShare, ok := data.(collections.ValidatorShare); ok {
 		if _, ok := n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()]; ok {
 			// TODO: override logic TBD
 			return
@@ -139,11 +139,6 @@ func (n *ssvNode) Start() error {
 					continue
 				}
 				go func(slot uint64) {
-					n.logger.Info("scheduling duty processing start for slot",
-						zap.Time("start_time", n.getSlotStartTime(slot)),
-						zap.Uint64("committee_index", duty.GetCommitteeIndex()),
-						zap.Uint64("slot", slot))
-
 					// execute task if slot already began and not pass 1 epoch
 					currentSlot := uint64(n.getCurrentSlot())
 					if slot >= currentSlot && slot-currentSlot <= n.dutySlotsLimit {
@@ -153,8 +148,16 @@ func (n *ssvNode) Start() error {
 							n.logger.Error("Failed to deserialize pubkey from duty")
 						}
 						v := n.validatorsMap[pubKey.SerializeToHexStr()]
+						n.logger.Info("starting duty processing start for slot",
+							zap.Uint64("committee_index", duty.GetCommitteeIndex()),
+							zap.Uint64("slot", slot))
 						go v.ExecuteDuty(n.context, prevIdentifier, slot, duty)
 					} else {
+						n.logger.Info("scheduling duty processing start for slot",
+							zap.Time("start_time", n.getSlotStartTime(slot)),
+							zap.Uint64("committee_index", duty.GetCommitteeIndex()),
+							zap.Uint64("slot", slot))
+
 						if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
 							n.logger.Error("failed to schedule slot")
 						}

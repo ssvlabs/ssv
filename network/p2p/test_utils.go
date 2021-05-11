@@ -11,37 +11,32 @@ var (
 	refPk = fixtures.RefPk
 )
 
-func validators() []*collections.Validator {
-	pk := &bls.PublicKey{}
-	err := pk.Deserialize(refPk)
-	if err != nil {
-		return nil
-	}
-	return []*collections.Validator{
+func validators() []*collections.ValidatorShare {
+	//pk := &bls.PublicKey{}
+	//pk.Deserialize(refPk)
+	return []*collections.ValidatorShare{
 		{
 			NodeID:      1,
-			ValidatorPK: pk,
+			ValidatorPK: nil,
 			ShareKey:    nil,
 			Committee:   nil,
 		},
 	}
 }
 
-// TestValidatorStorage struct
+// TestValidatorStorage implementation
 type TestValidatorStorage struct {
 }
 
-// LoadFromConfig function
+// LoadFromConfig implementation
 func (v *TestValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error {
 	return nil
 }
-
-// SaveValidatorShare function
-func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.Validator) error {
+// SaveValidatorShare implementation
+func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.ValidatorShare) error {
 	return nil
 }
-
-// GetAllValidatorShares function
-func (v *TestValidatorStorage) GetAllValidatorShares() ([]*collections.Validator, error) {
+// GetAllValidatorsShare implementation
+func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*collections.ValidatorShare, error) {
 	return validators(), nil
 }
