@@ -108,8 +108,9 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 					oessList := make([]eth1.Oess, len(oessListEncoded))
 					isEventBelongsToOperator := false
 
-					e.logger.Debug("Validator PubKey:", zap.String("", hex.EncodeToString(validatorAddedEvent.Pubkey)))
-					e.logger.Debug("Owner Address:   ", zap.String("", validatorAddedEvent.OwnerAddress.String()))
+					e.logger.Debug("ValidatorAdded Event",
+						zap.String("Validator PubKey", hex.EncodeToString(validatorAddedEvent.Pubkey)),
+						zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
 					for i := range oessListEncoded {
 						oessEncoded, err := hex.DecodeString(oessListEncoded[i])
 						if err != nil {
@@ -123,10 +124,11 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 							continue
 						}
 
-						e.logger.Debug("Index:           ", zap.Any("", oessList[i].Index))
-						e.logger.Debug("Operator PubKey: ", zap.String("", hex.EncodeToString(oessList[i].OperatorPubKey)))
-						e.logger.Debug("Share PubKey:    ", zap.String("", hex.EncodeToString(oessList[i].SharePubKey)))
-						e.logger.Debug("Encrypted Key:   ", zap.String("", hex.EncodeToString(oessList[i].EncryptedKey)))
+						e.logger.Debug("Validator Share",
+							zap.Any("Index", oessList[i].Index),
+							zap.String("Operator PubKey", hex.EncodeToString(oessList[i].OperatorPubKey)),
+							zap.String("Share PubKey", hex.EncodeToString(oessList[i].SharePubKey)),
+							zap.String("Encrypted Key", hex.EncodeToString(oessList[i].EncryptedKey)))
 
 						if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
 							isEventBelongsToOperator = true

@@ -53,7 +53,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, validatorShareByKey.ValidatorPK.SerializeToHexStr(), validatorShare.ValidatorPK.SerializeToHexStr())
 
-	validators, err := validatorStorage.GetAllValidatorsShare()
+	validators, err := validatorStorage.GetAllValidatorShares()
 	require.NoError(t, err)
 	require.EqualValues(t, len(validators), 2)
 }

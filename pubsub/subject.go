@@ -27,7 +27,7 @@ func (b *BaseSubject) Deregister(o Observer) {
 // notifyAll notify all observers
 func (b *BaseSubject) notifyAll() {
 	for _, observer := range b.ObserverList {
-		observer.Update(b.Name)
+		observer.InformObserver(b.Name)
 	}
 }
 
@@ -35,7 +35,7 @@ func (b *BaseSubject) notifyAll() {
 func removeFromSlice(observerList []Observer, observerToRemove Observer) []Observer {
 	observerListLength := len(observerList)
 	for i, observer := range observerList {
-		if observerToRemove.GetID() == observer.GetID() {
+		if observerToRemove.GetObserverID() == observer.GetObserverID() {
 			observerList[observerListLength-1], observerList[i] = observerList[i], observerList[observerListLength-1]
 			return observerList[:observerListLength-1]
 		}

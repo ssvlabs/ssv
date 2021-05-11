@@ -56,6 +56,6 @@ func NewContractEvent(name string) *ContractEvent {
 // NotifyAll notify all subscribe observables
 func (e *ContractEvent) NotifyAll() {
 	for _, observer := range e.ObserverList {
-		observer.Update(e.Data)
+		observer.InformObserver(e.Data)
 	}
 }

@@ -25,6 +25,6 @@ func NewDBEvent(name string) *DBEvent {
 // NotifyAll notify all subscribe observables
 func (e *DBEvent) NotifyAll() {
 	for _, observer := range e.ObserverList {
-		observer.Update(e.Data)
+		observer.InformObserver(e.Data)
 	}
 }

@@ -4,8 +4,8 @@ import "go.uber.org/zap"
 
 // Observer interface
 type Observer interface {
-	Update(interface{})
-	GetID() string
+	InformObserver(interface{})
+	GetObserverID() string
 }
 
 // BaseObserver struct

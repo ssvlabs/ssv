@@ -40,10 +40,10 @@ type Options struct {
 type Node interface {
 	// Start starts the SSV node
 	Start() error
-	// Update updates observer
-	Update(i interface{})
-	// GetID get the observer id
-	GetID() string
+	// InformObserver informs observer
+	InformObserver(i interface{})
+	// GetObserverID get the observer id
+	GetObserverID() string
 }
 
 // ssvNode implements Node interface
@@ -89,7 +89,8 @@ func New(opts Options) Node {
 	}
 }
 
-func (n *ssvNode) Update(data interface{}) {
+// InformObserver informs observer
+func (n *ssvNode) InformObserver(data interface{}) {
 	n.logger.Info("Got event from validator storage", zap.Any("log", data))
 
 	if validatorShare, ok := data.(collections.ValidatorShare); ok {
@@ -113,7 +114,8 @@ func (n *ssvNode) Update(data interface{}) {
 	}
 }
 
-func (n *ssvNode) GetID() string {
+// GetObserverID get the observer id
+func (n *ssvNode) GetObserverID() string {
 	// TODO return proper id for the observer
 	return "SsvNodeObserver"
 }

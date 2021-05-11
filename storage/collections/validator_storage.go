@@ -23,10 +23,10 @@ type IValidatorStorage interface {
 	LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error
 	SaveValidatorShare(validator *ValidatorShare) error
 	GetAllValidatorShares() ([]*ValidatorShare, error)
-	// Update updates observer
-	Update(i interface{})
-	// GetID get the observer id
-	GetID() string
+	// InformObserver informs observer
+	InformObserver(i interface{})
+	// GetObserverID get the observer id
+	GetObserverID() string
 }
 
 // ValidatorShare model for ValidatorStorage struct creation
@@ -46,8 +46,8 @@ type ValidatorStorage struct {
 	pubsub.BaseObserver
 }
 
-// Update updates observer
-func (v *ValidatorStorage) Update(data interface{}) {
+// InformObserver informs observer
+func (v *ValidatorStorage) InformObserver(data interface{}) {
 
 	v.logger.Info("Got log from contract", zap.Any("log", data))
 
@@ -91,8 +91,8 @@ func (v *ValidatorStorage) Update(data interface{}) {
 	}
 }
 
-// GetID get the observer id
-func (v *ValidatorStorage) GetID() string {
+// GetObserverID get the observer id
+func (v *ValidatorStorage) GetObserverID() string {
 	// TODO return proper id for the observer
 	return "ValidatorStorageObserver"
 }
