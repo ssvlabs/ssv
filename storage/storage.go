@@ -1,10 +1,10 @@
 package storage
 
-// Db interface for all db kind
-type Db interface {
+// IKvStorage interface for all db kind
+type IKvStorage interface {
 	Set(prefix []byte, key []byte, value []byte) error
 	Get(prefix []byte, key []byte) (Obj, error)
-	GetAllByBucket(prefix []byte) ([]Obj, error)
+	GetAllByCollection(prefix []byte) ([]Obj, error)
 }
 
 // Obj struct for getting key/value from storage

@@ -28,12 +28,12 @@ type ValidatorShare struct {
 // ValidatorStorage struct
 type ValidatorStorage struct {
 	prefix []byte
-	db     storage.Db
+	db     storage.IKvStorage
 	logger *zap.Logger
 }
 
 // NewValidatorStorage creates new validator storage
-func NewValidatorStorage(db storage.Db, logger *zap.Logger) ValidatorStorage {
+func NewValidatorStorage(db storage.IKvStorage, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
 		prefix: []byte("validator-"),
 		db:     db,
@@ -82,7 +82,7 @@ func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*ValidatorShare, erro
 
 // GetAllValidatorsShare returns ALL validators shares from db
 func (v *ValidatorStorage) GetAllValidatorsShare() ([]*ValidatorShare, error) {
-	objs, err := v.db.GetAllByBucket(v.prefix)
+	objs, err := v.db.GetAllByCollection(v.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}
@@ -98,8 +98,8 @@ func (v *ValidatorStorage) GetAllValidatorsShare() ([]*ValidatorShare, error) {
 	return res, nil
 }
 
-//  serializedValidator struct
-type serializedValidator struct {
+//  validatorSerializer struct
+type validatorSerializer struct {
 	NodeID     uint64
 	ShareKey   []byte
 	Committiee map[uint64]*proto.Node
@@ -107,7 +107,7 @@ type serializedValidator struct {
 
 // Serialize ValidatorStorage to []byte for db purposes
 func (v *ValidatorShare) Serialize() ([]byte, error) {
-	value := serializedValidator{
+	value := validatorSerializer{
 		NodeID:     v.NodeID,
 		ShareKey:   v.ShareKey.Serialize(),
 		Committiee: v.Committee,
@@ -116,14 +116,14 @@ func (v *ValidatorShare) Serialize() ([]byte, error) {
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	if err := e.Encode(value); err != nil {
-		return nil, errors.Wrap(err, "Failed to encode serializedValidator")
+		return nil, errors.Wrap(err, "Failed to encode validatorSerializer")
 	}
 	return b.Bytes(), nil
 }
 
 // Deserialize key/value to ValidatorStorage struct
 func (v *ValidatorShare) Deserialize(obj storage.Obj) (*ValidatorShare, error) {
-	var valShare serializedValidator
+	var valShare validatorSerializer
 	d := gob.NewDecoder(bytes.NewReader(obj.Value))
 	if err := d.Decode(&valShare); err != nil {
 		return nil, errors.Wrap(err, "Failed to get val value")
