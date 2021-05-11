@@ -125,6 +125,6 @@ func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 }
 
 // SubscribeTopic  for new validator create new topic, subscribe and start listen
-func (n *Local) SubscribeTopic(validatorPk *bls.PublicKey) error{
+func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error{
 	return nil
 }

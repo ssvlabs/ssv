@@ -10,15 +10,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// IValidator interface for validator storage
-type IValidator interface {
+// IValidatorStorage interface for validator storage
+type IValidatorStorage interface {
 	LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, shareKey *bls.SecretKey, ibftCommittee map[uint64]*proto.Node) error
-	SaveValidatorShare(validator *Validator) error
-	GetAllValidatorsShare() ([]*Validator, error)
+	SaveValidatorShare(validator *ValidatorShare) error
+	GetAllValidatorsShare() ([]*ValidatorShare, error)
 }
 
-// Validator model for ValidatorStorage struct creation
-type Validator struct {
+// ValidatorShare model for ValidatorStorage struct creation
+type ValidatorShare struct {
 	NodeID      uint64
 	ValidatorPK *bls.PublicKey
 	ShareKey    *bls.SecretKey
@@ -32,8 +32,8 @@ type ValidatorStorage struct {
 	logger *zap.Logger
 }
 
-// NewValidator creates new validator storage
-func NewValidator(db storage.Db, logger *zap.Logger) ValidatorStorage {
+// NewValidatorStorage creates new validator storage
+func NewValidatorStorage(db storage.Db, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
 		prefix: []byte("validator-"),
 		db:     db,
@@ -48,7 +48,7 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 	if pubKey != (&bls.PublicKey{}) && shareKey != (&bls.SecretKey{}) && len(ibftCommittee) > 0 {
 		ibftCommittee[nodeID].Pk = shareKey.GetPublicKey().Serialize()
 		ibftCommittee[nodeID].Sk = shareKey.Serialize()
-		validator := Validator{
+		validator := ValidatorShare{
 			NodeID:      nodeID,
 			ValidatorPK: pubKey,
 			ShareKey:    shareKey,
@@ -63,7 +63,7 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 }
 
 // SaveValidatorShare save validator share to db
-func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
+func (v *ValidatorStorage) SaveValidatorShare(validator *ValidatorShare) error {
 	value, err := validator.Serialize()
 	if err != nil {
 		v.logger.Error("failed serialized validator", zap.Error(err))
@@ -72,23 +72,23 @@ func (v *ValidatorStorage) SaveValidatorShare(validator *Validator) error {
 }
 
 // GetValidatorsShare by key
-func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*Validator, error) {
+func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*ValidatorShare, error) {
 	obj, err := v.db.Get(v.prefix, key)
 	if err != nil{
 		return nil, err
 	}
-	return (&Validator{}).Deserialize(obj)
+	return (&ValidatorShare{}).Deserialize(obj)
 }
 
 // GetAllValidatorsShare returns ALL validators shares from db
-func (v *ValidatorStorage) GetAllValidatorsShare() ([]*Validator, error) {
+func (v *ValidatorStorage) GetAllValidatorsShare() ([]*ValidatorShare, error) {
 	objs, err := v.db.GetAllByBucket(v.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}
-	var res []*Validator
+	var res []*ValidatorShare
 	for _, obj := range objs {
-		val, err := (&Validator{}).Deserialize(obj)
+		val, err := (&ValidatorShare{}).Deserialize(obj)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to deserialized validator")
 		}
@@ -106,7 +106,7 @@ type serializedValidator struct {
 }
 
 // Serialize ValidatorStorage to []byte for db purposes
-func (v *Validator) Serialize() ([]byte, error) {
+func (v *ValidatorShare) Serialize() ([]byte, error) {
 	value := serializedValidator{
 		NodeID:     v.NodeID,
 		ShareKey:   v.ShareKey.Serialize(),
@@ -122,7 +122,7 @@ func (v *Validator) Serialize() ([]byte, error) {
 }
 
 // Deserialize key/value to ValidatorStorage struct
-func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
+func (v *ValidatorShare) Deserialize(obj storage.Obj) (*ValidatorShare, error) {
 	var valShare serializedValidator
 	d := gob.NewDecoder(bytes.NewReader(obj.Value))
 	if err := d.Decode(&valShare); err != nil {
@@ -136,7 +136,7 @@ func (v *Validator) Deserialize(obj storage.Obj) (*Validator, error) {
 	if err := pubKey.Deserialize(obj.Key); err != nil {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
-	return &Validator{
+	return &ValidatorShare{
 		NodeID:      valShare.NodeID,
 		ValidatorPK: pubKey,
 		ShareKey:    shareSecret,

@@ -27,7 +27,7 @@ type StartOptions struct {
 	SeqNumber    uint64
 	Value          []byte
 	Duty           *ethpb.DutiesResponse_Duty
-	ValidatorShare collections.Validator
+	ValidatorShare collections.ValidatorShare
 }
 
 // IBFT represents behavior of the IBFT

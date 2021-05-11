@@ -11,10 +11,10 @@ var (
 	refPk = fixtures.RefPk
 )
 
-func validators() []*collections.Validator {
+func validators() []*collections.ValidatorShare {
 	//pk := &bls.PublicKey{}
 	//pk.Deserialize(refPk)
-	return []*collections.Validator{
+	return []*collections.ValidatorShare{
 		{
 			NodeID:      1,
 			ValidatorPK: nil,
@@ -33,10 +33,10 @@ func (v *TestValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicK
 	return nil
 }
 // SaveValidatorShare implementation
-func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.Validator) error {
+func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.ValidatorShare) error {
 	return nil
 }
 // GetAllValidatorsShare implementation
-func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*collections.Validator, error) {
+func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*collections.ValidatorShare, error) {
 	return validators(), nil
 }

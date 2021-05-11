@@ -179,7 +179,7 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 		logger.Fatal("failed to create db!", zap.Error(err))
 	}
 
-	validatorStorage := collections.NewValidator(db, logger)
+	validatorStorage := collections.NewValidatorStorage(db, logger)
 	// saves .env validator to storage
 	ibftCommittee := map[uint64]*proto.Node{
 		1: {

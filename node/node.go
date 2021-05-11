@@ -19,7 +19,7 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	ValidatorStorage collections.IValidator
+	ValidatorStorage collections.IValidatorStorage
 	IbftStorage      collections.Iibft
 	ETHNetwork       core.Network
 	Network          network.Network
@@ -42,7 +42,7 @@ type Node interface {
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	validatorStorage collections.IValidator
+	validatorStorage collections.IValidatorStorage
 	ibftStorage      collections.Iibft
 	ethNetwork       core.Network
 	network          network.Network
@@ -143,7 +143,7 @@ func (n *ssvNode) Start(ctx context.Context) error {
 }
 
 // setupValidators for each validatorShare with proper ibft wrappers
-func (n *ssvNode) setupValidators(ctx context.Context, validatorsShare []*collections.Validator) map[string]*validator.Validator {
+func (n *ssvNode) setupValidators(ctx context.Context, validatorsShare []*collections.ValidatorShare) map[string]*validator.Validator {
 	res := make(map[string]*validator.Validator)
 	for _, validatorShare := range validatorsShare {
 		res[validatorShare.ValidatorPK.SerializeToHexStr()] = validator.New(ctx, n.logger, validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
