@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// HistorySync is responsible for syncing and iBFT instance when needed by
+// ReqHandler is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
 type ReqHandler struct {
 	network network.Network
@@ -20,6 +20,7 @@ func NewReqHandler(logger *zap.Logger, network network.Network, storage collecti
 	return &ReqHandler{logger: logger, network: network, storage: storage}
 }
 
+// Process takes a req and processes it
 func (s *ReqHandler) Process(msg *network.SyncChanObj) {
 	switch msg.Msg.Type {
 	case network.Sync_GetHighestType:

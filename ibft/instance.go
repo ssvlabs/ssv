@@ -44,7 +44,6 @@ type Instance struct {
 	Params           *proto.InstanceParams
 	roundChangeTimer *time.Timer
 	Logger           *zap.Logger
-	msgLock          sync.Mutex
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue
@@ -224,7 +223,7 @@ func (i *Instance) StartEventLoop() {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
 	for {
-		if i.stop {
+		if i.IsStopped() {
 			i.Logger.Info("stopping iBFT message pipeline...")
 			break
 		}
