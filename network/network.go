@@ -52,7 +52,7 @@ type Network interface {
 
 	// GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 	// If peer list is nil, broadcasts to all.
-	GetHighestDecidedInstance(peers []peer.ID, msg *SyncMessage) (*Message, error)
+	GetHighestDecidedInstance(peer peer.ID, msg *SyncMessage) (*Message, error)
 
 	// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 	RespondToHighestDecidedInstance(stream SyncStream, msg *SyncMessage) error
@@ -62,4 +62,7 @@ type Network interface {
 
 	// SubscribeToValidatorNetwork subscribing and listen to validator network
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
+
+	// AllPeers returns all connected peers for a validator PK
+	AllPeers(validatorPk *bls.PublicKey) ([]peer.ID, error)
 }

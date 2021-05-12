@@ -11,13 +11,13 @@ import (
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // Peer list must not be nil or empty if stream is nil.
 // returns a stream closed for writing
-func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peers []peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
+func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
 	if stream == nil {
-		if len(peers) == 0 {
-			return nil, errors.New("peer list is empty or nil")
+		if len(peer) == 0 {
+			return nil, errors.New("peer ID nil")
 		}
 
-		s, err := n.host.NewStream(n.ctx, peers[0], syncStreamProtocol)
+		s, err := n.host.NewStream(n.ctx, peer, syncStreamProtocol)
 		if err != nil {
 			return nil, err
 		}
@@ -44,8 +44,8 @@ func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peers []peer.ID,
 
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // If peer list is nil, broadcasts to all.
-func (n *p2pNetwork) GetHighestDecidedInstance(peers []peer.ID, msg *network.SyncMessage) (*network.Message, error) {
-	stream, err := n.sendSyncMessage(nil, peers, msg)
+func (n *p2pNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
+	stream, err := n.sendSyncMessage(nil, peer, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not send sync msg")
 	}
@@ -68,7 +68,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peers []peer.ID, msg *network.Syn
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().String()
-	_, err := n.sendSyncMessage(stream, nil, msg)
+	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
 
