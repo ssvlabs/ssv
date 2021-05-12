@@ -3,8 +3,8 @@ package flags
 import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
-	"time"
 	"go.uber.org/zap/zapcore"
+	"time"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
@@ -18,14 +18,14 @@ const (
 	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
-	dutySlotsLimit = "duty-slots-limit"
+	dutySlotsLimit       = "duty-slots-limit"
 	hostDNS              = "host-dns"
 	hostAddress          = "host-address"
 	tcpPort              = "tcp-port"
 	udpPort              = "udp-port"
 	genesisEpoch         = "genesis-epoch"
-	loggerLevel         = "logger-level"
-	storagePath         = "storage-path"
+	loggerLevel          = "logger-level"
+	storagePath          = "storage-path"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command

@@ -11,12 +11,12 @@ import (
 	"log"
 )
 
-type bootNodeConfig struct {
+type Config struct {
 	config.GlobalConfig `yaml:"global"`
 	Options bootnode.Options `yaml:"bootnode"`
 }
 
-var cfg bootNodeConfig
+var cfg Config
 
 var globalArgs config.Args
 

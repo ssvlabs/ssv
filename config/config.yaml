@@ -3,6 +3,12 @@ global:
 db:
   Path: ./data/db
   Type: db
+ssv:
+  GenesisEpoch:
+  DutyLimit: 32
+  ValidatorOptions:
+    SignatureCollectionTimeout: 5
+
 bootnode:
   ExternalIP:
   PrivateKey:

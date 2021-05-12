@@ -3,7 +3,11 @@ package ssvnode
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/cli/config"
+	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -15,15 +19,15 @@ import (
 	"github.com/bloxapp/ssv/cli/flags"
 )
 
-type ssvNodeConfig struct {
+type Config struct {
 	config.GlobalConfig `yaml:"global"`
-	DBOptions basedb.Options `yaml:"db"`
+	DBOptions           basedb.Options `yaml:"db"`
+	SSVOptions          node.Options   `yaml:"ssv"`
 }
 
-var cfg ssvNodeConfig
+var cfg Config
 
 var globalArgs config.Args
-
 
 // startNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -38,12 +42,89 @@ var StartNodeCmd = &cobra.Command{
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel)
 
 		if err != nil {
-			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel),zap.Error(err))
+			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
 		}
 
 		cfg.DBOptions.Logger = Logger
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 
+		// TODO Not refactored yet Start:
+		beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get beacon node address flag value", zap.Error(err))
+		}
+		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get node ID flag value", zap.Error(err))
+		}
+		logger := Logger.With(zap.Uint64("node_id", nodeID))
+
+		eth2Network, err := flags.GetNetworkFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get eth2Network flag value", zap.Error(err))
+		}
+		beaconClient, err := prysmgrpc.New(cmd.Context(), Logger, eth2Network, []byte("BloxStaking"), beaconAddr)
+		if err != nil {
+			Logger.Fatal("failed to create beacon client", zap.Error(err))
+		}
+		// end Non refactored
+
+		ctx := cmd.Context()
+		cfg.SSVOptions.Context = ctx
+		cfg.SSVOptions.Logger = Logger
+		cfg.SSVOptions.Beacon = &beaconClient
+		cfg.SSVOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.ValidatorOptions.Logger = Logger
+		cfg.SSVOptions.ValidatorOptions.Context = ctx
+		cfg.SSVOptions.ValidatorOptions.DB = &db
+
+		ssvNode := node.New(cfg.SSVOptions)
+
+		//cfg := p2p.Config{
+		//	DiscoveryType: discoveryType,
+		//	BootstrapNodeAddr: []string{
+		//		// deployemnt
+		//		// internal ip
+		//		//"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+		//		//external ip
+		//		"enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+		//		// ssh
+		//		//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
+		//	},
+		//	UDPPort:     udpPort,
+		//	TCPPort:     tcpPort,
+		//	TopicName:   validatorKey,
+		//	HostDNS:     hostDNS,
+		//	HostAddress: hostAddress,
+		//}
+		//network, err := p2p.New(cmd.Context(), logger, &cfg)
+		//if err != nil {
+		//	logger.Fatal("failed to create network", zap.Error(err))
+		//}
+
+		ssvNode := node.New(node.Options{
+			ValidatorStorage: validatorStorage,
+			Beacon:           beaconClient,
+			ETHNetwork:       eth2Network,
+			Network:          network,
+			Queue:            msgQ,
+			Consensus:        consensusType,
+			IBFT: ibft.New(
+				ibftStorage,
+				network,
+				msgQ,
+				&proto.InstanceParams{
+					ConsensusParams: proto.DefaultConsensusParams(),
+				},
+			),
+			Logger:                     logger,
+			SignatureCollectionTimeout: sigCollectionTimeout,
+			Phase1TestGenesis:          genesisEpoch,
+		})
+
+		if err := ssvNode.Start(cmd.Context()); err != nil {
+			logger.Fatal("failed to start SSV node", zap.Error(err))
+		}
 
 		//
 		//nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
