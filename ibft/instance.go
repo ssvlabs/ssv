@@ -57,6 +57,9 @@ type Instance struct {
 	changeRoundChan       chan bool
 	stageChangedChans     []chan proto.RoundState
 	stageChangedChansLock sync.Mutex
+
+	// flags
+	stop bool
 }
 
 // NewInstance is the constructor of Instance
@@ -134,6 +137,14 @@ func (i *Instance) Start(inputValue []byte) {
 	i.triggerRoundChangeOnTimer()
 }
 
+// Stop will trigger a stop for the entire instance
+func (i *Instance) Stop() {
+	i.stop = true
+	i.stopRoundChangeTimer()
+	i.SetStage(proto.RoundState_Stopped)
+	i.Logger.Info("stopping iBFT instance...")
+}
+
 // Stage returns the instance message state
 func (i *Instance) Stage() proto.RoundState {
 	return i.State.Stage
@@ -150,7 +161,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	i.State.Stage = stage
 
 	// Delete all queue messages when decided, we do not need them anymore.
-	if i.State.Stage == proto.RoundState_Decided {
+	if i.State.Stage == proto.RoundState_Decided || i.State.Stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.State.Round; j++ {
 			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, j))
 		}
@@ -187,6 +198,11 @@ func (i *Instance) StartEventLoop() {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
 	for {
+		if i.stop {
+			i.Logger.Info("stopping iBFT message pipeline...")
+			break
+		}
+
 		processedMsg, err := i.ProcessMessage()
 		if err != nil {
 			i.Logger.Error("msg pipeline error", zap.Error(err))
