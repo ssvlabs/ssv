@@ -63,6 +63,16 @@ func (msg *SignedMessage) VerifyAggregatedSig(pks []*bls.PublicKey) (bool, error
 		return false, errors.New("pks are invalid")
 	}
 
+	// signer uniqueness
+	uniqueMap := make(map[uint64]bool)
+	for _, signer := range msg.SignerIds {
+		if _, found := uniqueMap[signer]; !found {
+			uniqueMap[signer] = true
+		} else {
+			return false, errors.New("signers are not unique")
+		}
+	}
+
 	root, err := msg.Message.SigningRoot()
 	if err != nil {
 		return false, err
