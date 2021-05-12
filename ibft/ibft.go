@@ -112,6 +112,13 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 				newInstance.Logger.Error("could not save aggregated commit msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
+			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
+				i.logger.Error("could not save highest decided message to storage", zap.Error(err))
+			}
+			if err := i.network.BroadcastDecided(agg); err != nil {
+				i.logger.Error("could not broadcast decided message", zap.Error(err))
+			}
+			i.currentInstance = nil
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}

@@ -50,6 +50,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 		msgQueue,
 		&proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   validatorShare.Committee,
 		},
 	)
 

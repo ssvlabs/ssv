@@ -19,19 +19,19 @@ by calling Decide(λi,− , Qcommit) do
 */
 func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	if err := i.params.VerifySignedMessage(msg); err != nil {
-		i.logger.Error("could not verify decided msg", zap.Error(err))
+		i.logger.Error("could not verify decided msg", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
 		return
 	}
 
-	i.logger.Info("received highest decided", zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("node ids", msg.SignerIds))
+	i.logger.Debug("received valid decided msg", zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("signer ids", msg.SignerIds))
 
 	// if we already have this in storage, pass
-	res, err := i.decidedMsgKnown(msg)
+	known, err := i.decidedMsgKnown(msg)
 	if err != nil {
 		i.logger.Error("can't check if decided msg is known", zap.Error(err))
 		return
 	}
-	if res {
+	if known {
 		return
 	}
 
