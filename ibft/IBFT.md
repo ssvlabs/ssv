@@ -1,82 +1,124 @@
-# Istanbul Byzantine Fault Tolerance (IBFT)
+## Istanbul Byzantine Fault Tolerance (IBFT) Consensus - Annotated Spec
 
-**Blox SSV - Secret Shared Validator -** is governed by the Istanbul Byzantine Fault Tolerance (IBFT) as the consensus algorithm.
-The IBFT ensures a single and deterministic defined order of transactions in the distributed digital ledger.
+### Introduction
 
-There are different working algorithms:
+Blox SSV (Secret Shared Validators) is governed by the IBFT consensus algorithm. IBFT ensures that consensus can be reached by a committee of validator nodes (n) while tolerating for a certain amount of faulty nodes (f) as defined by n≥3f+1. In SSV, each validator node represents a &#39;share&#39; of a private validator key for Ethereum 2.0 (Eth2). Effectively, the network allows for the splitting of an Eth2 validator key into a multisig, governed by IBFT consensus.
 
-- **Proof Of Work (PoW):**  the first algorithm to build a decentralized ledger. It is an expensive algorithm that requires
-  massive computing efforts and energy consumption from a hardware - the validator node - to deter malicious uses of
-  computing power such as spammers or massive service attacks.
+At a very high level, the protocol can be expressed across three phases:
 
-- **Proof of Stake (PoS):**  considered as an enhanced algorithm over the PoW, the Proof of Stake optimize significantly the hardware and power consumption. Blocks are created via various combination of random selection and wealth or age (i.e. stake). The PoS attributes mining power to the proportion of coins held by a miner. This way, a node is limited to mine a percentage of transactions proportionally to his/her stake. Whereas in PoW-based systems an amount of cryptocurrency is created as rewards for miners, the PoS systems usually uses transaction fees as a reward - i.e. Gas fees in Ethereum network.
+1. **PRE-PREPARE**
+2. **PREPARE**
+3. **COMMIT**
 
-- **Proof of Authority (PoA):**  known possibly as the best solution, PoA is a consensus mechanism in which a limited number of entities - validators - are allowed to validate transactions. This vetting is based upon someone's identity as a node owner and his/her wealth stake - making malicious behaviour very damaging to their reputation and often leading to penalties. Unlike the PoW mechanism, here there is no competition between validators. The consensus requires almost no computing power, and therefore almost no electricity for its operation.
-
-- **Byzantine Fault Tolerance (BFT):** conceptually, the BFT is the characteristic which defines a system that tolerates the class of failures that belong to the [Byzantine General's Problem](https://medium.com/loom-network/understanding-blockchain-fundamentals-part-1-byzantine-fault-tolerance-245f46fe8419). It is considered as the most difficult class of *failure modes*. In simple words, the algorithm guarantees that the number of traitors do not exceed  one third of the generals. In the absence of BFT< a peer is able to transmit and post false transactions effectively nullifying the blockchain's reliability. Worst than that, given the decentralized nature of the blockchain, no central authority could take it over and repair the damage.
-- ---
-
-## Istanbul Byzantine Fault Tolerance (IBFT)
-
-IBFT - implementation of BFT - is a consensus mechanism that ensures a single, agreed-upon ordering of transactions in the blockchain.
-
-IBFT uses a pool of validation nodes - _Validators_ - operating on an Ethereum network - ETH 2.0 - for `Attestation` and `Proposal`.
-
-At a very high level point-of-view we can be expressed in a **3 phase protocol**:
-
-1. `PRE-PREPARE`: a [leader is selected](./leader/README.md) from the validators group to propose a value to agree upon.
-1. `PREPARE`: upon receiving a valid pre-prepare, other validators broadcasts the prepare message. 
-1. `COMMIT`: upon receiving 2/3 votes, validators broadcasts a commit message.
-
-_Istanbul BFT is inspired by Castro-Liskov 99 [paper](http://pmg.csail.mit.edu/papers/osdi99.pdf)_
-
-
-### IBFT Benefits :
-- **Immediate Block Finality:** The only one block producer can propose a block. Therefore, the chain does not suffer from forks or orphans. Single block is guaranteed on a protocol level.
-- **Reduced Computations:** since every block producer have a chance to add block deterministically, the efforts required to compute and propose a block is reduced significantly, using minimum CPU power and network propagation.
-- **High Data Integrity and Fault Tolerance:** IBFT uses a group of validators to ensure the integrity of each block being proposed. A super-majority (~66%) of these validators are required to sign the block prior to insertion to the chain, making block forgery very difficult. The "leadership" of the group also rotates over time - ensuring that a faulty node connot exert long term influence over the chain.
-- **Operationally Flexible:** the group of validators can be modified in time, ensuring the group contains only full-trusted nodes.
-
+_IBFT was first defined in EIP-650 and implemented in the_ [_Quorum blockchain_](https://arxiv.org/pdf/2002.03613.pdf)_._
 
 ### Terminology
-- **`VALIDATOR`**: block validation participant - a.k.a. node.
-- **`DUTY BLOCK`**: data that represents the validator's duty on the beacon chain network - e.g. block proposal, attestation, aggregation
-- **`LEADER`**: a duty block validation participant - node - chosen to propose a duty block in a consensus round.
-- **`ROUND`**: a consensus turn. Starts with a leader creating a duty block proposal and ends with a duty block consensus - or a round change.
-- **`PROPOSAL`**: a new duty block generation with an undergoing consensus processing.
-- **`COMMITMENT`**: votes by validators which confirm the validity of a duty block.
-- **`SEQUENCE`**: a sequence number of a proposal. It shall be greater than all previous sequence numbers.
-- **`COMMITTEE`**: group of nodes - validators - responsible for a consensus voting to assure a valid duty block generated.
-- **`SIGNATURES`**: a technical signature from a node to attest messages broadcast for a given duty block.
 
-### Consensus States
+- **Validator Node** : block validation participant. Each node represents a portion (share) of an Ethereum validator.
+- **Round** : a consensus turn. Starting with a leader (defined below) creating a duty block proposal and ending with duty block consensus or a round change.
+- **Leader** :the validator node responsible for broadcasting the PRE-PREPARE message in a given round.
+- **Consensus** : process of reaching agreement on the data to be signed between validator nodes.
+- **Committee** : group of validator nodes responsible for consensus voting to assure generation of a valid duty block.
 
-Istanbul BFT is a [state machine replication](https://en.wikipedia.org/wiki/State_machine_replication) algorithm.
-Each validator maintains a state machine replica in order to reach block consensus.
+### Variables
 
-#### States:
-- **`NEW ROUND`**: leader sends new duty block. Validators waits for PRE-PREPARE message
-- **`PRE-PREPARED`**: validator received the PRE-PREPARE message and broadcasts PREPARE message. Waits for 2/3 of PREPARE or COMMIT messages
-- **`PREPARED`**: validator received 2/3 of PREPARE messages and broadcasts COMMIT messages.
-- **`COMMITTED`**: validator received 2/3 of COMMIT messages and inserts the block into the blockchain
-- **`ROUND CHANGE`**: validator is waiting for 2/3 of ROUND CHANGE messages on the same proposed round number
+- **f** : the amount of faulty validator nodes that can be tolerated (and still reach consensus) out of n validator nodes, according to n≥3f+1 (f must be a whole number and is always rounded down); e.g., if there are 7 validator nodes (n=7), it is still possible to reach consensus with 2 faulty nodes (f=2), and if there are 4, 5 or 6 validator nodes, it is possible to reach consensus with 1 faulty node.
+- **p(i)**: process - a single validator node in a committee. (i) is the index identifier of the specific node.
+- **λ** : IBFT instance (changes for every slot); in the beacon chain system, λ corresponds to the slot number.
+- **r:** IBFT round within an instance (starts with r=1 and resets every instance; in a perfect situation, there will be only one round per instance).
+- **inputValue** : the duty data from the beacon chain (for attestation/proposal); when it&#39;s sent by a validator node rather than fetched directly from the beacon chain, it&#39;s referred to as &quot;value&quot; (or &quot;v&quot;) rather than inputValue.
+- **pr** : used only in ROUND-CHANGE messages, indicates the highest round in which the node received a quorum of valid PREPARE messages; pr must always be lower than r (because in round change message, r is always the NEXT round) in a valid ROUND-CHANGE message. If the round change happens before the node receives a quorum of valid PREPARE messages during the current instance, pr will retain the default value of ⊥ (null).
+- **pv** : the corresponding inputValue of round pr. If the round change happens before the node receives a quorum of valid PREPARE messages during the current instance, pv will retain the default value of ⊥ (null).
+- **timer** : set when the START procedure is initiated at the beginning of a new instance, and expires at time t(r) if consensus hasn&#39;t been reached. If the timer expires, this will trigger broadcasting a ROUND-CHANGE message, after which the timer will be reset. If consensus is reached before t(r), the timer is stopped.
+- **t(r)**: the time (Unix) in which the round should end if the nodes fail to reach consensus.
+- **Q** : Quorum - 2f+1 valid messages, where f is the number of allowed fails according to the formula n≥3f+1 (refer to f above).
+  \*Note that a message sent by a node is included in its count towards a quorum, e.g., in a 4 node system, if a node sent a message it must receive only two more valid messages to reach a quorum.
+- **Qcommit** : a private case of Q indicating a quorum of COMMIT messages, indicating that consensus has been reached.
+- **Qprepare** : a private case of Q indicating a quorum of PREPARE messages.
+- **Qrc** : a private case of Q indicating a quorum of ROUND-CHANGE messages.
+  Note that unlike in Frc (see below), in Qrc the r values of all messages must be the same; pr and pv, however, can be of different values (in such a case, the pr with the highest value is referred to as pr(max)).
+- **Frc** : indicates f+1 valid ROUND-CHANGE messages. In an Frc, unlike Qrc, the r values needn&#39;t be identical in all of the group&#39;s messages.
+- **m** : message; there are four types of messages - PRE-PREPARE, PREPARE, COMMIT, ROUND-CHANGE.
 
----
-**Documentation References:**
-- [Understanding Blockchain Fundamentals](https://medium.com/loom-network/understanding-blockchain-fundamentals-part-1-byzantine-fault-tolerance-245f46fe8419)
-- [PoS explained by Binance](https://academy.binance.com/en/articles/proof-of-stake-explained)
-- [PoA explained by Binance](https://academy.binance.com/en/articles/proof-of-authority-explained)
-- [BFT explained by Binance](https://academy.binance.com/en/articles/byzantine-fault-tolerance-explained)
-- [IBFT Paper](http://pmg.csail.mit.edu/papers/osdi99.pdf)
-- [Ethereum Repo IBFT Issue](https://github.com/ethereum/EIPs/issues/650)
-- [IBFT Benefits by Consensys](https://media.consensys.net/scaling-consensus-for-enterprise-explaining-the-ibft-algorithm-ba86182ea668)
-- [Distributed Ledger Definition](https://searchcio.techtarget.com/definition/distributed-ledger)
-- [Distributed Ledger by Wikipedia](https://en.wikipedia.org/wiki/Distributed_ledger)
-- [Distributed Ledger Technology](https://tradeix.com/distributed-ledger-technology)
+### Consensus Instance
+
+#### START Procedure
+
+START procedure is initiated at the beginning of an instance, and only once per instance. It includes the slot number λ (which is also used as the instance identifier) and the duty data inputValue. Both are taken from the Eth2 node.
+
+When the START procedure is initiated, all of the validator nodes set the timer to expire after t(r).
+
+Leader selection occurs right after the START procedure is initiated.
+
+#### Leader Selection
+
+The leader is the validator node responsible for broadcasting the PRE-PREPARE message in a given round.
+
+At the beginning of each instance (when START procedure is initiated), one of the validator nodes is chosen to be the leader based on two values - the slot number λand the round number r.
+
+The leader choosing mechanism is deterministic, i.e., for a given round and slot, there can be only one specific leader, which is crucial because each node must always know who should be the correct leader each round, and discard any PRE-PREPARE message broadcasted by an incorrect leader.
+
+As there is no way to predict future slot numbers for which the validator will have a duty (beyond the very next slot), there is no way to predict future leaders, which makes this deterministic mechanism secure.
+
+When there is more than one round in an instance, a new leader is chosen each round. In this case, only the round number r changes (the slot number λ always remains the same throughout all rounds in an instance), and leaders subsequent to the first will be selected according to their node indexes (e.g., if in round r=1 the node with index 2 (p(2)) is selected as the leader, in round r=2 the node with index 3 (p(3)) will be the leader).
+
+Once the leader node is selected, it broadcasts the PRE-PREPARE message <PRE-PREPARE, λ, r, inputValue> to all nodes.
 
 
 
+#### Consensus Phases:
 
+##### PRE-PREPARE
 
+When a leader is selected, it broadcasts the PRE-PREPARE message <PRE-PREPARE, λ, r, inputValue> to all validator nodes.
 
+A validator node that receives the PRE-PREPARE message validates that it came from the correct leader, and if so, the inputValue data is validated against the data from the Eth2 node, and if the data is valid, the validator node sets the timer to time t(r) and broadcasts the PREPARE message <PREPARE, λ, r, value> to all other nodes, and then waits for a quorum of valid PREPARE messages. Note - the leader itself also receives the PRE-PREPARE message that it sent, and then broadcasts PREPARE as the other nodes do.
 
+If a PRE-PREPARE message is invalid (for any reason), it is discarded and the nodes continue to wait for a valid PRE-PREPARE message.
+\*Note that for any round after the first round (r>1), the PRE-PREPARE message must be justified (and also validated as in the first round). See the ROUND-CHANGE section for more information.
+
+The uniqueness of PRE-PREPARE is two-fold:
+
+1. It is sent only by one node (the round&#39;s leader).
+
+2. There&#39;s no need for a quorum for this message, validation against the Eth2 node is sufficient.
+
+##### PREPARE
+
+Upon receiving a valid PRE-PREPARE message, the validator node sets the timer to time t(r) and broadcasts the PREPARE message <PREPARE, λ, r, value> and waits until it receives a quorum of valid PREPARE messages.
+
+Validation of PREPARE messages received from other nodes is achieved by checking that the message format is correct, and that a slashable event will not be caused if the data in the PREPARE message will be signed, i.e., this data hasn&#39;t been signed already in the past (there is no check against the Eth2 node, the validator node should have this information).
+
+When a quorum of valid PREPARE messages is received, the validator node broadcasts the COMMIT message <COMMIT, λ, r, value> and waits until it receives a quorum of valid COMMIT messages.
+
+If a validator node receives a quorum of valid PREPARE messages before receiving the matching PRE-PREPARE message, it can act upon it (i.e., broadcast the COMMIT message) without waiting for the PRE-PREPARE, because PRE-PREPARE is no longer required.
+
+##### COMMIT
+
+Upon receiving a valid PREPARE message, the validator node broadcasts the COMMIT message <COMMIT, λ, r, value> and waits until it receives a quorum of valid COMMIT messages.
+
+Validation of COMMIT messages received from other nodes is achieved by checking that the message format is correct, and that a slashable event will not be caused if the data in the COMMIT message will be signed, i.e., this data hasn&#39;t been signed already in the past (there is no check against the Eth2 node, the validator node should have this information).
+
+When a quorum of valid COMMIT messages is received, consensus has been reached and the validator node stops the timer and submits the information (signed duty - attestation/proposal) to the Eth2 node.
+
+If a validator node receives a quorum of valid COMMIT messages before receiving the matching PRE-PREPARE and/or PREPARE message, it can act upon it (i.e., submit the information to the Eth2 node) without waiting for the missing messages.
+
+##### ROUND-CHANGE
+
+If the time t(r) is reached before consensus is reached, the timer expires and the node broadcasts a ROUND-CHANGE message in order to advance the round from r to r+1. The content of a ROUND-CHANGE message sent by a node which current round is r is <ROUND-CHANGE, λ, r+1, pr, pv>, where pr indicates the highest round in which a quorum of PREPARE messages has been received, and pv indicates the value which was included in those PREPARE messages. After broadcasting this message, the node sets the timer to expire at time t(r+1) and waits for a quorum of valid ROUND-CHANGE messages (Qrc). If the node has never received a quorum of PREPARE messages for the instance λ, then pr and pv will be ⊥ (null).
+\*Note - a ROUND-CHANGE message is considered valid if its format is correct and if r+1 is higher than the current round the recipient node is in. In addition, if pr≠⊥, then pr<r+1 must be true for the message to be valid.
+Important - while λ and r+1 must be identical across all messages in a Qrc, pr and pv can be of different values (in such a set, the pr with the highest value is referred to as pr(max)).
+
+Another event which triggers the node to broadcast a ROUND-CHANGE message is when receiving a set of f+1 valid ROUND-CHANGE messages (such a set is referred to as Frc) before the timer expires. In Frc, unlike Qrc, the r value in the set of f+1 messages can be different in each message, and the node that received the Frc will broadcast a ROUND-CHANGE message with the smallest r value among the r values of the Frc set (referred to as r(min)).
+
+Before broadcasting the PRE-PREPARE message of a new round, the new leader (see &quot;Leader Choosing&quot; section) must first perform justification on the quorum of ROUND-CHANGE messages Qrc. This is done by verifying that a quorum of valid PREPARE messages was indeed received in round r=pr(max), and that pr(max) is the highest round in which a quorum of PREPARE messages has been received in this instance. If pr=⊥ in all of the ROUND-CHANGE messages that should be justified, they are automatically justified.
+
+Following the justification of Qrc, the leader sets a new timer for the new round and broadcasts a new PRE-PREPARE message <PRE-PREPARE, λ, r (of the new round), inputValue>, in which inputValue=pv if pv≠⊥, and if pv=⊥ then inputValue is taken from the Eth2 node as in the first round. In case the Qrc contains messages with different pr and pv values, the pv that will be used is the one with the highest related pr (pr(max)).
+
+The PRE-PREPARE messages should be justified by the nodes when received (note that if r=1, i.e., no round change has yet occurred, PRE-PREPARE does not require justification). This justification is performed by justifying the quorum of ROUND-CHANGE messages in the same way that the leader justified it before broadcasting the PRE-PREPARE. After the node justifies the PRE-PREPARE message, it also checks that it is valid in the same fashion as in the first round. If the PRE-PREPARE is justified and valid, the round continues normally as in the first round.
+
+### Diagrams
+
+![Normal case](../github/resources/IBFTChart1.png)
+
+![Round change](../github/resources/IBFTChart2.png)
