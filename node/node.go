@@ -151,7 +151,6 @@ func (n *ssvNode) Start() error {
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
 								n.logger.Error("Failed to deserialize pubkey from duty")
 							}
-							n.logger.Info("TEST", zap.String("key", pubKey.SerializeToHexStr()))
 							v := n.validatorsMap[pubKey.SerializeToHexStr()]
 							n.logger.Info("starting duty processing start for slot",
 								zap.Uint64("committee_index", duty.GetCommitteeIndex()),
