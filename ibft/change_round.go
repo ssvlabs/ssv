@@ -40,7 +40,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 */
 func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon change round full quorum", func(signedMessage *proto.SignedMessage) error {
-		if i.State.Stage == proto.RoundState_PrePrepare {
+		if i.Stage() == proto.RoundState_PrePrepare {
 			i.Logger.Info("already received change round quorum, not processing change-round message")
 			return nil
 		}
