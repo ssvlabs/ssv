@@ -64,5 +64,5 @@ type Network interface {
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
 
 	// AllPeers returns all connected peers for a validator PK
-	AllPeers(validatorPk *bls.PublicKey) ([]peer.ID, error)
+	AllPeers(validatorPk []byte) ([]peer.ID, error)
 }

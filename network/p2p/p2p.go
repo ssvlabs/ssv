@@ -268,8 +268,8 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (n *p2pNetwork) AllPeers(validatorPk *bls.PublicKey) ([]peer.ID, error) {
-	topic, err := n.getTopic(validatorPk.Serialize())
+func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]peer.ID, error) {
+	topic, err := n.getTopic(validatorPk)
 	if err != nil {
 		return []peer.ID{}, err
 	}

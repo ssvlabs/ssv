@@ -44,6 +44,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = ibft.New(
+		logger,
 		ibftStorage,
 		network,
 		msgQueue,
@@ -69,7 +70,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 
 // Start validator
 func (v *Validator) Start() error {
-	if err := v.network.SubscribeToValidatorNetwork(v.ValidatorShare.ValidatorPK); err != nil{
+	if err := v.network.SubscribeToValidatorNetwork(v.ValidatorShare.ValidatorPK); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()

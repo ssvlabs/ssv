@@ -130,6 +130,6 @@ func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (n *Local) AllPeers(validatorPk *bls.PublicKey) ([]peer.ID, error) {
+func (n *Local) AllPeers(validatorPk []byte) ([]peer.ID, error) {
 	panic("implement")
 }
