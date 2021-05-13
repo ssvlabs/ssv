@@ -49,7 +49,6 @@ type ssvNode struct {
 	validatorController validator.IController
 	logger              *zap.Logger
 	beacon              beacon.Beacon
-
 	// genesis epoch
 	genesisEpoch uint64
 	// max slots for duty to wait

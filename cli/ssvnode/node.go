@@ -70,6 +70,24 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("failed to get val flag value", zap.Error(err))
 		}
+		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
+		}
+
+		hostAddress, err := flags.GetHostAddressFlagValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get hostAddress key flag value", zap.Error(err))
+		}
+
+		tcpPort, err := flags.GetTCPPortFlagValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
+		}
+		udpPort, err := flags.GetUDPPortFlagValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get udp port flag value", zap.Error(err))
+		}
 
 		p2pCfg := p2p.Config{
 			DiscoveryType: discoveryType,
@@ -84,11 +102,10 @@ var StartNodeCmd = &cobra.Command{
 			},
 			UDPPort:     udpPort,
 			TCPPort:     tcpPort,
-			TopicName:   validatorKey,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
 		}
-		network, err := p2p.New(cmd.Context(), logger, &cfg)
+		network, err := p2p.New(cmd.Context(), logger, &p2pCfg)
 		if err != nil {
 			logger.Fatal("failed to create network", zap.Error(err))
 		}
@@ -103,6 +120,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = &db
+		cfg.SSVOptions.ValidatorOptions.Network = network
+		cfg.SSVOptions.ValidatorOptions.Beacon = &beaconClient
 
 		ssvNode := node.New(cfg.SSVOptions)
 

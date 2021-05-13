@@ -3,7 +3,7 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
@@ -11,13 +11,13 @@ var (
 	refPk = fixtures.RefPk
 )
 
-func validators() []*collections.Validator {
+func validators() []*storage.Share {
 	//pk := &bls.PublicKey{}
 	//pk.Deserialize(refPk)
-	return []*collections.Validator{
+	return []*storage.Share{
 		{
 			NodeID:      1,
-			ValidatorPK: nil,
+			PublicKey: nil,
 			ShareKey:    nil,
 			Committee:   nil,
 		},
@@ -33,10 +33,10 @@ func (v *TestValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicK
 	return nil
 }
 // SaveValidatorShare implementation
-func (v *TestValidatorStorage) SaveValidatorShare(validator *collections.Validator) error {
+func (v *TestValidatorStorage) SaveValidatorShare(validator *storage.Share) error {
 	return nil
 }
 // GetAllValidatorsShare implementation
-func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*collections.Validator, error) {
+func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*storage.Share, error) {
 	return validators(), nil
 }

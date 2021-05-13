@@ -37,7 +37,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: FirstInstanceIdentifier(),
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.Validator{
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPk,
 					ShareKey:    sk,
@@ -54,7 +54,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.Validator{
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPk,
 					ShareKey:    sk,
@@ -71,7 +71,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.Validator{
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPk,
 					ShareKey:    sk,
@@ -88,7 +88,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.Validator{
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPk,
 					ShareKey:    sk,
@@ -124,7 +124,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.Validator{
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPk,
 					ShareKey:    sk,
@@ -148,7 +148,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.Validator{
+				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPk,
 					ShareKey:    sk,

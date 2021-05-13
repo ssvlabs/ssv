@@ -2,10 +2,12 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"time"
 )
@@ -18,6 +20,7 @@ type ControllerOptions struct {
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"DUTY_LIMIT" env-default:"5" env-description:"Timeout for signature collection after consensus"`
 	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
+	Beacon                     *beacon.Beacon
 }
 
 // Controller interface
@@ -29,19 +32,20 @@ type IController interface {
 // Validator struct that manages all ibft wrappers
 type Controller struct {
 	context                    context.Context
-	collection                 ICollection
+	collection                 storage.ICollection
 	logger                     *zap.Logger
 	signatureCollectionTimeout time.Duration
 	slotQueue                  slotqueue.Queue
+	beacon                     beacon.Beacon
 	// TODO remove after IBFT refactor
-	network                    network.Network
+	network     network.Network
 	ibftStorage collections.IbftStorage
 }
 
 func NewController(options ControllerOptions) IController {
 	ibftStorage := collections.NewIbft(options.DB, options.Logger, "attestation")
 
-	collection := NewCollection(collectionOptions{
+	collection := storage.NewCollection(storage.CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
@@ -51,6 +55,7 @@ func NewController(options ControllerOptions) IController {
 		logger:                     options.Logger,
 		signatureCollectionTimeout: options.SignatureCollectionTimeout,
 		slotQueue:                  options.SlotQueue,
+		beacon:                     *options.Beacon,
 		ibftStorage:                ibftStorage,
 	}
 	return &controller
@@ -71,6 +76,7 @@ func (c *Controller) setupValidators() map[string]*Validator {
 			SlotQueue:                  c.slotQueue,
 			Logger:                     c.logger,
 			Share:                      validatorShare,
+			Network:                    c.network,
 		}, &c.ibftStorage)
 	}
 	c.logger.Info("setup validators done successfully", zap.Int("count", len(res)))

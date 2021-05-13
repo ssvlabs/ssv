@@ -31,7 +31,7 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 
 	// start timeout
 	go func() {
-		<-time.After(v.SignatureCollectionTimeout)
+		<-time.After(v.signatureCollectionTimeout)
 		lock.Lock()
 		defer lock.Unlock()
 		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
@@ -82,7 +82,7 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
 func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, identifier []byte, decidedValue []byte, signaturesCount int, role beacon.Role, duty *ethpb.DutiesResponse_Duty) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := v.signDuty(ctx, decidedValue, role, duty, v.ValidatorShare.ShareKey)
+	sig, root, valueStruct, err := v.signDuty(ctx, decidedValue, role, duty, v.Share.ShareKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
@@ -94,13 +94,13 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 			ValidatorPk: duty.PublicKey,
 		},
 		Signature: sig,
-		SignerIds: []uint64{v.ValidatorShare.NodeID},
+		SignerIds: []uint64{v.Share.NodeID},
 	}); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := v.waitForSignatureCollection(logger, identifier, root, signaturesCount, v.ValidatorShare.Committee)
+	signatures, err := v.waitForSignatureCollection(logger, identifier, root, signaturesCount, v.Share.Committee)
 
 	// clean queue for messages, we don't need them anymore.
 	v.msgQueue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier))
@@ -175,7 +175,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 
 	decided, signaturesCount, decidedByts := v.ibfts[role].StartInstance(ibft.StartOptions{
 		Duty:           duty,
-		ValidatorShare: *v.ValidatorShare,
+		ValidatorShare: *v.Share,
 		Logger:         l,
 		ValueCheck:     valCheckInstance,
 		PrevInstance:   prevIdentifier,
@@ -196,7 +196,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot
 		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
-	roles, err := v.beacon.RolesAt(ctx, slot, duty, v.ValidatorShare.ValidatorPK, v.ValidatorShare.ShareKey)
+	roles, err := v.beacon.RolesAt(ctx, slot, duty, v.Share.PublicKey, v.Share.ShareKey)
 	if err != nil {
 		logger.Error("failed to get roles for duty", zap.Error(err))
 		return

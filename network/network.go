@@ -60,5 +60,6 @@ type Network interface {
 	// ReceivedSyncMsgChan returns the channel for sync messages
 	ReceivedSyncMsgChan() <-chan *SyncChanObj
 
-	SubscribeTopic(validatorPk *bls.PublicKey) error
+	// SubscribeToValidatorNetwork subscribing and listen to validator network
+	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
 }

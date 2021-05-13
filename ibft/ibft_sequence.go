@@ -51,6 +51,6 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 		Lambda:         opts.Identifier,
 		SeqNumber:      opts.SeqNumber,
 		PreviousLambda: opts.PrevInstance,
-		ValidatorPK:    opts.ValidatorShare.ValidatorPK.Serialize(),
+		ValidatorPK:    opts.ValidatorShare.PublicKey.Serialize(),
 	}
 }

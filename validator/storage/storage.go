@@ -1,4 +1,4 @@
-package validator
+package storage
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -16,7 +16,7 @@ type ICollection interface {
 }
 
 // Collection struct
-type collectionOptions struct {
+type CollectionOptions struct {
 	DB     *basedb.IDb
 	Logger *zap.Logger
 }
@@ -29,7 +29,7 @@ type Collection struct {
 }
 
 // NewCollection creates new share storage
-func NewCollection(options collectionOptions) ICollection {
+func NewCollection(options CollectionOptions) ICollection {
 	collection := Collection{
 		db: *options.DB,
 		logger: options.Logger,

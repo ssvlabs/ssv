@@ -10,8 +10,8 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/slotqueue"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/stretchr/testify/require"
@@ -164,9 +164,9 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
 
-	ret.ValidatorShare = &collections.Validator{
+	ret.Share = &storage.Share{
 		NodeID:      1,
-		ValidatorPK: pk,
+		PublicKey: pk,
 		ShareKey:    nil,
 		Committee: map[uint64]*proto.Node{
 			1: {
@@ -191,7 +191,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	require.NoError(t, err)
 
 	// timeout
-	ret.SignatureCollectionTimeout = time.Second * 2
+	ret.signatureCollectionTimeout = time.Second * 2
 
 	go ret.listenToNetworkMessages()
 	return ret

@@ -19,6 +19,14 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
+	if options.Type == "memory" {
+		opt.InMemory = true
+		opt.Dir = ""
+		opt.ValueDir = ""
+	}
+
+	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
+
 	db, err := badger.Open(opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open badger")
@@ -56,6 +64,7 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, error) {
 		Value: resValue,
 	}, err
 }
+
 
 // GetAllByBucket return all array of Obj for all keys under specified prefix(bucket)
 func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]basedb.Obj, error) {

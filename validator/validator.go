@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"time"
 
 	"github.com/pkg/errors"
@@ -21,28 +22,30 @@ import (
 type Options struct {
 	Context                    context.Context
 	Logger                     *zap.Logger
-	Share                      *Share
+	Share                      *storage.Share
 	SignatureCollectionTimeout time.Duration
 	SlotQueue                  slotqueue.Queue
+	Network                    network.Network
+	Beacon                     beacon.Beacon
 }
 
 // Validator struct that manages all ibft wrappers
 type Validator struct {
 	ctx    context.Context
 	logger *zap.Logger
-	Share  *Share
+	Share  *storage.Share
 	//ibftStorage                collections.Iibft
 	ethNetwork core.Network
-
-	//beacon                     beacon.Beacon
+	beacon                     beacon.Beacon
 	ibfts                      map[beacon.Role]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.Network
 	slotQueue                  slotqueue.Queue
-	SignatureCollectionTimeout time.Duration
+	signatureCollectionTimeout time.Duration
 }
 
 // New Validator creation
+
 func New(opt Options, ibftStorage collections.Iibft) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
@@ -50,28 +53,18 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = ibft.New(
 		ibftStorage,
-		network,
+		opt.Network,
 		msgQueue,
 		&proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 		},
 	)
-	//ibfts := make(map[beacon.Role]ibft.IBFT)
-	//ibfts[beacon.RoleAttester] = ibft.New(
-	//	ibftStorage,
-	//	network,
-	//	msgQueue,
-	//	&proto.InstanceParams{
-	//		ConsensusParams: proto.DefaultConsensusParams(),
-	//	},
-	//)
-	//
 	return &Validator{
 		ctx:                        opt.Context,
 		logger:                     logger,
 		msgQueue:                   msgQueue,
 		Share:                      opt.Share,
-		SignatureCollectionTimeout: opt.SignatureCollectionTimeout,
+		signatureCollectionTimeout: opt.SignatureCollectionTimeout,
 		slotQueue:                  opt.SlotQueue,
 		ibfts:                      ibfts,
 	}
@@ -107,7 +100,7 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 
 // Start validator
 func (v *Validator) Start() error {
-	if err := v.network.SubscribeTopic(v.Share.PublicKey); err != nil {
+	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()
