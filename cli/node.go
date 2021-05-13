@@ -116,6 +116,11 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
+		maxBatch, err := flags.GetMaxNetworkResponseBatchValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get max batch flag value", zap.Error(err))
+		}
+
 		// init storage
 		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPk, shareKey, nodeID)
 
@@ -148,6 +153,9 @@ var startNodeCmd = &cobra.Command{
 			TCPPort:     tcpPort,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
+
+			// flags
+			MaxBatchResponse: maxBatch,
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
@@ -230,6 +238,7 @@ func init() {
 	flags.AddGenesisEpochFlag(startNodeCmd)
 	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
+	flags.AddMaxNetworkResponseBatchFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }
