@@ -19,9 +19,10 @@ var generateOperatorKeysCmd = &cobra.Command{
 		logger := logex.Build(RootCmd.Short, zapcore.DebugLevel)
 
 		// generate random private key (secret)
-		sk, err := rsa.GenerateKey(rand.Reader, 1024)
+		sk, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
 			logger.Error("Failed to generate operator private key", zap.Error(err))
+			return
 		}
 		// retrieve public key from the newly generated secret
 		pk := &sk.PublicKey
@@ -34,6 +35,10 @@ var generateOperatorKeysCmd = &cobra.Command{
 			},
 		)
 		pkBytes, err := x509.MarshalPKIXPublicKey(pk)
+		if err != nil {
+			logger.Error("Failed to marshal public key", zap.Error(err))
+			return
+		}
 		pkPem := pem.EncodeToMemory(
 			&pem.Block{
 				Type:  "RSA PUBLIC KEY",
