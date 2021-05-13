@@ -14,11 +14,27 @@ import (
 type testNetwork struct {
 	t                      *testing.T
 	highestDecidedReceived map[peer.ID]*proto.SignedMessage
+	decidedArr             map[peer.ID][]*proto.SignedMessage
+	maxBatch               int
 	peers                  []peer.ID
+	retError               error
 }
 
-func NewTestNetwork(t *testing.T, peers []peer.ID, highestDecidedReceived map[peer.ID]*proto.SignedMessage) *testNetwork {
-	return &testNetwork{t: t, peers: peers, highestDecidedReceived: highestDecidedReceived}
+func NewTestNetwork(
+	t *testing.T, peers []peer.ID,
+	maxBatch int,
+	highestDecidedReceived map[peer.ID]*proto.SignedMessage,
+	decidedArr map[peer.ID][]*proto.SignedMessage,
+	retError error,
+) *testNetwork {
+	return &testNetwork{
+		t:                      t,
+		peers:                  peers,
+		maxBatch:               maxBatch,
+		highestDecidedReceived: highestDecidedReceived,
+		decidedArr:             decidedArr,
+		retError:               retError,
+	}
 }
 
 func (n *testNetwork) Broadcast(msg *proto.SignedMessage) error {
@@ -45,7 +61,7 @@ func (n *testNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 	return nil
 }
 
-func (n *testNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
+func (n *testNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
 	if highest, found := n.highestDecidedReceived[peer]; found {
@@ -53,9 +69,10 @@ func (n *testNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncM
 			return nil, errors.New("could not find highest")
 		}
 
-		return &network.Message{
-			SignedMessage: highest,
-			Type:          network.NetworkMsg_SyncType,
+		return &network.SyncMessage{
+			SignedMessages: []*proto.SignedMessage{highest},
+			FromPeerID:     peer.String(),
+			Type:           network.Sync_GetInstanceRange,
 		}, nil
 	}
 	return nil, errors.New("could not find highest")
@@ -63,6 +80,38 @@ func (n *testNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncM
 
 func (n *testNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	return nil
+}
+
+func (n *testNetwork) GetDecidedByRange(fromPeer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	time.Sleep(time.Millisecond * 100)
+
+	if n.retError != nil {
+		return nil, n.retError
+	}
+
+	if arr, found := n.decidedArr[fromPeer]; found {
+		if !bytes.Equal(msg.ValidatorPk, arr[0].Message.ValidatorPk) {
+			return nil, errors.New("could not find highest")
+		}
+
+		ret := make([]*proto.SignedMessage, 0)
+		for _, m := range arr {
+			if m.Message.SeqNumber >= msg.Params[0] && m.Message.SeqNumber <= msg.Params[1] {
+				ret = append(ret, m)
+			}
+			if len(ret) == n.maxBatch {
+				break
+			}
+		}
+
+		return &network.SyncMessage{
+			SignedMessages: ret,
+			FromPeerID:     fromPeer.String(),
+			ValidatorPk:    msg.ValidatorPk,
+			Type:           network.Sync_GetInstanceRange,
+		}, nil
+	}
+	return nil, errors.New("could not find highest")
 }
 
 func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {

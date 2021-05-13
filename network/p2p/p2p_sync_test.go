@@ -9,6 +9,43 @@ import (
 	"time"
 )
 
+func TestSyncMessageBroadcastingTimeout(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	// create 2 peers
+	peer1, err := New(context.Background(), logger, &Config{
+		DiscoveryType:     "mdns",
+		BootstrapNodeAddr: []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
+		UDPPort:           12000,
+		TCPPort:           13000,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
+	})
+	require.NoError(t, err)
+
+	peer2, err := New(context.Background(), logger, &Config{
+		DiscoveryType:     "mdns",
+		BootstrapNodeAddr: []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
+		UDPPort:           12001,
+		TCPPort:           13001,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
+	})
+	require.NoError(t, err)
+
+	// broadcast msg
+	messageToBroadcast := &network.SyncMessage{
+		SignedMessages: nil,
+		Type:           network.Sync_GetHighestType,
+	}
+
+	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
+	res, err := peer1.GetHighestDecidedInstance(peer2.(*p2pNetwork).host.ID(), messageToBroadcast)
+	require.EqualError(t, err, "no response for sync request")
+	time.Sleep(time.Millisecond * 100)
+	require.Nil(t, res)
+}
+
 func TestSyncMessageBroadcasting(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
@@ -18,6 +55,8 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 		BootstrapNodeAddr: []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
 		UDPPort:           12000,
 		TCPPort:           13000,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
 	})
 	require.NoError(t, err)
 
@@ -26,6 +65,8 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 		BootstrapNodeAddr: []string{"enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g"},
 		UDPPort:           12001,
 		TCPPort:           13001,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
 	})
 	require.NoError(t, err)
 
@@ -61,9 +102,9 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 
 	// verify
 	require.NotNil(t, res)
-	require.IsType(t, network.SyncMessage{}, *res.SyncMessage)
-	require.EqualValues(t, peer2.(*p2pNetwork).host.ID().String(), res.SyncMessage.FromPeerID)
-	require.EqualValues(t, network.Sync_GetHighestType, res.SyncMessage.Type)
+	require.IsType(t, network.SyncMessage{}, *res)
+	require.EqualValues(t, peer2.(*p2pNetwork).host.ID().String(), res.FromPeerID)
+	require.EqualValues(t, network.Sync_GetHighestType, res.Type)
 
 	// verify stream closed
 	require.NotNil(t, receivedStream)

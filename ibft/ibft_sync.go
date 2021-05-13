@@ -6,6 +6,6 @@ import (
 )
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
-	s := sync.NewReqHandler(i.logger, i.network, i.ibftStorage)
+	s := sync.NewReqHandler(i.logger, msg.Msg.ValidatorPk, i.network, i.ibftStorage)
 	go s.Process(msg)
 }

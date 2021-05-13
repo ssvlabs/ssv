@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -45,6 +46,121 @@ func multiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg
 		Message:   msg,
 		Signature: agg.Serialize(),
 		SignerIds: ids,
+	}
+}
+
+func TestFetchDecided(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	tests := []struct {
+		name           string
+		valdiatorPK    []byte
+		peers          []peer.ID
+		fromPeer       peer.ID
+		rangeParams    []uint64
+		decidedArr     map[peer.ID][]*proto.SignedMessage
+		expectedError  string
+		forceError     error
+		expectedResLen uint64
+	}{
+		{
+			"valid fetch no pagination",
+			[]byte{1, 2, 3, 4},
+			[]peer.ID{"2"},
+			"2",
+			[]uint64{1, 3, 3},
+			map[peer.ID][]*proto.SignedMessage{
+				"2": {
+					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+						Type:        proto.RoundState_Decided,
+						Round:       1,
+						Lambda:      []byte("lambda"),
+						SeqNumber:   1,
+						ValidatorPk: []byte{1, 2, 3, 4},
+					}),
+					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+						Type:        proto.RoundState_Decided,
+						Round:       1,
+						Lambda:      []byte("lambda"),
+						SeqNumber:   2,
+						ValidatorPk: []byte{1, 2, 3, 4},
+					}),
+					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+						Type:        proto.RoundState_Decided,
+						Round:       1,
+						Lambda:      []byte("lambda"),
+						SeqNumber:   3,
+						ValidatorPk: []byte{1, 2, 3, 4},
+					}),
+				},
+			},
+			"",
+			nil,
+			3,
+		},
+		{
+			"valid fetch with pagination",
+			[]byte{1, 2, 3, 4},
+			[]peer.ID{"2"},
+			"2",
+			[]uint64{1, 3, 2},
+			map[peer.ID][]*proto.SignedMessage{
+				"2": {
+					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+						Type:        proto.RoundState_Decided,
+						Round:       1,
+						Lambda:      []byte("lambda"),
+						SeqNumber:   1,
+						ValidatorPk: []byte{1, 2, 3, 4},
+					}),
+					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+						Type:        proto.RoundState_Decided,
+						Round:       1,
+						Lambda:      []byte("lambda"),
+						SeqNumber:   2,
+						ValidatorPk: []byte{1, 2, 3, 4},
+					}),
+					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+						Type:        proto.RoundState_Decided,
+						Round:       1,
+						Lambda:      []byte("lambda"),
+						SeqNumber:   3,
+						ValidatorPk: []byte{1, 2, 3, 4},
+					}),
+				},
+			},
+			"",
+			nil,
+			3,
+		},
+		{
+			"force error",
+			[]byte{1, 2, 3, 4},
+			[]peer.ID{"2"},
+			"2",
+			[]uint64{1, 3, 2},
+			map[peer.ID][]*proto.SignedMessage{},
+			"could not fetch ranged decided instances",
+			errors.New("error"),
+			3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			s := NewHistorySync(test.valdiatorPK, NewTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil), nil, &proto.InstanceParams{
+				ConsensusParams: proto.DefaultConsensusParams(),
+				IbftCommittee:   nodes,
+			}, zap.L())
+			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])
+
+			if len(test.expectedError) > 0 {
+				require.EqualError(t, err, test.expectedError)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, res, int(test.expectedResLen))
+			}
+
+		})
 	}
 }
 
@@ -153,15 +269,31 @@ func TestFindHighest(t *testing.T) {
 			1,
 			"could not fetch highest decided from peers",
 		},
+		{
+			"return not decided",
+			[]byte{1, 2, 3, 4},
+			[]peer.ID{"2", "3"},
+			map[peer.ID]*proto.SignedMessage{
+				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					Type:        proto.RoundState_Prepare,
+					Round:       1,
+					Lambda:      []byte("lambda"),
+					SeqNumber:   1,
+					ValidatorPk: []byte{1, 2, 3, 4},
+				}),
+			},
+			1,
+			"could not fetch highest decided from peers",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, NewTestNetwork(t, test.peers, test.highestMap), &proto.InstanceParams{
+			s := NewHistorySync(test.valdiatorPK, NewTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, &proto.InstanceParams{
 				ConsensusParams: proto.DefaultConsensusParams(),
 				IbftCommittee:   nodes,
 			}, zap.L())
-			res, err := s.findHighestInstance()
+			res, _, err := s.findHighestInstance()
 
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)

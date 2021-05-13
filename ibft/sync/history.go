@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
 	"sync"
@@ -15,38 +16,66 @@ import (
 type HistorySync struct {
 	logger         *zap.Logger
 	network        network.Network
+	ibftStorage    collections.Iibft
 	instanceParams *proto.InstanceParams
 	validatorPK    []byte
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(validatorPK []byte, network network.Network, instanceParams *proto.InstanceParams, logger *zap.Logger) *HistorySync {
+func NewHistorySync(validatorPK []byte, network network.Network, ibftStorage collections.Iibft, instanceParams *proto.InstanceParams, logger *zap.Logger) *HistorySync {
 	return &HistorySync{
 		logger:         logger,
 		validatorPK:    validatorPK,
 		network:        network,
+		ibftStorage:    ibftStorage,
 		instanceParams: instanceParams,
 	}
 }
 
 // Start the sync
 func (s *HistorySync) Start() {
-	_, err := s.findHighestInstance()
+	// fetch remote highest
+	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
 		panic("implement")
 	}
-	panic("implement HistorySync")
+
+	// fetch local highest
+	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
+	if err != nil {
+		panic("implement")
+	}
+
+	// check we are behind and need to sync
+	if localHighest.Message.SeqNumber >= remoteHighest.Message.SeqNumber {
+		s.logger.Info("node is synced", zap.Uint64("highest seq", localHighest.Message.SeqNumber))
+		return
+	}
+
+	// fetch missing data
+	decidedMsgs, err := s.fetchValidateAndSaveInstances(fromPeer, localHighest.Message.SeqNumber+1, remoteHighest.Message.SeqNumber)
+	if err != nil {
+		panic("implement")
+	}
+
+	// save to storage
+	for _, msg := range decidedMsgs {
+		if err := s.ibftStorage.SaveDecided(msg); err != nil {
+			s.logger.Error("could not save decided msg during sync", zap.Error(err))
+			break
+		}
+	}
 }
 
-// findHighestInstance returns the highest found decided signed message from peers
-func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, error) {
+// findHighestInstance returns the highest found decided signed message and the peer it was received from
+func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, error) {
 	// pick up to 4 peers
 	// TODO - why 4? should be set as param?
 	// TODO select peers by quality/ score?
 	// TODO - should be changed to support multi duty
 	usedPeers, err := s.network.AllPeers(s.validatorPK)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(usedPeers) > 4 {
 		usedPeers = usedPeers[:4]
@@ -54,7 +83,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, error) {
 
 	// fetch response
 	wg := &sync.WaitGroup{}
-	results := make([]*network.Message, 4)
+	results := make([]*network.SyncMessage, 4)
 	for i, p := range usedPeers {
 		wg.Add(1)
 		go func(index int, peer peer.ID, wg *sync.WaitGroup) {
@@ -75,33 +104,47 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, error) {
 
 	// validate response and find highest decided
 	var ret *proto.SignedMessage
+	var fromPeer peer.ID
 	for _, res := range results {
 		if res == nil {
 			continue
 		}
 
+		if len(res.SignedMessages) != 1 {
+			s.logger.Debug("received invalid highest decided", zap.Error(err))
+			continue
+		}
+
+		signedMsg := res.SignedMessages[0]
+
 		// validate
-		if err := s.isValidHighestMsg(res.SignedMessage); err != nil {
+		if err := s.isValidDecidedMsg(signedMsg); err != nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err))
 			continue
 		}
 
 		if ret == nil {
-			ret = res.SignedMessage
+			ret = signedMsg
+			fromPeer = peer.ID(res.FromPeerID)
 		}
-		if ret.Message.SeqNumber < res.SignedMessage.Message.SeqNumber {
-			ret = res.SignedMessage
+		if ret.Message.SeqNumber < signedMsg.Message.SeqNumber {
+			ret = signedMsg
+			fromPeer = peer.ID(res.FromPeerID)
 		}
 	}
 
 	if ret == nil {
-		return nil, errors.New("could not fetch highest decided from peers")
+		return nil, "", errors.New("could not fetch highest decided from peers")
 	}
 
-	return ret, nil
+	return ret, fromPeer, nil
 }
 
-func (s *HistorySync) isValidHighestMsg(msg *proto.SignedMessage) error {
+func (s *HistorySync) isValidDecidedMsg(msg *proto.SignedMessage) error {
+	if msg.Message.Type != proto.RoundState_Decided {
+		return errors.New("decided msg with wrong type")
+	}
+
 	// signature
 	if err := s.instanceParams.VerifySignedMessage(msg); err != nil {
 		return err
@@ -120,6 +163,46 @@ func (s *HistorySync) isValidHighestMsg(msg *proto.SignedMessage) error {
 }
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
-func (s *HistorySync) FetchValidateAndSaveInstances(startID []byte, endID []byte) {
+// Range is start to end seq including
+func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq uint64, endSeq uint64) ([]*proto.SignedMessage, error) {
+	ret := make([]*proto.SignedMessage, endSeq-startSeq+1)
+	failCount := 0
+	start := startSeq
+	done := false
+	for {
+		if failCount == 5 {
+			return nil, errors.New("could not fetch ranged decided instances")
+		}
+		if done {
+			return ret, nil
+		}
 
+		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
+			ValidatorPk: s.validatorPK,
+			Params:      []uint64{start, endSeq},
+			Type:        network.Sync_GetInstanceRange,
+		})
+		if err != nil {
+			failCount++
+			continue
+		}
+
+		// set in return slice
+		for _, msg := range res.SignedMessages {
+			start = msg.Message.SeqNumber
+
+			// if msg is invalid, break and try again with an updated start seq
+			if s.isValidDecidedMsg(msg) != nil {
+				start = msg.Message.SeqNumber
+				continue
+			}
+			saveIndex := msg.Message.SeqNumber - startSeq
+			ret[saveIndex] = msg
+			start = msg.Message.SeqNumber + 1
+
+			if msg.Message.SeqNumber == endSeq {
+				done = true
+			}
+		}
+	}
 }

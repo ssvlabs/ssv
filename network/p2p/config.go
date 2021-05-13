@@ -3,6 +3,7 @@ package p2p
 import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"time"
 )
 
 // Config - describe the config options for p2p network
@@ -20,4 +21,5 @@ type Config struct {
 
 	// params
 	MaxBatchResponse uint64 // maximum number of returned objects in a batch
+	RequestTimeout   time.Duration
 }
