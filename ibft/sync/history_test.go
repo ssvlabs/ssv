@@ -147,7 +147,7 @@ func TestFetchDecided(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, NewTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil), nil, &proto.InstanceParams{
+			s := NewHistorySync(test.valdiatorPK, newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil), nil, &proto.InstanceParams{
 				ConsensusParams: proto.DefaultConsensusParams(),
 				IbftCommittee:   nodes,
 			}, zap.L())
@@ -289,7 +289,7 @@ func TestFindHighest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, NewTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, &proto.InstanceParams{
+			s := NewHistorySync(test.valdiatorPK, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, &proto.InstanceParams{
 				ConsensusParams: proto.DefaultConsensusParams(),
 				IbftCommittee:   nodes,
 			}, zap.L())

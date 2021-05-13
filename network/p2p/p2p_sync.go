@@ -6,6 +6,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -59,12 +60,20 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 	}()
 
 	var resMsg *network.Message
+	var resMsgLock sync.Mutex
 	go func() {
-		resMsg, err = readMessageData(stream)
+		res, resErr := readMessageData(stream)
+
+		resMsgLock.Lock()
+		defer resMsgLock.Unlock()
+		resMsg = res
+		err = resErr
 	}()
 
 	time.Sleep(n.cfg.RequestTimeout)
 
+	resMsgLock.Lock()
+	defer resMsgLock.Unlock()
 	if resMsg == nil { // no response
 		err = errors.New("no response for sync request")
 	}

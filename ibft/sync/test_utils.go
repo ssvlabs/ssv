@@ -20,7 +20,8 @@ type testNetwork struct {
 	retError               error
 }
 
-func NewTestNetwork(
+// newTestNetwork returns a new test network instance
+func newTestNetwork(
 	t *testing.T, peers []peer.ID,
 	maxBatch int,
 	highestDecidedReceived map[peer.ID]*proto.SignedMessage,
@@ -114,18 +115,23 @@ func (n *testNetwork) GetDecidedByRange(fromPeer peer.ID, msg *network.SyncMessa
 	return nil, errors.New("could not find highest")
 }
 
+// RespondToGetDecidedByRange responds to a GetDecidedByRange
+func (n *testNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	panic("implement")
+}
+
 func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	return nil
 }
 
 // SubscribeToValidatorNetwork subscribing and listen to validator network
-func (s *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+func (n *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	return nil
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (s *testNetwork) AllPeers(validatorPk []byte) ([]peer.ID, error) {
-	return s.peers, nil
+func (n *testNetwork) AllPeers(validatorPk []byte) ([]peer.ID, error) {
+	return n.peers, nil
 }
 
 //type testStorage struct {

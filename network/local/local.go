@@ -106,7 +106,7 @@ func (n *Local) BroadcastSyncMessage(peers []peer.ID, msg *network.SyncMessage) 
 
 // GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 // If peer list is nil, broadcasts to all.
-func (n *Local) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
+func (n *Local) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	panic("implement")
 }
 
@@ -122,6 +122,16 @@ func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	c := make(chan *network.SyncChanObj)
 	n.syncC = append(n.syncC, c)
 	return c
+}
+
+// GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
+func (n *Local) GetDecidedByRange(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	panic("implement")
+}
+
+// RespondToGetDecidedByRange responds to a GetDecidedByRange
+func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	panic("implement")
 }
 
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen

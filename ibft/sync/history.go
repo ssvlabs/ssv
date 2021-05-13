@@ -189,8 +189,6 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq u
 
 		// set in return slice
 		for _, msg := range res.SignedMessages {
-			start = msg.Message.SeqNumber
-
 			// if msg is invalid, break and try again with an updated start seq
 			if s.isValidDecidedMsg(msg) != nil {
 				start = msg.Message.SeqNumber
