@@ -2,8 +2,10 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
 	"time"
 )
@@ -14,6 +16,7 @@ type ControllerOptions struct {
 	DB                         *basedb.IDb
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"DUTY_LIMIT" env-default:"5" env-description:"Timeout for signature collection after consensus"`
+	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
 }
 
@@ -30,9 +33,14 @@ type Controller struct {
 	logger                     *zap.Logger
 	signatureCollectionTimeout time.Duration
 	slotQueue                  slotqueue.Queue
+	// TODO remove after IBFT refactor
+	network                    network.Network
+	ibftStorage collections.IbftStorage
 }
 
 func NewController(options ControllerOptions) IController {
+	ibftStorage := collections.NewIbft(options.DB, options.Logger, "attestation")
+
 	collection := NewCollection(collectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
@@ -43,6 +51,7 @@ func NewController(options ControllerOptions) IController {
 		logger:                     options.Logger,
 		signatureCollectionTimeout: options.SignatureCollectionTimeout,
 		slotQueue:                  options.SlotQueue,
+		ibftStorage:                ibftStorage,
 	}
 	return &controller
 }
@@ -55,7 +64,6 @@ func (c *Controller) setupValidators() map[string]*Validator {
 	}
 
 	res := make(map[string]*Validator)
-
 	for _, validatorShare := range validatorsShare {
 		res[validatorShare.PublicKey.SerializeToHexStr()] = New(Options{
 			Context:                    c.context,
@@ -63,7 +71,7 @@ func (c *Controller) setupValidators() map[string]*Validator {
 			SlotQueue:                  c.slotQueue,
 			Logger:                     c.logger,
 			Share:                      validatorShare,
-		})
+		}, &c.ibftStorage)
 	}
 	c.logger.Info("setup validators done successfully", zap.Int("count", len(res)))
 	return res

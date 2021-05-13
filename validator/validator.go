@@ -2,6 +2,10 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/collections"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,10 +32,10 @@ type Validator struct {
 	logger *zap.Logger
 	Share  *Share
 	//ibftStorage                collections.Iibft
-	//ethNetwork                 core.Network
+	ethNetwork core.Network
 
 	//beacon                     beacon.Beacon
-	//ibfts                      map[beacon.Role]ibft.IBFT
+	ibfts                      map[beacon.Role]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.Network
 	slotQueue                  slotqueue.Queue
@@ -39,9 +43,19 @@ type Validator struct {
 }
 
 // New Validator creation
-func New(opt Options) *Validator {
+func New(opt Options, ibftStorage collections.Iibft) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
+
+	ibfts := make(map[beacon.Role]ibft.IBFT)
+	ibfts[beacon.RoleAttester] = ibft.New(
+		ibftStorage,
+		network,
+		msgQueue,
+		&proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+		},
+	)
 	//ibfts := make(map[beacon.Role]ibft.IBFT)
 	//ibfts[beacon.RoleAttester] = ibft.New(
 	//	ibftStorage,
@@ -59,6 +73,7 @@ func New(opt Options) *Validator {
 		Share:                      opt.Share,
 		SignatureCollectionTimeout: opt.SignatureCollectionTimeout,
 		slotQueue:                  opt.SlotQueue,
+		ibfts:                      ibfts,
 	}
 }
 

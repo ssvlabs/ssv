@@ -29,7 +29,7 @@ type Collection struct {
 }
 
 // NewCollection creates new share storage
-func NewCollection(options CollectionOptions) ICollection {
+func NewCollection(options collectionOptions) ICollection {
 	collection := Collection{
 		db: *options.DB,
 		logger: options.Logger,
