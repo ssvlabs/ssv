@@ -14,7 +14,7 @@
 # Dependency directories (remove the comment below to include it)
 vendor/
 
-.env
+.env*
 
 # User-specific stuff:
 .idea/**/workspace.xml
@@ -38,3 +38,4 @@ vendor/
 .DS_Store
 
 bin/
+/data/

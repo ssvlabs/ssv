@@ -7,12 +7,10 @@
 
 SSV is a protocol for distributing an eth2 validator key between multiple operators governed by a consensus protocol ([Istanbul BFT](https://arxiv.org/pdf/2002.03613.pdf)).
 
-
-## ⚠️ Phase 1 testing ⚠️
-Please see [phase 1 testing doc](./PHASE_1_TESTNET.md) for details
-
-
 ## Getting started
+An SSV operator's getting started [documentation](./internals/documentation/operator_getting_started.md)
+
+## Common commands
 ```bash
 # Build binary
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
@@ -42,35 +40,36 @@ $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {private
 
 ## Example .env file 
 ```
-   DISCOVERY_TYPE=mdns
-   CONSENSUS_TYPE=validation
    NETWORK=pyrmont
-   BEACON_NODE_ADDR=eth2-4000-prysm.stage.bloxinfra.com:80
+   DISCOVERY_TYPE=<mdns for local network, empty for discov5 remote>
+   STORAGE_PATH=<example ./data/db/node_1/2/3/4>
+   BOOT_NODE_EXTERNAL_IP=
+   BOOT_NODE_PRIVATE_KEY=
+   BEACON_NODE_ADDR= <can use eth2-4000-prysm-ext.stage.bloxinfra.com:80>
+   NODE_ID=
    VALIDATOR_PUBLIC_KEY=
-   VALIDATOR_PRIVATE_KEY= # NOT USED FOR NOW
-   SSV_NODE_1=
-   SSV_NODE_PUB_KEY_1=
-   SSV_NODE_2=
-   SSV_NODE_PUB_KEY_2=
-   SSV_NODE_3=
-   SSV_NODE_PUB_KEY_3=
-   SSV_NODE_4=
-   SSV_NODE_PUB_KEY_4=
+   SSV_PRIVATE_KEY=
+   PUBKEY_NODE_1=
+   PUBKEY_NODE_2=
+   PUBKEY_NODE_3=
+   PUBKEY_NODE_4=
 ```
+For a 4 node SSV network, 4 .env.node.<1/2/3/4> files need to be created.
 
 ### Progress
 [X] Free standing, reference iBFT Go implementation\
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Glang\
 [ ] Single standing instance running with Prysm's validator client\
-[\\] Networking and discovery\
-[\\] db, persistance and recovery\
-[ ] Between instance persistence (pevent starting a new instance if previous not decided)
+[X] Networking and discovery\
+[X] db, persistance and recovery\
+[ ] Between instance persistence (pevent starting a new instance if previous not decided)\
 [ ] Multi network support (being part of multiple SSV groups)\
+[ ] Aggregation and Proposal support\
 [X] Key sharing\
 [X] Deployment\
 [\\] Documentation\
-[ ] Phase 1 changes\
+[X] Phase 1 testing\
 [ ] Audit
 
 ** X=done, \\=WIP

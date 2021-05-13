@@ -29,7 +29,9 @@ type InstanceOptions struct {
 	LeaderSelector leader.Selector
 	Params         *proto.InstanceParams
 	Lambda         []byte
+	SeqNumber      uint64
 	PreviousLambda []byte
+	ValidatorPK    []byte
 }
 
 // Instance defines the instance attributes
@@ -70,13 +72,15 @@ func NewInstance(opts InstanceOptions) *Instance {
 		State: &proto.State{
 			Stage:          proto.RoundState_NotStarted,
 			Lambda:         opts.Lambda,
+			SeqNumber:      opts.SeqNumber,
 			PreviousLambda: opts.PreviousLambda,
+			ValidatorPk:    opts.ValidatorPK,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Params:         opts.Params,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId)),
+		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId), zap.Uint64("seq_num", opts.SeqNumber)),
 		msgLock:        sync.Mutex{},
 
 		MsgQueue:            opts.Queue,

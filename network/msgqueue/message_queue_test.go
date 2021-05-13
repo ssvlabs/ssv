@@ -11,21 +11,21 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 	msgQ := New()
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 4},
-		Msg: &proto.SignedMessage{
+		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,
 			},
 		},
-		Type: network.IBFTBroadcastingType,
+		Type: network.NetworkMsg_IBFTType,
 	})
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 4},
-		Msg: &proto.SignedMessage{
+		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,
 			},
 		},
-		Type: network.SignatureBroadcastingType,
+		Type: network.NetworkMsg_SignatureType,
 	})
 
 	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 1)
@@ -44,23 +44,23 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 	msgQ := New()
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 4},
-		Msg: &proto.SignedMessage{
+		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,
 			},
 		},
-		Type: network.IBFTBroadcastingType,
+		Type: network.NetworkMsg_IBFTType,
 	})
 	require.NotNil(t, msgQ.queue["lambda_01020304_round_1"])
 
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 5},
-		Msg: &proto.SignedMessage{
+		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 7,
 			},
 		},
-		Type: network.IBFTBroadcastingType,
+		Type: network.NetworkMsg_IBFTType,
 	})
 	require.NotNil(t, msgQ.queue["lambda_01020305_round_7"])
 
@@ -70,12 +70,12 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 	})
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 5},
-		Msg: &proto.SignedMessage{
+		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 3,
 			},
 		},
-		Type: network.IBFTBroadcastingType,
+		Type: network.NetworkMsg_IBFTType,
 	})
 
 	require.NotNil(t, msgQ.queue["a"])
@@ -93,12 +93,12 @@ func TestMessageQueue_PopMessage(t *testing.T) {
 	}
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 4},
-		Msg: &proto.SignedMessage{
+		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,
 			},
 		},
-		Type: network.IBFTBroadcastingType,
+		Type: network.NetworkMsg_IBFTType,
 	})
 
 	require.NotNil(t, msgQ.PopMessage("a"))

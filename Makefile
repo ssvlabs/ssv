@@ -20,7 +20,7 @@ endif
 # node command builder
 NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
 --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} \
---host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL}
+--host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --storage-path=${STORAGE_PATH}
 
 
 ifneq ($(TCP_PORT),)
@@ -88,7 +88,7 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 
 else
-	@echo "Running node (${NODE_ID})"
+	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
@@ -113,6 +113,7 @@ docker-all:
 DEBUG_NODES=ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev ssv-node-4-dev
 .PHONY: docker-debug
 docker-debug:
+	@echo $(DEBUG_NODES)
 	@docker-compose up --build $(DEBUG_NODES)
 
 .PHONY: stop

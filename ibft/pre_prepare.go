@@ -15,6 +15,8 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State),
 		auth.ValidateRound(i.State),
+		auth.ValidatePKs(i.State),
+		auth.ValidateSequenceNumber(i.State),
 		auth.AuthorizeMsg(i.Params),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),
@@ -48,7 +50,7 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
 func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
-	return pipeline.WrapFunc(func(signedMessage *proto.SignedMessage) error {
+	return pipeline.WrapFunc("upon pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
 		// add to pre-prepare messages
 		i.PrePrepareMessages.AddMessage(signedMessage)
 		i.Logger.Info("received valid pre-prepare message for round",
@@ -82,7 +84,9 @@ func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 		Type:           proto.RoundState_PrePrepare,
 		Round:          i.State.Round,
 		Lambda:         i.State.Lambda,
+		SeqNumber:      i.State.SeqNumber,
 		PreviousLambda: i.State.PreviousLambda,
 		Value:          value,
+		ValidatorPk:    i.State.ValidatorPk,
 	}
 }

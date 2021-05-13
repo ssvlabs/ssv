@@ -3,8 +3,8 @@ package flags
 import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
-	"time"
 	"go.uber.org/zap/zapcore"
+	"time"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
@@ -18,12 +18,14 @@ const (
 	discoveryFlag        = "discovery-type"
 	consensusFlag        = "val"
 	sigCollectionTimeout = "sig-collection-timeout"
+	dutySlotsLimit       = "duty-slots-limit"
 	hostDNS              = "host-dns"
 	hostAddress          = "host-address"
 	tcpPort              = "tcp-port"
 	udpPort              = "udp-port"
 	genesisEpoch         = "genesis-epoch"
-	loggerLevel         = "logger-level"
+	loggerLevel          = "logger-level"
+	storagePath          = "storage-path"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -105,6 +107,16 @@ func GetSignatureCollectionTimeValue(c *cobra.Command) (time.Duration, error) {
 	return time.Second * time.Duration(v), nil
 }
 
+// AddDutySlotsLimit adds the max amount of slots to execute duty in delay flag to the command
+func AddDutySlotsLimit(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, dutySlotsLimit, 32, "Duties max slots delay to attest", false)
+}
+
+// GetDutySlotsLimitValue gets the max amount of slots to execute duty in delay flag to  the command
+func GetDutySlotsLimitValue(c *cobra.Command) (uint64, error) {
+	return c.Flags().GetUint64(dutySlotsLimit)
+}
+
 // GetHostDNSFlagValue gets the host dns flag from the command
 func GetHostDNSFlagValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(hostDNS)
@@ -183,4 +195,15 @@ func GetLoggerLevelValue(c *cobra.Command) (zapcore.Level, error) {
 // AddLoggerLevelFlag adds the logger level flag to the command
 func AddLoggerLevelFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, loggerLevel, "info", "logger level", false)
+}
+
+// GetStoragePathValue gets the storage path flag from the command
+func GetStoragePathValue(c *cobra.Command) (string, error) {
+	val, err := c.Flags().GetString(storagePath)
+	return val, err
+}
+
+// AddStoragePathFlag adds the storage path flag to the command
+func AddStoragePathFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, storagePath, "./data/db", "storage path", false)
 }

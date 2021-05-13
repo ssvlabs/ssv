@@ -26,3 +26,8 @@ func UponPartialQuorum() pipeline.Pipeline {
 func (p *uponPartialQuorum) Run(signedMessage *proto.SignedMessage) error {
 	return nil // TODO
 }
+
+// Name implements pipeline.Pipeline interface
+func (p *uponPartialQuorum) Name() string {
+	return "upon partial quorum"
+}

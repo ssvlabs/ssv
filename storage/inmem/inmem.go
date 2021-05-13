@@ -1,7 +1,6 @@
 package inmem
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage"
 )
 
@@ -10,14 +9,26 @@ type inMemStorage struct {
 }
 
 // New is the constructor of inMemStorage
-func New() storage.Storage {
+func New() storage.IKvStorage {
 	return &inMemStorage{}
 }
 
-func (s *inMemStorage) SavePrepared(signedMsg *proto.SignedMessage) {
-	// TODO: Implement
+func (i *inMemStorage) Set(prefix []byte, key []byte, value []byte) error {
+	return nil
 }
 
-func (s *inMemStorage) SaveDecided(signedMsg *proto.SignedMessage) {
-	// TODO: Implement
+func (i *inMemStorage) Get(prefix []byte, key []byte) (storage.Obj, error) {
+	return storage.Obj{
+		Key:   key,
+		Value: nil,
+	}, nil
+}
+
+func (i *inMemStorage) GetAllByCollection(prefix []byte) ([]storage.Obj, error) {
+	return []storage.Obj{
+		{
+			Key:   nil,
+			Value: nil,
+		},
+	}, nil
 }

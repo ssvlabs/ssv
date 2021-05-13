@@ -1,17 +1,16 @@
 package ibft
 
 import (
-	"bytes"
-	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/storage/collections"
+	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/storage"
 )
 
 // FirstInstanceIdentifier is the identifier of the first instance in the DB
@@ -21,11 +20,14 @@ func FirstInstanceIdentifier() []byte {
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
-	Logger       *zap.Logger
-	ValueCheck   valcheck.ValueCheck
-	PrevInstance []byte
-	Identifier   []byte
-	Value        []byte
+	Logger         *zap.Logger
+	ValueCheck     valcheck.ValueCheck
+	PrevInstance   []byte
+	Identifier     []byte
+	SeqNumber    uint64
+	Value          []byte
+	Duty           *ethpb.DutiesResponse_Duty
+	ValidatorShare collections.ValidatorShare
 }
 
 // IBFT represents behavior of the IBFT
@@ -33,15 +35,18 @@ type IBFT interface {
 	// StartInstance starts a new instance by the given options
 	StartInstance(opts StartOptions) (bool, int, []byte)
 
+	// NextSeqNumber returns the previous decided instance seq number + 1
+	// In case it's the first instance it returns 0
+	NextSeqNumber() uint64
+
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[uint64]*proto.Node
 }
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	instances      map[string]*Instance // key is the instance identifier
-	storage        storage.Storage
-	me             *proto.Node
+	instances      []*Instance // key is the instance identifier
+	ibftStorage    collections.Iibft
 	network        network.Network
 	msgQueue       *msgqueue.MessageQueue
 	params         *proto.InstanceParams
@@ -49,17 +54,10 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(
-	storage storage.Storage,
-	me *proto.Node,
-	network network.Network,
-	queue *msgqueue.MessageQueue,
-	params *proto.InstanceParams,
-) IBFT {
+func New(storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
 	ret := &ibftImpl{
-		instances:      make(map[string]*Instance),
-		storage:        storage,
-		me:             me,
+		ibftStorage:    storage,
+		instances:      make([]*Instance, 0),
 		network:        network,
 		msgQueue:       queue,
 		params:         params,
@@ -74,38 +72,23 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	go func() {
 		for msg := range msgChan {
 			i.msgQueue.AddMessage(&network.Message{
-				Lambda: msg.Message.Lambda,
-				Msg:    msg,
-				Type:   network.IBFTBroadcastingType,
+				Lambda:        msg.Message.Lambda,
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_IBFTType,
 			})
 		}
 	}()
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
-	// If previous instance didn't decide, can't start another instance.
-	if !bytes.Equal(opts.PrevInstance, FirstInstanceIdentifier()) {
-		instance, found := i.instances[hex.EncodeToString(opts.PrevInstance)]
-		if !found {
-			opts.Logger.Error("previous instance not found")
-		}
-		if instance.Stage() != proto.RoundState_Decided {
-			opts.Logger.Error("previous instance not decided, can't start new instance")
-		}
+	instanceOpts := i.instanceOptionsFromStartOptions(opts)
+
+	if err := i.canStartNewInstance(instanceOpts); err != nil {
+		opts.Logger.Error("can't start new iBFT instance", zap.Error(err))
 	}
 
-	newInstance := NewInstance(InstanceOptions{
-		Logger:         opts.Logger,
-		Me:             i.me,
-		Network:        i.network,
-		Queue:          i.msgQueue,
-		ValueCheck:     opts.ValueCheck,
-		LeaderSelector: i.leaderSelector,
-		Params:         i.params,
-		Lambda:         opts.Identifier,
-		PreviousLambda: opts.PrevInstance,
-	})
-	i.instances[hex.EncodeToString(opts.Identifier)] = newInstance
+	newInstance := NewInstance(instanceOpts)
+	i.instances = append(i.instances, newInstance)
 	go newInstance.StartEventLoop()
 	go newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
@@ -122,19 +105,20 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			agg, err := newInstance.PreparedAggregatedMsg()
-			if err != nil {
-				newInstance.Logger.Error("could not get aggregated prepare msg and save to storage", zap.Error(err))
+			if err := i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
+				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.storage.SavePrepared(agg)
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
 				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
 				return false, 0, nil
 			}
-			i.storage.SaveDecided(agg)
+			if err := i.ibftStorage.SaveDecided(agg); err != nil {
+				newInstance.Logger.Error("could not save aggregated commit msg to storage", zap.Error(err))
+				return false, 0, nil
+			}
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}
