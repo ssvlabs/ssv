@@ -21,6 +21,7 @@ type ControllerOptions struct {
 	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
 	Beacon                     *beacon.Beacon
+	LocalShareOptions          storage.LocalShareOptions `yaml:"LocalShare"`
 }
 
 // Controller interface
@@ -49,6 +50,7 @@ func NewController(options ControllerOptions) IController {
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
+	collection.LoadFromConfig(options.LocalShareOptions)
 	controller := Controller{
 		collection:                 collection,
 		context:                    options.Context,
@@ -58,6 +60,7 @@ func NewController(options ControllerOptions) IController {
 		beacon:                     *options.Beacon,
 		ibftStorage:                ibftStorage,
 	}
+
 	return &controller
 }
 
