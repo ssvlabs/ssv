@@ -82,6 +82,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 
 	newInstance := NewInstance(instanceOpts)
 	i.instances = append(i.instances, newInstance)
+	i.currentInstance = newInstance
 	go newInstance.StartEventLoop()
 	go newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
