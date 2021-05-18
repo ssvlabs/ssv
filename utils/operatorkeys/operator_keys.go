@@ -1,4 +1,4 @@
-package operator_keys
+package operatorkeys
 
 import (
 	"crypto/rand"
@@ -41,6 +41,7 @@ func GenerateKeys() ([]byte, []byte, error) {
 	return pkPem, skPem, nil
 }
 
+// DecodeKey with secret key (base64) and hash (base64), return the encrypted key string
 func DecodeKey(skPemBase64 string, hashBase64 string) (string, error) {
 	sk, err := convertPemToPrivateKey(skPemBase64)
 	if err != nil{
@@ -49,6 +50,7 @@ func DecodeKey(skPemBase64 string, hashBase64 string) (string, error) {
 	return decryptHash(sk, hashBase64)
 }
 
+// convertPemToPrivateKey return rsa private key from secret key (base64)
 func convertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
 	skPem, err := base64.StdEncoding.DecodeString(skPemBase64)
 	if err != nil {
@@ -71,6 +73,7 @@ func convertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
 	return parsedSk, nil
 }
 
+// decryptHash using secret key and encrypted hash
 func decryptHash(sk *rsa.PrivateKey, hashBase64 string) (string, error) {
 	hash, _ := base64.StdEncoding.DecodeString(hashBase64)
 	decryptedKey, err := rsa.DecryptPKCS1v15(rand.Reader, sk, hash)
