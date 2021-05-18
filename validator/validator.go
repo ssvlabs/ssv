@@ -35,7 +35,7 @@ type Validator struct {
 	logger *zap.Logger
 	Share  *storage.Share
 	//ibftStorage                collections.Iibft
-	ethNetwork core.Network
+	ethNetwork                 core.Network
 	beacon                     beacon.Beacon
 	ibfts                      map[beacon.Role]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
@@ -66,6 +66,7 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 		Share:                      opt.Share,
 		signatureCollectionTimeout: opt.SignatureCollectionTimeout,
 		slotQueue:                  opt.SlotQueue,
+		network:                    opt.Network,
 		ibfts:                      ibfts,
 	}
 }

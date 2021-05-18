@@ -18,8 +18,9 @@ type BadgerDb struct {
 func New(options basedb.Options) (basedb.IDb, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
+
 	opt := badger.DefaultOptions(options.Path)
-	if options.Type == "memory" {
+	if options.Type == "badger-memory" {
 		opt.InMemory = true
 		opt.Dir = ""
 		opt.ValueDir = ""
@@ -66,8 +67,8 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, error) {
 }
 
 
-// GetAllByBucket return all array of Obj for all keys under specified prefix(bucket)
-func (b *BadgerDb) GetAllByBucket(prefix []byte) ([]basedb.Obj, error) {
+// GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
+func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	var res []basedb.Obj
 	var err error
 	err = b.db.View(func(txn *badger.Txn) error {

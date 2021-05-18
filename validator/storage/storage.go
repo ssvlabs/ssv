@@ -13,6 +13,7 @@ import (
 type ICollection interface {
 	LoadFromConfig(options LocalShareOptions) error
 	SaveValidatorShare(share *Share) error
+	GetValidatorsShare(key []byte) (*Share, error)
 	GetAllValidatorsShare() ([]*Share, error)
 }
 
@@ -24,10 +25,10 @@ type CollectionOptions struct {
 
 // Local share options - used to load validator share from config
 type LocalShareOptions struct {
-	NodeID    uint64            `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
-	PublicKey string            `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
-	ShareKey  string            `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
-	Committee map[string]uint64 `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
+	NodeID    uint64         `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
+	PublicKey string         `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
+	ShareKey  string         `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
+	Committee map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 }
 
 // Collection struct
@@ -74,16 +75,16 @@ func (s *Collection) LoadFromConfig(options LocalShareOptions) error {
 		ibftCommittee := make(map[uint64]*proto.Node)
 
 		for pk, id := range options.Committee {
-			ibftCommittee[id] = &proto.Node{
-				IbftId: id,
+			s.logger.Info("ddd", zap.String("pk", pk), zap.Int("id", id))
+			ibftCommittee[uint64(id)] = &proto.Node{
+				IbftId: uint64(id),
 				Pk:     _getBytesFromHex(pk),
 			}
-			if id == options.NodeID{
+			if uint64(id) == options.NodeID {
 				ibftCommittee[options.NodeID].Pk = shareKey.GetPublicKey().Serialize()
 				ibftCommittee[options.NodeID].Sk = shareKey.Serialize()
 			}
 		}
-
 
 		validator := Share{
 			NodeID:    options.NodeID,
@@ -91,6 +92,7 @@ func (s *Collection) LoadFromConfig(options LocalShareOptions) error {
 			ShareKey:  shareKey,
 			Committee: ibftCommittee,
 		}
+		s.logger.Info(validator.ShareKey.SerializeToHexStr())
 		err = s.SaveValidatorShare(&validator)
 	}
 	if err == nil {
@@ -119,7 +121,7 @@ func (s *Collection) GetValidatorsShare(key []byte) (*Share, error) {
 
 // GetAllValidatorsShare returns ALL validators shares from db
 func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
-	objs, err := s.db.GetAllByBucket(s.prefix)
+	objs, err := s.db.GetAllByCollection(s.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
 	}

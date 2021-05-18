@@ -3,8 +3,8 @@ package ibft
 import (
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -37,9 +37,9 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: FirstInstanceIdentifier(),
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.ValidatorShare{
+				ValidatorShare: storage.Share{
 					NodeID:      1,
-					ValidatorPK: validatorPk,
+					PublicKey: validatorPk,
 					ShareKey:    sk,
 					Committee:   nil,
 				},
@@ -54,9 +54,9 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.ValidatorShare{
+				ValidatorShare: storage.Share{
 					NodeID:      1,
-					ValidatorPK: validatorPk,
+					PublicKey: validatorPk,
 					ShareKey:    sk,
 					Committee:   nil,
 				},
@@ -71,9 +71,9 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.ValidatorShare{
+				ValidatorShare: storage.Share{
 					NodeID:      1,
-					ValidatorPK: validatorPk,
+					PublicKey: validatorPk,
 					ShareKey:    sk,
 					Committee:   nil,
 				},
@@ -88,9 +88,9 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.ValidatorShare{
+				ValidatorShare: storage.Share{
 					NodeID:      1,
-					ValidatorPK: validatorPk,
+					PublicKey: validatorPk,
 					ShareKey:    sk,
 					Committee:   nil,
 				},
@@ -124,9 +124,9 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.ValidatorShare{
+				ValidatorShare: storage.Share{
 					NodeID:      1,
-					ValidatorPK: validatorPk,
+					PublicKey: validatorPk,
 					ShareKey:    sk,
 					Committee:   nil,
 				},
@@ -148,9 +148,9 @@ func TestCanStartNewInstance(t *testing.T) {
 				PrevInstance: []byte{5, 5, 5, 5},
 				Identifier:   []byte{1, 2, 3, 4},
 				Duty: nil,
-				ValidatorShare: collections.ValidatorShare{
+				ValidatorShare: storage.Share{
 					NodeID:      1,
-					ValidatorPK: validatorPk,
+					PublicKey: validatorPk,
 					ShareKey:    sk,
 					Committee:   nil,
 				},

@@ -17,7 +17,7 @@ type ControllerOptions struct {
 	Context                    context.Context
 	DB                         *basedb.IDb
 	Logger                     *zap.Logger
-	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"DUTY_LIMIT" env-default:"5" env-description:"Timeout for signature collection after consensus"`
+	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5" env-description:"Timeout for signature collection after consensus"`
 	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
 	Beacon                     *beacon.Beacon
@@ -59,6 +59,7 @@ func NewController(options ControllerOptions) IController {
 		slotQueue:                  options.SlotQueue,
 		beacon:                     *options.Beacon,
 		ibftStorage:                ibftStorage,
+		network:                    options.Network,
 	}
 
 	return &controller

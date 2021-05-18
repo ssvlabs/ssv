@@ -35,7 +35,7 @@ type Options struct {
 	// max slots for duty to wait
 	//TODO switch to time frame?
 	// genesis epoch
-	ValidatorOptions *validator.ControllerOptions `yaml:"ValidatorOptions"`
+	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 }
 
 // ssvNode implements Node interface
@@ -57,18 +57,19 @@ type ssvNode struct {
 
 // New is the constructor of ssvNode
 func New(opts Options) Node {
+	slotQueue:= slotqueue.New(*opts.ETHNetwork)
+	opts.ValidatorOptions.SlotQueue = slotQueue
 	ssv := &ssvNode{
 		context:             opts.Context,
 		logger:              opts.Logger,
 		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
-		validatorController: validator.NewController(*opts.ValidatorOptions),
+		validatorController: validator.NewController(opts.ValidatorOptions),
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
 		// TODO do we really need to pass the whole object or just SlotDurationSec
-		slotQueue: slotqueue.New(*opts.ETHNetwork),
+		slotQueue: slotQueue,
 	}
-
 	return ssv
 
 	//return &ssvNode{

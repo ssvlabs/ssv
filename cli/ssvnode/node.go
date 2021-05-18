@@ -3,6 +3,7 @@ package ssvnode
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -14,14 +15,17 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
-
-	"github.com/bloxapp/ssv/cli/flags"
 )
 
 type Config struct {
 	config.GlobalConfig `yaml:"global"`
 	DBOptions           basedb.Options `yaml:"db"`
 	SSVOptions          node.Options   `yaml:"ssv"`
+	Network             string         `yaml:"Network"  env-default:"pyrmont"`
+	DiscoveryType       string         `yaml:"DiscoveryType"  env-default:"mdns"`
+	BeaconNodeAddr      string         `yaml:"BeaconNodeAddr"  env-default:"eth2-4000-prysm-ext.stage.bloxinfra.com:80"`
+	TcpPort             int         `yaml:"TcpPort" env-default:"13000"`
+	UdpPort             int         `yaml:"UdpPort" env-default:"12000"`
 }
 
 var cfg Config
@@ -48,47 +52,51 @@ var StartNodeCmd = &cobra.Command{
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 
 		// TODO Not refactored yet Start:
-		beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
-		if err != nil {
-			Logger.Fatal("failed to get beacon node address flag value", zap.Error(err))
-		}
-		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
-		if err != nil {
-			Logger.Fatal("failed to get node ID flag value", zap.Error(err))
-		}
-		logger := Logger.With(zap.Uint64("node_id", nodeID))
+		//beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
+		//if err != nil {
+		//	Logger.Fatal("failed to get beacon node address flag value", zap.Error(err))
+		//}
+		beaconAddr := cfg.BeaconNodeAddr
+		//nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
+		//if err != nil {
+		//	Logger.Fatal("failed to get node ID flag value", zap.Error(err))
+		//}
+		//logger := Logger.With(zap.Uint64("node_id", nodeID))
 
-		eth2Network, err := flags.GetNetworkFlagValue(cmd)
-		if err != nil {
-			logger.Fatal("failed to get eth2Network flag value", zap.Error(err))
-		}
+		//eth2Network, err := flags.GetNetworkFlagValue(cmd)
+		//if err != nil {
+		//	Logger.Fatal("failed to get eth2Network flag value", zap.Error(err))
+		//}
+		eth2Network := core.NetworkFromString(cfg.Network)
 		beaconClient, err := prysmgrpc.New(cmd.Context(), Logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			Logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
-		discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
-		if err != nil {
-			logger.Fatal("failed to get val flag value", zap.Error(err))
-		}
-		hostDNS, err := flags.GetHostDNSFlagValue(cmd)
-		if err != nil {
-			logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
-		}
+		//discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
+		//if err != nil {
+		//	logger.Fatal("failed to get val flag value", zap.Error(err))
+		//}
+		discoveryType := cfg.DiscoveryType
+		//hostDNS, err := flags.GetHostDNSFlagValue(cmd)
+		//if err != nil {
+		//	logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
+		//}
 
-		hostAddress, err := flags.GetHostAddressFlagValue(cmd)
-		if err != nil {
-			logger.Fatal("failed to get hostAddress key flag value", zap.Error(err))
-		}
+		//hostAddress, err := flags.GetHostAddressFlagValue(cmd)
+		//if err != nil {
+		//	logger.Fatal("failed to get hostAddress key flag value", zap.Error(err))
+		//}
 
-		tcpPort, err := flags.GetTCPPortFlagValue(cmd)
-		if err != nil {
-			Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
-		}
-		udpPort, err := flags.GetUDPPortFlagValue(cmd)
-		if err != nil {
-			Logger.Fatal("failed to get udp port flag value", zap.Error(err))
-		}
-
+		//tcpPort, err := flags.GetTCPPortFlagValue(cmd)
+		//if err != nil {
+		//	Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
+		//}
+		tcpPort := cfg.TcpPort
+		//udpPort, err := flags.GetUDPPortFlagValue(cmd)
+		//if err != nil {
+		//	Logger.Fatal("failed to get udp port flag value", zap.Error(err))
+		//}
+		udpPort := cfg.UdpPort
 		p2pCfg := p2p.Config{
 			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
@@ -102,12 +110,12 @@ var StartNodeCmd = &cobra.Command{
 			},
 			UDPPort:     udpPort,
 			TCPPort:     tcpPort,
-			HostDNS:     hostDNS,
-			HostAddress: hostAddress,
+			HostDNS:     "",
+			HostAddress: "",
 		}
-		network, err := p2p.New(cmd.Context(), logger, &p2pCfg)
+		network, err := p2p.New(cmd.Context(), Logger, &p2pCfg)
 		if err != nil {
-			logger.Fatal("failed to create network", zap.Error(err))
+			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
 		// end Non refactored
@@ -168,9 +176,8 @@ var StartNodeCmd = &cobra.Command{
 		//})
 
 		if err := ssvNode.Start(); err != nil {
-			logger.Fatal("failed to start SSV node", zap.Error(err))
+			Logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
-
 
 		//
 		//Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
@@ -233,20 +240,21 @@ func _getBytesFromHex(str string) []byte {
 }
 
 func init() {
-	flags.AddPrivKeyFlag(StartNodeCmd)
-	flags.AddValidatorKeyFlag(StartNodeCmd)
-	flags.AddBeaconAddrFlag(StartNodeCmd)
-	flags.AddNetworkFlag(StartNodeCmd)
-	flags.AddDiscoveryFlag(StartNodeCmd)
-	flags.AddConsensusFlag(StartNodeCmd)
-	flags.AddNodeIDKeyFlag(StartNodeCmd)
-	flags.AddSignatureCollectionTimeFlag(StartNodeCmd)
-	flags.AddHostDNSFlag(StartNodeCmd)
-	flags.AddHostAddressFlag(StartNodeCmd)
-	flags.AddTCPPortFlag(StartNodeCmd)
-	flags.AddUDPPortFlag(StartNodeCmd)
-	flags.AddGenesisEpochFlag(StartNodeCmd)
-	flags.AddStoragePathFlag(StartNodeCmd)
+	//flags.AddPrivKeyFlag(StartNodeCmd)
+	//flags.AddValidatorKeyFlag(StartNodeCmd)
+	//flags.AddBeaconAddrFlag(StartNodeCmd)
+	//flags.AddNetworkFlag(StartNodeCmd)
+	//flags.AddDiscoveryFlag(StartNodeCmd)
+	//flags.AddConsensusFlag(StartNodeCmd)
+	//flags.AddNodeIDKeyFlag(StartNodeCmd)
+	//flags.AddSignatureCollectionTimeFlag(StartNodeCmd)
+	//flags.AddHostDNSFlag(StartNodeCmd)
+	//flags.AddHostAddressFlag(StartNodeCmd)
+	//flags.AddTCPPortFlag(StartNodeCmd)
+	//flags.AddUDPPortFlag(StartNodeCmd)
+	//flags.AddGenesisEpochFlag(StartNodeCmd)
+	//flags.AddStoragePathFlag(StartNodeCmd)
 
 	//RootCmd.AddCommand(startNodeCmd)
+	config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
