@@ -6,18 +6,20 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
+	"time"
 )
 
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // Peer list must not be nil or empty if stream is nil.
 // returns a stream closed for writing
-func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peers []peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
+func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
 	if stream == nil {
-		if len(peers) == 0 {
-			return nil, errors.New("peer list is empty or nil")
+		if len(peer) == 0 {
+			return nil, errors.New("peer ID nil")
 		}
 
-		s, err := n.host.NewStream(n.ctx, peers[0], syncStreamProtocol)
+		s, err := n.host.NewStream(n.ctx, peer, syncStreamProtocol)
 		if err != nil {
 			return nil, err
 		}
@@ -42,10 +44,10 @@ func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peers []peer.ID,
 	return stream, nil
 }
 
-// BroadcastSyncMessage broadcasts a sync message to peers.
-// If peer list is nil, broadcasts to all.
-func (n *p2pNetwork) GetHighestDecidedInstance(peers []peer.ID, msg *network.SyncMessage) (*network.Message, error) {
-	stream, err := n.sendSyncMessage(nil, peers, msg)
+// sendAndReadResponse sends a reques sync msg, waits to a response and parses it. Includes timeout as well
+func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
+	var err error
+	stream, err := n.sendSyncMessage(nil, peer, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not send sync msg")
 	}
@@ -57,18 +59,57 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peers []peer.ID, msg *network.Syn
 		}
 	}()
 
-	res, err := readMessageData(stream)
-	if err != nil {
-		err = errors.Wrap(err, "failed to read response for sync message")
+	var resMsg *network.Message
+	var resMsgLock sync.Mutex
+	go func() {
+		res, resErr := readMessageData(stream)
+
+		resMsgLock.Lock()
+		defer resMsgLock.Unlock()
+		resMsg = res
+		err = resErr
+	}()
+
+	time.Sleep(n.cfg.RequestTimeout)
+
+	resMsgLock.Lock()
+	defer resMsgLock.Unlock()
+	if resMsg == nil { // no response
+		err = errors.New("no response for sync request")
 	}
 
-	return res, err
+	return resMsg, err
+}
+
+// BroadcastSyncMessage broadcasts a sync message to peers.
+// If peer list is nil, broadcasts to all.
+func (n *p2pNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	res, err := n.sendAndReadSyncResponse(peer, msg)
+	if err != nil {
+		return nil, err
+	}
+	return res.SyncMessage, nil
 }
 
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().String()
-	_, err := n.sendSyncMessage(stream, nil, msg)
+	_, err := n.sendSyncMessage(stream, "", msg)
+	return err
+}
+
+// GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
+func (n *p2pNetwork) GetDecidedByRange(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	res, err := n.sendAndReadSyncResponse(peer, msg)
+	if err != nil {
+		return nil, err
+	}
+	return res.SyncMessage, nil
+}
+
+func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	msg.FromPeerID = n.host.ID().String()
+	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 	"log"
 	"os"
+	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
@@ -116,6 +117,16 @@ var startNodeCmd = &cobra.Command{
 			logger.Fatal("failed to set hex private key", zap.Error(err))
 		}
 
+		maxBatch, err := flags.GetMaxNetworkResponseBatchValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get max batch flag value", zap.Error(err))
+		}
+
+		reqTimeout, err := flags.GetNetworkRequestTimeoutValue(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get network req timeout flag value", zap.Error(err))
+		}
+
 		// init storage
 		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPk, shareKey, nodeID)
 
@@ -148,6 +159,10 @@ var startNodeCmd = &cobra.Command{
 			TCPPort:     tcpPort,
 			HostDNS:     hostDNS,
 			HostAddress: hostAddress,
+
+			// flags
+			MaxBatchResponse: maxBatch,
+			RequestTimeout:   time.Second * time.Duration(reqTimeout),
 		}
 		network, err := p2p.New(cmd.Context(), logger, &cfg)
 		if err != nil {
@@ -230,6 +245,8 @@ func init() {
 	flags.AddGenesisEpochFlag(startNodeCmd)
 	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
+	flags.AddMaxNetworkResponseBatchFlag(startNodeCmd)
+	flags.AddNetworkRequestTimeoutFlag(startNodeCmd)
 
 	RootCmd.AddCommand(startNodeCmd)
 }

@@ -26,6 +26,8 @@ const (
 	genesisEpoch         = "genesis-epoch"
 	loggerLevel          = "logger-level"
 	storagePath          = "storage-path"
+	maxNetBatch          = "network-max-batch"
+	netReqTimeout        = "network-req-timeout"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -206,4 +208,26 @@ func GetStoragePathValue(c *cobra.Command) (string, error) {
 // AddStoragePathFlag adds the storage path flag to the command
 func AddStoragePathFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, storagePath, "./data/db", "storage path", false)
+}
+
+// GetMaxNetworkResponseBatchValue gets the max network response batch flag from the command
+func GetMaxNetworkResponseBatchValue(c *cobra.Command) (uint64, error) {
+	val, err := c.Flags().GetUint64(maxNetBatch)
+	return val, err
+}
+
+// AddMaxNetworkResponseBatchFlag adds the max network response batch flag to the command
+func AddMaxNetworkResponseBatchFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, maxNetBatch, 25, "maximum number of batched return objects in a network response", false)
+}
+
+// GetNetworkRequestTimeoutValue gets the network request timeout (in seconds) flag from the command
+func GetNetworkRequestTimeoutValue(c *cobra.Command) (uint64, error) {
+	val, err := c.Flags().GetUint64(netReqTimeout)
+	return val, err
+}
+
+// AddNetworkRequestTimeoutFlag adds the network request timeout (in seconds) flag to the command
+func AddNetworkRequestTimeoutFlag(c *cobra.Command) {
+	cliflag.AddPersistentIntFlag(c, netReqTimeout, 5, "P2P network request timeout (in seconds)", false)
 }

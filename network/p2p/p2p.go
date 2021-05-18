@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"net"
 	"sync"
 	"time"
@@ -48,28 +49,28 @@ type listener struct {
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx              context.Context
-	cfg              *Config
-	listenersLock    sync.Locker
-	dv5Listener      iListener
-	listeners        []listener
-	logger           *zap.Logger
-	privKey          *ecdsa.PrivateKey
-	peers            *peers.Status
-	host             p2pHost.Host
-	pubsub           *pubsub.PubSub
+	ctx           context.Context
+	cfg           *Config
+	listenersLock sync.Locker
+	dv5Listener   iListener
+	listeners     []listener
+	logger        *zap.Logger
+	privKey       *ecdsa.PrivateKey
+	peers         *peers.Status
+	host          p2pHost.Host
+	pubsub        *pubsub.PubSub
 }
 
 // New is the constructor of p2pNetworker
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	// init empty topics map
-	cfg.Topics =  make(map[string]*pubsub.Topic)
+	cfg.Topics = make(map[string]*pubsub.Topic)
 
 	n := &p2pNetwork{
-		ctx:              ctx,
-		cfg:              cfg,
-		listenersLock:    &sync.Mutex{},
-		logger:           logger,
+		ctx:           ctx,
+		cfg:           cfg,
+		listenersLock: &sync.Mutex{},
+		logger:        logger,
 	}
 
 	var _ipAddr net.IP
@@ -179,7 +180,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.handleStream()
 
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		for _, topic := range n.cfg.Topics{
+		for _, topic := range n.cfg.Topics {
 			n.logger.Info("topic peers status", zap.Any("peers", topic.ListPeers()))
 		}
 	})
@@ -187,7 +188,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error{
+func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
 	if err != nil {
 		return errors.Wrap(err, "failed to join to Topics")
@@ -250,13 +251,13 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	}(sub)
 }
 
-// GetTopic return topic by validator public key
-func (n *p2pNetwork) GetTopic(msg *proto.SignedMessage) (*pubsub.Topic, error) {
-	if msg.Message == nil || msg.Message.ValidatorPk == nil{
-		return nil, errors.New("missing Message or ValidatorPk in signMsg")
+// getTopic return topic by validator public key
+func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
+	if validatorPK == nil {
+		return nil, errors.New("ValidatorPk is nil in signMsg")
 	}
 	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(msg.Message.GetValidatorPk()); err != nil{
+	if err := pk.Deserialize(validatorPK); err != nil {
 		return nil, errors.Wrap(err, "failed to deserialize publicKey")
 	}
 	topic := pk.SerializeToHexStr()
@@ -264,6 +265,15 @@ func (n *p2pNetwork) GetTopic(msg *proto.SignedMessage) (*pubsub.Topic, error) {
 		return nil, errors.New("topic is not exist or registered")
 	}
 	return n.cfg.Topics[topic], nil
+}
+
+// AllPeers returns all connected peers for a validator PK
+func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]peer.ID, error) {
+	topic, err := n.getTopic(validatorPk)
+	if err != nil {
+		return []peer.ID{}, err
+	}
+	return topic.ListPeers(), nil
 }
 
 // getTopicName return formatted topic name

@@ -69,6 +69,13 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	msg, err = instance.CommittedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.SignerIds)
+
+	// test verification
+	params := &proto.InstanceParams{
+		ConsensusParams: proto.DefaultConsensusParams(),
+		IbftCommittee:   nodes,
+	}
+	require.NoError(t, params.VerifySignedMessage(msg))
 }
 
 func TestCommitPipeline(t *testing.T) {
