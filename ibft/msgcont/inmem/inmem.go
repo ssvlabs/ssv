@@ -14,7 +14,7 @@ type messagesContainer struct {
 	messagesByRoundAndValue map[uint64]map[string][]*proto.SignedMessage // map[round]map[valueHex]msgs
 	exitingMsgSigners       map[uint64]map[uint64]bool
 	quorumThreshold         uint64
-	lock                    sync.Mutex
+	lock                    sync.RWMutex
 }
 
 // New is the constructor of MessagesContainer
@@ -29,14 +29,14 @@ func New(quorumThreshold uint64) msgcont.MessageContainer {
 
 // ReadOnlyMessagesByRound returns messagesByRound by the given round
 func (c *messagesContainer) ReadOnlyMessagesByRound(round uint64) []*proto.SignedMessage {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	return c.messagesByRound[round]
 }
 
 func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round uint64, value []byte) []*proto.SignedMessage {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	valueHex := hex.EncodeToString(value)
 
 	if _, found := c.messagesByRoundAndValue[round]; !found {
