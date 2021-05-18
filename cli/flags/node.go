@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
-	"time"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )

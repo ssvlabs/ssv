@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/shared/params"
 	"log"
 	"os"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
+	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
