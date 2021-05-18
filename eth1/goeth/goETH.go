@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -91,39 +92,13 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 					e.contractEvent.Data = operatorAddedEvent
 
 				case "ValidatorAdded":
-					validatorAddedEvent := eth1.ValidatorAddedEvent{}
-					err = contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventType.Name, vLog.Data)
+					err := e.ProcessValidatorAddedEvent(vLog.Data, contractAbi, eventName)
 					if err != nil {
-						e.logger.Error("Failed to unpack ValidatorAdded event", zap.Error(err))
-						continue
-					}
-
-					isEventBelongsToOperator := false
-
-					e.logger.Debug("ValidatorAdded Event",
-						zap.String("Validator PublicKey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
-						zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
-					for i := range validatorAddedEvent.OessList {
-						validatorShare := validatorAddedEvent.OessList[i]
-						e.logger.Debug("Validator Share",
-							zap.Any("Index", validatorShare.Index),
-							zap.String("Operator PubKey", hex.EncodeToString(validatorShare.OperatorPublicKey)),
-							zap.String("Share PubKey", hex.EncodeToString(validatorShare.SharedPublicKey)),
-							zap.String("Encrypted Key", hex.EncodeToString(validatorShare.EncryptedKey)))
-
-						if strings.EqualFold(hex.EncodeToString(validatorShare.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
-							isEventBelongsToOperator = true
-						}
-					}
-
-					if isEventBelongsToOperator {
-						e.contractEvent.Data = validatorAddedEvent
-						e.contractEvent.NotifyAll()
+						e.logger.Error("Failed to process ValidatorAdded event", zap.Error(err))
 					}
 
 				default:
 					e.logger.Debug("Unknown contract event is received")
-					continue
 				}
 			}
 		}
@@ -135,13 +110,37 @@ func (e *eth1GRPC) GetContractEvent() *eth1.ContractEvent {
 	return e.contractEvent
 }
 
-// deleteEmpty TODO need this func?
-//func deleteEmpty(s []string) []string {
-//	var r []string
-//	for _, str := range s {
-//		if str != "" {
-//			r = append(r, str)
-//		}
-//	}
-//	return r
-//}
+func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, eventName string) error {
+	validatorAddedEvent := eth1.ValidatorAddedEvent{}
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventName, data)
+	if err != nil {
+		return errors.Wrap(err, "Failed to unpack ValidatorAdded event")
+	}
+
+	isEventBelongsToOperator := false
+
+	e.logger.Debug("ValidatorAdded Event",
+		zap.String("Validator PublicKey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
+		zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
+	for i := range validatorAddedEvent.OessList {
+		validatorShare := validatorAddedEvent.OessList[i]
+		e.logger.Debug("Validator Share",
+			zap.Any("Index", validatorShare.Index),
+			zap.String("Operator PubKey", hex.EncodeToString(validatorShare.OperatorPublicKey)),
+			zap.String("Share PubKey", hex.EncodeToString(validatorShare.SharedPublicKey)),
+			zap.String("Encrypted Key", hex.EncodeToString(validatorShare.EncryptedKey)))
+
+		if strings.EqualFold(hex.EncodeToString(validatorShare.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+			isEventBelongsToOperator = true
+		}
+	}
+
+	if isEventBelongsToOperator {
+		e.contractEvent.Data = validatorAddedEvent
+		e.contractEvent.NotifyAll()
+	} else {
+		e.logger.Debug("ValidatorAdded Event doesn't belong to operator")
+	}
+
+	return nil
+}
