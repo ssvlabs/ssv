@@ -51,42 +51,41 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 
 	v.logger.Info("Got log from contract", zap.Any("log", data))
 
-	if validatorEvent, ok := data.(eth1.ValidatorEvent); ok {
-		validator := ValidatorShare{}
+	if validatorAddedEvent, ok := data.(eth1.ValidatorAddedEvent); ok {
+		validatorShare := ValidatorShare{}
 		ibftCommittee := map[uint64]*proto.Node{}
-		oessList := validatorEvent.OessList
-		for i := range oessList {
-			nodeID := oessList[i].Index.Uint64() + 1
+		for i := range validatorAddedEvent.OessList {
+			oess := validatorAddedEvent.OessList[i]
+			nodeID := oess.Index.Uint64() + 1
 			ibftCommittee[nodeID] = &proto.Node{
 				IbftId: nodeID,
-				Pk:     oessList[i].SharePubKey,
+				Pk:     oess.SharedPublicKey,
 			}
-			if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
-				validator.NodeID = nodeID
+			if strings.EqualFold(hex.EncodeToString(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+				validatorShare.NodeID = nodeID
 
-				validator.ValidatorPK = &bls.PublicKey{}
-				if err := validator.ValidatorPK.Deserialize(validatorEvent.ValidatorPubKey); err != nil {
+				validatorShare.ValidatorPK = &bls.PublicKey{}
+				if err := validatorShare.ValidatorPK.Deserialize(validatorAddedEvent.PublicKey); err != nil {
 					v.logger.Error("failed to deserialize share public key", zap.Error(err))
 					return
 				}
 
 				// TODO: decrypt share private key using operator private key
-				validator.ShareKey = &bls.SecretKey{}
-				if err := validator.ShareKey.Deserialize(oessList[i].EncryptedKey); err != nil {
+				validatorShare.ShareKey = &bls.SecretKey{}
+				if err := validatorShare.ShareKey.Deserialize(oess.EncryptedKey); err != nil {
 					v.logger.Error("failed to deserialize share private key", zap.Error(err))
 					return
 				}
-				ibftCommittee[nodeID].Sk = oessList[i].EncryptedKey
-
+				ibftCommittee[nodeID].Sk = oess.EncryptedKey
 			}
 		}
-		validator.Committee = ibftCommittee
-		if err := v.SaveValidatorShare(&validator); err != nil {
+		validatorShare.Committee = ibftCommittee
+		if err := v.SaveValidatorShare(&validatorShare); err != nil {
 			v.logger.Error("failed to save validator share", zap.Error(err))
 			return
 		}
 
-		v.dbEvent.Data = validator
+		v.dbEvent.Data = validatorShare
 		v.dbEvent.NotifyAll()
 	}
 }

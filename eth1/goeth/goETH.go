@@ -98,48 +98,26 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 						continue
 					}
 
-					oessAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().OessABI))
-					if err != nil {
-						e.logger.Fatal("Failed to parse Oess ABI interface", zap.Error(err))
-						continue
-					}
-
-					oessListEncoded := deleteEmpty(strings.Split(hex.EncodeToString(validatorAddedEvent.Oess), params.SsvConfig().OessSeparator))
-					oessList := make([]eth1.Oess, len(oessListEncoded))
 					isEventBelongsToOperator := false
 
 					e.logger.Debug("ValidatorAdded Event",
-						zap.String("Validator PubKey", hex.EncodeToString(validatorAddedEvent.Pubkey)),
+						zap.String("Validator PublicKey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
 						zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
-					for i := range oessListEncoded {
-						oessEncoded, err := hex.DecodeString(oessListEncoded[i])
-						if err != nil {
-							e.logger.Error("Failed to HEX decode Oess", zap.Error(err))
-							continue
-						}
-
-						err = oessAbi.UnpackIntoInterface(&oessList[i], "tuple", oessEncoded)
-						if err != nil {
-							e.logger.Error("Failed to unpack Oess struct", zap.Error(err))
-							continue
-						}
-
+					for i := range validatorAddedEvent.OessList {
+						validatorShare := validatorAddedEvent.OessList[i]
 						e.logger.Debug("Validator Share",
-							zap.Any("Index", oessList[i].Index),
-							zap.String("Operator PubKey", hex.EncodeToString(oessList[i].OperatorPubKey)),
-							zap.String("Share PubKey", hex.EncodeToString(oessList[i].SharePubKey)),
-							zap.String("Encrypted Key", hex.EncodeToString(oessList[i].EncryptedKey)))
+							zap.Any("Index", validatorShare.Index),
+							zap.String("Operator PubKey", hex.EncodeToString(validatorShare.OperatorPublicKey)),
+							zap.String("Share PubKey", hex.EncodeToString(validatorShare.SharedPublicKey)),
+							zap.String("Encrypted Key", hex.EncodeToString(validatorShare.EncryptedKey)))
 
-						if strings.EqualFold(hex.EncodeToString(oessList[i].OperatorPubKey), params.SsvConfig().OperatorPublicKey) {
+						if strings.EqualFold(hex.EncodeToString(validatorShare.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
 							isEventBelongsToOperator = true
 						}
 					}
 
 					if isEventBelongsToOperator {
-						e.contractEvent.Data = eth1.ValidatorEvent{
-							ValidatorPubKey: validatorAddedEvent.Pubkey,
-							OessList:        oessList,
-						}
+						e.contractEvent.Data = validatorAddedEvent
 						e.contractEvent.NotifyAll()
 					}
 

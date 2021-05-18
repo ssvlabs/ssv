@@ -18,17 +18,17 @@ type ContractEvent struct {
 
 // Oess struct
 type Oess struct {
-	OperatorPubKey []byte
-	Index          *big.Int
-	SharePubKey    []byte
-	EncryptedKey   []byte
+	Index             *big.Int
+	OperatorPublicKey []byte
+	SharedPublicKey   []byte
+	EncryptedKey      []byte
 }
 
 // ValidatorAddedEvent struct
 type ValidatorAddedEvent struct {
-	Pubkey       []byte
+	PublicKey    []byte
 	OwnerAddress common.Address
-	Oess         []byte
+	OessList     []Oess
 }
 
 // OperatorAddedEvent struct
@@ -36,12 +36,6 @@ type OperatorAddedEvent struct {
 	Name           string
 	Pubkey         []byte
 	PaymentAddress common.Address
-}
-
-// ValidatorEvent struct
-type ValidatorEvent struct {
-	ValidatorPubKey []byte
-	OessList        []Oess
 }
 
 // NewContractEvent create new event subject
