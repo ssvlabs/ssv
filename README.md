@@ -42,6 +42,7 @@ $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {private
 ```
    NETWORK=pyrmont
    DISCOVERY_TYPE=<mdns for local network, empty for discov5 remote>
+   STORAGE_PATH=<example ./data/db/node_1/2/3/4>
    BOOT_NODE_EXTERNAL_IP=
    BOOT_NODE_PRIVATE_KEY=
    BEACON_NODE_ADDR= <can use eth2-4000-prysm-ext.stage.bloxinfra.com:80>
