@@ -13,3 +13,14 @@ type BaseObserver struct {
 	ID     string
 	Logger zap.Logger
 }
+
+// InformObserver informs observer
+func (b BaseObserver) InformObserver(i interface{}) {
+	b.Logger.Info("InformObserver")
+}
+
+// GetObserverID get observer ID
+func (b BaseObserver) GetObserverID() string {
+	return "BaseObserver"
+}
+
