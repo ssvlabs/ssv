@@ -1,4 +1,4 @@
-package operatorkeys
+package rsaencryption
 
 import (
 	"encoding/base64"

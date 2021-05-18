@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/utils/operatorkeys"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // generateOperatorKeysCmd is the command to generate operator private/public keys
@@ -16,7 +16,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := logex.Build(RootCmd.Short, zapcore.DebugLevel)
 
-		pk, sk, err := operatorkeys.GenerateKeys()
+		pk, sk, err := rsaencryption.GenerateKeys()
 		if err != nil{
 			logger.Fatal("Failed to generate operator keys", zap.Error(err))
 		}

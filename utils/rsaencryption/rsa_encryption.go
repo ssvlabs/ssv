@@ -1,4 +1,4 @@
-package operatorkeys
+package rsaencryption
 
 import (
 	"crypto/rand"
@@ -16,7 +16,7 @@ func GenerateKeys() ([]byte, []byte, error) {
 	// generate random private key (secret)
 	sk, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to generate operator private key")
+		return nil, nil, errors.Wrap(err, "Failed to generate private key")
 	}
 	// retrieve public key from the newly generated secret
 	pk := &sk.PublicKey
@@ -45,7 +45,7 @@ func GenerateKeys() ([]byte, []byte, error) {
 func DecodeKey(skPemBase64 string, hashBase64 string) (string, error) {
 	sk, err := convertPemToPrivateKey(skPemBase64)
 	if err != nil{
-		return "", errors.Wrap(err, "Failed to decrypt operator private key")
+		return "", errors.Wrap(err, "Failed to decrypt private key")
 	}
 	return decryptHash(sk, hashBase64)
 }
@@ -63,12 +63,12 @@ func convertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
 		var err error
 		b, err = x509.DecryptPEMBlock(block, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "Failed to decrypt operator private key")
+			return nil, errors.Wrap(err, "Failed to decrypt private key")
 		}
 	}
 	parsedSk, err := x509.ParsePKCS1PrivateKey(b)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to parse operator private key")
+		return nil, errors.Wrap(err, "Failed to parse private key")
 	}
 	return parsedSk, nil
 }
