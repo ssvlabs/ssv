@@ -48,17 +48,18 @@ type Node interface {
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	validatorStorage collections.IValidatorStorage
-	ibftStorage      collections.Iibft
-	ethNetwork       core.Network
-	network          network.Network
-	consensus        string
-	slotQueue        slotqueue.Queue
-	beacon           beacon.Beacon
-	logger           *zap.Logger
-	validatorsMap    map[string]*validator.Validator
-	streamDuties     <-chan *ethpb.DutiesResponse_Duty
-	context          context.Context
+	validatorStorage  collections.IValidatorStorage
+	ibftStorage       collections.Iibft
+	ethNetwork        core.Network
+	network           network.Network
+	consensus         string
+	slotQueue         slotqueue.Queue
+	beacon            beacon.Beacon
+	logger            *zap.Logger
+	validatorsMap     map[string]*validator.Validator
+	streamDuties      <-chan *ethpb.DutiesResponse_Duty
+	pubkeysUpdateChan chan bool
+	context           context.Context
 
 	// timeouts
 	signatureCollectionTimeout time.Duration
@@ -128,6 +129,9 @@ func (n *ssvNode) Start() error {
 
 	for {
 		select {
+		case <-n.pubkeysUpdateChan:
+			n.logger.Debug("public keys updated, restart stream duties listener")
+			continue
 		case duty := <-n.streamDuties:
 			go func(duty *ethpb.DutiesResponse_Duty) {
 				slots := collectSlots(duty)
@@ -171,8 +175,6 @@ func (n *ssvNode) Start() error {
 			}(duty)
 		}
 	}
-
-	return nil
 }
 
 // setupValidators for each validatorShare with proper ibft wrappers
@@ -214,6 +216,12 @@ func (n *ssvNode) startStreamDuties() {
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
 	}
+	if n.pubkeysUpdateChan == nil {
+		n.pubkeysUpdateChan = make(chan bool) // first init
+	} else {
+		n.pubkeysUpdateChan <- true // update stream duty listener in order to fetch newly added pubkeys
+	}
+
 	n.logger.Info("start streaming duties")
 }
 

@@ -135,12 +135,13 @@ func (e *eth1GRPC) GetContractEvent() *eth1.ContractEvent {
 	return e.contractEvent
 }
 
-func deleteEmpty(s []string) []string {
-	var r []string
-	for _, str := range s {
-		if str != "" {
-			r = append(r, str)
-		}
-	}
-	return r
-}
+// deleteEmpty TODO need this func?
+//func deleteEmpty(s []string) []string {
+//	var r []string
+//	for _, str := range s {
+//		if str != "" {
+//			r = append(r, str)
+//		}
+//	}
+//	return r
+//}
