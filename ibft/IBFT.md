@@ -36,8 +36,8 @@ _IBFT was first defined in EIP-650 and implemented in the_ [_Quorum blockchain_]
 - **Qcommit** : a private case of Q indicating a quorum of COMMIT messages, indicating that consensus has been reached.
 - **Qprepare** : a private case of Q indicating a quorum of PREPARE messages.
 - **Qrc** : a private case of Q indicating a quorum of ROUND-CHANGE messages.
-  Note that unlike in Frc (see below), in Qrc the r values of all messages must be the same; pr and pv, however, can be of different values (in such a case, the pr with the highest value is referred to as pr(max)).
-- **Frc** : indicates f+1 valid ROUND-CHANGE messages. In an Frc, unlike Qrc, the r values needn&#39;t be identical in all of the group&#39;s messages.
+  Note that unlike Frc (see below), in Qrc the r values of all messages must be the same; pr and pv, however, can be of different values (in such a case, the pr with the highest value is referred to as pr(max)).
+- **Frc** : indicates f+1 valid ROUND-CHANGE messages. In an Frc, unlike Qrc, the r values need not be identical in all of the group&#39;s messages.
 - **m** : message; there are four types of messages - PRE-PREPARE, PREPARE, COMMIT, ROUND-CHANGE.
 
 ### Consensus Instance
