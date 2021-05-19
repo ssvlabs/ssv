@@ -1,4 +1,5 @@
-#### Setting AWS server for operator ![ethereum](/docs/resources/blox_logo.png)
+![ethereum](/docs/resources/blox_logo.png)
+#### Setting AWS server for operator
 ##### Create a server of your choice and expose on ports 12000 UDP and 13000 TCP
  - In the search bar search for "ec2"
  - Launch new instance
