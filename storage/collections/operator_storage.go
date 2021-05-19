@@ -3,8 +3,10 @@ package collections
 import (
 	"crypto/rsa"
 	"encoding/base64"
-	"github.com/dgraph-io/badger"
+	"strings"
 
+	"github.com/dgraph-io/badger"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -92,7 +94,20 @@ func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 		return errors.Wrap(err, "failed to extract operator public key")
 	}
 	o.logger.Info("operator public key", zap.Any("key", operatorPublicKey))
-	params.SsvConfig().OperatorPublicKey = operatorPublicKey
+
+	inDef := `[{ "name" : "method", "type": "function", "inputs": [{"type": "string"}]}]`
+	inAbi, err := abi.JSON(strings.NewReader(inDef))
+	if err != nil {
+		return errors.Wrap(err, "failed to define ABI")
+	}
+
+	var packed []byte
+	packed, err = inAbi.Pack("method", operatorPublicKey)
+	if err != nil {
+		return errors.Wrap(err, "failed to pack operatorPublicKey")
+	}
+
+	params.SsvConfig().OperatorPublicKey = packed[4:]
 	return nil
 }
 
