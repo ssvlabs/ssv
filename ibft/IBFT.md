@@ -10,7 +10,7 @@ At a very high level, the protocol can be expressed across three phases:
 2. **PREPARE**
 3. **COMMIT**
 
-_IBFT was first defined in EIP-650 and implemented in the_ [_Quorum blockchain_](https://arxiv.org/pdf/2002.03613.pdf)_._
+_IBFT was first defined in EIP-650 and discussed at length in_ [_The Istanbul BFT Consensus Algorithm_](https://arxiv.org/pdf/2002.03613.pdf)_. Please refer to that paper for advanced reading._
 
 ### Terminology
 
@@ -36,7 +36,7 @@ _IBFT was first defined in EIP-650 and implemented in the_ [_Quorum blockchain_]
 - **Qcommit** : a private case of Q indicating a quorum of COMMIT messages, indicating that consensus has been reached.
 - **Qprepare** : a private case of Q indicating a quorum of PREPARE messages.
 - **Qrc** : a private case of Q indicating a quorum of ROUND-CHANGE messages.
-  Note that unlike Frc (see below), in Qrc the r values of all messages must be the same; pr and pv, however, can be of different values (in such a case, the pr with the highest value is referred to as pr(max)).
+  Note that unlike Frc (see below), in Qrc the r values of all messages must be the same; each pr and pv however can be of different values (if so, the pr with the highest value is referred to as pr(max)).
 - **Frc** : indicates f+1 valid ROUND-CHANGE messages. In an Frc, unlike Qrc, the r values need not be identical in all of the group&#39;s messages.
 - **m** : message; there are four types of messages - PRE-PREPARE, PREPARE, COMMIT, ROUND-CHANGE.
 
@@ -105,15 +105,15 @@ If a validator node receives a quorum of valid COMMIT messages before receiving 
 
 ##### ROUND-CHANGE
 
-If the time t(r) is reached before consensus is reached, the timer expires and the node broadcasts a ROUND-CHANGE message in order to advance the round from r to r+1. The content of a ROUND-CHANGE message sent by a node which current round is r is <ROUND-CHANGE, λ, r+1, pr, pv>, where pr indicates the highest round in which a quorum of PREPARE messages has been received, and pv indicates the value which was included in those PREPARE messages. After broadcasting this message, the node sets the timer to expire at time t(r+1) and waits for a quorum of valid ROUND-CHANGE messages (Qrc). If the node has never received a quorum of PREPARE messages for the instance λ, then pr and pv will be ⊥ (null).
+If the time t(r) is reached before consensus is reached, the timer expires and the node broadcasts a ROUND-CHANGE message in order to advance the round from r to r+1. The content of a ROUND-CHANGE message sent by a node (that’s current round is r) is <ROUND-CHANGE, λ, r+1, pr, pv>, where pr indicates the highest round in which a quorum of PREPARE messages has been received, and pv indicates the value which was included in those PREPARE messages. After broadcasting this message, the node sets the timer to expire at time t(r+1) and waits for a quorum of valid ROUND-CHANGE messages (Qrc). If the node has never received a quorum of PREPARE messages for the instance λ, then pr and pv will be ⊥ (null).
 \*Note - a ROUND-CHANGE message is considered valid if its format is correct and if r+1 is higher than the current round the recipient node is in. In addition, if pr≠⊥, then pr<r+1 must be true for the message to be valid.
-Important - while λ and r+1 must be identical across all messages in a Qrc, pr and pv can be of different values (in such a set, the pr with the highest value is referred to as pr(max)).
+Important - while λ and r+1 must be identical across all messages in a Qrc, each pr and pv can be of different values (in such a set, the pr with the highest value is referred to as pr(max)).
 
 Another event which triggers the node to broadcast a ROUND-CHANGE message is when receiving a set of f+1 valid ROUND-CHANGE messages (such a set is referred to as Frc) before the timer expires. In Frc, unlike Qrc, the r value in the set of f+1 messages can be different in each message, and the node that received the Frc will broadcast a ROUND-CHANGE message with the smallest r value among the r values of the Frc set (referred to as r(min)).
 
 Before broadcasting the PRE-PREPARE message of a new round, the new leader (see &quot;Leader Choosing&quot; section) must first perform justification on the quorum of ROUND-CHANGE messages Qrc. This is done by verifying that a quorum of valid PREPARE messages was indeed received in round r=pr(max), and that pr(max) is the highest round in which a quorum of PREPARE messages has been received in this instance. If pr=⊥ in all of the ROUND-CHANGE messages that should be justified, they are automatically justified.
 
-Following the justification of Qrc, the leader sets a new timer for the new round and broadcasts a new PRE-PREPARE message <PRE-PREPARE, λ, r (of the new round), inputValue>, in which inputValue=pv if pv≠⊥, and if pv=⊥ then inputValue is taken from the Eth2 node as in the first round. In case the Qrc contains messages with different pr and pv values, the pv that will be used is the one with the highest related pr (pr(max)).
+Following the justification of Qrc, the leader sets a new timer for the new round and broadcasts a new PRE-PREPARE message <PRE-PREPARE, λ, r (of the new round), inputValue>, in which inputValue=pv if pv≠⊥, and if pv=⊥ then inputValue is taken from the Eth2 node as in the first round. In case the Qrc contains messages with different pr and pv values, the pv used is the one with the highest related pr (pr(max)).
 
 The PRE-PREPARE messages should be justified by the nodes when received (note that if r=1, i.e., no round change has yet occurred, PRE-PREPARE does not require justification). This justification is performed by justifying the quorum of ROUND-CHANGE messages in the same way that the leader justified it before broadcasting the PRE-PREPARE. After the node justifies the PRE-PREPARE message, it also checks that it is valid in the same fashion as in the first round. If the PRE-PREPARE is justified and valid, the round continues normally as in the first round.
 
