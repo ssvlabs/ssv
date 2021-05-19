@@ -72,7 +72,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 				ValidatorIndex: 0,
 			}
 
-			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, []byte("id"), 0, test.role, duty)
+			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, 0, test.role, duty)
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
 				return
@@ -171,7 +171,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			for index, sig := range test.sigs {
 				err := validator.network.BroadcastSignature(&proto.SignedMessage{
 					Message: &proto.Message{
-						Lambda: []byte("id"),
+						Lambda:      []byte("id"),
 						ValidatorPk: pk.Serialize(),
 					},
 					Signature: sig,

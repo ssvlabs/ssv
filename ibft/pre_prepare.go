@@ -23,7 +23,7 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	)
 }
 
-// JustifyPrePrepare -- TODO
+// JustifyPrePrepare implements:
 // predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
 // 	return
 // 		round = 1

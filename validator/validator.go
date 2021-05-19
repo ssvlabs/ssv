@@ -93,7 +93,6 @@ func (v *Validator) Start() error {
 func (v *Validator) startSlotQueueListener() {
 	v.logger.Info("start listening slot queue")
 
-	prevIdentifier := ibft.FirstInstanceIdentifier()
 	for {
 		slot, duty, ok, err := v.slotQueue.Next(v.ValidatorShare.ValidatorPK.Serialize())
 		if err != nil {
@@ -105,7 +104,7 @@ func (v *Validator) startSlotQueueListener() {
 			v.logger.Debug("no duties for slot scheduled")
 			continue
 		}
-		go v.ExecuteDuty(v.ctx, prevIdentifier, slot, duty)
+		go v.ExecuteDuty(v.ctx, slot, duty)
 	}
 }
 

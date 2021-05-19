@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	// EntryNotFoundError is an error for a storage entry not found
 	EntryNotFoundError = "EntryNotFoundError"
 )
 

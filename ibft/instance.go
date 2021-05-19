@@ -278,11 +278,6 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	return nil
 }
 
-// Cleanup -- TODO: describe
-func (i *Instance) Cleanup() {
-	// TODO: Implement
-}
-
 /**
 "Timer:
 	In addition to the State variables, each correct process pi also maintains a timer represented by timeri,

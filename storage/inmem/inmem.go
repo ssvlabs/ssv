@@ -4,10 +4,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/bloxapp/ssv/storage"
+	"sync"
 )
 
 // inMemStorage implements storage.Storage interface
 type inMemStorage struct {
+	lock   sync.RWMutex
 	memory map[string]map[string][]byte
 }
 
@@ -17,6 +19,8 @@ func New() storage.IKvStorage {
 }
 
 func (i *inMemStorage) Set(prefix []byte, key []byte, value []byte) error {
+	i.lock.Lock()
+	defer i.lock.Unlock()
 	if i.memory[hex.EncodeToString(prefix)] == nil {
 		i.memory[hex.EncodeToString(prefix)] = make(map[string][]byte)
 	}
@@ -25,6 +29,8 @@ func (i *inMemStorage) Set(prefix []byte, key []byte, value []byte) error {
 }
 
 func (i *inMemStorage) Get(prefix []byte, key []byte) (storage.Obj, error) {
+	i.lock.RLock()
+	defer i.lock.RUnlock()
 	if _, found := i.memory[hex.EncodeToString(prefix)]; found {
 		if value, found := i.memory[hex.EncodeToString(prefix)][hex.EncodeToString(key)]; found {
 			return storage.Obj{

@@ -34,15 +34,19 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+	prevLambda := FirstInstanceIdentifier()
 	for i := 0; i <= highestSeq; i++ {
+		lambda := []byte(fmt.Sprintf("lambda_%d", i))
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
-			Type:        proto.RoundState_Decided,
-			Round:       3,
-			SeqNumber:   uint64(i),
-			ValidatorPk: validatorPK(sks).Serialize(),
-			Lambda:      []byte("Lambda"),
-			Value:       []byte("value"),
+			Type:           proto.RoundState_Decided,
+			Round:          3,
+			SeqNumber:      uint64(i),
+			ValidatorPk:    validatorPK(sks).Serialize(),
+			Lambda:         lambda,
+			PreviousLambda: prevLambda,
+			Value:          []byte("value"),
 		})
+		prevLambda = lambda
 		require.NoError(t, storage.SaveDecided(aggSignedMsg))
 		if i == highestSeq {
 			require.NoError(t, storage.SaveHighestDecidedInstance(aggSignedMsg))
@@ -52,7 +56,7 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 }
 
 func populatedIbft(
-	nodeId uint64,
+	nodeID uint64,
 	network *local.Local,
 	storage collections.Iibft,
 	sks map[uint64]*bls.SecretKey,
@@ -64,15 +68,15 @@ func populatedIbft(
 		IbftCommittee:   nodes,
 	}
 	share := &collections.ValidatorShare{
-		NodeID:      nodeId,
+		NodeID:      nodeID,
 		ValidatorPK: validatorPK(sks),
-		ShareKey:    sks[nodeId],
+		ShareKey:    sks[nodeID],
 		Committee:   nodes,
 	}
 	return New(
 		zap.L(),
 		storage,
-		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeId-1))),
+		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
 		queue,
 		params,
 		share,
@@ -144,13 +148,13 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		_ = populatedIbft(4, network, populatedStorage(t, sks, 89), sks, nodes)
 
 		// test before sync
-		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		_, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 		require.EqualError(t, err, "EntryNotFoundError")
 
 		i1.(*ibftImpl).SyncIBFT()
 
 		// test after sync
-		highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 		require.NoError(t, err)
 		require.EqualValues(t, 105, highest.Message.SeqNumber)
 	})
@@ -167,13 +171,13 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		_ = populatedIbft(4, network, populatedStorage(t, sks, 89), sks, nodes)
 
 		// test before sync
-		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		_, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 		require.EqualError(t, err, "EntryNotFoundError")
 
 		i1.(*ibftImpl).SyncIBFT()
 
 		// test after sync
-		highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 		require.NoError(t, err)
 		require.EqualValues(t, 89, highest.Message.SeqNumber)
 	})

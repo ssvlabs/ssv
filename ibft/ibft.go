@@ -38,7 +38,10 @@ type IBFT interface {
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
-	NextSeqNumber() uint64
+	NextSeqNumber() (uint64, error)
+
+	// PreviousDecidedLambda returns the previous instance lambda that was decided
+	PreviousDecidedLambda() ([]byte, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[uint64]*proto.Node
@@ -46,7 +49,6 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	instances           []*Instance // key is the instance identifier
 	currentInstance     *Instance
 	currentInstanceLock sync.Locker
 	logger              *zap.Logger
@@ -69,7 +71,6 @@ func New(
 ) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:         storage,
-		instances:           make([]*Instance, 0),
 		currentInstanceLock: &sync.Mutex{},
 		logger:              logger,
 		network:             network,
@@ -90,7 +91,6 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	}
 
 	newInstance := NewInstance(instanceOpts)
-	i.instances = append(i.instances, newInstance)
 	i.currentInstance = newInstance
 	go newInstance.StartEventLoop()
 	go newInstance.StartMessagePipeline()
@@ -132,6 +132,18 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}
+}
+
+// PreviousDecidedLambda returns the previous instance lambda that was decided
+func (i *ibftImpl) PreviousDecidedLambda() ([]byte, error) {
+	lastDecided, err := i.HighestKnownDecided()
+	if err != nil {
+		return nil, err
+	}
+	if lastDecided == nil {
+		return FirstInstanceIdentifier(), nil
+	}
+	return lastDecided.Message.Lambda, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
