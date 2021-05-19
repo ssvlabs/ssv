@@ -102,7 +102,7 @@ func NewValidatorStorage(db storage.IKvStorage, logger *zap.Logger) ValidatorSto
 		prefix: []byte("validator-"),
 		db:     db,
 		logger: logger,
-		dbEvent: storage.NewDBEvent("dbtEvent"),
+		dbEvent: storage.NewDBEvent("dbEvent"),
 	}
 	return validator
 }

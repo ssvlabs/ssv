@@ -13,6 +13,7 @@ enum RoundState {
   Commit        = 3; // Commit is when an instance receives a qualified quorum of prepare msgs, then sends a commit msg.
   ChangeRound   = 4;
   Decided       = 5; // Decided is when an instance receives a qualified quorum of commit msgs
+  Stopped       = 6;
 }
 
 message Message {

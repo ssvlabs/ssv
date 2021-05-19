@@ -81,7 +81,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// check if quorum achieved, act upon it.
-		if i.State.Stage == proto.RoundState_Decided {
+		if i.Stage() == proto.RoundState_Decided {
 			i.Logger.Info("already decided, not processing commit message")
 			return nil // no reason to commit again
 		}

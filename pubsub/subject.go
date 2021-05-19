@@ -16,6 +16,7 @@ type BaseSubject struct {
 
 // Register add Observer to subject
 func (b *BaseSubject) Register(o Observer) {
+	// TODO add only if not exists (change to map)
 	b.ObserverList = append(b.ObserverList, o)
 }
 
