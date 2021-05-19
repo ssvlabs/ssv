@@ -39,6 +39,7 @@ ifneq ($(GENESIS_EPOCH),)
   NODE_COMMAND+= --genesis-epoch=${GENESIS_EPOCH}
 endif
 
+UNFORMATTED=$(shell gofmt -s -l .)
 
 #Lint
 .PHONY: lint-prepare
@@ -49,16 +50,16 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
-
-#Test
+	@echo "Checking for unformatted files"
+	if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "The following files are not formatted: \n${UNFORMATTED}"; \
+	fi
 
 #Test
 .PHONY: full-test
 full-test:
 	@echo "Running the full test..."
 	@go test -tags blst_enabled -timeout 20m -cover -race -p 1 -v ./...
-
-
 
 # TODO: Intgrate use of short flag (unit tests) + running tests through docker
 #.PHONY: unittest
