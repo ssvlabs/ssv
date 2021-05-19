@@ -1,0 +1,11 @@
+ssv:
+  ValidatorOptions:
+    LocalShare:
+      NodeID: 1
+      PublicKey: 99d8485216f6a37372a294d51f85d85bfca4b6c3201cbd389a1cdc62565f12f4ee5c491575fd85b6faa3b86eafedce57
+      ShareKey: xxx
+      Committee:
+        www: 1
+        xxx: 2
+        yyy: 3
+        zzz: 4
