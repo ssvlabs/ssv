@@ -26,8 +26,10 @@ enum Sync {
 
 message SyncMessage {
   repeated proto.SignedMessage SignedMessages = 1;
-  string FromPeerID = 2;
-  Sync Type = 3;
+  string FromPeerID                           = 2;
+  repeated uint64 params                      = 3;
+  bytes validator_pk                          = 4;
+  Sync Type                                   = 5;
 }
 
 // Message is a wrapper struct for all network message types

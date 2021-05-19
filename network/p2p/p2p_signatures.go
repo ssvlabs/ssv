@@ -18,7 +18,7 @@ func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic, err := n.GetTopic(msg)
+	topic, err := n.getTopic(msg.Message.GetValidatorPk())
 	if err != nil {
 		return errors.Wrap(err, "failed to get topic")
 	}

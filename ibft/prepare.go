@@ -73,8 +73,8 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// If already prepared (or moved forward to commit) no reason to prepare again.
-		if i.State.Stage == proto.RoundState_Prepare ||
-			i.State.Stage == proto.RoundState_Decided {
+		if i.Stage() == proto.RoundState_Prepare ||
+			i.Stage() == proto.RoundState_Decided {
 			i.Logger.Info("already prepared, not processing prepare message")
 			return nil // no reason to prepare again
 		}
