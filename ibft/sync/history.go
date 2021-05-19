@@ -37,13 +37,15 @@ func (s *HistorySync) Start() {
 	// fetch remote highest
 	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
-		panic("implement")
+		s.logger.Error("could not fetch highest instance during sync", zap.Error(err))
+		return
 	}
 
 	// fetch local highest
 	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
 	if err != nil && err.Error() != collections.EntryNotFoundError { // if not found continue with sync
-		panic("implement")
+		s.logger.Error("could not fetch local highest instance during sync", zap.Error(err))
+		return
 	}
 
 	syncStartSeqNumber := uint64(0)
@@ -60,7 +62,8 @@ func (s *HistorySync) Start() {
 	// fetch missing data
 	decidedMsgs, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
 	if err != nil {
-		panic("implement")
+		s.logger.Error("could not fetch decided by range during sync", zap.Error(err))
+		return
 	}
 
 	// save to storage
@@ -160,6 +163,8 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 }
 
 func (s *HistorySync) isValidDecidedMsg(msg *proto.SignedMessage) error {
+	// TODO - test lambda? prev lambda?
+
 	if msg.Message.Type != proto.RoundState_Decided {
 		return errors.New("decided msg with wrong type")
 	}

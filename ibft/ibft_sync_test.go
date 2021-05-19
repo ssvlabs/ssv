@@ -125,3 +125,52 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 100, highest.Message.SeqNumber)
 }
+
+func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
+	t.Run("scenario 1", func(t *testing.T) {
+		sks, nodes := GenerateNodes(4)
+		network := local.NewLocalNetwork()
+
+		s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+		i1 := populatedIbft(1, network, &s1, sks, nodes)
+
+		_ = populatedIbft(2, network, populatedStorage(t, sks, 100), sks, nodes)
+		_ = populatedIbft(3, network, populatedStorage(t, sks, 105), sks, nodes)
+		_ = populatedIbft(4, network, populatedStorage(t, sks, 89), sks, nodes)
+
+		// test before sync
+		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		require.EqualError(t, err, "EntryNotFoundError")
+
+		i1.(*ibftImpl).SyncIBFT()
+
+		// test after sync
+		highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		require.NoError(t, err)
+		require.EqualValues(t, 105, highest.Message.SeqNumber)
+	})
+
+	t.Run("scenario 2", func(t *testing.T) {
+		sks, nodes := GenerateNodes(4)
+		network := local.NewLocalNetwork()
+
+		s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+		i1 := populatedIbft(1, network, &s1, sks, nodes)
+
+		_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
+		_ = populatedIbft(3, network, populatedStorage(t, sks, 20), sks, nodes)
+		_ = populatedIbft(4, network, populatedStorage(t, sks, 89), sks, nodes)
+
+		// test before sync
+		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		require.EqualError(t, err, "EntryNotFoundError")
+
+		i1.(*ibftImpl).SyncIBFT()
+
+		// test after sync
+		highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+		require.NoError(t, err)
+		require.EqualValues(t, 89, highest.Message.SeqNumber)
+	})
+
+}
