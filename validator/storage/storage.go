@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// IValidator interface for validator storage
+// ICollection interface for validator storage
 type ICollection interface {
 	LoadFromConfig(options LocalShareOptions) error
 	SaveValidatorShare(share *Share) error
@@ -17,13 +17,13 @@ type ICollection interface {
 	GetAllValidatorsShare() ([]*Share, error)
 }
 
-// Collection struct
+// CollectionOptions struct
 type CollectionOptions struct {
 	DB     *basedb.IDb
 	Logger *zap.Logger
 }
 
-// Local share options - used to load validator share from config
+// LocalShareOptions - used to load validator share from config
 type LocalShareOptions struct {
 	NodeID    uint64         `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
 	PublicKey string         `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
@@ -43,11 +43,11 @@ func NewCollection(options CollectionOptions) ICollection {
 	collection := Collection{
 		db:     *options.DB,
 		logger: options.Logger,
-		prefix: []byte(GetCollectionPrefix()),
+		prefix: []byte(getCollectionPrefix()),
 	}
 	return &collection
 }
-func GetCollectionPrefix() string {
+func getCollectionPrefix() string {
 	return "share-"
 }
 

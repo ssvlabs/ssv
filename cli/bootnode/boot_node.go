@@ -2,7 +2,7 @@ package bootnode
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/cli/config"
+	global_config "github.com/bloxapp/ssv/cli/config"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -11,16 +11,16 @@ import (
 	"log"
 )
 
-type Config struct {
-	config.GlobalConfig `yaml:"global"`
+type config struct {
+	global_config.GlobalConfig `yaml:"global"`
 	Options bootnode.Options `yaml:"bootnode"`
 }
 
-var cfg Config
+var cfg config
 
-var globalArgs config.Args
+var globalArgs global_config.Args
 
-// startBootNodeCmd is the command to start SSV boot node
+// StartBootNodeCmd is the command to start SSV boot node
 var StartBootNodeCmd = &cobra.Command{
 	Use:   "start-boot-node",
 	Short: "Starts boot node for discovery based ENR",
@@ -45,5 +45,5 @@ var StartBootNodeCmd = &cobra.Command{
 }
 
 func init() {
-	config.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
+	global_config.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
 }

@@ -45,7 +45,6 @@ type Validator struct {
 }
 
 // New Validator creation
-
 func New(opt Options, ibftStorage collections.Iibft) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr()))
 	msgQueue := msgqueue.New()

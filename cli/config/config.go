@@ -5,11 +5,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Args expose available global args for cli command
 type Args struct {
-	ConfigPath string
+	ConfigPath      string
 	ShareConfigPath string
 }
 
+// GlobalConfig expose available global config for cli command
 type GlobalConfig struct {
 	LogLevel string `yaml:"LogLevel" env:"LOG_LEVEL" env-default:"info" env-description:"Defines logger's log level'"`
 }
@@ -18,11 +20,11 @@ type GlobalConfig struct {
 func ProcessArgs(cfg interface{}, a *Args, cmd *cobra.Command) {
 	configFlag := "config"
 	cmd.PersistentFlags().StringVarP(&a.ConfigPath, configFlag, "c", "./config/config.yaml", "Path to configuration file")
-	cmd.MarkFlagRequired(configFlag)
+	_ = cmd.MarkFlagRequired(configFlag)
 
 	shareConfigFlag := "share-config"
 	cmd.PersistentFlags().StringVarP(&a.ShareConfigPath, shareConfigFlag, "s", "", "Path to local share configuration file")
-	cmd.MarkFlagRequired(shareConfigFlag)
+	_ = cmd.MarkFlagRequired(shareConfigFlag)
 
 	envHelp, _ := cleanenv.GetDescription(cfg, nil)
 	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())

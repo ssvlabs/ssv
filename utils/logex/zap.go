@@ -1,7 +1,6 @@
 package logex
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -40,6 +39,7 @@ func Build(appName string, level zapcore.Level) *zap.Logger {
 	return logger
 }
 
+// GetLoggerLevelValue resolves logger level to zap level
 func GetLoggerLevelValue(loggerLevel string) (zapcore.Level, error) {
 	switch loggerLevel {
 	case "debug":
@@ -57,7 +57,7 @@ func GetLoggerLevelValue(loggerLevel string) (zapcore.Level, error) {
 	case "fatal":
 		return zapcore.FatalLevel, nil
 	default:
-		return zapcore.InfoLevel, errors.New(fmt.Sprintf("unknown log level - %s", loggerLevel))
+		return zapcore.InfoLevel, fmt.Errorf("unknown log level - %s", loggerLevel)
 	}
 }
 

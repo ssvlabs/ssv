@@ -1,11 +1,10 @@
 package ssvnode
 
 import (
-	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
-	"github.com/bloxapp/ssv/cli/config"
+	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/storage"
@@ -17,22 +16,24 @@ import (
 	"log"
 )
 
-type Config struct {
-	config.GlobalConfig `yaml:"global"`
+type config struct {
+	global_config.GlobalConfig `yaml:"global"`
 	DBOptions           basedb.Options `yaml:"db"`
 	SSVOptions          node.Options   `yaml:"ssv"`
-	Network             string         `yaml:"Network"  env-default:"pyrmont"`
-	DiscoveryType       string         `yaml:"DiscoveryType"  env-default:"mdns"`
-	BeaconNodeAddr      string         `yaml:"BeaconNodeAddr"  env-default:"eth2-4000-prysm-ext.stage.bloxinfra.com:80"`
-	TcpPort             int            `yaml:"TcpPort" env-default:"13000"`
-	UdpPort             int            `yaml:"UdpPort" env-default:"12000"`
+	Network             string         `yaml:"Network" env-default:"pyrmont"`
+	DiscoveryType       string         `yaml:"DiscoveryType" env-default:"mdns"`
+	BeaconNodeAddr      string         `yaml:"BeaconNodeAddr" env-required:"true"`
+	TCPPort             int            `yaml:"TcpPort" env-default:"13000"`
+	UDPPort             int            `yaml:"UdpPort" env-default:"12000"`
+	HostAddress         string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
+	HostDNS             string         `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 }
 
-var cfg Config
+var cfg config
 
-var globalArgs config.Args
+var globalArgs global_config.Args
 
-// startNodeCmd is the command to start SSV node
+// StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
@@ -54,6 +55,9 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.DBOptions.Logger = Logger
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
+		if err != nil {
+			Logger.Fatal("failed to create db!", zap.Error(err))
+		}
 
 		// TODO Not refactored yet Start:
 		//beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
@@ -95,12 +99,6 @@ var StartNodeCmd = &cobra.Command{
 		//if err != nil {
 		//	Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
 		//}
-		tcpPort := cfg.TcpPort
-		//udpPort, err := flags.GetUDPPortFlagValue(cmd)
-		//if err != nil {
-		//	Logger.Fatal("failed to get udp port flag value", zap.Error(err))
-		//}
-		udpPort := cfg.UdpPort
 		p2pCfg := p2p.Config{
 			DiscoveryType: discoveryType,
 			BootstrapNodeAddr: []string{
@@ -112,10 +110,10 @@ var StartNodeCmd = &cobra.Command{
 				// ssh
 				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
 			},
-			UDPPort:     udpPort,
-			TCPPort:     tcpPort,
-			HostDNS:     "",
-			HostAddress: "",
+			UDPPort:     cfg.UDPPort,
+			TCPPort:     cfg.TCPPort,
+			HostDNS:     cfg.HostDNS,
+			HostAddress: cfg.HostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), Logger, &p2pCfg)
 		if err != nil {
@@ -238,11 +236,6 @@ var StartNodeCmd = &cobra.Command{
 //	return validatorStorage, ibftStorage
 //}
 
-func _getBytesFromHex(str string) []byte {
-	val, _ := hex.DecodeString(str)
-	return val
-}
-
 func init() {
 	//flags.AddPrivKeyFlag(StartNodeCmd)
 	//flags.AddValidatorKeyFlag(StartNodeCmd)
@@ -260,5 +253,5 @@ func init() {
 	//flags.AddStoragePathFlag(StartNodeCmd)
 
 	//RootCmd.AddCommand(startNodeCmd)
-	config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }

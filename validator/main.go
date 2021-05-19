@@ -12,26 +12,26 @@ import (
 	"time"
 )
 
-// Options to add in validator struct creation
+// ControllerOptions for controller struct creation
 type ControllerOptions struct {
 	Context                    context.Context
 	DB                         *basedb.IDb
 	Logger                     *zap.Logger
-	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5" env-description:"Timeout for signature collection after consensus"`
+	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
 	Beacon                     *beacon.Beacon
 	LocalShareOptions          storage.LocalShareOptions `yaml:"LocalShare"`
 }
 
-// Controller interface
+// IController interface
 type IController interface {
 	setupValidators() map[string]*Validator
 	StartValidators() map[string]*Validator
 }
 
-// Validator struct that manages all ibft wrappers
-type Controller struct {
+// Controller struct that manages all validator shares
+type controller struct {
 	context                    context.Context
 	collection                 storage.ICollection
 	logger                     *zap.Logger
@@ -43,6 +43,7 @@ type Controller struct {
 	ibftStorage collections.IbftStorage
 }
 
+// NewController creates new validator controller
 func NewController(options ControllerOptions) IController {
 	ibftStorage := collections.NewIbft(options.DB, options.Logger, "attestation")
 
@@ -50,8 +51,11 @@ func NewController(options ControllerOptions) IController {
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
-	collection.LoadFromConfig(options.LocalShareOptions)
-	controller := Controller{
+	if err := collection.LoadFromConfig(options.LocalShareOptions); err != nil {
+		options.Logger.Error("Failed to load validator share data from config", zap.Error(err))
+	}
+
+	ctrl := controller{
 		collection:                 collection,
 		context:                    options.Context,
 		logger:                     options.Logger,
@@ -62,11 +66,11 @@ func NewController(options ControllerOptions) IController {
 		network:                    options.Network,
 	}
 
-	return &controller
+	return &ctrl
 }
 
 // setupValidators for each validatorShare with proper ibft wrappers
-func (c *Controller) setupValidators() map[string]*Validator {
+func (c *controller) setupValidators() map[string]*Validator {
 	validatorsShare, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
 		c.logger.Fatal("Failed to get validatorStorage share", zap.Error(err))
@@ -87,8 +91,8 @@ func (c *Controller) setupValidators() map[string]*Validator {
 	return res
 }
 
-// startValidators functions (queue streaming, msgQueue listen, etc)
-func (c *Controller) StartValidators() map[string]*Validator {
+// StartValidators functions (queue streaming, msgQueue listen, etc)
+func (c *controller) StartValidators() map[string]*Validator {
 	validators := c.setupValidators()
 	for _, v := range validators {
 		if err := v.Start(); err != nil {

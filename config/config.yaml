@@ -11,6 +11,7 @@ ssv:
   ValidatorOptions:
     SignatureCollectionTimeout: 5s
 
+BeaconNodeAddr: eth2-4000-prysm-ext.stage.bloxinfra.com:80
 TcpPort:
 UdpPort:
 

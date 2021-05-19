@@ -3,9 +3,9 @@ ifndef $(GOPATH)
     export GOPATH
 endif
 
-ifndef $(EXTERNAL_IP)
-    EXTERNAL_IP=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
-    export EXTERNAL_IP
+ifndef $(HOST_ADDRESS)
+    HOST_ADDRESS=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
+    export HOST_ADDRESS
 endif
 
 ifndef $(BUILD_PATH)
@@ -13,32 +13,22 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
-ifneq (,$(wildcard ./.env))
-    include .env
-endif
+#ifndef $(CONFIG_PATH)
+#    CONFIG_PATH="./config/config.yaml"
+#    export CONFIG_PATH
+#endif
+
+#ifneq (,$(wildcard ./.env))
+#    include .env
+#endif
 
 # node command builder
-NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
---beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} \
---host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --storage-path=${STORAGE_PATH}
+NODE_COMMAND=--config=${CONFIG_PATH}
 
 
-ifneq ($(TCP_PORT),)
-  NODE_COMMAND+= --tcp-port=${TCP_PORT}
+ifneq ($(SHARE_CONFIG),)
+  NODE_COMMAND+= --share-config=${SHARE_CONFIG}
 endif
-
-ifneq ($(UDP_PORT),)
-  NODE_COMMAND+= --udp-port=${UDP_PORT}
-endif
-
-ifneq ($(DISCOVERY_TYPE),)
-  NODE_COMMAND+= --discovery-type=${DISCOVERY_TYPE}
-endif
-
-ifneq ($(GENESIS_EPOCH),)
-  NODE_COMMAND+= --genesis-epoch=${GENESIS_EPOCH}
-endif
-
 
 #Lint
 .PHONY: lint-prepare
@@ -82,13 +72,16 @@ full-test:
 .PHONY: start-node
 start-node:
 	@echo "Build ${BUILD_PATH}"
+	@echo "Build ${CONFIG_PATH}"
+	@echo "Build ${CONFIG_PATH2}"
+	@echo "Command ${NODE_COMMAND}"
 ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 
 else
-	@echo "Running node (${NODE_ID} with IP ${EXTERNAL_IP})"
+	@echo "Running node on address: ${HOST_ADDRESS})"
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 

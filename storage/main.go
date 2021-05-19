@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 )
 
+// GetStorageFactory resolve and returns db instance based on db type
 func GetStorageFactory(options basedb.Options) (basedb.IDb, error) {
 	switch options.Type {
 	case "badger-db":

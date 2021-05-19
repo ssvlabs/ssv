@@ -6,11 +6,14 @@ x-base:
     context: .
     dockerfile: Dockerfile
   image: ssvnode:latest
-  command: make BUILD_PATH=/go/bin/ssvnode start-node
+#  command: make BUILD_PATH=/go/bin/ssvnode start-node
+  command: ls
   network_mode: host
 #  networks:
 #    - bloxapp-docker
   restart: always
+  environment:
+    CONFIG_PATH: config/config.yaml
 
 x-base-dev:
   &default-dev
@@ -31,8 +34,12 @@ services:
   ssv-node-1:
     <<: *default-base
     container_name: ssv-node-1
-    env_file:
-      - .env.node.1
+    environment:
+      CONFIG_PATH: config/config.yaml
+      SHARE_CONFIG: config/share1.yaml
+#    env_file:
+#      - .env.node.1
+
 
   ssv-node-2:
     <<: *default-base
