@@ -10,19 +10,22 @@ import (
 // ReqHandler is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
 type ReqHandler struct {
-	validatorPK []byte
-	network     network.Network
-	storage     collections.Iibft
-	logger      *zap.Logger
+	// paginationMaxSize is the max number of returned elements in a single response
+	paginationMaxSize uint64
+	validatorPK       []byte
+	network           network.Network
+	storage           collections.Iibft
+	logger            *zap.Logger
 }
 
 // NewReqHandler returns a new instance of ReqHandler
 func NewReqHandler(logger *zap.Logger, validatorPK []byte, network network.Network, storage collections.Iibft) *ReqHandler {
 	return &ReqHandler{
-		logger:      logger,
-		validatorPK: validatorPK,
-		network:     network,
-		storage:     storage,
+		paginationMaxSize: 25, // TODO - change to be a param
+		logger:            logger,
+		validatorPK:       validatorPK,
+		network:           network,
+		storage:           storage,
 	}
 }
 
@@ -42,9 +45,19 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 	if len(msg.Msg.Params) != 2 {
 		panic("implement")
 	}
+	if msg.Msg.Params[0] > msg.Msg.Params[1] {
+		panic("implement")
+	}
+
+	// enforce max page size
+	startSeq := msg.Msg.Params[0]
+	endSeq := msg.Msg.Params[1]
+	if endSeq-startSeq > s.paginationMaxSize {
+		endSeq = startSeq + s.paginationMaxSize
+	}
 
 	ret := make([]*proto.SignedMessage, 0)
-	for i := msg.Msg.Params[0]; i <= msg.Msg.Params[1]; i++ {
+	for i := startSeq; i <= endSeq; i++ {
 		decidedMsg, err := s.storage.GetDecided(msg.Msg.ValidatorPk, i)
 		if err != nil {
 			panic("implement")
