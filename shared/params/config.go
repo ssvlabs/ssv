@@ -4,5 +4,5 @@ package params
 type SsvNetworkConfig struct {
 	OperatorContractAddress string
 	ContractABI             string
-	OperatorPublicKey       []byte
+	OperatorPublicKey       string
 }

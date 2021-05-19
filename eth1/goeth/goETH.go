@@ -1,11 +1,8 @@
 package goeth
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -18,6 +15,8 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/shared/params"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 type eth1GRPC struct {
@@ -135,19 +134,44 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 			zap.String("Share PubKey", hex.EncodeToString(validatorShare.SharedPublicKey)),
 			zap.String("Encrypted Key", hex.EncodeToString(validatorShare.EncryptedKey)))
 
-		if bytes.Equal(validatorShare.OperatorPublicKey, params.SsvConfig().OperatorPublicKey) {
-			sk, err := e.operatorStorage.GetPrivateKey()
-			if err != nil{
-				e.logger.Error("failed to get private key", zap.Error(err))
-				continue
+		def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+		outAbi, err := abi.JSON(strings.NewReader(def))
+		if err != nil {
+			e.logger.Error("failed to define ABI", zap.Error(err))
+			continue
+		}
+
+		outOperatorPublicKey, err := outAbi.Unpack("method", validatorShare.OperatorPublicKey)
+		if err != nil {
+			e.logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
+			continue
+		}
+
+		if operatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
+			validatorShare.OperatorPublicKey = []byte(operatorPublicKey)
+			if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
+				sk, err := e.operatorStorage.GetPrivateKey()
+				if err != nil {
+					e.logger.Error("failed to get private key", zap.Error(err))
+					continue
+				}
+
+				out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
+				if err != nil {
+					e.logger.Error("failed to unpack EncryptedKey", zap.Error(err))
+					continue
+				}
+
+				if encryptedSharePrivateKey, ok := out[0].(string); ok {
+					decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
+					if err != nil {
+						e.logger.Error("failed to decrypt share private key", zap.Error(err))
+						continue
+					}
+					validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
+					isEventBelongsToOperator = true
+				}
 			}
-			decryptedShare, err := rsaencryption.DecodeKey(sk, string(validatorShare.EncryptedKey))
-			if err != nil{
-				e.logger.Error("failed to decrypt share key", zap.Error(err))
-				continue
-			}
-			validatorShare.EncryptedKey = []byte(decryptedShare)
-			isEventBelongsToOperator = true
 		}
 	}
 

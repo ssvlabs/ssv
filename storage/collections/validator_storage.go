@@ -3,6 +3,8 @@ package collections
 import (
 	"bytes"
 	"encoding/gob"
+	"strings"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -36,9 +38,9 @@ type ValidatorShare struct {
 
 // ValidatorStorage struct
 type ValidatorStorage struct {
-	prefix []byte
-	db     storage.IKvStorage
-	logger *zap.Logger
+	prefix  []byte
+	db      storage.IKvStorage
+	logger  *zap.Logger
 	dbEvent *storage.DBEvent
 	pubsub.BaseObserver
 }
@@ -58,7 +60,7 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 				IbftId: nodeID,
 				Pk:     oess.SharedPublicKey,
 			}
-			if bytes.Equal(oess.OperatorPublicKey, params.SsvConfig().OperatorPublicKey) {
+			if strings.EqualFold(string(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
 				validatorShare.NodeID = nodeID
 
 				validatorShare.ValidatorPK = &bls.PublicKey{}
@@ -95,9 +97,9 @@ func (v *ValidatorStorage) GetObserverID() string {
 // NewValidatorStorage creates new validator storage
 func NewValidatorStorage(db storage.IKvStorage, logger *zap.Logger) ValidatorStorage {
 	validator := ValidatorStorage{
-		prefix: []byte("validator-"),
-		db:     db,
-		logger: logger,
+		prefix:  []byte("validator-"),
+		db:      db,
+		logger:  logger,
 		dbEvent: storage.NewDBEvent("dbEvent"),
 	}
 	return validator
@@ -135,7 +137,7 @@ func (v *ValidatorStorage) SaveValidatorShare(validator *ValidatorShare) error {
 // GetValidatorsShare by key
 func (v *ValidatorStorage) GetValidatorsShare(key []byte) (*ValidatorShare, error) {
 	obj, err := v.db.Get(v.prefix, key)
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	return (&ValidatorShare{}).Deserialize(obj)
