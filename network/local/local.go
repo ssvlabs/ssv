@@ -13,22 +13,38 @@ import (
 
 // Local implements network.Local interface
 type Local struct {
+	localPeerID        peer.ID
 	msgC               []chan *proto.SignedMessage
 	sigC               []chan *proto.SignedMessage
 	decidedC           []chan *proto.SignedMessage
 	syncC              []chan *network.SyncChanObj
 	syncPeers          map[peer.ID]chan *network.SyncChanObj
-	createChannelMutex sync.Mutex
+	createChannelMutex *sync.Mutex
 }
 
 // NewLocalNetwork creates a new instance of a local network
 func NewLocalNetwork() *Local {
 	return &Local{
-		msgC:      make([]chan *proto.SignedMessage, 0),
-		sigC:      make([]chan *proto.SignedMessage, 0),
-		decidedC:  make([]chan *proto.SignedMessage, 0),
-		syncC:     make([]chan *network.SyncChanObj, 0),
-		syncPeers: make(map[peer.ID]chan *network.SyncChanObj),
+		msgC:               make([]chan *proto.SignedMessage, 0),
+		sigC:               make([]chan *proto.SignedMessage, 0),
+		decidedC:           make([]chan *proto.SignedMessage, 0),
+		syncC:              make([]chan *network.SyncChanObj, 0),
+		syncPeers:          make(map[peer.ID]chan *network.SyncChanObj),
+		createChannelMutex: &sync.Mutex{},
+	}
+}
+
+// CopyWithLocalNodeID copies the local network instance and adds a unique node id to it
+// this is used for peer specific messages like sync messages to identify each node
+func (n *Local) CopyWithLocalNodeID(id peer.ID) *Local {
+	return &Local{
+		localPeerID:        id,
+		msgC:               n.msgC,
+		sigC:               n.sigC,
+		decidedC:           n.decidedC,
+		syncC:              n.syncC,
+		syncPeers:          n.syncPeers,
+		createChannelMutex: n.createChannelMutex,
 	}
 }
 
@@ -114,6 +130,7 @@ func (n *Local) GetHighestDecidedInstance(toPeer peer.ID, msg *network.SyncMessa
 
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *Local) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+	msg.FromPeerID = string(n.localPeerID)
 	_, _ = stream.(*Stream).WriteSynMsg(msg)
 	return nil
 }
@@ -147,6 +164,7 @@ func (n *Local) GetDecidedByRange(toPeer peer.ID, msg *network.SyncMessage) (*ne
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
 func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	msg.FromPeerID = string(n.localPeerID)
 	_, _ = stream.(*Stream).WriteSynMsg(msg)
 	return nil
 }

@@ -42,28 +42,47 @@ func (s *HistorySync) Start() {
 
 	// fetch local highest
 	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
-	if err != nil {
+	if err != nil && err.Error() != collections.EntryNotFoundError { // if not found continue with sync
 		panic("implement")
 	}
 
+	syncStartSeqNumber := uint64(0)
+	if localHighest != nil {
+		syncStartSeqNumber = localHighest.Message.SeqNumber + 1
+	}
+
 	// check we are behind and need to sync
-	if localHighest.Message.SeqNumber >= remoteHighest.Message.SeqNumber {
-		s.logger.Info("node is synced", zap.Uint64("highest seq", localHighest.Message.SeqNumber))
+	if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
+		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber))
 		return
 	}
 
 	// fetch missing data
-	decidedMsgs, err := s.fetchValidateAndSaveInstances(fromPeer, localHighest.Message.SeqNumber+1, remoteHighest.Message.SeqNumber)
+	decidedMsgs, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
 	if err != nil {
 		panic("implement")
 	}
 
 	// save to storage
+	var fetchedHighest *proto.SignedMessage
 	for _, msg := range decidedMsgs {
 		if err := s.ibftStorage.SaveDecided(msg); err != nil {
 			s.logger.Error("could not save decided msg during sync", zap.Error(err))
 			break
 		}
+
+		// set highest
+		if fetchedHighest == nil {
+			fetchedHighest = msg
+		}
+		if msg.Message.SeqNumber > fetchedHighest.Message.SeqNumber {
+			fetchedHighest = msg
+		}
+	}
+
+	// save highest
+	if err := s.ibftStorage.SaveHighestDecidedInstance(fetchedHighest); err != nil {
+		s.logger.Error("could not save highest decided msg during sync", zap.Error(err))
 	}
 }
 
@@ -110,7 +129,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 			continue
 		}
 
-		if len(res.SignedMessages) != 1 {
+		if len(res.SignedMessages) != 1 || res.SignedMessages[0] == nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err))
 			continue
 		}

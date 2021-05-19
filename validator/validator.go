@@ -39,7 +39,16 @@ type Validator struct {
 }
 
 // New Validator creation
-func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.ValidatorShare, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
+func New(
+	ctx context.Context,
+	logger *zap.Logger,
+	validatorShare *collections.ValidatorShare,
+	ibftStorage collections.Iibft,
+	network network.Network,
+	ethNetwork core.Network,
+	_beacon beacon.Beacon,
+	opt Options,
+) *Validator {
 	logger = logger.With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr()))
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.Role]ibft.IBFT)
@@ -52,6 +61,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   validatorShare.Committee,
 		},
+		validatorShare,
 	)
 
 	return &Validator{

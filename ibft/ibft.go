@@ -53,12 +53,20 @@ type ibftImpl struct {
 	ibftStorage         collections.Iibft
 	network             network.Network
 	msgQueue            *msgqueue.MessageQueue
-	params              *proto.InstanceParams
+	params              *proto.InstanceParams // TODO - this should be deprecated for validator share
+	ValidatorShare      *collections.ValidatorShare
 	leaderSelector      leader.Selector
 }
 
 // New is the constructor of IBFT
-func New(logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
+func New(
+	logger *zap.Logger,
+	storage collections.Iibft,
+	network network.Network,
+	queue *msgqueue.MessageQueue,
+	params *proto.InstanceParams,
+	ValidatorShare *collections.ValidatorShare,
+) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:         storage,
 		instances:           make([]*Instance, 0),
@@ -67,6 +75,7 @@ func New(logger *zap.Logger, storage collections.Iibft, network network.Network,
 		network:             network,
 		msgQueue:            queue,
 		params:              params,
+		ValidatorShare:      ValidatorShare,
 		leaderSelector:      &leader.Deterministic{},
 	}
 	ret.listenToNetworkMessages()

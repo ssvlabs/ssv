@@ -93,7 +93,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMe
 
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().String()
+	msg.FromPeerID = n.host.ID().String() // critical
 	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
@@ -108,7 +108,7 @@ func (n *p2pNetwork) GetDecidedByRange(peer peer.ID, msg *network.SyncMessage) (
 }
 
 func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().String()
+	msg.FromPeerID = n.host.ID().String() // critical
 	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
