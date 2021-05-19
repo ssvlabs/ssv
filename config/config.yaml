@@ -1,23 +1,18 @@
 global:
   LogLevel: info
+
 db:
   Path: ./data/db
-  Type: db
+  Type: badger-db
+
 ssv:
   GenesisEpoch:
   DutyLimit: 32
   ValidatorOptions:
-    SignatureCollectionTimeout: 5
-    LocalShare:
-      NodeID: 1
-      PublicKey: 99d8485216f6a37372a294d51f85d85bfca4b6c3201cbd389a1cdc62565f12f4ee5c491575fd85b6faa3b86eafedce57
-      ShareKey: 62e570ebafcb30419df0723c857f66ae3c65b34696f60f41470ab53e815fbb41
-      Committee:
-        849529e63d6a8a4b410eccb3a8d79c36544ae88c1cb1f0b6da9201831736a3313e9a84175dc57fc599cc947bf66b0018: 1
-        ae7cfdccb1b2c7db8c63e242b7c4b43002684e37cc93ed611331f62b056384e218376bcedffcee94e39901ceedfee14e: 2
-        88322514876243cdf48c2769e119629be419259a67487b8883a0a69146f2d138827c05529aa3f3a9427c10145bdd250c: 3
-        b71c3d76823739d54df490bc5a80475a2bd9ee441ce2a43d0d785fbf7b739ce88259861bed51a2f88629348097f097e5: 4
+    SignatureCollectionTimeout: 5s
 
+TcpPort:
+UdpPort:
 
 bootnode:
   ExternalIP:

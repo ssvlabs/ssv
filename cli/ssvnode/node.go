@@ -24,8 +24,8 @@ type Config struct {
 	Network             string         `yaml:"Network"  env-default:"pyrmont"`
 	DiscoveryType       string         `yaml:"DiscoveryType"  env-default:"mdns"`
 	BeaconNodeAddr      string         `yaml:"BeaconNodeAddr"  env-default:"eth2-4000-prysm-ext.stage.bloxinfra.com:80"`
-	TcpPort             int         `yaml:"TcpPort" env-default:"13000"`
-	UdpPort             int         `yaml:"UdpPort" env-default:"12000"`
+	TcpPort             int            `yaml:"TcpPort" env-default:"13000"`
+	UdpPort             int            `yaml:"UdpPort" env-default:"12000"`
 }
 
 var cfg Config
@@ -40,6 +40,11 @@ var StartNodeCmd = &cobra.Command{
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal(err)
+			}
+		}
 
 		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel)
@@ -47,7 +52,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
 		}
-
 		cfg.DBOptions.Logger = Logger
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 

@@ -75,7 +75,8 @@ func (s *Collection) LoadFromConfig(options LocalShareOptions) error {
 		ibftCommittee := make(map[uint64]*proto.Node)
 
 		for pk, id := range options.Committee {
-			s.logger.Info("ddd", zap.String("pk", pk), zap.Int("id", id))
+			// TODO  remove test log
+			s.logger.Info("loaded env committee", zap.String("pk", pk), zap.Int("id", id))
 			ibftCommittee[uint64(id)] = &proto.Node{
 				IbftId: uint64(id),
 				Pk:     _getBytesFromHex(pk),
