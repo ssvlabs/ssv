@@ -64,44 +64,44 @@ services:
     container_name: ssv-node-1-dev
 #    ports:
 #      - 40005:40005
-    env_file:
-      - .env.node.1
     environment:
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40005
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share1.yaml
 
   ssv-node-2-dev:
     << : *default-dev
     container_name: ssv-node-2-dev
 #    ports:
 #      - 40006:40006
-    env_file:
-      - .env.node.2
     environment:
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40006
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share2.yaml
 
   ssv-node-3-dev:
     << : *default-dev
     container_name: ssv-node-3-dev
 #    ports:
 #      - 40007:40007
-    env_file:
-      - .env.node.3
     environment:
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40007
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share3.yaml
 
   ssv-node-4-dev:
     << : *default-dev
     container_name: ssv-node-4-dev
 #    ports:
 #      - 40008:40008
-    env_file:
-      - .env.node.4
     environment:
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40008
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share4.yaml
 
 #networks:
 #  bloxapp-docker:
