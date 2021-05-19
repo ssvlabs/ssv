@@ -85,6 +85,11 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 	return ret
 }
 
+// MsgCount will return a count of messages by their index
+func (q *MessageQueue) MsgCount(index string) int {
+	return len(q.queue[index])
+}
+
 func (q *MessageQueue) deleteMessageFromAllIndexes(indexes []string, id string) {
 	for _, indx := range indexes {
 		newIndexQ := make([]*messageContainer, 0)

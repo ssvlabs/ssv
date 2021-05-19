@@ -52,11 +52,13 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = ibft.New(
+		logger,
 		ibftStorage,
 		opt.Network,
 		msgQueue,
 		&proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   opt.Share.Committee,
 		},
 	)
 	return &Validator{

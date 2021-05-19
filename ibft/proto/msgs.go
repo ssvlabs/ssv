@@ -50,8 +50,27 @@ func (msg *Message) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
 
 // VerifySig returns true if the justification signed msg verifies against the public key, false if otherwise
 func (msg *SignedMessage) VerifySig(pk *bls.PublicKey) (bool, error) {
+	return msg.VerifyAggregatedSig([]*bls.PublicKey{pk})
+}
+
+// VerifyAggregatedSig returns true if the  signed msg verifies against the public keys, false if otherwise
+func (msg *SignedMessage) VerifyAggregatedSig(pks []*bls.PublicKey) (bool, error) {
 	if msg.Signature == nil || len(msg.Signature) == 0 {
 		return false, errors.New("message signature is invalid")
+	}
+
+	if len(pks) == 0 {
+		return false, errors.New("pks are invalid")
+	}
+
+	// signer uniqueness
+	uniqueMap := make(map[uint64]bool)
+	for _, signer := range msg.SignerIds {
+		if _, found := uniqueMap[signer]; !found {
+			uniqueMap[signer] = true
+		} else {
+			return false, errors.New("signers are not unique")
+		}
 	}
 
 	root, err := msg.Message.SigningRoot()
@@ -59,11 +78,21 @@ func (msg *SignedMessage) VerifySig(pk *bls.PublicKey) (bool, error) {
 		return false, err
 	}
 
+	// aggregate pks
+	var aggPK *bls.PublicKey
+	for _, pk := range pks {
+		if aggPK == nil {
+			aggPK = pk
+		} else {
+			aggPK.Add(pk)
+		}
+	}
+
 	sig := &bls.Sign{}
 	if err := sig.Deserialize(msg.Signature); err != nil {
 		return false, err
 	}
-	return sig.VerifyByte(pk, root), nil
+	return sig.VerifyByte(aggPK, root), nil
 }
 
 // SignersIDString returns all Signer's Ids as string

@@ -190,7 +190,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.State.Stage == proto.RoundState_PrePrepare)
+	require.True(t, instance.Stage() == proto.RoundState_PrePrepare)
 
 	// return nil if another pre-prepare received.
 	err = instance.UponPrePrepareMsg().Run(msg)

@@ -24,13 +24,13 @@ func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*Node) {
 	return sks, nodes
 }
 
-func signMsg(id uint64, secretKey *bls.SecretKey, msg *Message) *SignedMessage {
+func signMsg(id uint64, secretKey *bls.SecretKey, msg *Message) (*SignedMessage, *bls.Sign) {
 	signature, _ := msg.Sign(secretKey)
 	return &SignedMessage{
 		Message:   msg,
 		Signature: signature.Serialize(),
 		SignerIds: []uint64{id},
-	}
+	}, signature
 }
 
 func TestInstanceParams_ThresholdSize(t *testing.T) {
@@ -66,4 +66,27 @@ func TestPubKeysById(t *testing.T) {
 	// test multiple with invalid
 	_, err = params.PubKeysByID([]uint64{0, 5})
 	require.EqualError(t, err, "pk for id not found")
+}
+
+func TestVerifySignedMsg(t *testing.T) {
+	secretKeys, nodes := generateNodes(4)
+	params := &InstanceParams{
+		IbftCommittee: nodes,
+	}
+
+	msg := &Message{
+		Type:      RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte{1, 2, 3, 4},
+		SeqNumber: 1,
+	}
+	aggMessage, aggregated := signMsg(1, secretKeys[1], msg)
+	_, sig2 := signMsg(2, secretKeys[2], msg)
+	aggregated.Add(sig2)
+	aggMessage.Signature = aggregated.Serialize()
+	aggMessage.SignerIds = []uint64{1, 2}
+
+	require.NoError(t, params.VerifySignedMessage(aggMessage))
+	aggMessage.SignerIds = []uint64{1, 3}
+	require.EqualError(t, params.VerifySignedMessage(aggMessage), "could not verify message signature")
 }
