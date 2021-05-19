@@ -3,6 +3,8 @@ package sync
 import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/inmem"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
@@ -147,7 +149,9 @@ func TestFetchDecided(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil), nil, &proto.InstanceParams{
+			storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
+			s := NewHistorySync(test.valdiatorPK, network, &storage, &proto.InstanceParams{
 				ConsensusParams: proto.DefaultConsensusParams(),
 				IbftCommittee:   nodes,
 			}, zap.L())
@@ -157,7 +161,7 @@ func TestFetchDecided(t *testing.T) {
 				require.EqualError(t, err, test.expectedError)
 			} else {
 				require.NoError(t, err)
-				require.Len(t, res, int(test.expectedResLen))
+				require.EqualValues(t, res.Message.SeqNumber, test.expectedResLen)
 			}
 
 		})

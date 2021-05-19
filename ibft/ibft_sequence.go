@@ -14,6 +14,10 @@ A fully synced iBFT node must have all sequences to be fully synced, no skips or
 */
 
 func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
+	if !i.initFinished {
+		return errors.New("iBFT hasn't initialized yet")
+	}
+
 	highestKnown, err := i.HighestKnownDecided()
 	if err != nil {
 		return err

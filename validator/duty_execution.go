@@ -185,7 +185,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		return 0, nil, nil, errors.Wrap(err, "failed to get prev decided identifier")
 	}
 
-	decided, signaturesCount, decidedByts := v.ibfts[role].StartInstance(ibft.StartOptions{
+	decided, signaturesCount, decidedValue := v.ibfts[role].StartInstance(ibft.StartOptions{
 		Duty:           duty,
 		ValidatorShare: *v.ValidatorShare,
 		Logger:         l,
@@ -199,7 +199,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	if !decided {
 		return 0, nil, nil, errors.New("ibft did not decide, not executing role")
 	}
-	return signaturesCount, decidedByts, identifier, nil
+	return signaturesCount, decidedValue, identifier, nil
 }
 
 // ExecuteDuty by slotQueue
@@ -240,8 +240,6 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 				logger.Error("could not execute duty", zap.Error(err))
 				return
 			}
-
-			//identfier = newId // TODO: Fix race condition
 		}(role)
 	}
 }

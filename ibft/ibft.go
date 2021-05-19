@@ -33,6 +33,9 @@ type StartOptions struct {
 
 // IBFT represents behavior of the IBFT
 type IBFT interface {
+	// Init should be called after creating an IBFT instance to init the instance, sync it, etc.
+	Init()
+
 	// StartInstance starts a new instance by the given options
 	StartInstance(opts StartOptions) (bool, int, []byte)
 
@@ -58,6 +61,9 @@ type ibftImpl struct {
 	params              *proto.InstanceParams // TODO - this should be deprecated for validator share
 	ValidatorShare      *collections.ValidatorShare
 	leaderSelector      leader.Selector
+
+	// flags
+	initFinished bool
 }
 
 // New is the constructor of IBFT
@@ -78,9 +84,17 @@ func New(
 		params:              params,
 		ValidatorShare:      ValidatorShare,
 		leaderSelector:      &leader.Deterministic{},
+
+		// flags
+		initFinished: false,
 	}
-	ret.listenToNetworkMessages()
 	return ret
+}
+
+func (i *ibftImpl) Init() {
+	i.SyncIBFT()
+	i.listenToNetworkMessages()
+	i.initFinished = true
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {

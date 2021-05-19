@@ -3,6 +3,7 @@ package sync
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -59,33 +60,17 @@ func (s *HistorySync) Start() {
 		return
 	}
 
-	// fetch missing data
-	decidedMsgs, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
+	// fetch, validate and save missing data
+	highestSaved, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
 	if err != nil {
 		s.logger.Error("could not fetch decided by range during sync", zap.Error(err))
-		return
-	}
-
-	// save to storage
-	var fetchedHighest *proto.SignedMessage
-	for _, msg := range decidedMsgs {
-		if err := s.ibftStorage.SaveDecided(msg); err != nil {
-			s.logger.Error("could not save decided msg during sync", zap.Error(err))
-			break
-		}
-
-		// set highest
-		if fetchedHighest == nil {
-			fetchedHighest = msg
-		}
-		if msg.Message.SeqNumber > fetchedHighest.Message.SeqNumber {
-			fetchedHighest = msg
-		}
 	}
 
 	// save highest
-	if err := s.ibftStorage.SaveHighestDecidedInstance(fetchedHighest); err != nil {
-		s.logger.Error("could not save highest decided msg during sync", zap.Error(err))
+	if highestSaved != nil {
+		if err := s.ibftStorage.SaveHighestDecidedInstance(highestSaved); err != nil {
+			s.logger.Error("could not save highest decided msg during sync", zap.Error(err))
+		}
 	}
 }
 
@@ -188,17 +173,16 @@ func (s *HistorySync) isValidDecidedMsg(msg *proto.SignedMessage) error {
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
 // Range is start to end seq including
-func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq uint64, endSeq uint64) ([]*proto.SignedMessage, error) {
-	ret := make([]*proto.SignedMessage, endSeq-startSeq+1)
+func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, err error) {
 	failCount := 0
 	start := startSeq
 	done := false
 	for {
 		if failCount == 5 {
-			return nil, errors.New("could not fetch ranged decided instances")
+			return highestSaved, errors.New("could not fetch ranged decided instances")
 		}
 		if done {
-			return ret, nil
+			return highestSaved, nil
 		}
 
 		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
@@ -211,20 +195,33 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq u
 			continue
 		}
 
-		// set in return slice
+		// validate and save
 		for _, msg := range res.SignedMessages {
 			// if msg is invalid, break and try again with an updated start seq
 			if s.isValidDecidedMsg(msg) != nil {
 				start = msg.Message.SeqNumber
 				continue
 			}
-			saveIndex := msg.Message.SeqNumber - startSeq
-			ret[saveIndex] = msg
+
+			// save
+			if err := s.ibftStorage.SaveDecided(msg); err != nil {
+				return highestSaved, err
+			}
+
+			// set highest
+			if highestSaved == nil {
+				highestSaved = msg
+			}
+			if highestSaved.Message.SeqNumber < msg.Message.SeqNumber {
+				highestSaved = msg
+			}
+
 			start = msg.Message.SeqNumber + 1
 
 			if msg.Message.SeqNumber == endSeq {
 				done = true
 			}
 		}
+		s.logger.Info(fmt.Sprintf("fetched and saved sequence numbers %d-%d", start, endSeq))
 	}
 }

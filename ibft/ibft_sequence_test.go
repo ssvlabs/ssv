@@ -22,6 +22,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		name          string
 		opts          StartOptions
 		storage       collections.Iibft
+		initFinished  bool
 		expectedError string
 	}{
 		{
@@ -39,6 +40,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				},
 			},
 			populatedStorage(t, sks, 10),
+			true,
 			"",
 		},
 		{
@@ -56,7 +58,26 @@ func TestCanStartNewInstance(t *testing.T) {
 				},
 			},
 			nil,
+			true,
 			"",
+		},
+		{
+			"didn't finish initialization",
+			StartOptions{
+				PrevInstance: FirstInstanceIdentifier(),
+				Identifier:   []byte("lambda_0"),
+				SeqNumber:    0,
+				Duty:         nil,
+				ValidatorShare: collections.ValidatorShare{
+					NodeID:      1,
+					ValidatorPK: validatorPK(sks),
+					ShareKey:    sks[1],
+					Committee:   nodes,
+				},
+			},
+			nil,
+			false,
+			"iBFT hasn't initialized yet",
 		},
 		{
 			"invalid first instance",
@@ -73,6 +94,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				},
 			},
 			nil,
+			true,
 			"previous lambda identifier is for first instance but seq number is not 0",
 		},
 		{
@@ -90,6 +112,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				},
 			},
 			populatedStorage(t, sks, 10),
+			true,
 			"instance seq invalid",
 		},
 		{
@@ -107,6 +130,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				},
 			},
 			populatedStorage(t, sks, 10),
+			true,
 			"prev lambda doesn't match known lambda",
 		},
 		{
@@ -124,6 +148,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				},
 			},
 			populatedStorage(t, sks, 10),
+			true,
 			"instance seq invalid",
 		},
 	}
@@ -131,7 +156,7 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-
+			i.initFinished = test.initFinished
 			if test.storage != nil {
 				i.ibftStorage = test.storage
 			} else {

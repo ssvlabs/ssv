@@ -63,6 +63,7 @@ func New(
 		},
 		validatorShare,
 	)
+	go ibfts[beacon.RoleAttester].Init()
 
 	return &Validator{
 		ctx:                        ctx,

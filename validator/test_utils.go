@@ -52,6 +52,10 @@ type testIBFT struct {
 	signaturesCount int
 }
 
+func (t *testIBFT) Init() {
+
+}
+
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
 	return t.decided, t.signaturesCount, opts.Value
 }

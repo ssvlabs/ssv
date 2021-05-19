@@ -73,7 +73,7 @@ func populatedIbft(
 		ShareKey:    sks[nodeID],
 		Committee:   nodes,
 	}
-	return New(
+	ret := New(
 		zap.L(),
 		storage,
 		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
@@ -81,6 +81,9 @@ func populatedIbft(
 		params,
 		share,
 	)
+	ret.(*ibftImpl).initFinished = true // as if they are already synced
+	ret.(*ibftImpl).listenToNetworkMessages()
+	return ret
 }
 
 func TestSyncFromScratch(t *testing.T) {
