@@ -2,8 +2,6 @@ package cli
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/shared/params"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"log"
 	"os"
 	"time"
@@ -247,19 +245,9 @@ func configureStorage(storagePath string, logger *zap.Logger, operatorKey string
 	ibftStorage := collections.NewIbft(db, logger, "attestation")
 
 	operatorStorage := collections.NewOperatorStorage(db, logger)
-	if err := operatorStorage.SavePrivateKey(operatorKey); err != nil{
-		logger.Fatal("failed to save operator private key", zap.Error(err))
+	if err := operatorStorage.SetupPrivateKey(operatorKey); err != nil{
+		logger.Fatal("failed to setup operator private key", zap.Error(err))
 	}
-	sk, err := operatorStorage.GetPrivateKey()
-	if err := operatorStorage.SavePrivateKey(operatorKey); err != nil{
-		logger.Fatal("failed to get operator private key", zap.Error(err))
-	}
-	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
-	if err != nil{
-		logger.Fatal("failed to extract operator public key", zap.Error(err))
-	}
-	logger.Info("operator public key", zap.Any("key", operatorPublicKey))
-	params.SsvConfig().OperatorPublicKey = string(operatorPublicKey)
 
 	return validatorStorage, ibftStorage, operatorStorage
 }

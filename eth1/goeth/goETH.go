@@ -1,6 +1,7 @@
 package goeth
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -134,7 +135,7 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 			zap.String("Share PubKey", hex.EncodeToString(validatorShare.SharedPublicKey)),
 			zap.String("Encrypted Key", hex.EncodeToString(validatorShare.EncryptedKey)))
 
-		if strings.EqualFold(hex.EncodeToString(validatorShare.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+		if bytes.Equal(validatorShare.OperatorPublicKey, params.SsvConfig().OperatorPublicKey) {
 			sk, err := e.operatorStorage.GetPrivateKey()
 			if err != nil{
 				e.logger.Error("failed to get private key", zap.Error(err))

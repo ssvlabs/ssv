@@ -43,16 +43,17 @@ func GenerateKeys() ([]byte, []byte, error) {
 
 // DecodeKey with secret key (base64) and hash (base64), return the encrypted key string
 func DecodeKey(sk *rsa.PrivateKey, hashBase64 string) (string, error) {
-	return decryptHash(sk, hashBase64)
+	hash, _ := base64.StdEncoding.DecodeString(hashBase64)
+	decryptedKey, err := rsa.DecryptPKCS1v15(rand.Reader, sk, hash)
+	if err != nil {
+		return "", errors.Wrap(err, "Failed to decrypt key")
+	}
+	return string(decryptedKey), nil
 }
 
-// ConvertPemToPrivateKey return rsa private key from secret key (base64)
-func ConvertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
-	skPem, err := base64.StdEncoding.DecodeString(skPemBase64)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to decode base64")
-	}
-	block, _ := pem.Decode(skPem)
+// ConvertPemToPrivateKey return rsa private key from secret key
+func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(skPem))
 	enc := x509.IsEncryptedPEMBlock(block)
 	b := block.Bytes
 	if enc {
@@ -69,6 +70,17 @@ func ConvertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
 	return parsedSk, nil
 }
 
+// PrivateKeyToByte converts privateKey to []byte
+func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
+	return pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(sk),
+		},
+	)
+}
+
+// ExtractPublicKey get public key from private key and return []byte represent the public key
 func ExtractPublicKey(sk *rsa.PrivateKey) ([]byte, error) {
 	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
 	if err != nil {
@@ -80,14 +92,4 @@ func ExtractPublicKey(sk *rsa.PrivateKey) ([]byte, error) {
 			Bytes: pkBytes,
 		},
 	), nil
-}
-
-// decryptHash using secret key and encrypted hash
-func decryptHash(sk *rsa.PrivateKey, hashBase64 string) (string, error) {
-	hash, _ := base64.StdEncoding.DecodeString(hashBase64)
-	decryptedKey, err := rsa.DecryptPKCS1v15(rand.Reader, sk, hash)
-	if err != nil {
-		return "", errors.Wrap(err, "Failed to decrypt key")
-	}
-	return string(decryptedKey), nil
 }

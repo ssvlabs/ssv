@@ -3,9 +3,6 @@ package collections
 import (
 	"bytes"
 	"encoding/gob"
-	"encoding/hex"
-	"strings"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -61,7 +58,7 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 				IbftId: nodeID,
 				Pk:     oess.SharedPublicKey,
 			}
-			if strings.EqualFold(hex.EncodeToString(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+			if bytes.Equal(oess.OperatorPublicKey, params.SsvConfig().OperatorPublicKey) {
 				validatorShare.NodeID = nodeID
 
 				validatorShare.ValidatorPK = &bls.PublicKey{}
@@ -70,7 +67,6 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 					return
 				}
 
-				// TODO: decrypt share private key using operator private key
 				validatorShare.ShareKey = &bls.SecretKey{}
 				if err := validatorShare.ShareKey.Deserialize(oess.EncryptedKey); err != nil {
 					v.logger.Error("failed to deserialize share private key", zap.Error(err))
