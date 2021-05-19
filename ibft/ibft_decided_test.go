@@ -2,8 +2,13 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network/local"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/inmem"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
+	"time"
 )
 
 type testStorage struct {
@@ -242,4 +247,61 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
 	}
+}
+
+func TestSyncAfterDecided(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	network := local.NewLocalNetwork()
+
+	s1 := populatedStorage(t, sks, 4)
+	i1 := populatedIbft(1, network, s1, sks, nodes)
+
+	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
+
+	// test before sync
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	require.NoError(t, err)
+	require.EqualValues(t, 4, highest.Message.SeqNumber)
+
+	decidedMsg := aggregateSign(t, sks, &proto.Message{
+		Type:        proto.RoundState_Decided,
+		Round:       3,
+		SeqNumber:   10,
+		ValidatorPk: validatorPK(sks).Serialize(),
+		Lambda:      []byte("Lambda"),
+		Value:       []byte("value"),
+	})
+
+	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
+
+	time.Sleep(time.Millisecond * 500) // wait for sync to complete
+	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	require.NoError(t, err)
+	require.EqualValues(t, 10, highest.Message.SeqNumber)
+}
+
+func TestSyncFromScratchAfterDecided(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	network := local.NewLocalNetwork()
+
+	s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+	i1 := populatedIbft(1, network, &s1, sks, nodes)
+
+	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
+
+	decidedMsg := aggregateSign(t, sks, &proto.Message{
+		Type:        proto.RoundState_Decided,
+		Round:       3,
+		SeqNumber:   10,
+		ValidatorPk: validatorPK(sks).Serialize(),
+		Lambda:      []byte("Lambda"),
+		Value:       []byte("value"),
+	})
+
+	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
+
+	time.Sleep(time.Millisecond * 500) // wait for sync to complete
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	require.NoError(t, err)
+	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }

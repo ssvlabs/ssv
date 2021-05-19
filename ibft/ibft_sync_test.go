@@ -18,26 +18,31 @@ func validatorPK(sks map[uint64]*bls.SecretKey) *bls.PublicKey {
 	return sks[1].GetPublicKey()
 }
 
+func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
+	var aggSignedMsg *proto.SignedMessage
+	for index, sk := range sks {
+		sigend := SignMsg(t, index, sk, msg)
+
+		if aggSignedMsg == nil {
+			aggSignedMsg = sigend
+		} else {
+			require.NoError(t, aggSignedMsg.Aggregate(sigend))
+		}
+	}
+	return aggSignedMsg
+}
+
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
 	for i := 0; i <= highestSeq; i++ {
-		var aggSignedMsg *proto.SignedMessage
-		for index, sk := range sks {
-			sigend := SignMsg(t, index, sk, &proto.Message{
-				Type:        proto.RoundState_Decided,
-				Round:       3,
-				SeqNumber:   uint64(i),
-				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("Lambda"),
-				Value:       []byte("value"),
-			})
-
-			if aggSignedMsg == nil {
-				aggSignedMsg = sigend
-			} else {
-				require.NoError(t, aggSignedMsg.Aggregate(sigend))
-			}
-		}
+		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
+			Type:        proto.RoundState_Decided,
+			Round:       3,
+			SeqNumber:   uint64(i),
+			ValidatorPk: validatorPK(sks).Serialize(),
+			Lambda:      []byte("Lambda"),
+			Value:       []byte("value"),
+		})
 		require.NoError(t, storage.SaveDecided(aggSignedMsg))
 		if i == highestSeq {
 			require.NoError(t, storage.SaveHighestDecidedInstance(aggSignedMsg))
