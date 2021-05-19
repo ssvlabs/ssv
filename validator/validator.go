@@ -27,6 +27,7 @@ type Options struct {
 	SlotQueue                  slotqueue.Queue
 	Network                    network.Network
 	Beacon                     beacon.Beacon
+	ETHNetwork                 *core.Network
 }
 
 // Validator struct that manages all ibft wrappers
@@ -35,7 +36,7 @@ type Validator struct {
 	logger *zap.Logger
 	Share  *storage.Share
 	//ibftStorage                collections.Iibft
-	ethNetwork                 core.Network
+	ethNetwork                 *core.Network
 	beacon                     beacon.Beacon
 	ibfts                      map[beacon.Role]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
@@ -67,36 +68,10 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 		slotQueue:                  opt.SlotQueue,
 		network:                    opt.Network,
 		ibfts:                      ibfts,
+		ethNetwork:                 opt.ETHNetwork,
+		beacon:                     opt.Beacon,
 	}
 }
-
-//func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Validator, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
-//	logger = logger.With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr()))
-//	msgQueue := msgqueue.New()
-//	ibfts := make(map[beacon.Role]ibft.IBFT)
-//	ibfts[beacon.RoleAttester] = ibft.New(
-//		ibftStorage,
-//		network,
-//		msgQueue,
-//		&proto.InstanceParams{
-//			ConsensusParams: proto.DefaultConsensusParams(),
-//		},
-//	)
-//
-//	return &Validator{
-//		ctx:                        ctx,
-//		logger:                     logger,
-//		ValidatorShare:             validatorShare,
-//		ibftStorage:                ibftStorage,
-//		ethNetwork:                 ethNetwork,
-//		network:                    network,
-//		beacon:                     _beacon,
-//		ibfts:                      ibfts,
-//		msgQueue:                   msgQueue,
-//		slotQueue:                  opt.SlotQueue,
-//		SignatureCollectionTimeout: opt.SignatureCollectionTimeout,
-//	}
-//}
 
 // Start validator
 func (v *Validator) Start() error {

@@ -36,27 +36,27 @@ services:
     environment:
       CONFIG_PATH: ./config.yaml
       SHARE_CONFIG: ./share1.yaml
-#    env_file:
-#      - .env.node.1
-
 
   ssv-node-2:
     <<: *default-base
     container_name: ssv-node-2
-    env_file:
-      - .env.node.2
+    environment:
+      CONFIG_PATH: ./config.yaml
+      SHARE_CONFIG: ./share2.yaml
 
   ssv-node-3:
     <<: *default-base
     container_name: ssv-node-3
-    env_file:
-      - .env.node.3
+    environment:
+      CONFIG_PATH: ./config.yaml
+      SHARE_CONFIG: ./share3.yaml
 
   ssv-node-4:
     <<: *default-base
     container_name: ssv-node-4
-    env_file:
-      - .env.node.4
+    environment:
+      CONFIG_PATH: ./config.yaml
+      SHARE_CONFIG: ./share4.yaml
 
 
   ssv-node-1-dev:

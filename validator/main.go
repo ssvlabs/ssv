@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/slotqueue"
@@ -18,6 +19,7 @@ type ControllerOptions struct {
 	DB                         *basedb.IDb
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
+	ETHNetwork                 *core.Network
 	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
 	Beacon                     *beacon.Beacon
@@ -41,6 +43,7 @@ type controller struct {
 	// TODO remove after IBFT refactor
 	network     network.Network
 	ibftStorage collections.IbftStorage
+	ethNetwork  *core.Network
 }
 
 // NewController creates new validator controller
@@ -64,6 +67,7 @@ func NewController(options ControllerOptions) IController {
 		beacon:                     *options.Beacon,
 		ibftStorage:                ibftStorage,
 		network:                    options.Network,
+		ethNetwork:                 options.ETHNetwork,
 	}
 
 	return &ctrl
@@ -85,6 +89,8 @@ func (c *controller) setupValidators() map[string]*Validator {
 			Logger:                     c.logger,
 			Share:                      validatorShare,
 			Network:                    c.network,
+			ETHNetwork:                 c.ethNetwork,
+			Beacon:                     c.beacon,
 		}, &c.ibftStorage)
 	}
 	c.logger.Info("setup validators done successfully", zap.Int("count", len(res)))

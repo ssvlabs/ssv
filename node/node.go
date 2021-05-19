@@ -71,20 +71,6 @@ func New(opts Options) Node {
 		slotQueue: slotQueue,
 	}
 	return ssv
-
-	//return &ssvNode{
-	//	//validatorStorage:           opts.ValidatorStorage,
-	//	//ibftStorage:                opts.IbftStorage,
-	//	//ethNetwork:                 opts.ETHNetwork,
-	//	//network:                    opts.Network,
-	//	//slotQueue:                  slotqueue.New(opts.ETHNetwork),
-	//	//beacon:                     opts.Beacon,
-	//	logger: opts.Logger,
-	//	//signatureCollectionTimeout: opts.SignatureCollectionTimeout,
-	//	// genesis epoch
-	//	genesisEpoch: opts.GenesisEpoch,
-	//	DutyLimit:    opts.DutyLimit,
-	//}
 }
 
 // Start implements Node interface
