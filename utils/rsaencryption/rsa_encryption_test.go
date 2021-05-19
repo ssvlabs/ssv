@@ -16,14 +16,16 @@ func TestGenerateKeys(t *testing.T) {
 	_, skByte, err := GenerateKeys()
 	require.NoError(t, err)
 	skBase64 := base64.StdEncoding.EncodeToString(skByte) // for testing purposes
-	sk, err := convertPemToPrivateKey(skBase64)
+	sk, err := ConvertPemToPrivateKey(skBase64)
 	require.NoError(t, err)
 	require.Equal(t, 2048, sk.N.BitLen())
 	require.NoError(t, sk.Validate())
 }
 
 func TestDecodeKey(t *testing.T) {
-	key, err := DecodeKey(skPemBase64, encryptedKeyBase64)
+	sk, err := ConvertPemToPrivateKey(skPemBase64)
+	require.NoError(t, err)
+	key, err := DecodeKey(sk, encryptedKeyBase64)
 	require.NoError(t, err)
 	require.Equal(t, "626d6a13ae5b1458c310700941764f3841f279f9c8de5f4ba94abd01dc082517", key)
 }

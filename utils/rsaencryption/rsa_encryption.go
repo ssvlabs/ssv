@@ -42,24 +42,20 @@ func GenerateKeys() ([]byte, []byte, error) {
 }
 
 // DecodeKey with secret key (base64) and hash (base64), return the encrypted key string
-func DecodeKey(skPemBase64 string, hashBase64 string) (string, error) {
-	sk, err := convertPemToPrivateKey(skPemBase64)
-	if err != nil{
-		return "", errors.Wrap(err, "Failed to decrypt private key")
-	}
+func DecodeKey(sk *rsa.PrivateKey, hashBase64 string) (string, error) {
 	return decryptHash(sk, hashBase64)
 }
 
-// convertPemToPrivateKey return rsa private key from secret key (base64)
-func convertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
+// ConvertPemToPrivateKey return rsa private key from secret key (base64)
+func ConvertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
 	skPem, err := base64.StdEncoding.DecodeString(skPemBase64)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to decode base64")
 	}
 	block, _ := pem.Decode(skPem)
-	enc:= x509.IsEncryptedPEMBlock(block)
+	enc := x509.IsEncryptedPEMBlock(block)
 	b := block.Bytes
-	if enc{
+	if enc {
 		var err error
 		b, err = x509.DecryptPEMBlock(block, nil)
 		if err != nil {
@@ -71,6 +67,19 @@ func convertPemToPrivateKey(skPemBase64 string) (*rsa.PrivateKey, error) {
 		return nil, errors.Wrap(err, "Failed to parse private key")
 	}
 	return parsedSk, nil
+}
+
+func ExtractPublicKey(sk *rsa.PrivateKey) ([]byte, error) {
+	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to marshal private key")
+	}
+	return pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PUBLIC KEY",
+			Bytes: pkBytes,
+		},
+	), nil
 }
 
 // decryptHash using secret key and encrypted hash

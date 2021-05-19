@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/shared/params"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"log"
 	"os"
 
@@ -108,6 +109,11 @@ var startNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get storage path flag value", zap.Error(err))
 		}
 
+		operatorKey, err := flags.GetOperatorPrivateKeyFlag(cmd)
+		if err != nil {
+			Logger.Fatal("failed to get operator private key flag value", zap.Error(err))
+		}
+
 		validatorPubKey := &bls.PublicKey{}
 		if err := validatorPubKey.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
@@ -119,7 +125,7 @@ var startNodeCmd = &cobra.Command{
 		}
 
 		// init storage
-		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPubKey, shareKey, nodeID)
+		validatorStorage, ibftStorage, operatorStorage := configureStorage(storagePath, logger, operatorKey, validatorPubKey, shareKey, nodeID)
 
 		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
@@ -129,11 +135,6 @@ var startNodeCmd = &cobra.Command{
 		eth1Addr, err := flags.GetEth1AddrValue(cmd)
 		if err != nil {
 			Logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
-		}
-
-		params.SsvConfig().OperatorPublicKey, err = flags.GetOperatorPubKeyFlag(cmd)
-		if err != nil {
-			Logger.Fatal("failed to get operator public key flag value", zap.Error(err))
 		}
 
 		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
@@ -182,7 +183,7 @@ var startNodeCmd = &cobra.Command{
 
 		if eth1Addr != "" {
 			// 1. create new eth1 client
-			eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr)
+			eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr, operatorStorage)
 			if err != nil {
 				logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
 			}
@@ -197,7 +198,7 @@ var startNodeCmd = &cobra.Command{
 	},
 }
 
-func configureStorage(storagePath string, logger *zap.Logger, validatorPubKey *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
+func configureStorage(storagePath string, logger *zap.Logger, operatorKey string, validatorPubKey *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage, collections.OperatorStorage) {
 	db, err := kv.New(storagePath, *logger, &kv.Options{})
 	if err != nil {
 		logger.Fatal("failed to create db!", zap.Error(err))
@@ -229,7 +230,23 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPubKey *b
 	}
 
 	ibftStorage := collections.NewIbft(db, logger, "attestation")
-	return validatorStorage, ibftStorage
+
+	operatorStorage := collections.NewOperatorStorage(db, logger)
+	if err := operatorStorage.SavePrivateKey(operatorKey); err != nil{
+		logger.Fatal("failed to save operator private key", zap.Error(err))
+	}
+	sk, err := operatorStorage.GetPrivateKey()
+	if err := operatorStorage.SavePrivateKey(operatorKey); err != nil{
+		logger.Fatal("failed to get operator private key", zap.Error(err))
+	}
+	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
+	if err != nil{
+		logger.Fatal("failed to extract operator public key", zap.Error(err))
+	}
+	logger.Info("operator public key", zap.Any("key", operatorPublicKey))
+	params.SsvConfig().OperatorPublicKey = string(operatorPublicKey)
+
+	return validatorStorage, ibftStorage, operatorStorage
 }
 
 func _getBytesFromHex(str string) []byte {
@@ -253,7 +270,7 @@ func init() {
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
 	flags.AddEth1AddrFlag(startNodeCmd)
-	flags.AddOperatorPubKeyFlag(startNodeCmd)
+	flags.AddOperatorPrivateKeyFlag(startNodeCmd)
 	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
 

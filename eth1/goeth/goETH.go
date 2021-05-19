@@ -3,6 +3,8 @@ package goeth
 import (
 	"context"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -17,14 +19,15 @@ import (
 )
 
 type eth1GRPC struct {
-	ctx           context.Context
-	conn          *ethclient.Client
-	logger        *zap.Logger
-	contractEvent *eth1.ContractEvent
+	ctx             context.Context
+	conn            *ethclient.Client
+	logger          *zap.Logger
+	contractEvent   *eth1.ContractEvent
+	operatorStorage collections.IOperatorStorage
 }
 
 // New create new goEth instance
-func New(ctx context.Context, logger *zap.Logger, nodeAddr string) (eth1.Eth1, error) {
+func New(ctx context.Context, logger *zap.Logger, nodeAddr string, operatorStorage collections.IOperatorStorage) (eth1.Eth1, error) {
 	// Create an IPC based RPC connection to a remote node
 	conn, err := ethclient.Dial(nodeAddr)
 	if err != nil {
@@ -32,9 +35,10 @@ func New(ctx context.Context, logger *zap.Logger, nodeAddr string) (eth1.Eth1, e
 	}
 
 	e := &eth1GRPC{
-		ctx:    ctx,
-		conn:   conn,
-		logger: logger,
+		ctx:             ctx,
+		conn:            conn,
+		logger:          logger,
+		operatorStorage: operatorStorage,
 	}
 
 	// init the instance which publishes an event when anything happens
@@ -112,6 +116,18 @@ func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 							zap.String("Encrypted Key", hex.EncodeToString(validatorShare.EncryptedKey)))
 
 						if strings.EqualFold(hex.EncodeToString(validatorShare.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+							sk, err := e.operatorStorage.GetPrivateKey()
+							if err != nil{
+								e.logger.Error("failed to get private key", zap.Error(err))
+								continue
+							}
+							decryptedShare, err := rsaencryption.DecodeKey(sk, string(validatorShare.EncryptedKey))
+							if err != nil{
+								e.logger.Error("failed to decrypt share key", zap.Error(err))
+								continue
+							}
+							validatorShare.EncryptedKey = []byte(decryptedShare)
+
 							isEventBelongsToOperator = true
 						}
 					}

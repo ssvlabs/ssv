@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
-	"time"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
@@ -29,7 +28,7 @@ const (
 	loggerLevel          = "logger-level"
 	eth1AddrFlag         = "eth1-addr"
 	storagePath          = "storage-path"
-	operatorPubKeyFlag   = "operator-pubkey"
+	operatorPrivateFlag  = "operator-private-key"
 )
 
 // AddNodeIDKeyFlag adds the node ID flag to the command
@@ -211,14 +210,14 @@ func GetEth1AddrValue(c *cobra.Command) (string, error) {
 	return c.Flags().GetString(eth1AddrFlag)
 }
 
-// AddOperatorPubKeyFlag adds the operator public key flag to the command
-func AddOperatorPubKeyFlag(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, operatorPubKeyFlag, "", "operator public key", false)
+// AddOperatorPrivateKeyFlag adds the operator private key flag to the command
+func AddOperatorPrivateKeyFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, operatorPrivateFlag, "", "operator private key", false)
 }
 
-// GetOperatorPubKeyFlag gets the operator public key flag from the command
-func GetOperatorPubKeyFlag(c *cobra.Command) (string, error) {
-	return c.Flags().GetString(operatorPubKeyFlag)
+// GetOperatorPrivateKeyFlag gets the operator private key flag from the command
+func GetOperatorPrivateKeyFlag(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(operatorPrivateFlag)
 }
 
 // GetStoragePathValue gets the storage path flag from the command
