@@ -40,19 +40,16 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
-	prevLambda := FirstInstanceIdentifier()
 	for i := 0; i <= highestSeq; i++ {
 		lambda := []byte(fmt.Sprintf("lambda_%d", i))
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
-			Type:           proto.RoundState_Decided,
-			Round:          3,
-			SeqNumber:      uint64(i),
-			ValidatorPk:    validatorPK(sks).Serialize(),
-			Lambda:         lambda,
-			PreviousLambda: prevLambda,
-			Value:          []byte("value"),
+			Type:        proto.RoundState_Decided,
+			Round:       3,
+			SeqNumber:   uint64(i),
+			ValidatorPk: validatorPK(sks).Serialize(),
+			Lambda:      lambda,
+			Value:       []byte("value"),
 		})
-		prevLambda = lambda
 		require.NoError(t, storage.SaveDecided(aggSignedMsg))
 		if i == highestSeq {
 			require.NoError(t, storage.SaveHighestDecidedInstance(aggSignedMsg))

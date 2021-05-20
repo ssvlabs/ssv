@@ -29,7 +29,7 @@ func TestMsgLambda(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pipeline := ValidateLambdas(test.expectedLambda, nil)
+			pipeline := ValidateLambdas(test.expectedLambda)
 			err := pipeline.Run(&proto.SignedMessage{
 				Message: &proto.Message{
 					Lambda: test.actualLambda,

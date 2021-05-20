@@ -22,9 +22,8 @@ message Message {
   bytes lambda            = 3;
   // sequence number is an incremental number for each instance, much like a block number would be in a blockchain
   uint64 seq_number       = 4;
-  bytes previous_lambda   = 5; // previous_lambda could be compared to prev block hash, to build instances as a chain
-  bytes value             = 6;
-  bytes validator_pk      = 7;
+  bytes value             = 5;
+  bytes validator_pk      = 6;
 }
 
 message SignedMessage{

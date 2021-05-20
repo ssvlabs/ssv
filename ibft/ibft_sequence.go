@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"bytes"
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
@@ -34,24 +33,6 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 		return errors.New("instance seq invalid")
 	}
 
-	// verify prev instance lambda + decided.
-	// If first instance identifier, check seq number is 0
-	// if not first instance identifier, fetch from storage and compare
-	if !bytes.Equal(opts.PreviousLambda, FirstInstanceIdentifier()) {
-		if highestKnown == nil {
-			return errors.New("could not fetch highest decided")
-		}
-		if !bytes.Equal(highestKnown.Message.Lambda, opts.PreviousLambda) {
-			return errors.New("prev lambda doesn't match known lambda")
-		}
-		if highestKnown.Message.Type != proto.RoundState_Decided {
-			return errors.New("previous instance not decided, can't start new instance")
-		}
-	} else {
-		if opts.SeqNumber != 0 {
-			return errors.New("previous lambda identifier is for first instance but seq number is not 0")
-		}
-	}
 	return nil
 }
 
@@ -84,9 +65,8 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 			ConsensusParams: i.params.ConsensusParams,
 			IbftCommittee:   opts.ValidatorShare.Committee,
 		},
-		Lambda:         opts.Identifier,
-		SeqNumber:      opts.SeqNumber,
-		PreviousLambda: opts.PrevInstance,
-		ValidatorPK:    opts.ValidatorShare.ValidatorPK.Serialize(),
+		Lambda:      opts.Identifier,
+		SeqNumber:   opts.SeqNumber,
+		ValidatorPK: opts.ValidatorShare.ValidatorPK.Serialize(),
 	}
 }

@@ -30,7 +30,6 @@ type InstanceOptions struct {
 	Params         *proto.InstanceParams
 	Lambda         []byte
 	SeqNumber      uint64
-	PreviousLambda []byte
 	ValidatorPK    []byte
 }
 
@@ -76,11 +75,10 @@ func NewInstance(opts InstanceOptions) *Instance {
 	return &Instance{
 		Me: opts.Me,
 		State: &proto.State{
-			Stage:          proto.RoundState_NotStarted,
-			Lambda:         opts.Lambda,
-			SeqNumber:      opts.SeqNumber,
-			PreviousLambda: opts.PreviousLambda,
-			ValidatorPk:    opts.ValidatorPK,
+			Stage:       proto.RoundState_NotStarted,
+			Lambda:      opts.Lambda,
+			SeqNumber:   opts.SeqNumber,
+			ValidatorPk: opts.ValidatorPK,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
@@ -118,9 +116,6 @@ func NewInstance(opts InstanceOptions) *Instance {
 func (i *Instance) Start(inputValue []byte) {
 	if i.State.Lambda == nil {
 		i.Logger.Fatal("can't start instance with invalid Lambda")
-	}
-	if i.State.PreviousLambda == nil {
-		i.Logger.Fatal("can't start instance with invalid Previous Lambda")
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))

@@ -14,11 +14,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
-// FirstInstanceIdentifier is the identifier of the first instance in the DB
-func FirstInstanceIdentifier() []byte {
-	return []byte{0, 0, 0, 0, 0, 0, 0, 0}
-}
-
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
 	Logger         *zap.Logger
@@ -42,9 +37,6 @@ type IBFT interface {
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
 	NextSeqNumber() (uint64, error)
-
-	// PreviousDecidedLambda returns the previous instance lambda that was decided
-	PreviousDecidedLambda() ([]byte, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[uint64]*proto.Node
@@ -146,18 +138,6 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 			return true, len(agg.GetSignerIds()), agg.Message.Value
 		}
 	}
-}
-
-// PreviousDecidedLambda returns the previous instance lambda that was decided
-func (i *ibftImpl) PreviousDecidedLambda() ([]byte, error) {
-	lastDecided, err := i.HighestKnownDecided()
-	if err != nil {
-		return nil, err
-	}
-	if lastDecided == nil {
-		return FirstInstanceIdentifier(), nil
-	}
-	return lastDecided.Message.Lambda, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

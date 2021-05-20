@@ -15,7 +15,7 @@ import (
 func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
-		auth.ValidateLambdas(i.State.Lambda, i.State.PreviousLambda),
+		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
 		auth.ValidatePKs(i.State.ValidatorPk),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
@@ -102,12 +102,11 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 
 func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
-		Type:           proto.RoundState_Prepare,
-		Round:          i.State.Round,
-		Lambda:         i.State.Lambda,
-		SeqNumber:      i.State.SeqNumber,
-		PreviousLambda: i.State.PreviousLambda,
-		Value:          value,
-		ValidatorPk:    i.State.ValidatorPk,
+		Type:        proto.RoundState_Prepare,
+		Round:       i.State.Round,
+		Lambda:      i.State.Lambda,
+		SeqNumber:   i.State.SeqNumber,
+		Value:       value,
+		ValidatorPk: i.State.ValidatorPk,
 	}
 }

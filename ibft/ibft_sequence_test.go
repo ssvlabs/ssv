@@ -28,10 +28,9 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"valid next instance start",
 			StartOptions{
-				PrevInstance: []byte("lambda_10"),
-				Identifier:   []byte("lambda_10"),
-				SeqNumber:    11,
-				Duty:         nil,
+				Identifier: []byte("lambda_10"),
+				SeqNumber:  11,
+				Duty:       nil,
 				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPK(sks),
@@ -46,10 +45,9 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"valid first instance",
 			StartOptions{
-				PrevInstance: FirstInstanceIdentifier(),
-				Identifier:   []byte("lambda_0"),
-				SeqNumber:    0,
-				Duty:         nil,
+				Identifier: []byte("lambda_0"),
+				SeqNumber:  0,
+				Duty:       nil,
 				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPK(sks),
@@ -64,10 +62,9 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"didn't finish initialization",
 			StartOptions{
-				PrevInstance: FirstInstanceIdentifier(),
-				Identifier:   []byte("lambda_0"),
-				SeqNumber:    0,
-				Duty:         nil,
+				Identifier: []byte("lambda_0"),
+				SeqNumber:  0,
+				Duty:       nil,
 				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPK(sks),
@@ -80,30 +77,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			"iBFT hasn't initialized yet",
 		},
 		{
-			"invalid first instance",
-			StartOptions{
-				PrevInstance: FirstInstanceIdentifier(),
-				Identifier:   []byte("lambda_0"),
-				SeqNumber:    1,
-				Duty:         nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
-				},
-			},
-			nil,
-			true,
-			"previous lambda identifier is for first instance but seq number is not 0",
-		},
-		{
 			"sequence skips",
 			StartOptions{
-				PrevInstance: []byte("lambda_10"),
-				Identifier:   []byte("lambda_12"),
-				SeqNumber:    12,
-				Duty:         nil,
+				Identifier: []byte("lambda_12"),
+				SeqNumber:  12,
+				Duty:       nil,
 				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPK(sks),
@@ -116,30 +94,11 @@ func TestCanStartNewInstance(t *testing.T) {
 			"instance seq invalid",
 		},
 		{
-			"unknown prev identifier",
-			StartOptions{
-				PrevInstance: []byte("lambda_X"),
-				Identifier:   []byte("lambda_11"),
-				SeqNumber:    11,
-				Duty:         nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
-				},
-			},
-			populatedStorage(t, sks, 10),
-			true,
-			"prev lambda doesn't match known lambda",
-		},
-		{
 			"past instance",
 			StartOptions{
-				PrevInstance: []byte("lambda_9"),
-				Identifier:   []byte("lambda_10"),
-				SeqNumber:    10,
-				Duty:         nil,
+				Identifier: []byte("lambda_10"),
+				SeqNumber:  10,
+				Duty:       nil,
 				ValidatorShare: collections.ValidatorShare{
 					NodeID:      1,
 					ValidatorPK: validatorPK(sks),

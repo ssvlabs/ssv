@@ -179,18 +179,11 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		return 0, nil, nil, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	// get prev decided
-	prevIdentifier, err := v.ibfts[role].PreviousDecidedLambda()
-	if err != nil {
-		return 0, nil, nil, errors.Wrap(err, "failed to get prev decided identifier")
-	}
-
 	decided, signaturesCount, decidedValue := v.ibfts[role].StartInstance(ibft.StartOptions{
 		Duty:           duty,
 		ValidatorShare: *v.ValidatorShare,
 		Logger:         l,
 		ValueCheck:     valCheckInstance,
-		PrevInstance:   prevIdentifier,
 		Identifier:     identifier,
 		SeqNumber:      seqNumber,
 		Value:          inputByts,
