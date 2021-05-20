@@ -17,10 +17,10 @@ import (
 func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State), // TODO - should we validate round? or maybe just higher round?
-		auth.ValidatePKs(i.State),
-		auth.ValidateSequenceNumber(i.State),
+		auth.ValidateLambdas(i.State.Lambda, i.State.PreviousLambda),
+		auth.ValidateRound(i.State.Round),
+		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.Params),
 		changeround.Validate(i.Params),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
@@ -120,6 +120,7 @@ func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 }
 
 func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
+	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 	msgs := i.ChangeRoundMessages.ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.Params.CommitteeSize()*2
 	return quorum, len(msgs), i.Params.CommitteeSize()

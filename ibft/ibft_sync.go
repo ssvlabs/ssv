@@ -12,7 +12,7 @@ func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
 func (i *ibftImpl) SyncIBFT() error {
-	s := sync.NewHistorySync(i.ValidatorShare.ValidatorPK.Serialize(), i.network, i.ibftStorage, i.params, i.logger)
+	s := sync.NewHistorySync(i.logger, i.ValidatorShare.ValidatorPK.Serialize(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	s.Start()
 	return nil
 }

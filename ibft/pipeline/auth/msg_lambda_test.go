@@ -23,15 +23,13 @@ func TestMsgLambda(t *testing.T) {
 			"different msg lambda",
 			[]byte{1, 2, 3, 4},
 			[]byte{1, 2, 3, 3},
-			"message Lambda (\x01\x02\x03\x03) does not equal State Lambda (\x01\x02\x03\x04)",
+			"message Lambda (\x01\x02\x03\x03) does not equal expected Lambda (\x01\x02\x03\x04)",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pipeline := ValidateLambdas(&proto.State{
-				Lambda: test.expectedLambda,
-			})
+			pipeline := ValidateLambdas(test.expectedLambda, nil)
 			err := pipeline.Run(&proto.SignedMessage{
 				Message: &proto.Message{
 					Lambda: test.actualLambda,

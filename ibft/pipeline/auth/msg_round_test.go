@@ -29,9 +29,7 @@ func TestMsgRound(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pipeline := ValidateRound(&proto.State{
-				Round: test.expectedRound,
-			})
+			pipeline := ValidateRound(test.expectedRound)
 			err := pipeline.Run(&proto.SignedMessage{
 				Message: &proto.Message{
 					Round: test.actualRound,

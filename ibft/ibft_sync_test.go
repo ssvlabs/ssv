@@ -18,6 +18,12 @@ func validatorPK(sks map[uint64]*bls.SecretKey) *bls.PublicKey {
 	return sks[1].GetPublicKey()
 }
 
+func aggregateInvalidSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
+	sigend := SignMsg(t, 1, sks[1], msg)
+	sigend.SignerIds = []uint64{2}
+	return sigend
+}
+
 func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
 	var aggSignedMsg *proto.SignedMessage
 	for index, sk := range sks {

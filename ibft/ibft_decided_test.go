@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -264,12 +265,13 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Decided,
-		Round:       3,
-		SeqNumber:   10,
-		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte("Lambda"),
-		Value:       []byte("value"),
+		Type:           proto.RoundState_Decided,
+		Round:          3,
+		SeqNumber:      10,
+		ValidatorPk:    validatorPK(sks).Serialize(),
+		Lambda:         []byte("Lambda"),
+		PreviousLambda: []byte("lambda_9"),
+		Value:          []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
@@ -304,4 +306,131 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
+}
+
+func TestValidateDecidedMsg(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	network := local.NewLocalNetwork()
+	ibft := populatedIbft(1, network, populatedStorage(t, sks, 10), sks, nodes)
+
+	tests := []struct {
+		name          string
+		msg           *proto.SignedMessage
+		expectedError error
+	}{
+		{
+			"valid",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      11,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_11"),
+				PreviousLambda: []byte("lambda_10"),
+				Value:          []byte("value"),
+			}),
+			nil,
+		},
+		{
+			"invalid msg stage",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Commit,
+				Round:          3,
+				SeqNumber:      11,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_11"),
+				PreviousLambda: []byte("lambda_10"),
+				Value:          []byte("value"),
+			}),
+			errors.New("message type is wrong"),
+		},
+		{
+			"invalid msg pk",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      11,
+				ValidatorPk:    []byte{1, 2, 3, 4},
+				Lambda:         []byte("lambda_11"),
+				PreviousLambda: []byte("lambda_10"),
+				Value:          []byte("value"),
+			}),
+			errors.New("invalid message validator PK"),
+		},
+		{
+			"invalid msg sig",
+			aggregateInvalidSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      11,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_11"),
+				PreviousLambda: []byte("lambda_10"),
+				Value:          []byte("value"),
+			}),
+			errors.New("could not verify message signature"),
+		},
+		{
+			"invalid prev",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      11,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_11"),
+				PreviousLambda: []byte("lambda_9"),
+				Value:          []byte("value"),
+			}),
+			errors.New("message previous Lambda does not equal previous decided Lambda"),
+		},
+		{
+			"valid first decided",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      0,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_0"),
+				PreviousLambda: FirstInstanceIdentifier(),
+				Value:          []byte("value"),
+			}),
+			nil,
+		},
+		{
+			"invalid first decided",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      1,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_0"),
+				PreviousLambda: FirstInstanceIdentifier(),
+				Value:          []byte("value"),
+			}),
+			errors.New("message previous Lambda does not equal previous decided Lambda"),
+		},
+		{
+			"invalid first decided",
+			aggregateSign(t, sks, &proto.Message{
+				Type:           proto.RoundState_Decided,
+				Round:          3,
+				SeqNumber:      0,
+				ValidatorPk:    validatorPK(sks).Serialize(),
+				Lambda:         []byte("lambda_0"),
+				PreviousLambda: []byte("lambda_1"),
+				Value:          []byte("value"),
+			}),
+			errors.New("message previous Lambda does not equal previous decided Lambda"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.expectedError != nil {
+				require.EqualError(t, ibft.(*ibftImpl).validateDecidedMsg(test.msg), test.expectedError.Error())
+			} else {
+				require.NoError(t, ibft.(*ibftImpl).validateDecidedMsg(test.msg))
+			}
+		})
+	}
 }

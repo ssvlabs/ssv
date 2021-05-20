@@ -13,10 +13,10 @@ import (
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.ValidatePKs(i.State),
-		auth.ValidateSequenceNumber(i.State),
+		auth.ValidateLambdas(i.State.Lambda, i.State.PreviousLambda),
+		auth.ValidateRound(i.State.Round),
+		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.Params),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),

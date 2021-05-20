@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -15,21 +14,27 @@ import (
 // HistorySync is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
 type HistorySync struct {
-	logger         *zap.Logger
-	network        network.Network
-	ibftStorage    collections.Iibft
-	instanceParams *proto.InstanceParams
-	validatorPK    []byte
+	logger              *zap.Logger
+	network             network.Network
+	ibftStorage         collections.Iibft
+	validateDecidedMsgF func(msg *proto.SignedMessage) error
+	validatorPK         []byte
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(validatorPK []byte, network network.Network, ibftStorage collections.Iibft, instanceParams *proto.InstanceParams, logger *zap.Logger) *HistorySync {
+func NewHistorySync(
+	logger *zap.Logger,
+	validatorPK []byte,
+	network network.Network,
+	ibftStorage collections.Iibft,
+	validateDecidedMsgF func(msg *proto.SignedMessage) error,
+) *HistorySync {
 	return &HistorySync{
-		logger:         logger,
-		validatorPK:    validatorPK,
-		network:        network,
-		ibftStorage:    ibftStorage,
-		instanceParams: instanceParams,
+		logger:              logger,
+		validatorPK:         validatorPK,
+		network:             network,
+		validateDecidedMsgF: validateDecidedMsgF,
+		ibftStorage:         ibftStorage,
 	}
 }
 
@@ -125,7 +130,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 		signedMsg := res.SignedMessages[0]
 
 		// validate
-		if err := s.isValidDecidedMsg(signedMsg); err != nil {
+		if err := s.validateDecidedMsgF(signedMsg); err != nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err))
 			continue
 		}
@@ -145,30 +150,6 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 	}
 
 	return ret, fromPeer, nil
-}
-
-func (s *HistorySync) isValidDecidedMsg(msg *proto.SignedMessage) error {
-	// TODO - test lambda? prev lambda?
-
-	if msg.Message.Type != proto.RoundState_Decided {
-		return errors.New("decided msg with wrong type")
-	}
-
-	// signature
-	if err := s.instanceParams.VerifySignedMessage(msg); err != nil {
-		return err
-	}
-
-	// threshold
-	if len(msg.SignerIds) < s.instanceParams.ThresholdSize() {
-		return errors.New("highest msg has no quorum")
-	}
-
-	// validator pk
-	if !bytes.Equal(s.validatorPK, msg.Message.ValidatorPk) {
-		return errors.New("invalid validator PK")
-	}
-	return nil
 }
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
@@ -198,7 +179,7 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq u
 		// validate and save
 		for _, msg := range res.SignedMessages {
 			// if msg is invalid, break and try again with an updated start seq
-			if s.isValidDecidedMsg(msg) != nil {
+			if s.validateDecidedMsgF(msg) != nil {
 				start = msg.Message.SeqNumber
 				continue
 			}

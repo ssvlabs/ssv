@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/collections"
 )
 
 /**
@@ -54,15 +53,6 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 		}
 	}
 	return nil
-}
-
-// HighestKnownDecided returns the highest known decided instance
-func (i *ibftImpl) HighestKnownDecided() (*proto.SignedMessage, error) {
-	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.ValidatorShare.ValidatorPK.Serialize())
-	if err != nil && err.Error() != collections.EntryNotFoundError {
-		return nil, err
-	}
-	return highestKnown, nil
 }
 
 // NextSeqNumber returns the previous decided instance seq number + 1

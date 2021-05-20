@@ -10,13 +10,13 @@ import (
 )
 
 // ValidateLambdas validates current and previous lambdas
-func ValidateLambdas(state *proto.State) pipeline.Pipeline {
+func ValidateLambdas(lambda, previousLambda []byte) pipeline.Pipeline {
 	return pipeline.WrapFunc("lambda", func(signedMessage *proto.SignedMessage) error {
-		if !bytes.Equal(signedMessage.Message.Lambda, state.Lambda) {
-			return errors.Errorf("message Lambda (%s) does not equal State Lambda (%s)", string(signedMessage.Message.Lambda), string(state.Lambda))
+		if !bytes.Equal(signedMessage.Message.Lambda, lambda) {
+			return errors.Errorf("message Lambda (%s) does not equal expected Lambda (%s)", string(signedMessage.Message.Lambda), string(lambda))
 		}
-		if !bytes.Equal(signedMessage.Message.PreviousLambda, state.PreviousLambda) {
-			return errors.New("message previous Lambda does not equal State previous Lambda")
+		if !bytes.Equal(signedMessage.Message.PreviousLambda, previousLambda) {
+			return errors.New("message previous Lambda does not equal previous decided Lambda")
 		}
 		return nil
 	})

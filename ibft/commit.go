@@ -15,10 +15,10 @@ import (
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.ValidatePKs(i.State),
-		auth.ValidateSequenceNumber(i.State),
+		auth.ValidateLambdas(i.State.Lambda, i.State.PreviousLambda),
+		auth.ValidateRound(i.State.Round),
+		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.Params),
 		i.uponCommitMsg(),
 	)
@@ -56,6 +56,7 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 }
 
 func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
+	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 	cnt := 0
 	msgs := i.CommitMessages.ReadOnlyMessagesByRound(round)
 	for _, v := range msgs {

@@ -52,7 +52,7 @@ func multiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg
 }
 
 func TestFetchDecided(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, _ := GenerateNodes(4)
 	tests := []struct {
 		name           string
 		valdiatorPK    []byte
@@ -151,10 +151,9 @@ func TestFetchDecided(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
 			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
-			s := NewHistorySync(test.valdiatorPK, network, &storage, &proto.InstanceParams{
-				ConsensusParams: proto.DefaultConsensusParams(),
-				IbftCommittee:   nodes,
-			}, zap.L())
+			s := NewHistorySync(zap.L(), test.valdiatorPK, network, &storage, func(msg *proto.SignedMessage) error {
+				return nil
+			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])
 
 			if len(test.expectedError) > 0 {
@@ -169,7 +168,7 @@ func TestFetchDecided(t *testing.T) {
 }
 
 func TestFindHighest(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, _ := GenerateNodes(4)
 	highest1 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:        proto.RoundState_Decided,
 		Round:       1,
@@ -241,22 +240,25 @@ func TestFindHighest(t *testing.T) {
 			1,
 			"could not fetch highest decided from peers",
 		},
-		{
-			"no quorum msg",
-			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
-				"2": multiSignMsg(t, []uint64{1, 2}, sks, &proto.Message{
-					Type:        proto.RoundState_Decided,
-					Round:       1,
-					Lambda:      []byte("lambda"),
-					SeqNumber:   1,
-					ValidatorPk: []byte{1, 2, 3, 4},
-				}),
-			},
-			1,
-			"could not fetch highest decided from peers",
-		},
+		//
+		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
+		//
+		//{
+		//	"no quorum msg",
+		//	[]byte{1, 2, 3, 4},
+		//	[]peer.ID{"2", "3"},
+		//	map[peer.ID]*proto.SignedMessage{
+		//		"2": multiSignMsg(t, []uint64{1, 2}, sks, &proto.Message{
+		//			Type:        proto.RoundState_Decided,
+		//			Round:       1,
+		//			Lambda:      []byte("lambda"),
+		//			SeqNumber:   1,
+		//			ValidatorPk: []byte{1, 2, 3, 4},
+		//		}),
+		//	},
+		//	1,
+		//	"could not fetch highest decided from peers",
+		//},
 		{
 			"wrong pk",
 			[]byte{1, 1, 1, 1},
@@ -273,30 +275,36 @@ func TestFindHighest(t *testing.T) {
 			1,
 			"could not fetch highest decided from peers",
 		},
-		{
-			"return not decided",
-			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
-				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-					Type:        proto.RoundState_Prepare,
-					Round:       1,
-					Lambda:      []byte("lambda"),
-					SeqNumber:   1,
-					ValidatorPk: []byte{1, 2, 3, 4},
-				}),
-			},
-			1,
-			"could not fetch highest decided from peers",
-		},
+		//
+		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
+		//
+		//{
+		//	"return not decided",
+		//	[]byte{1, 2, 3, 4},
+		//	[]peer.ID{"2", "3"},
+		//	map[peer.ID]*proto.SignedMessage{
+		//		"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		//			Type:        proto.RoundState_Prepare,
+		//			Round:       1,
+		//			Lambda:      []byte("lambda"),
+		//			SeqNumber:   1,
+		//			ValidatorPk: []byte{1, 2, 3, 4},
+		//		}),
+		//	},
+		//	1,
+		//	"could not fetch highest decided from peers",
+		//},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, &proto.InstanceParams{
-				ConsensusParams: proto.DefaultConsensusParams(),
-				IbftCommittee:   nodes,
-			}, zap.L())
+			s := NewHistorySync(zap.L(),
+				test.valdiatorPK,
+				newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil),
+				nil,
+				func(msg *proto.SignedMessage) error {
+					return nil
+				})
 			res, _, err := s.findHighestInstance()
 
 			if len(test.expectedError) > 0 {
@@ -305,7 +313,6 @@ func TestFindHighest(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, test.expectedHighestSeq, res.Message.SeqNumber)
 			}
-
 		})
 	}
 }

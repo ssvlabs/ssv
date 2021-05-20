@@ -14,12 +14,11 @@ import (
 
 func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		//i.WaitForStage(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.ValidatePKs(i.State),
-		auth.ValidateSequenceNumber(i.State),
+		auth.ValidateLambdas(i.State.Lambda, i.State.PreviousLambda),
+		auth.ValidateRound(i.State.Round),
+		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.Params),
 		i.uponPrepareMsg(),
 	)
@@ -79,6 +78,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			return nil // no reason to prepare again
 		}
 
+		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
 			i.Logger.Info("prepared instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round))
