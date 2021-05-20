@@ -76,6 +76,8 @@ func (s *HistorySync) Start() {
 			s.logger.Error("could not save highest decided msg during sync", zap.Error(err))
 		}
 	}
+
+	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber))
 }
 
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
@@ -204,6 +206,6 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 				done = true
 			}
 		}
-		s.logger.Info(fmt.Sprintf("fetched and saved sequence numbers %d-%d", start, endSeq))
+		s.logger.Info(fmt.Sprintf("fetched and saved instances up to sequence number %d", endSeq))
 	}
 }
