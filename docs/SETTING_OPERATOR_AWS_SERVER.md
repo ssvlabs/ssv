@@ -1,4 +1,4 @@
-![ethereum](/docs/resources/blox_logo.png)
+[<img src="/docs/resources/blox_logo.png" >](https://www.bloxstaking.com/)
 #### Setting AWS server for operator
 ##### Create a server of your choice and expose on ports 12000 UDP and 13000 TCP
  - In the search bar search for "ec2"

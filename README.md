@@ -3,12 +3,13 @@
 <br>
 <br>
 
-# SSV - Secret Shared Validator
-
-SSV is a protocol for distributing an eth2 validator key between multiple operators governed by a consensus protocol ([Istanbul BFT](https://arxiv.org/pdf/2002.03613.pdf)).
+# Secret-Shared-Validator(SSV)
+Secret Shared Validator ('SSV') is a unique technology that enables the distributed control and operation of an Ethereum validator.\
+SSV uses an MPC threshold scheme with a consensus layer on top, that governs the network. Its core strength is in its robustness and\
+fault tolerance which leads the way for an open network of staking operators to run validators in a decentralized and trustless way.
 
 ## Getting started
-An SSV operator's getting started [documentation](./internals/documentation/operator_getting_started.md)
+An SSV operator's getting started [documentation](docs/OPERATOR_GETTING_STARTED.md)
 
 ## Common commands
 ```bash

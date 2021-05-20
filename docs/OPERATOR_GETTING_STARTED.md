@@ -1,14 +1,6 @@
-[<img src="../img/bloxstaking_header_image.png" >](https://www.bloxstaking.com/)
+[<img src="/docs/resources/blox_logo.png" >](https://www.bloxstaking.com/)
 
-<br>
-<br>
-
-# Secret-Shared-Validator(SSV)
-Secret Shared Validator ('SSV') is a unique technology that enables the distributed control and operation of an Ethereum validator.\
-SSV uses an MPC threshold scheme with a consensus layer on top, that governs the network. Its core strength is in its robustness and\
-fault tolerance which leads the way for an open network of staking operators to run validators in a decentralized and trustless way. 
-
-## SSV Operator
+ ## SSV Operator
 An operator is an entity running the SSV node code (found here) and joining the SSV network.
 
 ### General SSV information (Semi technical read)
