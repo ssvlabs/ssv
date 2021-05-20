@@ -43,7 +43,7 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 	for i := 0; i <= highestSeq; i++ {
 		lambda := []byte(fmt.Sprintf("lambda_%d", i))
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
-			Type:        proto.RoundState_Decided,
+			Type:        proto.RoundState_Commit,
 			Round:       3,
 			SeqNumber:   uint64(i),
 			ValidatorPk: validatorPK(sks).Serialize(),

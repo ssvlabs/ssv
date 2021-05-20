@@ -11,30 +11,9 @@ import (
 )
 
 func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
-	// verify prev instance lambda + decided.
-	// If first instance identifier, check seq number is 0
-	// if not first instance identifier, fetch from storage and compare
-	//var expectedPrevIdentifier []byte
-	//var prevInstanceStatus proto.RoundState
-	//if msg.Message.SeqNumber == 0 {
-	//	expectedPrevIdentifier = FirstInstanceIdentifier()
-	//	prevInstanceStatus = proto.RoundState_Decided // first identifier is also decided
-	//} else {
-	//	prevDecided, err := i.ibftStorage.GetDecided(i.ValidatorShare.ValidatorPK.Serialize(), msg.Message.SeqNumber-1)
-	//	// if we can't find prev decided we can't verify prevIdentifier
-	//	if err != nil {
-	//		return err
-	//	}
-	//	if prevDecided == nil {
-	//		return errors.New("can't fetch previous decided for validation")
-	//	}
-	//	expectedPrevIdentifier = prevDecided.Message.Lambda
-	//	prevInstanceStatus = prevDecided.Message.Type
-	//}
-
 	p := pipeline.Combine(
 		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
-		auth.MsgTypeCheck(proto.RoundState_Decided),
+		auth.MsgTypeCheck(proto.RoundState_Commit),
 		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
 		auth.ValidatePKs(i.ValidatorShare.ValidatorPK.Serialize()),
 		auth.AuthorizeMsg(i.params),
@@ -55,7 +34,7 @@ by calling Decide(λi,− , Qcommit) do
 */
 func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	if err := i.validateDecidedMsg(msg); err != nil {
-		i.logger.Error("received decided message invalid", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
+		i.logger.Error("received invalid decided message", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
 		return
 	}
 

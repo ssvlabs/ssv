@@ -65,11 +65,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 4,
 			}),
 			true,
@@ -79,11 +79,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 			"decided from future, requires sync. current is nil",
 			nil,
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 4,
 			}),
 			true,
@@ -98,11 +98,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 10,
 			}),
 			true,
@@ -117,11 +117,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 1,
 			}),
 			false,
@@ -136,11 +136,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 3,
 			}),
 			false,
@@ -156,7 +156,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			},
 			nil,
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 0,
 			}),
 			false,
@@ -198,7 +198,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 1,
 			}),
 			true,
@@ -207,7 +207,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			"current instance nil",
 			nil,
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 1,
 			}),
 			false,
@@ -221,7 +221,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			false,
@@ -235,7 +235,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
-				Type:      proto.RoundState_Decided,
+				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
 			}),
 			false,
@@ -265,7 +265,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Decided,
+		Type:        proto.RoundState_Commit,
 		Round:       3,
 		SeqNumber:   10,
 		ValidatorPk: validatorPK(sks).Serialize(),
@@ -291,7 +291,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Decided,
+		Type:        proto.RoundState_Commit,
 		Round:       3,
 		SeqNumber:   10,
 		ValidatorPk: validatorPK(sks).Serialize(),
@@ -320,7 +320,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"valid",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Decided,
+				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
@@ -332,7 +332,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"invalid msg stage",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
+				Type:        proto.RoundState_Prepare,
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
@@ -344,7 +344,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"invalid msg pk",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Decided,
+				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: []byte{1, 2, 3, 4},
@@ -356,7 +356,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"invalid msg sig",
 			aggregateInvalidSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Decided,
+				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
@@ -368,7 +368,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"valid first decided",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Decided,
+				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   0,
 				ValidatorPk: validatorPK(sks).Serialize(),
