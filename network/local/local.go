@@ -18,7 +18,7 @@ type Local struct {
 	sigC               []chan *proto.SignedMessage
 	decidedC           []chan *proto.SignedMessage
 	syncC              []chan *network.SyncChanObj
-	syncPeers          map[peer.ID]chan *network.SyncChanObj
+	syncPeers          map[string]chan *network.SyncChanObj
 	createChannelMutex *sync.Mutex
 }
 
@@ -29,7 +29,7 @@ func NewLocalNetwork() *Local {
 		sigC:               make([]chan *proto.SignedMessage, 0),
 		decidedC:           make([]chan *proto.SignedMessage, 0),
 		syncC:              make([]chan *network.SyncChanObj, 0),
-		syncPeers:          make(map[peer.ID]chan *network.SyncChanObj),
+		syncPeers:          make(map[string]chan *network.SyncChanObj),
 		createChannelMutex: &sync.Mutex{},
 	}
 }
@@ -112,9 +112,9 @@ func (n *Local) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 
 // GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 // If peer list is nil, broadcasts to all.
-func (n *Local) GetHighestDecidedInstance(toPeer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	if toChan, found := n.syncPeers[toPeer]; found {
-		stream := NewLocalStream(peer.ID(msg.FromPeerID), toPeer)
+func (n *Local) GetHighestDecidedInstance(peerID string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerID]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerID)
 		go func() {
 			toChan <- &network.SyncChanObj{
 				Msg:    msg,
@@ -141,14 +141,14 @@ func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	defer n.createChannelMutex.Unlock()
 	c := make(chan *network.SyncChanObj)
 	n.syncC = append(n.syncC, c)
-	n.syncPeers[peer.ID(fmt.Sprintf("%d", len(n.syncPeers)))] = c
+	n.syncPeers[fmt.Sprintf("%d", len(n.syncPeers))] = c
 	return c
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-func (n *Local) GetDecidedByRange(toPeer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	if toChan, found := n.syncPeers[toPeer]; found {
-		stream := NewLocalStream(peer.ID(msg.FromPeerID), toPeer)
+func (n *Local) GetDecidedByRange(peerID string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerID]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerID)
 		go func() {
 			toChan <- &network.SyncChanObj{
 				Msg:    msg,
@@ -175,8 +175,8 @@ func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (n *Local) AllPeers(validatorPk []byte) ([]peer.ID, error) {
-	ret := make([]peer.ID, 0)
+func (n *Local) AllPeers(validatorPk []byte) ([]string, error) {
+	ret := make([]string, 0)
 	for k := range n.syncPeers {
 		ret = append(ret, k)
 	}

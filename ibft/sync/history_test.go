@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/inmem"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -56,10 +55,10 @@ func TestFetchDecided(t *testing.T) {
 	tests := []struct {
 		name           string
 		valdiatorPK    []byte
-		peers          []peer.ID
-		fromPeer       peer.ID
+		peers          []string
+		fromPeer       string
 		rangeParams    []uint64
-		decidedArr     map[peer.ID][]*proto.SignedMessage
+		decidedArr     map[string][]*proto.SignedMessage
 		expectedError  string
 		forceError     error
 		expectedResLen uint64
@@ -67,10 +66,10 @@ func TestFetchDecided(t *testing.T) {
 		{
 			"valid fetch no pagination",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
+			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 3},
-			map[peer.ID][]*proto.SignedMessage{
+			map[string][]*proto.SignedMessage{
 				"2": {
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:        proto.RoundState_Decided,
@@ -102,10 +101,10 @@ func TestFetchDecided(t *testing.T) {
 		{
 			"valid fetch with pagination",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
+			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 2},
-			map[peer.ID][]*proto.SignedMessage{
+			map[string][]*proto.SignedMessage{
 				"2": {
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:        proto.RoundState_Decided,
@@ -137,11 +136,11 @@ func TestFetchDecided(t *testing.T) {
 		{
 			"force error",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
+			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 2},
-			map[peer.ID][]*proto.SignedMessage{},
-			"could not fetch ranged decided instances",
+			map[string][]*proto.SignedMessage{},
+			"could not find highest",
 			errors.New("error"),
 			3,
 		},
@@ -187,16 +186,16 @@ func TestFindHighest(t *testing.T) {
 	tests := []struct {
 		name               string
 		valdiatorPK        []byte
-		peers              []peer.ID
-		highestMap         map[peer.ID]*proto.SignedMessage
+		peers              []string
+		highestMap         map[string]*proto.SignedMessage
 		expectedHighestSeq uint64
 		expectedError      string
 	}{
 		{
 			"valid",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 			},
 			1,
@@ -205,8 +204,8 @@ func TestFindHighest(t *testing.T) {
 		{
 			"valid multi responses",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2", "3"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 				"3": highest2,
 			},
@@ -216,8 +215,8 @@ func TestFindHighest(t *testing.T) {
 		{
 			"valid multi responses different seq",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2", "3"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 				"3": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 					Type:        proto.RoundState_Decided,
@@ -233,8 +232,8 @@ func TestFindHighest(t *testing.T) {
 		{
 			"invalid validator pk",
 			[]byte{1, 1, 1, 1},
-			[]peer.ID{"2"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 			},
 			1,
@@ -262,8 +261,8 @@ func TestFindHighest(t *testing.T) {
 		{
 			"wrong pk",
 			[]byte{1, 1, 1, 1},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2", "3"},
+			map[string]*proto.SignedMessage{
 				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 					Type:        proto.RoundState_Decided,
 					Round:       1,

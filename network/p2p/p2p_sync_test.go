@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"github.com/bloxapp/ssv/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
@@ -40,7 +41,8 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
-	res, err := peer1.GetHighestDecidedInstance(peer2.(*p2pNetwork).host.ID(), messageToBroadcast)
+	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
+	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
 	require.EqualError(t, err, "no response for sync request")
 	time.Sleep(time.Millisecond * 100)
 	require.Nil(t, res)
@@ -96,7 +98,8 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 500) // important to let nodes reach each other
-	res, err := peer1.GetHighestDecidedInstance(peer2.(*p2pNetwork).host.ID(), messageToBroadcast)
+	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
+	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
 	require.NoError(t, err)
 	time.Sleep(time.Millisecond * 100)
 

@@ -3,7 +3,6 @@ package local
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
@@ -118,7 +117,7 @@ func TestGetHighestDecided(t *testing.T) {
 		})
 	}()
 
-	res, err := net.GetHighestDecidedInstance(peer.ID("1"), &network.SyncMessage{
+	res, err := net.GetHighestDecidedInstance("1", &network.SyncMessage{
 		ValidatorPk: []byte{1, 2, 3, 4},
 		FromPeerID:  "0",
 		Type:        network.Sync_GetHighestType,
@@ -142,7 +141,7 @@ func TestGetDecidedByRange(t *testing.T) {
 		})
 	}()
 
-	res, err := net.GetDecidedByRange(peer.ID("1"), &network.SyncMessage{
+	res, err := net.GetDecidedByRange("1", &network.SyncMessage{
 		ValidatorPk: []byte{1, 2, 3, 4},
 		FromPeerID:  "0",
 		Type:        network.Sync_GetHighestType,
@@ -156,5 +155,5 @@ func TestGetAllPeers(t *testing.T) {
 	_, _, _, _ = net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan()
 	res, err := net.AllPeers([]byte{})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []peer.ID{"0", "1", "2", "3"}, res)
+	require.ElementsMatch(t, []string{"0", "1", "2", "3"}, res)
 }

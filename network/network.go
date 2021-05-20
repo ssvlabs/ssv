@@ -3,7 +3,6 @@ package network
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"io"
 )
 
@@ -52,13 +51,13 @@ type Network interface {
 
 	// GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 	// If peer list is nil, broadcasts to all.
-	GetHighestDecidedInstance(peer peer.ID, msg *SyncMessage) (*SyncMessage, error)
+	GetHighestDecidedInstance(peerID string, msg *SyncMessage) (*SyncMessage, error)
 
 	// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 	RespondToHighestDecidedInstance(stream SyncStream, msg *SyncMessage) error
 
 	// GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-	GetDecidedByRange(peer peer.ID, msg *SyncMessage) (*SyncMessage, error)
+	GetDecidedByRange(peerID string, msg *SyncMessage) (*SyncMessage, error)
 
 	// RespondToGetDecidedByRange responds to a GetDecidedByRange
 	RespondToGetDecidedByRange(stream SyncStream, msg *SyncMessage) error
@@ -70,5 +69,5 @@ type Network interface {
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
 
 	// AllPeers returns all connected peers for a validator PK
-	AllPeers(validatorPk []byte) ([]peer.ID, error)
+	AllPeers(validatorPk []byte) ([]string, error)
 }

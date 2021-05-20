@@ -86,6 +86,7 @@ func populatedIbft(
 	)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
+	ret.(*ibftImpl).listenToSyncMessages()
 	return ret
 }
 

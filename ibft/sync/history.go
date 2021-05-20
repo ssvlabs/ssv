@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -80,7 +79,7 @@ func (s *HistorySync) Start() {
 }
 
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
-func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, error) {
+func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error) {
 	// pick up to 4 peers
 	// TODO - why 4? should be set as param?
 	// TODO select peers by quality/ score?
@@ -98,7 +97,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 	results := make([]*network.SyncMessage, 4)
 	for i, p := range usedPeers {
 		wg.Add(1)
-		go func(index int, peer peer.ID, wg *sync.WaitGroup) {
+		go func(index int, peer string, wg *sync.WaitGroup) {
 			res, err := s.network.GetHighestDecidedInstance(peer, &network.SyncMessage{
 				Type:        network.Sync_GetHighestType,
 				ValidatorPk: s.validatorPK,
@@ -116,7 +115,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 
 	// validate response and find highest decided
 	var ret *proto.SignedMessage
-	var fromPeer peer.ID
+	var fromPeer string
 	for _, res := range results {
 		if res == nil {
 			continue
@@ -137,11 +136,11 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 
 		if ret == nil {
 			ret = signedMsg
-			fromPeer = peer.ID(res.FromPeerID)
+			fromPeer = res.FromPeerID
 		}
 		if ret.Message.SeqNumber < signedMsg.Message.SeqNumber {
 			ret = signedMsg
-			fromPeer = peer.ID(res.FromPeerID)
+			fromPeer = res.FromPeerID
 		}
 	}
 
@@ -154,13 +153,14 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
 // Range is start to end seq including
-func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, err error) {
+func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, err error) {
 	failCount := 0
 	start := startSeq
 	done := false
+	var latestError error
 	for {
 		if failCount == 5 {
-			return highestSaved, errors.New("could not fetch ranged decided instances")
+			return highestSaved, latestError
 		}
 		if done {
 			return highestSaved, nil
@@ -173,6 +173,7 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq u
 		})
 		if err != nil {
 			failCount++
+			latestError = err
 			continue
 		}
 

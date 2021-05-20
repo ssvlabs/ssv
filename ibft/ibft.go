@@ -84,6 +84,8 @@ func New(
 }
 
 func (i *ibftImpl) Init() {
+	i.listenToSyncMessages()
+	i.waitForMinPeerCount(3)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
 	i.initFinished = true

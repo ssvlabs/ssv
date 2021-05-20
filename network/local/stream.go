@@ -2,18 +2,17 @@ package local
 
 import (
 	"github.com/bloxapp/ssv/network"
-	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 // Stream is used by local network
 type Stream struct {
-	From        peer.ID
-	To          peer.ID
+	From        string
+	To          string
 	ReceiveChan chan *network.SyncMessage
 }
 
 // NewLocalStream returs a stream instance
-func NewLocalStream(From peer.ID, To peer.ID) *Stream {
+func NewLocalStream(From string, To string) *Stream {
 	return &Stream{
 		From:        From,
 		To:          To,
