@@ -127,7 +127,7 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 		zap.String("Validator PublicKey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
 		zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
 	for i := range validatorAddedEvent.OessList {
-		validatorShare := validatorAddedEvent.OessList[i]
+		validatorShare := &validatorAddedEvent.OessList[i]
 		e.logger.Debug("Validator Share",
 			zap.Any("Index", validatorShare.Index),
 			zap.String("Operator PubKey", hex.EncodeToString(validatorShare.OperatorPublicKey)),
@@ -164,6 +164,9 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 
 				if encryptedSharePrivateKey, ok := out[0].(string); ok {
 					decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
+					e.logger.Debug("decryptedSharePrivateKey", zap.String("", decryptedSharePrivateKey))
+					decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
+					e.logger.Debug("decryptedSharePrivateKey remove 0x", zap.String("", decryptedSharePrivateKey))
 					if err != nil {
 						e.logger.Error("failed to decrypt share private key", zap.Error(err))
 						continue

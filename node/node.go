@@ -96,7 +96,7 @@ func (n *ssvNode) InformObserver(data interface{}) {
 
 	if validatorShare, ok := data.(collections.ValidatorShare); ok {
 		if _, ok := n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()]; ok {
-			// TODO: override logic TBD
+			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.ValidatorPK.SerializeToHexStr()))
 			return
 		}
 		// setup validator

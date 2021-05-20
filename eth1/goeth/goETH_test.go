@@ -1,7 +1,19 @@
 package goeth
 
 import (
+	"context"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -16,6 +28,8 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 )
+
+var skBase64 = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
 
 func TestReadingEventLogs(t *testing.T) {
 	t.Run("Successfully Process ValidatorAdded Event", func(t *testing.T) {
@@ -46,92 +60,150 @@ func TestReadingEventLogs(t *testing.T) {
 }
 
 // TODO test for checking event log - need to decide if need to be part of testing
-//func TestNew(t *testing.T) {
-//	t.Run("add", func(t *testing.T) {
-//
-//		client, err := ethclient.Dial("ws://eth1-ws.stage.bloxinfra.com/ws")
-//		require.NoError(t, err)
-//
-//		contractAddress := common.HexToAddress(params.SsvConfig().OperatorContractAddress)
-//		query := ethereum.FilterQuery{
-//			FromBlock: big.NewInt(4819444),
-//			ToBlock:   big.NewInt(4819444),
-//			Addresses: []common.Address{
-//				contractAddress,
-//			},
-//		}
-//
-//		logs, err := client.FilterLogs(context.Background(), query)
-//		require.NoError(t, err)
-//
-//		contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
-//		require.NoError(t, err)
-//
-//		logger := *zap.L()
-//		db, err := kv.New("./data/db", logger, &kv.Options{InMemory: true})
-//		require.NoError(t, err)
-//		defer db.Close()
-//		operatorStorage := collections.NewOperatorStorage(db, &logger)
-//		operatorStorage.SetupPrivateKey("LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==")
-//		sk, err := operatorStorage.GetPrivateKey()
-//		operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
-//
-//		for _, vLog := range logs {
-//			fmt.Println("BlockNumber:     ", vLog.BlockNumber)
-//			fmt.Println("TxHash:          ", vLog.TxHash.Hex())
-//
-//			fmt.Println(hex.EncodeToString(vLog.Data))
-//
-//			eventType, err := contractAbi.EventByID(vLog.Topics[0])
-//			require.NoError(t, err)
-//
-//			event := eth1.ValidatorAddedEvent{}
-//			err = contractAbi.UnpackIntoInterface(&event, eventType.Name, vLog.Data)
-//			require.NoError(t, err)
-//
-//			fmt.Println("Validator PubKey:", hex.EncodeToString(event.PublicKey))
-//			fmt.Println("Owner Address:   ", event.OwnerAddress.String())
-//			for i := range event.OessList {
-//				oess := event.OessList[i]
-//				fmt.Println("Index:           ", oess.Index)
-//				fmt.Println("Operator PubKey: ", hex.EncodeToString(oess.OperatorPublicKey))
-//				fmt.Println("Share PubKey:    ", hex.EncodeToString(oess.SharedPublicKey))
-//				fmt.Println("Encrypted Key:   ", hex.EncodeToString(oess.EncryptedKey))
-//
-//				def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
-//				outAbi, err := abi.JSON(strings.NewReader(def))
-//				if err != nil {
-//					logger.Error("failed to define ABI", zap.Error(err))
-//					continue
-//				}
-//
-//				outOperatorPublicKey, err := outAbi.Unpack("method", oess.OperatorPublicKey)
-//				if err != nil {
-//					logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
-//					continue
-//				}
-//
-//				if oessOperatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
-//					if strings.EqualFold(oessOperatorPublicKey, operatorPublicKey) {
-//						out, err := outAbi.Unpack("method", oess.EncryptedKey)
-//						if err != nil {
-//							logger.Error("failed to unpack EncryptedKey", zap.Error(err))
-//							continue
-//						}
-//
-//						if encryptedSharePrivateKey, ok := out[0].(string); ok {
-//							decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
-//							if err != nil {
-//								logger.Error("failed to decrypt share private key", zap.Error(err))
-//								continue
-//							}
-//							oess.EncryptedKey = []byte(decryptedSharePrivateKey)
-//					}
-//				}
-//			}
-//
-//			eventSignature := []byte("ItemSet(bytes32,bytes32)")
-//			hash := crypto.Keccak256Hash(eventSignature)
-//			fmt.Println(hash.Hex()) // 0xe79e73da417710ae99aa2088575580a60415d359acfad9cdd3382d59c80281d4
-//		}}})
-//	}
+func TestAddValidatorEvent(t *testing.T) {
+	t.Run("add", func(t *testing.T) {
+		threshold.Init()
+
+		logger := *zap.L()
+		db, err := kv.New("./data/db", logger, &kv.Options{InMemory: true})
+		require.NoError(t, err)
+		defer db.Close()
+		operatorStorage := collections.NewOperatorStorage(db, &logger)
+		validatorStorage := collections.NewValidatorStorage(db, &logger)
+
+		client, err := ethclient.Dial("ws://eth1-ws.stage.bloxinfra.com/ws")
+		require.NoError(t, err)
+
+		contractAddress := common.HexToAddress(params.SsvConfig().OperatorContractAddress)
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(4824290),
+			ToBlock:   big.NewInt(4824290),
+			Addresses: []common.Address{
+				contractAddress,
+			},
+		}
+
+		logs, err := client.FilterLogs(context.Background(), query)
+		require.NoError(t, err)
+
+		contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+		require.NoError(t, err)
+
+		require.NoError(t, operatorStorage.SetupPrivateKey(skBase64))
+		sk, err := operatorStorage.GetPrivateKey()
+		operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
+
+		for _, vLog := range logs {
+			fmt.Println("BlockNumber:     ", vLog.BlockNumber)
+			fmt.Println("TxHash:          ", vLog.TxHash.Hex())
+
+			fmt.Println(hex.EncodeToString(vLog.Data))
+
+			eventType, err := contractAbi.EventByID(vLog.Topics[0])
+			require.NoError(t, err)
+
+			event := eth1.ValidatorAddedEvent{}
+			err = contractAbi.UnpackIntoInterface(&event, eventType.Name, vLog.Data)
+			require.NoError(t, err)
+
+			fmt.Println("Validator PubKey:", hex.EncodeToString(event.PublicKey))
+			fmt.Println("Owner Address:   ", event.OwnerAddress.String())
+
+			ibftCommittee := map[uint64]*proto.Node{}
+			validatorShare := collections.ValidatorShare{}
+			for i := range event.OessList {
+				oess := &event.OessList[i]
+				fmt.Println("Index:           ", oess.Index)
+				fmt.Println("Operator PubKey: ", hex.EncodeToString(oess.OperatorPublicKey))
+				fmt.Println("Share PubKey:    ", hex.EncodeToString(oess.SharedPublicKey))
+				fmt.Println("Encrypted Key:   ", hex.EncodeToString(oess.EncryptedKey))
+
+				def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+				outAbi, err := abi.JSON(strings.NewReader(def))
+				if err != nil {
+					logger.Error("failed to define ABI", zap.Error(err))
+					continue
+				}
+
+				outOperatorPublicKey, err := outAbi.Unpack("method", oess.OperatorPublicKey)
+				if err != nil {
+					logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
+					continue
+				}
+
+				nodeID := oess.Index.Uint64() + 1
+				ibftCommittee[nodeID] = &proto.Node{
+					IbftId: nodeID,
+					Pk:     oess.SharedPublicKey,
+				}
+
+				if oessOperatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
+					oess.OperatorPublicKey = []byte(oessOperatorPublicKey)
+
+					// mock pubsub functionality
+					data, _ := json.Marshal(event)
+					var eventFromObserver eth1.ValidatorAddedEvent
+					require.NoError(t, json.Unmarshal(data, &eventFromObserver))
+
+					oess2 := eventFromObserver.OessList[i]
+					if strings.EqualFold(string(oess2.OperatorPublicKey), operatorPublicKey) {
+						out, err := outAbi.Unpack("method", oess.EncryptedKey)
+						if err != nil {
+							logger.Error("failed to unpack EncryptedKey", zap.Error(err))
+							continue
+						}
+
+						if encryptedSharePrivateKey, ok := out[0].(string); ok {
+							decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
+							if err != nil {
+								logger.Error("failed to decrypt share private key", zap.Error(err))
+								continue
+							}
+							oess.EncryptedKey = []byte(decryptedSharePrivateKey)
+							validatorShare.NodeID = nodeID
+							ibftCommittee[nodeID].Sk = oess.EncryptedKey
+
+							validatorShare.ValidatorPK = &bls.PublicKey{}
+							if err := validatorShare.ValidatorPK.Deserialize(event.PublicKey); err != nil {
+								logger.Error("failed to deserialize share public key", zap.Error(err))
+								return
+							}
+							fmt.Println("TEST:   ", validatorShare.ValidatorPK.SerializeToHexStr())
+
+							validatorShare.ShareKey = &bls.SecretKey{}
+							if err := validatorShare.ShareKey.Deserialize(oess.EncryptedKey); err != nil {
+								logger.Error("failed to deserialize share private key", zap.Error(err))
+								return
+							}
+						}
+					}
+
+				}
+
+				eventSignature := []byte("ItemSet(bytes32,bytes32)")
+				hash := crypto.Keccak256Hash(eventSignature)
+				fmt.Println(hash.Hex()) // 0xe79e73da417710ae99aa2088575580a60415d359acfad9cdd3382d59c80281d4
+			}
+
+			validatorShare.Committee = ibftCommittee
+			require.NoError(t, validatorStorage.SaveValidatorShare(&validatorShare))
+			v, err := validatorStorage.GetValidatorsShare(event.PublicKey)
+			require.NoError(t, err)
+			require.NotNil(t, v)
+
+			marshalValidatorShare, err := json.Marshal(&validatorShare)
+			if err != nil {
+				logger.Error("failed to marshal validator share", zap.Error(err))
+				return
+			}
+
+			var validatorShare2 collections.ValidatorShare
+			err = json.Unmarshal(marshalValidatorShare, &validatorShare2)
+			if err != nil {
+				logger.Error("failed to unmarshal validator share", zap.Error(err))
+			}
+
+			fmt.Println("TEST2:   ", validatorShare2.ValidatorPK.SerializeToHexStr())
+		}
+	})
+}
