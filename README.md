@@ -3,61 +3,72 @@
 <br>
 <br>
 
-# Secret-Shared-Validator(SSV)
-Secret Shared Validator ('SSV') is a unique technology that enables the distributed control and operation of an Ethereum validator.\
-SSV uses an MPC threshold scheme with a consensus layer on top, that governs the network. Its core strength is in its robustness and\
-fault tolerance which leads the way for an open network of staking operators to run validators in a decentralized and trustless way.
+# SSV - Secret Shared Validator
 
-## Getting started
-An SSV operator's getting started [documentation](docs/OPERATOR_GETTING_STARTED.md)
+[![API Reference](
+https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/68747470733a2f2f676f646f632e6f72672f6769746875622e636f6d2f676f6c616e672f6764646f3f7374617475732e737667
+)](https://pkg.go.dev/github.com/ethereum/eth2-ssv?tab=doc)
+![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/full-test.yml/badge.svg?branch=stage)
+![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/lint.yml/badge.svg?branch=stage)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ethereum/eth2-ssv)](https://goreportcard.com/report/github.com/ethereum/eth2-ssv)
+[![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/eDXSP9R)
 
-## Common commands
-```bash
-# Build binary
-$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+[comment]: <> ([![Travis]&#40;https://travis-ci.com/ethereum/eth2-ssv.svg?branch=stage&#41;]&#40;https://travis-ci.com/ethereum/eth2-ssv&#41;)
 
-# Run local 4 node network (requires docker and a .env file as shown below)
-$ make docker-debug 
+## Introduction
 
-# Lint
-$ make lint-prepare
+Secret Shared Validator ('SSV') is a unique technology that enables the distributed control and operation of an Ethereum validator.
 
-$ make lint
+SSV uses an MPC threshold scheme with a consensus layer on top ([Istanbul BFT](https://arxiv.org/pdf/2002.03613.pdf)), 
+that governs the network. \
+Its core strength is in its robustness and fault tolerance which leads the way for an open network of staking operators 
+to run validators in a decentralized and trustless way.
 
-# Full test
-$ make full-test
+## Information
 
-```
+### General SSV information (Semi technical read)
+* Article by [Blox](https://medium.com/bloxstaking/an-introduction-to-secret-shared-validators-ssv-for-ethereum-2-0-faf49efcabee)
+* Article by [Mara Schmiedt and Collin Mayers](https://medium.com/coinmonks/eth2-secret-shared-validators-85824df8cbc0)
 
-## Splitting a key
-We split an eth2 BLS validator key into shares via Shamir-Secret-Sharing(SSS) to be used between the SSV nodes. 
-```bash
-# Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
-$ ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}
+### Technical iBFT and SSV read
+* [iBFT Paper](https://arxiv.org/pdf/2002.03613.pdf)
+* [iBFT annotated paper (By Blox)](./ibft/IBFT.md)
+* [EIP650](https://github.com/ethereum/EIPs/issues/650)
 
-# Generate threshold keys
-$ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}
-```
 
-## Example .env file 
-```
-   NETWORK=pyrmont
-   DISCOVERY_TYPE=<mdns for local network, empty for discov5 remote>
-   STORAGE_PATH=<example ./data/db/node_1/2/3/4>
-   BOOT_NODE_EXTERNAL_IP=
-   BOOT_NODE_PRIVATE_KEY=
-   BEACON_NODE_ADDR= <can use eth2-4000-prysm-ext.stage.bloxinfra.com:80>
-   NODE_ID=
-   VALIDATOR_PUBLIC_KEY=
-   SSV_PRIVATE_KEY=
-   PUBKEY_NODE_1=
-   PUBKEY_NODE_2=
-   PUBKEY_NODE_3=
-   PUBKEY_NODE_4=
-```
-For a 4 node SSV network, 4 .env.node.<1/2/3/4> files need to be created.
+## Getting Started
 
-### Progress
+The following documents contains instructions and information on how to get started:
+* [An SSV operator's getting started](./docs/OPERATOR_GETTING_STARTED.md)
+* [How to setup an operator on AWS](./docs/SETTING_OPERATOR_AWS_SERVER.md)
+* [Developers' Guide](./docs/DEV_GUIDE.md)
+
+## Contribution
+
+Thank you for considering a contribution to the source code.
+
+In order to contribute to eth2-ssv, please fork, add your code, commit and send a pull request
+for the maintainers to review and merge into the main code base.\
+If you wish to submit more complex changes though, please check up with the core devs first on [our discord](https://discord.gg/eDXSP9R)
+to ensure those changes are in line with the general philosophy of the project and/or get
+some early feedback which can make both your efforts much lighter as well as our review
+and merge procedures quick and simple.
+
+Please see the [Developers' Guide](./docs/DEV_GUIDE.md)
+for more details on configuring your environment, managing project dependencies, and
+testing procedures.
+
+## License
+
+The eth2-ssv library (i.e. all code outside of the `cmd` directory) is licensed under the
+[GNU Lesser General Public License v3.0](https://www.gnu.org/licenses/lgpl-3.0.en.html),
+also included in our repository in the `LICENSE` file.
+
+The eth2-ssv binaries (i.e. all code inside of the `cmd` directory) is licensed under the
+[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also
+included in our repository in the `LICENSE` file.
+
+## Road Map
 [X] Free standing, reference iBFT Go implementation\
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Glang\
@@ -75,23 +86,3 @@ For a 4 node SSV network, 4 .env.node.<1/2/3/4> files need to be created.
 
 ** X=done, \\=WIP
 
-
-### Research (Deprecated)
-- Secret Shared Validators on Eth2
-    - [Litepaper](https://medium.com/coinmonks/eth2-secret-shared-validators-85824df8cbc0)
-- iBTF
-    - [Paper](https://arxiv.org/pdf/2002.03613.pdf)
-    - [EIP650](https://github.com/ethereum/EIPs/issues/650)
-    - [Liveness issues](https://github.com/ConsenSys/quorum/issues/305) - should have been addressed in the paper
-    - [Consensys short description](https://docs.goquorum.consensys.net/en/stable/Concepts/Consensus/IBFT/)
-- POC
-    - [SSV Python node](https://github.com/dankrad/python-ssv)
-    - [iBFT Python](https://github.com/dankrad/python-ibft)
-    - [Prysm adapted validator client](https://github.com/alonmuroch/prysm/tree/ssv)
-- Other implementations
-    - [Consensys Quorum](https://github.com/ConsenSys/quorum)   
-    - [Besu Hyperledger](https://besu.hyperledger.org/en/stable/HowTo/Configure/Consensus-Protocols/IBFT/)
-        - [code]( https://github.com/hyperledger/besu/tree/master/consensus/ibft)
-- DKG
-    - [Blox's eth2 pools research](https://github.com/bloxapp/eth2-staking-pools-research)
-    - [ETH DKG](https://github.com/PhilippSchindler/ethdkg)

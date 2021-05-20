@@ -16,6 +16,8 @@ vendor/
 
 .env*
 config/share*
+share*.yaml
+share*.yml
 
 # User-specific stuff:
 .idea/**/workspace.xml
