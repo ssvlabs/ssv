@@ -81,15 +81,17 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 }
 
 // ExtractPublicKey get public key from private key and return []byte represent the public key
-func ExtractPublicKey(sk *rsa.PrivateKey) ([]byte, error) {
+func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to marshal private key")
+		return "", errors.Wrap(err, "Failed to marshal private key")
 	}
-	return pem.EncodeToMemory(
+	pemByte := pem.EncodeToMemory(
 		&pem.Block{
 			Type:  "RSA PUBLIC KEY",
 			Bytes: pkBytes,
 		},
-	), nil
+	)
+
+	return base64.StdEncoding.EncodeToString(pemByte), nil
 }

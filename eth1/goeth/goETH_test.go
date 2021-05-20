@@ -26,7 +26,7 @@ func TestReadingEventLogs(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 		operatorStorage := collections.NewOperatorStorage(db, &logger)
-		err = operatorStorage.SavePrivateKey("-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA7jWpLkzgvMwoG8MtErR2DhT2MutIfaGtVlLx5V+h8jl+vyqO\nV/rlJDEeC/G35iWC4XE7FqJQW5BjoAfuMxPzQC6z0A5oR7ztnXu6sEwNHIHXwDAH\nLySuWP3pFbZ4Bw9oQYMBfmSl/xWGK2VswiXdCEqFJFgMPY76RPcJ6GgdMg+YTQYU\nEjiQN1ivbJf4ViJBE7+mSmxVM503VirAfgvBzpgu3stvHtzQWVvxrt54tFoC0tfX\nMQEsRSEmMThVHhqZ+e2B8/dMd6GQhvq9etuEaBLhJZEQyi2IiQM6RX6kModgFRg/\nzkmLVWCEHO13hUyFJ1jx5/C9lB2SeD5ocwXxbQIDAQABAoIBACw4Xe2wa8/gflmZ\nA9cDFR9MGOAe+VgJGWp6/1i7Rg73SWYnekEu3Da5v4AsIR1iPUeog3WSMCSvSy88\nCaYFwBRcFxk6c3VNxzaC74cmtxBhsjGFOPAxeQQgLpLPSrzUyV/P+AkEmiQeVMfd\njjEEYmHVo525kpwi3KbMzVQNb84I52dG0Ev8fsYmmB8sChedIW+t7c/W7v1LOeDK\nVgQV5JdK0NyKnTZstOjrMwyvhLG04iGVVTfrboq2ZM2a4Y6BtWnX7lBKpamk1YIJ\nJjZVyZZ0FdyFPVNIfUcUbuTxbwOJy8Nm2hlhcc2Psmj/BBR5AoaZXs+rE8mqA2yI\nqEcf5oECgYEA9ZMotLKLk/tRmQn59LmXqhYTKUe07GWmQ8dtFXnd1AJXdCb8SpRv\nCNeFBxMBEPdpmIwTXoaiDm74d5dOom1eiCa7BprzpUF3eFJPsuuzz04yEfheGDwt\nVP9p6EOGdyE+JKGH1spLzX0RDHPCKRx9VsuiYwKDKnJR7wDQ5pUiyZECgYEA+FJ1\nZAc9UbHLHH4NjbKxtM/QpkzlTl7mLVbZIdqk2G+jKWnr+c2Y7hCA8EAmmmyRDhoA\nNuc2SO2Ujgcg+Pv/R76htTWPFH+3ugtekYj3/DgEfYUXKAPXXhgPntM056ZVEpqw\nksIuPXdQ8OREk5Cj8HXOxOktB0/MSfu9XdjVXB0CgYEApIg9HJwHYlVevT9u5eU2\n1TFHE0BE2qHcPMsvrdThp/sNpve7zygWIIFtUmkMLNbnO9qV254uk6cL9+w7Nh46\n2NPCONG2bkEnj0jutvyukzVb3KhgOrKO2MTrqz8ap1Rxc096WJFfKkUiGAqyyqKY\n4385xEZZpSXE+XG9hM/k59ECgYA6WeYL40edctHvmA9HRL5NZqf47AjWKaac8NOF\nCQPDeDg2+xTgVlehWW9zBSANGYXccm+qdxpieLF3zmUJHO4Xxcvp8PP2NSzPIuzN\n9gmP0vn7JNMULBLnoW/KOocsCAHlpUPouIh1GRyD/p++rTZYwtYbn09dcHrox6bv\n7ov0YQKBgH0znEzwzdBUY0AtXz1ASB9uiCzeSglFrEl3GI88A2Ix2jad0HAGCmyY\nNrAIZKN44jp3V7/gB22oiA22+uRLA202g3dCiTEatU0f9J8gp38TekLp/VgSpuiN\nKRmX8b9JZWxhiBMNis0f3nBt9VDX7G+tHIY/5ACRHKp6FLPhnaeP\n-----END RSA PRIVATE KEY-----\n")
+		err = operatorStorage.SetupPrivateKey("LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==")
 		require.NoError(t, err)
 
 		contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
@@ -44,3 +44,94 @@ func TestReadingEventLogs(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+// TODO test for checking event log - need to decide if need to be part of testing
+//func TestNew(t *testing.T) {
+//	t.Run("add", func(t *testing.T) {
+//
+//		client, err := ethclient.Dial("ws://eth1-ws.stage.bloxinfra.com/ws")
+//		require.NoError(t, err)
+//
+//		contractAddress := common.HexToAddress(params.SsvConfig().OperatorContractAddress)
+//		query := ethereum.FilterQuery{
+//			FromBlock: big.NewInt(4819444),
+//			ToBlock:   big.NewInt(4819444),
+//			Addresses: []common.Address{
+//				contractAddress,
+//			},
+//		}
+//
+//		logs, err := client.FilterLogs(context.Background(), query)
+//		require.NoError(t, err)
+//
+//		contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+//		require.NoError(t, err)
+//
+//		logger := *zap.L()
+//		db, err := kv.New("./data/db", logger, &kv.Options{InMemory: true})
+//		require.NoError(t, err)
+//		defer db.Close()
+//		operatorStorage := collections.NewOperatorStorage(db, &logger)
+//		operatorStorage.SetupPrivateKey("LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==")
+//		sk, err := operatorStorage.GetPrivateKey()
+//		operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
+//
+//		for _, vLog := range logs {
+//			fmt.Println("BlockNumber:     ", vLog.BlockNumber)
+//			fmt.Println("TxHash:          ", vLog.TxHash.Hex())
+//
+//			fmt.Println(hex.EncodeToString(vLog.Data))
+//
+//			eventType, err := contractAbi.EventByID(vLog.Topics[0])
+//			require.NoError(t, err)
+//
+//			event := eth1.ValidatorAddedEvent{}
+//			err = contractAbi.UnpackIntoInterface(&event, eventType.Name, vLog.Data)
+//			require.NoError(t, err)
+//
+//			fmt.Println("Validator PubKey:", hex.EncodeToString(event.PublicKey))
+//			fmt.Println("Owner Address:   ", event.OwnerAddress.String())
+//			for i := range event.OessList {
+//				oess := event.OessList[i]
+//				fmt.Println("Index:           ", oess.Index)
+//				fmt.Println("Operator PubKey: ", hex.EncodeToString(oess.OperatorPublicKey))
+//				fmt.Println("Share PubKey:    ", hex.EncodeToString(oess.SharedPublicKey))
+//				fmt.Println("Encrypted Key:   ", hex.EncodeToString(oess.EncryptedKey))
+//
+//				def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+//				outAbi, err := abi.JSON(strings.NewReader(def))
+//				if err != nil {
+//					logger.Error("failed to define ABI", zap.Error(err))
+//					continue
+//				}
+//
+//				outOperatorPublicKey, err := outAbi.Unpack("method", oess.OperatorPublicKey)
+//				if err != nil {
+//					logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
+//					continue
+//				}
+//
+//				if oessOperatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
+//					if strings.EqualFold(oessOperatorPublicKey, operatorPublicKey) {
+//						out, err := outAbi.Unpack("method", oess.EncryptedKey)
+//						if err != nil {
+//							logger.Error("failed to unpack EncryptedKey", zap.Error(err))
+//							continue
+//						}
+//
+//						if encryptedSharePrivateKey, ok := out[0].(string); ok {
+//							decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
+//							if err != nil {
+//								logger.Error("failed to decrypt share private key", zap.Error(err))
+//								continue
+//							}
+//							oess.EncryptedKey = []byte(decryptedSharePrivateKey)
+//					}
+//				}
+//			}
+//
+//			eventSignature := []byte("ItemSet(bytes32,bytes32)")
+//			hash := crypto.Keccak256Hash(eventSignature)
+//			fmt.Println(hash.Hex()) // 0xe79e73da417710ae99aa2088575580a60415d359acfad9cdd3382d59c80281d4
+//		}}})
+//	}

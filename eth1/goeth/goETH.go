@@ -148,7 +148,7 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 		}
 
 		if operatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
-			validatorShare.OperatorPublicKey = []byte(operatorPublicKey)
+			validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
 			if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
 				sk, err := e.operatorStorage.GetPrivateKey()
 				if err != nil {

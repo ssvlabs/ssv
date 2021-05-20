@@ -15,7 +15,6 @@ import (
 
 // IOperatorStorage interface that managing all operator settings
 type IOperatorStorage interface {
-	SavePrivateKey(operatorKey string) error
 	GetPrivateKey() (*rsa.PrivateKey, error)
 	SetupPrivateKey(operatorKey string) error
 	verifyPrivateKeyExist(operatorKey string) (string, error)
@@ -37,14 +36,6 @@ func NewOperatorStorage(db storage.IKvStorage, logger *zap.Logger) OperatorStora
 		logger: logger,
 	}
 	return validator
-}
-
-// SavePrivateKey save operator private key
-func (o OperatorStorage) SavePrivateKey(operatorKey string) error {
-	if err := o.db.Set(o.prefix, []byte("private-key"), []byte(operatorKey)); err != nil {
-		return err
-	}
-	return nil
 }
 
 // GetPrivateKey return rsa private key
@@ -77,7 +68,7 @@ func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 			operatorKey = newSk
 		}
 
-		if err := o.SavePrivateKey(operatorKey); err != nil {
+		if err := o.savePrivateKey(operatorKey); err != nil {
 			return errors.Wrap(err, "failed to save operator private key")
 		}
 	}
@@ -91,7 +82,16 @@ func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 		return errors.Wrap(err, "failed to extract operator public key")
 	}
 	o.logger.Info("operator public key", zap.Any("key", operatorPublicKey))
-	params.SsvConfig().OperatorPublicKey = string(operatorPublicKey)
+	params.SsvConfig().OperatorPublicKey = operatorPublicKey
+	return nil
+}
+
+
+// SavePrivateKey save operator private key
+func (o OperatorStorage) savePrivateKey(operatorKey string) error {
+	if err := o.db.Set(o.prefix, []byte("private-key"), []byte(operatorKey)); err != nil {
+		return err
+	}
 	return nil
 }
 
