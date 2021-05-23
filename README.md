@@ -40,7 +40,7 @@ to run validators in a decentralized and trustless way.
 
 The following documents contains instructions and information on how to get started:
 * [An SSV operator's getting started](./docs/OPERATOR_GETTING_STARTED.md)
-* [How to setup an operator on AWS](./docs/SETTING_OPERATOR_AWS_SERVER.md)
+* [How to setup an operator on AWS](./docs/OPERATOR_GETTING_STARTED.md#setting-aws-server-for-operator)
 * [Developers' Guide](./docs/DEV_GUIDE.md)
 
 ## Contribution

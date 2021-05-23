@@ -25,7 +25,7 @@ $ make lint-prepare
 $ make lint
 ```
 
-#### Splitting a key
+#### Splitting a Validator Key
 
 We split an eth2 BLS validator key into shares via Shamir-Secret-Sharing(SSS) to be used between the SSV nodes.
 
@@ -37,6 +37,12 @@ $ ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}
 $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}
 ```
 
+#### Generating an Operator Key
+
+```bash
+$ ./bin/ssvnode generate-operator-keys
+```
+
 ### Config Files
 
 Config files are located in `./config` directory:
@@ -44,11 +50,11 @@ Config files are located in `./config` directory:
 #### Node Config 
 
 Specifies general configuration regards the current node. \
-Example yaml - [config.yaml](./config/config.yaml)
+Example yaml - [config.yaml](../config/config.yaml)
 
 #### Shares Config
 
-For a 4 node SSV network, 4 share<nodeId>.yaml files need to be created, based on the [template file](./config/example_share.yaml). \
+For a 4 node SSV network, 4 share<nodeId>.yaml files need to be created, based on the [template file](../config/example_share.yaml). \
 E.g. `./config/share1.yaml`, `./config/share2.yaml`, etc.
 
 ## Standards
