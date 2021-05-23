@@ -129,7 +129,7 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 	for i := range validatorAddedEvent.OessList {
 		validatorShare := &validatorAddedEvent.OessList[i]
 
-		def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+		def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]` //TODO need to set as var?
 		outAbi, err := abi.JSON(strings.NewReader(def))
 		if err != nil {
 			e.logger.Error("failed to define ABI", zap.Error(err))
@@ -164,7 +164,6 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 						e.logger.Error("failed to decrypt share private key", zap.Error(err))
 						continue
 					}
-					e.logger.Debug("decryptedSharePrivateKey", zap.String("key", decryptedSharePrivateKey))
 					validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
 					isEventBelongsToOperator = true
 				}

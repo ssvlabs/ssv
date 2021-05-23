@@ -92,14 +92,11 @@ func New(opts Options) Node {
 
 // InformObserver informs observer
 func (n *ssvNode) InformObserver(data interface{}) {
-	n.logger.Info("Got event from validator storage", zap.Any("log", data))
-
 	if validatorShare, ok := data.(collections.ValidatorShare); ok {
 		if _, ok := n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()]; ok {
 			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.ValidatorPK.SerializeToHexStr()))
 			return
 		}
-		n.logger.Info("validator", zap.String("sk", validatorShare.ShareKey.SerializeToHexStr()))
 		// setup validator
 		n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()] = validator.New(n.context, n.logger, &validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
 			SlotQueue:                  n.slotQueue,
