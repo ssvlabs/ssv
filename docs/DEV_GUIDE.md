@@ -37,23 +37,19 @@ $ ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}
 $ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}
 ```
 
-### Example .env file
-```
-   NETWORK=pyrmont
-   DISCOVERY_TYPE=<mdns for local network, empty for discov5 remote>
-   STORAGE_PATH=<example ./data/db/node_1/2/3/4>
-   BOOT_NODE_EXTERNAL_IP=
-   BOOT_NODE_PRIVATE_KEY=
-   BEACON_NODE_ADDR= <can use eth2-4000-prysm-ext.stage.bloxinfra.com:80>
-   NODE_ID=
-   VALIDATOR_PUBLIC_KEY=
-   SSV_PRIVATE_KEY=
-   PUBKEY_NODE_1=
-   PUBKEY_NODE_2=
-   PUBKEY_NODE_3=
-   PUBKEY_NODE_4=
-```
-For a 4 node SSV network, 4 .env.node.<1/2/3/4> files need to be created.
+### Config Files
+
+Config files are located in `./config` directory:
+
+#### Node Config 
+
+Specifies general configuration regards the current node. \
+Example yaml - [config.yaml](./config/config.yaml)
+
+#### Shares Config
+
+For a 4 node SSV network, 4 share<nodeId>.yaml files need to be created, based on the [template file](./config/example_share.yaml). \
+E.g. `./config/share1.yaml`, `./config/share2.yaml`, etc.
 
 ## Standards
 

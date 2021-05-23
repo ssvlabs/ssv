@@ -28,12 +28,12 @@ $ ./bin/ssvnode create-threshold --count {number of ssv nodes} --private-key {pr
 
   ##### 4.1. Node Config
 
-  Fill the required fields in [config.yaml](./config/example_share.yaml) file
+  Fill the required fields in [config.yaml](./config/config.yaml) file
 
   ##### 4.2. Shares Config
 
   Create 4 .yaml files with the corresponding configuration, based on the [template file](./config/example_share.yaml). \
-  The files should be placed in the root directory of eth2-SSV project (`./share1.yaml`, `./share2.yaml`, etc.)
+  The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
 
 #### 5. Run a local network with 4 nodes
 ```bash

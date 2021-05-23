@@ -12,7 +12,7 @@ x-base:
 #    - bloxapp-docker
   restart: always
   environment:
-    CONFIG_PATH: config/config.yaml
+    CONFIG_PATH: ./config/config.yaml
 
 x-base-dev:
   &default-dev
@@ -34,29 +34,29 @@ services:
     <<: *default-base
     container_name: ssv-node-1
     environment:
-      CONFIG_PATH: ./config.yaml
-      SHARE_CONFIG: ./share1.yaml
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share1.yaml
 
   ssv-node-2:
     <<: *default-base
     container_name: ssv-node-2
     environment:
-      CONFIG_PATH: ./config.yaml
-      SHARE_CONFIG: ./share2.yaml
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share2.yaml
 
   ssv-node-3:
     <<: *default-base
     container_name: ssv-node-3
     environment:
-      CONFIG_PATH: ./config.yaml
-      SHARE_CONFIG: ./share3.yaml
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share3.yaml
 
   ssv-node-4:
     <<: *default-base
     container_name: ssv-node-4
     environment:
-      CONFIG_PATH: ./config.yaml
-      SHARE_CONFIG: ./share4.yaml
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share4.yaml
 
 
   ssv-node-1-dev:
