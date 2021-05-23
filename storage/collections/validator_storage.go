@@ -71,7 +71,7 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 					v.logger.Error("failed to deserialize share private key", zap.Error(err))
 					return
 				}
-				ibftCommittee[nodeID].Sk = oess.EncryptedKey
+				ibftCommittee[nodeID].Sk = validatorShare.ShareKey.Serialize()
 			}
 		}
 		validatorShare.Committee = ibftCommittee
@@ -116,6 +116,7 @@ func (v *ValidatorStorage) LoadFromConfig(nodeID uint64, pubKey *bls.PublicKey, 
 		}
 		err = v.SaveValidatorShare(&validator)
 	}
+
 	if err == nil {
 		v.logger.Info("validator share has been loaded from config")
 	}
