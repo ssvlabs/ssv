@@ -164,6 +164,7 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 						e.logger.Error("failed to decrypt share private key", zap.Error(err))
 						continue
 					}
+					e.logger.Debug("decryptedSharePrivateKey", zap.String("key", decryptedSharePrivateKey))
 					validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
 					isEventBelongsToOperator = true
 				}

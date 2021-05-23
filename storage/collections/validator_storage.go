@@ -53,7 +53,7 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 		for i := range validatorAddedEvent.OessList {
 			oess := validatorAddedEvent.OessList[i]
 			nodeID := oess.Index.Uint64() + 1
-			ibftCommittee[nodeID - 1] = &proto.Node{ // position should start at 0
+			ibftCommittee[nodeID] = &proto.Node{
 				IbftId: nodeID,
 				Pk:     oess.SharedPublicKey,
 			}
