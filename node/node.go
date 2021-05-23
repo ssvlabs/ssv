@@ -26,12 +26,13 @@ type Options struct {
 	//ValidatorStorage collections.IValidator
 	//IbftStorage      collections.Iibft
 	//Network          network.Network
-	ETHNetwork   *core.Network
-	Beacon       *beacon.Beacon
-	Context      context.Context
-	Logger       *zap.Logger
-	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
-	DutyLimit    uint64 `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
+	ETHNetwork      *core.Network
+	Beacon          *beacon.Beacon
+	Context         context.Context
+	Logger          *zap.Logger
+	GenesisEpoch    uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
+	DutyLimit       uint64 `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
+	OperatorPrivKey string `yaml:"OperatorPrivKey" env:"OPERATOR_PRIVKEY" env-default:"" env-required:"true" env-description:"Private key of the operator"`
 	// max slots for duty to wait
 	//TODO switch to time frame?
 	// genesis epoch
@@ -57,7 +58,7 @@ type ssvNode struct {
 
 // New is the constructor of ssvNode
 func New(opts Options) Node {
-	slotQueue:= slotqueue.New(*opts.ETHNetwork)
+	slotQueue := slotqueue.New(*opts.ETHNetwork)
 	opts.ValidatorOptions.SlotQueue = slotQueue
 	ssv := &ssvNode{
 		context:             opts.Context,

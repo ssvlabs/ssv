@@ -23,7 +23,8 @@ type ControllerOptions struct {
 	Network                    network.Network
 	SlotQueue                  slotqueue.Queue
 	Beacon                     *beacon.Beacon
-	LocalShareOptions          storage.LocalShareOptions `yaml:"LocalShare"`
+	LocalShareOptions          storage.ShareOptions   `yaml:"LocalShare"`
+	Shares                     []storage.ShareOptions `yaml:"Shares"`
 }
 
 // IController interface
@@ -54,7 +55,14 @@ func NewController(options ControllerOptions) IController {
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
-	if err := collection.LoadFromConfig(options.LocalShareOptions); err != nil {
+
+	if len(options.Shares) > 0 { // multiple shares
+		for _, share := range options.Shares {
+			if err := collection.LoadFromConfig(share); err != nil {
+				options.Logger.Error("Failed to load validator share data from config", zap.Error(err))
+			}
+		}
+	} else if err := collection.LoadFromConfig(options.LocalShareOptions); err != nil {
 		options.Logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
 

@@ -79,6 +79,7 @@ $ echo "CONSENSUS_TYPE=validation" >> .env
 $ echo "STORAGE_PATH={db data path}" >> .env
 $ echo "NETWORK=pyrmont" >> .env
 $ echo "BEACON_NODE_ADDR={ETH 2.0 node}" >> .env
+$ echo "OPERATOR_PRIVKEY={privkey of the operator}" >> .env
 $ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
 $ echo "NODE_ID={provided node index}" >> .env
 $ echo "SSV_PRIVATE_KEY={provided node private key}" >> .env

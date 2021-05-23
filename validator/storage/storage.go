@@ -11,7 +11,7 @@ import (
 
 // ICollection interface for validator storage
 type ICollection interface {
-	LoadFromConfig(options LocalShareOptions) error
+	LoadFromConfig(options ShareOptions) error
 	SaveValidatorShare(share *Share) error
 	GetValidatorsShare(key []byte) (*Share, error)
 	GetAllValidatorsShare() ([]*Share, error)
@@ -23,8 +23,8 @@ type CollectionOptions struct {
 	Logger *zap.Logger
 }
 
-// LocalShareOptions - used to load validator share from config
-type LocalShareOptions struct {
+// ShareOptions - used to load validator share from config
+type ShareOptions struct {
 	NodeID    uint64         `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
 	PublicKey string         `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
 	ShareKey  string         `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
@@ -52,7 +52,7 @@ func getCollectionPrefix() string {
 }
 
 // LoadFromConfig fetch validator share form .env and save it to db
-func (s *Collection) LoadFromConfig(options LocalShareOptions) error {
+func (s *Collection) LoadFromConfig(options ShareOptions) error {
 	var err error
 	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
 		shareKey := &bls.SecretKey{}
