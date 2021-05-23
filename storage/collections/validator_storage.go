@@ -47,16 +47,13 @@ type ValidatorStorage struct {
 
 // InformObserver informs observer
 func (v *ValidatorStorage) InformObserver(data interface{}) {
-
-	v.logger.Info("Got log from contract", zap.Any("log", data))
-
 	if validatorAddedEvent, ok := data.(eth1.ValidatorAddedEvent); ok {
 		validatorShare := ValidatorShare{}
 		ibftCommittee := map[uint64]*proto.Node{}
 		for i := range validatorAddedEvent.OessList {
 			oess := validatorAddedEvent.OessList[i]
 			nodeID := oess.Index.Uint64() + 1
-			ibftCommittee[nodeID] = &proto.Node{
+			ibftCommittee[nodeID - 1] = &proto.Node{ // position should start at 0
 				IbftId: nodeID,
 				Pk:     oess.SharedPublicKey,
 			}

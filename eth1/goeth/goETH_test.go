@@ -1,7 +1,19 @@
 package goeth
 
 import (
+	"context"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -17,7 +29,7 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
-//var skBase64 = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
+var skBase64 = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
 //var skBase64 = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBcjZXc09kMzJZVStPeVowVVZtUlZCSERES0szZTU5NGlTNXZ0dEsxUmIyVVh3djA0CmZKcGd4L1NQWmlqUmE0eFdmc3ZsaTMxeHg1c2srMlh6OTJ1VTlOUTg4ZGUvRjF6Ym1qdDAzbnBaOFpLbndybUsKOXZURE9PZFY4M1RiMUNYTzFhb3J2eVM1MERiZTlSbHE2SGNDdW5NNFpCeTRId29nakFmNjZhMUJzTzl4bHZGNwo0UEgrRTJ0Q1k0ZVYwL1M4VFdHbjh4R0dITW5GT0l1UmRMUTB6Yy9DSk9WMEgrV1pIRURlNzI1TzBHUDBNdXRCCmNHZWE1R3A4ckZwWHkvMDFBdmlXajBnMDdqMFR1M0hZN0dlSy9lU1MvWFY4YlREbjgzRlBsTnhYd3JWaXdzOXQKcGxzTFMxeUxSN0xxT2NYYVl4NHRLY3FrVTQ0UFhmem9UeC9BaHdJREFRQUJBb0lCQUhJUGhiMjJNODZSV1VuMwpaVU9NdCtEQVVSdFRmVkxZM3pCMk8zQit0RWxBUHFQeXlBR3lSbkxTajJScDBVU2p4MjlqZk5hT1NacXpWdHFpCkpFRmhiVU5ucDRQczlEeDVvbW1QZnA4U21PSFV1SGd0QU43SnB4U0d0VHY1Z045TkJmbWVIZlpzSlBYZkMvM2gKMlpqSDM4K3dEc2lFRmRTaVFPeHVLalFndkczbW0vWlF4VmVxeFNlWWJjd3RQVyswdlY3M3NhODlJd090SVhmUQpCc1VEWFZkL2hzTTFHdyt0Q2cxNXV4czE3RnlhZnl4N0I4czFRdmZtWnl1cmNLaE4zSTF3OEsxeFphZlBLamt1CnNrejdSWjJjVXJLdEk2Z1ZYbkFvQVhEdEpFMGx3SVdEN002VGsyNGd0VVVBcWZBMUc3cURldE51bXR4UFdrblUKWjY1RllyRUNnWUVBeVRvL3JObDM4N1JFcytLckFvRFZLbDRmYjJGNElHY055MWFWSTI1Qkh4U3ljcTQ4d09aYgplc3VjREdyTVBvZkFLUWxsSmJ0WVpvWEJWNVVNTTVrWVp6OHk2K21LZ1JjbE9JcldjYmtNeGU3NmVQZW50WU00CjNIS2FqcHpNb1dLZG1qdkN6QXNwenBHSFltWmtpbGNGSlk3U2VFRzYvRHVqMUV6eURWcDJTbnNDZ1lFQTMzVDAKdWFYcmFZNVFMN0xDSzZtN0dIL0RxcStRQmg4Zkw1Z0RhRWZEV2VWREFEYVl1OXVwOE91Wmk4N3dyS1NQanpVbwpBTDdEQTNJNThISEx5WlhuSHRyK2kvZU1odE9LQ2ZCWWlqbEd0Z25vK3g4NXZPdlF3d0p1SmxoNHJ6UVBlTjF6CllnNnZKbHpiNlpuRnVaR2wzY3UvS0JzK01IcXlnRTdOdE56VnVtVUNnWUFZQmV3MEpvSTdoZm50djlIS3FyYkkKS0JSNHA1by94QTNSaUxTbFZqUlFFWmg4T0hEb1ZwZjFRUG1RUWUvQVIxU1prWldSdTV3Q0lWWERydmVWOFdFSQpjbk1SMXYvQ0NaRlgvcnM3T0d4ZDlQblNGejdlWEp3ZE5WRmVWVG5ZeW4wbVBKdzAzK0JOMlBIZ3ZYaWpTMkJCCjY1c1U0RVFDZU54R0xDbDVqcU13b1FLQmdCZ2t3ZUJoTGZ0Y3RndEJURHQ5ZmtxYVcyRFEwVVhvRE8yT2hpZTUKUVVFd1JUbjdyQ3I0QS9lVTdTVXUrZEFkZzZsY2UvTUFxWDl3MHhQSXA5VWpEakxHUktTSTNiVWZuQldRMDNBegoyaEVISnhZaS9KRU9CYU5jV3R4bnlMcGRiS0tKZ3RNQWRTbzI5RWZjSm9Ielc3R0lOeUkxTjFYem05L0RJL1M3CnU1Z0ZBb0dCQUxhbW1zcmFlcXRZWmIvVmZWVFNmQ1A2dHV4R0lpWTJSVHlvRTRBcEhPdHV1NmM0RzhucHh5S3MKa2ZvQ25wREFEMzE0bndzSEpya3VHaXJBRWRFRTNuZVNOTXVrd0UzcVVYN1BYMHdYTTJvWnZ0anBCcE4xMWdLYwp6MmNEU1UrTUJ4OWdQd3NhMVB2aHVqMkI1eXRlbDZ1TWo2NkRFZ2xHaVRodS8rVDB4Rk5XCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
 //var skBase64 = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb2dJQkFBS0NBUUVBdVIzV0hmU1lhWlE0NjkxenR0aTZmUEFwTGprb0tzKytBL3RBZ1JVd0dsSFdibmI2CjJPVU4ra0tTUU53VWlNMFRwWGdOVHVSNGpjdWdKa1NTRlRSRHlYTC9JdGlvOUVkcTdoSFFDcERDTEJUU1hGU20KMjJrNlNRbllGeWs3UVNndnoyQW9mOXJ6YVdBQmVmUkZPdUs5cVZPTStvOGdGcXBxeVBGdElHL0JVL0VvWXYzQQpNU1A5UWJCTXRXSkIvcTd2QStZMUFrZEJiYUNuaGFkK1FUWGxjVWRLNFpsdnU1V0VaTEt0L04yVTVEZDBoWHhFCnBuRlo3L01SNVRnRVl2NFl3aUpHeWNyRTFKWGVSU2MrM21DWUp6RXNiMk9ZMFNkTzdiMExxZ2ozaFVrRG1wR1UKS2NoQlQyaGw0NWJ5ak4valZjUW1rb29lYUgzSCt2R2IvNzhVRXdJREFRQUJBb0lCQUJET2NxZ1prdFRURGkvcgoxUnVlcForK05oN3FOWWxkZndUaGhNT3pac0NjK1hqaCtIaEVvM1k3SVFnZWN3YlFoNTRZUGkwUmRSaDZpam12Ck5Bd1V5S3E3ZEFwMzNTOEFaT2JrV3h6NmM0YUpCV2c0ajBXUVVpaGJhbkQvMzA5VkZMSWhLc3dnMXNTVVlNM3YKclhGaE1KTDA4UEcybU5VMTk2ZnlzMU9ra2NyTERKTTU0RGQ2LzlBMm5LdmVYU3pCSjFBbGxGUCtpbUhFbCtQYQo3RUtxcUNKeGpxOUxLalRDV2pmTER5MXQ0YzE4eFgrRTBGTGdNUS9ybUVDS1VEazVCWHh3TE1mV1lQa3J0MkZTCnR6aVZVQXJCRHV4cEFZR2xBOXF6QVppRE0xaVJ1R3VPZnowNWpQUW5sUzF5SVFpQXRRUXJ2aE5MN245a3ZzSVEKeXcxc1AzRUNnWUVBeUV1TElKTis0NHpqYVBKY1BzN3RsRmFCMVNHMXAvblBoYkNSUkVDUGdEQnZ2QUdXbUZCQQpua2dnYTFTOFYyNk1SY1FTSk5PYUlrRHYrc2l4WWEybVo2N3ZTL3RUNEtRUWttSjBwdkptTHdVNUthMG04R00zCkNGRUR4T1BraHNTWEpHS3RiK2FpdXBHQ3JMZTdhWjZxLzE4K0toRk9VTVNYSytLaVFFY2gwSThDZ1lFQTdKbWYKWk1qMlJyNlhnQmhCUVp4c1AxZm4xdEUyNHRjVHYvbEhjVU82MTA4TnVLaXY2UkFZR3ZDM2VudUNtSjA2Si9IdQovakQxS20xVHpGUHJCZ2ZQczVmOVVWOW8xSXc0aEFnZ0hMcE4ya2svR2kvMFN3bG94Sm93OWJ3MldGTUZURnlDCldxaDY0WE9jM2dydUdlWDArY2d5RTV1UWttRnFtc1R5U2loV2ZqMENnWUJjNXgxTEtON01NUWN5SUdoRkFib1UKK2VNU3RxWUptY2QxM1NZa0lFWHZVWWdpRGlLSjEzK0JhemNPVWFsaWJIWkh6ZUFVa01tSFpkTnA0VGpWYzdRaApsM1NMSzdJR0dsTk5jcmxremo0elJScjBoOG50NmpjV2RtMW5IOFZaOVVtZHFOK0ZiZGJBN3NsTHo1VHdNcFppCkNRMU9lZVIzZGhnZ1ZPaXBJOVU5WlFLQmdHbFBEMFVhdFpOVGJiZFVGR2VScWhTZm1jOWhtNTVud0tDbjRZYW0KY05rNGxKRG1kRFcyTmlSM2xCTHVPbmlYTXJWbzE4bElIVGRmSmZkQ09zK2FWblpIWmpiNzBuc1lWbWRkL24wSwo1M0FMUGd6MzN6SXU0L1R0OUhETDd4eHRCMlN2b0UyZHcrUHBRNThKR21Wb2x4cytZaHVjR0VNdkhQWDZSeVYrCnd0QzVBb0dBSzQrNDFpZjlWb3JhL1N0OXRYbElmb2pXa1U5ZGN4aHdzdmErSXQ3UjAvTEFRT05Rb1hVUUZSbWkKM0VmNTE2Vmx3MFBUN1pxa0RkTVQyc1lkTVVkTGVHMVZtUVRlSXlzcWUwWmNFWUJYY3FwRXNVZEJkSzVjcytkVgoyYjMvYjh2KzY5aUMwVTRRaVU4TllGQ2pSWFdRck0rSmdnT0dCY3lxaTRpVjZkYm5mRU09Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
 //var skBase64 = "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb2dJQkFBS0NBUUVBb3pVaGFzSG9HeE1YS3pUbzgrSHdYZXR6cm1YQ1g5N215cGloeGMvbDFISWVJVXBXCmV3NkFNMzlPd1JQZ2VVMFZ3QmQ2NHZhbzZsTTNaQWxTdVZlMlpuU3RPTUlyQlNYZWxiRzRvUGtEbnFmQ01sYmYKa1RNRlhXVFowdE1IdGJwVkU3N2o0aEpxaUI3ZU13YitwNXUxWi82ZXFaNmZFZGc4MjkzM3dlSGFVY3N3ZklCaApYNlNaUjNlMkJvRUJ2bHljNE5ENEFoNVFaZjMrRWpxSit5dHZzeGJGbkw1SktZaGNKVzhia0J3M2gzZWt5RjJjCmI2eUE3M3dsTzZhWklaRWJ4QkE0WDl4WjhMSFBaNHJYWG9Gb2gxUUJ3UjE5RWF6YXlvSHVOYmRYakFtT2FzVWIKT0ttNFJBdk9ya1FwZ1I4S0J4NGMzczk0OFlidTBJRktQb0NIQndJREFRQUJBb0lCQUdGWXBXLzU3S21KZjM1RAo5dGJRNHdBQ0dtUGhTa2pJdVR3S1FpT3MxMWNhSWlLVkpuUUx1Q2YvUFVnb3hQRlZLeTRDVTBmZysrdVlheWQ5CjhCdWcxNmpRMnlsSmwwTmd6UnpZZmxsMWJkVktGcWpUN0ZHODd1dy81VFM4cnBLVWEzNTFrNU1halBSWUJRekcKbFVuL3Mvb3RneEdGRFRnbGxGZElWQ2tPdjV1YzlKMW9MVFQrMmV5Y1B1SHdDVlgxMkxZcXdmN2x1aDZ5UGZrYwp5UWFBOWMydW5NQWluaUZlbFNWWHpIZnpoWWFTZVhYdmVYcVU1NjYvVnJYU2MwNytFWG5oQktpZk95V01ZN0lZCitGNDAzdzF0TjVUeUVsTXdHMVhWbkI1MFljU3Y0WnFJVkE3aDVZVjR1aWZ2K3IxU0JJVFBHNlFzdWV2S0NNMHIKQkVVY0NpRUNnWUVBekFhdy9KOW1FQ1RZeVdFOWNkOE4rejFPdXBIVWZMcGxqVCtTOU1IbGFzWGlDdE04WXJtNAorZ2FGb3o0WHA0U2hqb1FCbThjZGdudW5HWitLakZkYlBDQlRZdi9sWjNBejUyTS9ZcWIvM1MwTXI1L2YxSStUCnBxUXRLUncyRTJuNG9Ma0hpWXFoUy9ySEY3VGRGR3dsSmlYYVJ2L09MN0RreFRrSklpcEdlVGtDZ1lFQXpNaUIKYml4L3Fua2VaYklsZEZwOFpDN1NoRFdTYkJvUHU1UEhnODdkbWFNSGhwTGQ1Z3M5T0RVc0lIbFAwN05vL21NQQpwZU9hREFMYS90R09DTVcvaEdaQW9vdEJFZnYrNW5FYndBSm52d1d3cVVoaFFBNkJocE5nODR0dGlnUlNxbFFrCmpmcHZCNmlZQ0k2ajRQVGhrWG1pM3hWc3VtM0JtMXBVUlpNb1FqOENnWUFEcXRNZmwxWGtVR1U5S1d4TFViRVUKcFFOM1F3dkl1aWo5SXZsblFOejQwRm5CekE0MzBCTE5HN1RuUEVSOGxGdTdEaEJoVm5EbldZV2xaa0s5Und5eQp4Zm41dTVQS0NqQkVwbm9MTWVsRGRuM1Y0ay9KcUZNRkdjcGVCTTNNQjRtYWlmaml0Z1UwTW12RnQxQ0ovMitqCmdlYXNoQWlXdnQwOTFrcWR2SmpMc1FLQmdHS2pKV3k2OUZkWmRhSElXREFlTVpKVDEwU2xSVHphcEw5V0pDREIKOEkxRE1LbktiaVdUUGs2bmxmU2lXaWYvWDlCQVFaeWw3NXBmZWJxSmwxOTBXSlplWmoyazA1ZmxDRmRaSGVPegpoT05HeTF3T3FBRWh1NVBsd3lvciszd2lMdXNxRWwxc3hqUXJLZWZkUk9Sakw0OVJ4bmlycWk1MkZXNU42UStHCkhUc2pBb0dBV0xYSmp6ZUREQVd0YnRSekRHTEY1ZXNYdjU5YU9McU1qMFhlTDJ2cmwxMjdka203ampJOTVDbWsKREZBOWx0cmhYRWZFcE9LUlBOTk54dnVQZUlWNlFRUXhRb1VFZFR4S0p3cENJQlBMK3U1MWlqNjlhZElQeXdNawprU2twaVJ4VEQvL1dQOGhseGlBM2FGYk05d0dSYlBudWtJdkFwd3RvUG5rV2RlYVRERk09Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
@@ -50,151 +62,151 @@ func TestReadingEventLogs(t *testing.T) {
 	})
 }
 
-// TODO test for checking event log - need to decide if need to be part of testing
-//func TestAddValidatorEvent(t *testing.T) {
-//	t.Run("add", func(t *testing.T) {
-//		threshold.Init()
-//
-//		logger := *zap.L()
-//		db, err := kv.New("./data/db", logger, &kv.Options{InMemory: true})
-//		require.NoError(t, err)
-//		defer db.Close()
-//		operatorStorage := collections.NewOperatorStorage(db, &logger)
-//		validatorStorage := collections.NewValidatorStorage(db, &logger)
-//
-//		client, err := ethclient.Dial("ws://eth1-ws.stage.bloxinfra.com/ws")
-//		require.NoError(t, err)
-//
-//		contractAddress := common.HexToAddress(params.SsvConfig().OperatorContractAddress)
-//		query := ethereum.FilterQuery{
-//			FromBlock: big.NewInt(4825778),
-//			ToBlock:   big.NewInt(4825778),
-//			Addresses: []common.Address{
-//				contractAddress,
-//			},
-//		}
-//
-//		logs, err := client.FilterLogs(context.Background(), query)
-//		require.NoError(t, err)
-//
-//		contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
-//		require.NoError(t, err)
-//
-//		require.NoError(t, operatorStorage.SetupPrivateKey(skBase64))
-//		sk, err := operatorStorage.GetPrivateKey()
-//		operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
-//
-//		for _, vLog := range logs {
-//			fmt.Println("BlockNumber:     ", vLog.BlockNumber)
-//			fmt.Println("TxHash:          ", vLog.TxHash.Hex())
-//
-//			fmt.Println(hex.EncodeToString(vLog.Data))
-//
-//			eventType, err := contractAbi.EventByID(vLog.Topics[0])
-//			require.NoError(t, err)
-//
-//			event := eth1.ValidatorAddedEvent{}
-//			err = contractAbi.UnpackIntoInterface(&event, eventType.Name, vLog.Data)
-//			require.NoError(t, err)
-//
-//			fmt.Println("Validator PubKey:", hex.EncodeToString(event.PublicKey))
-//			fmt.Println("Owner Address:   ", event.OwnerAddress.String())
-//
-//			ibftCommittee := map[uint64]*proto.Node{}
-//			validatorShare := collections.ValidatorShare{}
-//			for i := range event.OessList {
-//				oess := &event.OessList[i]
-//				fmt.Println("Index:           ", oess.Index)
-//				fmt.Println("Operator PubKey: ", hex.EncodeToString(oess.OperatorPublicKey))
-//				fmt.Println("Share PubKey:    ", hex.EncodeToString(oess.SharedPublicKey))
-//				fmt.Println("Encrypted Key:   ", hex.EncodeToString(oess.EncryptedKey))
-//
-//				def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
-//				outAbi, err := abi.JSON(strings.NewReader(def))
-//				if err != nil {
-//					logger.Error("failed to define ABI", zap.Error(err))
-//					continue
-//				}
-//
-//				outOperatorPublicKey, err := outAbi.Unpack("method", oess.OperatorPublicKey)
-//				if err != nil {
-//					logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
-//					continue
-//				}
-//				nodeID := oess.Index.Uint64() + 1
-//				ibftCommittee[nodeID] = &proto.Node{
-//					IbftId: nodeID,
-//					Pk:     oess.SharedPublicKey,
-//				}
-//
-//				if oessOperatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
-//					oess.OperatorPublicKey = []byte(oessOperatorPublicKey)
-//
-//					// mock pubsub functionality
-//					data, _ := json.Marshal(event)
-//					var eventFromObserver eth1.ValidatorAddedEvent
-//					require.NoError(t, json.Unmarshal(data, &eventFromObserver))
-//
-//					oess2 := eventFromObserver.OessList[i]
-//					if strings.EqualFold(string(oess2.OperatorPublicKey), operatorPublicKey) {
-//						out, err := outAbi.Unpack("method", oess2.EncryptedKey)
-//						if err != nil {
-//							logger.Error("failed to unpack EncryptedKey", zap.Error(err))
-//							continue
-//						}
-//
-//						if encryptedSharePrivateKey, ok := out[0].(string); ok {
-//							decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
-//							if err != nil {
-//								logger.Error("failed to decrypt share private key", zap.Error(err))
-//								continue
-//							}
-//							decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
-//
-//							oess.EncryptedKey = []byte(decryptedSharePrivateKey)
-//							validatorShare.NodeID = nodeID
-//							ibftCommittee[nodeID].Sk = oess2.EncryptedKey
-//
-//							validatorShare.ValidatorPK = &bls.PublicKey{}
-//							if err := validatorShare.ValidatorPK.Deserialize(event.PublicKey); err != nil {
-//								logger.Error("failed to deserialize share public key", zap.Error(err))
-//								return
-//							}
-//
-//							validatorShare.ShareKey = &bls.SecretKey{}
-//							if err := validatorShare.ShareKey.Deserialize(oess2.EncryptedKey); err != nil {
-//								logger.Error("failed to deserialize share private key", zap.Error(err))
-//								return
-//							}
-//						}
-//					}
-//
-//				}
-//
-//				eventSignature := []byte("ItemSet(bytes32,bytes32)")
-//				hash := crypto.Keccak256Hash(eventSignature)
-//				fmt.Println(hash.Hex()) // 0xe79e73da417710ae99aa2088575580a60415d359acfad9cdd3382d59c80281d4
-//			}
-//
-//			validatorShare.Committee = ibftCommittee
-//			require.NoError(t, validatorStorage.SaveValidatorShare(&validatorShare))
-//			v, err := validatorStorage.GetValidatorsShare(event.PublicKey)
-//			require.NoError(t, err)
-//			require.NotNil(t, v)
-//
-//			marshalValidatorShare, err := json.Marshal(&validatorShare)
-//			if err != nil {
-//				logger.Error("failed to marshal validator share", zap.Error(err))
-//				return
-//			}
-//
-//			var validatorShare2 collections.ValidatorShare
-//			err = json.Unmarshal(marshalValidatorShare, &validatorShare2)
-//			if err != nil {
-//				logger.Error("failed to unmarshal validator share", zap.Error(err))
-//			}
-//
-//			fmt.Println("TEST2:   ", validatorShare2.ValidatorPK.SerializeToHexStr())
-//		}
-//	})
-//}
+//TODO test for checking event log - need to decide if need to be part of testing
+func TestAddValidatorEvent(t *testing.T) {
+	t.Run("add", func(t *testing.T) {
+		threshold.Init()
+
+		logger := *zap.L()
+		db, err := kv.New("./data/db", logger, &kv.Options{InMemory: true})
+		require.NoError(t, err)
+		defer db.Close()
+		operatorStorage := collections.NewOperatorStorage(db, &logger)
+		validatorStorage := collections.NewValidatorStorage(db, &logger)
+
+		client, err := ethclient.Dial("ws://eth1-ws.stage.bloxinfra.com/ws")
+		require.NoError(t, err)
+
+		contractAddress := common.HexToAddress(params.SsvConfig().OperatorContractAddress)
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(4825778),
+			ToBlock:   big.NewInt(4825778),
+			Addresses: []common.Address{
+				contractAddress,
+			},
+		}
+
+		logs, err := client.FilterLogs(context.Background(), query)
+		require.NoError(t, err)
+
+		contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+		require.NoError(t, err)
+
+		require.NoError(t, operatorStorage.SetupPrivateKey(skBase64))
+		sk, err := operatorStorage.GetPrivateKey()
+		operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
+
+		for _, vLog := range logs {
+			fmt.Println("BlockNumber:     ", vLog.BlockNumber)
+			fmt.Println("TxHash:          ", vLog.TxHash.Hex())
+
+			fmt.Println(hex.EncodeToString(vLog.Data))
+
+			eventType, err := contractAbi.EventByID(vLog.Topics[0])
+			require.NoError(t, err)
+
+			event := eth1.ValidatorAddedEvent{}
+			err = contractAbi.UnpackIntoInterface(&event, eventType.Name, vLog.Data)
+			require.NoError(t, err)
+
+			fmt.Println("Validator PubKey:", hex.EncodeToString(event.PublicKey))
+			fmt.Println("Owner Address:   ", event.OwnerAddress.String())
+
+			ibftCommittee := map[uint64]*proto.Node{}
+			validatorShare := collections.ValidatorShare{}
+			for i := range event.OessList {
+				oess := &event.OessList[i]
+				fmt.Println("Index:           ", oess.Index)
+				fmt.Println("Operator PubKey: ", hex.EncodeToString(oess.OperatorPublicKey))
+				fmt.Println("Share PubKey:    ", hex.EncodeToString(oess.SharedPublicKey))
+				fmt.Println("Encrypted Key:   ", hex.EncodeToString(oess.EncryptedKey))
+
+				def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+				outAbi, err := abi.JSON(strings.NewReader(def))
+				if err != nil {
+					logger.Error("failed to define ABI", zap.Error(err))
+					continue
+				}
+
+				outOperatorPublicKey, err := outAbi.Unpack("method", oess.OperatorPublicKey)
+				if err != nil {
+					logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
+					continue
+				}
+				nodeID := oess.Index.Uint64() + 1
+				ibftCommittee[nodeID] = &proto.Node{
+					IbftId: nodeID,
+					Pk:     oess.SharedPublicKey,
+				}
+
+				if oessOperatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
+					oess.OperatorPublicKey = []byte(oessOperatorPublicKey)
+
+					// mock pubsub functionality
+					data, _ := json.Marshal(event)
+					var eventFromObserver eth1.ValidatorAddedEvent
+					require.NoError(t, json.Unmarshal(data, &eventFromObserver))
+
+					oess2 := eventFromObserver.OessList[i]
+					if strings.EqualFold(string(oess2.OperatorPublicKey), operatorPublicKey) {
+						out, err := outAbi.Unpack("method", oess2.EncryptedKey)
+						if err != nil {
+							logger.Error("failed to unpack EncryptedKey", zap.Error(err))
+							continue
+						}
+
+						if encryptedSharePrivateKey, ok := out[0].(string); ok {
+							decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
+							if err != nil {
+								logger.Error("failed to decrypt share private key", zap.Error(err))
+								continue
+							}
+							decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
+
+							oess.EncryptedKey = []byte(decryptedSharePrivateKey)
+							validatorShare.NodeID = nodeID
+							ibftCommittee[nodeID].Sk = oess2.EncryptedKey
+
+							validatorShare.ValidatorPK = &bls.PublicKey{}
+							if err := validatorShare.ValidatorPK.Deserialize(event.PublicKey); err != nil {
+								logger.Error("failed to deserialize share public key", zap.Error(err))
+								return
+							}
+
+							validatorShare.ShareKey = &bls.SecretKey{}
+							if err := validatorShare.ShareKey.Deserialize(oess2.EncryptedKey); err != nil {
+								logger.Error("failed to deserialize share private key", zap.Error(err))
+								return
+							}
+						}
+					}
+
+				}
+
+				eventSignature := []byte("ItemSet(bytes32,bytes32)")
+				hash := crypto.Keccak256Hash(eventSignature)
+				fmt.Println(hash.Hex()) // 0xe79e73da417710ae99aa2088575580a60415d359acfad9cdd3382d59c80281d4
+			}
+
+			validatorShare.Committee = ibftCommittee
+			require.NoError(t, validatorStorage.SaveValidatorShare(&validatorShare))
+			v, err := validatorStorage.GetValidatorsShare(event.PublicKey)
+			require.NoError(t, err)
+			require.NotNil(t, v)
+
+			marshalValidatorShare, err := json.Marshal(&validatorShare)
+			if err != nil {
+				logger.Error("failed to marshal validator share", zap.Error(err))
+				return
+			}
+
+			var validatorShare2 collections.ValidatorShare
+			err = json.Unmarshal(marshalValidatorShare, &validatorShare2)
+			if err != nil {
+				logger.Error("failed to unmarshal validator share", zap.Error(err))
+			}
+
+			fmt.Println("TEST2:   ", validatorShare2.ValidatorPK.SerializeToHexStr())
+		}
+	})
+}
