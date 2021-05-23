@@ -67,7 +67,7 @@ func (v *ValidatorStorage) InformObserver(data interface{}) {
 				}
 
 				validatorShare.ShareKey = &bls.SecretKey{}
-				if err := validatorShare.ShareKey.Deserialize(oess.EncryptedKey); err != nil {
+				if err := validatorShare.ShareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
 					v.logger.Error("failed to deserialize share private key", zap.Error(err))
 					return
 				}
@@ -209,3 +209,5 @@ func (v *ValidatorShare) Deserialize(obj storage.Obj) (*ValidatorShare, error) {
 func (v *ValidatorStorage) GetDBEvent() *storage.DBEvent {
 	return v.dbEvent
 }
+
+

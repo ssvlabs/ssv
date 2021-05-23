@@ -163,9 +163,8 @@ func TestAddValidatorEvent(t *testing.T) {
 							}
 							decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 
-							oess.EncryptedKey = []byte(decryptedSharePrivateKey)
+							oess2.EncryptedKey = []byte(decryptedSharePrivateKey)
 							validatorShare.NodeID = nodeID
-							ibftCommittee[nodeID].Sk = oess2.EncryptedKey
 
 							validatorShare.ValidatorPK = &bls.PublicKey{}
 							if err := validatorShare.ValidatorPK.Deserialize(event.PublicKey); err != nil {
@@ -174,10 +173,12 @@ func TestAddValidatorEvent(t *testing.T) {
 							}
 
 							validatorShare.ShareKey = &bls.SecretKey{}
-							if err := validatorShare.ShareKey.Deserialize(oess2.EncryptedKey); err != nil {
+							if err := validatorShare.ShareKey.SetHexString(string(oess2.EncryptedKey)); err != nil {
 								logger.Error("failed to deserialize share private key", zap.Error(err))
 								return
 							}
+
+							ibftCommittee[nodeID].Sk = validatorShare.ShareKey.Serialize()
 						}
 					}
 

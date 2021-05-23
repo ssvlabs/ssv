@@ -30,14 +30,12 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("failed to get logger level flag value", zap.Error(err))
 		}
-
-		Logger = logex.Build(RootCmd.Short, loggerLevel)
+		logger := logex.Build(RootCmd.Short, loggerLevel)
 
 		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get node ID flag value", zap.Error(err))
+			logger.Fatal("failed to get node ID flag value", zap.Error(err))
 		}
-		logger := Logger.With(zap.Uint64("node_id", nodeID))
 
 		eth2Network, err := flags.GetNetworkFlagValue(cmd)
 		if err != nil {
@@ -91,26 +89,26 @@ var startNodeCmd = &cobra.Command{
 
 		tcpPort, err := flags.GetTCPPortFlagValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
+			logger.Fatal("failed to get tcp port flag value", zap.Error(err))
 		}
 		udpPort, err := flags.GetUDPPortFlagValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get udp port flag value", zap.Error(err))
+			logger.Fatal("failed to get udp port flag value", zap.Error(err))
 		}
 
 		genesisEpoch, err := flags.GetGenesisEpochValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
+			logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
 		}
 
 		storagePath, err := flags.GetStoragePathValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get storage path flag value", zap.Error(err))
+			logger.Fatal("failed to get storage path flag value", zap.Error(err))
 		}
 
 		operatorKey, err := flags.GetOperatorPrivateKeyFlag(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get operator private key flag value", zap.Error(err))
+			logger.Fatal("failed to get operator private key flag value", zap.Error(err))
 		}
 
 		validatorPubKey := &bls.PublicKey{}
@@ -125,12 +123,12 @@ var startNodeCmd = &cobra.Command{
 
 		maxBatch, err := flags.GetMaxNetworkResponseBatchValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get max batch flag value", zap.Error(err))
+			logger.Fatal("failed to get max batch flag value", zap.Error(err))
 		}
 
 		reqTimeout, err := flags.GetNetworkRequestTimeoutValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get network req timeout flag value", zap.Error(err))
+			logger.Fatal("failed to get network req timeout flag value", zap.Error(err))
 		}
 
 		// init storage
@@ -143,11 +141,11 @@ var startNodeCmd = &cobra.Command{
 
 		eth1Addr, err := flags.GetEth1AddrValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
+			logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
 		}
 
-		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
-		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
+		logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
+		logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
 		logger.Debug("Node params",
 			zap.String("eth2Network", string(eth2Network)),
 			zap.String("discovery-type", discoveryType),
@@ -238,6 +236,7 @@ func configureStorage(storagePath string, logger *zap.Logger, operatorKey string
 		},
 	}
 
+	//"Committee":{"1":{"ibft_id":1,"pk":"kvxW5wviiPn93zK/OYPiPsu8l3aCBmA6De8vOtQSB1UblQrWq8fLcKDiEdsOaQHU","sk":"NjMyZGFjMzUyZWE2NjlkZDE1ZjcxYjBlOGE1ZWUzYTE="},"2":{"ibft_id":2,"pk":"lRIfDl2EJFUt7lsdW9HJ2cWMsCWWCG4zkMiHxrBR0jGLTGS2DTXoPV0Gn9pZRyRB"},"3":{"ibft_id":3,"pk":"hM7KkeXZ7QxkENv4k+C+eUBsxLHJ3UzTtWtslNhio7vfbYB9BL0bN2gor6iLcrBs"},"4":{"ibft_id":4,"pk":"qitntGQn7UnWvDlYmFmZQWwBuQxE1+mkHDlcuAW63PbnWYgKeQsl7/YeenAhnoVR"}
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPubKey, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}

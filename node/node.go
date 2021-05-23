@@ -99,6 +99,7 @@ func (n *ssvNode) InformObserver(data interface{}) {
 			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.ValidatorPK.SerializeToHexStr()))
 			return
 		}
+		n.logger.Info("validator", zap.String("sk", validatorShare.ShareKey.SerializeToHexStr()))
 		// setup validator
 		n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()] = validator.New(n.context, n.logger, &validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
 			SlotQueue:                  n.slotQueue,
