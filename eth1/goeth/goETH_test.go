@@ -22,12 +22,13 @@ var eventData = "000000000000000000000000943a1b677da0ac80f380f08731fae841b120140
 
 type EventObserver struct {
 	t *testing.T
+	data eth1.ValidatorAddedEvent
 }
 
 func (e *EventObserver) InformObserver(i interface{}) {
 	validatorAddedEvent, ok := i.(eth1.ValidatorAddedEvent)
 	require.True(e.t, ok)
-	require.NotNil(e.t, validatorAddedEvent)
+	e.data = validatorAddedEvent
 }
 
 func (e *EventObserver) GetObserverID() string {
@@ -60,6 +61,7 @@ func TestReadingEventLogs(t *testing.T) {
 		require.NoError(t, err)
 		err = e.ProcessValidatorAddedEvent(data, contractAbi, "ValidatorAdded")
 		require.NoError(t, err)
+		require.NotNil(t, observer.data)
 	})
 }
 

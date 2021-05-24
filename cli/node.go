@@ -236,7 +236,6 @@ func configureStorage(storagePath string, logger *zap.Logger, operatorKey string
 		},
 	}
 
-	//"Committee":{"1":{"ibft_id":1,"pk":"kvxW5wviiPn93zK/OYPiPsu8l3aCBmA6De8vOtQSB1UblQrWq8fLcKDiEdsOaQHU","sk":"NjMyZGFjMzUyZWE2NjlkZDE1ZjcxYjBlOGE1ZWUzYTE="},"2":{"ibft_id":2,"pk":"lRIfDl2EJFUt7lsdW9HJ2cWMsCWWCG4zkMiHxrBR0jGLTGS2DTXoPV0Gn9pZRyRB"},"3":{"ibft_id":3,"pk":"hM7KkeXZ7QxkENv4k+C+eUBsxLHJ3UzTtWtslNhio7vfbYB9BL0bN2gor6iLcrBs"},"4":{"ibft_id":4,"pk":"qitntGQn7UnWvDlYmFmZQWwBuQxE1+mkHDlcuAW63PbnWYgKeQsl7/YeenAhnoVR"}
 	if err := validatorStorage.LoadFromConfig(nodeID, validatorPubKey, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
