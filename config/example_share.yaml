@@ -3,12 +3,12 @@ db:
   Type: badger-db
 ssv:
   ValidatorOptions:
-    LocalShare:
-      NodeID: 1
-      PublicKey: xxx-validator-pubkey
-      ShareKey: xxx-share-privkey
-      Committee:
-        share-pubkey-node1: 1
-        share-pubkey-node2: 2
-        share-pubkey-node3: 3
-        share-pubkey-node4: 4
+    Shares:
+      - NodeID: 1
+        PublicKey: xxx-validator-pubkey
+        ShareKey: xxx-share-privkey
+        Committee:
+          share-pubkey-node1: 1
+          share-pubkey-node2: 2
+          share-pubkey-node3: 3
+          share-pubkey-node4: 4

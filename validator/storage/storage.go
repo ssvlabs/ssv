@@ -31,6 +31,55 @@ type ShareOptions struct {
 	Committee map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 }
 
+func (options *ShareOptions) ToShare() (*Share, error) {
+	var err error
+
+	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
+		shareKey := &bls.SecretKey{}
+
+		if err = shareKey.SetHexString(options.ShareKey); err != nil {
+			return nil, errors.Wrap(err, "failed to set hex private key")
+		}
+		validatorPk := &bls.PublicKey{}
+		if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
+			return nil, errors.Wrap(err, "failed to decode validator key")
+		}
+
+		_getBytesFromHex := func(str string) []byte {
+			val, e := hex.DecodeString(str)
+			if e != nil {
+				err = errors.Wrap(err, "failed to decode committee")
+			}
+			return val
+		}
+		ibftCommittee := make(map[uint64]*proto.Node)
+
+		for pk, id := range options.Committee {
+			ibftCommittee[uint64(id)] = &proto.Node{
+				IbftId: uint64(id),
+				Pk:     _getBytesFromHex(pk),
+			}
+			if uint64(id) == options.NodeID {
+				ibftCommittee[options.NodeID].Pk = shareKey.GetPublicKey().Serialize()
+				ibftCommittee[options.NodeID].Sk = shareKey.Serialize()
+			}
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		share := Share{
+			NodeID:    options.NodeID,
+			PublicKey: validatorPk,
+			ShareKey:  shareKey,
+			Committee: ibftCommittee,
+		}
+		return &share, nil
+	}
+	return nil, errors.New("empty share")
+}
+
 // Collection struct
 type Collection struct {
 	db     basedb.IDb
@@ -55,46 +104,14 @@ func getCollectionPrefix() string {
 func (s *Collection) LoadFromConfig(options ShareOptions) error {
 	var err error
 	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
-		shareKey := &bls.SecretKey{}
-
-		if err := shareKey.SetHexString(options.ShareKey); err != nil {
-			s.logger.Fatal("failed to set hex private key", zap.Error(err))
+		share, e := options.ToShare()
+		if e != nil {
+			err = e
+			s.logger.Fatal("failed to create share object:", zap.Error(err))
+		} else if share != nil {
+			s.logger.Info(share.ShareKey.SerializeToHexStr())
+			err = s.SaveValidatorShare(share)
 		}
-		validatorPk := &bls.PublicKey{}
-		if err := validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
-			s.logger.Fatal("failed to decode validator key", zap.Error(err))
-		}
-
-		_getBytesFromHex := func(str string) []byte {
-			val, err := hex.DecodeString(str)
-			if err != nil {
-				s.logger.Fatal("failed to decode committee", zap.Error(err))
-			}
-			return val
-		}
-		ibftCommittee := make(map[uint64]*proto.Node)
-
-		for pk, id := range options.Committee {
-			// TODO  remove test log
-			s.logger.Info("loaded env committee", zap.String("pk", pk), zap.Int("id", id))
-			ibftCommittee[uint64(id)] = &proto.Node{
-				IbftId: uint64(id),
-				Pk:     _getBytesFromHex(pk),
-			}
-			if uint64(id) == options.NodeID {
-				ibftCommittee[options.NodeID].Pk = shareKey.GetPublicKey().Serialize()
-				ibftCommittee[options.NodeID].Sk = shareKey.Serialize()
-			}
-		}
-
-		validator := Share{
-			NodeID:    options.NodeID,
-			PublicKey: validatorPk,
-			ShareKey:  shareKey,
-			Committee: ibftCommittee,
-		}
-		s.logger.Info(validator.ShareKey.SerializeToHexStr())
-		err = s.SaveValidatorShare(&validator)
 	}
 	if err == nil {
 		s.logger.Info("validator share has been loaded from config")
