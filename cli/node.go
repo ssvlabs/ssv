@@ -2,10 +2,6 @@ package cli
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/beacon/prysmgrpc"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/logex"
 	"log"
 	"os"
 	"time"
@@ -14,10 +10,15 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	"github.com/bloxapp/ssv/cli/flags"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // startNodeCmd is the command to start SSV node
@@ -29,14 +30,12 @@ var startNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("failed to get logger level flag value", zap.Error(err))
 		}
-
-		Logger = logex.Build(RootCmd.Short, loggerLevel)
+		logger := logex.Build(RootCmd.Short, loggerLevel)
 
 		nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get node ID flag value", zap.Error(err))
+			logger.Fatal("failed to get node ID flag value", zap.Error(err))
 		}
-		logger := Logger.With(zap.Uint64("node_id", nodeID))
 
 		eth2Network, err := flags.GetNetworkFlagValue(cmd)
 		if err != nil {
@@ -90,25 +89,30 @@ var startNodeCmd = &cobra.Command{
 
 		tcpPort, err := flags.GetTCPPortFlagValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
+			logger.Fatal("failed to get tcp port flag value", zap.Error(err))
 		}
 		udpPort, err := flags.GetUDPPortFlagValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get udp port flag value", zap.Error(err))
+			logger.Fatal("failed to get udp port flag value", zap.Error(err))
 		}
 
 		genesisEpoch, err := flags.GetGenesisEpochValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
+			logger.Fatal("failed to get genesis epoch flag value", zap.Error(err))
 		}
 
 		storagePath, err := flags.GetStoragePathValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get storage path flag value", zap.Error(err))
+			logger.Fatal("failed to get storage path flag value", zap.Error(err))
 		}
 
-		validatorPk := &bls.PublicKey{}
-		if err := validatorPk.DeserializeHexStr(validatorKey); err != nil {
+		operatorKey, err := flags.GetOperatorPrivateKeyFlag(cmd)
+		if err != nil {
+			logger.Fatal("failed to get operator private key flag value", zap.Error(err))
+		}
+
+		validatorPubKey := &bls.PublicKey{}
+		if err := validatorPubKey.DeserializeHexStr(validatorKey); err != nil {
 			logger.Fatal("failed to decode validator key", zap.Error(err))
 		}
 
@@ -119,24 +123,29 @@ var startNodeCmd = &cobra.Command{
 
 		maxBatch, err := flags.GetMaxNetworkResponseBatchValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get max batch flag value", zap.Error(err))
+			logger.Fatal("failed to get max batch flag value", zap.Error(err))
 		}
 
 		reqTimeout, err := flags.GetNetworkRequestTimeoutValue(cmd)
 		if err != nil {
-			Logger.Fatal("failed to get network req timeout flag value", zap.Error(err))
+			logger.Fatal("failed to get network req timeout flag value", zap.Error(err))
 		}
 
 		// init storage
-		validatorStorage, ibftStorage := configureStorage(storagePath, logger, validatorPk, shareKey, nodeID)
+		validatorStorage, ibftStorage, operatorStorage := configureStorage(storagePath, logger, operatorKey, validatorPubKey, shareKey, nodeID)
 
 		beaconClient, err := prysmgrpc.New(cmd.Context(), logger, eth2Network, []byte("BloxStaking"), beaconAddr)
 		if err != nil {
 			logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		Logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
-		Logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
+		eth1Addr, err := flags.GetEth1AddrValue(cmd)
+		if err != nil {
+			logger.Fatal("failed to get eth1 addr flag value", zap.Error(err))
+		}
+
+		logger.Info("Running node with ports", zap.Int("tcp", tcpPort), zap.Int("udp", udpPort))
+		logger.Info("Running node with genesis epoch", zap.Uint64("epoch", genesisEpoch))
 		logger.Debug("Node params",
 			zap.String("eth2Network", string(eth2Network)),
 			zap.String("discovery-type", discoveryType),
@@ -180,15 +189,27 @@ var startNodeCmd = &cobra.Command{
 			SignatureCollectionTimeout: sigCollectionTimeout,
 			GenesisEpoch:               genesisEpoch,
 			DutySlotsLimit:             dutySlotsLimit,
+			Context: cmd.Context(),
 		})
 
-		if err := ssvNode.Start(cmd.Context()); err != nil {
+		if eth1Addr != "" {
+			// 1. create new eth1 client
+			eth1Client, err := goeth.New(cmd.Context(), logger, eth1Addr, operatorStorage)
+			if err != nil {
+				logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
+			}
+
+			// 2. register validatorStorage as observer to operator contract events subject
+			eth1Client.GetContractEvent().Register(&validatorStorage)
+		}
+		validatorStorage.GetDBEvent().Register(ssvNode)
+		if err := ssvNode.Start(); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
 }
 
-func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage) {
+func configureStorage(storagePath string, logger *zap.Logger, operatorKey string, validatorPubKey *bls.PublicKey, shareKey *bls.SecretKey, nodeID uint64) (collections.ValidatorStorage, collections.IbftStorage, collections.OperatorStorage) {
 	db, err := kv.New(storagePath, *logger, &kv.Options{})
 	if err != nil {
 		logger.Fatal("failed to create db!", zap.Error(err))
@@ -215,12 +236,18 @@ func configureStorage(storagePath string, logger *zap.Logger, validatorPk *bls.P
 		},
 	}
 
-	if err := validatorStorage.LoadFromConfig(nodeID, validatorPk, shareKey, ibftCommittee); err != nil {
+	if err := validatorStorage.LoadFromConfig(nodeID, validatorPubKey, shareKey, ibftCommittee); err != nil {
 		logger.Error("Failed to load validator share data from config", zap.Error(err))
 	}
 
 	ibftStorage := collections.NewIbft(db, logger, "attestation")
-	return validatorStorage, ibftStorage
+
+	operatorStorage := collections.NewOperatorStorage(db, logger)
+	if err := operatorStorage.SetupPrivateKey(operatorKey); err != nil{
+		logger.Fatal("failed to setup operator private key", zap.Error(err))
+	}
+
+	return validatorStorage, ibftStorage, operatorStorage
 }
 
 func _getBytesFromHex(str string) []byte {
@@ -243,6 +270,8 @@ func init() {
 	flags.AddTCPPortFlag(startNodeCmd)
 	flags.AddUDPPortFlag(startNodeCmd)
 	flags.AddGenesisEpochFlag(startNodeCmd)
+	flags.AddEth1AddrFlag(startNodeCmd)
+	flags.AddOperatorPrivateKeyFlag(startNodeCmd)
 	flags.AddStoragePathFlag(startNodeCmd)
 	flags.AddLoggerLevelFlag(RootCmd)
 	flags.AddMaxNetworkResponseBatchFlag(startNodeCmd)

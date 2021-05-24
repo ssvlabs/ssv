@@ -39,17 +39,10 @@ type Validator struct {
 }
 
 // New Validator creation
-func New(
-	ctx context.Context,
-	logger *zap.Logger,
-	validatorShare *collections.ValidatorShare,
-	ibftStorage collections.Iibft,
-	network network.Network,
-	ethNetwork core.Network,
-	_beacon beacon.Beacon,
-	opt Options,
-) *Validator {
-	logger = logger.With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr()))
+func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.ValidatorShare, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
+	logger = logger.
+		With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr())).
+		With(zap.Uint64("node_id", validatorShare.NodeID))
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = ibft.New(

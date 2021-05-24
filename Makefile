@@ -20,7 +20,8 @@ endif
 # node command builder
 NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
 --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} \
---host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --storage-path=${STORAGE_PATH}
+--host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --eth1-addr=${ETH_1_ADDR} \
+--storage-path=${STORAGE_PATH} --operator-private-key=${OPERATOR_PRIAVTE_KEY}
 
 
 ifneq ($(TCP_PORT),)
@@ -39,6 +40,7 @@ ifneq ($(GENESIS_EPOCH),)
   NODE_COMMAND+= --genesis-epoch=${GENESIS_EPOCH}
 endif
 
+UNFORMATTED=$(shell gofmt -s -l .)
 
 #Lint
 .PHONY: lint-prepare
@@ -49,16 +51,16 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
-
-#Test
+	@echo "Checking for unformatted files"
+	if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "The following files are not formatted: \n${UNFORMATTED}"; \
+	fi
 
 #Test
 .PHONY: full-test
 full-test:
 	@echo "Running the full test..."
 	@go test -tags blst_enabled -timeout 20m -cover -race -p 1 -v ./...
-
-
 
 # TODO: Intgrate use of short flag (unit tests) + running tests through docker
 #.PHONY: unittest

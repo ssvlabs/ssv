@@ -36,6 +36,7 @@ func TestValidatorSerializer(t *testing.T) {
 func TestSaveAndGetValidatorStorage(t *testing.T) {
 	db, err := kv.New("./data/db", *zap.L(), &kv.Options{InMemory: true})
 	require.NoError(t, err)
+	defer db.Close()
 
 	validatorStorage := ValidatorStorage{
 		prefix: []byte("validator-"),
@@ -53,7 +54,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, validatorShareByKey.ValidatorPK.SerializeToHexStr(), validatorShare.ValidatorPK.SerializeToHexStr())
 
-	validators, err := validatorStorage.GetAllValidatorsShare()
+	validators, err := validatorStorage.GetAllValidatorShares()
 	require.NoError(t, err)
 	require.EqualValues(t, len(validators), 2)
 }

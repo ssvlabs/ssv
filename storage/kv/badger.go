@@ -98,3 +98,10 @@ func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]storage.Obj, error) {
 	})
 	return res, err
 }
+
+// Close close db
+func (b *BadgerDb) Close() {
+	if err := b.db.Close(); err != nil{
+		b.logger.Fatal("failed to close db", zap.Error(err))
+	}
+}

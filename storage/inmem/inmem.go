@@ -13,6 +13,7 @@ type inMemStorage struct {
 	memory map[string]map[string][]byte
 }
 
+
 // New is the constructor of inMemStorage
 func New() storage.IKvStorage {
 	return &inMemStorage{memory: make(map[string]map[string][]byte)}
@@ -60,4 +61,9 @@ func (i *inMemStorage) GetAllByCollection(prefix []byte) ([]storage.Obj, error) 
 		return ret, nil
 	}
 	return []storage.Obj{}, errors.New("not found")
+}
+
+
+func (i *inMemStorage) Close() {
+	panic("implement me")
 }
