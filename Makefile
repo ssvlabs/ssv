@@ -30,6 +30,11 @@ ifneq ($(SHARE_CONFIG),)
   NODE_COMMAND+= --share-config=${SHARE_CONFIG}
 endif
 
+COV_CMD="-cover"
+ifeq ($(COVERAGE),true)
+	COV_CMD="-coverpkg=${$(go list ./... | grep -v mocks | tr '\n' ',')} -coverprofile=coverage.out -covermode=atomic"
+endif
+
 #Lint
 .PHONY: lint-prepare
 lint-prepare:
@@ -41,19 +46,10 @@ lint:
 	./bin/golangci-lint run -v ./...
 
 #Test
-
-#Test
 .PHONY: full-test
 full-test:
 	@echo "Running the full test..."
-	@go test -tags blst_enabled -timeout 20m -cover -race -p 1 -v ./...
-
-#Test Coverage
-.PHONY: test-cov
-full-test:
-	@echo "Running the full test..."
-	@go test -tags blst_enabled -timeout 20m -coverpkg=${$(go list ./... | grep -v mocks | tr '\n' ',')} -coverprofile=coverage.out -covermode=atomic -race -p 1 -v ./...
-
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
 
 
 # TODO: Intgrate use of short flag (unit tests) + running tests through docker

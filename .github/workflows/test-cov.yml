@@ -18,7 +18,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install make
 
       - name: Run make test
-        run: make test-cov
+        run: make full-test COVERAGE=true
 
       - name: Create coverage badge
         if: ${{ success() }}
