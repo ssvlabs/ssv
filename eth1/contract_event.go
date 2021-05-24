@@ -16,7 +16,7 @@ type ContractEvent struct {
 	Data interface{}
 }
 
-// Oess struct
+// Oess struct represents the shares values
 type Oess struct {
 	Index             *big.Int
 	OperatorPublicKey []byte
@@ -24,14 +24,14 @@ type Oess struct {
 	EncryptedKey      []byte
 }
 
-// ValidatorAddedEvent struct
+// ValidatorAddedEvent struct represents event received by the smart contract
 type ValidatorAddedEvent struct {
 	PublicKey    []byte
 	OwnerAddress common.Address
 	OessList     []Oess
 }
 
-// OperatorAddedEvent struct
+// OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
 	Name           string
 	Pubkey         []byte
