@@ -48,6 +48,12 @@ full-test:
 	@echo "Running the full test..."
 	@go test -tags blst_enabled -timeout 20m -cover -race -p 1 -v ./...
 
+#Test Coverage
+.PHONY: test-cov
+full-test:
+	@echo "Running the full test..."
+	@go test -tags blst_enabled -timeout 20m -coverpkg=${$(go list ./... | grep -v mocks | tr '\n' ',')} -coverprofile=coverage.out -covermode=atomic -race -p 1 -v ./...
+
 
 
 # TODO: Intgrate use of short flag (unit tests) + running tests through docker

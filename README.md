@@ -10,6 +10,7 @@ https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/6874
 )](https://pkg.go.dev/github.com/ethereum/eth2-ssv?tab=doc)
 ![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/full-test.yml/badge.svg?branch=stage)
 ![Github Actions](https://github.com/ethereum/eth2-ssv/actions/workflows/lint.yml/badge.svg?branch=stage)
+![Test Coverage](./docs/resources/cov-badge.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ethereum/eth2-ssv)](https://goreportcard.com/report/github.com/ethereum/eth2-ssv)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.gg/eDXSP9R)
 
