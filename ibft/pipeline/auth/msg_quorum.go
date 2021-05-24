@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-// AuthorizeMsg is the pipeline to authorize message
+// ValidateQuorum is the pipeline to validate msg quorum requirement
 func ValidateQuorum(threshold int) pipeline.Pipeline {
 	return pipeline.WrapFunc("quorum", func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) < threshold {

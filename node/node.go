@@ -132,24 +132,6 @@ func (n *SsvNode) Start() error {
 					n.logger.Debug("no slots found for the given duty")
 					return
 				}
-				go func(slot uint64) {
-					// execute task if slot already began and not pass 1 epoch
-					currentSlot := uint64(n.getCurrentSlot())
-					if slot >= currentSlot && slot-currentSlot <= n.dutySlotsLimit {
-						pubKey := &bls.PublicKey{}
-						if err := pubKey.Deserialize(duty.PublicKey); err != nil {
-							n.logger.Error("Failed to deserialize pubkey from duty")
-						}
-						v := validatorsMap[pubKey.SerializeToHexStr()]
-						n.logger.Info("starting duty processing start for slot",
-							zap.Uint64("committee_index", duty.GetCommitteeIndex()),
-							zap.Uint64("slot", slot))
-						go v.ExecuteDuty(ctx, slot, duty)
-					} else {
-						n.logger.Info("scheduling duty processing start for slot",
-							zap.Time("start_time", n.getSlotStartTime(slot)),
-							zap.Uint64("committee_index", duty.GetCommitteeIndex()),
-							zap.Uint64("slot", slot))
 
 				for _, slot := range slots {
 					if slot < n.getEpochFirstSlot(n.genesisEpoch) {
@@ -165,14 +147,13 @@ func (n *SsvNode) Start() error {
 						// execute task if slot already began and not pass 1 epoch
 						currentSlot := uint64(n.getCurrentSlot())
 						if slot >= currentSlot && slot-currentSlot <= n.dutySlotsLimit {
-							prevIdentifier := ibft.FirstInstanceIdentifier()
 							pubKey := &bls.PublicKey{}
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
 								n.logger.Error("Failed to deserialize pubkey from duty")
 							}
 							v := n.validatorsMap[pubKey.SerializeToHexStr()]
 							logger.Info("starting duty processing start for slot")
-							go v.ExecuteDuty(n.context, prevIdentifier, slot, duty)
+							go v.ExecuteDuty(n.context, slot, duty)
 						} else {
 							logger.Info("scheduling duty processing start for slot")
 							if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
