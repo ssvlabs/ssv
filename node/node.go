@@ -38,7 +38,7 @@ type Options struct {
 // Node represents the behavior of SSV node
 type Node interface {
 	// Start starts the SSV node
-	Start(ctx context.Context) error
+	Start() error
 }
 
 // SsvNode implements Node interface
