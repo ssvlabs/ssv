@@ -20,7 +20,8 @@ endif
 # node command builder
 NODE_COMMAND=--node-id=${NODE_ID} --private-key=${SSV_PRIVATE_KEY} --validator-key=${VALIDATOR_PUBLIC_KEY} \
 --beacon-node-addr=${BEACON_NODE_ADDR} --network=${NETWORK} --val=${CONSENSUS_TYPE} \
---host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --storage-path=${STORAGE_PATH}
+--host-dns=${HOST_DNS} --host-address=${EXTERNAL_IP} --logger-level=${LOGGER_LEVEL} --eth1-addr=${ETH_1_ADDR} \
+--storage-path=${STORAGE_PATH} --operator-private-key=${OPERATOR_PRIAVTE_KEY}
 
 
 ifneq ($(TCP_PORT),)

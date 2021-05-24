@@ -8,6 +8,7 @@ import (
 type inMemStorage struct {
 }
 
+
 // New is the constructor of inMemStorage
 func New() storage.IKvStorage {
 	return &inMemStorage{}
@@ -31,4 +32,9 @@ func (i *inMemStorage) GetAllByCollection(prefix []byte) ([]storage.Obj, error) 
 			Value: nil,
 		},
 	}, nil
+}
+
+
+func (i *inMemStorage) Close() {
+	panic("implement me")
 }

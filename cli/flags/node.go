@@ -1,10 +1,11 @@
 package flags
 
 import (
+	"time"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap/zapcore"
-	"time"
 
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
@@ -25,7 +26,9 @@ const (
 	udpPort              = "udp-port"
 	genesisEpoch         = "genesis-epoch"
 	loggerLevel          = "logger-level"
+	eth1AddrFlag         = "eth1-addr"
 	storagePath          = "storage-path"
+	operatorPrivateFlag  = "operator-private-key"
 	maxNetBatch          = "network-max-batch"
 	netReqTimeout        = "network-req-timeout"
 )
@@ -199,10 +202,29 @@ func AddLoggerLevelFlag(c *cobra.Command) {
 	cliflag.AddPersistentStringFlag(c, loggerLevel, "info", "logger level", false)
 }
 
+// AddEth1AddrFlag adds the eth1 address flag to the command
+func AddEth1AddrFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, eth1AddrFlag, "", "eth1 node address", false)
+}
+
+// GetEth1AddrValue gets the eth1 address flag from the command
+func GetEth1AddrValue(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(eth1AddrFlag)
+}
+
+// AddOperatorPrivateKeyFlag adds the operator private key flag to the command
+func AddOperatorPrivateKeyFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, operatorPrivateFlag, "", "operator private key", false)
+}
+
+// GetOperatorPrivateKeyFlag gets the operator private key flag from the command
+func GetOperatorPrivateKeyFlag(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(operatorPrivateFlag)
+}
+
 // GetStoragePathValue gets the storage path flag from the command
 func GetStoragePathValue(c *cobra.Command) (string, error) {
-	val, err := c.Flags().GetString(storagePath)
-	return val, err
+	return c.Flags().GetString(storagePath)
 }
 
 // AddStoragePathFlag adds the storage path flag to the command
