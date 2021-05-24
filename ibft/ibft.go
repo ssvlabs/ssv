@@ -14,11 +14,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
-// FirstInstanceIdentifier is the identifier of the first instance in the DB
-func FirstInstanceIdentifier() []byte {
-	return []byte{0, 0, 0, 0, 0, 0, 0, 0}
-}
-
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
 	Logger         *zap.Logger
@@ -33,12 +28,15 @@ type StartOptions struct {
 
 // IBFT represents behavior of the IBFT
 type IBFT interface {
+	// Init should be called after creating an IBFT instance to init the instance, sync it, etc.
+	Init()
+
 	// StartInstance starts a new instance by the given options
 	StartInstance(opts StartOptions) (bool, int, []byte)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
-	NextSeqNumber() uint64
+	NextSeqNumber() (uint64, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[uint64]*proto.Node
@@ -46,31 +44,51 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	instances           []*Instance // key is the instance identifier
 	currentInstance     *Instance
 	currentInstanceLock sync.Locker
 	logger              *zap.Logger
 	ibftStorage         collections.Iibft
 	network             network.Network
 	msgQueue            *msgqueue.MessageQueue
-	params              *proto.InstanceParams
+	params              *proto.InstanceParams // TODO - this should be deprecated for validator share
+	ValidatorShare      *collections.ValidatorShare
 	leaderSelector      leader.Selector
+
+	// flags
+	initFinished bool
 }
 
 // New is the constructor of IBFT
-func New(logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams) IBFT {
+func New(
+	logger *zap.Logger,
+	storage collections.Iibft,
+	network network.Network,
+	queue *msgqueue.MessageQueue,
+	params *proto.InstanceParams,
+	ValidatorShare *collections.ValidatorShare,
+) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:         storage,
-		instances:           make([]*Instance, 0),
 		currentInstanceLock: &sync.Mutex{},
 		logger:              logger,
 		network:             network,
 		msgQueue:            queue,
 		params:              params,
+		ValidatorShare:      ValidatorShare,
 		leaderSelector:      &leader.Deterministic{},
+
+		// flags
+		initFinished: false,
 	}
-	ret.listenToNetworkMessages()
 	return ret
+}
+
+func (i *ibftImpl) Init() {
+	i.listenToSyncMessages()
+	i.waitForMinPeerCount(3)
+	i.SyncIBFT()
+	i.listenToNetworkMessages()
+	i.initFinished = true
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
@@ -81,7 +99,6 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	}
 
 	newInstance := NewInstance(instanceOpts)
-	i.instances = append(i.instances, newInstance)
 	i.currentInstance = newInstance
 	go newInstance.StartEventLoop()
 	go newInstance.StartMessagePipeline()

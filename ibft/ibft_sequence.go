@@ -12,24 +12,41 @@ A fully synced iBFT node must have all sequences to be fully synced, no skips or
 */
 
 func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
+	if !i.initFinished {
+		return errors.New("iBFT hasn't initialized yet")
+	}
+
+	highestKnown, err := i.HighestKnownDecided()
+	if err != nil {
+		return err
+	}
+
+	highestSeqKnown := uint64(0)
+	if highestKnown != nil {
+		highestSeqKnown = highestKnown.Message.SeqNumber
+	}
+
 	if opts.SeqNumber == 0 {
 		return nil
 	}
-	if opts.SeqNumber != uint64(len(i.instances)) {
+	if opts.SeqNumber != highestSeqKnown+1 {
 		return errors.New("instance seq invalid")
 	}
-	// If previous instance didn't decide, can't start another instance.
-	instance := i.instances[opts.SeqNumber-1]
-	if instance.Stage() != proto.RoundState_Decided {
-		return errors.New("previous instance not decided, can't start new instance")
-	}
+
 	return nil
 }
 
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (i *ibftImpl) NextSeqNumber() uint64 {
-	return 0 //uint64(len(i.instances)) // TODO - make seq incremental
+func (i *ibftImpl) NextSeqNumber() (uint64, error) {
+	knownDecided, err := i.HighestKnownDecided()
+	if err != nil {
+		return 0, err
+	}
+	if knownDecided == nil {
+		return 0, nil
+	}
+	return knownDecided.Message.SeqNumber + 1, nil
 }
 
 func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOptions {
@@ -48,9 +65,8 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 			ConsensusParams: i.params.ConsensusParams,
 			IbftCommittee:   opts.ValidatorShare.Committee,
 		},
-		Lambda:         opts.Identifier,
-		SeqNumber:      opts.SeqNumber,
-		PreviousLambda: opts.PrevInstance,
-		ValidatorPK:    opts.ValidatorShare.ValidatorPK.Serialize(),
+		Lambda:      opts.Identifier,
+		SeqNumber:   opts.SeqNumber,
+		ValidatorPK: opts.ValidatorShare.ValidatorPK.Serialize(),
 	}
 }

@@ -13,17 +13,17 @@ import (
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
-		auth.ValidateLambdas(i.State),
-		auth.ValidateRound(i.State),
-		auth.ValidatePKs(i.State),
-		auth.ValidateSequenceNumber(i.State),
+		auth.ValidateLambdas(i.State.Lambda),
+		auth.ValidateRound(i.State.Round),
+		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.Params),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.Params),
 		i.UponPrePrepareMsg(),
 	)
 }
 
-// JustifyPrePrepare -- TODO
+// JustifyPrePrepare implements:
 // predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
 // 	return
 // 		round = 1
@@ -81,12 +81,11 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 
 func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
-		Type:           proto.RoundState_PrePrepare,
-		Round:          i.State.Round,
-		Lambda:         i.State.Lambda,
-		SeqNumber:      i.State.SeqNumber,
-		PreviousLambda: i.State.PreviousLambda,
-		Value:          value,
-		ValidatorPk:    i.State.ValidatorPk,
+		Type:        proto.RoundState_PrePrepare,
+		Round:       i.State.Round,
+		Lambda:      i.State.Lambda,
+		SeqNumber:   i.State.SeqNumber,
+		Value:       value,
+		ValidatorPk: i.State.ValidatorPk,
 	}
 }

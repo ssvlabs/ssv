@@ -1,6 +1,27 @@
 package ibft
 
-import "github.com/bloxapp/ssv/network"
+import (
+	"github.com/bloxapp/ssv/network"
+	"go.uber.org/zap"
+	"time"
+)
+
+func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
+	for {
+		time.Sleep(time.Second)
+
+		peers, err := i.network.AllPeers(i.ValidatorShare.ValidatorPK.Serialize())
+		if err != nil {
+			i.logger.Error("failed fetching peers", zap.Error(err))
+			continue
+		}
+
+		i.logger.Debug("waiting for min peer count", zap.Int("current peer count", len(peers)))
+		if len(peers) == minPeerCount {
+			break
+		}
+	}
+}
 
 func (i *ibftImpl) listenToNetworkMessages() {
 	msgChan := i.network.ReceivedMsgChan()
@@ -21,7 +42,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 			i.ProcessDecidedMessage(msg)
 		}
 	}()
+}
 
+func (i *ibftImpl) listenToSyncMessages() {
 	// sync messages
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {

@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+func peerToString(peerID peer.ID) string {
+	return peer.Encode(peerID)
+}
+
+func peerFromString(peerStr string) (peer.ID, error) {
+	return peer.Decode(peerStr)
+}
+
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // Peer list must not be nil or empty if stream is nil.
 // returns a stream closed for writing
@@ -83,8 +91,13 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // If peer list is nil, broadcasts to all.
-func (n *p2pNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	res, err := n.sendAndReadSyncResponse(peer, msg)
+func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	peerID, err := peerFromString(peerStr)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := n.sendAndReadSyncResponse(peerID, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -93,14 +106,19 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMe
 
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().String()
+	msg.FromPeerID = n.host.ID().Pretty() // critical
 	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-func (n *p2pNetwork) GetDecidedByRange(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	res, err := n.sendAndReadSyncResponse(peer, msg)
+func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	peerID, err := peerFromString(peerStr)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := n.sendAndReadSyncResponse(peerID, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +126,7 @@ func (n *p2pNetwork) GetDecidedByRange(peer peer.ID, msg *network.SyncMessage) (
 }
 
 func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().String()
+	msg.FromPeerID = n.host.ID().Pretty() // critical
 	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }

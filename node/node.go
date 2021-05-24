@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/slotqueue"
@@ -148,14 +147,13 @@ func (n *SsvNode) Start() error {
 						// execute task if slot already began and not pass 1 epoch
 						currentSlot := uint64(n.getCurrentSlot())
 						if slot >= currentSlot && slot-currentSlot <= n.dutySlotsLimit {
-							prevIdentifier := ibft.FirstInstanceIdentifier()
 							pubKey := &bls.PublicKey{}
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
 								n.logger.Error("Failed to deserialize pubkey from duty")
 							}
 							v := n.validatorsMap[pubKey.SerializeToHexStr()]
 							logger.Info("starting duty processing start for slot")
-							go v.ExecuteDuty(n.context, prevIdentifier, slot, duty)
+							go v.ExecuteDuty(n.context, slot, duty)
 						} else {
 							logger.Info("scheduling duty processing start for slot")
 							if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {

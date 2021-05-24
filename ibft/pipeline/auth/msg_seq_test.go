@@ -29,9 +29,7 @@ func TestMsgSeq(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pipeline := ValidateSequenceNumber(&proto.State{
-				SeqNumber: test.expectedSeq,
-			})
+			pipeline := ValidateSequenceNumber(test.expectedSeq)
 			err := pipeline.Run(&proto.SignedMessage{
 				Message: &proto.Message{
 					SeqNumber: test.actualSeq,

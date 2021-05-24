@@ -8,9 +8,9 @@ import (
 )
 
 // ValidatePKs validates a msgs pk
-func ValidatePKs(state *proto.State) pipeline.Pipeline {
+func ValidatePKs(pk []byte) pipeline.Pipeline {
 	return pipeline.WrapFunc("validator PK", func(signedMessage *proto.SignedMessage) error {
-		if len(signedMessage.Message.ValidatorPk) != 48 || !bytes.Equal(state.ValidatorPk, signedMessage.Message.ValidatorPk) {
+		if len(signedMessage.Message.ValidatorPk) != 48 || !bytes.Equal(pk, signedMessage.Message.ValidatorPk) {
 			return errors.New("invalid message validator PK")
 		}
 		return nil

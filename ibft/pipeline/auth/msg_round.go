@@ -8,10 +8,10 @@ import (
 )
 
 // ValidateRound validates round
-func ValidateRound(state *proto.State) pipeline.Pipeline {
+func ValidateRound(round uint64) pipeline.Pipeline {
 	return pipeline.WrapFunc("round", func(signedMessage *proto.SignedMessage) error {
-		if state.Round != signedMessage.Message.Round {
-			return errors.Errorf("message round (%d) does not equal State round (%d)", signedMessage.Message.Round, state.Round)
+		if round != signedMessage.Message.Round {
+			return errors.Errorf("message round (%d) does not equal State round (%d)", signedMessage.Message.Round, round)
 		}
 
 		return nil

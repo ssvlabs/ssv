@@ -1,12 +1,11 @@
 package sync
 
 import (
-	"bytes"
 	"errors"
+	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -14,21 +13,27 @@ import (
 // HistorySync is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
 type HistorySync struct {
-	logger         *zap.Logger
-	network        network.Network
-	ibftStorage    collections.Iibft
-	instanceParams *proto.InstanceParams
-	validatorPK    []byte
+	logger              *zap.Logger
+	network             network.Network
+	ibftStorage         collections.Iibft
+	validateDecidedMsgF func(msg *proto.SignedMessage) error
+	validatorPK         []byte
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(validatorPK []byte, network network.Network, ibftStorage collections.Iibft, instanceParams *proto.InstanceParams, logger *zap.Logger) *HistorySync {
+func NewHistorySync(
+	logger *zap.Logger,
+	validatorPK []byte,
+	network network.Network,
+	ibftStorage collections.Iibft,
+	validateDecidedMsgF func(msg *proto.SignedMessage) error,
+) *HistorySync {
 	return &HistorySync{
-		logger:         logger,
-		validatorPK:    validatorPK,
-		network:        network,
-		ibftStorage:    ibftStorage,
-		instanceParams: instanceParams,
+		logger:              logger,
+		validatorPK:         validatorPK,
+		network:             network,
+		validateDecidedMsgF: validateDecidedMsgF,
+		ibftStorage:         ibftStorage,
 	}
 }
 
@@ -37,38 +42,46 @@ func (s *HistorySync) Start() {
 	// fetch remote highest
 	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
-		panic("implement")
+		s.logger.Error("could not fetch highest instance during sync", zap.Error(err))
+		return
 	}
 
 	// fetch local highest
 	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
-	if err != nil {
-		panic("implement")
-	}
-
-	// check we are behind and need to sync
-	if localHighest.Message.SeqNumber >= remoteHighest.Message.SeqNumber {
-		s.logger.Info("node is synced", zap.Uint64("highest seq", localHighest.Message.SeqNumber))
+	if err != nil && err.Error() != collections.EntryNotFoundError { // if not found continue with sync
+		s.logger.Error("could not fetch local highest instance during sync", zap.Error(err))
 		return
 	}
 
-	// fetch missing data
-	decidedMsgs, err := s.fetchValidateAndSaveInstances(fromPeer, localHighest.Message.SeqNumber+1, remoteHighest.Message.SeqNumber)
-	if err != nil {
-		panic("implement")
+	syncStartSeqNumber := uint64(0)
+	if localHighest != nil {
+		syncStartSeqNumber = localHighest.Message.SeqNumber + 1
 	}
 
-	// save to storage
-	for _, msg := range decidedMsgs {
-		if err := s.ibftStorage.SaveDecided(msg); err != nil {
-			s.logger.Error("could not save decided msg during sync", zap.Error(err))
-			break
+	// check we are behind and need to sync
+	if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
+		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber))
+		return
+	}
+
+	// fetch, validate and save missing data
+	highestSaved, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
+	if err != nil {
+		s.logger.Error("could not fetch decided by range during sync", zap.Error(err))
+	}
+
+	// save highest
+	if highestSaved != nil {
+		if err := s.ibftStorage.SaveHighestDecidedInstance(highestSaved); err != nil {
+			s.logger.Error("could not save highest decided msg during sync", zap.Error(err))
 		}
 	}
+
+	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber))
 }
 
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
-func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, error) {
+func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error) {
 	// pick up to 4 peers
 	// TODO - why 4? should be set as param?
 	// TODO select peers by quality/ score?
@@ -86,7 +99,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 	results := make([]*network.SyncMessage, 4)
 	for i, p := range usedPeers {
 		wg.Add(1)
-		go func(index int, peer peer.ID, wg *sync.WaitGroup) {
+		go func(index int, peer string, wg *sync.WaitGroup) {
 			res, err := s.network.GetHighestDecidedInstance(peer, &network.SyncMessage{
 				Type:        network.Sync_GetHighestType,
 				ValidatorPk: s.validatorPK,
@@ -104,13 +117,13 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 
 	// validate response and find highest decided
 	var ret *proto.SignedMessage
-	var fromPeer peer.ID
+	var fromPeer string
 	for _, res := range results {
 		if res == nil {
 			continue
 		}
 
-		if len(res.SignedMessages) != 1 {
+		if len(res.SignedMessages) != 1 || res.SignedMessages[0] == nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err))
 			continue
 		}
@@ -118,18 +131,18 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 		signedMsg := res.SignedMessages[0]
 
 		// validate
-		if err := s.isValidDecidedMsg(signedMsg); err != nil {
+		if err := s.validateDecidedMsgF(signedMsg); err != nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err))
 			continue
 		}
 
 		if ret == nil {
 			ret = signedMsg
-			fromPeer = peer.ID(res.FromPeerID)
+			fromPeer = res.FromPeerID
 		}
 		if ret.Message.SeqNumber < signedMsg.Message.SeqNumber {
 			ret = signedMsg
-			fromPeer = peer.ID(res.FromPeerID)
+			fromPeer = res.FromPeerID
 		}
 	}
 
@@ -140,41 +153,19 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, peer.ID, erro
 	return ret, fromPeer, nil
 }
 
-func (s *HistorySync) isValidDecidedMsg(msg *proto.SignedMessage) error {
-	if msg.Message.Type != proto.RoundState_Decided {
-		return errors.New("decided msg with wrong type")
-	}
-
-	// signature
-	if err := s.instanceParams.VerifySignedMessage(msg); err != nil {
-		return err
-	}
-
-	// threshold
-	if len(msg.SignerIds) < s.instanceParams.ThresholdSize() {
-		return errors.New("highest msg has no quorum")
-	}
-
-	// validator pk
-	if !bytes.Equal(s.validatorPK, msg.Message.ValidatorPk) {
-		return errors.New("invalid validator PK")
-	}
-	return nil
-}
-
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
 // Range is start to end seq including
-func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq uint64, endSeq uint64) ([]*proto.SignedMessage, error) {
-	ret := make([]*proto.SignedMessage, endSeq-startSeq+1)
+func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, err error) {
 	failCount := 0
 	start := startSeq
 	done := false
+	var latestError error
 	for {
 		if failCount == 5 {
-			return nil, errors.New("could not fetch ranged decided instances")
+			return highestSaved, latestError
 		}
 		if done {
-			return ret, nil
+			return highestSaved, nil
 		}
 
 		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
@@ -184,23 +175,37 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer peer.ID, startSeq u
 		})
 		if err != nil {
 			failCount++
+			latestError = err
 			continue
 		}
 
-		// set in return slice
+		// validate and save
 		for _, msg := range res.SignedMessages {
 			// if msg is invalid, break and try again with an updated start seq
-			if s.isValidDecidedMsg(msg) != nil {
+			if s.validateDecidedMsgF(msg) != nil {
 				start = msg.Message.SeqNumber
 				continue
 			}
-			saveIndex := msg.Message.SeqNumber - startSeq
-			ret[saveIndex] = msg
+
+			// save
+			if err := s.ibftStorage.SaveDecided(msg); err != nil {
+				return highestSaved, err
+			}
+
+			// set highest
+			if highestSaved == nil {
+				highestSaved = msg
+			}
+			if highestSaved.Message.SeqNumber < msg.Message.SeqNumber {
+				highestSaved = msg
+			}
+
 			start = msg.Message.SeqNumber + 1
 
 			if msg.Message.SeqNumber == endSeq {
 				done = true
 			}
 		}
+		s.logger.Info(fmt.Sprintf("fetched and saved instances up to sequence number %d", endSeq))
 	}
 }

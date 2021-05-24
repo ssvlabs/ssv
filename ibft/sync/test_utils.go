@@ -6,26 +6,25 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"testing"
 	"time"
 )
 
 type testNetwork struct {
 	t                      *testing.T
-	highestDecidedReceived map[peer.ID]*proto.SignedMessage
-	decidedArr             map[peer.ID][]*proto.SignedMessage
+	highestDecidedReceived map[string]*proto.SignedMessage
+	decidedArr             map[string][]*proto.SignedMessage
 	maxBatch               int
-	peers                  []peer.ID
+	peers                  []string
 	retError               error
 }
 
 // newTestNetwork returns a new test network instance
 func newTestNetwork(
-	t *testing.T, peers []peer.ID,
+	t *testing.T, peers []string,
 	maxBatch int,
-	highestDecidedReceived map[peer.ID]*proto.SignedMessage,
-	decidedArr map[peer.ID][]*proto.SignedMessage,
+	highestDecidedReceived map[string]*proto.SignedMessage,
+	decidedArr map[string][]*proto.SignedMessage,
 	retError error,
 ) *testNetwork {
 	return &testNetwork{
@@ -62,7 +61,7 @@ func (n *testNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 	return nil
 }
 
-func (n *testNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *testNetwork) GetHighestDecidedInstance(peer string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
 	if highest, found := n.highestDecidedReceived[peer]; found {
@@ -72,7 +71,7 @@ func (n *testNetwork) GetHighestDecidedInstance(peer peer.ID, msg *network.SyncM
 
 		return &network.SyncMessage{
 			SignedMessages: []*proto.SignedMessage{highest},
-			FromPeerID:     peer.String(),
+			FromPeerID:     peer,
 			Type:           network.Sync_GetInstanceRange,
 		}, nil
 	}
@@ -83,7 +82,7 @@ func (n *testNetwork) RespondToHighestDecidedInstance(stream network.SyncStream,
 	return nil
 }
 
-func (n *testNetwork) GetDecidedByRange(fromPeer peer.ID, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *testNetwork) GetDecidedByRange(fromPeer string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
 	if n.retError != nil {
@@ -107,7 +106,7 @@ func (n *testNetwork) GetDecidedByRange(fromPeer peer.ID, msg *network.SyncMessa
 
 		return &network.SyncMessage{
 			SignedMessages: ret,
-			FromPeerID:     fromPeer.String(),
+			FromPeerID:     fromPeer,
 			ValidatorPk:    msg.ValidatorPk,
 			Type:           network.Sync_GetInstanceRange,
 		}, nil
@@ -130,7 +129,7 @@ func (n *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) er
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (n *testNetwork) AllPeers(validatorPk []byte) ([]peer.ID, error) {
+func (n *testNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.peers, nil
 }
 

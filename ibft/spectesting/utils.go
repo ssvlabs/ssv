@@ -18,33 +18,30 @@ import (
 // PrePrepareMsg constructs and signs a pre-prepare msg
 func PrePrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
-		Type:           proto.RoundState_PrePrepare,
-		Round:          round,
-		Lambda:         lambda,
-		PreviousLambda: prevLambda,
-		Value:          inputValue,
+		Type:   proto.RoundState_PrePrepare,
+		Round:  round,
+		Lambda: lambda,
+		Value:  inputValue,
 	})
 }
 
 // PrepareMsg constructs and signs a prepare msg
 func PrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
-		Type:           proto.RoundState_Prepare,
-		Round:          round,
-		Lambda:         lambda,
-		PreviousLambda: prevLambda,
-		Value:          inputValue,
+		Type:   proto.RoundState_Prepare,
+		Round:  round,
+		Lambda: lambda,
+		Value:  inputValue,
 	})
 }
 
 // CommitMsg constructs and signs a commit msg
 func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
-		Type:           proto.RoundState_Commit,
-		Round:          round,
-		Lambda:         lambda,
-		PreviousLambda: prevLambda,
-		Value:          inputValue,
+		Type:   proto.RoundState_Commit,
+		Round:  round,
+		Lambda: lambda,
+		Value:  inputValue,
 	})
 }
 
@@ -65,11 +62,10 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedVa
 
 	if preparedValue != nil {
 		crData.JustificationMsg = &proto.Message{
-			Type:           proto.RoundState_Prepare,
-			Round:          preparedRound,
-			Lambda:         lambda,
-			PreviousLambda: prevLambda,
-			Value:          preparedValue,
+			Type:   proto.RoundState_Prepare,
+			Round:  preparedRound,
+			Lambda: lambda,
+			Value:  preparedValue,
 		}
 		var aggregatedSig *bls.Sign
 		SignerIds := make([]uint64, 0)
@@ -93,11 +89,10 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedVa
 	require.NoError(t, err)
 
 	return SignMsg(t, id, sk, &proto.Message{
-		Type:           proto.RoundState_ChangeRound,
-		Round:          round,
-		Lambda:         lambda,
-		PreviousLambda: prevLambda,
-		Value:          byts,
+		Type:   proto.RoundState_ChangeRound,
+		Round:  round,
+		Lambda: lambda,
+		Value:  byts,
 	})
 }
 
@@ -114,9 +109,8 @@ func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Inst
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   TestNodes(),
 		},
-		Lambda:         lambda,
-		PreviousLambda: prevLambda,
-		ValidatorPK:    fixtures.RefPk, // just as a value
+		Lambda:      lambda,
+		ValidatorPK: fixtures.RefPk, // just as a value
 	}
 
 	return ibft.NewInstance(opts)

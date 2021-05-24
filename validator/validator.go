@@ -54,7 +54,9 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   validatorShare.Committee,
 		},
+		validatorShare,
 	)
+	go ibfts[beacon.RoleAttester].Init()
 
 	return &Validator{
 		ctx:                        ctx,
@@ -85,7 +87,6 @@ func (v *Validator) Start() error {
 func (v *Validator) startSlotQueueListener() {
 	v.logger.Info("start listening slot queue")
 
-	prevIdentifier := ibft.FirstInstanceIdentifier()
 	for {
 		slot, duty, ok, err := v.slotQueue.Next(v.ValidatorShare.ValidatorPK.Serialize())
 		if err != nil {
@@ -97,7 +98,7 @@ func (v *Validator) startSlotQueueListener() {
 			v.logger.Debug("no duties for slot scheduled")
 			continue
 		}
-		go v.ExecuteDuty(v.ctx, prevIdentifier, slot, duty)
+		go v.ExecuteDuty(v.ctx, slot, duty)
 	}
 }
 

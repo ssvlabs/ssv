@@ -3,8 +3,9 @@ package sync
 import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/inmem"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -50,14 +51,14 @@ func multiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg
 }
 
 func TestFetchDecided(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, _ := GenerateNodes(4)
 	tests := []struct {
 		name           string
 		valdiatorPK    []byte
-		peers          []peer.ID
-		fromPeer       peer.ID
+		peers          []string
+		fromPeer       string
 		rangeParams    []uint64
-		decidedArr     map[peer.ID][]*proto.SignedMessage
+		decidedArr     map[string][]*proto.SignedMessage
 		expectedError  string
 		forceError     error
 		expectedResLen uint64
@@ -65,10 +66,10 @@ func TestFetchDecided(t *testing.T) {
 		{
 			"valid fetch no pagination",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
+			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 3},
-			map[peer.ID][]*proto.SignedMessage{
+			map[string][]*proto.SignedMessage{
 				"2": {
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:        proto.RoundState_Decided,
@@ -100,10 +101,10 @@ func TestFetchDecided(t *testing.T) {
 		{
 			"valid fetch with pagination",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
+			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 2},
-			map[peer.ID][]*proto.SignedMessage{
+			map[string][]*proto.SignedMessage{
 				"2": {
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:        proto.RoundState_Decided,
@@ -135,11 +136,11 @@ func TestFetchDecided(t *testing.T) {
 		{
 			"force error",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
+			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 2},
-			map[peer.ID][]*proto.SignedMessage{},
-			"could not fetch ranged decided instances",
+			map[string][]*proto.SignedMessage{},
+			"could not find highest",
 			errors.New("error"),
 			3,
 		},
@@ -147,17 +148,18 @@ func TestFetchDecided(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil), nil, &proto.InstanceParams{
-				ConsensusParams: proto.DefaultConsensusParams(),
-				IbftCommittee:   nodes,
-			}, zap.L())
+			storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
+			s := NewHistorySync(zap.L(), test.valdiatorPK, network, &storage, func(msg *proto.SignedMessage) error {
+				return nil
+			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])
 
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
 				require.NoError(t, err)
-				require.Len(t, res, int(test.expectedResLen))
+				require.EqualValues(t, res.Message.SeqNumber, test.expectedResLen)
 			}
 
 		})
@@ -165,7 +167,7 @@ func TestFetchDecided(t *testing.T) {
 }
 
 func TestFindHighest(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, _ := GenerateNodes(4)
 	highest1 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:        proto.RoundState_Decided,
 		Round:       1,
@@ -184,16 +186,16 @@ func TestFindHighest(t *testing.T) {
 	tests := []struct {
 		name               string
 		valdiatorPK        []byte
-		peers              []peer.ID
-		highestMap         map[peer.ID]*proto.SignedMessage
+		peers              []string
+		highestMap         map[string]*proto.SignedMessage
 		expectedHighestSeq uint64
 		expectedError      string
 	}{
 		{
 			"valid",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 			},
 			1,
@@ -202,8 +204,8 @@ func TestFindHighest(t *testing.T) {
 		{
 			"valid multi responses",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2", "3"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 				"3": highest2,
 			},
@@ -213,8 +215,8 @@ func TestFindHighest(t *testing.T) {
 		{
 			"valid multi responses different seq",
 			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2", "3"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 				"3": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 					Type:        proto.RoundState_Decided,
@@ -230,34 +232,37 @@ func TestFindHighest(t *testing.T) {
 		{
 			"invalid validator pk",
 			[]byte{1, 1, 1, 1},
-			[]peer.ID{"2"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
 				"2": highest1,
 			},
 			1,
 			"could not fetch highest decided from peers",
 		},
-		{
-			"no quorum msg",
-			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
-				"2": multiSignMsg(t, []uint64{1, 2}, sks, &proto.Message{
-					Type:        proto.RoundState_Decided,
-					Round:       1,
-					Lambda:      []byte("lambda"),
-					SeqNumber:   1,
-					ValidatorPk: []byte{1, 2, 3, 4},
-				}),
-			},
-			1,
-			"could not fetch highest decided from peers",
-		},
+		//
+		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
+		//
+		//{
+		//	"no quorum msg",
+		//	[]byte{1, 2, 3, 4},
+		//	[]peer.ID{"2", "3"},
+		//	map[peer.ID]*proto.SignedMessage{
+		//		"2": multiSignMsg(t, []uint64{1, 2}, sks, &proto.Message{
+		//			Type:        proto.RoundState_Decided,
+		//			Round:       1,
+		//			Lambda:      []byte("lambda"),
+		//			SeqNumber:   1,
+		//			ValidatorPk: []byte{1, 2, 3, 4},
+		//		}),
+		//	},
+		//	1,
+		//	"could not fetch highest decided from peers",
+		//},
 		{
 			"wrong pk",
 			[]byte{1, 1, 1, 1},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
+			[]string{"2", "3"},
+			map[string]*proto.SignedMessage{
 				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 					Type:        proto.RoundState_Decided,
 					Round:       1,
@@ -269,30 +274,36 @@ func TestFindHighest(t *testing.T) {
 			1,
 			"could not fetch highest decided from peers",
 		},
-		{
-			"return not decided",
-			[]byte{1, 2, 3, 4},
-			[]peer.ID{"2", "3"},
-			map[peer.ID]*proto.SignedMessage{
-				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-					Type:        proto.RoundState_Prepare,
-					Round:       1,
-					Lambda:      []byte("lambda"),
-					SeqNumber:   1,
-					ValidatorPk: []byte{1, 2, 3, 4},
-				}),
-			},
-			1,
-			"could not fetch highest decided from peers",
-		},
+		//
+		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
+		//
+		//{
+		//	"return not decided",
+		//	[]byte{1, 2, 3, 4},
+		//	[]peer.ID{"2", "3"},
+		//	map[peer.ID]*proto.SignedMessage{
+		//		"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		//			Type:        proto.RoundState_Prepare,
+		//			Round:       1,
+		//			Lambda:      []byte("lambda"),
+		//			SeqNumber:   1,
+		//			ValidatorPk: []byte{1, 2, 3, 4},
+		//		}),
+		//	},
+		//	1,
+		//	"could not fetch highest decided from peers",
+		//},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(test.valdiatorPK, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, &proto.InstanceParams{
-				ConsensusParams: proto.DefaultConsensusParams(),
-				IbftCommittee:   nodes,
-			}, zap.L())
+			s := NewHistorySync(zap.L(),
+				test.valdiatorPK,
+				newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil),
+				nil,
+				func(msg *proto.SignedMessage) error {
+					return nil
+				})
 			res, _, err := s.findHighestInstance()
 
 			if len(test.expectedError) > 0 {
@@ -301,7 +312,6 @@ func TestFindHighest(t *testing.T) {
 				require.NoError(t, err)
 				require.EqualValues(t, test.expectedHighestSeq, res.Message.SeqNumber)
 			}
-
 		})
 	}
 }
