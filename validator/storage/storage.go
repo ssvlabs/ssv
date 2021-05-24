@@ -31,6 +31,7 @@ type ShareOptions struct {
 	Committee map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 }
 
+// ToShare creates a Share instance from ShareOptions
 func (options *ShareOptions) ToShare() (*Share, error) {
 	var err error
 
