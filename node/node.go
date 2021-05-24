@@ -40,10 +40,6 @@ type Options struct {
 type Node interface {
 	// Start starts the SSV node
 	Start() error
-	// InformObserver informs observer
-	InformObserver(i interface{})
-	// GetObserverID get the observer id
-	GetObserverID() string
 }
 
 // ssvNode implements Node interface
@@ -71,7 +67,7 @@ type ssvNode struct {
 }
 
 // New is the constructor of ssvNode
-func New(opts Options) Node {
+func New(opts Options) *ssvNode {
 	return &ssvNode{
 		validatorStorage:           opts.ValidatorStorage,
 		ibftStorage:                opts.IbftStorage,

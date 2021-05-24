@@ -9,7 +9,7 @@ import (
 	"github.com/bloxapp/ssv/pubsub"
 )
 
-// ContractEvent struct
+// ContractEvent struct is an implementation of BaseSubject that notify about an event from the smart contract to all the registered observers
 type ContractEvent struct {
 	pubsub.BaseSubject
 	Log  types.Log

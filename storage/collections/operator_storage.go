@@ -17,7 +17,6 @@ import (
 type IOperatorStorage interface {
 	GetPrivateKey() (*rsa.PrivateKey, error)
 	SetupPrivateKey(operatorKey string) error
-	verifyPrivateKeyExist(operatorKey string) (string, error)
 }
 
 // OperatorStorage implement IOperatorStorage

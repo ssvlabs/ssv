@@ -1,13 +1,13 @@
 package pubsub
 
-// subject interface
+// subject interface that manage registered Observers and passing notify interface (each implementation will cast by it use)
 type subject interface {
 	Register(Observer Observer)
 	Deregister(Observer Observer)
 	notifyAll()
 }
 
-// BaseSubject struct
+// BaseSubject struct is the base implementation of subject
 type BaseSubject struct {
 	subject
 	ObserverList []Observer
