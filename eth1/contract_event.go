@@ -16,7 +16,7 @@ type ContractEvent struct {
 	Data interface{}
 }
 
-// Oess struct represents the shares values
+// Oess struct stands for operator encrypted secret share
 type Oess struct {
 	Index             *big.Int
 	OperatorPublicKey []byte
