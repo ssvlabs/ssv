@@ -36,6 +36,7 @@ func TestValidatorSerializer(t *testing.T) {
 func TestSaveAndGetValidatorStorage(t *testing.T) {
 	db, err := kv.New("./data/db", *zap.L(), &kv.Options{InMemory: true})
 	require.NoError(t, err)
+	defer db.Close()
 
 	validatorStorage := ValidatorStorage{
 		prefix: []byte("validator-"),
