@@ -25,6 +25,7 @@ jobs:
         run: |
           [ -f coverage.out ] && echo "processing coverage output file" || echo "could not find coverage output file"
           COV_TOTAL=`go tool cover -func=coverage.out | grep total | grep -Eo '[0-9]+\.[0-9]+'`
+          echo "Code coverage: $COV_TOTAL"
           if (( $(echo "$COV_TOTAL <= 50" | bc -l) )) ; then
             COV_COLOR=red
           elif (( $(echo "$COV_TOTAL > 80" | bc -l) )); then
