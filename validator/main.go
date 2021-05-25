@@ -55,12 +55,9 @@ func NewController(options ControllerOptions) IController {
 		Logger: options.Logger,
 	})
 
-	if len(options.Shares) > 0 {
-		for _, share := range options.Shares {
-			if err := collection.LoadFromConfig(share); err != nil {
-				options.Logger.Error("Failed to load validator share data from config", zap.Error(err))
-			}
-		}
+	err := collection.LoadMultipleFromConfig(options.Shares)
+	if err != nil {
+		options.Logger.Error("failed to load all validators from config", zap.Error(err))
 	}
 
 	ctrl := controller{

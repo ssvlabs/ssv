@@ -1,16 +1,14 @@
 package storage
 
 import (
-	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // ICollection interface for validator storage
 type ICollection interface {
+	LoadMultipleFromConfig(items []ShareOptions) error
 	LoadFromConfig(options ShareOptions) error
 	SaveValidatorShare(share *Share) error
 	GetValidatorsShare(key []byte) (*Share, error)
@@ -21,64 +19,6 @@ type ICollection interface {
 type CollectionOptions struct {
 	DB     *basedb.IDb
 	Logger *zap.Logger
-}
-
-// ShareOptions - used to load validator share from config
-type ShareOptions struct {
-	NodeID    uint64         `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
-	PublicKey string         `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
-	ShareKey  string         `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
-	Committee map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
-}
-
-// ToShare creates a Share instance from ShareOptions
-func (options *ShareOptions) ToShare() (*Share, error) {
-	var err error
-
-	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
-		shareKey := &bls.SecretKey{}
-
-		if err = shareKey.SetHexString(options.ShareKey); err != nil {
-			return nil, errors.Wrap(err, "failed to set hex private key")
-		}
-		validatorPk := &bls.PublicKey{}
-		if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
-			return nil, errors.Wrap(err, "failed to decode validator key")
-		}
-
-		_getBytesFromHex := func(str string) []byte {
-			val, e := hex.DecodeString(str)
-			if e != nil {
-				err = errors.Wrap(err, "failed to decode committee")
-			}
-			return val
-		}
-		ibftCommittee := make(map[uint64]*proto.Node)
-
-		for pk, id := range options.Committee {
-			ibftCommittee[uint64(id)] = &proto.Node{
-				IbftId: uint64(id),
-				Pk:     _getBytesFromHex(pk),
-			}
-			if uint64(id) == options.NodeID {
-				ibftCommittee[options.NodeID].Pk = shareKey.GetPublicKey().Serialize()
-				ibftCommittee[options.NodeID].Sk = shareKey.Serialize()
-			}
-		}
-
-		if err != nil {
-			return nil, err
-		}
-
-		share := Share{
-			NodeID:    options.NodeID,
-			PublicKey: validatorPk,
-			ShareKey:  shareKey,
-			Committee: ibftCommittee,
-		}
-		return &share, nil
-	}
-	return nil, errors.New("empty share")
 }
 
 // Collection struct
@@ -101,7 +41,20 @@ func getCollectionPrefix() string {
 	return "share-"
 }
 
-// LoadFromConfig fetch validator share form .env and save it to db
+// LoadMultipleFromConfig fetch multiple validators share from config and save it to db
+func (s *Collection) LoadMultipleFromConfig(items []ShareOptions) error {
+	if len(items) > 0 {
+		for _, opts := range items {
+			if err := s.LoadFromConfig(opts); err != nil {
+				s.logger.Error("failed to load validator share data from config", zap.Error(err))
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// LoadFromConfig fetch validator share from config and save it to db
 func (s *Collection) LoadFromConfig(options ShareOptions) error {
 	var err error
 	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
@@ -125,6 +78,7 @@ func (s *Collection) SaveValidatorShare(validator *Share) error {
 	value, err := validator.Serialize()
 	if err != nil {
 		s.logger.Error("failed serialized validator", zap.Error(err))
+		return err
 	}
 	return s.db.Set(s.prefix, validator.PublicKey.Serialize(), value)
 }
