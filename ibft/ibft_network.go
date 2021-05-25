@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"bytes"
 	"github.com/bloxapp/ssv/network"
 	"go.uber.org/zap"
 	"time"
@@ -39,7 +40,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
-			i.ProcessDecidedMessage(msg)
+			if bytes.Equal(i.ValidatorShare.ValidatorPK.Serialize(), msg.Message.ValidatorPk) { // making sure the msg is relevant to the share
+				i.ProcessDecidedMessage(msg)
+			}
 		}
 	}()
 }
