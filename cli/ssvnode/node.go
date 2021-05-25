@@ -5,11 +5,13 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	global_config "github.com/bloxapp/ssv/cli/config"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/docker/docker/daemon/logger"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -18,15 +20,16 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions           basedb.Options `yaml:"db"`
-	SSVOptions          node.Options   `yaml:"ssv"`
-	Network             string         `yaml:"Network" env-default:"pyrmont"`
-	DiscoveryType       string         `yaml:"DiscoveryType" env-default:"mdns"`
-	BeaconNodeAddr      string         `yaml:"BeaconNodeAddr" env-required:"true"`
-	TCPPort             int            `yaml:"TcpPort" env-default:"13000"`
-	UDPPort             int            `yaml:"UdpPort" env-default:"12000"`
-	HostAddress         string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
-	HostDNS             string         `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
+	DBOptions                  basedb.Options `yaml:"db"`
+	SSVOptions                 node.Options   `yaml:"ssv"`
+	Network                    string         `yaml:"Network" env-default:"pyrmont"`
+	DiscoveryType              string         `yaml:"DiscoveryType" env-default:"mdns"`
+	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env-required:"true"`
+	ETH1Addr                   string         `yaml:"ETH1Addr" env-required:"true"`
+	TCPPort                    int            `yaml:"TcpPort" env-default:"13000"`
+	UDPPort                    int            `yaml:"UdpPort" env-default:"12000"`
+	HostAddress                string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
+	HostDNS                    string         `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 }
 
 var cfg config
@@ -60,47 +63,13 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO Not refactored yet Start:
-		//beaconAddr, err := flags.GetBeaconAddrFlagValue(cmd)
-		//if err != nil {
-		//	Logger.Fatal("failed to get beacon node address flag value", zap.Error(err))
-		//}
-		beaconAddr := cfg.BeaconNodeAddr
-		//nodeID, err := flags.GetNodeIDKeyFlagValue(cmd)
-		//if err != nil {
-		//	Logger.Fatal("failed to get node ID flag value", zap.Error(err))
-		//}
-		//logger := Logger.With(zap.Uint64("node_id", nodeID))
-
-		//eth2Network, err := flags.GetNetworkFlagValue(cmd)
-		//if err != nil {
-		//	Logger.Fatal("failed to get eth2Network flag value", zap.Error(err))
-		//}
 		eth2Network := core.NetworkFromString(cfg.Network)
-		beaconClient, err := prysmgrpc.New(cmd.Context(), Logger, eth2Network, []byte("BloxStaking"), beaconAddr)
+		beaconClient, err := prysmgrpc.New(cmd.Context(), Logger, eth2Network, []byte("BloxStaking"), cfg.BeaconNodeAddr)
 		if err != nil {
 			Logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
-		//discoveryType, err := flags.GetDiscoveryFlagValue(cmd)
-		//if err != nil {
-		//	logger.Fatal("failed to get val flag value", zap.Error(err))
-		//}
-		discoveryType := cfg.DiscoveryType
-		//hostDNS, err := flags.GetHostDNSFlagValue(cmd)
-		//if err != nil {
-		//	logger.Fatal("failed to get hostDNS key flag value", zap.Error(err))
-		//}
-
-		//hostAddress, err := flags.GetHostAddressFlagValue(cmd)
-		//if err != nil {
-		//	logger.Fatal("failed to get hostAddress key flag value", zap.Error(err))
-		//}
-
-		//tcpPort, err := flags.GetTCPPortFlagValue(cmd)
-		//if err != nil {
-		//	Logger.Fatal("failed to get tcp port flag value", zap.Error(err))
-		//}
 		p2pCfg := p2p.Config{
-			DiscoveryType: discoveryType,
+			DiscoveryType: cfg.DiscoveryType,
 			BootstrapNodeAddr: []string{
 				// deployemnt
 				// internal ip
@@ -130,11 +99,26 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
-		cfg.SSVOptions.ValidatorOptions.DB = &db
+		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = network
 		cfg.SSVOptions.ValidatorOptions.Beacon = &beaconClient
 
 		ssvNode := node.New(cfg.SSVOptions)
+
+		if cfg.ETH1Addr != "" {
+			// 1. create new eth1 client
+			eth1Client, err := goeth.New(cmd.Context(), Logger, cfg.ETH1Addr, operatorStorage)
+			if err != nil {
+				Logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
+			}
+
+			// 2. register validatorStorage as observer to operator contract events subject
+			eth1Client.GetContractEvent().Register(&validatorStorage)
+		}
+		validatorStorage.GetDBEvent().Register(ssvNode)
+		if err := ssvNode.Start(); err != nil {
+			Logger.Fatal("failed to start SSV node", zap.Error(err))
+		}
 
 		if err := ssvNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))

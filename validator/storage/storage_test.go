@@ -42,6 +42,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 
 	db, err := storage.GetStorageFactory(options)
 	require.NoError(t, err)
+	defer db.Close()
 
 	collection := NewCollection(CollectionOptions{
 		DB:     &db,

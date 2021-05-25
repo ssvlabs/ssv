@@ -52,6 +52,10 @@ type testIBFT struct {
 	signaturesCount int
 }
 
+func (t *testIBFT) Init() {
+
+}
+
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
 	return t.decided, t.signaturesCount, opts.Value
 }
@@ -78,8 +82,8 @@ func (t *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
 	}
 }
 
-func (t *testIBFT) NextSeqNumber() uint64 {
-	return 0
+func (t *testIBFT) NextSeqNumber() (uint64, error) {
+	return 0, nil
 }
 
 /**

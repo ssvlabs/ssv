@@ -16,7 +16,7 @@ import (
 // ControllerOptions for controller struct creation
 type ControllerOptions struct {
 	Context                    context.Context
-	DB                         *basedb.IDb
+	DB                         basedb.IDb
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	ETHNetwork                 *core.Network

@@ -13,6 +13,7 @@ ssv:
   OperatorPrivKey:
 
 BeaconNodeAddr: eth2-4000-prysm-ext.stage.bloxinfra.com:80
+ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
 HostAddress: example.ip
 TcpPort:
 UdpPort:

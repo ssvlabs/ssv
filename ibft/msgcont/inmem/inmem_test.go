@@ -10,10 +10,9 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 	c := New(3)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          1,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2, 3, 4},
@@ -25,10 +24,9 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 	// try to add duplicate
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          1,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{4, 5},
@@ -37,10 +35,9 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 	require.Len(t, c.ReadOnlyMessagesByRound(2), 0)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          1,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{4},
@@ -53,20 +50,18 @@ func TestMessagesContainer_ReadOnlyMessagesByRound(t *testing.T) {
 	c := New(3)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          1,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2, 3, 4},
 	})
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          1,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{5},
@@ -85,10 +80,9 @@ func TestMessagesContainer_QuorumAchieved(t *testing.T) {
 	c := New(3)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          1,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2, 3},
@@ -102,10 +96,9 @@ func TestMessagesContainer_QuorumAchieved(t *testing.T) {
 
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          2,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  2,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2},
@@ -114,10 +107,9 @@ func TestMessagesContainer_QuorumAchieved(t *testing.T) {
 	require.False(t, res)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
-			Round:          2,
-			Lambda:         nil,
-			PreviousLambda: nil,
-			Value:          []byte{1, 1, 1, 1},
+			Round:  2,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
 		SignerIds: []uint64{3},

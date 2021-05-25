@@ -17,7 +17,7 @@ type ICollection interface {
 
 // CollectionOptions struct
 type CollectionOptions struct {
-	DB     *basedb.IDb
+	DB     basedb.IDb
 	Logger *zap.Logger
 }
 
@@ -31,7 +31,7 @@ type Collection struct {
 // NewCollection creates new share storage
 func NewCollection(options CollectionOptions) ICollection {
 	collection := Collection{
-		db:     *options.DB,
+		db:     options.DB,
 		logger: options.Logger,
 		prefix: []byte(getCollectionPrefix()),
 	}

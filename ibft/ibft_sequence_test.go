@@ -1,182 +1,146 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
+	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 )
 
 func testIBFTInstance(t *testing.T) *ibftImpl {
 	return &ibftImpl{
-		instances: make([]*Instance, 0),
+		//instances: make([]*Instance, 0),
 	}
 }
 
 func TestCanStartNewInstance(t *testing.T) {
-	threshold.Init()
-	validatorPk := &bls.PublicKey{}
-	require.NoError(t, validatorPk.Deserialize(fixtures.RefPk))
-
-	sk := &bls.SecretKey{}
-	sk.SetByCSPRNG()
+	sks, nodes := GenerateNodes(4)
 
 	tests := []struct {
 		name          string
 		opts          StartOptions
-		seqNumber     uint64
-		prevInstances []*Instance
+		storage       collections.Iibft
+		initFinished  bool
 		expectedError string
 	}{
 		{
-			"valid start",
+			"valid next instance start",
 			StartOptions{
-				PrevInstance: FirstInstanceIdentifier(),
-				Identifier:   []byte{1, 2, 3, 4},
-				Duty: nil,
-				ValidatorShare: storage.Share{
-					NodeID:      1,
-					PublicKey: validatorPk,
-					ShareKey:    sk,
-					Committee:   nil,
+				Identifier: []byte("lambda_10"),
+				SeqNumber:  11,
+				Duty:       nil,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
-			0,
-			make([]*Instance, 0),
+			populatedStorage(t, sks, 10),
+			true,
 			"",
 		},
 		{
-			"unknown prev",
+			"valid first instance",
 			StartOptions{
-				PrevInstance: []byte{5, 5, 5, 5},
-				Identifier:   []byte{1, 2, 3, 4},
-				Duty: nil,
-				ValidatorShare: storage.Share{
-					NodeID:      1,
-					PublicKey: validatorPk,
-					ShareKey:    sk,
-					Committee:   nil,
+				Identifier: []byte("lambda_0"),
+				SeqNumber:  0,
+				Duty:       nil,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
-			1,
-			make([]*Instance, 0),
-			"instance seq invalid",
+			nil,
+			true,
+			"",
 		},
 		{
-			"future instance",
+			"didn't finish initialization",
 			StartOptions{
-				PrevInstance: []byte{5, 5, 5, 5},
-				Identifier:   []byte{1, 2, 3, 4},
-				Duty: nil,
-				ValidatorShare: storage.Share{
-					NodeID:      1,
-					PublicKey: validatorPk,
-					ShareKey:    sk,
-					Committee:   nil,
+				Identifier: []byte("lambda_0"),
+				SeqNumber:  0,
+				Duty:       nil,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
-			10,
-			make([]*Instance, 0),
+			nil,
+			false,
+			"iBFT hasn't initialized yet",
+		},
+		{
+			"sequence skips",
+			StartOptions{
+				Identifier: []byte("lambda_12"),
+				SeqNumber:  12,
+				Duty:       nil,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
+				},
+			},
+			populatedStorage(t, sks, 10),
+			true,
 			"instance seq invalid",
 		},
 		{
 			"past instance",
 			StartOptions{
-				PrevInstance: []byte{5, 5, 5, 5},
-				Identifier:   []byte{1, 2, 3, 4},
-				Duty: nil,
-				ValidatorShare: storage.Share{
-					NodeID:      1,
-					PublicKey: validatorPk,
-					ShareKey:    sk,
-					Committee:   nil,
+				Identifier: []byte("lambda_10"),
+				SeqNumber:  10,
+				Duty:       nil,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
-			1,
-			[]*Instance{
-				{
-					State: &proto.State{
-						Stage:     proto.RoundState_Decided,
-						SeqNumber: 0,
-					},
-				},
-				{
-					State: &proto.State{
-						Stage:     proto.RoundState_Decided,
-						SeqNumber: 1,
-					},
-				},
-				{
-					State: &proto.State{
-						Stage:     proto.RoundState_Decided,
-						SeqNumber: 2,
-					},
-				},
-			},
+			populatedStorage(t, sks, 10),
+			true,
 			"instance seq invalid",
-		},
-		{
-			"valid prev",
-			StartOptions{
-				PrevInstance: []byte{5, 5, 5, 5},
-				Identifier:   []byte{1, 2, 3, 4},
-				Duty: nil,
-				ValidatorShare: storage.Share{
-					NodeID:      1,
-					PublicKey: validatorPk,
-					ShareKey:    sk,
-					Committee:   nil,
-				},
-			},
-			1,
-			[]*Instance{
-				{
-					State: &proto.State{
-						Stage:     proto.RoundState_Decided,
-						SeqNumber: 0,
-					},
-				},
-			},
-			"",
-		},
-		{
-			"valid prev",
-			StartOptions{
-				PrevInstance: []byte{5, 5, 5, 5},
-				Identifier:   []byte{1, 2, 3, 4},
-				Duty: nil,
-				ValidatorShare: storage.Share{
-					NodeID:      1,
-					PublicKey: validatorPk,
-					ShareKey:    sk,
-					Committee:   nil,
-				},
-			},
-			1,
-			[]*Instance{
-				{
-					State: &proto.State{
-						Stage:     proto.RoundState_Prepare,
-						SeqNumber: 0,
-					},
-				},
-			},
-			"previous instance not decided, can't start new instance",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
+			i.initFinished = test.initFinished
+			if test.storage != nil {
+				i.ibftStorage = test.storage
+			} else {
+				options := basedb.Options{
+					Type:   "badger-memory",
+					Logger: zap.L(),
+					Path:   "",
+				}
+				// TODO do we must create new db instnce for each test?
+				db, err := storage.GetStorageFactory(options)
+				require.NoError(t, err)
+				s := collections.NewIbft(db, options.Logger, "attestation")
+				i.ibftStorage = &s
+			}
+
+			i.ValidatorShare = &test.opts.ValidatorShare
 			i.params = &proto.InstanceParams{
 				ConsensusParams: proto.DefaultConsensusParams(),
+				IbftCommittee:   nodes,
 			}
-			i.instances = test.prevInstances
+			//i.instances = test.prevInstances
 			instanceOpts := i.instanceOptionsFromStartOptions(test.opts)
-			instanceOpts.SeqNumber = test.seqNumber
+			//instanceOpts.SeqNumber = test.seqNumber
 			err := i.canStartNewInstance(instanceOpts)
 
 			if len(test.expectedError) > 0 {

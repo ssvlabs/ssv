@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"net"
 	"sync"
 	"time"
@@ -268,12 +267,19 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]peer.ID, error) {
+func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
+	ret := make([]string, 0)
+
 	topic, err := n.getTopic(validatorPk)
 	if err != nil {
-		return []peer.ID{}, err
+		return nil, err
 	}
-	return topic.ListPeers(), nil
+
+	for _, p := range topic.ListPeers() {
+		ret = append(ret, peerToString(p))
+	}
+
+	return ret, nil
 }
 
 // getTopicName return formatted topic name

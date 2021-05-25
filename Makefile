@@ -13,15 +13,6 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
-#ifndef $(CONFIG_PATH)
-#    CONFIG_PATH="./config/config.yaml"
-#    export CONFIG_PATH
-#endif
-
-#ifneq (,$(wildcard ./.env))
-#    include .env
-#endif
-
 # node command builder
 NODE_COMMAND=--config=${CONFIG_PATH}
 
@@ -34,6 +25,7 @@ COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
 	COV_CMD="-coverpkg=${$(go list ./... | grep -v mocks | tr '\n' ',')} -coverprofile=coverage.out -covermode=atomic"
 endif
+UNFORMATTED=$(shell gofmt -s -l .)
 
 #Lint
 .PHONY: lint-prepare
@@ -44,32 +36,16 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
+	@echo "Checking for unformatted files"
+	if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "The following files are not formatted: \n${UNFORMATTED}"; \
+	fi
 
 #Test
 .PHONY: full-test
 full-test:
 	@echo "Running the full test..."
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
-
-
-# TODO: Intgrate use of short flag (unit tests) + running tests through docker
-#.PHONY: unittest
-#unittest:
-#	@go test -v -short -race ./...
-
-#.PHONY: full-test-local
-#full-test-local:
-#	@docker-compose -f test.docker-compose.yaml up -d mysql_test
-#	@make full-test
-#	# @docker-compose -f test.docker-compose.yaml down --volumes
-#
-#
-#.PHONY: docker-test
-#docker-test:
-#	@docker-compose -f test.docker-compose.yaml up -d mysql_test
-#	@docker-compose -f test.docker-compose.yaml up --build --abort-on-container-exit
-#	@docker-compose -f test.docker-compose.yaml down --volumes
-
 
 .PHONY: start-node
 start-node:
@@ -119,4 +95,4 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node --private-key=${BOOT_NODE_PRIVATE_KEY} --external-ip=${BOOT_NODE_EXTERNAL_IP}
+	${BUILD_PATH} start-boot-node

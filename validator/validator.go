@@ -47,7 +47,9 @@ type Validator struct {
 
 // New Validator creation
 func New(opt Options, ibftStorage collections.Iibft) *Validator {
-	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr()))
+	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
+		With(zap.Uint64("node_id", opt.Share.NodeID))
+
 	msgQueue := msgqueue.New()
 
 	ibfts := make(map[beacon.Role]ibft.IBFT)
@@ -60,7 +62,10 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   opt.Share.Committee,
 		},
+		opt.Share,
 	)
+	go ibfts[beacon.RoleAttester].Init()
+
 	return &Validator{
 		ctx:                        opt.Context,
 		logger:                     logger,
@@ -89,7 +94,6 @@ func (v *Validator) Start() error {
 func (v *Validator) startSlotQueueListener() {
 	v.logger.Info("start listening slot queue")
 
-	prevIdentifier := ibft.FirstInstanceIdentifier()
 	for {
 		slot, duty, ok, err := v.slotQueue.Next(v.Share.PublicKey.Serialize())
 		if err != nil {
@@ -101,7 +105,7 @@ func (v *Validator) startSlotQueueListener() {
 			v.logger.Debug("no duties for slot scheduled")
 			continue
 		}
-		go v.ExecuteDuty(v.ctx, prevIdentifier, slot, duty)
+		go v.ExecuteDuty(v.ctx, slot, duty)
 	}
 }
 

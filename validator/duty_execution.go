@@ -118,7 +118,7 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 	return nil
 }
 
-func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap.Logger, prevIdentifier []byte, slot uint64, role beacon.Role, duty *ethpb.DutiesResponse_Duty) (int, []byte, []byte, error) {
+func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap.Logger, slot uint64, role beacon.Role, duty *ethpb.DutiesResponse_Duty) (int, []byte, []byte, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance valcheck2.ValueCheck
@@ -173,25 +173,30 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		v.logger.Error("no ibft for this role", zap.Any("role", role))
 	}
 
-	decided, signaturesCount, decidedByts := v.ibfts[role].StartInstance(ibft.StartOptions{
+	// calculate next seq
+	seqNumber, err := v.ibfts[role].NextSeqNumber()
+	if err != nil {
+		return 0, nil, nil, errors.Wrap(err, "failed to calculate next sequence number")
+	}
+
+	decided, signaturesCount, decidedValue := v.ibfts[role].StartInstance(ibft.StartOptions{
 		Duty:           duty,
 		ValidatorShare: *v.Share,
 		Logger:         l,
 		ValueCheck:     valCheckInstance,
-		PrevInstance:   prevIdentifier,
 		Identifier:     identifier,
-		SeqNumber:      v.ibfts[role].NextSeqNumber(),
+		SeqNumber:      seqNumber,
 		Value:          inputByts,
 	})
 
 	if !decided {
 		return 0, nil, nil, errors.New("ibft did not decide, not executing role")
 	}
-	return signaturesCount, decidedByts, identifier, nil
+	return signaturesCount, decidedValue, identifier, nil
 }
 
 // ExecuteDuty by slotQueue
-func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot uint64, duty *ethpb.DutiesResponse_Duty, ) {
+func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty) {
 	logger := v.logger.With(zap.Time("start_time", v.getSlotStartTime(slot)),
 		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
@@ -206,7 +211,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
 
-			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, prevIdentifier, slot, role, duty)
+			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)
 			if err != nil {
 				logger.Error("could not come to consensus", zap.Error(err))
 				return
@@ -228,8 +233,6 @@ func (v *Validator) ExecuteDuty(ctx context.Context, prevIdentifier []byte, slot
 				logger.Error("could not execute duty", zap.Error(err))
 				return
 			}
-
-			//identfier = newId // TODO: Fix race condition
 		}(role)
 	}
 }

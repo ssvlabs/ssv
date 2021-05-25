@@ -47,9 +47,7 @@ func TestMsgValidatorPK(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			pipeline := ValidatePKs(&proto.State{
-				ValidatorPk: test.expectedPK,
-			})
+			pipeline := ValidatePKs(test.expectedPK)
 			err := pipeline.Run(&proto.SignedMessage{
 				Message: &proto.Message{
 					ValidatorPk: test.actualPK,
