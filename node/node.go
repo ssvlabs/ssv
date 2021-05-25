@@ -33,7 +33,6 @@ type Options struct {
 	// max slots for duty to wait
 	//TODO switch to time frame?
 	DutyLimit       uint64 `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
-	OperatorPrivKey string `yaml:"OperatorPrivKey" env:"OPERATOR_PRIVKEY" env-default:"" env-required:"true" env-description:"Private key of the operator"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 }
 

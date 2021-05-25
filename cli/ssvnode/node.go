@@ -10,8 +10,8 @@ import (
 	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/docker/docker/daemon/logger"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -25,6 +25,7 @@ type config struct {
 	Network                    string         `yaml:"Network" env-default:"pyrmont"`
 	DiscoveryType              string         `yaml:"DiscoveryType" env-default:"mdns"`
 	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env-required:"true"`
+	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr                   string         `yaml:"ETH1Addr" env-required:"true"`
 	TCPPort                    int            `yaml:"TcpPort" env-default:"13000"`
 	UDPPort                    int            `yaml:"UdpPort" env-default:"12000"`
@@ -106,6 +107,10 @@ var StartNodeCmd = &cobra.Command{
 		ssvNode := node.New(cfg.SSVOptions)
 
 		if cfg.ETH1Addr != "" {
+			operatorStorage := collections.NewOperatorStorage(db, Logger)
+			if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
+				Logger.Fatal("failed to setup operator private key", zap.Error(err))
+			}
 			// 1. create new eth1 client
 			eth1Client, err := goeth.New(cmd.Context(), Logger, cfg.ETH1Addr, operatorStorage)
 			if err != nil {
