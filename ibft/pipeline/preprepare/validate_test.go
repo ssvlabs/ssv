@@ -59,58 +59,78 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	}
 	consensus := bytesval.New([]byte(time.Now().Weekday().String()))
 
-	// test no signer
-	msg := &proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_PrePrepare,
-			Round:  1,
-			Lambda: []byte("Lambda"),
-			Value:  []byte(time.Now().Weekday().String()),
+	tests := []struct {
+		name string
+		err  string
+		msg  *proto.SignedMessage
+	}{
+		{
+			"no signers",
+			"invalid number of signers for pre-prepare message",
+			&proto.SignedMessage{
+				Message: &proto.Message{
+					Type:   proto.RoundState_PrePrepare,
+					Round:  1,
+					Lambda: []byte("Lambda"),
+					Value:  []byte(time.Now().Weekday().String()),
+				},
+				Signature: []byte{},
+				SignerIds: []uint64{},
+			},
 		},
-		Signature: []byte{},
-		SignerIds: []uint64{},
-	}
-	err := ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
-	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
-
-	// test > 1 signer
-	msg = &proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_PrePrepare,
-			Round:  1,
-			Lambda: []byte("Lambda"),
-			Value:  []byte(time.Now().Weekday().String()),
+		{
+			"only 2 signers",
+			"invalid number of signers for pre-prepare message",
+			&proto.SignedMessage{
+				Message: &proto.Message{
+					Type:   proto.RoundState_PrePrepare,
+					Round:  1,
+					Lambda: []byte("Lambda"),
+					Value:  []byte(time.Now().Weekday().String()),
+				},
+				Signature: []byte{},
+				SignerIds: []uint64{1, 2},
+			},
 		},
-		Signature: []byte{},
-		SignerIds: []uint64{1, 2},
+		{
+			"wrong message",
+			"failed while validating pre-prepare: msg value is wrong",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:   proto.RoundState_PrePrepare,
+				Round:  1,
+				Lambda: []byte("Lambda"),
+				Value:  []byte("wrong value"),
+			}),
+		},
+		{
+			"non-leader sender",
+			"pre-prepare message sender is not the round's leader",
+			SignMsg(t, 2, sks[2], &proto.Message{
+				Type:   proto.RoundState_PrePrepare,
+				Round:  1,
+				Lambda: []byte("Lambda"),
+				Value:  []byte("wrong value"),
+			}),
+		},
+		{
+			"valid message",
+			"",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:   proto.RoundState_PrePrepare,
+				Round:  1,
+				Lambda: []byte("Lambda"),
+				Value:  []byte(time.Now().Weekday().String()),
+			}),
+		},
 	}
-	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
-	require.EqualError(t, err, "invalid number of signers for pre-prepare message")
-
-	msg = SignMsg(t, 1, sks[1], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  1,
-		Lambda: []byte("Lambda"),
-		Value:  []byte("wrong value"),
-	})
-	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
-	require.EqualError(t, err, "failed while validating pre-prepare: msg value is wrong")
-
-	msg = SignMsg(t, 2, sks[2], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  1,
-		Lambda: []byte("Lambda"),
-		Value:  []byte("wrong value"),
-	})
-	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
-	require.EqualError(t, err, "pre-prepare message sender is not the round's leader")
-
-	msg = SignMsg(t, 1, sks[1], &proto.Message{
-		Type:   proto.RoundState_PrePrepare,
-		Round:  1,
-		Lambda: []byte("Lambda"),
-		Value:  []byte(time.Now().Weekday().String()),
-	})
-	err = ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(msg)
-	require.NoError(t, err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, params).Run(test.msg)
+			if len(test.err) > 0 {
+				require.EqualError(t, err, test.err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

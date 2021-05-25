@@ -51,25 +51,29 @@ func TestSignedMessage_AggregateSig(t *testing.T) {
 	})
 
 	// simple aggregate
-	require.NoError(t, a.Aggregate(b))
-	require.EqualValues(t, []uint64{0, 1}, a.SignerIds)
-	aggPk := secretKeys[0].GetPublicKey()
-	aggPk.Add(secretKeys[1].GetPublicKey())
-	res, err := a.VerifySig(aggPk)
-	require.NoError(t, err)
-	require.True(t, res)
-
-	// double aggregate
-	require.EqualError(t, a.Aggregate(b), "can't aggregate messages with similar signers")
-
-	// aggregate different messages
-	c, _ := signMsg(2, secretKeys[2], &Message{
-		Type:   RoundState_Prepare,
-		Round:  1,
-		Lambda: []byte("wrong lambda"),
-		Value:  []byte("value"),
+	t.Run("simple aggregate", func(t *testing.T) {
+		require.NoError(t, a.Aggregate(b))
+		require.EqualValues(t, []uint64{0, 1}, a.SignerIds)
+		aggPk := secretKeys[0].GetPublicKey()
+		aggPk.Add(secretKeys[1].GetPublicKey())
+		res, err := a.VerifySig(aggPk)
+		require.NoError(t, err)
+		require.True(t, res)
 	})
-	require.EqualError(t, a.Aggregate(c), "can't aggregate different messages")
+
+	t.Run("duplicate aggregate", func(t *testing.T) {
+		require.EqualError(t, a.Aggregate(b), "can't aggregate messages with similar signers")
+	})
+
+	t.Run("aggregate different messages", func(t *testing.T) {
+		c, _ := signMsg(2, secretKeys[2], &Message{
+			Type:           RoundState_Prepare,
+			Round:          1,
+			Lambda:         []byte("wrong lambda"),
+			Value:          []byte("value"),
+		})
+		require.EqualError(t, a.Aggregate(c), "can't aggregate different messages")
+	})
 }
 
 func TestSignedMessage_VerifyAggregatedSig(t *testing.T) {
@@ -146,6 +150,41 @@ func TestSignedMessage_VerifyAggregatedSig(t *testing.T) {
 				require.EqualError(t, err, test.expectedError)
 			}
 
+		})
+	}
+}
+
+func TestVerifyUniqueSigners(t *testing.T) {
+	tests := []struct {
+		name      string
+		signerIds []uint64
+		err       string
+	}{
+		{
+			"valid list of signers",
+			[]uint64{1, 2, 3},
+			"",
+		},
+		{
+			"duplicated signers",
+			[]uint64{1, 2, 2},
+			"signers are not unique",
+		},
+		{
+			"no signers",
+			[]uint64{},
+			"",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := verifyUniqueSigners(test.signerIds)
+			if len(test.err) > 0 {
+				require.EqualError(t, err, test.err)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
