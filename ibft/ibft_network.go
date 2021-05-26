@@ -41,8 +41,8 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	go func() {
 		for msg := range decidedChan {
 			if bytes.Equal(i.ValidatorShare.ValidatorPK.Serialize(), msg.Message.ValidatorPk) { // making sure the msg is relevant to the share
+				i.ProcessDecidedMessage(msg)
 			}
-			i.ProcessDecidedMessage(msg)
 		}
 	}()
 }
