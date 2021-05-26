@@ -102,28 +102,21 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = network
-		cfg.SSVOptions.ValidatorOptions.Beacon = &beaconClient
-
-		ssvNode := node.New(cfg.SSVOptions)
+		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 
 		if cfg.ETH1Addr != "" {
 			operatorStorage := collections.NewOperatorStorage(db, Logger)
 			if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
 				Logger.Fatal("failed to setup operator private key", zap.Error(err))
 			}
-			// 1. create new eth1 client
-			eth1Client, err := goeth.New(cmd.Context(), Logger, cfg.ETH1Addr, operatorStorage)
+			// create new eth1 client
+			cfg.SSVOptions.ValidatorOptions.Eth1Client, err = goeth.New(cmd.Context(), Logger, cfg.ETH1Addr, operatorStorage)
 			if err != nil {
 				Logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
 			}
+		}
 
-			// 2. register validatorStorage as observer to operator contract events subject
-			eth1Client.GetContractEvent().Register(&validatorStorage)
-		}
-		validatorStorage.GetDBEvent().Register(ssvNode)
-		if err := ssvNode.Start(); err != nil {
-			Logger.Fatal("failed to start SSV node", zap.Error(err))
-		}
+		ssvNode := node.New(cfg.SSVOptions)
 
 		if err := ssvNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))

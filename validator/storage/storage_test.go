@@ -45,7 +45,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	defer db.Close()
 
 	collection := NewCollection(CollectionOptions{
-		DB:     &db,
+		DB:     db,
 		Logger: options.Logger,
 	})
 

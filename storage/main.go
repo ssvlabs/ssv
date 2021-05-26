@@ -10,10 +10,10 @@ import (
 func GetStorageFactory(options basedb.Options) (basedb.IDb, error) {
 	switch options.Type {
 	case "badger-db":
-		db, err :=kv.New(options)
+		db, err := kv.New(options)
 		return db, err
 	case "badger-memory":
-		db, err :=kv.New(options)
+		db, err := kv.New(options)
 		return db, err
 	}
 	return nil, fmt.Errorf("unsupported storage type passed")

@@ -3,8 +3,9 @@ package sync
 import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/inmem"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -148,9 +149,16 @@ func TestFetchDecided(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+			logger := zap.L()
+			db, err := kv.New(basedb.Options{
+				Type:   "badger-memory",
+				Path:   "",
+				Logger: logger,
+			})
+			require.NoError(t, err)
+			storage := collections.NewIbft(db, logger, "attestation")
 			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
-			s := NewHistorySync(zap.L(), test.valdiatorPK, network, &storage, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(logger, test.valdiatorPK, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])

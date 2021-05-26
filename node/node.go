@@ -21,37 +21,33 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	//ValidatorStorage collections.IValidator
-	//IbftStorage      collections.Iibft
-	//Network          network.Network
-	ETHNetwork      *core.Network
-	Beacon          *beacon.Beacon
-	Context         context.Context
-	Logger          *zap.Logger
+	ETHNetwork *core.Network
+	Beacon     *beacon.Beacon
+	Context    context.Context
+	Logger     *zap.Logger
 	// genesis epoch
-	GenesisEpoch    uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
+	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
 	//TODO switch to time frame?
-	DutyLimit       uint64 `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
+	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 }
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	//validatorStorage collections.IValidator
-	//ibftStorage      collections.Iibft
-	//network          network.Network
-	ethNetwork          core.Network
-	slotQueue           slotqueue.Queue
-	context             context.Context
-	validatorController validator.IController
-	logger              *zap.Logger
-	beacon              beacon.Beacon
-	genesisEpoch uint64
-	dutyLimit uint64
-	validatorsMap     map[string]*validator.Validator
-	streamDuties      <-chan *ethpb.DutiesResponse_Duty
-	pubkeysUpdateChan chan bool
+	ethNetwork            core.Network
+	slotQueue             slotqueue.Queue
+	context               context.Context
+	validatorController   validator.IController
+	logger                *zap.Logger
+	beacon                beacon.Beacon
+	genesisEpoch          uint64
+	dutyLimit             uint64
+	streamDuties          <-chan *ethpb.DutiesResponse_Duty
+	pubkeysUpdateChan     chan bool
+
+	//eth1Client eth1.Eth1
+	// add eth1Client and listen to its events
 }
 
 // New is the constructor of ssvNode
@@ -68,18 +64,21 @@ func New(opts Options) Node {
 		beacon:              *opts.Beacon,
 		// TODO do we really need to pass the whole object or just SlotDurationSec
 		slotQueue: slotQueue,
-		validatorsMap:  make(map[string]*validator.Validator),
 	}
+
 	return ssv
 }
 
 // Start implements Node interface
 func (n *ssvNode) Start() error {
-	n.validatorsMap = n.validatorController.StartValidators()
+	n.validatorController.StartValidators()
 	n.startStreamDuties()
 
 	for {
 		select {
+		case <- n.validatorController.NewValidatorChan():
+			n.startStreamDuties()
+			continue
 		case <-n.pubkeysUpdateChan:
 			n.logger.Debug("public keys updated, restart stream duties listener")
 			continue
@@ -107,11 +106,15 @@ func (n *ssvNode) Start() error {
 						if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
 							pubKey := &bls.PublicKey{}
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
-								n.logger.Error("Failed to deserialize pubkey from duty")
+								n.logger.Error("failed to deserialize pubkey from duty")
 							}
-							v := n.validatorsMap[pubKey.SerializeToHexStr()]
-							logger.Info("starting duty processing start for slot")
-							go v.ExecuteDuty(n.context, slot, duty)
+							v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
+							if ok {
+								logger.Info("starting duty processing start for slot")
+								go v.ExecuteDuty(n.context, slot, duty)
+							} else {
+								logger.Info("could not find validator")
+							}
 						} else {
 							logger.Info("scheduling duty processing start for slot")
 							if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
@@ -124,13 +127,11 @@ func (n *ssvNode) Start() error {
 		}
 	}
 }
+
 // startStreamDuties start to stream duties from the beacon chain
 func (n *ssvNode) startStreamDuties() {
-	var pubKeys [][]byte
 	var err error
-	for _, val := range n.validatorsMap {
-		pubKeys = append(pubKeys, val.Share.PublicKey.Serialize())
-	}
+	pubKeys := n.validatorController.GetValidatorsPubKeys()
 	n.streamDuties, err = n.beacon.StreamDuties(n.context, pubKeys)
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
@@ -171,22 +172,29 @@ func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
 	return slots
 }
 
-
-////InformObserver informs observer
+// InformObserver informs observer
 //func (n *ssvNode) InformObserver(data interface{}) {
 //	if validatorShare, ok := data.(storage.Share); ok {
-//		if _, ok := n.validatorsMap[validatorShare.PublicKey.SerializeToHexStr()]; ok {
+//		v, exist := n.validatorController.GetValidator(validatorShare.PublicKey.SerializeToHexStr())
+//		if exist {
 //			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.PublicKey.SerializeToHexStr()))
 //			return
 //		}
 //		// setup validator
-//		n.validatorsMap[validatorShare.PublicKey.SerializeToHexStr()] = validator.New(n.context, n.logger, &validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
+//		validatorOpts := validator.Options{
+//			Context:                    n.context,
+//			Logger:                     n.logger,
+//			Share:                      &validatorShare,
+//			Network:                    n.network,
+//			Beacon:                     n.beacon,
+//			ETHNetwork:                 n.ethNetwork,
 //			SlotQueue:                  n.slotQueue,
 //			SignatureCollectionTimeout: n.signatureCollectionTimeout,
-//		})
-//
+//		}
+//		v = validator.New(validatorOpts, n.ibftStorage)
+//		n.validatorController.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v)
 //		// start validator
-//		if err := n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()].Start(); err != nil {
+//		if err := v.Start(); err != nil {
 //			n.logger.Error("failed to start validator", zap.Error(err))
 //		}
 //
@@ -196,8 +204,7 @@ func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
 //}
 
 // GetObserverID get the observer id
-func (n *ssvNode) GetObserverID() string {
-	// TODO return proper id for the observer
-	return "SsvNodeObserver"
-}
-
+//func (n *ssvNode) GetObserverID() string {
+//	// TODO return proper id for the observer
+//	return "SsvNodeObserver"
+//}
