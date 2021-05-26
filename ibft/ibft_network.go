@@ -18,7 +18,7 @@ func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 		}
 
 		i.logger.Debug("waiting for min peer count", zap.Int("current peer count", len(peers)))
-		if len(peers) == minPeerCount {
+		if len(peers) >= minPeerCount {
 			break
 		}
 	}
