@@ -47,6 +47,11 @@ full-test:
 	@echo "Running the full test..."
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
 
+#Build
+.PHONY: build
+build:
+	CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+
 .PHONY: start-node
 start-node:
 	@echo "Build ${BUILD_PATH}"

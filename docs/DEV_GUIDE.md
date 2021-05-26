@@ -11,7 +11,7 @@
 
 #### Build
 ```bash
-$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+$ make build
 ```
 
 #### Test
