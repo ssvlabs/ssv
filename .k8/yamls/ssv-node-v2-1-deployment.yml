@@ -1,0 +1,136 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-v2-1-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-v2-1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12000
+      protocol: UDP
+      targetPort: 12000
+      name: port-12000
+    - port: 13000
+      protocol: TCP
+      targetPort: 13000
+      name: port-13000        
+  selector:
+    app: ssv-node-v2-1
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-v2-1
+  name: ssv-node-v2-1
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-v2-1
+  template:
+    metadata:
+      labels:
+        app: ssv-node-v2-1
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-2
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-3
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-4
+              topologyKey: kubernetes.io/hostname
+            weight: 1              
+      containers:
+      - name: ssv-node-v2-1
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12000
+          name: port-12000
+          hostPort: 12000            
+          protocol: UDP
+        - containerPort: 13000
+          name: port-13000
+          hostPort: 13000
+        env:
+        - name: NODE_ID
+          value: "1"
+        - name: SSV_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: ssv_node_v2_1
+        - name: VALIDATOR_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: validator_public_key_v2
+        - name: BEACON_NODE_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: beacon_node_addr
+        - name: PUBKEY_NODE_2
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_2
+        - name: PUBKEY_NODE_3
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_3
+        - name: PUBKEY_NODE_4
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_4
+        - name: NETWORK
+          value: "pyrmont" 
+        - name: CONSENSUS_TYPE
+          value: "validation"
+        - name: HOST_DNS
+#          value: "ssv-lb.stage.bloxinfra.com"
+          value: ""
+        - name: GENESIS_EPOCH
+          value: "34165"
+        - name: LOGGER_LEVEL
+          value: "debug"
+        volumeMounts:
+        - mountPath: "/data/db"
+          name: ssv-node-v2-1
+      volumes:
+      - persistentVolumeClaim:
+          claimName: ssv-node-v2-1
+        name: ssv-node-v2-1
+      hostNetwork: true            
