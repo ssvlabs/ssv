@@ -152,6 +152,7 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 // InformObserver informs observer
 func (c *controller) InformObserver(data interface{}) {
 	if validatorAddedEvent, ok := data.(eth1.ValidatorAddedEvent); ok {
+		c.logger.Debug("validator add event")
 		validatorShare := c.createValidatorShare(validatorAddedEvent)
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			c.logger.Error("failed to save validator share", zap.Error(err))
@@ -164,12 +165,6 @@ func (c *controller) InformObserver(data interface{}) {
 }
 
 func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Share) {
-	//v, _ := c.GetValidator(validatorShare.PublicKey.SerializeToHexStr())
-	//if exist {
-	//	c.logger.Info("validator already exist", zap.String("pubkey", validatorShare.PublicKey.SerializeToHexStr()))
-	//	return
-	//}
-
 	// setup validator
 	validatorOpts := Options{
 		Context:                    c.context,

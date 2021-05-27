@@ -73,10 +73,10 @@ func New(opts Options) Node {
 func (n *ssvNode) Start() error {
 	n.validatorController.StartValidators()
 	n.startStreamDuties()
-
+	validatorChan := n.validatorController.NewValidatorChan()
 	for {
 		select {
-		case <- n.validatorController.NewValidatorChan():
+		case <- validatorChan:
 			n.startStreamDuties()
 			continue
 		case <-n.pubkeysUpdateChan:
