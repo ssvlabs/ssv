@@ -19,5 +19,4 @@ message Node{
 
 message InstanceParams{
   ConsensusParams consensus_params = 1;
-  map<uint64, Node> ibft_committee = 2;
 }

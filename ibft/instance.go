@@ -3,12 +3,12 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/storage/collections"
 	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft/leader"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
@@ -22,7 +22,8 @@ import (
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
 	Logger         *zap.Logger
-	Me             *proto.Node
+	ValidatorShare *collections.ValidatorShare
+	//Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
@@ -30,12 +31,13 @@ type InstanceOptions struct {
 	Params         *proto.InstanceParams
 	Lambda         []byte
 	SeqNumber      uint64
-	ValidatorPK    []byte
+	//ValidatorPK    []byte
 }
 
 // Instance defines the instance attributes
 type Instance struct {
-	Me               *proto.Node
+	//Me               *proto.Node
+	ValidatorShare   *collections.ValidatorShare
 	State            *proto.State
 	network          network.Network
 	ValueCheck       valcheck.ValueCheck
@@ -66,31 +68,31 @@ type Instance struct {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts InstanceOptions) *Instance {
-	// make sure secret key is not nil, otherwise the node can't operate
-	if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
-		opts.Logger.Fatal("can't create Instance with invalid secret key")
-		return nil
-	}
+	//// make sure secret key is not nil, otherwise the node can't operate
+	//if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
+	//	opts.Logger.Fatal("can't create Instance with invalid secret key")
+	//	return nil
+	//}
 
 	return &Instance{
-		Me: opts.Me,
+		//Me: opts.Me,
+		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
-			Stage:       proto.RoundState_NotStarted,
-			Lambda:      opts.Lambda,
-			SeqNumber:   opts.SeqNumber,
-			ValidatorPk: opts.ValidatorPK,
+			Stage:     proto.RoundState_NotStarted,
+			Lambda:    opts.Lambda,
+			SeqNumber: opts.SeqNumber,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Params:         opts.Params,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId), zap.Uint64("seq_num", opts.SeqNumber)),
+		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID), zap.Uint64("seq_num", opts.SeqNumber)),
 
 		MsgQueue:            opts.Queue,
-		PrePrepareMessages:  msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
-		PrepareMessages:     msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
-		CommitMessages:      msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
-		ChangeRoundMessages: msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		PrepareMessages:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 
 		// chan
 		changeRoundChan:   make(chan bool),
@@ -240,12 +242,12 @@ func (i *Instance) StartMessagePipeline() {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	sk := &bls.SecretKey{}
-	if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
-		return err
-	}
+	//sk := &bls.SecretKey{}
+	//if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
+	//	return err
+	//}
 
-	sig, err := msg.Sign(sk)
+	sig, err := msg.Sign(i.ValidatorShare.ShareKey)
 	if err != nil {
 		return err
 	}
@@ -253,7 +255,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
-		SignerIds: []uint64{i.Me.IbftId},
+		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
 	if i.network != nil {
 		return i.network.Broadcast(signedMessage)

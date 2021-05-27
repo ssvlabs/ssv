@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"testing"
 
@@ -60,8 +61,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
 		},
+		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
@@ -131,8 +132,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	instance := &Instance{
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
 		},
+		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
@@ -413,7 +414,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			signature, err := test.msg.Sign(secretKeys[test.signerID])
 			require.NoError(t, err)
 
-			err = changeround.Validate(instance.Params).Run(&proto.SignedMessage{
+			err = changeround.Validate(instance.ValidatorShare).Run(&proto.SignedMessage{
 				Message:   test.msg,
 				Signature: signature.Serialize(),
 				SignerIds: []uint64{test.signerID},
@@ -437,13 +438,13 @@ func TestRoundChangeJustification(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee: map[uint64]*proto.Node{
-				0: {IbftId: 0},
-				1: {IbftId: 1},
-				2: {IbftId: 2},
-				3: {IbftId: 3},
-			},
 		},
+		ValidatorShare: &collections.ValidatorShare{Committee: map[uint64]*proto.Node{
+			0: {IbftId: 0},
+			1: {IbftId: 1},
+			2: {IbftId: 2},
+			3: {IbftId: 3},
+		}},
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
@@ -534,13 +535,13 @@ func TestHighestPrepared(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee: map[uint64]*proto.Node{
-				0: {IbftId: 0},
-				1: {IbftId: 1},
-				2: {IbftId: 2},
-				3: {IbftId: 3},
-			},
 		},
+		ValidatorShare: &collections.ValidatorShare{Committee: map[uint64]*proto.Node{
+			0: {IbftId: 0},
+			1: {IbftId: 1},
+			2: {IbftId: 2},
+			3: {IbftId: 3},
+		}},
 	}
 	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
@@ -595,12 +596,15 @@ func TestHighestPrepared(t *testing.T) {
 }
 
 func TestChangeRoundPipeline(t *testing.T) {
-	_, nodes := GenerateNodes(4)
+	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
+		},
+		ValidatorShare: &collections.ValidatorShare{
+			Committee:   nodes,
+			ValidatorPK: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
 			Round: 1,

@@ -116,7 +116,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
+			if err := i.ibftStorage.SaveCurrentInstance(newInstance.ValidatorShare.ValidatorPK.Serialize(), newInstance.State); err != nil {
 				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
@@ -144,7 +144,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
-	return i.params.IbftCommittee
+	return i.ValidatorShare.Committee
 }
 
 // resetLeaderSelection resets leader selection with seed and round 1

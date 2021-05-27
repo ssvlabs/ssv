@@ -1,8 +1,6 @@
 package collections
 
 import (
-	"bytes"
-	"encoding/gob"
 	"strings"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -26,14 +24,6 @@ type IValidatorStorage interface {
 	InformObserver(i interface{})
 	// GetObserverID get the observer id
 	GetObserverID() string
-}
-
-// ValidatorShare model for ValidatorStorage struct creation
-type ValidatorShare struct {
-	NodeID      uint64
-	ValidatorPK *bls.PublicKey
-	ShareKey    *bls.SecretKey
-	Committee   map[uint64]*proto.Node
 }
 
 // ValidatorStorage struct
@@ -166,48 +156,7 @@ type validatorSerializer struct {
 	Committiee map[uint64]*proto.Node
 }
 
-// Serialize ValidatorStorage to []byte for db purposes
-func (v *ValidatorShare) Serialize() ([]byte, error) {
-	value := validatorSerializer{
-		NodeID:     v.NodeID,
-		ShareKey:   v.ShareKey.Serialize(),
-		Committiee: v.Committee,
-	}
-
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	if err := e.Encode(value); err != nil {
-		return nil, errors.Wrap(err, "Failed to encode validatorSerializer")
-	}
-	return b.Bytes(), nil
-}
-
-// Deserialize key/value to ValidatorStorage struct
-func (v *ValidatorShare) Deserialize(obj storage.Obj) (*ValidatorShare, error) {
-	var valShare validatorSerializer
-	d := gob.NewDecoder(bytes.NewReader(obj.Value))
-	if err := d.Decode(&valShare); err != nil {
-		return nil, errors.Wrap(err, "Failed to get val value")
-	}
-	shareSecret := &bls.SecretKey{} // need to decode secret separately cause of encoding has private var limit in bls.SecretKey struct
-	if err := shareSecret.Deserialize(valShare.ShareKey); err != nil {
-		return nil, errors.Wrap(err, "Failed to get key secret")
-	}
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(obj.Key); err != nil {
-		return nil, errors.Wrap(err, "Failed to get pubkey")
-	}
-	return &ValidatorShare{
-		NodeID:      valShare.NodeID,
-		ValidatorPK: pubKey,
-		ShareKey:    shareSecret,
-		Committee:   valShare.Committiee,
-	}, nil
-}
-
 // GetDBEvent returns the dbEvent
 func (v *ValidatorStorage) GetDBEvent() *storage.DBEvent {
 	return v.dbEvent
 }
-
-

@@ -3,6 +3,7 @@ package changeround
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -46,11 +47,10 @@ func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
 
 func TestValidateChangeRound(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
-	params := &proto.InstanceParams{
-		ConsensusParams: proto.DefaultConsensusParams(),
-		IbftCommittee:   nodes,
+	share := &collections.ValidatorShare{
+		Committee: nodes,
 	}
-	pip := Validate(params)
+	pip := Validate(share)
 
 	tests := []struct {
 		name string

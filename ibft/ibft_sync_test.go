@@ -68,7 +68,6 @@ func populatedIbft(
 	queue := msgqueue.New()
 	params := &proto.InstanceParams{
 		ConsensusParams: proto.DefaultConsensusParams(),
-		IbftCommittee:   nodes,
 	}
 	share := &collections.ValidatorShare{
 		NodeID:      nodeID,

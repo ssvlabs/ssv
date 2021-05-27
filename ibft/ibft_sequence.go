@@ -51,22 +51,16 @@ func (i *ibftImpl) NextSeqNumber() (uint64, error) {
 
 func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOptions {
 	return InstanceOptions{
-		Logger: opts.Logger,
-		Me: &proto.Node{
-			IbftId: opts.ValidatorShare.NodeID,
-			Pk:     opts.ValidatorShare.ShareKey.GetPublicKey().Serialize(),
-			Sk:     opts.ValidatorShare.ShareKey.Serialize(),
-		},
+		Logger:         opts.Logger,
+		ValidatorShare: i.ValidatorShare,
 		Network:        i.network,
 		Queue:          i.msgQueue,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: i.leaderSelector,
 		Params: &proto.InstanceParams{
 			ConsensusParams: i.params.ConsensusParams,
-			IbftCommittee:   opts.ValidatorShare.Committee,
 		},
-		Lambda:      opts.Identifier,
-		SeqNumber:   opts.SeqNumber,
-		ValidatorPK: opts.ValidatorShare.ValidatorPK.Serialize(),
+		Lambda:    opts.Identifier,
+		SeqNumber: opts.SeqNumber,
 	}
 }

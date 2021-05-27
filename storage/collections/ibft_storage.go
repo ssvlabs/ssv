@@ -17,7 +17,7 @@ const (
 // Iibft is an interface for persisting chain data
 type Iibft interface {
 	// SaveCurrentInstance saves the state for the current running (not yet decided) instance
-	SaveCurrentInstance(state *proto.State) error
+	SaveCurrentInstance(pk []byte, state *proto.State) error
 	// GetCurrentInstance returns the state for the current running (not yet decided) instance
 	GetCurrentInstance(pk []byte) (*proto.State, error)
 	// SaveDecided saves a signed message for an ibft instance with decided justification
@@ -49,12 +49,12 @@ func NewIbft(db storage.IKvStorage, logger *zap.Logger, instanceType string) Ibf
 }
 
 // SaveCurrentInstance func implementation
-func (i *IbftStorage) SaveCurrentInstance(state *proto.State) error {
+func (i *IbftStorage) SaveCurrentInstance(pk []byte, state *proto.State) error {
 	value, err := json.Marshal(state)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, "current", state.ValidatorPk)
+	return i.save(value, "current", pk)
 }
 
 // GetCurrentInstance func implementation

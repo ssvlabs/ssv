@@ -14,7 +14,6 @@ type ValidSimpleRun struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
-	prevLambda []byte
 }
 
 // Name returns test name
@@ -25,10 +24,9 @@ func (test *ValidSimpleRun) Name() string {
 // Prepare prepares the test
 func (test *ValidSimpleRun) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
-	test.prevLambda = []byte{0, 0, 0, 0}
 	test.inputValue = spectesting.TestInputValue()
 
-	test.instance = spectesting.TestIBFTInstance(t, test.lambda, test.prevLambda)
+	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
 	test.instance.State.Round = 1
 
 	// load messages to queue
@@ -44,17 +42,17 @@ func (test *ValidSimpleRun) Prepare(t *testing.T) {
 // MessagesSequence includes all messages
 func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
-		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, test.inputValue, 1, 2),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, test.inputValue, 1, 3),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, test.inputValue, 1, 4),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 1, 2),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.inputValue, 1, 3),
+		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.inputValue, 1, 4),
 
-		spectesting.CommitMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[1], test.lambda, test.prevLambda, test.inputValue, 1, 2),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[2], test.lambda, test.prevLambda, test.inputValue, 1, 3),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[3], test.lambda, test.prevLambda, test.inputValue, 1, 4),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 1, 2),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[2], test.lambda, test.inputValue, 1, 3),
+		spectesting.CommitMsg(t, spectesting.TestSKs()[3], test.lambda, test.inputValue, 1, 4),
 	}
 }
 

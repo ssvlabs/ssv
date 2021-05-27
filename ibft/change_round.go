@@ -19,10 +19,10 @@ func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
-		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidatePKs(i.ValidatorShare.ValidatorPK.Serialize()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
-		auth.AuthorizeMsg(i.Params),
-		changeround.Validate(i.Params),
+		auth.AuthorizeMsg(i.ValidatorShare),
+		changeround.Validate(i.ValidatorShare),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
 		changeround.UponPartialQuorum(),
 		i.uponChangeRoundFullQuorum(),
@@ -122,8 +122,8 @@ func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 	msgs := i.ChangeRoundMessages.ReadOnlyMessagesByRound(round)
-	quorum = len(msgs)*3 >= i.Params.CommitteeSize()*2
-	return quorum, len(msgs), i.Params.CommitteeSize()
+	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*2
+	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
@@ -231,6 +231,6 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 		Lambda:      i.State.Lambda,
 		SeqNumber:   i.State.SeqNumber,
 		Value:       data,
-		ValidatorPk: i.State.ValidatorPk,
+		ValidatorPk: i.ValidatorShare.ValidatorPK.Serialize(),
 	}, nil
 }

@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/storage/collections"
 	"testing"
 	"time"
 
@@ -21,7 +22,6 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
 		},
 		State: &proto.State{
 			Round:         1,
@@ -29,10 +29,10 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		Me: &proto.Node{
-			IbftId: 1,
-			Pk:     nodes[1].Pk,
-			Sk:     secretKeys[1].Serialize(),
+		ValidatorShare: &collections.ValidatorShare{
+			Committee: nodes,
+			NodeID:    1,
+			ShareKey:  secretKeys[1],
 		},
 		ValueCheck:     bytesval.New(value),
 		LeaderSelector: &leader.Constant{},
@@ -99,7 +99,6 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
 		},
 		State: &proto.State{
 			Round:         1,
@@ -107,10 +106,10 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		Me: &proto.Node{
-			IbftId: 1,
-			Pk:     nodes[1].Pk,
-			Sk:     secretKeys[1].Serialize(),
+		ValidatorShare: &collections.ValidatorShare{
+			Committee: nodes,
+			NodeID:    1,
+			ShareKey:  secretKeys[1],
 		},
 		ValueCheck:     bytesval.New(value),
 		LeaderSelector: &leader.Constant{},
@@ -161,7 +160,6 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		PrepareMessages:    msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
 		},
 		State: &proto.State{
 			Round:         1,
@@ -169,10 +167,11 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		Me: &proto.Node{
-			IbftId: 1,
-			Pk:     nodes[1].Pk,
-			Sk:     secretKeys[1].Serialize(),
+		ValidatorShare: &collections.ValidatorShare{
+			Committee:   nodes,
+			NodeID:      1,
+			ShareKey:    secretKeys[1],
+			ValidatorPK: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
 		LeaderSelector: &leader.Constant{},
@@ -203,7 +202,11 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
+		},
+		ValidatorShare: &collections.ValidatorShare{
+			Committee: nodes,
+			NodeID:    1,
+			ShareKey:  secretKeys[1],
 		},
 		State: &proto.State{
 			Round:         1,
@@ -258,12 +261,16 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 }
 
 func TestPrePreparePipeline(t *testing.T) {
-	_, nodes := GenerateNodes(4)
+	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
+		},
+		ValidatorShare: &collections.ValidatorShare{
+			Committee:   nodes,
+			NodeID:      1,
+			ValidatorPK: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
 			Round: 1,
