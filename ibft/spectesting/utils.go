@@ -116,7 +116,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 	return ibft.NewInstance(opts)
 }
 
-// TestNodes generates test nodes for SSV
+// TestShares generates test nodes for SSV
 func TestShares() map[uint64]*collections.ValidatorShare {
 	return map[uint64]*collections.ValidatorShare{
 		1: {
@@ -172,6 +172,7 @@ func TestNodes() map[uint64]*proto.Node {
 	}
 }
 
+// TestValidatorPK returns ref validator pk
 func TestValidatorPK() *bls.PublicKey {
 	threshold.Init()
 	ret := &bls.PublicKey{}
