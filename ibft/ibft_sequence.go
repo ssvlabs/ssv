@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"errors"
-	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 /**
@@ -57,10 +56,8 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 		Queue:          i.msgQueue,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: i.leaderSelector,
-		Params: &proto.InstanceParams{
-			ConsensusParams: i.params.ConsensusParams,
-		},
-		Lambda:    opts.Identifier,
-		SeqNumber: opts.SeqNumber,
+		Config:         i.instanceConfig,
+		Lambda:         opts.Identifier,
+		SeqNumber:      opts.SeqNumber,
 	}
 }

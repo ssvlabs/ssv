@@ -13,9 +13,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{
 			Committee: nodes,
 			NodeID:    1,
@@ -79,9 +77,7 @@ func TestPreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{
 			Committee:   nodes,
 			NodeID:      1,

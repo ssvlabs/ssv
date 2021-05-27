@@ -20,9 +20,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	instance := &Instance{
 		PrePrepareMessages:  msgcontinmem.New(3),
 		ChangeRoundMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("Lambda"),
@@ -97,9 +95,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		PrePrepareMessages:  msgcontinmem.New(3),
 		PrepareMessages:     msgcontinmem.New(3),
 		ChangeRoundMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("Lambda"),
@@ -158,9 +154,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	instance := &Instance{
 		PrePrepareMessages: msgcontinmem.New(3),
 		PrepareMessages:    msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         1,
 			Lambda:        []byte("Lambda"),
@@ -200,9 +194,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:              proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{
 			Committee: nodes,
 			NodeID:    1,
@@ -264,9 +256,7 @@ func TestPrePreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{
 			Committee:   nodes,
 			NodeID:      1,

@@ -59,10 +59,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 	secretKey, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
-		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
+		Config:          proto.DefaultConsensusParams(),
+		ValidatorShare:  &collections.ValidatorShare{Committee: nodes},
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
@@ -130,9 +128,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 func TestValidateChangeRoundMessage(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
 		State: &proto.State{
 			Round:         1,
@@ -436,9 +432,7 @@ func TestRoundChangeJustification(t *testing.T) {
 
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:              proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
@@ -533,9 +527,7 @@ func TestHighestPrepared(t *testing.T) {
 
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:              proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
@@ -599,9 +591,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{
 			Committee:   nodes,
 			ValidatorPK: sks[1].GetPublicKey(), // just placeholder

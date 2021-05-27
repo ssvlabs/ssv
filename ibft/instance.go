@@ -28,7 +28,7 @@ type InstanceOptions struct {
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
-	Params         *proto.InstanceParams
+	Config         *proto.InstanceConfig
 	Lambda         []byte
 	SeqNumber      uint64
 	//ValidatorPK    []byte
@@ -42,7 +42,7 @@ type Instance struct {
 	network          network.Network
 	ValueCheck       valcheck.ValueCheck
 	LeaderSelector   leader.Selector
-	Params           *proto.InstanceParams
+	Config           *proto.InstanceConfig
 	roundChangeTimer *time.Timer
 	Logger           *zap.Logger
 
@@ -85,7 +85,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
-		Params:         opts.Params,
+		Config:         opts.Config,
 		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID), zap.Uint64("seq_num", opts.SeqNumber)),
 
 		MsgQueue:            opts.Queue,
@@ -131,7 +131,7 @@ func (i *Instance) Start(inputValue []byte) {
 
 			// LeaderPreprepareDelay waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
-			time.Sleep(time.Duration(i.Params.ConsensusParams.LeaderPreprepareDelay))
+			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelay))
 
 			msg := i.generatePrePrepareMessage(i.State.InputValue)
 			//
@@ -287,7 +287,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	i.stopRoundChangeTimer()
 
 	// stat new timer
-	roundTimeout := uint64(i.Params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
+	roundTimeout := uint64(i.Config.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 	i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {

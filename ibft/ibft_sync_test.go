@@ -66,9 +66,6 @@ func populatedIbft(
 	nodes map[uint64]*proto.Node,
 ) IBFT {
 	queue := msgqueue.New()
-	params := &proto.InstanceParams{
-		ConsensusParams: proto.DefaultConsensusParams(),
-	}
 	share := &collections.ValidatorShare{
 		NodeID:      nodeID,
 		ValidatorPK: validatorPK(sks),
@@ -80,7 +77,7 @@ func populatedIbft(
 		storage,
 		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
 		queue,
-		params,
+		proto.DefaultConsensusParams(),
 		share,
 	)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced

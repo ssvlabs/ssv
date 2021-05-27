@@ -50,9 +50,7 @@ func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.Va
 		ibftStorage,
 		network,
 		msgQueue,
-		&proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		proto.DefaultConsensusParams(),
 		validatorShare,
 	)
 	go ibfts[beacon.RoleAttester].Init()

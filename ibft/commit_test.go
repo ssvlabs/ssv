@@ -14,9 +14,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		CommitMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-		},
+		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
 		State: &proto.State{
 			Round: 3,
