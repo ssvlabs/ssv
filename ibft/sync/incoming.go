@@ -79,7 +79,9 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
 	highest, err := s.storage.GetHighestDecidedInstance(msg.Msg.ValidatorPk)
 	if err != nil {
-		s.logger.Error("failed to get highest decided from db", zap.Error(err))
+		s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))
+		if err.Error() != collections.EntryNotFoundError {
+		}
 	}
 	res := &network.SyncMessage{
 		SignedMessages: []*proto.SignedMessage{highest},

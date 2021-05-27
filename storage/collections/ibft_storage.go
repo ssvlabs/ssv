@@ -105,7 +105,7 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 func (i *IbftStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
 	val, err := i.get("highest", pk)
 	if err != nil {
-		return nil, errors.New(EntryNotFoundError)
+		return nil, errors.Wrap(err, "failed to get from db")
 	}
 	ret := &proto.SignedMessage{}
 	if err := json.Unmarshal(val, ret); err != nil {
