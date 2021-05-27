@@ -115,6 +115,11 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_v2_4
+        - name: ETH_1_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth1_addr
         - name: NETWORK
           value: "pyrmont"
         - name: CONSENSUS_TYPE
@@ -126,6 +131,8 @@ spec:
           value: "34165"
         - name: LOGGER_LEVEL
           value: "debug"
+        - name: STORAGE_PATH
+          value: "./data/db"
         volumeMounts:
         - mountPath: "/data/db"
           name: ssv-node-v2-2
