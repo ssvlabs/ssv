@@ -2,6 +2,7 @@ package cli
 
 import (
 	"github.com/bloxapp/ssv/cli/bootnode"
+	"github.com/bloxapp/ssv/cli/exporter"
 	"github.com/bloxapp/ssv/cli/ssvnode"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -29,7 +30,9 @@ func Execute(appName, version string) {
 		log.Fatal("failed to execute root command", zap.Error(err))
 	}
 }
+
 func init()  {
+	RootCmd.AddCommand(exporter.StartExporterNodeCmd)
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(ssvnode.StartNodeCmd)
 }
