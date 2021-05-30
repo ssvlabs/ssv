@@ -16,7 +16,7 @@ It provides a way for validator to inspect the operators' performance, duties hi
 Exporter node is new type of peer that needs to pull and store data from SSV nodes or smart contract. \
 As most of that logic already exist in SSV, the exporter is just a new executable, re-using existing code from SSV and have slightly different configuration.
 
-<img src="./resources/exporter-node-diagram.png" >
+<img src="../resources/exporter-node-diagram.png" >
 
 ### Data
 
@@ -38,10 +38,6 @@ The following information will be needed:
   * Status (failed | success)
   * Operators --> signer_ids + id lookup in contract information (oess > index)
     * operators with the corresponding indication for each operator on the duty
-
-The following diagram shows the initial mockup of Web UI:
-
-<img src="./resources/web-explorer-screenshot.png" >
 
 #### Contract Data
 
@@ -86,10 +82,14 @@ In order to achieve HA, one of the following should be the way to go:
 
 #### Explorer Center
 
+**TODO: finalize authentication**
+
 Exporter Node will provide the following end-points:
 
   ##### Get all operators
-  
+
+  **TODO: finalize response**
+
   `GET` `/operators`
   
   ```json
@@ -100,7 +100,9 @@ Exporter Node will provide the following end-points:
   ```
   
   ##### Get all validators
-  
+
+  **TODO: finalize response**  
+
   `GET` `/validators`
   
   ```json
@@ -112,7 +114,9 @@ Exporter Node will provide the following end-points:
 
 
   ##### Get ibft data 
-  
+
+  **TODO: finalize**
+
   Input: slot + seq_number
   
   * consider streams
