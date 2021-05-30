@@ -50,22 +50,25 @@ func TestPubKeysById(t *testing.T) {
 		IbftCommittee: nodes,
 	}
 
-	// test single
-	pks, err := params.PubKeysByID([]uint64{0})
-	require.NoError(t, err)
-	require.Len(t, pks, 1)
-	require.EqualValues(t, pks[0].Serialize(), secretKeys[0].GetPublicKey().Serialize())
+	t.Run("test single", func(t *testing.T) {
+		pks, err := params.PubKeysByID([]uint64{0})
+		require.NoError(t, err)
+		require.Len(t, pks, 1)
+		require.EqualValues(t, pks[0].Serialize(), secretKeys[0].GetPublicKey().Serialize())
+	})
 
-	// test multiple
-	pks, err = params.PubKeysByID([]uint64{0, 1})
-	require.NoError(t, err)
-	require.Len(t, pks, 2)
-	require.EqualValues(t, pks[0].Serialize(), secretKeys[0].GetPublicKey().Serialize())
-	require.EqualValues(t, pks[1].Serialize(), secretKeys[1].GetPublicKey().Serialize())
+	t.Run("test multiple", func(t *testing.T) {
+		pks, err := params.PubKeysByID([]uint64{0, 1})
+		require.NoError(t, err)
+		require.Len(t, pks, 2)
+		require.EqualValues(t, pks[0].Serialize(), secretKeys[0].GetPublicKey().Serialize())
+		require.EqualValues(t, pks[1].Serialize(), secretKeys[1].GetPublicKey().Serialize())
+	})
 
-	// test multiple with invalid
-	_, err = params.PubKeysByID([]uint64{0, 5})
-	require.EqualError(t, err, "pk for id not found")
+	t.Run("test multiple with invalid", func(t *testing.T) {
+		_, err := params.PubKeysByID([]uint64{0, 5})
+		require.EqualError(t, err, "pk for id not found")
+	})
 }
 
 func TestVerifySignedMsg(t *testing.T) {

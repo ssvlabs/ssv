@@ -3,7 +3,7 @@ package changeround
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
+	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -52,17 +52,16 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 		return errors.New("change round justification does not constitute a quorum")
 	}
 
-	// validate justification sig signature
-	// TODO - validate signed ids are unique
+	// validate justification signature
 	pks, err := p.params.PubKeysByID(data.SignerIds)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "change round could not get pubkey")
 	}
-
 	aggregated := pks.Aggregate()
 	res, err := data.VerifySig(aggregated)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "change round could not verify signature")
+
 	}
 	if !res {
 		return errors.New("change round justification signature doesn't verify")
