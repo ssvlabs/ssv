@@ -3,6 +3,8 @@ package cli
 import (
 	"github.com/bloxapp/ssv/cli/flags"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -13,7 +15,7 @@ var startBootNodeCmd = &cobra.Command{
 	Use:   "start-boot-node",
 	Short: "Starts boot node for discovery based ENR",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := Logger.Named("boot-node")
+		logger := logex.Build("boot-node", zapcore.DebugLevel)
 
 		privateKey, err := flags.GetBootNodePrivateKeyFlagValue(cmd)
 		if err != nil {
