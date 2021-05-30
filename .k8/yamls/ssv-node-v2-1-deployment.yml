@@ -134,7 +134,7 @@ spec:
         - name: STORAGE_PATH
           value: "./data/db"
         - name: CONFIG_PATH
-          value: ./config/config.yaml
+          value: "./config/config.yaml"
         volumeMounts:
         - mountPath: "/data/db"
           name: ssv-node-v2-1
