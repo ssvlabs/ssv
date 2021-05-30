@@ -7,7 +7,7 @@ ssv:
       - NodeID: 1
         PublicKey: xxx-validator-pubkey
         ShareKey: xxx-share-privkey
-        Committee:
+        Committee: # <share-pub-key>: <node-id>
           share-pubkey-node1: 1
           share-pubkey-node2: 2
           share-pubkey-node3: 3
