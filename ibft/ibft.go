@@ -86,7 +86,7 @@ func New(
 
 func (i *ibftImpl) Init() {
 	i.listenToSyncMessages()
-	i.waitForMinPeerCount(3)
+	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
 	i.initFinished = true
