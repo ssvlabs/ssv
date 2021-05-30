@@ -6,7 +6,7 @@ import (
 
 var (
 	// AppName is the application name
-	AppName = "SSV-CLI"
+	AppName = "SSV-Node"
 
 	// Version is the app version
 	Version = "latest"

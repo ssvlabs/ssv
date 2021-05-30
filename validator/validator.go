@@ -2,80 +2,87 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/slotqueue"
-	"github.com/bloxapp/ssv/storage/collections"
 )
 
 // Options to add in validator struct creation
 type Options struct {
+	Context                    context.Context
+	Logger                     *zap.Logger
+	Share                      *storage.Share
 	SignatureCollectionTimeout time.Duration
 	SlotQueue                  slotqueue.Queue
+	Network                    network.Network
+	Beacon                     beacon.Beacon
+	ETHNetwork                 *core.Network
 }
 
 // Validator struct that manages all ibft wrappers
 type Validator struct {
-	ctx                        context.Context
-	logger                     *zap.Logger
-	ValidatorShare             *collections.ValidatorShare
-	ibftStorage                collections.Iibft
-	ethNetwork                 core.Network
-	network                    network.Network
+	ctx    context.Context
+	logger *zap.Logger
+	Share  *storage.Share
+	//ibftStorage                collections.Iibft
+	ethNetwork                 *core.Network
 	beacon                     beacon.Beacon
 	ibfts                      map[beacon.Role]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
+	network                    network.Network
 	slotQueue                  slotqueue.Queue
-	SignatureCollectionTimeout time.Duration
+	signatureCollectionTimeout time.Duration
 }
 
 // New Validator creation
-func New(ctx context.Context, logger *zap.Logger, validatorShare *collections.ValidatorShare, ibftStorage collections.Iibft, network network.Network, ethNetwork core.Network, _beacon beacon.Beacon, opt Options) *Validator {
-	logger = logger.
-		With(zap.String("pubKey", validatorShare.ValidatorPK.SerializeToHexStr())).
-		With(zap.Uint64("node_id", validatorShare.NodeID))
+func New(opt Options, ibftStorage collections.Iibft) *Validator {
+	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
+		With(zap.Uint64("node_id", opt.Share.NodeID))
+
 	msgQueue := msgqueue.New()
+
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = ibft.New(
 		logger,
 		ibftStorage,
-		network,
+		opt.Network,
 		msgQueue,
 		&proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   validatorShare.Committee,
+			IbftCommittee:   opt.Share.Committee,
 		},
-		validatorShare,
+		opt.Share,
 	)
 	go ibfts[beacon.RoleAttester].Init()
 
 	return &Validator{
-		ctx:                        ctx,
+		ctx:                        opt.Context,
 		logger:                     logger,
-		ValidatorShare:             validatorShare,
-		ibftStorage:                ibftStorage,
-		ethNetwork:                 ethNetwork,
-		network:                    network,
-		beacon:                     _beacon,
-		ibfts:                      ibfts,
 		msgQueue:                   msgQueue,
+		Share:                      opt.Share,
+		signatureCollectionTimeout: opt.SignatureCollectionTimeout,
 		slotQueue:                  opt.SlotQueue,
-		SignatureCollectionTimeout: opt.SignatureCollectionTimeout,
+		network:                    opt.Network,
+		ibfts:                      ibfts,
+		ethNetwork:                 opt.ETHNetwork,
+		beacon:                     opt.Beacon,
 	}
 }
 
 // Start validator
 func (v *Validator) Start() error {
-	if err := v.network.SubscribeToValidatorNetwork(v.ValidatorShare.ValidatorPK); err != nil {
+	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()
@@ -88,7 +95,7 @@ func (v *Validator) startSlotQueueListener() {
 	v.logger.Info("start listening slot queue")
 
 	for {
-		slot, duty, ok, err := v.slotQueue.Next(v.ValidatorShare.ValidatorPK.Serialize())
+		slot, duty, ok, err := v.slotQueue.Next(v.Share.PublicKey.Serialize())
 		if err != nil {
 			v.logger.Error("failed to get next slot data", zap.Error(err))
 			continue

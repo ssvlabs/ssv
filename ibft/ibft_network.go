@@ -10,7 +10,7 @@ func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 	for {
 		time.Sleep(time.Second)
 
-		peers, err := i.network.AllPeers(i.ValidatorShare.ValidatorPK.Serialize())
+		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
 		if err != nil {
 			i.logger.Error("failed fetching peers", zap.Error(err))
 			continue

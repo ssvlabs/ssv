@@ -3,7 +3,8 @@ package collections
 import (
 	"encoding/base64"
 	"github.com/bloxapp/ssv/shared/params"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -17,7 +18,13 @@ var (
 )
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
-	db, err := kv.New("./data/db", *zap.L(), &kv.Options{InMemory: true})
+	options:= basedb.Options{
+		Type: "badger-memory",
+		Logger: zap.L(),
+		Path: "",
+	}
+
+	db, err := storage.GetStorageFactory(options)
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -67,7 +74,13 @@ func TestSetupPrivateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			db, err := kv.New("./data/db", *zap.L(), &kv.Options{InMemory: true})
+			options:= basedb.Options{
+				Type: "badger-memory",
+				Logger: zap.L(),
+				Path: "",
+			}
+
+			db, err := storage.GetStorageFactory(options)
 			require.NoError(t, err)
 			defer db.Close()
 

@@ -2,38 +2,16 @@ package node
 
 import (
 	"context"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/validator"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"time"
 
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/slotqueue"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/validator"
 )
-
-// Options contains options to create the node
-type Options struct {
-	ValidatorStorage collections.IValidatorStorage
-	IbftStorage      collections.Iibft
-	ETHNetwork       core.Network
-	Network          network.Network
-	Consensus        string
-	Beacon           beacon.Beacon
-	Logger           *zap.Logger
-	// timeouts
-	SignatureCollectionTimeout time.Duration
-	// genesis epoch
-	GenesisEpoch uint64
-	// max slots for duty to wait
-	DutySlotsLimit uint64
-	Context        context.Context
-}
 
 // Node represents the behavior of SSV node
 type Node interface {
@@ -41,87 +19,66 @@ type Node interface {
 	Start() error
 }
 
-// SsvNode implements Node interface
-type SsvNode struct {
-	validatorStorage  collections.IValidatorStorage
-	ibftStorage       collections.Iibft
-	ethNetwork        core.Network
-	network           network.Network
-	consensus         string
-	slotQueue         slotqueue.Queue
-	beacon            beacon.Beacon
-	logger            *zap.Logger
-	validatorsMap     map[string]*validator.Validator
-	streamDuties      <-chan *ethpb.DutiesResponse_Duty
-	pubkeysUpdateChan chan bool
-	context           context.Context
-
-	// timeouts
-	signatureCollectionTimeout time.Duration
+// Options contains options to create the node
+type Options struct {
+	ETHNetwork *core.Network
+	Beacon     *beacon.Beacon
+	Context    context.Context
+	Logger     *zap.Logger
 	// genesis epoch
-	genesisEpoch uint64
+	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
-	dutySlotsLimit uint64
-	pubsub.BaseObserver
+	//TODO switch to time frame?
+	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
+	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 }
 
-// New is the constructor of SsvNode
-func New(opts Options) *SsvNode {
-	return &SsvNode{
-		validatorStorage:           opts.ValidatorStorage,
-		ibftStorage:                opts.IbftStorage,
-		ethNetwork:                 opts.ETHNetwork,
-		network:                    opts.Network,
-		consensus:                  opts.Consensus,
-		slotQueue:                  slotqueue.New(opts.ETHNetwork),
-		beacon:                     opts.Beacon,
-		logger:                     opts.Logger,
-		signatureCollectionTimeout: opts.SignatureCollectionTimeout,
-		// genesis epoch
-		genesisEpoch:   opts.GenesisEpoch,
-		dutySlotsLimit: opts.DutySlotsLimit,
-		validatorsMap:  make(map[string]*validator.Validator),
-		context:        opts.Context,
+// ssvNode implements Node interface
+type ssvNode struct {
+	ethNetwork            core.Network
+	slotQueue             slotqueue.Queue
+	context               context.Context
+	validatorController   validator.IController
+	logger                *zap.Logger
+	beacon                beacon.Beacon
+	genesisEpoch          uint64
+	dutyLimit             uint64
+	streamDuties          <-chan *ethpb.DutiesResponse_Duty
+	pubkeysUpdateChan     chan bool
+
+	//eth1Client eth1.Eth1
+	// add eth1Client and listen to its events
+}
+
+// New is the constructor of ssvNode
+func New(opts Options) Node {
+	slotQueue := slotqueue.New(*opts.ETHNetwork)
+	opts.ValidatorOptions.SlotQueue = slotQueue
+	ssv := &ssvNode{
+		context:             opts.Context,
+		logger:              opts.Logger,
+		genesisEpoch:        opts.GenesisEpoch,
+		dutyLimit:           opts.DutyLimit,
+		validatorController: validator.NewController(opts.ValidatorOptions),
+		ethNetwork:          *opts.ETHNetwork,
+		beacon:              *opts.Beacon,
+		// TODO do we really need to pass the whole object or just SlotDurationSec
+		slotQueue: slotQueue,
 	}
-}
 
-// InformObserver informs observer
-func (n *SsvNode) InformObserver(data interface{}) {
-	if validatorShare, ok := data.(collections.ValidatorShare); ok {
-		if _, ok := n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()]; ok {
-			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.ValidatorPK.SerializeToHexStr()))
-			return
-		}
-		// setup validator
-		n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()] = validator.New(n.context, n.logger, &validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
-			SlotQueue:                  n.slotQueue,
-			SignatureCollectionTimeout: n.signatureCollectionTimeout,
-		})
-
-		// start validator
-		if err := n.validatorsMap[validatorShare.ValidatorPK.SerializeToHexStr()].Start(); err != nil {
-			n.logger.Error("failed to start validator", zap.Error(err))
-		}
-
-		// update stream duties
-		n.startStreamDuties()
-	}
-}
-
-// GetObserverID get the observer id
-func (n *SsvNode) GetObserverID() string {
-	// TODO return proper id for the observer
-	return "SsvNodeObserver"
+	return ssv
 }
 
 // Start implements Node interface
-func (n *SsvNode) Start() error {
-	n.setupValidators()
-	n.startValidators()
+func (n *ssvNode) Start() error {
+	n.validatorController.StartValidators()
 	n.startStreamDuties()
-
+	validatorChan := n.validatorController.NewValidatorChan()
 	for {
 		select {
+		case <- validatorChan:
+			n.startStreamDuties()
+			continue
 		case <-n.pubkeysUpdateChan:
 			n.logger.Debug("public keys updated, restart stream duties listener")
 			continue
@@ -146,14 +103,18 @@ func (n *SsvNode) Start() error {
 							With(zap.Time("start_time", n.getSlotStartTime(slot)))
 						// execute task if slot already began and not pass 1 epoch
 						currentSlot := uint64(n.getCurrentSlot())
-						if slot >= currentSlot && slot-currentSlot <= n.dutySlotsLimit {
+						if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
 							pubKey := &bls.PublicKey{}
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
-								n.logger.Error("Failed to deserialize pubkey from duty")
+								n.logger.Error("failed to deserialize pubkey from duty")
 							}
-							v := n.validatorsMap[pubKey.SerializeToHexStr()]
-							logger.Info("starting duty processing start for slot")
-							go v.ExecuteDuty(n.context, slot, duty)
+							v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
+							if ok {
+								logger.Info("starting duty processing start for slot")
+								go v.ExecuteDuty(n.context, slot, duty)
+							} else {
+								logger.Info("could not find validator")
+							}
 						} else {
 							logger.Info("scheduling duty processing start for slot")
 							if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
@@ -167,41 +128,10 @@ func (n *SsvNode) Start() error {
 	}
 }
 
-// setupValidators for each validatorShare with proper ibft wrappers
-func (n *SsvNode) setupValidators() {
-	validatorShares, err := n.validatorStorage.GetAllValidatorShares()
-	if err != nil {
-		n.logger.Fatal("Failed to get all validator shares", zap.Error(err))
-	}
-
-	res := make(map[string]*validator.Validator)
-	for _, validatorShare := range validatorShares {
-		res[validatorShare.ValidatorPK.SerializeToHexStr()] = validator.New(n.context, n.logger, validatorShare, n.ibftStorage, n.network, n.ethNetwork, n.beacon, validator.Options{
-			SlotQueue:                  n.slotQueue,
-			SignatureCollectionTimeout: n.signatureCollectionTimeout,
-		})
-	}
-	n.logger.Info("setup validators done successfully", zap.Int("count", len(res)))
-	n.validatorsMap = res
-}
-
-// startValidators functions (queue streaming, msgQueue listen, etc)
-func (n *SsvNode) startValidators() {
-	for _, v := range n.validatorsMap {
-		if err := v.Start(); err != nil {
-			n.logger.Error("failed to start validator", zap.Error(err))
-			continue
-		}
-	}
-}
-
 // startStreamDuties start to stream duties from the beacon chain
-func (n *SsvNode) startStreamDuties() {
-	var pubKeys [][]byte
+func (n *ssvNode) startStreamDuties() {
 	var err error
-	for _, val := range n.validatorsMap {
-		pubKeys = append(pubKeys, val.ValidatorShare.ValidatorPK.Serialize())
-	}
+	pubKeys := n.validatorController.GetValidatorsPubKeys()
 	n.streamDuties, err = n.beacon.StreamDuties(n.context, pubKeys)
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
@@ -216,21 +146,21 @@ func (n *SsvNode) startStreamDuties() {
 }
 
 // getSlotStartTime returns the start time for the given slot
-func (n *SsvNode) getSlotStartTime(slot uint64) time.Time {
+func (n *ssvNode) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(n.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
 
 // getCurrentSlot returns the current beacon node slot
-func (n *SsvNode) getCurrentSlot() int64 {
+func (n *ssvNode) getCurrentSlot() int64 {
 	genesisTime := int64(n.ethNetwork.MinGenesisTime())
 	currentTime := time.Now().Unix()
 	return (currentTime - genesisTime) / 12
 }
 
 // getEpochFirstSlot returns the beacon node first slot in epoch
-func (n *SsvNode) getEpochFirstSlot(epoch uint64) uint64 {
+func (n *ssvNode) getEpochFirstSlot(epoch uint64) uint64 {
 	return epoch * 32
 }
 
@@ -241,3 +171,40 @@ func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
 	slots = append(slots, duty.GetProposerSlots()...)
 	return slots
 }
+
+// InformObserver informs observer
+//func (n *ssvNode) InformObserver(data interface{}) {
+//	if validatorShare, ok := data.(storage.Share); ok {
+//		v, exist := n.validatorController.GetValidator(validatorShare.PublicKey.SerializeToHexStr())
+//		if exist {
+//			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.PublicKey.SerializeToHexStr()))
+//			return
+//		}
+//		// setup validator
+//		validatorOpts := validator.Options{
+//			Context:                    n.context,
+//			Logger:                     n.logger,
+//			Share:                      &validatorShare,
+//			Network:                    n.network,
+//			Beacon:                     n.beacon,
+//			ETHNetwork:                 n.ethNetwork,
+//			SlotQueue:                  n.slotQueue,
+//			SignatureCollectionTimeout: n.signatureCollectionTimeout,
+//		}
+//		v = validator.New(validatorOpts, n.ibftStorage)
+//		n.validatorController.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v)
+//		// start validator
+//		if err := v.Start(); err != nil {
+//			n.logger.Error("failed to start validator", zap.Error(err))
+//		}
+//
+//		// update stream duties
+//		n.startStreamDuties()
+//	}
+//}
+
+// GetObserverID get the observer id
+//func (n *ssvNode) GetObserverID() string {
+//	// TODO return proper id for the observer
+//	return "SsvNodeObserver"
+//}

@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"sync"
 
@@ -23,7 +24,7 @@ type StartOptions struct {
 	SeqNumber      uint64
 	Value          []byte
 	Duty           *ethpb.DutiesResponse_Duty
-	ValidatorShare collections.ValidatorShare
+	ValidatorShare storage.Share
 }
 
 // IBFT represents behavior of the IBFT
@@ -51,7 +52,7 @@ type ibftImpl struct {
 	network             network.Network
 	msgQueue            *msgqueue.MessageQueue
 	params              *proto.InstanceParams // TODO - this should be deprecated for validator share
-	ValidatorShare      *collections.ValidatorShare
+	ValidatorShare      *storage.Share
 	leaderSelector      leader.Selector
 
 	// flags
@@ -65,7 +66,7 @@ func New(
 	network network.Network,
 	queue *msgqueue.MessageQueue,
 	params *proto.InstanceParams,
-	ValidatorShare *collections.ValidatorShare,
+	ValidatorShare  *storage.Share,
 ) IBFT {
 	ret := &ibftImpl{
 		ibftStorage:         storage,
