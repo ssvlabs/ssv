@@ -13,9 +13,13 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
+ifndef $(EXPORTER_BUILD_PATH)
+    EXPORTER_BUILD_PATH="./bin/exporter"
+    export EXPORTER_BUILD_PATH
+endif
+
 # node command builder
 NODE_COMMAND=--config=${CONFIG_PATH}
-
 
 ifneq ($(SHARE_CONFIG),)
   NODE_COMMAND+= --share-config=${SHARE_CONFIG}
@@ -52,6 +56,11 @@ full-test:
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
+#Build Exporter
+.PHONY: build-exporter
+build-exporter:
+	CGO_ENABLED=1 go build -o ./bin/exporter ./cmd/exporter/
+
 .PHONY: start-node
 start-node:
 	@echo "Build ${BUILD_PATH}"
@@ -62,7 +71,6 @@ ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
-
 else
 	@echo "Running node on address: ${HOST_ADDRESS})"
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
@@ -96,8 +104,12 @@ docker-debug:
 stop:
 	@docker-compose  down
 
-
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
+
+.PHONY: start-exporter-node
+start-exporter-node:
+	@echo "Running start-exporter-node"
+	${EXPORTER_BUILD_PATH} start-node

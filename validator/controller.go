@@ -152,13 +152,15 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 // InformObserver informs observer
 func (c *controller) InformObserver(data interface{}) {
 	if validatorAddedEvent, ok := data.(eth1.ValidatorAddedEvent); ok {
-		c.logger.Debug("validator add event")
+		c.logger.Debug("validator added event")
 		validatorShare := c.createValidatorShare(validatorAddedEvent)
-		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-			c.logger.Error("failed to save validator share", zap.Error(err))
-			return
+		if len(validatorShare.Committee) > 0 {
+			if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
+				c.logger.Error("failed to save validator share", zap.Error(err))
+				return
+			}
+			c.handleNewValidatorShare(validatorShare)
 		}
-		c.handleNewValidatorShare(validatorShare)
 	} else {
 		c.logger.Info("could not cast event")
 	}

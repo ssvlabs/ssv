@@ -3,6 +3,8 @@ package goeth
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -51,7 +53,62 @@ func New(ctx context.Context, logger *zap.Logger, nodeAddr string, operatorStora
 	return e, nil
 }
 
-// streamSmartContractEvents implements Eth1 interface
+// Sync tries to fetch history of contract events
+func (e *eth1GRPC) Sync() error {
+	err := e.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI)
+	if err != nil {
+		e.logger.Error("Failed to sync contract events", zap.Error(err))
+	}
+	return err
+}
+
+// syncSmartContractsEvents sync events history of the given contract
+func (e *eth1GRPC) syncSmartContractsEvents(contractAddr, contractABI string) error {
+	e.logger.Debug("syncing smart contract events")
+
+	contractAbi, err := abi.JSON(strings.NewReader(contractABI))
+	if err != nil {
+		return errors.Wrap(err, "failed to parse ABI interface")
+	}
+
+	contractAddress := common.HexToAddress(contractAddr)
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{contractAddress},
+		FromBlock: big.NewInt(800000),
+	}
+	logs, err := e.conn.FilterLogs(e.ctx, query)
+	if err != nil {
+		return errors.Wrap(err, "failed to get event logs")
+	}
+	e.logger.Debug(fmt.Sprintf("manage to get event logs, number of results: %d", len(logs)))
+
+	for _, vLog := range logs {
+		eventType, err := contractAbi.EventByID(vLog.Topics[0])
+		if err != nil {
+			e.logger.Error("Failed to find event type", zap.Error(err))
+			continue
+		}
+		switch eventName := eventType.Name; eventName {
+		case "OperatorAdded":
+			err := e.ProcessOperatorAddedEvent(vLog.Data, contractAbi, eventName)
+			if err != nil {
+				e.logger.Error("Failed to process OperatorAdded event", zap.Error(err))
+				continue
+			}
+		case "ValidatorAdded":
+			err := e.ProcessValidatorAddedEvent(vLog.Data, contractAbi, eventName)
+			if err != nil {
+				e.logger.Error("Failed to process ValidatorAdded event", zap.Error(err))
+				continue
+			}
+		default:
+			e.logger.Debug("Unknown contract event is received")
+		}
+	}
+	return nil
+}
+
+// streamSmartContractEvents listen to events from the given contract
 func (e *eth1GRPC) streamSmartContractEvents(contractAddr string) error {
 	contractAddress := common.HexToAddress(contractAddr)
 	query := ethereum.FilterQuery{
@@ -132,14 +189,12 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 		def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]` //TODO need to set as var?
 		outAbi, err := abi.JSON(strings.NewReader(def))
 		if err != nil {
-			e.logger.Error("failed to define ABI", zap.Error(err))
-			continue
+			return errors.Wrap(err, "failed to define ABI")
 		}
 
 		outOperatorPublicKey, err := outAbi.Unpack("method", validatorShare.OperatorPublicKey)
 		if err != nil {
-			e.logger.Error("failed to unpack OperatorPublicKey", zap.Error(err))
-			continue
+			return errors.Wrap(err, "failed to unpack OperatorPublicKey")
 		}
 
 		if operatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
@@ -147,22 +202,19 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 			if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
 				sk, err := e.operatorStorage.GetPrivateKey()
 				if err != nil {
-					e.logger.Error("failed to get private key", zap.Error(err))
-					continue
+					return errors.Wrap(err, "failed to get private key")
 				}
 
 				out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
 				if err != nil {
-					e.logger.Error("failed to unpack EncryptedKey", zap.Error(err))
-					continue
+					return errors.Wrap(err, "failed to unpack EncryptedKey")
 				}
 
 				if encryptedSharePrivateKey, ok := out[0].(string); ok {
 					decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
 					decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 					if err != nil {
-						e.logger.Error("failed to decrypt share private key", zap.Error(err))
-						continue
+						return errors.Wrap(err, "failed to decrypt share private key")
 					}
 					validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
 					isEventBelongsToOperator = true
@@ -178,5 +230,24 @@ func (e *eth1GRPC) ProcessValidatorAddedEvent(data []byte, contractAbi abi.ABI, 
 		e.logger.Debug("ValidatorAdded Event doesn't belong to operator")
 	}
 
+	return nil
+}
+
+func (e *eth1GRPC) ProcessOperatorAddedEvent(data []byte, contractAbi abi.ABI, eventName string) error {
+	operatorAddedEvent := eth1.OperatorAddedEvent{}
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, eventName, data)
+	if err != nil {
+		return errors.Wrap(err, "Failed to unpack OperatorAdded event")
+	}
+	e.contractEvent.Data = operatorAddedEvent
+
+	operatorPubkeyHex := hex.EncodeToString(operatorAddedEvent.Pubkey)
+	e.logger.Debug("OperatorAdded Event",
+		zap.String("Operator PublicKey", operatorPubkeyHex),
+		zap.String("Payment Address", operatorAddedEvent.PaymentAddress.String()))
+
+	if strings.EqualFold(operatorPubkeyHex, params.SsvConfig().OperatorPublicKey) {
+		e.contractEvent.NotifyAll()
+	}
 	return nil
 }
