@@ -122,6 +122,8 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: eth1_addr
+        - name: LOG_LEVEL
+          value: "debug"
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
