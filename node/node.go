@@ -97,12 +97,13 @@ func (n *ssvNode) Start() error {
 						continue
 					}
 					go func(slot uint64) {
+						currentSlot := uint64(n.getCurrentSlot())
 						logger := n.logger.
 							With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
+							With(zap.Uint64("current slot", currentSlot)).
 							With(zap.Uint64("slot", slot)).
 							With(zap.Time("start_time", n.getSlotStartTime(slot)))
 						// execute task if slot already began and not pass 1 epoch
-						currentSlot := uint64(n.getCurrentSlot())
 						if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
 							pubKey := &bls.PublicKey{}
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {

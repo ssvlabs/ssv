@@ -63,7 +63,7 @@ func (s *Collection) LoadFromConfig(options ShareOptions) error {
 			err = e
 			s.logger.Fatal("failed to create share object:", zap.Error(err))
 		} else if share != nil {
-			s.logger.Info(share.ShareKey.SerializeToHexStr())
+			s.logger.Info("share added", zap.String("public key", share.ShareKey.SerializeToHexStr()))
 			err = s.SaveValidatorShare(share)
 		}
 	}
