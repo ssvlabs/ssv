@@ -1,3 +1,5 @@
+global:
+  LogLevel: debug
 db:
   Path: ./data/db/2
   Type: badger-db
