@@ -152,12 +152,12 @@ spec:
           name: ssv-node-v2-3
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-cm-validator-options-stage-3
+          name: ssv-cm-validator-options-3
       volumes:
       - name: ssv-node-v2-3
         persistentVolumeClaim:
           claimName: ssv-node-v2-3
-      - name: ssv-cm-validator-options-stage-3
+      - name: ssv-cm-validator-options-3
         configMap:
-          name: ssv-cm-validator-options-stage-3
+          name: ssv-cm-validator-options-3
       hostNetwork: true            
