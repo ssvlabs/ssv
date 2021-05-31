@@ -1,0 +1,23 @@
+global:
+  LogLevel: info
+
+db:
+  Path: ./data/db
+  Type: badger-db
+
+ssv:
+  GenesisEpoch:
+  DutyLimit: 32
+  ValidatorOptions:
+    SignatureCollectionTimeout: 5s
+  OperatorPrivKey:
+
+BeaconNodeAddr: eth2-4000-prysm-ext.stage.bloxinfra.com:80
+ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
+HostAddress: example.ip
+TcpPort:
+UdpPort:
+
+bootnode:
+  ExternalIP:
+  PrivateKey:

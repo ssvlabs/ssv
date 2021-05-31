@@ -3,13 +3,13 @@ package collections
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -22,13 +22,13 @@ type IOperatorStorage interface {
 // OperatorStorage implement IOperatorStorage
 type OperatorStorage struct {
 	prefix []byte
-	db     storage.IKvStorage
+	db     basedb.IDb
 	logger *zap.Logger
 	pubsub.BaseObserver
 }
 
 // NewOperatorStorage init new instance of operator storage
-func NewOperatorStorage(db storage.IKvStorage, logger *zap.Logger) OperatorStorage {
+func NewOperatorStorage(db basedb.IDb, logger *zap.Logger) OperatorStorage {
 	validator := OperatorStorage{
 		prefix: []byte("operator-"),
 		db:     db,
@@ -84,7 +84,6 @@ func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 	params.SsvConfig().OperatorPublicKey = operatorPublicKey
 	return nil
 }
-
 
 // SavePrivateKey save operator private key
 func (o OperatorStorage) savePrivateKey(operatorKey string) error {

@@ -1,9 +1,17 @@
 package goeth
 
 import (
+	"context"
 	"encoding/hex"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/network/local"
+	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -40,12 +48,17 @@ func TestAddValidatorEventEndToEnd(t *testing.T) {
 	threshold.Init()
 
 	logger := *zap.L()
-	db, err := kv.New("./data/db", logger, &kv.Options{InMemory: true})
+
+	db, err := kv.New(basedb.Options{
+		Type:   "badger-memory",
+		Path:   "",
+		Logger: &logger,
+	})
 	require.NoError(t, err)
 	defer db.Close()
 	operatorStorage := collections.NewOperatorStorage(db, &logger)
 	require.NoError(t, operatorStorage.SetupPrivateKey(skBase64))
-	validatorStorage := collections.NewValidatorStorage(db, &logger)
+	//validatorStorage := collections.NewValidatorStorage(db, &logger)
 
 	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
 	require.NoError(t, err)
@@ -68,13 +81,57 @@ func TestAddValidatorEventEndToEnd(t *testing.T) {
 		require.NotNil(t, observer.data)
 	})
 
-	t.Run("validatorStorageInformAddValidator", func(t *testing.T) {
-		validatorStorage.InformObserver(observer.data)
-		share, err := validatorStorage.GetValidatorsShare(observer.data.PublicKey)
+	t.Run("validatorController AddValidatorEvent", func(t *testing.T) {
+		validatorCtrl := newValidatorCtrl(&logger, db, e)
+		data, err := hex.DecodeString(eventData)
 		require.NoError(t, err)
-		require.Equal(t, "0d140b18e66e6c4ca60b987e0652135160a150f329ee6cf4c0e47a3db07ab769", share.ShareKey.SerializeToHexStr())
-		require.Equal(t, "b16980164bb8005ef28343bb754dfe4365193b6c58f76b4fea2229106fe4f46919450b0535a9f4e1539024dbba8ccfe8", share.ShareKey.GetPublicKey().SerializeToHexStr())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case v := <- validatorCtrl.NewValidatorChan():
+					require.NotNil(t, v)
+					return
+				default:
+					continue
+				}
+			}
+		}()
+		err = e.ProcessValidatorAddedEvent(data, contractAbi, "ValidatorAdded")
+		require.NoError(t, err)
+		// wait until validator controller publish on channel
+		wg.Wait()
+		// get the newly added validator and validate its keys
+		pk := &bls.PublicKey{}
+		pk.Deserialize(observer.data.PublicKey)
+		v, ok := validatorCtrl.GetValidator(pk.SerializeToHexStr())
+		require.True(t, ok)
+		require.NotNil(t, v)
+		require.Equal(t, "0d140b18e66e6c4ca60b987e0652135160a150f329ee6cf4c0e47a3db07ab769",
+			v.Share.ShareKey.SerializeToHexStr())
+		require.Equal(t, "b16980164bb8005ef28343bb754dfe4365193b6c58f76b4fea2229106fe4f46919450b0535a9f4e1539024dbba8ccfe8",
+			v.Share.ShareKey.GetPublicKey().SerializeToHexStr())
 	})
+}
+
+func newValidatorCtrl(logger *zap.Logger, db basedb.IDb, eth1Client eth1.Eth1) validator.IController {
+	ethNet := core.NetworkFromString(string(core.PyrmontNetwork))
+	validatorCtrlOpts := validator.ControllerOptions{
+		Context:                    context.TODO(),
+		DB:                         db,
+		Logger:                     logger,
+		SignatureCollectionTimeout: 0,
+		ETHNetwork:                 &ethNet,
+		Network:                    local.NewLocalNetwork(),
+		SlotQueue:                  slotqueue.New(ethNet),
+		Beacon:                     nil,
+		Shares:                     nil,
+		Eth1Client:                 eth1Client,
+	}
+	validatorCtrl := validator.NewController(validatorCtrlOpts)
+	return validatorCtrl
 }
 
 //func TestAddValidatorEvent(t *testing.T) {

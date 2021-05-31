@@ -83,6 +83,8 @@ spec:
           name: port-13000
           hostPort: 13000
         env:
+        - name: SHARE_CONFIG
+          value: "./data"
         - name: NODE_ID
           value: "4"
         - name: SSV_PRIVATE_KEY
@@ -115,6 +117,11 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_v2_3
+        - name: ETH_1_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth1_addr
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
@@ -126,11 +133,22 @@ spec:
           value: "34165"
         - name: LOGGER_LEVEL
           value: "debug"
+        - name: STORAGE_PATH
+          value: "./data/db"
+        - name: CONFIG_PATH
+          value: ./config/config.yaml
+        - name: OPERATOR_KEY
+          value: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb2dJQkFBS0NBUUVBb3pVaGFzSG9HeE1YS3pUbzgrSHdYZXR6cm1YQ1g5N215cGloeGMvbDFISWVJVXBXCmV3NkFNMzlPd1JQZ2VVMFZ3QmQ2NHZhbzZsTTNaQWxTdVZlMlpuU3RPTUlyQlNYZWxiRzRvUGtEbnFmQ01sYmYKa1RNRlhXVFowdE1IdGJwVkU3N2o0aEpxaUI3ZU13YitwNXUxWi82ZXFaNmZFZGc4MjkzM3dlSGFVY3N3ZklCaApYNlNaUjNlMkJvRUJ2bHljNE5ENEFoNVFaZjMrRWpxSit5dHZzeGJGbkw1SktZaGNKVzhia0J3M2gzZWt5RjJjCmI2eUE3M3dsTzZhWklaRWJ4QkE0WDl4WjhMSFBaNHJYWG9Gb2gxUUJ3UjE5RWF6YXlvSHVOYmRYakFtT2FzVWIKT0ttNFJBdk9ya1FwZ1I4S0J4NGMzczk0OFlidTBJRktQb0NIQndJREFRQUJBb0lCQUdGWXBXLzU3S21KZjM1RAo5dGJRNHdBQ0dtUGhTa2pJdVR3S1FpT3MxMWNhSWlLVkpuUUx1Q2YvUFVnb3hQRlZLeTRDVTBmZysrdVlheWQ5CjhCdWcxNmpRMnlsSmwwTmd6UnpZZmxsMWJkVktGcWpUN0ZHODd1dy81VFM4cnBLVWEzNTFrNU1halBSWUJRekcKbFVuL3Mvb3RneEdGRFRnbGxGZElWQ2tPdjV1YzlKMW9MVFQrMmV5Y1B1SHdDVlgxMkxZcXdmN2x1aDZ5UGZrYwp5UWFBOWMydW5NQWluaUZlbFNWWHpIZnpoWWFTZVhYdmVYcVU1NjYvVnJYU2MwNytFWG5oQktpZk95V01ZN0lZCitGNDAzdzF0TjVUeUVsTXdHMVhWbkI1MFljU3Y0WnFJVkE3aDVZVjR1aWZ2K3IxU0JJVFBHNlFzdWV2S0NNMHIKQkVVY0NpRUNnWUVBekFhdy9KOW1FQ1RZeVdFOWNkOE4rejFPdXBIVWZMcGxqVCtTOU1IbGFzWGlDdE04WXJtNAorZ2FGb3o0WHA0U2hqb1FCbThjZGdudW5HWitLakZkYlBDQlRZdi9sWjNBejUyTS9ZcWIvM1MwTXI1L2YxSStUCnBxUXRLUncyRTJuNG9Ma0hpWXFoUy9ySEY3VGRGR3dsSmlYYVJ2L09MN0RreFRrSklpcEdlVGtDZ1lFQXpNaUIKYml4L3Fua2VaYklsZEZwOFpDN1NoRFdTYkJvUHU1UEhnODdkbWFNSGhwTGQ1Z3M5T0RVc0lIbFAwN05vL21NQQpwZU9hREFMYS90R09DTVcvaEdaQW9vdEJFZnYrNW5FYndBSm52d1d3cVVoaFFBNkJocE5nODR0dGlnUlNxbFFrCmpmcHZCNmlZQ0k2ajRQVGhrWG1pM3hWc3VtM0JtMXBVUlpNb1FqOENnWUFEcXRNZmwxWGtVR1U5S1d4TFViRVUKcFFOM1F3dkl1aWo5SXZsblFOejQwRm5CekE0MzBCTE5HN1RuUEVSOGxGdTdEaEJoVm5EbldZV2xaa0s5Und5eQp4Zm41dTVQS0NqQkVwbm9MTWVsRGRuM1Y0ay9KcUZNRkdjcGVCTTNNQjRtYWlmaml0Z1UwTW12RnQxQ0ovMitqCmdlYXNoQWlXdnQwOTFrcWR2SmpMc1FLQmdHS2pKV3k2OUZkWmRhSElXREFlTVpKVDEwU2xSVHphcEw5V0pDREIKOEkxRE1LbktiaVdUUGs2bmxmU2lXaWYvWDlCQVFaeWw3NXBmZWJxSmwxOTBXSlplWmoyazA1ZmxDRmRaSGVPegpoT05HeTF3T3FBRWh1NVBsd3lvciszd2lMdXNxRWwxc3hqUXJLZWZkUk9Sakw0OVJ4bmlycWk1MkZXNU42UStHCkhUc2pBb0dBV0xYSmp6ZUREQVd0YnRSekRHTEY1ZXNYdjU5YU9McU1qMFhlTDJ2cmwxMjdka203ampJOTVDbWsKREZBOWx0cmhYRWZFcE9LUlBOTk54dnVQZUlWNlFRUXhRb1VFZFR4S0p3cENJQlBMK3U1MWlqNjlhZElQeXdNawprU2twaVJ4VEQvL1dQOGhseGlBM2FGYk05d0dSYlBudWtJdkFwd3RvUG5rV2RlYVRERk09Ci0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
         volumeMounts:
-        - mountPath: "/data/db"
-          name: ssv-node-v2-4
+        - mountPath: "/data/"
+          name: ssv-node-v2-1
+        - mountPath: "/data/"
+          name: config-secrets-validator-options-1
       volumes:
       - persistentVolumeClaim:
-          claimName: ssv-node-v2-4
-        name: ssv-node-v2-4
-      hostNetwork: true            
+          claimName: ssv-node-v2-1
+        name: ssv-node-v2-1
+      - name: config-secrets-validator-options-1
+        secret:
+          secretName: config-secrets-validator-options-1
+      hostNetwork: true 

@@ -4,8 +4,9 @@ import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/inmem"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -284,8 +285,12 @@ func TestSyncAfterDecided(t *testing.T) {
 func TestSyncFromScratchAfterDecided(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	network := local.NewLocalNetwork()
-
-	s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+	db, _ := kv.New(basedb.Options{
+		Type:   "badger-memory",
+		Path:   "",
+		Logger: zap.L(),
+	})
+	s1 := collections.NewIbft(db, zap.L(), "attestation")
 	i1 := populatedIbft(1, network, &s1, sks, nodes)
 
 	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)

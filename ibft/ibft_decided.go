@@ -15,7 +15,7 @@ func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
-		auth.ValidatePKs(i.ValidatorShare.ValidatorPK.Serialize()),
+		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.AuthorizeMsg(i.params),
 		auth.ValidateQuorum(i.params.ThresholdSize()),
 	)
@@ -67,7 +67,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 
 // HighestKnownDecided returns the highest known decided instance
 func (i *ibftImpl) HighestKnownDecided() (*proto.SignedMessage, error) {
-	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.ValidatorShare.ValidatorPK.Serialize())
+	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.ValidatorShare.PublicKey.Serialize())
 	if err != nil && err.Error() != collections.EntryNotFoundError {
 		return nil, err
 	}

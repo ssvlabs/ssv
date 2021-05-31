@@ -83,7 +83,7 @@ func (v *Validator) reconstructAndBroadcastSignature(ctx context.Context, logger
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
-	if res := signature.VerifyByte(v.ValidatorShare.ValidatorPK, root); !res {
+	if res := signature.VerifyByte(v.Share.PublicKey, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}
 
@@ -95,7 +95,7 @@ func (v *Validator) reconstructAndBroadcastSignature(ctx context.Context, logger
 		logger.Info("submitting attestation")
 		inputValue.GetAttestation().Signature = signature.Serialize()
 		log.Printf("%s, %d\n", inputValue.GetAttestation(), duty.GetValidatorIndex())
-		if err := v.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex(), v.ValidatorShare.ValidatorPK); err != nil {
+		if err := v.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex(), v.Share.PublicKey); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	//case beacon.RoleAggregator:

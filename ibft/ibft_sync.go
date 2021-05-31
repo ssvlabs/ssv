@@ -12,6 +12,6 @@ func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
 func (i *ibftImpl) SyncIBFT() {
-	s := sync.NewHistorySync(i.logger, i.ValidatorShare.ValidatorPK.Serialize(), i.network, i.ibftStorage, i.validateDecidedMsg)
+	s := sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	s.Start()
 }
