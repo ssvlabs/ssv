@@ -34,9 +34,9 @@ type Iibft interface {
 // IbftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type IbftStorage struct {
-	prefix       []byte
-	db           basedb.IDb
-	logger       *zap.Logger
+	prefix []byte
+	db     basedb.IDb
+	logger *zap.Logger
 }
 
 // NewIbft create new ibft storage
@@ -106,7 +106,7 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 func (i *IbftStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
 	val, err := i.get("highest", pk)
 	if err != nil {
-		if err.Error() == "not found"{
+		if err.Error() == "not found" || err.Error() == "Key not found" { // TODO need to implement not found handle in db level
 			return nil, errors.New(EntryNotFoundError)
 		}
 		return nil, err
