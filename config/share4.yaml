@@ -1,0 +1,22 @@
+db:
+  Path: ./data/db/4
+  Type: badger-db
+ssv:
+  ValidatorOptions:
+    Shares:
+      - NodeID: 4
+        PublicKey: 8bb41ab7133f7b6cfd9506a436d4761d9dec006c21739efb8a8f8fec3f8c60d8a0ac4ba00a23bfd13c714bfdf2b2c9ce
+        ShareKey: 42b15fb8bf13e4eaee2771885b767510e3fdfb039c0542245099b0956078cfb0
+        Committee:
+          a8774519956ad7e4ef3b3feb4ba7888ed07d98084ff44a7aefc1f763d80da33db406b94297265bba455d5fee75a1251d: 1
+          80e718c01df93a838e0fb86f11fa815c033f8fe26ea341af0bd9d23250f09cfcc8a6e8ed8b0b9b3b119169183350142b: 2
+          845f038ef34a57643c4abc4f20193ceb7645bbf1298f0e30c7df9ae83ef698360b540fa0855bb6f6e139b5d327fef8f7: 3
+          84d662ef54fd9af518993dd6aa336d1116e4712a83a92fef18b8e9feffc27ccd91d2acd670c9e5fc81b55e9d7dc2d1a1: 4
+#      - NodeID: 4
+#        PublicKey: b4dbeb61df8d810ff7c3d319716c867ac8d717ac6037413e66f543ec031fd23f10d58cf0f94831ec4963b9dc6d6555ad
+#        ShareKey: 097c253e1bf2a8333ee53664f9c4cacf5794abfdbd01c5bda669e2952320c45a
+#        Committee:
+#          share-pubkey-node1: a07ade519fe96253491fdef133c2a0368ca16fb9fbba385fd3ee1818d3872c30b05d831c16a0e76150b01d0cf61caf3c
+#          share-pubkey-node2: ab95d4889e37868c3e37d849455f01d0bf7d689258ab243480e32b4fac3e68ec4564518f03481ba4694604ff8814cffe
+#          share-pubkey-node3: b50727d4272969ed51a5de6eca8ffecb0feb55dc5865e9b1a6335f4e80b680757affc08ad06eba0123b68779f7b6d782
+#          share-pubkey-node4: 8b28bd9c4d57928e5c67969ea850d2fd14e5f222ce7333e477a9ebd2be0e3c2df3d46b93c30080231dea30dbcf8836fe
