@@ -127,7 +127,8 @@ spec:
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS
-#          value: "ssv-lb.stage.bloxinfra.com"
+          value: ""
+        - name: HOST_ADDRESS
           value: ""
         - name: GENESIS_EPOCH
           value: "34165"
