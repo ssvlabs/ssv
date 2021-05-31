@@ -23,7 +23,7 @@ type config struct {
 	DBOptions                  basedb.Options `yaml:"db"`
 	SSVOptions                 node.Options   `yaml:"ssv"`
 	Network                    string         `yaml:"Network" env-default:"pyrmont"`
-	DiscoveryType              string         `yaml:"DiscoveryType" env-default:"mdns"`
+	DiscoveryType              string         `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"mdns"`
 	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env-required:"true"`
 	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr                   string         `yaml:"ETH1Addr" env-required:"true"`
