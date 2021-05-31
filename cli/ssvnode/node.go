@@ -29,7 +29,7 @@ type config struct {
 	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env-required:"true"`
 	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr                   string         `yaml:"ETH1Addr" env-required:"true"`
-	SmartContractAddr          string         `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from"`
+	SmartContractAddr          string         `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
 	TCPPort                    int            `yaml:"TcpPort" env-default:"13000"`
 	UDPPort                    int            `yaml:"UdpPort" env-default:"12000"`
 	HostAddress                string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
@@ -122,6 +122,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 			// create new eth1 client
 			if  cfg.SmartContractAddr != ""{
+				Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
 				params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
 			}
 			cfg.SSVOptions.ValidatorOptions.Eth1Client, err = goeth.New(cmd.Context(), Logger, cfg.ETH1Addr, operatorStorage)
