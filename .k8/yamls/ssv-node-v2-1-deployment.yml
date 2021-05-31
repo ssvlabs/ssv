@@ -84,7 +84,7 @@ spec:
           hostPort: 13000
         env:
         - name: SHARE_CONFIG
-          value: "./data"
+          value: "./data/share.yaml"
         - name: NODE_ID
           value: "1"
         - name: SSV_PRIVATE_KEY
