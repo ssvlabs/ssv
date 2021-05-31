@@ -30,6 +30,7 @@ type eth1GRPC struct {
 // New create new goEth instance
 func New(ctx context.Context, logger *zap.Logger, nodeAddr string, operatorStorage collections.IOperatorStorage) (eth1.Eth1, error) {
 	// Create an IPC based RPC connection to a remote node
+	logger.Info("dail beacon node", zap.String("addr", nodeAddr))
 	conn, err := ethclient.Dial(nodeAddr)
 	if err != nil {
 		logger.Error("Failed to connect to the Ethereum client", zap.Error(err))
