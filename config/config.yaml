@@ -15,6 +15,7 @@ ssv:
 BeaconNodeAddr: eth2-4000-prysm-ext.stage.bloxinfra.com:80
 ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
 HostAddress: example.ip
+SmartContractAddr: 0x1cfFB88C8fa7A3D4e806Ac4597d88F1DdD6A01A3
 TcpPort:
 UdpPort:
 
