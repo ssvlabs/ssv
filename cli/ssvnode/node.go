@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	global_config "github.com/bloxapp/ssv/cli/config"
-	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/shared/params"
@@ -125,7 +125,7 @@ var StartNodeCmd = &cobra.Command{
 				Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
 				params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
 			}
-			cfg.SSVOptions.Eth1Client, err = eth1.NewEth1Client(eth1.ClientOptions{
+			cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
 				Ctx:             cmd.Context(),
 				Logger:          Logger,
 				NodeAddr:        cfg.ETH1Addr,
