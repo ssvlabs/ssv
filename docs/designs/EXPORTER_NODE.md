@@ -18,6 +18,11 @@ As most of that logic already exist in SSV, the exporter is just a new executabl
 
 <img src="../resources/exporter-node-diagram.png" >
 
+### Bootstrap
+
+On start, exporter will first finish syncing data and only afterwards will start. \
+Once sync is finished, the exporter is able to serve requests and listen to live events from the contract.
+
 ### Data
 
 The following information will be needed:

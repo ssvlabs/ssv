@@ -1,6 +1,6 @@
 package main
 
-import "github.com/bloxapp/ssv/cli/exporter"
+import "github.com/bloxapp/ssv/cli"
 
 var (
 	// AppName is the application name
@@ -11,5 +11,5 @@ var (
 )
 
 func main() {
-	exporter.Execute(AppName, Version)
+	cli.Execute(AppName, Version)
 }

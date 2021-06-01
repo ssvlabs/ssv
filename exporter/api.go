@@ -9,14 +9,14 @@ import (
 
 // OperatorsResponse is the struct that represents an operator
 type OperatorsResponse struct {
-	Data []string `json:"data"`
-	Timestamp int64 `json:"timestamp"`
+	Data      []string `json:"data"`
+	Timestamp int64    `json:"timestamp"`
 }
 
 // ValidatorsResponse is the struct that represents a validator
 type ValidatorsResponse struct {
-	Data []string `json:"data"`
-	Timestamp int64 `json:"timestamp"`
+	Data      []string `json:"data"`
+	Timestamp int64    `json:"timestamp"`
 }
 
 type apiHandlers interface {
@@ -24,28 +24,34 @@ type apiHandlers interface {
 }
 
 type httpHandlers struct {
-	e *exporter
+	mux *http.ServeMux
+	e   *exporter
 
 	apiPort int
 }
 
-func newHttpHandlers(e *exporter, apiPort int) apiHandlers {
-	hh := httpHandlers{e, apiPort}
+func newHTTPHandlers(e *exporter, apiPort int) apiHandlers {
+	mux := http.NewServeMux()
+	hh := httpHandlers{mux, e, apiPort}
+	hh.registerHandlers()
 	return &hh
 }
 
+// Listen starts the http server
 func (hh *httpHandlers) Listen() error {
 	hh.e.logger.Info("exporter - listen for http requests on port " + fmt.Sprintf("%d", hh.apiPort))
-	mux := http.NewServeMux()
 
-	mux.HandleFunc("/validators", hh.getAllValidatorsHandler())
-	mux.HandleFunc("/operators", hh.getAllOperatorsHandler())
-
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", hh.apiPort), mux); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", hh.apiPort), hh.mux); err != nil {
 		hh.e.logger.Fatal("failed to start exporter http server", zap.Error(err))
 		return err
 	}
 	return nil
+}
+
+// register binds http handlers
+func (hh *httpHandlers) registerHandlers() {
+	hh.mux.HandleFunc("/validators", hh.getAllValidatorsHandler())
+	hh.mux.HandleFunc("/operators", hh.getAllOperatorsHandler())
 }
 
 // getAllValidatorsHandler returns an http handler for get validators api
