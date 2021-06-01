@@ -54,7 +54,7 @@ type controller struct {
 	ibftStorage collections.IbftStorage
 	ethNetwork  *core.Network
 
-	validatorsMap    map[string]*Validator
+	validatorsMap       map[string]*Validator
 	newValidatorSubject pubsub.Subject
 }
 
@@ -82,7 +82,7 @@ func NewController(options ControllerOptions) IController {
 		ibftStorage:                ibftStorage,
 		network:                    options.Network,
 		ethNetwork:                 options.ETHNetwork,
-		newValidatorSubject: 		pubsub.NewSubject(),
+		newValidatorSubject:        pubsub.NewSubject(),
 		validatorsMap:              make(map[string]*Validator),
 	}
 
@@ -94,6 +94,7 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 	for e := range cn {
 		if event, ok := e.(eth1.Event); ok {
 			if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
+				c.logger.Debug("controller received ValidatorAddedEvent from eth1client")
 				c.handleValidatorAddedEvent(validatorAddedEvent)
 			}
 		}
@@ -136,6 +137,7 @@ func (c *controller) StartValidators() map[string]*Validator {
 	}
 	return validators
 }
+
 // GetValidatorsPubKeys returns a list of all the validators public keys
 func (c *controller) GetValidatorsPubKeys() [][]byte {
 	var pubKeys [][]byte
@@ -144,11 +146,13 @@ func (c *controller) GetValidatorsPubKeys() [][]byte {
 	}
 	return pubKeys
 }
+
 // GetValidator returns a validator
 func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	v, ok := c.validatorsMap[pubKey]
 	return v, ok
 }
+
 // AddValidator adds a new validator
 func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 	if _, ok := c.validatorsMap[pubKey]; !ok {

@@ -1,9 +1,10 @@
-package eth1
+package goeth
 
 import (
 	"context"
 	"crypto/rsa"
 	"encoding/json"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -66,14 +67,14 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	eventsWg.Add(2)
 	go func() {
 		for e := range cn {
-			event, ok := e.(Event)
+			event, ok := e.(eth1.Event)
 			require.True(t, ok)
-			if ethEvent, ok := event.Data.(OperatorAddedEvent); ok {
+			if ethEvent, ok := event.Data.(eth1.OperatorAddedEvent); ok {
 				require.NotNil(t, ethEvent)
 				require.NotNil(t, ethEvent.PublicKey)
 				eventsWg.Done()
 			}
-			if ethEvent, ok := event.Data.(ValidatorAddedEvent); ok {
+			if ethEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
 				require.NotNil(t, ethEvent)
 				require.NotNil(t, ethEvent.PublicKey)
 				eventsWg.Done()

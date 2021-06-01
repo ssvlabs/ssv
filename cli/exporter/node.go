@@ -5,6 +5,7 @@ import (
 	"fmt"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
@@ -63,7 +64,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			//if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
 			//	Logger.Fatal("failed to setup operator private key", zap.Error(err))
 			//}
-			eth1Client, err = eth1.NewEth1Client(eth1.ClientOptions{
+			eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
 				Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
 				PrivKeyProvider: func() (*rsa.PrivateKey, error) {
 					return nil, nil

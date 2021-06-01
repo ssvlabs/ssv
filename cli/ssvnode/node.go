@@ -5,9 +5,10 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	global_config "github.com/bloxapp/ssv/cli/config"
-	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
+	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -23,10 +24,12 @@ type config struct {
 	DBOptions                  basedb.Options `yaml:"db"`
 	SSVOptions                 node.Options   `yaml:"ssv"`
 	Network                    string         `yaml:"Network" env-default:"pyrmont"`
-	DiscoveryType              string         `yaml:"DiscoveryType" env-default:"mdns"`
-	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env-required:"true"`
+	DiscoveryType              string         `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"mdns"`
+	Enr                        string         `yaml:"Enr" env:"ENR_KEY" env-description:"enr used in discovery" env-default:""`
+	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	ETH1Addr                   string         `yaml:"ETH1Addr" env-required:"true"`
+	ETH1Addr                   string         `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
+	SmartContractAddr          string         `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
 	TCPPort                    int            `yaml:"TcpPort" env-default:"13000"`
 	UDPPort                    int            `yaml:"UdpPort" env-default:"12000"`
 	HostAddress                string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
@@ -69,21 +72,29 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
+
+		enr := []string{
+			// deployemnt
+			// internal ip
+			//"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+			//external ip
+			"enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+			// ssh
+			//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
+		}
+		if cfg.Enr != "" {
+			enr = []string{
+				cfg.Enr,
+			}
+		}
+
 		p2pCfg := p2p.Config{
-			DiscoveryType: cfg.DiscoveryType,
-			BootstrapNodeAddr: []string{
-				// deployemnt
-				// internal ip
-				//"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
-				//external ip
-				"enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
-				// ssh
-				//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
-			},
-			UDPPort:     cfg.UDPPort,
-			TCPPort:     cfg.TCPPort,
-			HostDNS:     cfg.HostDNS,
-			HostAddress: cfg.HostAddress,
+			DiscoveryType:     cfg.DiscoveryType,
+			BootstrapNodeAddr: enr,
+			UDPPort:           cfg.UDPPort,
+			TCPPort:           cfg.TCPPort,
+			HostDNS:           cfg.HostDNS,
+			HostAddress:       cfg.HostAddress,
 		}
 		network, err := p2p.New(cmd.Context(), Logger, &p2pCfg)
 		if err != nil {
@@ -110,7 +121,11 @@ var StartNodeCmd = &cobra.Command{
 				Logger.Fatal("failed to setup operator private key", zap.Error(err))
 			}
 			// create new eth1 client
-			cfg.SSVOptions.Eth1Client, err = eth1.NewEth1Client(eth1.ClientOptions{
+			if  cfg.SmartContractAddr != "" {
+				Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
+				params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
+			}
+			cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
 				Ctx:             cmd.Context(),
 				Logger:          Logger,
 				NodeAddr:        cfg.ETH1Addr,

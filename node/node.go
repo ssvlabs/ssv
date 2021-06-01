@@ -88,6 +88,7 @@ func (n *ssvNode) Start() error {
 	for {
 		select {
 		case <-cnValidators:
+			n.logger.Debug("new processed validator, restarting stream duties")
 			n.startStreamDuties()
 			continue
 		case <-n.pubkeysUpdateChan:
@@ -108,12 +109,13 @@ func (n *ssvNode) Start() error {
 						continue
 					}
 					go func(slot uint64) {
+						currentSlot := uint64(n.getCurrentSlot())
 						logger := n.logger.
 							With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
+							With(zap.Uint64("current slot", currentSlot)).
 							With(zap.Uint64("slot", slot)).
 							With(zap.Time("start_time", n.getSlotStartTime(slot)))
 						// execute task if slot already began and not pass 1 epoch
-						currentSlot := uint64(n.getCurrentSlot())
 						if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
 							pubKey := &bls.PublicKey{}
 							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
@@ -197,40 +199,3 @@ func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
 	slots = append(slots, duty.GetProposerSlots()...)
 	return slots
 }
-
-// InformObserver informs observer
-//func (n *ssvNode) InformObserver(data interface{}) {
-//	if validatorShare, ok := data.(storage.Share); ok {
-//		v, exist := n.validatorController.GetValidator(validatorShare.PublicKey.SerializeToHexStr())
-//		if exist {
-//			n.logger.Info("validator already exist", zap.String("pubkey", validatorShare.PublicKey.SerializeToHexStr()))
-//			return
-//		}
-//		// setup validator
-//		validatorOpts := validator.Options{
-//			Context:                    n.context,
-//			Logger:                     n.logger,
-//			Share:                      &validatorShare,
-//			Network:                    n.network,
-//			Beacon:                     n.beacon,
-//			ETHNetwork:                 n.ethNetwork,
-//			SlotQueue:                  n.slotQueue,
-//			SignatureCollectionTimeout: n.signatureCollectionTimeout,
-//		}
-//		v = validator.New(validatorOpts, n.ibftStorage)
-//		n.validatorController.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v)
-//		// start validator
-//		if err := v.Start(); err != nil {
-//			n.logger.Error("failed to start validator", zap.Error(err))
-//		}
-//
-//		// update stream duties
-//		n.startStreamDuties()
-//	}
-//}
-
-// GetObserverID get the observer id
-//func (n *ssvNode) GetObserverID() string {
-//	// TODO return proper id for the observer
-//	return "SsvNodeObserver"
-//}
