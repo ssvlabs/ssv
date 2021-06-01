@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -29,15 +30,15 @@ type ControllerOptions struct {
 	SlotQueue                  slotqueue.Queue
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
-	Eth1Client                 eth1.Eth1
 }
 
 // IController interface
 type IController interface {
+	ListenToEth1Events(cn pubsub.SubjectChannel)
 	StartValidators() map[string]*Validator
 	GetValidatorsPubKeys() [][]byte
 	GetValidator(pubKey string) (*Validator, bool)
-	NewValidatorChan() chan *Validator
+	Subject() pubsub.SubjectBase
 }
 
 // Controller struct that manages all validator shares
@@ -54,7 +55,7 @@ type controller struct {
 	ethNetwork  *core.Network
 
 	validatorsMap    map[string]*Validator
-	newValidatorChan chan *Validator
+	newValidatorSubject pubsub.Subject
 }
 
 // NewController creates new validator controller
@@ -81,13 +82,22 @@ func NewController(options ControllerOptions) IController {
 		ibftStorage:                ibftStorage,
 		network:                    options.Network,
 		ethNetwork:                 options.ETHNetwork,
-		newValidatorChan:           make(chan *Validator),
-		validatorsMap: 				make(map[string]*Validator),
+		newValidatorSubject: 		pubsub.NewSubject(),
+		validatorsMap:              make(map[string]*Validator),
 	}
 
-	options.Eth1Client.GetContractEvent().Register(&ctrl)
-
 	return &ctrl
+}
+
+// ListenToEth1Events is listening to events coming from eth1 client
+func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
+	for e := range cn {
+		if event, ok := e.(eth1.Event); ok {
+			if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
+				c.handleValidatorAddedEvent(validatorAddedEvent)
+			}
+		}
+	}
 }
 
 // setupValidators for each validatorShare with proper ibft wrappers
@@ -126,7 +136,7 @@ func (c *controller) StartValidators() map[string]*Validator {
 	}
 	return validators
 }
-
+// GetValidatorsPubKeys returns a list of all the validators public keys
 func (c *controller) GetValidatorsPubKeys() [][]byte {
 	var pubKeys [][]byte
 	for _, val := range c.validatorsMap {
@@ -134,12 +144,12 @@ func (c *controller) GetValidatorsPubKeys() [][]byte {
 	}
 	return pubKeys
 }
-
+// GetValidator returns a validator
 func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	v, ok := c.validatorsMap[pubKey]
 	return v, ok
 }
-
+// AddValidator adds a new validator
 func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 	if _, ok := c.validatorsMap[pubKey]; !ok {
 		c.validatorsMap[pubKey] = v
@@ -149,20 +159,19 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 	return false
 }
 
-// InformObserver informs observer
-func (c *controller) InformObserver(data interface{}) {
-	if validatorAddedEvent, ok := data.(eth1.ValidatorAddedEvent); ok {
-		c.logger.Debug("validator added event")
-		validatorShare := c.createValidatorShare(validatorAddedEvent)
-		if len(validatorShare.Committee) > 0 {
-			if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-				c.logger.Error("failed to save validator share", zap.Error(err))
-				return
-			}
-			c.handleNewValidatorShare(validatorShare)
+// Subject returns the subject
+func (c *controller) Subject() pubsub.SubjectBase {
+	return c.newValidatorSubject
+}
+
+func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
+	validatorShare := c.createValidatorShare(validatorAddedEvent)
+	if len(validatorShare.Committee) > 0 {
+		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
+			c.logger.Error("failed to save validator share", zap.Error(err))
+			return
 		}
-	} else {
-		c.logger.Info("could not cast event")
+		c.handleNewValidatorShare(validatorShare)
 	}
 }
 
@@ -185,17 +194,7 @@ func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Sh
 		c.logger.Error("failed to start validator", zap.Error(err))
 	}
 
-	c.newValidatorChan <- v
-}
-
-// GetObserverID get the observer id
-func (c *controller) GetObserverID() string {
-	// TODO return proper id for the observer
-	return "ValidatorControllerObserver"
-}
-
-func (c *controller) NewValidatorChan() chan *Validator {
-	return c.newValidatorChan
+	c.newValidatorSubject.Notify(*v)
 }
 
 func (c *controller) createValidatorShare(validatorAddedEvent eth1.ValidatorAddedEvent) *validatorstorage.Share {

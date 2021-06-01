@@ -1,45 +1,80 @@
 package pubsub
 
-// subject interface that manage registered Observers and passing notify interface (each implementation will cast by it use)
-type subject interface {
-	Register(Observer Observer)
-	Deregister(Observer Observer)
-	notifyAll()
+import (
+	"github.com/pkg/errors"
+	"sync"
+)
+
+// SubjectEvent is the event being fired
+type SubjectEvent interface{}
+
+// SubjectChannel is the channel that will pass the events
+type SubjectChannel chan SubjectEvent
+
+// SubjectBase represents the base functionality of a subject (used by observers)
+type SubjectBase interface {
+	// Register adds a new observer
+	Register(id string) (SubjectChannel, error)
+	// Deregister removes an observer
+	Deregister(id string)
 }
 
-// BaseSubject struct is the base implementation of subject
-type BaseSubject struct {
-	subject
-	ObserverList []Observer
-	Name         string
+// SubjectController introduces "write" capabilities on the subject
+type SubjectController interface {
+	// Notify emits an event
+	Notify(e SubjectEvent)
 }
 
-// Register add Observer to subject
-func (b *BaseSubject) Register(o Observer) {
-	// TODO add only if not exists (change to map)
-	b.ObserverList = append(b.ObserverList, o)
+// Subject represent the interface for a subject
+type Subject interface {
+	SubjectBase
+	SubjectController
 }
 
-// Deregister remove Observer from subject
-func (b *BaseSubject) Deregister(o Observer) {
-	b.ObserverList = removeFromSlice(b.ObserverList, o)
+// subject is the internal implementation of Subject
+type subject struct {
+	observers map[string]*observer
+	mut       sync.RWMutex
 }
 
-// notifyAll notify all observers
-func (b *BaseSubject) notifyAll() {
-	for _, observer := range b.ObserverList {
-		observer.InformObserver(b.Name)
+// NewSubject creates a new instance of the internal struct
+func NewSubject() Subject {
+	outs := map[string]*observer{}
+	s := subject{outs, sync.RWMutex{}}
+	return &s
+}
+
+// Register adds a new observer
+func (s *subject) Register(id string) (SubjectChannel, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	if ob, exist := s.observers[id]; exist {
+		return ob.channel, errors.New("observer already exist")
+	}
+	s.observers[id] = newSubjectObserver()
+	return s.observers[id].channel, nil
+}
+
+// Deregister removes an observer
+func (s *subject) Deregister(id string) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	if ob, exist := s.observers[id]; exist {
+		delete(s.observers, id)
+		ob.close()
 	}
 }
 
-// removeFromSlice help func
-func removeFromSlice(observerList []Observer, observerToRemove Observer) []Observer {
-	observerListLength := len(observerList)
-	for i, observer := range observerList {
-		if observerToRemove.GetObserverID() == observer.GetObserverID() {
-			observerList[observerListLength-1], observerList[i] = observerList[i], observerList[observerListLength-1]
-			return observerList[:observerListLength-1]
+// Notify emits an event
+func (s *subject) Notify(e SubjectEvent) {
+	go func() {
+		s.mut.RLock()
+		defer s.mut.RUnlock()
+
+		for _, ob := range s.observers {
+			ob.notifyCallback(e)
 		}
-	}
-	return observerList
+	}()
 }

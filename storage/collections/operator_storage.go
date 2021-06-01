@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -24,7 +23,6 @@ type OperatorStorage struct {
 	prefix []byte
 	db     basedb.IDb
 	logger *zap.Logger
-	pubsub.BaseObserver
 }
 
 // NewOperatorStorage init new instance of operator storage
