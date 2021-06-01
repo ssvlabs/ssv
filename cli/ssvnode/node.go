@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon/prysmgrpc"
 	global_config "github.com/bloxapp/ssv/cli/config"
-	"github.com/bloxapp/ssv/eth1/goeth"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/node"
 	"github.com/bloxapp/ssv/shared/params"
@@ -121,11 +121,16 @@ var StartNodeCmd = &cobra.Command{
 				Logger.Fatal("failed to setup operator private key", zap.Error(err))
 			}
 			// create new eth1 client
-			if  cfg.SmartContractAddr != ""{
+			if  cfg.SmartContractAddr != "" {
 				Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
 				params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
 			}
-			cfg.SSVOptions.ValidatorOptions.Eth1Client, err = goeth.New(cmd.Context(), Logger, cfg.ETH1Addr, operatorStorage)
+			cfg.SSVOptions.Eth1Client, err = eth1.NewEth1Client(eth1.ClientOptions{
+				Ctx:             cmd.Context(),
+				Logger:          Logger,
+				NodeAddr:        cfg.ETH1Addr,
+				PrivKeyProvider: operatorStorage.GetPrivateKey,
+			})
 			if err != nil {
 				Logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
 			}

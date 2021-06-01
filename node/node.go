@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -25,6 +26,8 @@ type Options struct {
 	Beacon     *beacon.Beacon
 	Context    context.Context
 	Logger     *zap.Logger
+	Eth1Client eth1.Client
+
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
@@ -35,19 +38,18 @@ type Options struct {
 
 // ssvNode implements Node interface
 type ssvNode struct {
-	ethNetwork            core.Network
-	slotQueue             slotqueue.Queue
-	context               context.Context
-	validatorController   validator.IController
-	logger                *zap.Logger
-	beacon                beacon.Beacon
-	genesisEpoch          uint64
-	dutyLimit             uint64
-	streamDuties          <-chan *ethpb.DutiesResponse_Duty
-	pubkeysUpdateChan     chan bool
+	ethNetwork          core.Network
+	slotQueue           slotqueue.Queue
+	context             context.Context
+	validatorController validator.IController
+	logger              *zap.Logger
+	beacon              beacon.Beacon
+	genesisEpoch        uint64
+	dutyLimit           uint64
+	streamDuties        <-chan *ethpb.DutiesResponse_Duty
+	pubkeysUpdateChan   chan bool
 
-	//eth1Client eth1.Eth1
-	// add eth1Client and listen to its events
+	eth1Client eth1.Client
 }
 
 // New is the constructor of ssvNode
@@ -64,6 +66,7 @@ func New(opts Options) Node {
 		beacon:              *opts.Beacon,
 		// TODO do we really need to pass the whole object or just SlotDurationSec
 		slotQueue: slotQueue,
+		eth1Client: opts.Eth1Client,
 	}
 
 	return ssv
@@ -71,12 +74,20 @@ func New(opts Options) Node {
 
 // Start implements Node interface
 func (n *ssvNode) Start() error {
+	n.startEth1()
+
 	n.validatorController.StartValidators()
 	n.startStreamDuties()
-	validatorChan := n.validatorController.NewValidatorChan()
+
+	validatorsSubject := n.validatorController.Subject()
+	cnValidators, err := validatorsSubject.Register("SsvNodeObserver")
+	if err != nil {
+		n.logger.Error("failed to register on validators events subject", zap.Error(err))
+	}
+
 	for {
 		select {
-		case <- validatorChan:
+		case <-cnValidators:
 			n.startStreamDuties()
 			continue
 		case <-n.pubkeysUpdateChan:
@@ -126,6 +137,21 @@ func (n *ssvNode) Start() error {
 				}
 			}(duty)
 		}
+	}
+}
+
+func (n *ssvNode) startEth1() {
+	// setup validator controller to listen to ValidatorAdded events
+	cn, err := n.eth1Client.Subject().Register("ValidatorControllerObserver")
+	if err != nil {
+		n.logger.Error("failed to register on contract events subject", zap.Error(err))
+	}
+	go n.validatorController.ListenToEth1Events(cn)
+
+	// starts the eth1 events subscription
+	err = n.eth1Client.Start()
+	if err != nil {
+		n.logger.Error("failed to start eth1 client", zap.Error(err))
 	}
 }
 
