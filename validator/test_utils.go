@@ -124,11 +124,11 @@ func (t *testBeacon) SubmitAttestation(ctx context.Context, attestation *ethpb.A
 	return nil
 }
 
-func (t *testBeacon) GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error) {
+func (t *testBeacon) GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error) {
+func (t *testBeacon) SignAggregation(ctx context.Context, data *proto.InputValue_Aggregation, duty *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
 	return nil, nil
 }
 

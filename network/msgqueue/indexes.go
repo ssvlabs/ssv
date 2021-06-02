@@ -12,7 +12,7 @@ func IBFTRoundIndexKey(lambda []byte, round uint64) string {
 }
 func iBFTMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		if msg.Type == network.NetworkMsg_IBFTType {
+		if msg.Type == network.NetworkMsg_IBFTType { // TODO verify validator pubkey? && futy type?
 			return []string{
 				IBFTRoundIndexKey(msg.Lambda, msg.SignedMessage.Message.Round),
 			}
@@ -27,7 +27,7 @@ func SigRoundIndexKey(lambda []byte) string {
 }
 func sigMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		if msg.Type == network.NetworkMsg_SignatureType {
+		if msg.Type == network.NetworkMsg_SignatureType { // TODO verify validator pubkey? && futy type?
 			return []string{
 				SigRoundIndexKey(msg.Lambda),
 			}

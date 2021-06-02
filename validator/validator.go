@@ -53,18 +53,11 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 	msgQueue := msgqueue.New()
 
 	ibfts := make(map[beacon.Role]ibft.IBFT)
-	ibfts[beacon.RoleAttester] = ibft.New(
-		logger,
-		ibftStorage,
-		opt.Network,
-		msgQueue,
-		&proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   opt.Share.Committee,
-		},
-		opt.Share,
-	)
+	ibfts[beacon.RoleAttester] = setupIbftController(logger, ibftStorage, opt.Network, msgQueue, opt.Share)
+	ibfts[beacon.RoleAggregator] = setupIbftController(logger, ibftStorage, opt.Network, msgQueue, opt.Share)
+
 	go ibfts[beacon.RoleAttester].Init()
+	go ibfts[beacon.RoleAggregator].Init()
 
 	return &Validator{
 		ctx:                        opt.Context,
@@ -125,4 +118,18 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(v.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(v.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
+}
+
+func setupIbftController(logger *zap.Logger, ibftStorage collections.Iibft, network network.Network, msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.IBFT {
+	return ibft.New(
+		logger,
+		ibftStorage,
+		network,
+		msgQueue,
+		&proto.InstanceParams{
+			ConsensusParams: proto.DefaultConsensusParams(),
+			IbftCommittee:   share.Committee,
+		},
+		share,
+	)
 }

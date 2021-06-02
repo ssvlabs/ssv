@@ -136,18 +136,23 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		}
 		inputByts, err = json.Marshal(d)
 		if err != nil {
-			return 0, nil, nil, errors.Errorf("failed on attestation role: %s", role.String())
+			return 0, nil, nil, errors.Errorf("failed to marshal on attestation role: %s", role.String())
 		}
 		valCheckInstance = &valcheck.AttestationValueCheck{}
-	//case beacon.RoleAggregator:
-	//	aggData, err := v.beacon.GetAggregationData(ctx, slot, duty.GetCommitteeIndex())
-	//	if err != nil {
-	//		return 0, nil, errors.Wrap(err, "failed to get aggregation data")
-	//	}
-	//
-	//	inputValue.Data = &proto.InputValue_AggregationData{
-	//		AggregationData: aggData,
-	//	}
+	case beacon.RoleAggregator:
+		aggData, err := v.beacon.GetAggregationData(ctx, duty, v.Share.PublicKey, v.Share.ShareKey)
+		if err != nil {
+			return 0, nil, nil, errors.Wrap(err, "failed to get aggregation data")
+		}
+
+		d := &proto.InputValue_AggregationData{
+			AggregationData: aggData,
+		}
+		inputByts, err = json.Marshal(d)
+		if err != nil {
+			return 0, nil, nil, errors.Errorf("failed to marshal on aggregation role: %s", role.String())
+		}
+	//	 TODO need to add valCheck
 	//case beacon.RoleProposer:
 	//	block, err := v.beacon.GetProposalData(ctx, slot)
 	//	if err != nil {
@@ -162,11 +167,6 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	}
 
 	l := logger.With(zap.String("role", role.String()))
-
-	if err != nil {
-		return 0, nil, nil, errors.Wrap(err, "failed to marshal input value")
-	}
-
 	identifier := []byte(fmt.Sprintf("%d_%s", slot, role.String()))
 
 	if _, ok := v.ibfts[role]; !ok {

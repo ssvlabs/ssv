@@ -40,7 +40,7 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
-			if bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk) { // making sure the msg is relevant to the share only
+			if bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk) { // making sure the msg is relevant to the share only TODO need to verify duty type too
 				i.ProcessDecidedMessage(msg)
 			}
 		}
@@ -52,7 +52,7 @@ func (i *ibftImpl) listenToSyncMessages() {
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan {
-			i.ProcessSyncMessage(msg)
+			i.ProcessSyncMessage(msg) // TODO verify duty type
 		}
 	}()
 }

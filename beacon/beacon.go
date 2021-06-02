@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
@@ -50,10 +51,10 @@ type Beacon interface {
 	SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64, key *bls.PublicKey) error
 
 	// GetAggregationData returns aggregation data for the given slot and committee index
-	GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error)
+	GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error)
 
 	// SignAggregation signs the given aggregation data
-	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error)
+	SignAggregation(ctx context.Context, data *proto.InputValue_Aggregation, duty *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error)
 
 	// SubmitAggregation submits the given signed aggregation data
 	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
