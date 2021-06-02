@@ -3,7 +3,6 @@ package beacon
 import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -60,10 +59,10 @@ type Beacon interface {
 	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
 
 	// GetProposalData returns proposal block for the given slot
-	GetProposalData(ctx context.Context, slot uint64, duty slotqueue.Duty) (*ethpb.BeaconBlock, error)
+	GetProposalData(ctx context.Context, slot uint64, duty *bls.SecretKey) (*ethpb.BeaconBlock, error)
 
 	// SignProposal signs the given proposal block
-	SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) (*ethpb.SignedBeaconBlock, error)
+	SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty *bls.SecretKey) (*ethpb.SignedBeaconBlock, error)
 
 	// SubmitProposal submits the given signed block
 	SubmitProposal(ctx context.Context, block *ethpb.SignedBeaconBlock) error

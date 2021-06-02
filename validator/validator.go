@@ -55,9 +55,11 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = setupIbftController(logger, ibftStorage, opt.Network, msgQueue, opt.Share)
 	ibfts[beacon.RoleAggregator] = setupIbftController(logger, ibftStorage, opt.Network, msgQueue, opt.Share)
+	ibfts[beacon.RoleProposer] = setupIbftController(logger, ibftStorage, opt.Network, msgQueue, opt.Share)
 
-	go ibfts[beacon.RoleAttester].Init()
-	go ibfts[beacon.RoleAggregator].Init()
+	for _, ib := range ibfts { // init all ibfts
+		go ib.Init()
+	}
 
 	return &Validator{
 		ctx:                        opt.Context,

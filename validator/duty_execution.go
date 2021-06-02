@@ -152,16 +152,21 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		if err != nil {
 			return 0, nil, nil, errors.Errorf("failed to marshal on aggregation role: %s", role.String())
 		}
-	//	 TODO need to add valCheck
-	//case beacon.RoleProposer:
-	//	block, err := v.beacon.GetProposalData(ctx, slot)
-	//	if err != nil {
-	//		return 0, nil, errors.Wrap(err, "failed to get proposal block")
-	//	}
-	//
-	//	inputValue.Data = &proto.InputValue_BeaconBlock{
-	//		BeaconBlock: block,
-	//	}
+		valCheckInstance = &valcheck.AggregatorValueCheck{}
+	case beacon.RoleProposer:
+		block, err := v.beacon.GetProposalData(ctx, slot, v.Share.ShareKey)
+		if err != nil {
+			return 0, nil, nil, errors.Wrap(err, "failed to get proposal block")
+		}
+
+		d := &proto.InputValue_BeaconBlock{
+			BeaconBlock: block,
+		}
+		inputByts, err = json.Marshal(d)
+		if err != nil {
+			return 0, nil, nil, errors.Errorf("failed to marshal on proposer role: %s", role.String())
+		}
+		valCheckInstance = &valcheck.ProposerValueCheck{}
 	default:
 		return 0, nil, nil, errors.Errorf("unknown role: %s", role.String())
 	}
