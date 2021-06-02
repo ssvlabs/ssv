@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"go.uber.org/zap"
 	"time"
@@ -40,6 +41,7 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
+			validateMsg(msg)
 			if bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk) { // making sure the msg is relevant to the share only TODO need to verify duty type too
 				i.ProcessDecidedMessage(msg)
 			}
@@ -51,8 +53,14 @@ func (i *ibftImpl) listenToSyncMessages() {
 	// sync messages
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
-		for msg := range syncChan {
+		for msg := range syncChan { // TODO add validator pubkey validation
 			i.ProcessSyncMessage(msg) // TODO verify duty type
 		}
 	}()
+}
+
+func validateMsg(msg *proto.SignedMessage) {
+	//if bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk) {
+	//
+	//}
 }

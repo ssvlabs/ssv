@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
@@ -49,9 +48,9 @@ type controller struct {
 	slotQueue                  slotqueue.Queue
 	beacon                     beacon.Beacon
 	// TODO remove after IBFT refactor
-	network     network.Network
-	ibftStorage collections.IbftStorage
-	ethNetwork  *core.Network
+	network    network.Network
+	db         basedb.IDb
+	ethNetwork *core.Network
 
 	validatorsMap    map[string]*Validator
 	newValidatorChan chan *Validator
@@ -59,8 +58,6 @@ type controller struct {
 
 // NewController creates new validator controller
 func NewController(options ControllerOptions) IController {
-	ibftStorage := collections.NewIbft(options.DB, options.Logger, "attestation")
-
 	collection := validatorstorage.NewCollection(validatorstorage.CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
@@ -78,11 +75,11 @@ func NewController(options ControllerOptions) IController {
 		signatureCollectionTimeout: options.SignatureCollectionTimeout,
 		slotQueue:                  options.SlotQueue,
 		beacon:                     options.Beacon,
-		ibftStorage:                ibftStorage,
+		db:                         options.DB,
 		network:                    options.Network,
 		ethNetwork:                 options.ETHNetwork,
 		newValidatorChan:           make(chan *Validator),
-		validatorsMap: 				make(map[string]*Validator),
+		validatorsMap:              make(map[string]*Validator),
 	}
 
 	options.Eth1Client.GetContractEvent().Register(&ctrl)
@@ -108,7 +105,7 @@ func (c *controller) setupValidators() map[string]*Validator {
 			Network:                    c.network,
 			ETHNetwork:                 c.ethNetwork,
 			Beacon:                     c.beacon,
-		}, &c.ibftStorage)
+		}, c.db)
 	}
 	c.validatorsMap = res
 	c.logger.Info("setup validators done successfully", zap.Int("count", len(res)))
@@ -176,7 +173,7 @@ func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Sh
 		SlotQueue:                  c.slotQueue,
 		SignatureCollectionTimeout: c.signatureCollectionTimeout,
 	}
-	v := New(validatorOpts, &c.ibftStorage)
+	v := New(validatorOpts, c.db)
 	c.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v)
 	// start validator
 	if err := v.Start(); err != nil {
