@@ -24,7 +24,7 @@ func (n *p2pNetwork) BroadcastDecided(msg *proto.SignedMessage) error {
 		return errors.Wrap(err, "failed to get topic")
 	}
 
-	n.logger.Debug("Broadcasting to topic", zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
+	n.logger.Debug("Broadcasting to topic", zap.Any("lambda", msg.Message.Lambda), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
 	return topic.Publish(n.ctx, msgBytes)
 }
 
