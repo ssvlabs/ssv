@@ -2,9 +2,6 @@ package slotqueue
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -26,17 +23,6 @@ type Queue interface {
 type queue struct {
 	data   *cache.Cache
 	ticker *slotutil.SlotTicker
-}
-
-// Duty struct  TODO: need to remove
-type Duty struct {
-	NodeID uint64
-	Duty   *ethpb.DutiesResponse_Duty
-	// ValidatorPK is the validator's public key
-	ValidatorPK *bls.PublicKey
-	// ShareSK is this node's share secret key
-	ShareSK   *bls.SecretKey
-	Committee map[uint64]*proto.Node
 }
 
 // New is the constructor of queue
