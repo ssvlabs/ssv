@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"sync"
+	"time"
 )
 
 type config struct {
@@ -87,7 +88,10 @@ var StartExporterNodeCmd = &cobra.Command{
 		syncProcess.Add(1)
 		go func() {
 			Logger.Debug("about to sync exporter")
-			defer syncProcess.Done()
+			defer func() {
+				time.Sleep(100 * time.Millisecond)
+				syncProcess.Done()
+			}()
 			err := exporterNode.Sync()
 			if err != nil {
 				Logger.Error("failed to sync exporter node", zap.Error(err))

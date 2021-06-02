@@ -79,7 +79,7 @@ func (n *ssvNode) Start() error {
 	n.validatorController.StartValidators()
 	n.startStreamDuties()
 
-	validatorsSubject := n.validatorController.Subject()
+	validatorsSubject := n.validatorController.ValidatorSubject()
 	cnValidators, err := validatorsSubject.Register("SsvNodeObserver")
 	if err != nil {
 		n.logger.Error("failed to register on validators events subject", zap.Error(err))
@@ -143,7 +143,7 @@ func (n *ssvNode) Start() error {
 
 func (n *ssvNode) startEth1() {
 	// setup validator controller to listen to ValidatorAdded events
-	cn, err := n.eth1Client.Subject().Register("ValidatorControllerObserver")
+	cn, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
 	if err != nil {
 		n.logger.Error("failed to register on contract events subject", zap.Error(err))
 	}

@@ -60,7 +60,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 }
 
 // Subject returns the events subject
-func (ec *eth1Client) Subject() pubsub.SubjectBase {
+func (ec *eth1Client) EventsSubject() pubsub.SubjectBase {
 	return ec.outSubject
 }
 

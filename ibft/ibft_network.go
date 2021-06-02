@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+
+
 func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 	for {
 		time.Sleep(time.Second)
@@ -34,8 +36,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 			})
 		}
 	}()
+}
 
-	// decided messages
+func (i *ibftImpl) listenToNetworkDecidedMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {

@@ -19,16 +19,16 @@ type Share struct {
 
 //  serializedShare struct
 type serializedShare struct {
-	NodeID     uint64
-	ShareKey   []byte
+	NodeID    uint64
+	ShareKey  []byte
 	Committee map[uint64]*proto.Node
 }
 
 // Serialize share to []byte
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
-		NodeID:     s.NodeID,
-		ShareKey:   s.ShareKey.Serialize(),
+		NodeID:    s.NodeID,
+		ShareKey:  s.ShareKey.Serialize(),
 		Committee: s.Committee,
 	}
 
@@ -48,17 +48,20 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		return nil, errors.Wrap(err, "Failed to get val value")
 	}
 	shareSecret := &bls.SecretKey{} // need to decode secret separately cause of encoding has private var limit in bls.SecretKey struct
-	if err := shareSecret.Deserialize(value.ShareKey); err != nil {
-		return nil, errors.Wrap(err, "Failed to get key secret")
+	// in exporter scenario, share key should be nil
+	if value.ShareKey != nil && len(value.ShareKey) > 0 {
+		if err := shareSecret.Deserialize(value.ShareKey); err != nil {
+			return nil, errors.Wrap(err, "Failed to get key secret")
+		}
 	}
 	pubKey := &bls.PublicKey{}
 	if err := pubKey.Deserialize(obj.Key); err != nil {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
 	return &Share{
-		NodeID:      value.NodeID,
+		NodeID:    value.NodeID,
 		PublicKey: pubKey,
-		ShareKey:    shareSecret,
-		Committee:   value.Committee,
+		ShareKey:  shareSecret,
+		Committee: value.Committee,
 	}, nil
 }
