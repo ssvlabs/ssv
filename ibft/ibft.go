@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -45,6 +46,7 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
+	role                beacon.Role
 	currentInstance     *Instance
 	currentInstanceLock sync.Locker
 	logger              *zap.Logger
@@ -60,15 +62,9 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(
-	logger *zap.Logger,
-	storage collections.Iibft,
-	network network.Network,
-	queue *msgqueue.MessageQueue,
-	params *proto.InstanceParams,
-	ValidatorShare  *storage.Share,
-) IBFT {
+func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams, ValidatorShare *storage.Share, ) IBFT {
 	ret := &ibftImpl{
+		role:                role,
 		ibftStorage:         storage,
 		currentInstanceLock: &sync.Mutex{},
 		logger:              logger,

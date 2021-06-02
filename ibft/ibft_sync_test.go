@@ -78,14 +78,7 @@ func populatedIbft(
 		ShareKey:    sks[nodeID],
 		Committee:   nodes,
 	}
-	ret := New(
-		zap.L(),
-		ibftStorage,
-		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
-		queue,
-		params,
-		share,
-	)
+	ret := New(0, zap.L(), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, params, share)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
 	ret.(*ibftImpl).listenToSyncMessages()

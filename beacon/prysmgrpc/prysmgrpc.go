@@ -134,6 +134,7 @@ func (b *prysmGRPC) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Duties
 			return nil, errors.Wrap(err, "could not check if a validator is an aggregator")
 		}
 
+
 		if aggregator {
 			roles = append(roles, beacon.RoleAggregator)
 		}
