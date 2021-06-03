@@ -37,7 +37,8 @@ RUN apk -v --update add ca-certificates bash make  bind-tools && \
     rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
-COPY ./Makefile .env* config/* ./
+COPY ./Makefile .env* ./
+COPY config/* ./config/
 
 
 # Expose port for load balancing

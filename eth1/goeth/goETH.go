@@ -42,6 +42,7 @@ type eth1Client struct {
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	logger := opts.Logger
 	// Create an IPC based RPC connection to a remote node
+	logger.Info("dail beacon node", zap.String("addr", opts.NodeAddr))
 	conn, err := ethclient.Dial(opts.NodeAddr)
 	if err != nil {
 		logger.Error("Failed to connect to the Ethereum client", zap.Error(err))
