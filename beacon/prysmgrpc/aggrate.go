@@ -81,6 +81,7 @@ func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen 
 
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
+
 	return val, nil
 }
 
