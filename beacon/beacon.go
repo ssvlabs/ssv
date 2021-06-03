@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
