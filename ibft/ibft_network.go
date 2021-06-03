@@ -54,9 +54,7 @@ func (i *ibftImpl) listenToSyncMessages() {
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan { // TODO add validator pubkey validation
-			if i.validateMsg(msg.Msg.SignedMessages[0]) {
-				i.ProcessSyncMessage(msg) // TODO verify duty type
-			}
+			i.ProcessSyncMessage(msg) // TODO verify duty type
 		}
 	}()
 }
@@ -64,6 +62,6 @@ func (i *ibftImpl) listenToSyncMessages() {
 // validateMsg for each ibft controller by pubkey, role
 func (i *ibftImpl) validateMsg(msg *proto.SignedMessage) bool {
 	valid := bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk)
-	valid = i.role.String() == strings.Split(string(msg.Message.Lambda), "_ ")[1]
+	valid = i.role.String() == strings.Split(string(msg.Message.Lambda), "_")[1]
 	return valid
 }
