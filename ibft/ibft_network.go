@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"go.uber.org/zap"
+	"strings"
 	"time"
 )
 
@@ -58,8 +59,9 @@ func (i *ibftImpl) listenToSyncMessages() {
 	}()
 }
 
+// validateMsg for each ibft controller by pubkey, role
 func (i *ibftImpl) validateMsg(msg *proto.SignedMessage) bool {
 	valid := bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk)
-	valid = i.role.String() == string(msg.Message.Lambda)
+	valid = i.role.String() == strings.Split(string(msg.Message.Lambda), "_ ")[1]
 	return valid
 }
