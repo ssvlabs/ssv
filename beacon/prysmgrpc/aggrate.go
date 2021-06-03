@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
@@ -69,14 +70,15 @@ func (b *prysmGRPC) SubmitAggregation(ctx context.Context, data *ethpb.SignedAgg
 
 // isAggregator returns true if the given slot is aggregator
 func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
-	slotSig, err := b.signSlot(ctx, slot, shareKey)
-	if err != nil {
-		return false, err
-	}
-
+	b.logger.Info("check if is aggregator", zap.Int("committee", committeeLen), zap.Uint64("slot", slot))
 	modulo := uint64(1)
 	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
 		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
+	}
+
+	slotSig, err := b.signSlot(ctx, slot, shareKey)
+	if err != nil {
+		return false, err
 	}
 
 	hash := hashutil.Hash(slotSig)
