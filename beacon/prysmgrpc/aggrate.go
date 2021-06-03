@@ -3,7 +3,7 @@ package prysmgrpc
 import (
 	"context"
 	"encoding/binary"
-	"github.com/bloxapp/ssv/ibft/proto"
+	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"time"
@@ -44,14 +44,14 @@ func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty *ethpb.DutiesRe
 }
 
 // SignAggregation signs the given aggregation data
-func (b *prysmGRPC) SignAggregation(ctx context.Context, data *proto.InputValue_Aggregation, shareKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
-	sig, err := b.aggregateAndProofSig(ctx, data.Aggregation.Message, shareKey)
+func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, shareKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
+	sig, err := b.aggregateAndProofSig(ctx, data, shareKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign aggregate and proof")
 	}
 
 	return &ethpb.SignedAggregateAttestationAndProof{
-		Message:   data.Aggregation.Message,
+		Message:   data,
 		Signature: sig,
 	}, nil
 }
@@ -84,6 +84,24 @@ func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen 
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
 
+	return val, nil
+}
+
+// isAggregator returns true if the given slot is aggregator
+func (b *prysmGRPC) IsAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
+	modulo := uint64(1)
+	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
+		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
+	}
+
+	slotSig, err := b.signSlot(ctx, slot, shareKey)
+	if err != nil {
+		return false, err
+	}
+
+	hash := hashutil.Hash(slotSig)
+	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
+	fmt.Printf("%b | %b \n", binary.LittleEndian.Uint64(hash[:8]), binary.LittleEndian.Uint64(hash[:8])%modulo)
 	return val, nil
 }
 

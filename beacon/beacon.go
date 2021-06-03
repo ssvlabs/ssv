@@ -53,7 +53,7 @@ type Beacon interface {
 	GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error)
 
 	// SignAggregation signs the given aggregation data
-	SignAggregation(ctx context.Context, data *proto.InputValue_Aggregation, duty *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error)
+	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error)
 
 	// SubmitAggregation submits the given signed aggregation data
 	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
@@ -71,4 +71,6 @@ type Beacon interface {
 	// validator is known to not have a roles at the at slot. Returns UNKNOWN if the
 	// validator assignments are unknown. Otherwise returns a valid validatorRole map.
 	RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) ([]Role, error)
+
+	IsAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error)
 }

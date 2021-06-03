@@ -62,7 +62,7 @@ func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beac
 		if err := json.Unmarshal(decidedValue, s); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal aggregator")
 		}
-		signedAggregation, e := v.beacon.SignAggregation(ctx, s, v.Share.ShareKey)
+		signedAggregation, e := v.beacon.SignAggregation(ctx, s.Aggregation.Message, v.Share.ShareKey)
 		if e != nil{
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
