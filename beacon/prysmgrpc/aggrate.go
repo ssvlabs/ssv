@@ -70,7 +70,6 @@ func (b *prysmGRPC) SubmitAggregation(ctx context.Context, data *ethpb.SignedAgg
 
 // isAggregator returns true if the given slot is aggregator
 func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
-	b.logger.Info("check if is aggregator", zap.Int("committee", committeeLen), zap.Uint64("slot", slot))
 	modulo := uint64(1)
 	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
 		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
@@ -84,6 +83,7 @@ func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen 
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
 
+	b.logger.Info("check if is aggregator", zap.Int("committee", committeeLen), zap.Uint64("slot", slot), zap.Any("hash little endian", binary.LittleEndian.Uint64(hash[:8])), zap.Uint64("modulo", binary.LittleEndian.Uint64(hash[:8])%modulo))
 	return val, nil
 }
 
