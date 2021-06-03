@@ -54,7 +54,9 @@ func (i *ibftImpl) listenToSyncMessages() {
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan { // TODO add validator pubkey validation
-			i.ProcessSyncMessage(msg) // TODO verify duty type
+			if i.validateMsg(msg.Msg.SignedMessages[0]) {
+				i.ProcessSyncMessage(msg) // TODO verify duty type
+			}
 		}
 	}()
 }
