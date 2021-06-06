@@ -34,6 +34,8 @@ const (
 	// MsgChanSize is the buffer size of the message channel
 	MsgChanSize = 128
 
+	DefaultRequestTimeout = 5 * time.Second
+
 	topicFmt = "bloxstaking.ssv.%s"
 
 	syncStreamProtocol = "/sync/0.0.1"
@@ -64,7 +66,10 @@ type p2pNetwork struct {
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	// init empty topics map
 	cfg.Topics = make(map[string]*pubsub.Topic)
-
+	// defaults request timeout if not provided
+	if cfg.RequestTimeout == 0 {
+		cfg.RequestTimeout = DefaultRequestTimeout
+	}
 	n := &p2pNetwork{
 		ctx:           ctx,
 		cfg:           cfg,
