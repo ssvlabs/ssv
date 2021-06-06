@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
+	"time"
 )
 
 type config struct {
@@ -34,6 +35,8 @@ type config struct {
 	UDPPort                    int            `yaml:"UdpPort" env-default:"12000"`
 	HostAddress                string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
 	HostDNS                    string         `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
+
+	RequestTimeout time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 }
 
 var cfg config
@@ -95,6 +98,7 @@ var StartNodeCmd = &cobra.Command{
 			TCPPort:           cfg.TCPPort,
 			HostDNS:           cfg.HostDNS,
 			HostAddress:       cfg.HostAddress,
+			RequestTimeout:    cfg.RequestTimeout,
 		}
 		network, err := p2p.New(cmd.Context(), Logger, &p2pCfg)
 		if err != nil {

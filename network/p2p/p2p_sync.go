@@ -3,11 +3,10 @@ package p2p
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 func peerToString(peerID peer.ID) string {
@@ -67,30 +66,32 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 	}()
 
-	var resMsg *network.Message
-	var resMsgLock sync.Mutex
-	go func() {
-		res, resErr := readMessageData(stream)
-
-		resMsgLock.Lock()
-		defer resMsgLock.Unlock()
-		resMsg = res
-		err = resErr
-	}()
-
-	time.Sleep(n.cfg.RequestTimeout)
-
-	resMsgLock.Lock()
-	defer resMsgLock.Unlock()
-	if resMsg == nil { // no response
-		err = errors.New("no response for sync request")
+	readMsgData := func() (interface{}, error) {
+		msg, err := readMessageData(stream)
+		if msg == nil {
+			msg = &network.Message{}
+		}
+		return *msg, err
+	}
+	completed, res, err := tasks.ExecWithTimeout(n.ctx, readMsgData, n.cfg.RequestTimeout)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read sync msg")
+	}
+	if !completed {
+		n.logger.Debug("sync request timeout")
 	}
 
-	return resMsg, err
+	resMsg, ok := res.(network.Message)
+	if !ok || resMsg.SyncMessage == nil {
+		return nil, errors.New("no response for sync request")
+	}
+	n.logger.Debug("got sync response",
+		zap.String("FromPeerID", resMsg.SyncMessage.GetFromPeerID()))
+
+	return &resMsg, nil
 }
 
-// BroadcastSyncMessage broadcasts a sync message to peers.
-// If peer list is nil, broadcasts to all.
+// GetHighestDecidedInstance asks peers for SyncMessage
 func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	peerID, err := peerFromString(peerStr)
 	if err != nil {

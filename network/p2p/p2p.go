@@ -64,7 +64,6 @@ type p2pNetwork struct {
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	// init empty topics map
 	cfg.Topics = make(map[string]*pubsub.Topic)
-
 	n := &p2pNetwork{
 		ctx:           ctx,
 		cfg:           cfg,

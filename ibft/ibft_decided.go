@@ -61,7 +61,12 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		}
 		// sync
 		s := sync.NewHistorySync(i.logger, msg.Message.ValidatorPk, i.network, i.ibftStorage, i.validateDecidedMsg)
-		go s.Start()
+		go func() {
+			err := s.Start()
+			if err != nil {
+				i.logger.Error("history sync failed", zap.Error(err))
+			}
+		}()
 	}
 }
 
