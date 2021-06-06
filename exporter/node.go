@@ -12,12 +12,14 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math/big"
+	"time"
 )
 
 const (
@@ -52,7 +54,7 @@ type exporter struct {
 	logger           *zap.Logger
 	network          network.Network
 	eth1Client       eth1.Client
-	ibftDisptcher    ibft.Dispatcher
+	ibftDisptcher    tasks.Dispatcher
 
 	httpHandlers apiHandlers
 }
@@ -73,7 +75,11 @@ func New(opts Options) Exporter {
 		logger:           opts.Logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
-		ibftDisptcher:    ibft.NewDispatcher(context.TODO(), opts.Logger),
+		ibftDisptcher:    tasks.NewDispatcher(tasks.DispatcherOptions{
+			Ctx: context.TODO(),
+			Logger: opts.Logger,
+			Interval: 2 * time.Second,
+		}),
 	}
 	e.httpHandlers = newHTTPHandlers(&e, opts.APIPort)
 	go e.HandleEth1Events()
@@ -84,20 +90,24 @@ func New(opts Options) Exporter {
 // Start starts the exporter
 func (exp *exporter) Start() error {
 	exp.logger.Info("exporter.Start()")
-	//go func() {
-	//	shares, err1 := exp.validatorStorage.GetAllValidatorsShare()
-	//	if err1 != nil {
-	//		exp.logger.Debug("could not read all validators shares", zap.Error(err1))
-	//	}
-	//	exp.logger.Debug("all validators shares", zap.Int("len", len(shares)))
-	//	for _, share := range shares {
-	//		exp.syncIbftData(share.PublicKey)
-	//	}
-	//}()
-	err := exp.eth1Client.Start()
+	pubKeyStr := "8ed3a53383a2c9b9ab0ab5437985ac443a8d50bf50b5f69eeaf9850285aeaad703beff14e3d15b4e6b5702f446a97db4"
+	pubKey, err := hex.DecodeString(pubKeyStr)
 	if err != nil {
-		exp.logger.Error("could not start eth1 client")
+		return err
 	}
+	share, err := exp.validatorStorage.GetValidatorsShare(pubKey)
+	if err != nil {
+		return err
+	}
+	err = exp.triggerIBFTSync(share.PublicKey)
+	if err != nil {
+		return err
+	}
+	//go exp.validatorSyncInterval()
+	//err := exp.eth1Client.Start()
+	//if err != nil {
+	//	exp.logger.Error("could not start eth1 client")
+	//}
 	return exp.httpHandlers.Listen()
 }
 
@@ -106,7 +116,7 @@ func (exp *exporter) Start() error {
 //  2. registry data (validator/operator added) from eth1 contract
 func (exp *exporter) Sync() error {
 	exp.logger.Info("exporter.Sync()")
-	go exp.ibftDisptcher.StartInterval()
+	go exp.ibftDisptcher.Start()
 	offset := exp.syncOffset()
 	return exp.eth1Client.Sync(offset)
 }
@@ -182,9 +192,12 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
 		return errors.Wrap(err, "failed to save validator share")
 	}
+
 	exp.logger.Debug("validator share was saved", zap.String("pubKey", pubKeyHex))
 	// triggers a sync for the given validator
-	exp.syncIbftData(validatorShare.PublicKey)
+	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to trigger ibft sync")
+	}
 
 	return nil
 }
@@ -195,28 +208,52 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	return nil
 }
 
-func (exp *exporter) syncIbftData(validatorPubKey *bls.PublicKey) error {
+func (exp *exporter) validatorSyncInterval() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			exp.triggerIBFTSyncAll()
+		}
+	}
+}
+
+func (exp *exporter) triggerIBFTSyncAll() {
+	shares, err := exp.validatorStorage.GetAllValidatorsShare()
+	if err != nil {
+		exp.logger.Error("could not read all validators shares", zap.Error(err))
+	}
+	exp.logger.Debug("all validators shares", zap.Int("len", len(shares)))
+	for _, share := range shares {
+		exp.triggerIBFTSync(share.PublicKey)
+	}
+}
+
+func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
 	exp.logger.Info("syncing ibft data for validator", zap.String("pubKey", validatorPubKey.GetHexString()))
-	ibftInstance := ibft.NewIbftReadOnly(ibft.IbftReadOnlyOptions{
-		Logger:      exp.logger,
-		IbftStorage: exp.ibftStorage,
-		Network:     exp.network,
+	ibftInstance := ibft.NewIbftReadOnly(ibft.ReaderOptions{
+		Logger:  exp.logger,
+		Storage: exp.ibftStorage,
+		Network: exp.network,
 		Params: &proto.InstanceParams{
 			ConsensusParams: proto.DefaultConsensusParams(),
 			IbftCommittee:   validatorShare.Committee,
 		},
 		ValidatorShare: validatorShare,
 	})
-	// subscribe to topic so we could find relevant nodes (required by Network::AllPeers)
-	err = exp.network.SubscribeToValidatorNetwork(validatorPubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not subscribe to validator channel")
-	}
-	exp.ibftDisptcher.Queue(ibftInstance)
+
+	t := newIbftSyncTask(ibftInstance, validatorPubKey.GetHexString())
+	exp.ibftDisptcher.Queue(t)
 
 	return nil
+}
+
+func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
+	tid := fmt.Sprintf("ibft:sync/%s", pubKeyHex)
+	return *tasks.NewTask(ibftReader.Sync, tid)
 }

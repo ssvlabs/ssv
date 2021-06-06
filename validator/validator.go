@@ -82,7 +82,7 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 
 // Start validator
 func (v *Validator) Start() error {
-	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
+	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey, false); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()

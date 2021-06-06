@@ -170,7 +170,7 @@ func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *netwo
 }
 
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
-func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, silent bool) error {
 	return nil
 }
 

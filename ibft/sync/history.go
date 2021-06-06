@@ -1,11 +1,12 @@
 package sync
 
 import (
-	"errors"
+	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -38,19 +39,17 @@ func NewHistorySync(
 }
 
 // Start the sync
-func (s *HistorySync) Start() {
+func (s *HistorySync) Start() error {
 	// fetch remote highest
 	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
-		s.logger.Error("could not fetch highest instance during sync", zap.Error(err))
-		return
+		return errors.Wrap(err, "could not fetch highest instance during sync")
 	}
 
 	// fetch local highest
 	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
 	if err != nil && err.Error() != collections.EntryNotFoundError { // if not found continue with sync
-		s.logger.Error("could not fetch local highest instance during sync", zap.Error(err))
-		return
+		return errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 
 	syncStartSeqNumber := uint64(0)
@@ -61,23 +60,25 @@ func (s *HistorySync) Start() {
 	// check we are behind and need to sync
 	if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
 		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber))
-		return
+		return nil
 	}
 
 	// fetch, validate and save missing data
 	highestSaved, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
 	if err != nil {
-		s.logger.Error("could not fetch decided by range during sync", zap.Error(err))
+		return errors.Wrap(err, "could not fetch decided by range during sync")
 	}
 
 	// save highest
 	if highestSaved != nil {
 		if err := s.ibftStorage.SaveHighestDecidedInstance(highestSaved); err != nil {
-			s.logger.Error("could not save highest decided msg during sync", zap.Error(err))
+			return errors.Wrap(err, "could not save highest decided msg during sync")
 		}
 	}
 
 	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber))
+
+	return nil
 }
 
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
@@ -105,7 +106,8 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 				ValidatorPk: s.validatorPK,
 			})
 			if err != nil {
-				s.logger.Error("received error when fetching highest decided", zap.Error(err))
+				s.logger.Error("received error when fetching highest decided", zap.Error(err),
+					zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
 			} else {
 				results[index] = res
 			}
@@ -124,7 +126,8 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 		}
 
 		if len(res.SignedMessages) != 1 || res.SignedMessages[0] == nil {
-			s.logger.Debug("received invalid highest decided", zap.Error(err))
+			s.logger.Debug("received invalid highest decided", zap.Error(err),
+				zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
 			continue
 		}
 
@@ -132,7 +135,8 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 
 		// validate
 		if err := s.validateDecidedMsgF(signedMsg); err != nil {
-			s.logger.Debug("received invalid highest decided", zap.Error(err))
+			s.logger.Debug("received invalid highest decided", zap.Error(err),
+				zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
 			continue
 		}
 
@@ -147,6 +151,8 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	}
 
 	if ret == nil {
+		s.logger.Debug("could not fetch highest decided from peers",
+			zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
 		return nil, "", errors.New("could not fetch highest decided from peers")
 	}
 

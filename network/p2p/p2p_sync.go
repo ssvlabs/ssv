@@ -1,13 +1,13 @@
 package p2p
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 func peerToString(peerID peer.ID) string {
@@ -68,29 +68,24 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 	}()
 
 	var resMsg *network.Message
-	var resMsgLock sync.Mutex
-	go func() {
-		res, resErr := readMessageData(stream)
 
-		resMsgLock.Lock()
-		defer resMsgLock.Unlock()
-		resMsg = res
-		err = resErr
-	}()
-
-	time.Sleep(n.cfg.RequestTimeout)
-
-	resMsgLock.Lock()
-	defer resMsgLock.Unlock()
-	if resMsg == nil { // no response
+	readMsgData := func() {
+		resMsg, err = readMessageData(stream)
+	}
+	if completed := tasks.ExecWithTimeout(readMsgData, n.cfg.RequestTimeout, n.ctx); !completed {
+		n.logger.Debug("sync request timeout")
+	} else if resMsg == nil { // no response
 		err = errors.New("no response for sync request")
+	} else {
+		n.logger.Debug("got sync response",
+			zap.String("ValidatorPk", hex.EncodeToString(resMsg.SyncMessage.GetValidatorPk())),
+			zap.String("FromPeerID", resMsg.SyncMessage.GetFromPeerID()))
 	}
 
 	return resMsg, err
 }
 
-// BroadcastSyncMessage broadcasts a sync message to peers.
-// If peer list is nil, broadcasts to all.
+// GetHighestDecidedInstance asks peers for SyncMessage
 func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	peerID, err := peerFromString(peerStr)
 	if err != nil {

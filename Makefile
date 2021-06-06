@@ -112,4 +112,4 @@ start-boot-node:
 .PHONY: start-exporter-node
 start-exporter-node:
 	@echo "Running start-exporter-node"
-	${EXPORTER_BUILD_PATH} start-node
+	${EXPORTER_BUILD_PATH} start-exporter -c=./config/config.exporter.yaml

@@ -1,4 +1,4 @@
-package ibft
+package tasks
 
 import (
 	"context"
@@ -11,10 +11,22 @@ var (
 	defaultConcurrentLimit = 10
 )
 
-// Dispatcher maintains a queue of ibft sync tasks to dispatch
+// Task represents a some function to execute
+type Task struct {
+	Fn func() error
+	ID string
+}
+
+// NewTask creates a new task
+func NewTask(fn func() error, id string) *Task {
+	t := Task{fn, id}
+	return &t
+}
+
+// Dispatcher maintains a queue of tasks to dispatch
 type Dispatcher interface {
 	// Queue adds a new task
-	Queue(Reader)
+	Queue(Task)
 	// Dispatch will dispatch the next task
 	Dispatch()
 	// Start starts ticks
@@ -54,7 +66,7 @@ type dispatcher struct {
 	logger *zap.Logger
 
 	running int
-	waiting []Reader
+	waiting []Task
 	mut     sync.RWMutex
 
 	interval        time.Duration
@@ -71,38 +83,37 @@ func NewDispatcher(opts DispatcherOptions) Dispatcher {
 		logger:          opts.Logger,
 		interval:        opts.Interval,
 		concurrentLimit: opts.Concurrent,
-		waiting:         []Reader{},
+		waiting:         []Task{},
 		mut:             sync.RWMutex{},
 		running:         0,
 	}
 	return &d
 }
 
-func (d *dispatcher) Queue(ibftReader Reader) {
+func (d *dispatcher) Queue(task Task) {
 	d.mut.Lock()
 	defer d.mut.Unlock()
 
-	d.waiting = append(d.waiting, ibftReader)
-	pubKey := ibftReader.(*reader).validatorShare.PublicKey.SerializeToHexStr()
-	d.logger.Debug("ibft sync was queued", zap.String("pubKey", pubKey))
+	d.waiting = append(d.waiting, task)
+	d.logger.Debug("task was queued", zap.String("task-id", task.ID))
 }
 
-func (d *dispatcher) nextTaskToRun() Reader {
+func (d *dispatcher) nextTaskToRun() *Task {
 	d.mut.Lock()
 	defer d.mut.Unlock()
 
 	if len(d.waiting) == 0 {
 		return nil
 	}
-	ibftReader := d.waiting[0]
+	task := d.waiting[0]
 	d.waiting = d.waiting[1:]
 	d.running++
-	return ibftReader
+	return &task
 }
 
 func (d *dispatcher) Dispatch() {
-	ibftReader := d.nextTaskToRun()
-	if ibftReader == nil {
+	task := d.nextTaskToRun()
+	if task == nil {
 		return
 	}
 	go func() {
@@ -111,13 +122,11 @@ func (d *dispatcher) Dispatch() {
 			d.running--
 			d.mut.Unlock()
 		}()
-		pubKey := ibftReader.(*reader).validatorShare.PublicKey
-		pubKeyHex := pubKey.SerializeToHexStr()
-		d.logger.Debug("ibft sync was dispatched", zap.String("pubKeyHex", pubKeyHex))
-		err := ibftReader.Sync()
+		d.logger.Debug("task was dispatched", zap.String("task-id", task.ID))
+		err := task.Fn()
 		if err != nil {
-			d.logger.Error("could not sync ibft data", zap.Error(err),
-				zap.String("pubKeyHex", pubKeyHex))
+			d.logger.Error("task failed", zap.Error(err),
+				zap.String("task-id", task.ID))
 		}
 	}()
 }

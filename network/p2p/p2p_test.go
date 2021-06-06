@@ -33,8 +33,8 @@ func TestP2PNetworker(t *testing.T) {
 
 	pk := &bls.PublicKey{}
 	require.NoError(t, pk.Deserialize(refPk))
-	require.NoError(t, peer1.SubscribeToValidatorNetwork(pk))
-	require.NoError(t, peer2.SubscribeToValidatorNetwork(pk))
+	require.NoError(t, peer1.SubscribeToValidatorNetwork(pk, false))
+	require.NoError(t, peer2.SubscribeToValidatorNetwork(pk, false))
 
 	lambda := []byte("test-lambda")
 	messageToBroadcast := &proto.SignedMessage{

@@ -66,7 +66,7 @@ type Network interface {
 	ReceivedSyncMsgChan() <-chan *SyncChanObj
 
 	// SubscribeToValidatorNetwork subscribing and listen to validator network
-	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
+	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, silent bool) error
 
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)

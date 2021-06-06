@@ -34,6 +34,8 @@ const (
 	// MsgChanSize is the buffer size of the message channel
 	MsgChanSize = 128
 
+	DefaultRequestTimeout = 5 * time.Second
+
 	topicFmt = "bloxstaking.ssv.%s"
 
 	syncStreamProtocol = "/sync/0.0.1"
@@ -64,7 +66,9 @@ type p2pNetwork struct {
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	// init empty topics map
 	cfg.Topics = make(map[string]*pubsub.Topic)
-
+	if cfg.RequestTimeout == 0 {
+		cfg.RequestTimeout = DefaultRequestTimeout
+	}
 	n := &p2pNetwork{
 		ctx:           ctx,
 		cfg:           cfg,
@@ -187,7 +191,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, silent bool) error {
 	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
 	if err != nil {
 		return errors.Wrap(err, "failed to join to Topics")
@@ -200,8 +204,11 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	}
 	n.cfg.Subs = append(n.cfg.Subs, sub)
 
-	// listen to new topic
-	n.listen(sub)
+	// listen to new topic if this is not a silent subscription
+	if !silent {
+		n.listen(sub)
+	}
+
 	return nil
 }
 
