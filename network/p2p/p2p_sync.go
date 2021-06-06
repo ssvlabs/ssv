@@ -66,22 +66,24 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 	}()
 
-	var resMsg network.Message
 	readMsgData := func() (interface{}, error) {
 		msg, err := readMessageData(stream)
+		if msg == nil {
+			msg = &network.Message{}
+		}
 		return *msg, err
 	}
 	completed, res, err := tasks.ExecWithTimeout(n.ctx, readMsgData, n.cfg.RequestTimeout)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read sync msg")
+	}
 	if !completed {
 		n.logger.Debug("sync request timeout")
 	}
-	if res == nil { // no response
-		return nil, errors.New("no response for sync request")
-	}
-	// got response, trying to csat
+
 	resMsg, ok := res.(network.Message)
 	if !ok || resMsg.SyncMessage == nil {
-		return nil, errors.New("bad response for sync request")
+		return nil, errors.New("no response for sync request")
 	}
 	n.logger.Debug("got sync response",
 		zap.String("FromPeerID", resMsg.SyncMessage.GetFromPeerID()))

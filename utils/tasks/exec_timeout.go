@@ -19,7 +19,6 @@ func ExecWithTimeout(ctx context.Context, fn Func, t time.Duration) (bool, inter
 	c := make(chan funcResult)
 
 	go func() {
-		defer close(c)
 		res, err := fn()
 		c <- funcResult{res, err}
 	}()
