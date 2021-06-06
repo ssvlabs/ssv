@@ -1,34 +1,50 @@
 package pubsub
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
+	"sync"
 	"testing"
 )
 
-func TestPubSub(t *testing.T) {
-	t.Run("Successfully Register", func(t *testing.T) {
-		s := struct {
-			BaseSubject
-			Log  types.Log
-			Data interface{}
-		}{}
+func TestSubject_Register_MultipleObservers(t *testing.T) {
+	s := NewSubject()
+	var wg sync.WaitGroup
 
-		o1 := BaseObserver{
-			ID: "BaseObserver1",
-		}
+	wg.Add(1)
+	cn1, err := s.Register("test-observer1")
+	require.NoError(t, err)
+	go func() {
+		<-cn1
+		wg.Done()
+	}()
 
-		s.Register(o1)
-		require.Equal(t, 1, len(s.ObserverList))
+	wg.Add(1)
+	cn2, err := s.Register("test-observer2")
+	require.NoError(t, err)
+	go func() {
+		e := <-cn2
+		require.Equal(t, "event", e)
+		wg.Done()
+	}()
 
-		o2 := BaseObserver{
-			ID: "BaseObserver2",
-		}
+	e := "event"
+	s.Notify(e)
 
-		s.Register(o2)
-		require.Equal(t, 2, len(s.ObserverList))
+	wg.Wait()
+}
 
-		s.Deregister(o1)
-		require.NotEqual(t, 2, len(s.ObserverList))
-	})
+func TestSubject_Deregister(t *testing.T) {
+	s := NewSubject()
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	_, err := s.Register("test-observer1")
+	require.NoError(t, err)
+	_, err = s.Register("test-observer2")
+	require.NoError(t, err)
+	require.Equal(t, 2, len(s.(*subject).observers))
+	observer := s.(*subject).observers["test-observer2"]
+	s.Deregister("test-observer2")
+	require.Equal(t, 1, len(s.(*subject).observers))
+	require.False(t, observer.active)
 }
