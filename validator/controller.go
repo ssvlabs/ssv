@@ -38,7 +38,7 @@ type IController interface {
 	StartValidators() map[string]*Validator
 	GetValidatorsPubKeys() [][]byte
 	GetValidator(pubKey string) (*Validator, bool)
-	Subject() pubsub.SubjectBase
+	Subject() pubsub.Subscriber
 }
 
 // Controller struct that manages all validator shares
@@ -94,7 +94,6 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 	for e := range cn {
 		if event, ok := e.(eth1.Event); ok {
 			if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
-				c.logger.Debug("controller received ValidatorAddedEvent from eth1client")
 				c.handleValidatorAddedEvent(validatorAddedEvent)
 			}
 		}
@@ -164,7 +163,7 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 }
 
 // Subject returns the subject
-func (c *controller) Subject() pubsub.SubjectBase {
+func (c *controller) Subject() pubsub.Subscriber {
 	return c.newValidatorSubject
 }
 

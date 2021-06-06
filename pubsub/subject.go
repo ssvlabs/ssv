@@ -11,24 +11,24 @@ type SubjectEvent interface{}
 // SubjectChannel is the channel that will pass the events
 type SubjectChannel chan SubjectEvent
 
-// SubjectBase represents the base functionality of a subject (used by observers)
-type SubjectBase interface {
+// Subscriber represents the base functionality of a subject (used by observers)
+type Subscriber interface {
 	// Register adds a new observer
 	Register(id string) (SubjectChannel, error)
 	// Deregister removes an observer
 	Deregister(id string)
 }
 
-// SubjectController introduces "write" capabilities on the subject
-type SubjectController interface {
+// Publisher introduces "write" capabilities on the subject
+type Publisher interface {
 	// Notify emits an event
 	Notify(e SubjectEvent)
 }
 
 // Subject represent the interface for a subject
 type Subject interface {
-	SubjectBase
-	SubjectController
+	Subscriber
+	Publisher
 }
 
 // subject is the internal implementation of Subject
