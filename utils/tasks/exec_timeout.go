@@ -6,7 +6,7 @@ import (
 )
 
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed
-func ExecWithTimeout(fn func(), t time.Duration, ctx context.Context) bool {
+func ExecWithTimeout(ctx context.Context, fn func(), t time.Duration) bool {
 	c := make(chan struct{})
 
 	go func() {
