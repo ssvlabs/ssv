@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -67,22 +66,27 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 	}()
 
-	var resMsg *network.Message
-	readMsgData := func() {
-		resMsg, err = readMessageData(stream)
+	var resMsg network.Message
+	readMsgData := func() (interface{}, error) {
+		msg, err := readMessageData(stream)
+		return *msg, err
 	}
-	if completed := tasks.ExecWithTimeout(n.ctx, readMsgData, n.cfg.RequestTimeout); !completed {
+	completed, res, err := tasks.ExecWithTimeout(n.ctx, readMsgData, n.cfg.RequestTimeout)
+	if !completed {
 		n.logger.Debug("sync request timeout")
 	}
-	if resMsg == nil { // no response
-		err = errors.New("no response for sync request")
-	} else {
-		n.logger.Debug("got sync response",
-			zap.String("ValidatorPk", hex.EncodeToString(resMsg.SyncMessage.GetValidatorPk())),
-			zap.String("FromPeerID", resMsg.SyncMessage.GetFromPeerID()))
+	if res == nil { // no response
+		return nil, errors.New("no response for sync request")
 	}
+	// got response, trying to csat
+	resMsg, ok := res.(network.Message)
+	if !ok || resMsg.SyncMessage == nil {
+		return nil, errors.New("bad response for sync request")
+	}
+	n.logger.Debug("got sync response",
+		zap.String("FromPeerID", resMsg.SyncMessage.GetFromPeerID()))
 
-	return resMsg, err
+	return &resMsg, nil
 }
 
 // GetHighestDecidedInstance asks peers for SyncMessage
