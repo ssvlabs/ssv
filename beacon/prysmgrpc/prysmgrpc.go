@@ -227,7 +227,6 @@ func (b *prysmGRPC) signSlot(ctx context.Context, slot uint64, privateKey *bls.S
 	if err != nil {
 		return nil, err
 	}
-
 	return privateKey.SignByte(root[:]).Serialize(), nil
 }
 

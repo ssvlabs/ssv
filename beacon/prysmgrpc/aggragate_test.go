@@ -23,7 +23,7 @@ func TestPrysmGRPC_RolesAt(t *testing.T) {
 	for _, k := range keys{
 		shareKey := &bls.SecretKey{}
 		require.NoError(t, shareKey.SetHexString(k))
-		agg, err := beaconClient.IsAggregator(context.Background(), 1419179, 130, shareKey)
+		agg, err := beaconClient.IsAggregator(context.Background(), 1419615, 129, shareKey)
 		require.NoError(t, err)
 		fmt.Printf("%s -- %t  \n", k, agg)
 	}
