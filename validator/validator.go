@@ -130,10 +130,7 @@ func setupIbftController(role int, logger *zap.Logger, db basedb.IDb, network ne
 		&ibftStorage,
 		network,
 		msgQueue,
-		&proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   share.Committee,
-		},
+		proto.DefaultConsensusParams(),
 		share,
 	)
 }

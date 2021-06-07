@@ -134,10 +134,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			}
 
 			i.ValidatorShare = &test.opts.ValidatorShare
-			i.params = &proto.InstanceParams{
-				ConsensusParams: proto.DefaultConsensusParams(),
-				IbftCommittee:   nodes,
-			}
+			i.instanceConfig = proto.DefaultConsensusParams()
 			//i.instances = test.prevInstances
 			instanceOpts := i.instanceOptionsFromStartOptions(test.opts)
 			//instanceOpts.SeqNumber = test.seqNumber

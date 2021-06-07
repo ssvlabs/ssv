@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
@@ -19,21 +20,18 @@ func TestInstanceStop(t *testing.T) {
 		MsgQueue:           msgqueue.New(),
 		PrepareMessages:    msgcontinmem.New(3),
 		PrePrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
-		},
+		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:       1,
-			Stage:       proto.RoundState_PrePrepare,
-			Lambda:      []byte("Lambda"),
-			SeqNumber:   1,
-			ValidatorPk: secretKeys[1].GetPublicKey().Serialize(), // just for testing
+			Round:     1,
+			Stage:     proto.RoundState_PrePrepare,
+			Lambda:    []byte("Lambda"),
+			SeqNumber: 1,
 		},
-		Me: &proto.Node{
-			IbftId: 1,
-			Pk:     nodes[1].Pk,
-			Sk:     secretKeys[1].Serialize(),
+		ValidatorShare: &storage.Share{
+			Committee:   nodes,
+			NodeID:      1,
+			ShareKey:    secretKeys[1],
+			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
 		LeaderSelector: &leader.Constant{LeaderIndex: 1},

@@ -53,7 +53,7 @@ type ibftImpl struct {
 	ibftStorage         collections.Iibft
 	network             network.Network
 	msgQueue            *msgqueue.MessageQueue
-	params              *proto.InstanceParams // TODO - this should be deprecated for validator share
+	instanceConfig      *proto.InstanceConfig
 	ValidatorShare      *storage.Share
 	leaderSelector      leader.Selector
 
@@ -62,7 +62,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, params *proto.InstanceParams, ValidatorShare *storage.Share, ) IBFT {
+func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
 	ret := &ibftImpl{
 		role:                role,
 		ibftStorage:         storage,
@@ -70,7 +70,7 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 		logger:              logger,
 		network:             network,
 		msgQueue:            queue,
-		params:              params,
+		instanceConfig:      instanceConfig,
 		ValidatorShare:      ValidatorShare,
 		leaderSelector:      &leader.Deterministic{},
 
@@ -113,7 +113,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(newInstance.State); err != nil {
+			if err := i.ibftStorage.SaveCurrentInstance(newInstance.ValidatorShare.PublicKey.Serialize(), newInstance.State); err != nil {
 				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
@@ -141,7 +141,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
-	return i.params.IbftCommittee
+	return i.ValidatorShare.Committee
 }
 
 // resetLeaderSelection resets leader selection with seed and round 1
