@@ -3,7 +3,7 @@ package preprepare
 import (
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
@@ -11,7 +11,7 @@ import (
 )
 
 // ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, leaderSelector leader.Selector, share *collections.ValidatorShare) pipeline.Pipeline {
+func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, leaderSelector leader.Selector, share *storage.Share) pipeline.Pipeline {
 	return pipeline.WrapFunc("validate pre-prepare", func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")

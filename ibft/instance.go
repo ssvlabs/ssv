@@ -3,7 +3,7 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
 
@@ -22,7 +22,7 @@ import (
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
 	Logger         *zap.Logger
-	ValidatorShare *collections.ValidatorShare
+	ValidatorShare *storage.Share
 	//Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
@@ -37,7 +37,7 @@ type InstanceOptions struct {
 // Instance defines the instance attributes
 type Instance struct {
 	//Me               *proto.Node
-	ValidatorShare   *collections.ValidatorShare
+	ValidatorShare   *storage.Share
 	State            *proto.State
 	network          network.Network
 	ValueCheck       valcheck.ValueCheck

@@ -3,7 +3,7 @@ package changeround
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
@@ -12,11 +12,11 @@ import (
 
 // validate implements pipeline.Pipeline interface
 type validate struct {
-	share *collections.ValidatorShare
+	share *storage.Share
 }
 
 // Validate is the constructor of validate
-func Validate(share *collections.ValidatorShare) pipeline.Pipeline {
+func Validate(share *storage.Share) pipeline.Pipeline {
 	return &validate{
 		share: share,
 	}

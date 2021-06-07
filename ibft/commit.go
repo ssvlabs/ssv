@@ -17,7 +17,7 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
-		auth.ValidatePKs(i.ValidatorShare.ValidatorPK.Serialize()),
+		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		i.uponCommitMsg(),
@@ -107,6 +107,6 @@ func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 		Lambda:      i.State.Lambda,
 		SeqNumber:   i.State.SeqNumber,
 		Value:       value,
-		ValidatorPk: i.ValidatorShare.ValidatorPK.Serialize(),
+		ValidatorPk: i.ValidatorShare.PublicKey.Serialize(),
 	}
 }
