@@ -1,11 +1,8 @@
 package ibft
 
 import (
-	"bytes"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"go.uber.org/zap"
-	"strings"
 	"time"
 )
 
@@ -42,7 +39,7 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
-			if i.validateMsg(msg) {
+			if err := i.validateDecidedMsg(msg); err == nil {
 				i.ProcessDecidedMessage(msg)
 			}
 		}
@@ -57,15 +54,4 @@ func (i *ibftImpl) listenToSyncMessages() {
 			i.ProcessSyncMessage(msg) // TODO verify duty type
 		}
 	}()
-}
-
-// validateMsg for each ibft controller by pubkey, role
-func (i *ibftImpl) validateMsg(msg *proto.SignedMessage) bool {
-	if !bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk){
-		return false
-	}
-	if !(i.role.String() == strings.Split(string(msg.Message.Lambda), "_")[1]){
-		return false
-	} // check if role is the same TODO need to find better solution
-	return true
 }
