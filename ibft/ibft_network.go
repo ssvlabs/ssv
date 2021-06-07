@@ -61,7 +61,11 @@ func (i *ibftImpl) listenToSyncMessages() {
 
 // validateMsg for each ibft controller by pubkey, role
 func (i *ibftImpl) validateMsg(msg *proto.SignedMessage) bool {
-	valid := bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk)
-	valid = i.role.String() == strings.Split(string(msg.Message.Lambda), "_")[1]
-	return valid
+	if !bytes.Equal(i.ValidatorShare.PublicKey.Serialize(), msg.Message.ValidatorPk){
+		return false
+	}
+	if !(i.role.String() == strings.Split(string(msg.Message.Lambda), "_")[1]){
+		return false
+	} // check if role is the same TODO need to find better solution
+	return true
 }
