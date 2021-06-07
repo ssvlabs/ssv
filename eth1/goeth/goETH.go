@@ -75,11 +75,7 @@ func (ec *eth1Client) Start() error {
 
 // Sync reads events history
 func (ec *eth1Client) Sync(fromBlock *big.Int) error {
-	err := ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
-	if err != nil {
-		ec.logger.Error("Failed to sync contract events", zap.Error(err))
-	}
-	return err
+	return ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
 }
 
 // fireEvent notifies observers about some contract event
@@ -151,19 +147,20 @@ func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string,
 		return errors.Wrap(err, "failed to get event logs")
 	}
 	nResults := len(logs)
+	nSuccessful := nResults
 	ec.logger.Debug(fmt.Sprintf("got event logs, number of results: %d", nResults))
 
 	for _, vLog := range logs {
 		err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			nResults--
+			nSuccessful--
 			ec.logger.Error("Failed to handle event during sync", zap.Error(err))
 			continue
 		}
 	}
-	ec.logger.Debug(fmt.Sprintf("%d event logs were handled successfuly", nResults))
+	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nSuccessful))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Parsed: nSuccessful})
 
 	return nil
 }

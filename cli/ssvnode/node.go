@@ -110,6 +110,7 @@ var StartNodeCmd = &cobra.Command{
 		ctx := cmd.Context()
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
+		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = &beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network

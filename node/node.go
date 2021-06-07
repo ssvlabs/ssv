@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/slotqueue"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"time"
@@ -18,6 +19,7 @@ import (
 type Node interface {
 	// Start starts the SSV node
 	Start() error
+	//Start() error
 }
 
 // Options contains options to create the node
@@ -27,6 +29,7 @@ type Options struct {
 	Context    context.Context
 	Logger     *zap.Logger
 	Eth1Client eth1.Client
+	DB         basedb.IDb
 
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
@@ -44,6 +47,7 @@ type ssvNode struct {
 	validatorController validator.IController
 	logger              *zap.Logger
 	beacon              beacon.Beacon
+	storage             Storage
 	genesisEpoch        uint64
 	dutyLimit           uint64
 	streamDuties        <-chan *ethpb.DutiesResponse_Duty
@@ -64,8 +68,9 @@ func New(opts Options) Node {
 		validatorController: validator.NewController(opts.ValidatorOptions),
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
+		storage:             NewSSVNodeStorage(opts.DB, opts.Logger),
 		// TODO do we really need to pass the whole object or just SlotDurationSec
-		slotQueue: slotQueue,
+		slotQueue:  slotQueue,
 		eth1Client: opts.Eth1Client,
 	}
 
@@ -95,64 +100,52 @@ func (n *ssvNode) Start() error {
 			n.logger.Debug("public keys updated, restart stream duties listener")
 			continue
 		case duty := <-n.streamDuties:
-			go func(duty *ethpb.DutiesResponse_Duty) {
-				slots := collectSlots(duty)
-				if len(slots) == 0 {
-					n.logger.Debug("no slots found for the given duty")
-					return
-				}
-
-				for _, slot := range slots {
-					if slot < n.getEpochFirstSlot(n.genesisEpoch) {
-						// wait until genesis epoch starts
-						n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)), zap.Uint64("slot", slot))
-						continue
-					}
-					go func(slot uint64) {
-						currentSlot := uint64(n.getCurrentSlot())
-						logger := n.logger.
-							With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
-							With(zap.Uint64("current slot", currentSlot)).
-							With(zap.Uint64("slot", slot)).
-							With(zap.Time("start_time", n.getSlotStartTime(slot)))
-						// execute task if slot already began and not pass 1 epoch
-						if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
-							pubKey := &bls.PublicKey{}
-							if err := pubKey.Deserialize(duty.PublicKey); err != nil {
-								n.logger.Error("failed to deserialize pubkey from duty")
-							}
-							v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
-							if ok {
-								logger.Info("starting duty processing start for slot")
-								go v.ExecuteDuty(n.context, slot, duty)
-							} else {
-								logger.Info("could not find validator")
-							}
-						} else {
-							logger.Info("scheduling duty processing start for slot")
-							if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
-								n.logger.Error("failed to schedule slot")
-							}
-						}
-					}(slot)
-				}
-			}(duty)
+			go n.onDuty(duty)
 		}
 	}
 }
 
-func (n *ssvNode) startEth1() {
-	// setup validator controller to listen to ValidatorAdded events
-	cn, err := n.eth1Client.Subject().Register("ValidatorControllerObserver")
-	if err != nil {
-		n.logger.Error("failed to register on contract events subject", zap.Error(err))
-	}
-	go n.validatorController.ListenToEth1Events(cn)
 
-	// starts the eth1 events subscription
-	err = n.eth1Client.Start()
-	if err != nil {
-		n.logger.Error("failed to start eth1 client", zap.Error(err))
+func (n *ssvNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
+	slots := collectSlots(duty)
+	if len(slots) == 0 {
+		n.logger.Debug("no slots found for the given duty")
+		return
+	}
+
+	for _, slot := range slots {
+		if slot < n.getEpochFirstSlot(n.genesisEpoch) {
+			// wait until genesis epoch starts
+			n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)), zap.Uint64("slot", slot))
+			continue
+		}
+		go func(slot uint64) {
+			currentSlot := uint64(n.getCurrentSlot())
+			logger := n.logger.
+				With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
+				With(zap.Uint64("current slot", currentSlot)).
+				With(zap.Uint64("slot", slot)).
+				With(zap.Time("start_time", n.getSlotStartTime(slot)))
+			// execute task if slot already began and not pass 1 epoch
+			if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
+				pubKey := &bls.PublicKey{}
+				if err := pubKey.Deserialize(duty.PublicKey); err != nil {
+					n.logger.Error("failed to deserialize pubkey from duty")
+				}
+				v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
+				if ok {
+					logger.Info("starting duty processing start for slot")
+					go v.ExecuteDuty(n.context, slot, duty)
+				} else {
+					logger.Info("could not find validator")
+				}
+			} else {
+				logger.Info("scheduling duty processing start for slot")
+				if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
+					n.logger.Error("failed to schedule slot")
+				}
+			}
+		}(slot)
 	}
 }
 
