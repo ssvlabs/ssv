@@ -9,6 +9,8 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -16,7 +18,7 @@ import (
 )
 
 // PrePrepareMsg constructs and signs a pre-prepare msg
-func PrePrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
+func PrePrepareMsg(t *testing.T, sk *bls.SecretKey, lambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  round,
@@ -26,7 +28,7 @@ func PrePrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, roun
 }
 
 // PrepareMsg constructs and signs a prepare msg
-func PrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
+func PrepareMsg(t *testing.T, sk *bls.SecretKey, lambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:   proto.RoundState_Prepare,
 		Round:  round,
@@ -36,7 +38,7 @@ func PrepareMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, 
 }
 
 // CommitMsg constructs and signs a commit msg
-func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
+func CommitMsg(t *testing.T, sk *bls.SecretKey, lambda, inputValue []byte, round, id uint64) *proto.SignedMessage {
 	return SignMsg(t, id, sk, &proto.Message{
 		Type:   proto.RoundState_Commit,
 		Round:  round,
@@ -46,12 +48,12 @@ func CommitMsg(t *testing.T, sk, lambda, prevLambda, inputValue []byte, round, i
 }
 
 // ChangeRoundMsg constructs and signs a change round msg
-func ChangeRoundMsg(t *testing.T, sk, lambda, prevLambda []byte, round, id uint64) *proto.SignedMessage {
-	return ChangeRoundMsgWithPrepared(t, sk, lambda, prevLambda, nil, nil, round, 0, id)
+func ChangeRoundMsg(t *testing.T, sk *bls.SecretKey, lambda []byte, round, id uint64) *proto.SignedMessage {
+	return ChangeRoundMsgWithPrepared(t, sk, lambda, nil, nil, round, 0, id)
 }
 
 // ChangeRoundMsgWithPrepared constructs and signs a change round msg
-func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedValue []byte, signers map[uint64][]byte, round, preparedRound, id uint64) *proto.SignedMessage {
+func ChangeRoundMsgWithPrepared(t *testing.T, sk *bls.SecretKey, lambda, preparedValue []byte, signers map[uint64]*bls.SecretKey, round, preparedRound, id uint64) *proto.SignedMessage {
 	crData := &proto.ChangeRoundData{
 		PreparedRound:    preparedRound,
 		PreparedValue:    preparedValue,
@@ -97,23 +99,49 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk, lambda, prevLambda, preparedVa
 }
 
 // TestIBFTInstance returns a test iBFT instance
-func TestIBFTInstance(t *testing.T, lambda []byte, prevLambda []byte) *ibft.Instance {
+func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 	opts := ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
-		Me:             TestNodes()[1],
+		ValidatorShare: TestShares()[1],
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
 		ValueCheck:     bytesval.New(TestInputValue()),
 		LeaderSelector: &leader.Constant{LeaderIndex: 1},
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   TestNodes(),
-		},
-		Lambda:      lambda,
-		ValidatorPK: fixtures.RefPk, // just as a value
+		Config:         proto.DefaultConsensusParams(),
+		Lambda:         lambda,
 	}
 
 	return ibft.NewInstance(opts)
+}
+
+// TestShares generates test nodes for SSV
+func TestShares() map[uint64]*storage.Share {
+	return map[uint64]*storage.Share{
+		1: {
+			NodeID:      1,
+			PublicKey: TestValidatorPK(),
+			ShareKey:    TestSKs()[0],
+			Committee:   TestNodes(),
+		},
+		2: {
+			NodeID:      2,
+			PublicKey: TestValidatorPK(),
+			ShareKey:    TestSKs()[1],
+			Committee:   TestNodes(),
+		},
+		3: {
+			NodeID:      3,
+			PublicKey: TestValidatorPK(),
+			ShareKey:    TestSKs()[2],
+			Committee:   TestNodes(),
+		},
+		4: {
+			NodeID:      4,
+			PublicKey: TestValidatorPK(),
+			ShareKey:    TestSKs()[3],
+			Committee:   TestNodes(),
+		},
+	}
 }
 
 // TestNodes generates test nodes for SSV
@@ -122,24 +150,34 @@ func TestNodes() map[uint64]*proto.Node {
 		1: {
 			IbftId: 1,
 			Pk:     TestPKs()[0],
-			Sk:     TestSKs()[0],
+			Sk:     TestSKs()[0].Serialize(),
 		},
 		2: {
 			IbftId: 2,
 			Pk:     TestPKs()[1],
-			Sk:     TestSKs()[1],
+			Sk:     TestSKs()[1].Serialize(),
 		},
 		3: {
 			IbftId: 3,
 			Pk:     TestPKs()[2],
-			Sk:     TestSKs()[2],
+			Sk:     TestSKs()[2].Serialize(),
 		},
 		4: {
 			IbftId: 4,
 			Pk:     TestPKs()[3],
-			Sk:     TestSKs()[3],
+			Sk:     TestSKs()[3].Serialize(),
 		},
 	}
+}
+
+// TestValidatorPK returns ref validator pk
+func TestValidatorPK() *bls.PublicKey {
+	threshold.Init()
+	ret := &bls.PublicKey{}
+	if err := ret.Deserialize(fixtures.RefPk); err != nil {
+		panic(err)
+	}
+	return ret
 }
 
 // TestPKs PKS for TestSKs
@@ -153,13 +191,23 @@ func TestPKs() [][]byte {
 }
 
 // TestSKs returns reference test shares for SSV
-func TestSKs() [][]byte {
-	return [][]byte{
+func TestSKs() []*bls.SecretKey {
+	threshold.Init()
+	ret := make([]*bls.SecretKey, 4)
+	for i, skByts := range [][]byte{
 		fixtures.RefSplitShares[0],
 		fixtures.RefSplitShares[1],
 		fixtures.RefSplitShares[2],
 		fixtures.RefSplitShares[3],
+	} {
+		sk := &bls.SecretKey{}
+		if err := sk.Deserialize(skByts); err != nil {
+			panic(err)
+		}
+		ret[i] = sk
 	}
+
+	return ret
 }
 
 // TestInputValue a const input test value

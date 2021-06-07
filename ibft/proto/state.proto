@@ -16,5 +16,4 @@ message State {
     uint64 round            = 5;
     uint64 prepared_round   = 6;
     bytes prepared_value    = 7;
-    bytes validator_pk      = 8;
 }

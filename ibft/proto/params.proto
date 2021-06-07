@@ -6,7 +6,7 @@ option go_package = "github.com/bloxapp/ssv/ibft/proto";
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
-message ConsensusParams{
+message InstanceConfig{
   int64 round_change_duration       = 1;
   int64 leader_preprepare_delay     = 2; // The time a round leader waits before broadcasting pre-prepare message
 }
@@ -15,9 +15,4 @@ message Node{
   uint64 ibft_id  = 1;
   bytes pk        = 2 [(gogoproto.nullable) = false];
   bytes sk        = 3;
-}
-
-message InstanceParams{
-  ConsensusParams consensus_params = 1;
-  map<uint64, Node> ibft_committee = 2;
 }

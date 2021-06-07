@@ -16,8 +16,8 @@ func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
 		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
-		auth.AuthorizeMsg(i.params),
-		auth.ValidateQuorum(i.params.ThresholdSize()),
+		auth.AuthorizeMsg(i.ValidatorShare),
+		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
 	)
 	return p.Run(msg)
 }

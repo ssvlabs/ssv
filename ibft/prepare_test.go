@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"testing"
 
@@ -12,9 +13,11 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
+		Config:          proto.DefaultConsensusParams(),
+		ValidatorShare: &storage.Share{
+			Committee: nodes,
+			NodeID:    1,
+			ShareKey:  sks[1],
 		},
 		State: &proto.State{
 			Round: 1,
@@ -71,12 +74,14 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 }
 
 func TestPreparePipeline(t *testing.T) {
-	_, nodes := GenerateNodes(4)
+	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
+		Config:          proto.DefaultConsensusParams(),
+		ValidatorShare: &storage.Share{
+			Committee:   nodes,
+			NodeID:      1,
+			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
 			Round: 1,

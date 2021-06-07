@@ -37,17 +37,15 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 
 func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
 	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
-	err := storage.SaveCurrentInstance(&proto.State{
-		Stage:       proto.RoundState_Decided,
-		SeqNumber:   2,
-		Round:       0,
-		ValidatorPk: []byte{1, 2, 3, 4},
+	err := storage.SaveCurrentInstance([]byte{1, 2, 3, 4}, &proto.State{
+		Stage:     proto.RoundState_Decided,
+		SeqNumber: 2,
+		Round:     0,
 	})
 	require.NoError(t, err)
 
 	value, err := storage.GetCurrentInstance([]byte{1, 2, 3, 4})
 	require.NoError(t, err)
-	require.EqualValues(t, []byte{1, 2, 3, 4}, value.ValidatorPk)
 	require.EqualValues(t, 2, value.SeqNumber)
 
 	// not found

@@ -13,7 +13,6 @@ type NonJustifiedPrePrepapre struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
-	prevLambda []byte
 }
 
 // Name returns test name
@@ -24,10 +23,9 @@ func (test *NonJustifiedPrePrepapre) Name() string {
 // Prepare prepares the test
 func (test *NonJustifiedPrePrepapre) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
-	test.prevLambda = []byte{0, 0, 0, 0}
 	test.inputValue = spectesting.TestInputValue()
 
-	test.instance = spectesting.TestIBFTInstance(t, test.lambda, test.prevLambda)
+	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
 	test.instance.State.Round = 1
 
 	// load messages to queue
@@ -43,8 +41,8 @@ func (test *NonJustifiedPrePrepapre) Prepare(t *testing.T) {
 // MessagesSequence includes all test messages
 func (test *NonJustifiedPrePrepapre) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
-		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 1, 1),
-		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.prevLambda, test.inputValue, 2, 1),
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 2, 1),
 	}
 }
 

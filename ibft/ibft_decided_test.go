@@ -18,7 +18,7 @@ type testStorage struct {
 }
 
 // SaveCurrentInstance implementation
-func (s *testStorage) SaveCurrentInstance(_ *proto.State) error {
+func (s *testStorage) SaveCurrentInstance(pk []byte, _ *proto.State) error {
 	return nil
 }
 
