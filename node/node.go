@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"time"
@@ -79,7 +80,13 @@ func New(opts Options) Node {
 
 // Start implements Node interface
 func (n *ssvNode) Start() error {
-	n.startEth1()
+	n.logger.Info("starting ssv node")
+	if completed, _, _ := tasks.ExecWithTimeout(n.context, func() (interface{}, error) {
+		n.startEth1()
+		return struct {}{}, nil
+	}, 10 * time.Second); !completed {
+		n.logger.Warn("eth1 sync timeout")
+	}
 
 	n.validatorController.StartValidators()
 	n.startStreamDuties()

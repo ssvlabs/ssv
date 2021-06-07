@@ -20,6 +20,7 @@ func (n *ssvNode) startEth1() {
 	}
 	go n.validatorController.ListenToEth1Events(cnValidators)
 
+	n.logger.Debug("syncing eth1 events")
 	// sync past events
 	if err := n.syncEth1(); err != nil {
 		n.logger.Error("failed to sync eth1 events:", zap.Error(err))
@@ -27,6 +28,7 @@ func (n *ssvNode) startEth1() {
 		n.logger.Info("manage to sync events from eth1")
 	}
 
+	n.logger.Debug("starting eth1 events subscription")
 	// starts the eth1 events subscription
 	err = n.eth1Client.Start()
 	if err != nil {
