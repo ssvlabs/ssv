@@ -1,26 +1,25 @@
 package pubsub
 
-import "go.uber.org/zap"
-
-// Observer interface that notified by the subject registered to
-type Observer interface {
-	InformObserver(interface{}) // TODO need to use golang channels
-	GetObserverID() string
+// observer is an internal abstraction on top of channels
+type observer struct {
+	channel SubjectChannel
+	active  bool
 }
 
-// BaseObserver struct that implements Observer
-type BaseObserver struct {
-	ID     string
-	Logger zap.Logger
+func newSubjectObserver() *observer {
+	so := observer{
+		make(SubjectChannel),
+		true,
+	}
+	return &so
 }
 
-// InformObserver get inform by the subject and passes interface that need to cast for specific type
-func (b BaseObserver) InformObserver(i interface{}) {
-	b.Logger.Info("InformObserver")
+func (so *observer) close() {
+	so.active = false
 }
 
-// GetObserverID get observer ID
-func (b BaseObserver) GetObserverID() string {
-	return "BaseObserver"
+func (so *observer) notifyCallback(e SubjectEvent) {
+	if so.active {
+		so.channel <- e
+	}
 }
-

@@ -64,7 +64,6 @@ type p2pNetwork struct {
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	// init empty topics map
 	cfg.Topics = make(map[string]*pubsub.Topic)
-
 	n := &p2pNetwork{
 		ctx:           ctx,
 		cfg:           cfg,
@@ -266,7 +265,7 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 	return n.cfg.Topics[topic], nil
 }
 
-// AllPeers returns all connected peers for a validator PK
+// AllPeers returns all connected peers for a validator PK (except for the validator itself)
 func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	ret := make([]string, 0)
 

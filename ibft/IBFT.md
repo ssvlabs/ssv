@@ -119,6 +119,6 @@ The PRE-PREPARE messages should be justified by the nodes when received (note th
 
 ### Diagrams
 
-![Normal case](../github/resources/IBFTChart1.png)
+![Normal case](../docs/resources/IBFTChart1.png)
 
-![Round change](../github/resources/IBFTChart2.png)
+![Round change](../docs/resources/IBFTChart2.png)

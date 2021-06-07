@@ -83,6 +83,8 @@ spec:
           name: port-13000
           hostPort: 13000
         env:
+        - name: SHARE_CONFIG
+          value: "./data/share.yaml"
         - name: NODE_ID
           value: "1"
         - name: SSV_PRIVATE_KEY
@@ -115,22 +117,57 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: pubkey_node_v2_4
+        - name: ETH_1_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth1_addr
+        - name: CONFIG_PATH
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: config_path
+        - name: ENR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: enr_key
+        - name: SMART_CONTRACT_ADDR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: smart_contract_addr_key
+        - name: LOG_LEVEL
+          value: "debug"
+        - name: DISCOVERY_TYPE_KEY
+          value: "discv5"
         - name: NETWORK
           value: "pyrmont" 
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS
-#          value: "ssv-lb.stage.bloxinfra.com"
+          value: ""
+        - name: HOST_ADDRESS
           value: ""
         - name: GENESIS_EPOCH
           value: "34165"
         - name: LOGGER_LEVEL
           value: "debug"
+        - name: STORAGE_PATH
+          value: "./data/db"
+        - name: OPERATOR_KEY
+          value: "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjJEaFQyTXV0SWZhR3RWbEx4NVYraDhqbCt2eXFPClYvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQelFDNnowQTVvUjd6dG5YdTZzRXdOSElIWHdEQUgKTHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkQ0VxRkpGZ01QWTc2UlBjSjZHZ2RNZytZVFFZVQpFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkJ6cGd1M3N0dkh0elFXVnZ4cnQ1NHRGb0MwdGZYCk1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RWFCTGhKWkVReWkySWlRTTZSWDZrTW9kZ0ZSZy8KemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4YlFJREFRQUJBb0lCQUN3NFhlMndhOC9nZmxtWgpBOWNERlI5TUdPQWUrVmdKR1dwNi8xaTdSZzczU1dZbmVrRXUzRGE1djRBc0lSMWlQVWVvZzNXU01DU3ZTeTg4CkNhWUZ3QlJjRnhrNmMzVk54emFDNzRjbXR4QmhzakdGT1BBeGVRUWdMcExQU3J6VXlWL1ArQWtFbWlRZVZNZmQKampFRVltSFZvNTI1a3B3aTNLYk16VlFOYjg0STUyZEcwRXY4ZnNZbW1COHNDaGVkSVcrdDdjL1c3djFMT2VESwpWZ1FWNUpkSzBOeUtuVFpzdE9qck13eXZoTEcwNGlHVlZUZnJib3EyWk0yYTRZNkJ0V25YN2xCS3BhbWsxWUlKCkpqWlZ5WlowRmR5RlBWTklmVWNVYnVUeGJ3T0p5OE5tMmhsaGNjMlBzbWovQkJSNUFvYVpYcytyRThtcUEyeUkKcUVjZjVvRUNnWUVBOVpNb3RMS0xrL3RSbVFuNTlMbVhxaFlUS1VlMDdHV21ROGR0RlhuZDFBSlhkQ2I4U3BSdgpDTmVGQnhNQkVQZHBtSXdUWG9haURtNzRkNWRPb20xZWlDYTdCcHJ6cFVGM2VGSlBzdXV6ejA0eUVmaGVHRHd0ClZQOXA2RU9HZHlFK0pLR0gxc3BMelgwUkRIUENLUng5VnN1aVl3S0RLbkpSN3dEUTVwVWl5WkVDZ1lFQStGSjEKWkFjOVViSExISDROamJLeHRNL1Fwa3psVGw3bUxWYlpJZHFrMkcraktXbnIrYzJZN2hDQThFQW1tbXlSRGhvQQpOdWMyU08yVWpnY2crUHYvUjc2aHRUV1BGSCszdWd0ZWtZajMvRGdFZllVWEtBUFhYaGdQbnRNMDU2WlZFcHF3CmtzSXVQWGRROE9SRWs1Q2o4SFhPeE9rdEIwL01TZnU5WGRqVlhCMENnWUVBcElnOUhKd0hZbFZldlQ5dTVlVTIKMVRGSEUwQkUycUhjUE1zdnJkVGhwL3NOcHZlN3p5Z1dJSUZ0VW1rTUxOYm5POXFWMjU0dWs2Y0w5K3c3Tmg0NgoyTlBDT05HMmJrRW5qMGp1dHZ5dWt6VmIzS2hnT3JLTzJNVHJxejhhcDFSeGMwOTZXSkZmS2tVaUdBcXl5cUtZCjQzODV4RVpacFNYRStYRzloTS9rNTlFQ2dZQTZXZVlMNDBlZGN0SHZtQTlIUkw1TlpxZjQ3QWpXS2FhYzhOT0YKQ1FQRGVEZzIreFRnVmxlaFdXOXpCU0FOR1lYY2NtK3FkeHBpZUxGM3ptVUpITzRYeGN2cDhQUDJOU3pQSXV6Tgo5Z21QMHZuN0pOTVVMQkxub1cvS09vY3NDQUhscFVQb3VJaDFHUnlEL3ArK3JUWll3dFlibjA5ZGNIcm94NmJ2CjdvdjBZUUtCZ0gwem5Fend6ZEJVWTBBdFh6MUFTQjl1aUN6ZVNnbEZyRWwzR0k4OEEySXgyamFkMEhBR0NteVkKTnJBSVpLTjQ0anAzVjcvZ0IyMm9pQTIyK3VSTEEyMDJnM2RDaVRFYXRVMGY5SjhncDM4VGVrTHAvVmdTcHVpTgpLUm1YOGI5SlpXeGhpQk1OaXMwZjNuQnQ5VkRYN0crdEhJWS81QUNSSEtwNkZMUGhuYWVQCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg=="
         volumeMounts:
-        - mountPath: "/data/db"
+        - mountPath: /data
           name: ssv-node-v2-1
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-cm-validator-options-1
       volumes:
-      - persistentVolumeClaim:
+      - name: ssv-node-v2-1
+        persistentVolumeClaim:
           claimName: ssv-node-v2-1
-        name: ssv-node-v2-1
-      hostNetwork: true            
+      - name: ssv-cm-validator-options-1
+        configMap:
+          name: ssv-cm-validator-options-1
+      hostNetwork: true      

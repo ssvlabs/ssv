@@ -2,14 +2,15 @@ package collections
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/inmem"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
 )
 
 func TestIbftStorage_SaveDecided(t *testing.T) {
-	storage := NewIbft(inmem.New(), zap.L(), "attestation")
+	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
 	err := storage.SaveDecided(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:        proto.RoundState_Decided,
@@ -35,7 +36,7 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 }
 
 func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
-	storage := NewIbft(inmem.New(), zap.L(), "attestation")
+	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
 	err := storage.SaveCurrentInstance([]byte{1, 2, 3, 4}, &proto.State{
 		Stage:     proto.RoundState_Decided,
 		SeqNumber: 2,
@@ -53,7 +54,7 @@ func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
 }
 
 func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
-	storage := NewIbft(inmem.New(), zap.L(), "attestation")
+	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
 	err := storage.SaveHighestDecidedInstance(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:        proto.RoundState_Decided,
@@ -76,4 +77,13 @@ func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
 	// not found
 	_, err = storage.GetHighestDecidedInstance([]byte{1, 2, 3, 3})
 	require.EqualError(t, err, EntryNotFoundError)
+}
+
+func newInMemDb() basedb.IDb {
+	db, _ := kv.New(basedb.Options{
+		Type:   "badger-memory",
+		Path:   "",
+		Logger: zap.L(),
+	})
+	return db
 }

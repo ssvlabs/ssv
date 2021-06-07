@@ -15,7 +15,7 @@ func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
-		auth.ValidatePKs(i.ValidatorShare.ValidatorPK.Serialize()),
+		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
 	)
@@ -61,13 +61,18 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		}
 		// sync
 		s := sync.NewHistorySync(i.logger, msg.Message.ValidatorPk, i.network, i.ibftStorage, i.validateDecidedMsg)
-		go s.Start()
+		go func() {
+			err := s.Start()
+			if err != nil {
+				i.logger.Error("history sync failed", zap.Error(err))
+			}
+		}()
 	}
 }
 
 // HighestKnownDecided returns the highest known decided instance
 func (i *ibftImpl) HighestKnownDecided() (*proto.SignedMessage, error) {
-	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.ValidatorShare.ValidatorPK.Serialize())
+	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.ValidatorShare.PublicKey.Serialize())
 	if err != nil && err.Error() != collections.EntryNotFoundError {
 		return nil, err
 	}

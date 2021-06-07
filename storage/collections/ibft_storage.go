@@ -4,8 +4,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
+
 	"go.uber.org/zap"
 )
 
@@ -34,12 +35,12 @@ type Iibft interface {
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type IbftStorage struct {
 	prefix []byte
-	db     storage.IKvStorage
+	db     basedb.IDb
 	logger *zap.Logger
 }
 
 // NewIbft create new ibft storage
-func NewIbft(db storage.IKvStorage, logger *zap.Logger, instanceType string) IbftStorage {
+func NewIbft(db basedb.IDb, logger *zap.Logger, instanceType string) IbftStorage {
 	ibft := IbftStorage{
 		prefix: []byte(instanceType),
 		db:     db,
@@ -105,7 +106,10 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 func (i *IbftStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
 	val, err := i.get("highest", pk)
 	if err != nil {
-		return nil, errors.New(EntryNotFoundError)
+		if err.Error() == "not found" || err.Error() == "Key not found" { // TODO need to implement not found handle in db level
+			return nil, errors.New(EntryNotFoundError)
+		}
+		return nil, err
 	}
 	ret := &proto.SignedMessage{}
 	if err := json.Unmarshal(val, ret); err != nil {

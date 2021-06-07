@@ -1,13 +1,20 @@
 package kv
 
 import (
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
 )
 
 func TestBadgerEndToEnd(t *testing.T) {
-	db, err := New("./data/db", *zap.L(), &Options{InMemory: true})
+	options:= basedb.Options{
+		Type: "badger-memory",
+		Logger: zap.L(),
+		Path: "",
+	}
+
+	db, err := New(options)
 	require.NoError(t, err)
 
 	toSave := []struct {

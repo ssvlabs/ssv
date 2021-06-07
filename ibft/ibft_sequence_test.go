@@ -2,8 +2,10 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/inmem"
+	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -31,11 +33,11 @@ func TestCanStartNewInstance(t *testing.T) {
 				Identifier: []byte("lambda_10"),
 				SeqNumber:  11,
 				Duty:       nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
 			populatedStorage(t, sks, 10),
@@ -48,11 +50,11 @@ func TestCanStartNewInstance(t *testing.T) {
 				Identifier: []byte("lambda_0"),
 				SeqNumber:  0,
 				Duty:       nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
 			nil,
@@ -65,11 +67,11 @@ func TestCanStartNewInstance(t *testing.T) {
 				Identifier: []byte("lambda_0"),
 				SeqNumber:  0,
 				Duty:       nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
 			nil,
@@ -82,11 +84,11 @@ func TestCanStartNewInstance(t *testing.T) {
 				Identifier: []byte("lambda_12"),
 				SeqNumber:  12,
 				Duty:       nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
 			populatedStorage(t, sks, 10),
@@ -99,11 +101,11 @@ func TestCanStartNewInstance(t *testing.T) {
 				Identifier: []byte("lambda_10"),
 				SeqNumber:  10,
 				Duty:       nil,
-				ValidatorShare: collections.ValidatorShare{
-					NodeID:      1,
-					ValidatorPK: validatorPK(sks),
-					ShareKey:    sks[1],
-					Committee:   nodes,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
 				},
 			},
 			populatedStorage(t, sks, 10),
@@ -119,7 +121,15 @@ func TestCanStartNewInstance(t *testing.T) {
 			if test.storage != nil {
 				i.ibftStorage = test.storage
 			} else {
-				s := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+				options := basedb.Options{
+					Type:   "badger-memory",
+					Logger: zap.L(),
+					Path:   "",
+				}
+				// TODO do we must create new db instnce for each test?
+				db, err := storage.GetStorageFactory(options)
+				require.NoError(t, err)
+				s := collections.NewIbft(db, options.Logger, "attestation")
 				i.ibftStorage = &s
 			}
 

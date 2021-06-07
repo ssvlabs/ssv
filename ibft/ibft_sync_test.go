@@ -5,8 +5,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/inmem"
+	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
@@ -39,7 +41,7 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 }
 
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
-	storage := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 	for i := 0; i <= highestSeq; i++ {
 		lambda := []byte(fmt.Sprintf("lambda_%d", i))
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
@@ -61,20 +63,20 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 func populatedIbft(
 	nodeID uint64,
 	network *local.Local,
-	storage collections.Iibft,
+	ibftStorage collections.Iibft,
 	sks map[uint64]*bls.SecretKey,
 	nodes map[uint64]*proto.Node,
 ) IBFT {
 	queue := msgqueue.New()
-	share := &collections.ValidatorShare{
+	share := &storage.Share{
 		NodeID:      nodeID,
-		ValidatorPK: validatorPK(sks),
+		PublicKey: validatorPK(sks),
 		ShareKey:    sks[nodeID],
 		Committee:   nodes,
 	}
 	ret := New(
 		zap.L(),
-		storage,
+		ibftStorage,
 		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
 		queue,
 		proto.DefaultConsensusParams(),
@@ -89,8 +91,13 @@ func populatedIbft(
 func TestSyncFromScratch(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	network := local.NewLocalNetwork()
-
-	s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+	db, err := kv.New(basedb.Options{
+		Type:   "badger-memory",
+		Path:   "",
+		Logger: zap.L(),
+	})
+	require.NoError(t, err)
+	s1 := collections.NewIbft(db, zap.L(), "attestation")
 	i1 := populatedIbft(1, network, &s1, sks, nodes)
 
 	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
@@ -127,7 +134,7 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	network := local.NewLocalNetwork()
 
-	s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+	s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 	i1 := populatedIbft(1, network, &s1, sks, nodes)
 
 	_ = populatedIbft(2, network, populatedStorage(t, sks, 100), sks, nodes)
@@ -143,7 +150,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		sks, nodes := GenerateNodes(4)
 		network := local.NewLocalNetwork()
 
-		s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+		s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 		i1 := populatedIbft(1, network, &s1, sks, nodes)
 
 		_ = populatedIbft(2, network, populatedStorage(t, sks, 100), sks, nodes)
@@ -166,7 +173,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		sks, nodes := GenerateNodes(4)
 		network := local.NewLocalNetwork()
 
-		s1 := collections.NewIbft(inmem.New(), zap.L(), "attestation")
+		s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 		i1 := populatedIbft(1, network, &s1, sks, nodes)
 
 		_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
@@ -185,4 +192,13 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.EqualValues(t, 89, highest.Message.SeqNumber)
 	})
 
+}
+
+func newInMemDb() basedb.IDb {
+	db, _ := kv.New(basedb.Options{
+		Type:   "badger-memory",
+		Path:   "",
+		Logger: zap.L(),
+	})
+	return db
 }
