@@ -2,7 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
 
@@ -27,7 +27,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
@@ -102,7 +102,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
@@ -161,11 +161,11 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee:   nodes,
 			NodeID:      1,
 			ShareKey:    secretKeys[1],
-			ValidatorPK: secretKeys[1].GetPublicKey(),
+			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
 		LeaderSelector: &leader.Constant{},
@@ -195,7 +195,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
@@ -257,10 +257,10 @@ func TestPrePreparePipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee:   nodes,
 			NodeID:      1,
-			ValidatorPK: sks[1].GetPublicKey(),
+			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
 			Round: 1,

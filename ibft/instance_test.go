@@ -6,8 +6,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
@@ -27,11 +27,11 @@ func TestInstanceStop(t *testing.T) {
 			Lambda:    []byte("Lambda"),
 			SeqNumber: 1,
 		},
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee:   nodes,
 			NodeID:      1,
 			ShareKey:    secretKeys[1],
-			ValidatorPK: secretKeys[1].GetPublicKey(),
+			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
 		LeaderSelector: &leader.Constant{LeaderIndex: 1},

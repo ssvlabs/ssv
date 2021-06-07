@@ -1,7 +1,7 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,7 +15,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	instance := &Instance{
 		CommitMessages: msgcontinmem.New(3),
 		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
+		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
 			Round: 3,
 		},
@@ -70,7 +70,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.SignerIds)
 
 	// test verification
-	share := collections.ValidatorShare{Committee: nodes}
+	share := storage.Share{Committee: nodes}
 	require.NoError(t, share.VerifySignedMessage(msg))
 }
 
@@ -78,7 +78,7 @@ func TestCommitPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		ValidatorShare:  &collections.ValidatorShare{Committee: nodes, ValidatorPK: sks[1].GetPublicKey()},
+		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		State: &proto.State{
 			Round: 1,
 		},

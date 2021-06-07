@@ -8,9 +8,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -115,29 +115,29 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 }
 
 // TestShares generates test nodes for SSV
-func TestShares() map[uint64]*collections.ValidatorShare {
-	return map[uint64]*collections.ValidatorShare{
+func TestShares() map[uint64]*storage.Share {
+	return map[uint64]*storage.Share{
 		1: {
 			NodeID:      1,
-			ValidatorPK: TestValidatorPK(),
+			PublicKey: TestValidatorPK(),
 			ShareKey:    TestSKs()[0],
 			Committee:   TestNodes(),
 		},
 		2: {
 			NodeID:      2,
-			ValidatorPK: TestValidatorPK(),
+			PublicKey: TestValidatorPK(),
 			ShareKey:    TestSKs()[1],
 			Committee:   TestNodes(),
 		},
 		3: {
 			NodeID:      3,
-			ValidatorPK: TestValidatorPK(),
+			PublicKey: TestValidatorPK(),
 			ShareKey:    TestSKs()[2],
 			Committee:   TestNodes(),
 		},
 		4: {
 			NodeID:      4,
-			ValidatorPK: TestValidatorPK(),
+			PublicKey: TestValidatorPK(),
 			ShareKey:    TestSKs()[3],
 			Committee:   TestNodes(),
 		},

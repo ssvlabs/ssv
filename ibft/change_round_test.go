@@ -2,7 +2,7 @@ package ibft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"testing"
 
@@ -60,7 +60,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare:  &collections.ValidatorShare{Committee: nodes},
+		ValidatorShare:  &storage.Share{Committee: nodes},
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
@@ -129,7 +129,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{
 		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{Committee: nodes},
+		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
@@ -433,7 +433,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{Committee: map[uint64]*proto.Node{
+		ValidatorShare: &storage.Share{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -528,7 +528,7 @@ func TestHighestPrepared(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{Committee: map[uint64]*proto.Node{
+		ValidatorShare: &storage.Share{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -592,9 +592,9 @@ func TestChangeRoundPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &collections.ValidatorShare{
+		ValidatorShare: &storage.Share{
 			Committee:   nodes,
-			ValidatorPK: sks[1].GetPublicKey(), // just placeholder
+			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
 			Round: 1,

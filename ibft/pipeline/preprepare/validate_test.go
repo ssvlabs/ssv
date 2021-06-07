@@ -1,7 +1,7 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
@@ -54,7 +54,7 @@ func (s *testLeaderSelector) SetSeed(seed []byte, index uint64) error { return n
 
 func TestValidatePrePrepareValue(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
-	share := &collections.ValidatorShare{
+	share := &storage.Share{
 		Committee: nodes,
 	}
 	consensus := bytesval.New([]byte(time.Now().Weekday().String()))

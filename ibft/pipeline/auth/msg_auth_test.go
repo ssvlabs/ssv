@@ -3,7 +3,7 @@ package auth
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -119,7 +119,7 @@ func TestAuthorizeMsg(t *testing.T) {
 				signed.Signature = test.sig
 			}
 
-			pipeline := AuthorizeMsg(&collections.ValidatorShare{
+			pipeline := AuthorizeMsg(&storage.Share{
 				Committee: committee,
 			})
 
