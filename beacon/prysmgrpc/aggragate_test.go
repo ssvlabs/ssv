@@ -16,10 +16,14 @@ var keys = []string{
 	"42b15fb8bf13e4eaee2771885b767510e3fdfb039c0542245099b0956078cfb0",
 }
 
+func TestEndToEndAggregation(t *testing.T) {
+
+}
+
 func TestPrysmGRPC_RolesAt(t *testing.T) {
 	beaconClient, err := New(context.Background(), zap.L(), "pyrmont", []byte("BloxStaking"), "eth2-4000-prysm-ext.stage.bloxinfra.com:80")
 	require.NoError(t, err)
-
+	require.NoError(t, bls.Init(bls.BLS12_381))
 	for _, k := range keys{
 		shareKey := &bls.SecretKey{}
 		require.NoError(t, shareKey.SetHexString(k))
