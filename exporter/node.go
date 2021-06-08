@@ -30,6 +30,7 @@ const (
 type Exporter interface {
 	Start() error
 	Sync() error
+	ListenToEth1Events()
 }
 
 // Options contains options to create the node
@@ -49,6 +50,7 @@ type Options struct {
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
 	store            storage.ExporterStorage
+	operatorStorage  collections.IOperatorStorage
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
 	logger           *zap.Logger
@@ -82,32 +84,19 @@ func New(opts Options) Exporter {
 		}),
 	}
 	e.httpHandlers = newHTTPHandlers(&e, opts.APIPort)
-	go e.HandleEth1Events()
 
 	return &e
 }
 
 // Start starts the exporter
 func (exp *exporter) Start() error {
-	exp.logger.Info("exporter.Start()")
-	pubKeyStr := "8ed3a53383a2c9b9ab0ab5437985ac443a8d50bf50b5f69eeaf9850285aeaad703beff14e3d15b4e6b5702f446a97db4"
-	pubKey, err := hex.DecodeString(pubKeyStr)
+	exp.logger.Debug("exporter.Start()")
+
+	go exp.validatorSyncInterval()
+	err := exp.eth1Client.Start()
 	if err != nil {
-		return err
+		exp.logger.Error("could not start eth1 client")
 	}
-	share, err := exp.validatorStorage.GetValidatorsShare(pubKey)
-	if err != nil {
-		return err
-	}
-	err = exp.triggerIBFTSync(share.PublicKey)
-	if err != nil {
-		return err
-	}
-	//go exp.validatorSyncInterval()
-	//err := exp.eth1Client.Start()
-	//if err != nil {
-	//	exp.logger.Error("could not start eth1 client")
-	//}
 	return exp.httpHandlers.Listen()
 }
 
@@ -121,7 +110,8 @@ func (exp *exporter) Sync() error {
 	return exp.eth1Client.Sync(offset)
 }
 
-func (exp *exporter) HandleEth1Events() {
+// ListenToEth1Events register for eth1 events
+func (exp *exporter) ListenToEth1Events() {
 	go func() {
 		cn, err := exp.eth1Client.EventsSubject().Register("ExporterObserver")
 		if err != nil {
@@ -203,9 +193,12 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 }
 
 func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) error {
-	exp.logger.Info(fmt.Sprintf("operator added: %x", event.PublicKey))
-	// TODO: save operator data
-	return nil
+	exp.logger.Info("operator added event", zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
+	oi := collections.OperatorInformation{
+		PublicKey: event.PublicKey,
+		Name:      event.Name,
+	}
+	return exp.operatorStorage.SaveOperatorInformation(&oi)
 }
 
 func (exp *exporter) validatorSyncInterval() {

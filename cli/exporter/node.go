@@ -84,6 +84,9 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.ExporterOptions.DB = db
 
 		exporterNode := exporter.New(cfg.ExporterOptions)
+
+		go exporterNode.ListenToEth1Events()
+
 		var syncProcess sync.WaitGroup
 		syncProcess.Add(1)
 		go func() {
