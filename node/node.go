@@ -20,7 +20,6 @@ import (
 type Node interface {
 	// Start starts the SSV node
 	Start() error
-	//Start() error
 }
 
 // Options contains options to create the node
@@ -83,8 +82,8 @@ func (n *ssvNode) Start() error {
 	n.logger.Info("starting ssv node")
 	if completed, _, _ := tasks.ExecWithTimeout(n.context, func() (interface{}, error) {
 		n.startEth1()
-		return struct {}{}, nil
-	}, 10 * time.Second); !completed {
+		return struct{}{}, nil
+	}, 10*time.Second); !completed {
 		n.logger.Warn("eth1 sync timeout")
 	}
 
@@ -111,7 +110,6 @@ func (n *ssvNode) Start() error {
 		}
 	}
 }
-
 
 func (n *ssvNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 	slots := collectSlots(duty)

@@ -16,14 +16,14 @@ import (
 )
 
 func TestSyncEth1(t *testing.T) {
-	_, _, eth1Client, ssvNode := setupForTest()
+	_, _, eth1Client, ssvNode := setupNodeWithEth1ClientMock()
 
 	rawOffset := DefaultSyncOffset().Uint64()
 	rawOffset += 2
 	go func() {
 		logs := []types.Log{types.Log{}, types.Log{BlockNumber: rawOffset}}
-		eth1Client.sub.Notify(eth1.Event{Data: struct {}{}, Log: logs[0]})
-		eth1Client.sub.Notify(eth1.Event{Data: struct {}{}, Log: logs[1]})
+		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(eth1.Event{Data: eth1.SyncEndedEvent{Logs: logs, Parsed: 2}})
 	}()
 	err := ssvNode.syncEth1()
@@ -35,12 +35,12 @@ func TestSyncEth1(t *testing.T) {
 }
 
 func TestFailedSyncEth1(t *testing.T) {
-	_, _, eth1Client, ssvNode := setupForTest()
+	_, _, eth1Client, ssvNode := setupNodeWithEth1ClientMock()
 	eth1Client.syncResponse = errors.New("eth1-sync-test")
 	go func() {
 		logs := []types.Log{types.Log{}, types.Log{BlockNumber: DefaultSyncOffset().Uint64()}}
-		eth1Client.sub.Notify(eth1.Event{Data: struct {}{}, Log: logs[0]})
-		eth1Client.sub.Notify(eth1.Event{Data: struct {}{}, Log: logs[1]})
+		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[1]})
 		// marking 1 event as failed
 		eth1Client.sub.Notify(eth1.Event{Data: eth1.SyncEndedEvent{Logs: logs, Parsed: 1}})
 	}()
@@ -51,7 +51,7 @@ func TestFailedSyncEth1(t *testing.T) {
 	require.NotNil(t, err)
 }
 
-func setupForTest() (basedb.IDb, *zap.Logger, *eth1ClientMock, *ssvNode) {
+func setupNodeWithEth1ClientMock() (basedb.IDb, *zap.Logger, *eth1ClientMock, *ssvNode) {
 	logger := zap.L()
 	db, _ := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
@@ -61,9 +61,9 @@ func setupForTest() (basedb.IDb, *zap.Logger, *eth1ClientMock, *ssvNode) {
 	sub := pubsub.NewSubject()
 	eth1Client := eth1ClientMock{sub, 10 * time.Millisecond, nil}
 	node := ssvNode{
-		context: context.TODO(),
-		logger:  logger,
-		storage: NewSSVNodeStorage(db, logger),
+		context:    context.TODO(),
+		logger:     logger,
+		storage:    NewSSVNodeStorage(db, logger),
 		eth1Client: &eth1Client,
 	}
 	return db, logger, &eth1Client, &node
@@ -72,7 +72,7 @@ func setupForTest() (basedb.IDb, *zap.Logger, *eth1ClientMock, *ssvNode) {
 type eth1ClientMock struct {
 	sub pubsub.Subject
 
-	syncTimeout time.Duration
+	syncTimeout  time.Duration
 	syncResponse error
 }
 
@@ -88,4 +88,3 @@ func (ec *eth1ClientMock) Sync(fromBlock *big.Int) error {
 	time.Sleep(ec.syncTimeout)
 	return ec.syncResponse
 }
-

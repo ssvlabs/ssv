@@ -11,6 +11,7 @@ const (
 	defaultSyncOffset string = "49e08f"
 )
 
+// startEth1 starts to sync and listen to events
 func (n *ssvNode) startEth1() {
 	// setup validator controller to listen to ValidatorAdded events
 	// this will handle events from the sync as well
@@ -36,6 +37,7 @@ func (n *ssvNode) startEth1() {
 	}
 }
 
+// syncEth1 sync past events
 func (n *ssvNode) syncEth1() error {
 	cn, err := n.eth1Client.Subject().Register("SSVNodeObserver")
 	if err != nil {
@@ -49,7 +51,6 @@ func (n *ssvNode) syncEth1() error {
 	go func() {
 		defer syncWg.Done()
 		for e := range cn {
-			n.logger.Debug("got new event from eth1 sync")
 			if event, ok := e.(eth1.Event); ok {
 				n.logger.Debug("got new event from eth1 sync", zap.Uint64("BlockNumber", event.Log.BlockNumber))
 				if syncEndedEvent, ok = event.Data.(eth1.SyncEndedEvent); ok {
@@ -74,6 +75,7 @@ func (n *ssvNode) syncEth1() error {
 	return n.upgradeSyncOffset(syncOffset, syncEndedEvent)
 }
 
+// upgradeSyncOffset updates the sync offset after a sync
 func (n *ssvNode) upgradeSyncOffset(syncOffset *SyncOffset, syncEndedEvent eth1.SyncEndedEvent) error {
 	nResults := len(syncEndedEvent.Logs)
 	if nResults > 0 {
