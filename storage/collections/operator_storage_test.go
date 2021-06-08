@@ -1,13 +1,17 @@
 package collections
 
 import (
+	"bytes"
 	"encoding/base64"
+	"fmt"
+	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"strings"
 	"testing"
 )
 
@@ -18,10 +22,10 @@ var (
 )
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
-	options:= basedb.Options{
-		Type: "badger-memory",
+	options := basedb.Options{
+		Type:   "badger-memory",
 		Logger: zap.L(),
-		Path: "",
+		Path:   "",
 	}
 
 	db, err := storage.GetStorageFactory(options)
@@ -74,10 +78,10 @@ func TestSetupPrivateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			options:= basedb.Options{
-				Type: "badger-memory",
+			options := basedb.Options{
+				Type:   "badger-memory",
 				Logger: zap.L(),
-				Path: "",
+				Path:   "",
 			}
 
 			db, err := storage.GetStorageFactory(options)
@@ -108,5 +112,76 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(passedKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 		})
+	}
+}
+
+func TestOperatorStorage_SaveAndGetOperatorInformation(t *testing.T) {
+	operatorStorage, close := newOperatorStorageForTest()
+	require.NotNil(t, operatorStorage)
+	defer close()
+
+	operatorInfo := OperatorInformation{
+		PublicKey: fixtures.RefPk[:],
+		Name:      "my_operator",
+	}
+
+	t.Run("non-existing operator", func(t *testing.T) {
+		nonExistingOperator, err := operatorStorage.GetOperatorInformation([]byte("dummyPK"))
+		require.Nil(t, nonExistingOperator)
+		require.EqualError(t, err, "Key not found")
+	})
+
+	t.Run("create and get operator", func(t *testing.T) {
+		err := operatorStorage.SaveOperatorInformation(&operatorInfo)
+		require.NoError(t, err)
+		operatorInfoFromDB, err := operatorStorage.GetOperatorInformation(fixtures.RefPk[:])
+		require.NoError(t, err)
+		require.Equal(t, "my_operator", operatorInfoFromDB.Name)
+		require.True(t, bytes.Equal(operatorInfoFromDB.PublicKey, fixtures.RefPk[:]))
+	})
+}
+
+func TestOperatorStorage_ListOperators(t *testing.T) {
+	operatorStorage, close := newOperatorStorageForTest()
+	require.NotNil(t, operatorStorage)
+	defer close()
+
+	n := 5
+	for i := 0; i < n; i++ {
+		pk, _ , err := rsaencryption.GenerateKeys()
+		require.NoError(t, err)
+		operator := OperatorInformation{
+			PublicKey: pk,
+			Name:      fmt.Sprintf("operator-%d", i + 1),
+		}
+		err = operatorStorage.SaveOperatorInformation(&operator)
+		require.NoError(t, err)
+	}
+
+	operators, err := operatorStorage.ListOperators()
+	require.NoError(t, err)
+	require.Equal(t, 5, len(operators))
+	for _, operator := range operators {
+		require.True(t, strings.Contains(operator.Name, "operator-"))
+	}
+}
+
+func newOperatorStorageForTest() (*OperatorStorage, func()) {
+	logger := zap.L()
+	db, err := storage.GetStorageFactory(basedb.Options{
+		Type:   "badger-memory",
+		Logger: logger,
+		Path:   "",
+	})
+	if err != nil {
+		return nil, func() {}
+	}
+	operatorStorage := OperatorStorage{
+		prefix: []byte("operator-"),
+		db:     db,
+		logger: logger,
+	}
+	return &operatorStorage, func() {
+		db.Close()
 	}
 }

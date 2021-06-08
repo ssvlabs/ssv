@@ -1,8 +1,10 @@
 package collections
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger"
 	"github.com/pkg/errors"
@@ -16,6 +18,14 @@ import (
 type IOperatorStorage interface {
 	GetPrivateKey() (*rsa.PrivateKey, error)
 	SetupPrivateKey(operatorKey string) error
+	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, error)
+	SaveOperatorInformation(operatorInformation *OperatorInformation) error
+}
+
+// OperatorInformation the public data of an operator
+type OperatorInformation struct {
+	PublicKey []byte
+	Name      string
 }
 
 // OperatorStorage implement IOperatorStorage
@@ -81,6 +91,45 @@ func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 	o.logger.Info("operator public key", zap.Any("key", operatorPublicKey))
 	params.SsvConfig().OperatorPublicKey = operatorPublicKey
 	return nil
+}
+
+// ListOperators returns information of all the known operators
+func (o OperatorStorage) ListOperators() ([]OperatorInformation, error) {
+	objs, err := o.db.GetAllByCollection(o.prefix)
+	if err != nil {
+		return nil, err
+	}
+	var operators []OperatorInformation
+	privKeyBytes := append(o.prefix, []byte("private-key")...)
+	for _, obj := range objs {
+		if !bytes.Equal(obj.Key, privKeyBytes) {
+			var operatorInformation OperatorInformation
+			err = json.Unmarshal(obj.Value, &operatorInformation)
+			operators = append(operators, operatorInformation)
+		}
+	}
+
+	return operators, err
+}
+
+// GetOperatorInformation returns information of the given operator by public key
+func (o OperatorStorage) GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error) {
+	obj, err := o.db.Get(o.prefix, operatorPubKey)
+	if err != nil {
+		return nil, err
+	}
+	var operatorInformation OperatorInformation
+	err = json.Unmarshal(obj.Value, &operatorInformation)
+	return &operatorInformation, err
+}
+
+// SaveOperatorInformation saves operator information by its public key
+func (o OperatorStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
+	raw, err := json.Marshal(operatorInformation)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal operator information")
+	}
+	return o.db.Set(o.prefix, operatorInformation.PublicKey, raw)
 }
 
 // SavePrivateKey save operator private key
