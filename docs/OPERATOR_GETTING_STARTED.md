@@ -99,6 +99,7 @@ and run the command below to create a `config.yaml` file.
 ```
 $ yq e -n '.db = {"Path": "<db folder>", "Type": "badger-db"}' \
   | yq e '.Network = "pyrmont"' - \
+  | yq e '.DiscoveryType = "discv5"' \
   | yq e '.BeaconNodeAddr = "<ETH 2.0 node>"' - \
   | yq e '.ETH1Addr = "<ETH1 node>"' - \
   | yq e '.HostAddress = "<host public ip>"' - \
