@@ -4,7 +4,7 @@ import "github.com/bloxapp/ssv/cli"
 
 var (
 	// AppName is the application name
-	AppName = "exporter-Node"
+	AppName = "Exporter-Node"
 
 	// Version is the app version
 	Version = "latest"

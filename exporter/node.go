@@ -74,6 +74,7 @@ func New(opts Options) Exporter {
 		store:            storage.NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
+		operatorStorage: collections.NewOperatorStorage(opts.DB, opts.Logger),
 		logger:           opts.Logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
@@ -91,7 +92,6 @@ func New(opts Options) Exporter {
 // Start starts the exporter
 func (exp *exporter) Start() error {
 	exp.logger.Debug("exporter.Start()")
-
 	go exp.validatorSyncInterval()
 	err := exp.eth1Client.Start()
 	if err != nil {
@@ -193,12 +193,19 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 }
 
 func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) error {
-	exp.logger.Info("operator added event", zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
+	exp.logger.Info("operator added event",
+		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 	oi := collections.OperatorInformation{
 		PublicKey: event.PublicKey,
 		Name:      event.Name,
 	}
-	return exp.operatorStorage.SaveOperatorInformation(&oi)
+	err := exp.operatorStorage.SaveOperatorInformation(&oi)
+	if err != nil {
+		return err
+	}
+	exp.logger.Debug("managed to save operator information",
+		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
+	return nil
 }
 
 func (exp *exporter) validatorSyncInterval() {

@@ -18,7 +18,7 @@ import (
 type IOperatorStorage interface {
 	GetPrivateKey() (*rsa.PrivateKey, error)
 	SetupPrivateKey(operatorKey string) error
-	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, error)
+	GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error)
 	SaveOperatorInformation(operatorInformation *OperatorInformation) error
 }
 
@@ -36,17 +36,17 @@ type OperatorStorage struct {
 }
 
 // NewOperatorStorage init new instance of operator storage
-func NewOperatorStorage(db basedb.IDb, logger *zap.Logger) OperatorStorage {
+func NewOperatorStorage(db basedb.IDb, logger *zap.Logger) IOperatorStorage {
 	validator := OperatorStorage{
 		prefix: []byte("operator-"),
 		db:     db,
 		logger: logger,
 	}
-	return validator
+	return &validator
 }
 
 // GetPrivateKey return rsa private key
-func (o OperatorStorage) GetPrivateKey() (*rsa.PrivateKey, error) {
+func (o *OperatorStorage) GetPrivateKey() (*rsa.PrivateKey, error) {
 	obj, err := o.db.Get(o.prefix, []byte("private-key"))
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (o OperatorStorage) GetPrivateKey() (*rsa.PrivateKey, error) {
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
+func (o *OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
 		return errors.Wrap(err, "Failed to decode base64")
@@ -94,7 +94,7 @@ func (o OperatorStorage) SetupPrivateKey(operatorKeyBase64 string) error {
 }
 
 // ListOperators returns information of all the known operators
-func (o OperatorStorage) ListOperators() ([]OperatorInformation, error) {
+func (o *OperatorStorage) ListOperators() ([]OperatorInformation, error) {
 	objs, err := o.db.GetAllByCollection(o.prefix)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (o OperatorStorage) ListOperators() ([]OperatorInformation, error) {
 }
 
 // GetOperatorInformation returns information of the given operator by public key
-func (o OperatorStorage) GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error) {
+func (o *OperatorStorage) GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error) {
 	obj, err := o.db.Get(o.prefix, operatorPubKey)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func (o OperatorStorage) GetOperatorInformation(operatorPubKey []byte) (*Operato
 }
 
 // SaveOperatorInformation saves operator information by its public key
-func (o OperatorStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
+func (o *OperatorStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
 	raw, err := json.Marshal(operatorInformation)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
@@ -133,7 +133,7 @@ func (o OperatorStorage) SaveOperatorInformation(operatorInformation *OperatorIn
 }
 
 // SavePrivateKey save operator private key
-func (o OperatorStorage) savePrivateKey(operatorKey string) error {
+func (o *OperatorStorage) savePrivateKey(operatorKey string) error {
 	if err := o.db.Set(o.prefix, []byte("private-key"), []byte(operatorKey)); err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (o OperatorStorage) savePrivateKey(operatorKey string) error {
 }
 
 // verifyPrivateKeyExist return true if key exist and no new key passed else return new generated key
-func (o OperatorStorage) verifyPrivateKeyExist(operatorKey string) (string, error) {
+func (o *OperatorStorage) verifyPrivateKeyExist(operatorKey string) (string, error) {
 	// check if sk is exist or passedKey is passed. if not, generate new operator key
 	if _, err := o.GetPrivateKey(); err != nil { // need to generate new operator key
 		if err.Error() == badger.ErrKeyNotFound.Error() && operatorKey == "" {

@@ -92,6 +92,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		go func() {
 			Logger.Debug("about to sync exporter")
 			defer func() {
+				// 100ms delay after sync
 				time.Sleep(100 * time.Millisecond)
 				syncProcess.Done()
 			}()
