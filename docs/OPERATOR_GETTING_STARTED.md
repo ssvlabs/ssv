@@ -121,6 +121,7 @@ HostAddress: 84.220.13.151
 
 ### 6. Start Node in Docker
 
+Run the docker image from the same folder containing `config.yaml`.
 ```
-$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13000:13000 -p 12000:12000 -it ssv_node make BUILD_PATH=/go/bin/ssvnode start-node && docker logs ssv_node --follow
+$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13000:13000 -p 12000:12000 -v $(pwd)/config.yaml:/config.yaml -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node && docker logs ssv_node --follow
 ```
