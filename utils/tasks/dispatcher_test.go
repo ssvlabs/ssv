@@ -17,22 +17,25 @@ func TestNewDispatcher(t *testing.T) {
 		Interval:   1 * time.Millisecond,
 		Concurrent: 10,
 	})
-	countMut := sync.Mutex{}
-	count := 0
+	tmap := sync.Map{}
 	n := 90
 	tasks := []Task{}
 	for len(tasks) < n {
+		tid := fmt.Sprintf("id-%d", len(tasks))
 		tasks = append(tasks, *NewTask(func() error {
-			countMut.Lock()
-			defer countMut.Unlock()
-			count++
+			tmap.Store(tid, true)
 			return nil
-		}, fmt.Sprintf("id-%d", len(tasks))))
+		}, tid))
 	}
 	go d.Start()
 	for _, t := range tasks {
 		d.Queue(t)
 	}
 	time.Sleep((100 + 20) * time.Millisecond) // 100 (expected) + 20 (buffer)
+	count := 0
+	tmap.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
 	require.Equal(t, count, n)
 }

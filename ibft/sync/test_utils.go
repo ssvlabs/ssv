@@ -124,7 +124,7 @@ func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 }
 
 // SubscribeToValidatorNetwork subscribing and listen to validator network
-func (n *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+func (n *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, silent bool) error {
 	return nil
 }
 

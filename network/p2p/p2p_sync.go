@@ -74,7 +74,8 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 	}
 	if completed := tasks.ExecWithTimeout(readMsgData, n.cfg.RequestTimeout, n.ctx); !completed {
 		n.logger.Debug("sync request timeout")
-	} else if resMsg == nil { // no response
+	}
+	if resMsg == nil { // no response
 		err = errors.New("no response for sync request")
 	} else {
 		n.logger.Debug("got sync response",
@@ -93,7 +94,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Sync
 	}
 
 	res, err := n.sendAndReadSyncResponse(peerID, msg)
-	if err != nil {
+	if err != nil || res == nil {
 		return nil, err
 	}
 	return res.SyncMessage, nil
