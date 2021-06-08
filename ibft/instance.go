@@ -3,12 +3,12 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft/leader"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
@@ -22,25 +22,27 @@ import (
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
 	Logger         *zap.Logger
-	Me             *proto.Node
+	ValidatorShare *storage.Share
+	//Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
-	Params         *proto.InstanceParams
+	Config         *proto.InstanceConfig
 	Lambda         []byte
 	SeqNumber      uint64
-	ValidatorPK    []byte
+	//ValidatorPK    []byte
 }
 
 // Instance defines the instance attributes
 type Instance struct {
-	Me               *proto.Node
+	//Me               *proto.Node
+	ValidatorShare   *storage.Share
 	State            *proto.State
 	network          network.Network
 	ValueCheck       valcheck.ValueCheck
 	LeaderSelector   leader.Selector
-	Params           *proto.InstanceParams
+	Config           *proto.InstanceConfig
 	roundChangeTimer *time.Timer
 	Logger           *zap.Logger
 
@@ -66,31 +68,31 @@ type Instance struct {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts InstanceOptions) *Instance {
-	// make sure secret key is not nil, otherwise the node can't operate
-	if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
-		opts.Logger.Fatal("can't create Instance with invalid secret key")
-		return nil
-	}
+	//// make sure secret key is not nil, otherwise the node can't operate
+	//if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
+	//	opts.Logger.Fatal("can't create Instance with invalid secret key")
+	//	return nil
+	//}
 
 	return &Instance{
-		Me: opts.Me,
+		//Me: opts.Me,
+		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
-			Stage:       proto.RoundState_NotStarted,
-			Lambda:      opts.Lambda,
-			SeqNumber:   opts.SeqNumber,
-			ValidatorPk: opts.ValidatorPK,
+			Stage:     proto.RoundState_NotStarted,
+			Lambda:    opts.Lambda,
+			SeqNumber: opts.SeqNumber,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
-		Params:         opts.Params,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.Me.IbftId), zap.Uint64("seq_num", opts.SeqNumber)),
+		Config:         opts.Config,
+		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID), zap.Uint64("seq_num", opts.SeqNumber)),
 
 		MsgQueue:            opts.Queue,
-		PrePrepareMessages:  msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
-		PrepareMessages:     msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
-		CommitMessages:      msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
-		ChangeRoundMessages: msgcontinmem.New(uint64(opts.Params.ThresholdSize())),
+		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		PrepareMessages:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 
 		// chan
 		changeRoundChan:   make(chan bool),
@@ -129,7 +131,7 @@ func (i *Instance) Start(inputValue []byte) {
 
 			// LeaderPreprepareDelay waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
-			time.Sleep(time.Duration(i.Params.ConsensusParams.LeaderPreprepareDelay))
+			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelay))
 
 			msg := i.generatePrePrepareMessage(i.State.InputValue)
 			//
@@ -240,12 +242,12 @@ func (i *Instance) StartMessagePipeline() {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	sk := &bls.SecretKey{}
-	if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
-		return err
-	}
+	//sk := &bls.SecretKey{}
+	//if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
+	//	return err
+	//}
 
-	sig, err := msg.Sign(sk)
+	sig, err := msg.Sign(i.ValidatorShare.ShareKey)
 	if err != nil {
 		return err
 	}
@@ -253,7 +255,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
 		Signature: sig.Serialize(),
-		SignerIds: []uint64{i.Me.IbftId},
+		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
 	if i.network != nil {
 		return i.network.Broadcast(signedMessage)
@@ -285,7 +287,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	i.stopRoundChangeTimer()
 
 	// stat new timer
-	roundTimeout := uint64(i.Params.ConsensusParams.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
+	roundTimeout := uint64(i.Config.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 	i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {

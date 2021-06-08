@@ -7,6 +7,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*Node) {
+	bls.Init(bls.BLS12_381)
+	nodes := make(map[uint64]*Node)
+	sks := make(map[uint64]*bls.SecretKey)
+	for i := 0; i < cnt; i++ {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		nodes[uint64(i)] = &Node{
+			IbftId: uint64(i),
+			Pk:     sk.GetPublicKey().Serialize(),
+		}
+		sks[uint64(i)] = sk
+	}
+	return sks, nodes
+}
+
+func signMsg(id uint64, secretKey *bls.SecretKey, msg *Message) (*SignedMessage, *bls.Sign) {
+	signature, _ := msg.Sign(secretKey)
+	return &SignedMessage{
+		Message:   msg,
+		Signature: signature.Serialize(),
+		SignerIds: []uint64{id},
+	}, signature
+}
+
 func TestSignedMessage_DeepCopy(t *testing.T) {
 	toCopy := &SignedMessage{
 		Message: &Message{
@@ -67,21 +93,17 @@ func TestSignedMessage_AggregateSig(t *testing.T) {
 
 	t.Run("aggregate different messages", func(t *testing.T) {
 		c, _ := signMsg(2, secretKeys[2], &Message{
-			Type:           RoundState_Prepare,
-			Round:          1,
-			Lambda:         []byte("wrong lambda"),
-			Value:          []byte("value"),
+			Type:   RoundState_Prepare,
+			Round:  1,
+			Lambda: []byte("wrong lambda"),
+			Value:  []byte("value"),
 		})
 		require.EqualError(t, a.Aggregate(c), "can't aggregate different messages")
 	})
 }
 
 func TestSignedMessage_VerifyAggregatedSig(t *testing.T) {
-	secretKeys, nodes := generateNodes(4)
-	params := &InstanceParams{
-		ConsensusParams: DefaultConsensusParams(),
-		IbftCommittee:   nodes,
-	}
+	secretKeys, _ := generateNodes(4)
 	tests := []struct {
 		name          string
 		msgs          *Message
@@ -133,6 +155,7 @@ func TestSignedMessage_VerifyAggregatedSig(t *testing.T) {
 
 			// aggregate
 			var aggSig *bls.Sign
+			signerPKs := make([]*bls.PublicKey, 0)
 			for _, signerID := range test.signers {
 				_, sig := signMsg(signerID, secretKeys[signerID], test.msgs)
 				if aggSig == nil {
@@ -140,12 +163,15 @@ func TestSignedMessage_VerifyAggregatedSig(t *testing.T) {
 				} else {
 					aggSig.Add(sig)
 				}
+
+				signerPKs = append(signerPKs, secretKeys[signerID].GetPublicKey())
 			}
 			aggSignedMsg.Signature = aggSig.Serialize()
 
-			err := params.VerifySignedMessage(aggSignedMsg)
+			res, err := aggSignedMsg.VerifyAggregatedSig(signerPKs)
 			if len(test.expectedError) == 0 {
 				require.NoError(t, err)
+				require.True(t, res)
 			} else {
 				require.EqualError(t, err, test.expectedError)
 			}

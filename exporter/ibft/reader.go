@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -24,7 +25,7 @@ type ReaderOptions struct {
 	Logger         *zap.Logger
 	Storage        collections.Iibft
 	Network        network.Network
-	Params         *proto.InstanceParams
+	Config         *proto.InstanceConfig
 	ValidatorShare *storage.Share
 }
 
@@ -33,7 +34,7 @@ type reader struct {
 	storage collections.Iibft
 	network network.Network
 
-	params         *proto.InstanceParams
+	config         *proto.InstanceConfig
 	validatorShare *storage.Share
 }
 
@@ -43,7 +44,7 @@ func NewIbftReadOnly(opts ReaderOptions) Reader {
 		logger:         opts.Logger,
 		storage:        opts.Storage,
 		network:        opts.Network,
-		params:         opts.Params,
+		config:         opts.Config,
 		validatorShare: opts.ValidatorShare,
 	}
 	return &r
@@ -89,12 +90,10 @@ func (r *reader) listenToNetworkDecidedMessages() {
 func (r *reader) validateDecidedMsg(msg *proto.SignedMessage) error {
 	r.logger.Debug("validating a new decided message", zap.String("msg", msg.String()))
 	p := pipeline.Combine(
-		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
 		auth.ValidatePKs(r.validatorShare.PublicKey.Serialize()),
-		auth.AuthorizeMsg(r.params),
-		auth.ValidateQuorum(r.params.ThresholdSize()),
+		auth.AuthorizeMsg(r.validatorShare),
+		auth.ValidateQuorum(r.validatorShare.ThresholdSize()),
 	)
 	return p.Run(msg)
 }
@@ -114,13 +113,14 @@ func (r *reader) processDecidedMessage(msg *proto.SignedMessage) error {
 		return nil
 	}
 
-	//shouldSync, err := r.decidedRequiresSync(msg)
-	//if err != nil {
-	//	return errors.Wrap(err, "failed to check if decided sync is required")
-	//}
-	//if shouldSync {
-	//	r.Sync()
-	//}
+	shouldSync, err := r.decidedRequiresSync(msg)
+	if err != nil {
+		return errors.Wrap(err, "failed to check if decided sync is required")
+	}
+	if shouldSync {
+		r.logger.Warn("[not implemented yet] should sync validator data",
+			zap.String("validatorPubkey", hex.EncodeToString(msg.Message.ValidatorPk)))
+	}
 	return nil
 }
 

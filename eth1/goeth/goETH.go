@@ -42,7 +42,7 @@ type eth1Client struct {
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	logger := opts.Logger
 	// Create an IPC based RPC connection to a remote node
-	logger.Info("dail beacon node", zap.String("addr", opts.NodeAddr))
+	logger.Info("dialing beacon node", zap.String("addr", opts.NodeAddr))
 	conn, err := ethclient.Dial(opts.NodeAddr)
 	if err != nil {
 		logger.Error("Failed to connect to the Ethereum client", zap.Error(err))
@@ -60,8 +60,8 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	return &ec, nil
 }
 
-// Subject returns the events subject
-func (ec *eth1Client) EventsSubject() pubsub.SubjectBase {
+// EventsSubject returns the events subject
+func (ec *eth1Client) EventsSubject() pubsub.Subscriber {
 	return ec.outSubject
 }
 
@@ -106,7 +106,6 @@ func (ec *eth1Client) streamSmartContractEvents(contractAddr, contractABI string
 	logs := make(chan types.Log)
 	sub, err := ec.conn.SubscribeFilterLogs(ec.ctx, query, logs)
 	if err != nil {
-		//ec.logger.Fatal("Failed to subscribe to logs", zap.Error(err))
 		return errors.Wrap(err, "Failed to subscribe to logs")
 	}
 	ec.logger.Debug("subscribed to results of the streaming filter query")
@@ -199,7 +198,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			return errors.Wrap(err, "Failed to parse ValidatorAdded event")
 		}
 		if !isEventBelongsToOperator {
-			ec.logger.Debug("ValidatorAdded Event doesn't belong to operator")
+			ec.logger.Debug("Validator doesn't belong to operator")
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || operatorPriveKey == nil {

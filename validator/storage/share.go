@@ -7,7 +7,20 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"math"
 )
+
+// PubKeys defines the type for public keys object representation
+type PubKeys []*bls.PublicKey
+
+// Aggregate iterates over public keys and adds them to the bls PublicKey
+func (keys PubKeys) Aggregate() bls.PublicKey {
+	ret := bls.PublicKey{}
+	for _, k := range keys {
+		ret.Add(k)
+	}
+	return ret
+}
 
 // Share storage model
 type Share struct {
@@ -22,6 +35,54 @@ type serializedShare struct {
 	NodeID    uint64
 	ShareKey  []byte
 	Committee map[uint64]*proto.Node
+}
+
+// CommitteeSize returns the IBFT committee size
+func (s *Share) CommitteeSize() int {
+	return len(s.Committee)
+}
+
+// ThresholdSize returns the minimum IBFT committee members that needs to sign for a quorum
+func (s *Share) ThresholdSize() int {
+	return int(math.Ceil(float64(s.CommitteeSize()) * 2 / 3))
+}
+
+// PubKeysByID returns the public keys with the associated ids
+func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
+	ret := make([]*bls.PublicKey, 0)
+	for _, id := range ids {
+		if val, ok := s.Committee[id]; ok {
+			pk := &bls.PublicKey{}
+			if err := pk.Deserialize(val.Pk); err != nil {
+				return ret, err
+			}
+			ret = append(ret, pk)
+		} else {
+			return nil, errors.New("pk for id not found")
+		}
+	}
+	return ret, nil
+}
+
+// VerifySignedMessage returns true of signed message verifies against pks
+func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
+	pks, err := s.PubKeysByID(msg.SignerIds)
+	if err != nil {
+		return err
+	}
+	if len(pks) == 0 {
+		return errors.New("could not find public key")
+	}
+
+	res, err := msg.VerifyAggregatedSig(pks)
+	if err != nil {
+		return err
+	}
+	if !res {
+		return errors.New("could not verify message signature")
+	}
+
+	return nil
 }
 
 // Serialize share to []byte

@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,10 +14,8 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		CommitMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
-		},
+		Config:         proto.DefaultConsensusParams(),
+		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
 			Round: 3,
 		},
@@ -71,21 +70,15 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.SignerIds)
 
 	// test verification
-	params := &proto.InstanceParams{
-		ConsensusParams: proto.DefaultConsensusParams(),
-		IbftCommittee:   nodes,
-	}
-	require.NoError(t, params.VerifySignedMessage(msg))
+	share := storage.Share{Committee: nodes}
+	require.NoError(t, share.VerifySignedMessage(msg))
 }
 
 func TestCommitPipeline(t *testing.T) {
-	_, nodes := GenerateNodes(4)
+	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3),
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   nodes,
-		},
+		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		State: &proto.State{
 			Round: 1,
 		},

@@ -58,10 +58,7 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 		ibftStorage,
 		opt.Network,
 		msgQueue,
-		&proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   opt.Share.Committee,
-		},
+		proto.DefaultConsensusParams(),
 		opt.Share,
 	)
 	go ibfts[beacon.RoleAttester].Init()

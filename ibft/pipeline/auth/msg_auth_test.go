@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -118,9 +119,8 @@ func TestAuthorizeMsg(t *testing.T) {
 				signed.Signature = test.sig
 			}
 
-			pipeline := AuthorizeMsg(&proto.InstanceParams{
-				ConsensusParams: proto.DefaultConsensusParams(),
-				IbftCommittee:   committee,
+			pipeline := AuthorizeMsg(&storage.Share{
+				Committee: committee,
 			})
 
 			if len(test.expectedError) == 0 {

@@ -77,9 +77,9 @@ func New(opts Options) Exporter {
 		logger:           opts.Logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
-		ibftDisptcher:    tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx: context.TODO(),
-			Logger: opts.Logger,
+		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
+			Ctx:      context.TODO(),
+			Logger:   opts.Logger,
 			Interval: 2 * time.Second,
 		}),
 	}
@@ -204,11 +204,8 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 func (exp *exporter) validatorSyncInterval() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			exp.triggerIBFTSyncAll()
-		}
+	for range ticker.C {
+		exp.triggerIBFTSyncAll()
 	}
 }
 
@@ -219,7 +216,10 @@ func (exp *exporter) triggerIBFTSyncAll() {
 	}
 	exp.logger.Debug("all validators shares", zap.Int("len", len(shares)))
 	for _, share := range shares {
-		exp.triggerIBFTSync(share.PublicKey)
+		if err := exp.triggerIBFTSync(share.PublicKey); err != nil {
+			exp.logger.Warn("failed to trigger ibft sync", zap.Error(err),
+				zap.String("pubKeyHex", share.PublicKey.SerializeToHexStr()))
+		}
 	}
 }
 
@@ -230,13 +230,10 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	}
 	exp.logger.Info("syncing ibft data for validator", zap.String("pubKey", validatorPubKey.GetHexString()))
 	ibftInstance := ibft.NewIbftReadOnly(ibft.ReaderOptions{
-		Logger:  exp.logger,
-		Storage: exp.ibftStorage,
-		Network: exp.network,
-		Params: &proto.InstanceParams{
-			ConsensusParams: proto.DefaultConsensusParams(),
-			IbftCommittee:   validatorShare.Committee,
-		},
+		Logger:         exp.logger,
+		Storage:        exp.ibftStorage,
+		Network:        exp.network,
+		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
 

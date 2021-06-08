@@ -17,9 +17,9 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
-		auth.ValidatePKs(i.State.ValidatorPk),
+		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
-		auth.AuthorizeMsg(i.Params),
+		auth.AuthorizeMsg(i.ValidatorShare),
 		i.uponCommitMsg(),
 	)
 }
@@ -64,8 +64,8 @@ func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t
 			cnt++
 		}
 	}
-	quorum = cnt*3 >= i.Params.CommitteeSize()*2
-	return quorum, cnt, i.Params.CommitteeSize()
+	quorum = cnt*3 >= i.ValidatorShare.CommitteeSize()*2
+	return quorum, cnt, i.ValidatorShare.CommitteeSize()
 }
 
 /**
@@ -107,6 +107,6 @@ func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 		Lambda:      i.State.Lambda,
 		SeqNumber:   i.State.SeqNumber,
 		Value:       value,
-		ValidatorPk: i.State.ValidatorPk,
+		ValidatorPk: i.ValidatorShare.PublicKey.Serialize(),
 	}
 }
