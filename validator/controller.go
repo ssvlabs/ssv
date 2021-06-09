@@ -191,13 +191,13 @@ func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Sh
 		SignatureCollectionTimeout: c.signatureCollectionTimeout,
 	}
 	v := New(validatorOpts, &c.ibftStorage)
-	c.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v)
-	// start validator
-	if err := v.Start(); err != nil {
-		c.logger.Error("failed to start validator", zap.Error(err))
+	if added := c.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v); added {
+		// start validator
+		if err := v.Start(); err != nil {
+			c.logger.Error("failed to start validator", zap.Error(err))
+		}
+		c.newValidatorSubject.Notify(*v)
 	}
-
-	c.newValidatorSubject.Notify(*v)
 }
 
 func (c *controller) createValidatorShare(validatorAddedEvent eth1.ValidatorAddedEvent) *validatorstorage.Share {
