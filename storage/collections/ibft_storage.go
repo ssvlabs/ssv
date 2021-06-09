@@ -29,6 +29,8 @@ type Iibft interface {
 	SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error
 	// GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
 	GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error)
+
+	RemoveAll() error // TODO temp, need to remove
 }
 
 // IbftStorage struct
@@ -141,6 +143,10 @@ func (i *IbftStorage) key(id string, params ...[]byte) []byte {
 		ret = append(ret, p...)
 	}
 	return ret
+}
+
+func (i IbftStorage) RemoveAll() error  {
+	return i.db.RemoveAllByPrefix(i.prefix)
 }
 
 func uInt64ToByteSlice(n uint64) []byte {

@@ -96,6 +96,10 @@ func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	return res, err
 }
 
+func (b *BadgerDb) RemoveAllByPrefix(prefix []byte) error {
+	return b.db.DropPrefix(prefix)
+}
+
 // Close close db
 func (b *BadgerDb) Close() {
 	if err := b.db.Close(); err != nil{
