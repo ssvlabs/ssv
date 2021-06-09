@@ -58,10 +58,10 @@ type Beacon interface {
 	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
 
 	// GetProposalData returns proposal block for the given slot
-	GetProposalData(ctx context.Context, slot uint64, duty *bls.SecretKey) (*ethpb.BeaconBlock, error)
+	GetProposalData(ctx context.Context, slot uint64, shareKey *bls.SecretKey) (*ethpb.BeaconBlock, error)
 
 	// SignProposal signs the given proposal block
-	SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty *bls.SecretKey) (*ethpb.SignedBeaconBlock, error)
+	SignProposal(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error)
 
 	// SubmitProposal submits the given signed block
 	SubmitProposal(ctx context.Context, block *ethpb.SignedBeaconBlock) error

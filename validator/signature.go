@@ -77,7 +77,7 @@ func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beac
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal aggregator")
 		}
 
-		signedProposal, e := v.beacon.SignProposal(ctx, s.Block.Block, v.Share.ShareKey)
+		signedProposal, e := v.beacon.SignProposal(ctx, nil, s.Block.Block, v.Share.ShareKey)
 		if e != nil{
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}

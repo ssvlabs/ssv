@@ -222,7 +222,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 	}
 
 	for _, role := range roles {
-		go func(role beacon.Role) {
+	 	go func(role beacon.Role) {
 			logger := logger.With(zap.String("role", role.String()))
 			logger.Info("start role")
 			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)

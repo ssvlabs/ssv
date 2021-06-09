@@ -139,11 +139,11 @@ func (t *testBeacon) SubmitAggregation(ctx context.Context, data *ethpb.SignedAg
 	return nil
 }
 
-func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64, duty *bls.SecretKey) (*ethpb.BeaconBlock, error) {
+func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64, shareKey *bls.SecretKey) (*ethpb.BeaconBlock, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty *bls.SecretKey) (*ethpb.SignedBeaconBlock, error) {
+func (t *testBeacon) SignProposal(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error) {
 	return nil, nil
 }
 

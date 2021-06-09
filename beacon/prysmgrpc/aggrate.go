@@ -3,7 +3,6 @@ package prysmgrpc
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"time"
@@ -101,7 +100,7 @@ func (b *prysmGRPC) IsAggregator(ctx context.Context, slot uint64, committeeLen 
 
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
-	fmt.Printf("%b | %b \n", binary.LittleEndian.Uint64(hash[:8]), binary.LittleEndian.Uint64(hash[:8])%modulo)
+	b.logger.Info("check if is aggregator", zap.Bool("retured", val), zap.Int("committee", committeeLen), zap.Uint64("slot", slot), zap.Any("hash little endian", binary.LittleEndian.Uint64(hash[:8])), zap.Uint64("modulo", binary.LittleEndian.Uint64(hash[:8])%modulo))
 	return val, nil
 }
 

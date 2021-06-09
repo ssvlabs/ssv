@@ -3,7 +3,6 @@ package prysmgrpc
 import (
 	"context"
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"github.com/pkg/errors"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
@@ -30,13 +29,13 @@ func (b *prysmGRPC) GetProposalData(ctx context.Context, slot uint64, shareKey *
 }
 
 // SignProposal implements Beacon interface
-func (b *prysmGRPC) SignProposal(ctx context.Context, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error) {
+func (b *prysmGRPC) SignProposal(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error) {
 	// TODO: Check this
 	/*if err := b.preBlockSignValidations(ctx, block); err != nil {
 		return nil, errors.Wrapf(err, "failed block safety check for slot %d", block.Slot)
 	}*/
 
-	sig, err := b.signBlock(ctx, block, shareKey)
+	sig, err := b.signBlock(ctx, domain, block, shareKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign block")
 	}
@@ -80,10 +79,13 @@ func (b *prysmGRPC) signRandaoReveal(ctx context.Context, slot uint64, shareKey 
 	return shareKey.SignByte(root[:]).Serialize(), nil
 }
 
-func (b *prysmGRPC) signBlock(ctx context.Context, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) ([]byte, error) {
-	domain, err := b.domainData(ctx, b.network.EstimatedEpochAtSlot(block.GetSlot()), params.BeaconConfig().DomainBeaconProposer[:])
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get domain data")
+func (b *prysmGRPC) signBlock(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) ([]byte, error) {
+	var err error
+	if domain == nil{
+		domain, err = b.domainData(ctx, block.GetSlot(), params.BeaconConfig().DomainBeaconProposer[:])
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get domain data")
+		}
 	}
 
 	// TODO: A patch to randao signature!!

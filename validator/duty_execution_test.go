@@ -53,9 +53,9 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"non supported role",
 			false,
 			3,
-			beacon.RoleAggregator,
+			beacon.RoleUnknown,
 			refAttestationDataByts,
-			"unknown role: AGGREGATOR",
+			"unknown role: UNKNOWN",
 		},
 	}
 

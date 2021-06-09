@@ -2,7 +2,7 @@ package prysmgrpc
 
 import (
 	"context"
-	"fmt"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -21,14 +21,13 @@ func TestEndToEndAggregation(t *testing.T) {
 }
 
 func TestPrysmGRPC_RolesAt(t *testing.T) {
-	beaconClient, err := New(context.Background(), zap.L(), "pyrmont", []byte("BloxStaking"), "eth2-4000-prysm-ext.stage.bloxinfra.com:80")
+	beaconClient, err := New(context.Background(), logex.Build("", zap.DebugLevel), "pyrmont", []byte("BloxStaking"), "eth2-4000-prysm-ext.stage.bloxinfra.com:80")
 	require.NoError(t, err)
 	require.NoError(t, bls.Init(bls.BLS12_381))
 	for _, k := range keys{
 		shareKey := &bls.SecretKey{}
 		require.NoError(t, shareKey.SetHexString(k))
-		agg, err := beaconClient.IsAggregator(context.Background(), 1419615, 129, shareKey)
+		_, err := beaconClient.IsAggregator(context.Background(), 1419179, 130, shareKey)
 		require.NoError(t, err)
-		fmt.Printf("%s -- %t  \n", k, agg)
 	}
 }
