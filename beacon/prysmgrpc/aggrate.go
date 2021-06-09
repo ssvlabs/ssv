@@ -86,24 +86,6 @@ func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen 
 	return val, nil
 }
 
-// isAggregator returns true if the given slot is aggregator
-func (b *prysmGRPC) IsAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
-	modulo := uint64(1)
-	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
-		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
-	}
-
-	slotSig, err := b.signSlot(ctx, slot, shareKey)
-	if err != nil {
-		return false, err
-	}
-
-	hash := hashutil.Hash(slotSig)
-	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
-	b.logger.Info("check if is aggregator", zap.Bool("retured", val), zap.Int("committee", committeeLen), zap.Uint64("slot", slot), zap.Any("hash little endian", binary.LittleEndian.Uint64(hash[:8])), zap.Uint64("modulo", binary.LittleEndian.Uint64(hash[:8])%modulo))
-	return val, nil
-}
-
 // aggregateAndProofSig returns the signature of validator signing over aggregate and proof object.
 func (b *prysmGRPC) aggregateAndProofSig(ctx context.Context, agg *ethpb.AggregateAttestationAndProof, privateKey *bls.SecretKey) ([]byte, error) {
 	domain, err := b.domainData(ctx, agg.Aggregate.Data.Slot, params.BeaconConfig().DomainAggregateAndProof[:])

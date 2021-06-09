@@ -93,10 +93,6 @@ type testBeacon struct {
 	LastSubmittedAttestation *ethpb.Attestation
 }
 
-func (t *testBeacon) IsAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
-	panic("implement me")
-}
-
 func newTestBeacon(t *testing.T) *testBeacon {
 	ret := &testBeacon{}
 	// parse ref att. data

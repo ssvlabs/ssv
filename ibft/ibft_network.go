@@ -39,7 +39,7 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
-			if err := i.validateDecidedMsg(msg); err == nil {
+			if err := i.validateDecidedMsg(msg); err == nil { // might need better solution here
 				i.ProcessDecidedMessage(msg)
 			}
 		}
@@ -50,8 +50,8 @@ func (i *ibftImpl) listenToSyncMessages() {
 	// sync messages
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
-		for msg := range syncChan { // TODO add validator pubkey validation
-			i.ProcessSyncMessage(msg) // TODO verify duty type
+		for msg := range syncChan { // TODO add validator pubkey validation?
+			i.ProcessSyncMessage(msg) // TODO verify duty type?
 		}
 	}()
 }
