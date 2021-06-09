@@ -112,6 +112,11 @@ func (v *Validator) startSlotQueueListener() {
 func (v *Validator) listenToNetworkMessages() {
 	sigChan := v.network.ReceivedSignatureChan()
 	for sigMsg := range sigChan {
+		if sigMsg == nil {
+			v.logger.Debug("got nil message")
+			continue
+		}
+		v.logger.Debug("got new message", zap.String("sigMsg", sigMsg.String()))
 		v.msgQueue.AddMessage(&network.Message{
 			Lambda:        sigMsg.Message.Lambda,
 			SignedMessage: sigMsg,
