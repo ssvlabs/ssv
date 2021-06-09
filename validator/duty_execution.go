@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/node/valcheck"
 	"github.com/pkg/errors"
-	"strings"
 	"sync"
 	"time"
 
@@ -173,7 +171,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	}
 
 	l := logger.With(zap.String("role", role.String()))
-	identifier := []byte(identifierFormat(slot, role))
+	identifier := []byte(ibft.IdentifierFormat(slot, role))
 
 	if _, ok := v.ibfts[role]; !ok {
 		v.logger.Error("no ibft for this role", zap.Any("role", role))
@@ -199,14 +197,6 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		return 0, nil, nil, errors.New("ibft did not decide, not executing role")
 	}
 	return signaturesCount, decidedValue, identifier, nil
-}
-
-func identifierFormat(slot uint64, role beacon.Role) string {
-	return fmt.Sprintf("%d_%s", slot, role.String())
-}
-
-func identifierRole(identifier string) string {
-	return strings.Split(identifier, "_ ")[1]
 }
 
 // ExecuteDuty by slotQueue

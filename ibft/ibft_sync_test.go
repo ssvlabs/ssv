@@ -2,12 +2,14 @@ package ibft
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -43,7 +45,8 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 	for i := 0; i <= highestSeq; i++ {
-		lambda := []byte(fmt.Sprintf("lambda_%d", i))
+		lambda := []byte(IdentifierFormat(uint64(i), beacon.RoleAttester))
+
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
 			Type:        proto.RoundState_Commit,
 			Round:       3,
@@ -74,7 +77,7 @@ func populatedIbft(
 		ShareKey:    sks[nodeID],
 		Committee:   nodes,
 	}
-	ret := New(0, zap.L(), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, proto.DefaultConsensusParams(), share)
+	ret := New(beacon.RoleAttester, logex.Build("", zap.DebugLevel), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, proto.DefaultConsensusParams(), share)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
 	ret.(*ibftImpl).listenToSyncMessages()

@@ -3,6 +3,7 @@ package auth
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 )
 
@@ -57,7 +58,8 @@ func TestMsgValidatorPK(t *testing.T) {
 			if len(test.expectedError) == 0 {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, test.expectedError)
+				require.Error(t, err)
+				require.True(t, strings.HasPrefix(err.Error(), test.expectedError))
 			}
 		})
 	}

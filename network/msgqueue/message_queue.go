@@ -37,10 +37,6 @@ func New() *MessageQueue {
 	}
 }
 
-func (q *MessageQueue) QueueCount() int {
-	return len(q.queue)
-}
-
 // AddIndexFunc adds an index function that will be activated every new message the queue receives
 func (q *MessageQueue) AddIndexFunc(f IndexFunc) {
 	q.indexFuncs = append(q.indexFuncs, f)
