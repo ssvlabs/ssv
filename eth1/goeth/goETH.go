@@ -147,20 +147,19 @@ func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string,
 		return errors.Wrap(err, "failed to get event logs")
 	}
 	nResults := len(logs)
-	nSuccessful := nResults
 	ec.logger.Debug(fmt.Sprintf("got event logs, number of results: %d", nResults))
 
 	for _, vLog := range logs {
 		err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			nSuccessful--
+			nResults--
 			ec.logger.Error("Failed to handle event during sync", zap.Error(err))
 			continue
 		}
 	}
-	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nSuccessful))
+	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nResults))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Parsed: nSuccessful})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Parsed: nResults})
 
 	return nil
 }
