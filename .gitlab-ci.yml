@@ -33,6 +33,7 @@ Build stage Docker image:
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
     - stage
+    - eth1_sync
 
 Deploy to blox-infra-stage cluster:
   stage: deploy

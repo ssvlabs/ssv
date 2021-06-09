@@ -75,7 +75,7 @@ type eth1ClientMock struct {
 	syncResponse error
 }
 
-func (ec *eth1ClientMock) Subject() pubsub.Subscriber {
+func (ec *eth1ClientMock) EventsSubject() pubsub.Subscriber {
 	return ec.sub
 }
 

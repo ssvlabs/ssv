@@ -15,7 +15,7 @@ const (
 func (n *ssvNode) startEth1() {
 	// setup validator controller to listen to ValidatorAdded events
 	// this will handle events from the sync as well
-	cnValidators, err := n.eth1Client.Subject().Register("ValidatorControllerObserver")
+	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
 	if err != nil {
 		n.logger.Error("failed to register on contract events subject", zap.Error(err))
 	}
@@ -39,7 +39,7 @@ func (n *ssvNode) startEth1() {
 
 // syncEth1 sync past events
 func (n *ssvNode) syncEth1() error {
-	cn, err := n.eth1Client.Subject().Register("SSVNodeObserver")
+	cn, err := n.eth1Client.EventsSubject().Register("SSVNodeObserver")
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}

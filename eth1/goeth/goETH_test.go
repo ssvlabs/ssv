@@ -61,7 +61,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	err = json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
 
-	cn, err := ec.Subject().Register("ObserverForTest")
+	cn, err := ec.EventsSubject().Register("ObserverForTest")
 	require.NoError(t, err)
 	var eventsWg sync.WaitGroup
 	eventsWg.Add(2)

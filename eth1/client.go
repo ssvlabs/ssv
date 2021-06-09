@@ -26,7 +26,7 @@ type OperatorPrivateKeyProvider = func() (*rsa.PrivateKey, error)
 
 // Client represents the required interface for eth1 client
 type Client interface {
-	Subject() pubsub.Subscriber
+	EventsSubject() pubsub.Subscriber
 	Start() error
 	Sync(fromBlock *big.Int) error
 }

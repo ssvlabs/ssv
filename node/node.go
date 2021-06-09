@@ -90,7 +90,7 @@ func (n *ssvNode) Start() error {
 	n.validatorController.StartValidators()
 	n.startStreamDuties()
 
-	validatorsSubject := n.validatorController.Subject()
+	validatorsSubject := n.validatorController.NewValidatorSubject()
 	cnValidators, err := validatorsSubject.Register("SsvNodeObserver")
 	if err != nil {
 		n.logger.Error("failed to register on validators events subject", zap.Error(err))

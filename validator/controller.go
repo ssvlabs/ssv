@@ -38,7 +38,7 @@ type IController interface {
 	StartValidators() map[string]*Validator
 	GetValidatorsPubKeys() [][]byte
 	GetValidator(pubKey string) (*Validator, bool)
-	Subject() pubsub.Subscriber
+	NewValidatorSubject() pubsub.Subscriber
 }
 
 // Controller struct that manages all validator shares
@@ -163,12 +163,12 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 }
 
 // Subject returns the subject
-func (c *controller) Subject() pubsub.Subscriber {
+func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 	return c.newValidatorSubject
 }
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
-	validatorShare := c.createValidatorShare(validatorAddedEvent)
+	validatorShare := c.serializeValidatorAddedEvent(validatorAddedEvent)
 	if len(validatorShare.Committee) > 0 {
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			c.logger.Error("failed to save validator share", zap.Error(err))
@@ -200,7 +200,7 @@ func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Sh
 	}
 }
 
-func (c *controller) createValidatorShare(validatorAddedEvent eth1.ValidatorAddedEvent) *validatorstorage.Share {
+func (c *controller) serializeValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) *validatorstorage.Share {
 	validatorShare := validatorstorage.Share{}
 	ibftCommittee := map[uint64]*proto.Node{}
 	for i := range validatorAddedEvent.OessList {
