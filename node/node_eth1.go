@@ -79,7 +79,7 @@ func (n *ssvNode) syncEth1() error {
 func (n *ssvNode) upgradeSyncOffset(syncOffset *SyncOffset, syncEndedEvent eth1.SyncEndedEvent) error {
 	nResults := len(syncEndedEvent.Logs)
 	if nResults > 0 {
-		if syncEndedEvent.Parsed < nResults {
+		if !syncEndedEvent.Success {
 			n.logger.Warn("could not parse all events from eth1, sync offset will not be upgraded")
 		} else if rawOffset := syncEndedEvent.Logs[nResults-1].BlockNumber; rawOffset > syncOffset.Uint64() {
 			n.logger.Debug("upgrading sync offset", zap.Uint64("offset", rawOffset))

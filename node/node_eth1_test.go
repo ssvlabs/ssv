@@ -24,7 +24,7 @@ func TestSyncEth1(t *testing.T) {
 		logs := []types.Log{types.Log{}, types.Log{BlockNumber: rawOffset}}
 		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[0]})
 		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.sub.Notify(eth1.Event{Data: eth1.SyncEndedEvent{Logs: logs, Parsed: 2}})
+		eth1Client.sub.Notify(eth1.Event{Data: eth1.SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	err := ssvNode.syncEth1()
 	require.NoError(t, err)
@@ -41,8 +41,7 @@ func TestFailedSyncEth1(t *testing.T) {
 		logs := []types.Log{types.Log{}, types.Log{BlockNumber: DefaultSyncOffset().Uint64()}}
 		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[0]})
 		eth1Client.sub.Notify(eth1.Event{Data: struct{}{}, Log: logs[1]})
-		// marking 1 event as failed
-		eth1Client.sub.Notify(eth1.Event{Data: eth1.SyncEndedEvent{Logs: logs, Parsed: 1}})
+		eth1Client.sub.Notify(eth1.Event{Data: eth1.SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	err := ssvNode.syncEth1()
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")

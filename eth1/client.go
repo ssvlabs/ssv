@@ -15,8 +15,8 @@ type Event struct {
 
 // SyncEndedEvent meant to notify an observer that the sync is over
 type SyncEndedEvent struct {
-	// Parsed is the number of results that were parsed successfully
-	Parsed int
+	// Success returns true if the sync went well (all events were parsed)
+	Success bool
 	// Logs is the actual logs that we got from eth1
 	Logs []types.Log
 }

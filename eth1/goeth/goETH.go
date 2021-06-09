@@ -159,7 +159,7 @@ func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string,
 	}
 	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nResults))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Parsed: nResults})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nResults == len(logs)})
 
 	return nil
 }
