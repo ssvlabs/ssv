@@ -60,7 +60,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 }
 
 // Subject returns the events subject
-func (ec *eth1Client) Subject() pubsub.Subscriber {
+func (ec *eth1Client) EventsSubject() pubsub.Subscriber {
 	return ec.outSubject
 }
 
@@ -75,11 +75,7 @@ func (ec *eth1Client) Start() error {
 
 // Sync reads events history
 func (ec *eth1Client) Sync(fromBlock *big.Int) error {
-	err := ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
-	if err != nil {
-		ec.logger.Error("Failed to sync contract events", zap.Error(err))
-	}
-	return err
+	return ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
 }
 
 // fireEvent notifies observers about some contract event
@@ -161,9 +157,9 @@ func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string,
 			continue
 		}
 	}
-	ec.logger.Debug(fmt.Sprintf("%d event logs were handled successfuly", nResults))
+	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nResults))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nResults == len(logs)})
 
 	return nil
 }
@@ -172,8 +168,9 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	ec.logger.Debug("handling smart contract event")
 
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
-	if err != nil {
-		return errors.Wrap(err, "Failed to find event type")
+	if err != nil { // unknown event -> ignored
+		ec.logger.Warn("Failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
+		return nil
 	}
 	operatorPriveKey, err := ec.operatorPrivKeyProvider()
 	if err != nil {
