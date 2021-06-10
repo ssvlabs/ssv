@@ -103,7 +103,7 @@ and run the command below to create a `config.yaml` file.
 ```
 $ yq n db.Path "<db folder>" | tee config.yaml \
   && yq w -i config.yaml db.Type "badger-db" \
-  && yq w -i config.yaml Network "pyrmont" \
+  && yq w -i config.yaml Network "prater" \
   && yq w -i config.yaml DiscoveryType "discv5" \
   && yq w -i config.yaml BeaconNodeAddr "<ETH 2.0 node>" \
   && yq w -i config.yaml ETH1Addr "<ETH1 node>" \
@@ -117,9 +117,9 @@ db:
   Path: ./data/db/node_1
   Type: badger-db
 
-Network: pyrmont
+Network: prater
 DiscoveryType: discv5
-BeaconNodeAddr: prysm.stage.blox.com:80
+BeaconNodeAddr: prater.stage.blox.com:80
 ETH1Addr: ws://eth1.stage.blox.com/ws
 ```
 
