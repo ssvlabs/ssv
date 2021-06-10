@@ -33,7 +33,7 @@ var rawOperatorAdded = `
 }
 `
 
-var rawValidaatorAdded = `
+var rawValidatorAdded = `
 {
   "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
   "topics": [
@@ -57,8 +57,8 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	var vLogOperatorAdded types.Log
 	err = json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	var vLogValidaatorAdded types.Log
-	err = json.Unmarshal([]byte(rawValidaatorAdded), &vLogValidaatorAdded)
+	var vLogValidatorAdded types.Log
+	err = json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
 
 	cn, err := ec.EventsSubject().Register("ObserverForTest")
@@ -84,7 +84,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 
 	ec.handleEvent(vLogOperatorAdded, contractAbi)
 	time.Sleep(10 * time.Millisecond)
-	ec.handleEvent(vLogValidaatorAdded, contractAbi)
+	ec.handleEvent(vLogValidatorAdded, contractAbi)
 
 	eventsWg.Wait()
 }

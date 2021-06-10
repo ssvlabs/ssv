@@ -161,9 +161,9 @@ func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string,
 			continue
 		}
 	}
-	ec.logger.Debug(fmt.Sprintf("%d event logs were handled successfuly", nResults))
+	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nResults))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nResults == len(logs)})
 
 	return nil
 }
@@ -172,8 +172,9 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	ec.logger.Debug("handling smart contract event")
 
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
-	if err != nil {
-		return errors.Wrap(err, "Failed to find event type")
+	if err != nil { // unknown event -> ignored
+		ec.logger.Warn("Failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
+		return nil
 	}
 	operatorPriveKey, err := ec.operatorPrivKeyProvider()
 	if err != nil {

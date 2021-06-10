@@ -79,6 +79,10 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 
 // Start validator
 func (v *Validator) Start() error {
+	if v.network.IsSubscribeToValidatorNetwork(v.Share.PublicKey) {
+		v.logger.Debug("already subscribed to validator's topic")
+		return nil
+	}
 	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey, false); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
@@ -109,6 +113,11 @@ func (v *Validator) startSlotQueueListener() {
 func (v *Validator) listenToNetworkMessages() {
 	sigChan := v.network.ReceivedSignatureChan()
 	for sigMsg := range sigChan {
+		if sigMsg == nil {
+			v.logger.Debug("got nil message")
+			continue
+		}
+		v.logger.Debug("got new message", zap.String("sigMsg", sigMsg.String()))
 		v.msgQueue.AddMessage(&network.Message{
 			Lambda:        sigMsg.Message.Lambda,
 			SignedMessage: sigMsg,

@@ -13,11 +13,6 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
-ifndef $(EXPORTER_BUILD_PATH)
-    EXPORTER_BUILD_PATH="./bin/exporter"
-    export EXPORTER_BUILD_PATH
-endif
-
 # node command builder
 NODE_COMMAND=--config=${CONFIG_PATH}
 
@@ -112,4 +107,4 @@ start-boot-node:
 .PHONY: start-exporter-node
 start-exporter-node:
 	@echo "Running start-exporter-node"
-	${EXPORTER_BUILD_PATH} start-exporter -c=./config/config.exporter.yaml
+	${BUILD_PATH} start-exporter -c=./config/config.exporter.yaml
