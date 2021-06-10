@@ -87,41 +87,20 @@ In order to achieve HA, one of the following should be the way to go:
 
 #### Explorer Center
 
-**TODO: finalize authentication**
+Exporter Node will provide a `libp2p stream` endpoint for getting data. \
+The `stream` is a duplex channel, and will be used for:
+* push ibft data from exporter in an async manner
+* pull validators / operators information
 
-Exporter Node will provide the following end-points:
 
   ##### Get all operators
 
-  **TODO: finalize response**
-
-  `GET` `/operators`
-  
-  ```json
-  {
-    "data": [],
-    "timestamp": 1622361865789
-  }
-  ```
+  **TODO: finalize format (proto vs. json)**
   
   ##### Get all validators
 
-  **TODO: finalize response**  
+  **TODO: finalize format (proto vs. json)**
 
-  `GET` `/validators`
-  
-  ```json
-  {
-    "data": [],
-    "timestamp": 1622361865789
-  }
-  ```
+  ##### Push ibft data 
 
-
-  ##### Get ibft data 
-
-  **TODO: finalize**
-
-  Input: slot + seq_number
-  
-  * consider streams
+  **TODO: finalize format (proto vs. json)**
