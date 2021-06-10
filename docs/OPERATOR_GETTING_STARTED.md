@@ -101,13 +101,13 @@ and run the command below to create a `config.yaml` file.
 **NOTE** Operator private key is optional as mentioned in the previous step
 
 ```
-$ yq e -n '.db = {"Path": "<db folder>", "Type": "badger-db"}' \
-  | yq e '.Network = "pyrmont"' - \
-  | yq e '.DiscoveryType = "discv5"' \
-  | yq e '.BeaconNodeAddr = "<ETH 2.0 node>"' - \
-  | yq e '.ETH1Addr = "<ETH1 node>"' - \
-  | yq e '.OperatorKey = "<privkey of the operator>"' - \
-  | tee config.yaml
+$ yq n db.Path "<db folder>" | tee config.yaml \
+  && yq w -i config.yaml db.Type "badger-db" \
+  && yq w -i config.yaml Network "pyrmont" \
+  && yq w -i config.yaml DiscoveryType "discv5" \
+  && yq w -i config.yaml BeaconNodeAddr "<ETH 2.0 node>" \
+  && yq w -i config.yaml ETH1Addr "<ETH1 node>" \
+  && yq w -i config.yaml OperatorKey "<privkey of the operator>"
 ```
 
 `config.yaml` example:
