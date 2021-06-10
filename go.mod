@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
-	github.com/bloxapp/eth2-key-manager v1.0.4
+	github.com/bloxapp/eth2-key-manager v1.0.5
 	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/dgraph-io/badger v1.6.1
 	github.com/dgraph-io/badger/v3 v3.2011.1
