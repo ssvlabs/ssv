@@ -128,6 +128,11 @@ func (n *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) er
 	return nil
 }
 
+// IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
+func (n *testNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
+	return false
+}
+
 // AllPeers returns all connected peers for a validator PK
 func (n *testNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.peers, nil
