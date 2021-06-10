@@ -3,15 +3,9 @@ module github.com/bloxapp/ssv
 go 1.15
 
 require (
-	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/bloxapp/eth2-key-manager v1.0.5
-	github.com/containerd/fifo v1.0.0 // indirect
 	github.com/dgraph-io/badger v1.6.1
 	github.com/dgraph-io/badger/v3 v3.2011.1
-	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf
-	github.com/docker/go-connections v0.4.0 // indirect
-	github.com/docker/go-metrics v0.0.1 // indirect
-	github.com/docker/go-units v0.4.0 // indirect
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.4.3
@@ -26,8 +20,6 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.4.0
 	github.com/libp2p/go-tcp-transport v0.2.1
 	github.com/multiformats/go-multiaddr v0.3.1
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
