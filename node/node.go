@@ -158,7 +158,9 @@ func (n *ssvNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 func (n *ssvNode) startStreamDuties() {
 	var err error
 	pubKeys := n.validatorController.GetValidatorsPubKeys()
+	n.logger.Debug("got pubkeys for stream duties", zap.Int("pubkeys count", len(pubKeys)))
 	n.streamDuties, err = n.beacon.StreamDuties(n.context, pubKeys)
+	n.logger.Debug("got stream duties")
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
 	}
