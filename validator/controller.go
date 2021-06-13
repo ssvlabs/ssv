@@ -177,6 +177,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 			c.logger.Error("failed to save validator share", zap.Error(err))
 			return
 		}
+		c.logger.Debug("validator share was saved")
 		c.onNewValidatorShare(validatorShare)
 	}
 }

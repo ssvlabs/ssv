@@ -51,7 +51,6 @@ type ssvNode struct {
 	genesisEpoch        uint64
 	dutyLimit           uint64
 	streamDuties        <-chan *ethpb.DutiesResponse_Duty
-
 	eth1Client eth1.Client
 }
 
@@ -160,7 +159,6 @@ func (n *ssvNode) startStreamDuties() {
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
 	}
-
 	n.logger.Info("start streaming duties")
 }
 
