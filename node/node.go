@@ -51,8 +51,6 @@ type ssvNode struct {
 	genesisEpoch        uint64
 	dutyLimit           uint64
 	streamDuties        <-chan *ethpb.DutiesResponse_Duty
-	pubkeysUpdateChan   chan bool
-
 	eth1Client eth1.Client
 }
 
@@ -101,9 +99,6 @@ func (n *ssvNode) Start() error {
 		case <-cnValidators:
 			n.logger.Debug("new processed validator, restarting stream duties")
 			n.startStreamDuties()
-			continue
-		case <-n.pubkeysUpdateChan:
-			n.logger.Debug("public keys updated, restart stream duties listener")
 			continue
 		case duty := <-n.streamDuties:
 			go n.onDuty(duty)
@@ -164,12 +159,6 @@ func (n *ssvNode) startStreamDuties() {
 	if err != nil {
 		n.logger.Error("failed to open duties stream", zap.Error(err))
 	}
-	if n.pubkeysUpdateChan == nil {
-		n.pubkeysUpdateChan = make(chan bool) // first init
-	} else {
-		n.pubkeysUpdateChan <- true // update stream duty listener in order to fetch newly added pubkeys
-	}
-
 	n.logger.Info("start streaming duties")
 }
 
