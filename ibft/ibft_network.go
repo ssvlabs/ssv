@@ -9,14 +9,16 @@ import (
 )
 
 func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
-	tasks.ExecWithInterval(func() (bool, bool) {
+	tasks.ExecWithInterval(func(lastTick time.Duration) (bool, bool) {
 		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
 		if err != nil {
 			i.logger.Error("failed fetching peers", zap.Error(err))
 			// continue without increasing interval
 			return false, true
 		}
-		i.logger.Debug("waiting for min peer count", zap.Int("current peer count", len(peers)))
+		i.logger.Debug("waiting for min peer count",
+			zap.Int("current peer count", len(peers)),
+			zap.Int64("last interval ms", lastTick.Milliseconds()))
 		if len(peers) >= minPeerCount {
 			// stop interval if we found enough peers
 			return true, false
