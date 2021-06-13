@@ -3,7 +3,7 @@ module github.com/bloxapp/ssv
 go 1.15
 
 require (
-	github.com/bloxapp/eth2-key-manager v1.0.5
+	github.com/bloxapp/eth2-key-manager v1.0.6
 	github.com/dgraph-io/badger v1.6.1
 	github.com/dgraph-io/badger/v3 v3.2011.1
 	github.com/ethereum/go-ethereum v1.9.25
