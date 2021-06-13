@@ -34,7 +34,7 @@ var exportKeysCmd = &cobra.Command{
 
 		fmt.Println("Seed:", hex.EncodeToString(seed))
 		fmt.Println("Generating keys for index:", index)
-		path := core.PyrmontNetwork.FullPath(fmt.Sprintf("/%d/0/0", index))
+		path := core.PraterNetwork.FullPath(fmt.Sprintf("/%d/0/0", index))
 		key, err := util.PrivateKeyFromSeedAndPath(seed, path)
 		if err != nil {
 			Logger.Fatal("failed to get private key from seed", zap.Error(err))

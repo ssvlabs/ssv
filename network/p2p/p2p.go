@@ -204,6 +204,12 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	return nil
 }
 
+// IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
+func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
+	_, ok := n.cfg.Topics[validatorPk.SerializeToHexStr()]
+	return ok
+}
+
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	go func(sub *pubsub.Subscription) {
