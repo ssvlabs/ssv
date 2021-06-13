@@ -83,7 +83,7 @@ func (v *Validator) Start() error {
 		v.logger.Debug("already subscribed to validator's topic")
 		return nil
 	}
-	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey, false); err != nil {
+	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()

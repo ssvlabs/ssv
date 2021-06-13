@@ -82,6 +82,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.ExporterOptions.Logger = Logger
 		cfg.ExporterOptions.Network = network
 		cfg.ExporterOptions.DB = db
+		cfg.ExporterOptions.Ctx = cmd.Context()
 
 		exporterNode := exporter.New(cfg.ExporterOptions)
 

@@ -5,12 +5,13 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/sync"
+	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -54,14 +55,21 @@ func NewIbftReadOnly(opts ReaderOptions) Reader {
 func (r *reader) Sync() error {
 	validatorPubkey := r.validatorShare.PublicKey.Serialize()
 	// subscribe to topic so we could find relevant nodes
-	err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey, true)
+	err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey)
 	if err != nil {
 		r.logger.Error("could not subscribe to validator channel", zap.Error(err),
 			zap.String("validatorPubkey", r.validatorShare.PublicKey.SerializeToHexStr()))
 	}
-	time.Sleep(3500 * time.Millisecond) // wait for network setup
-	s := sync.NewHistorySync(r.logger, validatorPubkey, r.network, r.storage, r.validateDecidedMsg)
-	return s.Start()
+	// wait for network setup (subscribe to topic)
+	var netWaitGroup sync.WaitGroup
+	netWaitGroup.Add(1)
+	go func() {
+		defer netWaitGroup.Done()
+		time.Sleep(1 * time.Second)
+	}()
+	netWaitGroup.Wait()
+	hs := ibftsync.NewHistorySync(r.logger, validatorPubkey, r.network, r.storage, r.validateDecidedMsg)
+	return hs.Start()
 }
 
 // Start starts the network listeners

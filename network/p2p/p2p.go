@@ -187,7 +187,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, silent bool) error {
+func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
 	if err != nil {
 		return errors.Wrap(err, "failed to join to Topics")
@@ -200,10 +200,7 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, sil
 	}
 	n.cfg.Subs = append(n.cfg.Subs, sub)
 
-	// listen to new topic if this is not a silent subscription
-	if !silent {
-		n.listen(sub)
-	}
+	n.listen(sub)
 
 	return nil
 }

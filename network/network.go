@@ -66,7 +66,7 @@ type Network interface {
 	ReceivedSyncMsgChan() <-chan *SyncChanObj
 
 	// SubscribeToValidatorNetwork subscribing and listen to validator network
-	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey, silent bool) error
+	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
 
 	// IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
 	IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool

@@ -23,7 +23,13 @@ import (
 )
 
 const (
-	defaultOffset string = "49e08f"
+	defaultOffset             string = "49e08f"
+	validatorSyncIntervalTick        = 2 * time.Minute
+	ibftSyncDispatcherTick           = 2 * time.Second
+)
+
+var (
+	ibftSyncEnabled = false
 )
 
 // Exporter represents the main interface of this package
@@ -35,7 +41,7 @@ type Exporter interface {
 
 // Options contains options to create the node
 type Options struct {
-	APIPort int `yaml:"APIPort" env-default:"5001"`
+	Ctx context.Context
 
 	Logger     *zap.Logger
 	ETHNetwork *core.Network
@@ -49,6 +55,7 @@ type Options struct {
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
+	ctx              context.Context
 	store            storage.ExporterStorage
 	operatorStorage  collections.IOperatorStorage
 	validatorStorage validatorstorage.ICollection
@@ -57,8 +64,6 @@ type exporter struct {
 	network          network.Network
 	eth1Client       eth1.Client
 	ibftDisptcher    tasks.Dispatcher
-
-	httpHandlers apiHandlers
 }
 
 // New creates a new Exporter instance
@@ -71,20 +76,20 @@ func New(opts Options) Exporter {
 	)
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
 	e := exporter{
+		ctx:              opts.Ctx,
 		store:            storage.NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
-		operatorStorage: collections.NewOperatorStorage(opts.DB, opts.Logger),
+		operatorStorage:  collections.NewOperatorStorage(opts.DB, opts.Logger),
 		logger:           opts.Logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
 		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx:      context.TODO(),
+			Ctx:      opts.Ctx,
 			Logger:   opts.Logger,
-			Interval: 2 * time.Second,
+			Interval: ibftSyncDispatcherTick,
 		}),
 	}
-	e.httpHandlers = newHTTPHandlers(&e, opts.APIPort)
 
 	return &e
 }
@@ -95,9 +100,9 @@ func (exp *exporter) Start() error {
 	go exp.validatorSyncInterval()
 	err := exp.eth1Client.Start()
 	if err != nil {
-		exp.logger.Error("could not start eth1 client")
+		return errors.Wrap(err, "could not start eth1 client")
 	}
-	return exp.httpHandlers.Listen()
+	return nil
 }
 
 // Sync takes care of syncing an exporter node with:
@@ -209,7 +214,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 }
 
 func (exp *exporter) validatorSyncInterval() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(validatorSyncIntervalTick)
 	defer ticker.Stop()
 	for range ticker.C {
 		exp.triggerIBFTSyncAll()
@@ -231,6 +236,10 @@ func (exp *exporter) triggerIBFTSyncAll() {
 }
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
+	if !ibftSyncEnabled {
+		exp.logger.Info("ibft sync is disabled")
+		return nil
+	}
 	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
