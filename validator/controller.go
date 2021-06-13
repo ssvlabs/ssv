@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -162,23 +163,31 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 	return false
 }
 
-// Subject returns the subject
+// NewValidatorSubject returns the validators subject
 func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 	return c.newValidatorSubject
 }
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
+	c.logger.Debug("handles validator added event",
+		zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
 	validatorShare := c.serializeValidatorAddedEvent(validatorAddedEvent)
 	if len(validatorShare.Committee) > 0 {
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			c.logger.Error("failed to save validator share", zap.Error(err))
 			return
 		}
-		c.handleNewValidatorShare(validatorShare)
+		c.onNewValidatorShare(validatorShare)
 	}
 }
 
-func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Share) {
+func (c *controller) onNewValidatorShare(validatorShare *validatorstorage.Share) {
+	pubKeyHex := validatorShare.PublicKey.SerializeToHexStr()
+	if _, exist := c.GetValidator(pubKeyHex); exist {
+		c.logger.Debug("skip setup for known validator",
+			zap.String("pubKeyHex", pubKeyHex))
+		return
+	}
 	// setup validator
 	validatorOpts := Options{
 		Context:                    c.context,
@@ -191,10 +200,13 @@ func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Sh
 		SignatureCollectionTimeout: c.signatureCollectionTimeout,
 	}
 	v := New(validatorOpts, &c.ibftStorage)
-	if added := c.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v); added {
+	if added := c.AddValidator(pubKeyHex, v); added {
 		// start validator
 		if err := v.Start(); err != nil {
-			c.logger.Error("failed to start validator", zap.Error(err))
+			c.logger.Error("failed to start validator",
+				zap.Error(err), zap.String("pubKeyHex", pubKeyHex))
+		} else {
+			c.logger.Debug("validator started", zap.String("pubKeyHex", pubKeyHex))
 		}
 		c.newValidatorSubject.Notify(*v)
 	}
