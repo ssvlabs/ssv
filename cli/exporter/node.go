@@ -21,9 +21,10 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	ExporterOptions            exporter.Options `yaml:"exporter"`
 	DBOptions                  basedb.Options   `yaml:"db"`
 	P2pNetworkConfig           p2p.Config       `yaml:"network"`
+	// TODO: remove ExporterOptions from yaml if not needed
+	ExporterOptions            exporter.Options `yaml:"exporter"`
 
 	ETH1Addr   string `yaml:"ETH1Addr" env-required:"true"`
 	PrivateKey string `yaml:"PrivateKey" env:"EXPORTER_NODE_PRIVATE_KEY" env-description:"exporter node private key (default will generate new)"`
@@ -53,7 +54,21 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
-
+		bootstrapNodeAddr := []string{
+			// deployemnt
+			// internal ip
+			//"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+			//external ip
+			"enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
+			// ssh
+			//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
+		}
+		if cfg.P2pNetworkConfig.Enr != "" {
+			bootstrapNodeAddr = []string{
+				cfg.P2pNetworkConfig.Enr,
+			}
+		}
+		cfg.P2pNetworkConfig.BootstrapNodeAddr = bootstrapNodeAddr
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
@@ -61,12 +76,10 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		var eth1Client eth1.Client
 		if cfg.ETH1Addr != "" {
-			//operatorStorage := collections.NewOperatorStorage(db, Logger)
-			//if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
-			//	Logger.Fatal("failed to setup operator private key", zap.Error(err))
-			//}
 			eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
 				Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
+				// using an empty private key provider
+				// because the exporter doesn't run in the context of an operator
 				PrivKeyProvider: func() (*rsa.PrivateKey, error) {
 					return nil, nil
 				},
