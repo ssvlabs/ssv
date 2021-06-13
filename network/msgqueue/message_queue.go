@@ -32,6 +32,7 @@ func New() *MessageQueue {
 		queue:    make(map[string][]*messageContainer),
 		indexFuncs: []IndexFunc{
 			iBFTMessageIndex(),
+			iBFTAllRoundChangeIndex(),
 			sigMessageIndex(),
 		},
 	}
@@ -69,13 +70,25 @@ func (q *MessageQueue) AddMessage(msg *network.Message) {
 	}
 }
 
+func (q *MessageQueue) MessagesForIndex(index string) []*network.Message {
+	q.msgMutex.Lock()
+	defer q.msgMutex.Unlock()
+
+	ret := make([]*network.Message, 0)
+	for _, cont := range q.queue[index] {
+		ret = append(ret, cont.msg)
+	}
+
+	return ret
+}
+
 // PopMessage will return a message by its index if found, will also delete all other index occurrences of that message
 func (q *MessageQueue) PopMessage(index string) *network.Message {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
 	var ret *network.Message
-	if len(q.queue[index]) > 0 {
+	if q.MsgCount(index) > 0 {
 		c := q.queue[index][0]
 		ret = c.msg
 

@@ -59,32 +59,32 @@ func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.Sig
 // Run runs the test
 func (test *PrepareAtDifferentRound) Run(t *testing.T) {
 	// pre-prepare
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
 	// simulate a later round prepare and how the node gets there in terms of change round timeouts
 	for i := 2; i <= 5; i++ {
-		spectesting.RequireNotProcessedMessage(t, test.instance.ProcessMessage)
+		spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage)
 		spectesting.SimulateTimeout(test.instance, uint64(i))
 	}
 
 	// non qualified prepare quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(5, test.inputValue)
 	require.False(t, quorum)
 	// qualified prepare quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(5, test.inputValue)
 	require.True(t, quorum)
 	// non qualified commit quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(5, test.inputValue)
 	require.False(t, quorum)
 	// qualified commit quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireNotProcessedMessage(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(5, test.inputValue)
 	require.True(t, quorum)
 

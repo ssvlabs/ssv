@@ -14,17 +14,22 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateRound(i.State.Round),
 		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		changeround.Validate(i.ValidatorShare),
+	)
+}
+
+func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		i.changeRoundMsgValidationPipeline(),
+		auth.ValidateRound(i.State.Round),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
-		changeround.UponPartialQuorum(),
 		i.uponChangeRoundFullQuorum(),
 	)
 }
@@ -126,6 +131,13 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
 
+func (i *Instance) changeRoundPartialQuorum(msgs []*proto.SignedMessage) (quorum bool, t int, n int) {
+	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
+	// TODO - refactor a way to calculate partial quorum
+	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*1
+	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
+}
+
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue)
 
@@ -173,7 +185,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round))
 
 	// set time for next round change
-	i.triggerRoundChangeOnTimer()
+	i.startRoundChangeOnTimer()
 	// broadcast round change
 	broadcastMsg, err := i.generateChangeRoundMessage()
 	if err != nil {

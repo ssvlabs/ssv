@@ -64,6 +64,7 @@ type Instance struct {
 	stageChangedChansLock sync.Mutex
 	stopLock              sync.Mutex
 	stageLock             sync.Mutex
+	msgProcessingLock     sync.Mutex
 }
 
 // NewInstance is the constructor of Instance
@@ -102,6 +103,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stopLock:              sync.Mutex{},
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
+		msgProcessingLock:     sync.Mutex{},
 	}
 }
 
@@ -140,7 +142,7 @@ func (i *Instance) Start(inputValue []byte) {
 			}
 		}()
 	}
-	i.triggerRoundChangeOnTimer()
+	i.startRoundChangeOnTimer()
 }
 
 // Stop will trigger a stop for the entire instance
@@ -282,7 +284,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	The timer can be in one of two states: running or expired.
 	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the State changes to expired."
 */
-func (i *Instance) triggerRoundChangeOnTimer() {
+func (i *Instance) startRoundChangeOnTimer() {
 	// make sure previous timer is stopped
 	i.stopRoundChangeTimer()
 

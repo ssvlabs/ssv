@@ -2,8 +2,8 @@ package ibft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -593,7 +593,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
-			Committee:   nodes,
+			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
@@ -601,5 +601,5 @@ func TestChangeRoundPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundMsgPipeline()
-	require.EqualValues(t, "combination of: type check, lambda, round, validator PK, sequence, authorize, validate msg, add change round msg, upon partial quorum, upon change round full quorum, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: type check, lambda, validator PK, sequence, authorize, validate msg, , round, add change round msg, upon change round full quorum, ", pipeline.Name())
 }

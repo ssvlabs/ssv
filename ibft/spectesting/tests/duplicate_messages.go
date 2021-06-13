@@ -65,42 +65,42 @@ func (test *DuplicateMessages) MessagesSequence(t *testing.T) []*proto.SignedMes
 // Run runs the test
 func (test *DuplicateMessages) Run(t *testing.T) {
 	// pre-prepare
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	// first valid prepare msg
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	// duplicate prepare msg
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.Len(t, test.instance.PrepareMessages.ReadOnlyMessagesByRound(1), 1)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.Len(t, test.instance.PrepareMessages.ReadOnlyMessagesByRound(1), 1)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.Len(t, test.instance.PrepareMessages.ReadOnlyMessagesByRound(1), 1)
 	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
 	require.False(t, quorum)
 
 	// valid prepare quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 
 	// first valid commit msg
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	// duplicate prepare msg
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.Len(t, test.instance.CommitMessages.ReadOnlyMessagesByRound(1), 1)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.Len(t, test.instance.CommitMessages.ReadOnlyMessagesByRound(1), 1)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.Len(t, test.instance.CommitMessages.ReadOnlyMessagesByRound(1), 1)
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.False(t, quorum)
 
 	// valid commit quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireNotProcessedMessage(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 

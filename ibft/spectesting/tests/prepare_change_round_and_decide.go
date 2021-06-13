@@ -79,20 +79,20 @@ func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto
 // Run runs the test
 func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	// pre-prepare
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
 	// prepare
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.SimulateTimeout(test.instance, 2)
 
 	// change round
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	justified, err := test.instance.JustifyRoundChange(2)
 	require.NoError(t, err)
 	require.True(t, justified)
@@ -101,7 +101,7 @@ func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	justified, err = test.instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 	require.True(t, justified)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
 	// process all messages
 	for {

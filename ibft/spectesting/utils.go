@@ -118,28 +118,28 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 func TestShares() map[uint64]*storage.Share {
 	return map[uint64]*storage.Share{
 		1: {
-			NodeID:      1,
+			NodeID:    1,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[0],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[0],
+			Committee: TestNodes(),
 		},
 		2: {
-			NodeID:      2,
+			NodeID:    2,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[1],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[1],
+			Committee: TestNodes(),
 		},
 		3: {
-			NodeID:      3,
+			NodeID:    3,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[2],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[2],
+			Committee: TestNodes(),
 		},
 		4: {
-			NodeID:      4,
+			NodeID:    4,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[3],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[3],
+			Committee: TestNodes(),
 		},
 	}
 }
@@ -221,22 +221,22 @@ func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 	instance.SetStage(proto.RoundState_ChangeRound)
 }
 
-// RequireProcessedMessage will call ProcessMessage and verifies it returns true and nil for execution
-func RequireProcessedMessage(t *testing.T, f func() (bool, error)) {
+// RequireReturnedTrueNoError will call ProcessMessage and verifies it returns true and nil for execution
+func RequireReturnedTrueNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
 	require.NoError(t, err)
 	require.True(t, res)
 }
 
-// RequireNotProcessedMessage will call ProcessMessage and verifies it returns false and nil for execution
-func RequireNotProcessedMessage(t *testing.T, f func() (bool, error)) {
+// RequireReturnedFalseNoError will call ProcessMessage and verifies it returns false and nil for execution
+func RequireReturnedFalseNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
 	require.NoError(t, err)
 	require.False(t, res)
 }
 
-// RequireProcessMessageError will call ProcessMessage and verifies it returns true and error for execution
-func RequireProcessMessageError(t *testing.T, f func() (bool, error), errStr string) {
+// RequireReturnedTrueWithError will call ProcessMessage and verifies it returns true and error for execution
+func RequireReturnedTrueWithError(t *testing.T, f func() (bool, error), errStr string) {
 	res, err := f()
 	require.EqualError(t, err, errStr)
 	require.True(t, res)
