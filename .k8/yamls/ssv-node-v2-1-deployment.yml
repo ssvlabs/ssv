@@ -150,7 +150,7 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: GENESIS_EPOCH
-          value: "34165"
+          value: "1"
         - name: LOGGER_LEVEL
           value: "debug"
         - name: STORAGE_PATH
