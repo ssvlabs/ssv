@@ -180,13 +180,20 @@ func (i *Instance) uponChangeRoundTrigger() {
 	// set time for next round change
 	i.startRoundChangeOnTimer()
 	// broadcast round change
-	broadcastMsg, err := i.generateChangeRoundMessage()
-	if err != nil {
-		i.Logger.Error("could not generate change round msg", zap.Uint64("round", i.State.Round), zap.Error(err))
-	}
-	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
+	if err := i.broadcastChangeRound(); err != nil {
 		i.Logger.Error("could not broadcast round change message", zap.Error(err))
 	}
+}
+
+func (i *Instance) broadcastChangeRound() error {
+	broadcastMsg, err := i.generateChangeRoundMessage()
+	if err != nil {
+		return err
+	}
+	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
+		return err
+	}
+	return nil
 }
 
 /**

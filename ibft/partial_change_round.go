@@ -3,6 +3,7 @@ package ibft
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"go.uber.org/zap"
 )
 
 func (i *Instance) changeRoundPartialQuorum(msgs []*proto.SignedMessage) (quorum bool, t int, n int) {
@@ -56,11 +57,12 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 
 	if foundPartialQuorum {
 		i.stopRoundChangeTimer()
-		// TODO - purge all round change msgs?
 		i.State.Round = lowestChangeRound
 		i.startRoundChangeOnTimer()
 
-		// TODO - broadcast round change
+		if err := i.broadcastChangeRound(); err != nil {
+			i.Logger.Error("could not broadcast round change message", zap.Error(err))
+		}
 	}
 	return foundPartialQuorum, nil
 }
