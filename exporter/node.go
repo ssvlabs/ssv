@@ -95,6 +95,7 @@ func New(opts Options) Exporter {
 // Start starts the exporter
 func (exp *exporter) Start() error {
 	exp.logger.Debug("exporter.Start()")
+	go exp.ibftDisptcher.Start()
 	go exp.validatorSyncInterval()
 	err := exp.eth1Client.Start()
 	if err != nil {
@@ -108,7 +109,6 @@ func (exp *exporter) Start() error {
 //  2. registry data (validator/operator added) from eth1 contract
 func (exp *exporter) Sync() error {
 	exp.logger.Info("exporter.Sync()")
-	go exp.ibftDisptcher.Start()
 	err := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
 	if err != nil {
 		return errors.Wrap(err, "failed to sync eth1 contract events")
@@ -122,8 +122,7 @@ func (exp *exporter) ListenToEth1Events(cn pubsub.SubjectChannel) chan error {
 	go func() {
 		for e := range cn {
 			if event, ok := e.(eth1.Event); ok {
-				exp.logger.Debug("got new eth1 event")
-				var err error
+				var err error = nil
 				if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
 					err = exp.handleValidatorAddedEvent(validatorAddedEvent)
 				} else if opertaorAddedEvent, ok := event.Data.(eth1.OperatorAddedEvent); ok {
@@ -200,14 +199,15 @@ func (exp *exporter) triggerIBFTSyncAll() {
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if !ibftSyncEnabled {
-		exp.logger.Info("ibft sync is disabled")
+		//exp.logger.Info("ibft sync is disabled")
 		return nil
 	}
 	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
-	exp.logger.Info("syncing ibft data for validator", zap.String("pubKey", validatorPubKey.GetHexString()))
+	exp.logger.Debug("syncing ibft data for validator",
+		zap.String("pubKey", validatorPubKey.SerializeToHexStr()))
 	ibftInstance := ibft.NewIbftReadOnly(ibft.ReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
@@ -216,7 +216,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		ValidatorShare: validatorShare,
 	})
 
-	t := newIbftSyncTask(ibftInstance, validatorPubKey.GetHexString())
+	t := newIbftSyncTask(ibftInstance, validatorPubKey.SerializeToHexStr())
 	exp.ibftDisptcher.Queue(t)
 
 	return nil

@@ -51,7 +51,7 @@ type ssvNode struct {
 	genesisEpoch        uint64
 	dutyLimit           uint64
 	streamDuties        <-chan *ethpb.DutiesResponse_Duty
-	eth1Client eth1.Client
+	eth1Client          eth1.Client
 }
 
 // New is the constructor of ssvNode

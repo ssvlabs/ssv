@@ -6,7 +6,7 @@ import "sync"
 type observer struct {
 	channel SubjectChannel
 	active  bool
-	mut sync.Mutex
+	mut     sync.Mutex
 }
 
 func newSubjectObserver() *observer {
