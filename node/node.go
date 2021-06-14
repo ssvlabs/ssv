@@ -7,9 +7,9 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"time"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -82,11 +82,9 @@ func New(opts Options) Node {
 // Start implements Node interface
 func (n *ssvNode) Start() error {
 	n.logger.Info("starting ssv node")
-	if completed, _, _ := tasks.ExecWithTimeout(n.context, func() (interface{}, error) {
-		n.startEth1()
-		return struct{}{}, nil
-	}, eth1SyncTimeout); !completed {
-		n.logger.Warn("eth1 sync timeout")
+	if err := n.startEth1(); err != nil {
+		n.logger.Warn("eth1 sync failed", zap.Error(err))
+		return err
 	}
 
 	n.validatorController.StartValidators()
@@ -95,7 +93,8 @@ func (n *ssvNode) Start() error {
 	validatorsSubject := n.validatorController.NewValidatorSubject()
 	cnValidators, err := validatorsSubject.Register("SsvNodeObserver")
 	if err != nil {
-		n.logger.Error("failed to register on validators events subject", zap.Error(err))
+		n.logger.Warn("failed to register on validators events subject", zap.Error(err))
+		return err
 	}
 
 	for {
@@ -111,29 +110,28 @@ func (n *ssvNode) Start() error {
 }
 
 // startEth1 starts to sync and listen to events
-func (n *ssvNode) startEth1() {
+func (n *ssvNode) startEth1() error {
 	// setup validator controller to listen to ValidatorAdded events
 	// this will handle events from the sync as well
 	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
 	if err != nil {
-		n.logger.Error("failed to register on contract events subject", zap.Error(err))
+		return errors.Wrap(err, "failed to register on contract events subject")
 	}
 	go n.validatorController.ListenToEth1Events(cnValidators)
 
-	n.logger.Debug("syncing eth1 events")
 	// sync past events
 	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, "SSVNodeEth1Sync"); err != nil {
-		n.logger.Error("failed to sync eth1 events:", zap.Error(err))
-	} else {
-		n.logger.Info("manage to sync events from eth1")
+		return errors.Wrap(err, "failed to sync contract events")
 	}
+	n.logger.Info("manage to sync contract events")
 
-	n.logger.Debug("starting eth1 events subscription")
 	// starts the eth1 events subscription
 	err = n.eth1Client.Start()
 	if err != nil {
-		n.logger.Error("failed to start eth1 client", zap.Error(err))
+		return errors.Wrap(err, "failed to start eth1 client")
 	}
+
+	return nil
 }
 
 func (n *ssvNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
