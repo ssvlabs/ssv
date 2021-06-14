@@ -70,6 +70,7 @@ func (q *MessageQueue) AddMessage(msg *network.Message) {
 	}
 }
 
+// MessagesForIndex returns all messages for an index
 func (q *MessageQueue) MessagesForIndex(index string) []*network.Message {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()

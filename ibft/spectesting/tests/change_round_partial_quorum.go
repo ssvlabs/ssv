@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// ChangeRoundAndDecide tests coming to consensus after a non prepared change round
+// ChangeRoundPartialQuorum tests partial round change behaviour
 type ChangeRoundPartialQuorum struct {
 	instances  []*ibft.Instance
 	inputValue []byte
