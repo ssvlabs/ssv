@@ -2,12 +2,10 @@ package goeth
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -183,7 +181,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := ec.parseOperatorAddedEvent(vLog.Data, contractAbi, eventName)
+		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, vLog.Data, contractAbi, eventName)
 		if err != nil {
 			//ec.logger.Error("Failed to parse OperatorAdded event", zap.Error(err))
 			return errors.Wrap(err, "Failed to parse OperatorAdded event")
@@ -193,7 +191,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	case "ValidatorAdded":
-		event, isEventBelongsToOperator, err := ec.parseValidatorAddedEvent(vLog.Data, contractAbi, eventName)
+		event, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi, eventName)
 		if err != nil {
 			//ec.logger.Error("Failed to parse ValidatorAdded event", zap.Error(err))
 			return errors.Wrap(err, "Failed to parse ValidatorAdded event")
@@ -209,79 +207,4 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		ec.logger.Debug("Unknown contract event is received")
 	}
 	return nil
-}
-
-// parseOperatorAddedEvent parses an OperatorAddedEvent
-func (ec *eth1Client) parseOperatorAddedEvent(data []byte, contractAbi abi.ABI, eventName string) (*eth1.OperatorAddedEvent, bool, error) {
-	var operatorAddedEvent eth1.OperatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, eventName, data)
-	if err != nil {
-		return nil, false, errors.Wrap(err, "Failed to unpack OperatorAdded event")
-	}
-	operatorPubkeyHex := hex.EncodeToString(operatorAddedEvent.PublicKey)
-	ec.logger.Debug("OperatorAdded Event",
-		zap.String("Operator PublicKey", operatorPubkeyHex),
-		zap.String("Payment Address", operatorAddedEvent.PaymentAddress.String()))
-	isEventBelongsToOperator := strings.EqualFold(operatorPubkeyHex, params.SsvConfig().OperatorPublicKey)
-	return &operatorAddedEvent, isEventBelongsToOperator, nil
-}
-
-// parseValidatorAddedEvent parses ValidatorAddedEvent
-func (ec *eth1Client) parseValidatorAddedEvent(data []byte, contractAbi abi.ABI, eventName string) (*eth1.ValidatorAddedEvent, bool, error) {
-	var validatorAddedEvent eth1.ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventName, data)
-	if err != nil {
-		return nil, false, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
-	}
-
-	ec.logger.Debug("ValidatorAdded Event",
-		zap.String("Validator PublicKey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
-		zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
-
-	var isEventBelongsToOperator bool
-
-	for i := range validatorAddedEvent.OessList {
-		validatorShare := &validatorAddedEvent.OessList[i]
-
-		def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]` //TODO need to set as var?
-		outAbi, err := abi.JSON(strings.NewReader(def))
-		if err != nil {
-			return nil, false, errors.Wrap(err, "failed to define ABI")
-		}
-
-		outOperatorPublicKey, err := outAbi.Unpack("method", validatorShare.OperatorPublicKey)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "failed to unpack OperatorPublicKey")
-		}
-
-		if operatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
-			validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
-			if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
-				sk, err := ec.operatorPrivKeyProvider()
-				if err != nil {
-					return nil, false, errors.Wrap(err, "failed to get private key")
-				}
-				if sk == nil {
-					continue
-				}
-
-				out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
-				if err != nil {
-					return nil, false, errors.Wrap(err, "failed to unpack EncryptedKey")
-				}
-
-				if encryptedSharePrivateKey, ok := out[0].(string); ok {
-					decryptedSharePrivateKey, err := rsaencryption.DecodeKey(sk, encryptedSharePrivateKey)
-					decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
-					if err != nil {
-						return nil, false, errors.Wrap(err, "failed to decrypt share private key")
-					}
-					validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
-					isEventBelongsToOperator = true
-				}
-			}
-		}
-	}
-
-	return &validatorAddedEvent, isEventBelongsToOperator, nil
 }

@@ -1,6 +1,7 @@
 package node
 
 import (
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"go.uber.org/zap"
 	"math/big"
@@ -11,15 +12,9 @@ var (
 	syncOffsetKey = []byte("syncOffset")
 )
 
-// SyncOffset is the type of variable used for passing around the offset
-type SyncOffset = big.Int
-
 // Storage represents the interface for ssv node storage
 type Storage interface {
-	// SaveSyncOffset saves the offset (block number)
-	SaveSyncOffset(offset *SyncOffset) error
-	// GetSyncOffset returns the sync offset
-	GetSyncOffset() (*SyncOffset, error)
+	eth1.SyncOffsetStorage
 }
 
 type storage struct {
@@ -34,12 +29,12 @@ func NewSSVNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 }
 
 // SaveSyncOffset saves the offset
-func (s *storage) SaveSyncOffset(offset *SyncOffset) error {
+func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 	return s.db.Set(prefix, syncOffsetKey, offset.Bytes())
 }
 
 // GetSyncOffset returns the offset
-func (s *storage) GetSyncOffset() (*SyncOffset, error) {
+func (s *storage) GetSyncOffset() (*eth1.SyncOffset, error) {
 	obj, err := s.db.Get(prefix, syncOffsetKey)
 	if err != nil {
 		return nil, err

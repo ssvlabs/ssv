@@ -99,7 +99,11 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode := exporter.New(cfg.ExporterOptions)
 
-		go exporterNode.ListenToEth1Events()
+		eth1EventChan, err := eth1Client.EventsSubject().Register("Eth1ExporterObserver")
+		if err != nil {
+			Logger.Fatal("could not register for eth1 events subject", zap.Error(err))
+		}
+		go exporterNode.ListenToEth1Events(eth1EventChan)
 
 		var syncProcess sync.WaitGroup
 		syncProcess.Add(1)

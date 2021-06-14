@@ -1,15 +1,15 @@
-package node
+package exporter
 
 import (
-	"github.com/bloxapp/ssv/eth1"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"math/big"
 	"testing"
 )
 
-func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
+func TestExporterStorage_SaveAndGetSyncOffset(t *testing.T) {
 	logger := zap.L()
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
@@ -17,9 +17,9 @@ func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
 		Path:   "",
 	})
 	require.NoError(t, err)
-	s := NewSSVNodeStorage(db, logger)
+	s := NewExporterStorage(db, logger)
 
-	offset := new(eth1.SyncOffset)
+	offset := new(big.Int)
 	offset.SetString("49e08f", 16)
 	err = s.SaveSyncOffset(offset)
 	require.NoError(t, err)

@@ -7,9 +7,9 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/ibft"
-	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -18,14 +18,12 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math/big"
 	"time"
 )
 
 const (
-	defaultOffset             string = "49e08f"
-	validatorSyncIntervalTick        = 2 * time.Minute
-	ibftSyncDispatcherTick           = 2 * time.Second
+	validatorSyncIntervalTick = 2 * time.Minute
+	ibftSyncDispatcherTick    = 2 * time.Second
 )
 
 var (
@@ -36,7 +34,7 @@ var (
 type Exporter interface {
 	Start() error
 	Sync() error
-	ListenToEth1Events()
+	ListenToEth1Events(cn pubsub.SubjectChannel) chan error
 }
 
 // Options contains options to create the node
@@ -56,7 +54,7 @@ type Options struct {
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
 	ctx              context.Context
-	store            storage.ExporterStorage
+	store            Storage
 	operatorStorage  collections.IOperatorStorage
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
@@ -77,7 +75,7 @@ func New(opts Options) Exporter {
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
 	e := exporter{
 		ctx:              opts.Ctx,
-		store:            storage.NewExporterStorage(opts.DB, opts.Logger),
+		store:            NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
 		operatorStorage:  collections.NewOperatorStorage(opts.DB, opts.Logger),
@@ -111,69 +109,30 @@ func (exp *exporter) Start() error {
 func (exp *exporter) Sync() error {
 	exp.logger.Info("exporter.Sync()")
 	go exp.ibftDisptcher.Start()
-	offset := exp.syncOffset()
-	return exp.eth1Client.Sync(offset)
+	return eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
 }
 
 // ListenToEth1Events register for eth1 events
-func (exp *exporter) ListenToEth1Events() {
+func (exp *exporter) ListenToEth1Events(cn pubsub.SubjectChannel) chan error {
+	cnErr := make(chan error)
 	go func() {
-		cn, err := exp.eth1Client.EventsSubject().Register("ExporterObserver")
-		if err != nil {
-			exp.logger.Error("could not register for eth1 events channel", zap.Error(err))
-			return
-		}
-		offsetRaw := exp.syncOffset()
-		offset := offsetRaw.Uint64()
-		var errs []error
 		for e := range cn {
-			exp.logger.Debug("got new eth1 event in exporter")
 			if event, ok := e.(eth1.Event); ok {
+				exp.logger.Debug("got new eth1 event")
 				var err error
 				if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
 					err = exp.handleValidatorAddedEvent(validatorAddedEvent)
 				} else if opertaorAddedEvent, ok := event.Data.(eth1.OperatorAddedEvent); ok {
 					err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
-				} else if _, ok := event.Data.(eth1.SyncEndedEvent); ok && len(errs) == 0 {
-					// upgrade the sync-offset (in DB) once sync is over
-					// if some errors happened, avoid updating the local offset variable with new values
-					// this will make sure that the offset is not being upgraded if there are some missing events
-					if offset > offsetRaw.Uint64() {
-						exp.logger.Debug("upgrading sync offset", zap.Uint64("offset", offset))
-						offsetRaw.SetUint64(offset)
-						if err := exp.store.SaveSyncOffset(offsetRaw); err != nil {
-							exp.logger.Error("could not upgrade sync offset", zap.Error(err))
-						}
-					}
-					break
 				}
-				// If things went well - check for new offset
-				if err == nil {
-					blockNumber := event.Log.BlockNumber
-					if blockNumber > offset {
-						offset = blockNumber
-					}
-				} else {
-					exp.logger.Debug("could not handle event", zap.Error(err))
-					errs = append(errs, err)
+				if err != nil {
+					exp.logger.Warn("could not handle eth1 event", zap.Error(err))
+					cnErr <- err
 				}
 			}
 		}
-		exp.logger.Debug("done reading messages from channel")
-		if len(errs) > 0 {
-			exp.logger.Error("could not handle all events", zap.Int("numberOfFailures", len(errs)))
-		}
 	}()
-}
-
-func (exp *exporter) syncOffset() *big.Int {
-	offset, err := exp.store.GetSyncOffset()
-	if err != nil {
-		offset = new(big.Int)
-		exp.logger.Debug("could not get sync offset, using default offset")
-		offset.SetString(defaultOffset, 16)
-	}
-	return offset
+	return cnErr
 }
 
 // handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator

@@ -16,6 +16,10 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	eth1SyncTimeout = 20 * time.Second
+)
+
 // Node represents the behavior of SSV node
 type Node interface {
 	// Start starts the SSV node
@@ -81,7 +85,7 @@ func (n *ssvNode) Start() error {
 	if completed, _, _ := tasks.ExecWithTimeout(n.context, func() (interface{}, error) {
 		n.startEth1()
 		return struct{}{}, nil
-	}, 10 * time.Second); !completed {
+	}, eth1SyncTimeout); !completed {
 		n.logger.Warn("eth1 sync timeout")
 	}
 
@@ -103,6 +107,32 @@ func (n *ssvNode) Start() error {
 		case duty := <-n.streamDuties:
 			go n.onDuty(duty)
 		}
+	}
+}
+
+// startEth1 starts to sync and listen to events
+func (n *ssvNode) startEth1() {
+	// setup validator controller to listen to ValidatorAdded events
+	// this will handle events from the sync as well
+	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
+	if err != nil {
+		n.logger.Error("failed to register on contract events subject", zap.Error(err))
+	}
+	go n.validatorController.ListenToEth1Events(cnValidators)
+
+	n.logger.Debug("syncing eth1 events")
+	// sync past events
+	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, "SSVNodeEth1Sync"); err != nil {
+		n.logger.Error("failed to sync eth1 events:", zap.Error(err))
+	} else {
+		n.logger.Info("manage to sync events from eth1")
+	}
+
+	n.logger.Debug("starting eth1 events subscription")
+	// starts the eth1 events subscription
+	err = n.eth1Client.Start()
+	if err != nil {
+		n.logger.Error("failed to start eth1 client", zap.Error(err))
 	}
 }
 
