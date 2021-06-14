@@ -3,6 +3,7 @@ package ibft
 import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"go.uber.org/zap"
 )
@@ -38,13 +39,22 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
 	i.msgProcessingLock.Lock()
 	defer i.msgProcessingLock.Unlock()
-	if msgs := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda)); msgs != nil {
+	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda)); msgsMap != nil {
+		// get values and keys slices
+		msgs := make([]*network.Message, 0)
+		msgsIds := make([]string, 0)
+		for id, msg := range msgsMap {
+			msgs = append(msgs, msg)
+			msgsIds = append(msgsIds, id)
+		}
+
 		found, err := i.uponChangeRoundPartialQuorum(msgs)
 		if err != nil {
 			return false, err
 		}
 		if found {
-			// TODO - delete msgs?
+			// We delete all change round messages as we already acted upon them so they have no use.
+			i.MsgQueue.DeleteMessagesWithIds(msgsIds)
 		}
 		return found, err
 	}

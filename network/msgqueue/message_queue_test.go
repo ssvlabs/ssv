@@ -52,6 +52,7 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		Type: network.NetworkMsg_IBFTType,
 	})
 	require.NotNil(t, msgQ.queue["lambda_01020304_round_1"])
+	require.NotNil(t, msgQ.allMessages[msgQ.queue["lambda_01020304_round_1"][0].id])
 
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 5},
@@ -63,6 +64,7 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		Type: network.NetworkMsg_IBFTType,
 	})
 	require.NotNil(t, msgQ.queue["lambda_01020305_round_7"])
+	require.NotNil(t, msgQ.allMessages[msgQ.queue["lambda_01020305_round_7"][0].id])
 
 	// custom index
 	msgQ.indexFuncs = append(msgQ.indexFuncs, func(msg *network.Message) []string {
@@ -101,8 +103,35 @@ func TestMessageQueue_PopMessage(t *testing.T) {
 		Type: network.NetworkMsg_IBFTType,
 	})
 
+	msgId := msgQ.allMessages[msgQ.queue["a"][0].id]
 	require.NotNil(t, msgQ.PopMessage("a"))
+	require.Nil(t, msgQ.PopMessage("a"))
+	require.Nil(t, msgQ.allMessages[msgId.id])
+	require.Nil(t, msgQ.PopMessage("b"))
+	require.Nil(t, msgQ.PopMessage("c"))
+}
+
+func TestMessageQueue_DeleteMessagesWithIds(t *testing.T) {
+	msgQ := New()
+	msgQ.indexFuncs = []IndexFunc{
+		func(msg *network.Message) []string {
+			return []string{"a", "b", "c"}
+		},
+	}
+	msgQ.AddMessage(&network.Message{
+		Lambda: []byte{1, 2, 3, 4},
+		SignedMessage: &proto.SignedMessage{
+			Message: &proto.Message{
+				Round: 1,
+			},
+		},
+		Type: network.NetworkMsg_IBFTType,
+	})
+
+	msgId := msgQ.allMessages[msgQ.queue["a"][0].id]
+	msgQ.DeleteMessagesWithIds([]string{msgId.id})
 	require.Nil(t, msgQ.PopMessage("a"))
 	require.Nil(t, msgQ.PopMessage("b"))
 	require.Nil(t, msgQ.PopMessage("c"))
+	require.Nil(t, msgQ.allMessages[msgId.id])
 }

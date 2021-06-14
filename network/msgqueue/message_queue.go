@@ -20,16 +20,18 @@ type messageContainer struct {
 // To solve this issue we have a message broker from which the instance pulls new messages, this also reduces concurrency issues as the instance is now single threaded.
 // The message queue has internal logic to organize messages by their round.
 type MessageQueue struct {
-	msgMutex   sync.Mutex
-	indexFuncs []IndexFunc
-	queue      map[string][]*messageContainer // = map[index][messageContainer.id]messageContainer
+	msgMutex    sync.Mutex
+	indexFuncs  []IndexFunc
+	queue       map[string][]*messageContainer // = map[index][messageContainer.id]messageContainer
+	allMessages map[string]*messageContainer
 }
 
 // New is the constructor of MessageQueue
 func New() *MessageQueue {
 	return &MessageQueue{
-		msgMutex: sync.Mutex{},
-		queue:    make(map[string][]*messageContainer),
+		msgMutex:    sync.Mutex{},
+		queue:       make(map[string][]*messageContainer),
+		allMessages: make(map[string]*messageContainer),
 		indexFuncs: []IndexFunc{
 			iBFTMessageIndex(),
 			iBFTAllRoundChangeIndex(),
@@ -68,16 +70,17 @@ func (q *MessageQueue) AddMessage(msg *network.Message) {
 		}
 		q.queue[idx] = append(q.queue[idx], msgContainer)
 	}
+	q.allMessages[msgContainer.id] = msgContainer
 }
 
 // MessagesForIndex returns all messages for an index
-func (q *MessageQueue) MessagesForIndex(index string) []*network.Message {
+func (q *MessageQueue) MessagesForIndex(index string) map[string]*network.Message {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	ret := make([]*network.Message, 0)
+	ret := make(map[string]*network.Message, 0)
 	for _, cont := range q.queue[index] {
-		ret = append(ret, cont.msg)
+		ret[cont.id] = cont.msg
 	}
 
 	return ret
@@ -94,7 +97,7 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 		ret = c.msg
 
 		// delete all indexes
-		q.deleteMessageFromAllIndexes(c.indexes, c.id)
+		q.DeleteMessagesWithIds([]string{c.id})
 	}
 	return ret
 }
@@ -102,6 +105,15 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 // MsgCount will return a count of messages by their index
 func (q *MessageQueue) MsgCount(index string) int {
 	return len(q.queue[index])
+}
+
+func (q *MessageQueue) DeleteMessagesWithIds(ids []string) {
+	for _, id := range ids {
+		if msg, found := q.allMessages[id]; found {
+			q.deleteMessageFromAllIndexes(msg.indexes, id)
+			q.allMessages[id] = nil
+		}
+	}
 }
 
 func (q *MessageQueue) deleteMessageFromAllIndexes(indexes []string, id string) {

@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -72,22 +73,33 @@ func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 3, 2),
 		},
+		{ // f points to 2, no partial quorum
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 10, 1),
+		},
 	}
 }
 
 // Run runs the test
 func (test *ChangeRoundPartialQuorum) Run(t *testing.T) {
-	require.Len(t, test.instances, 4)
+	require.Len(t, test.instances, 5)
 
 	spectesting.RequireReturnedTrueNoError(t, test.instances[0].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 2, test.instances[0].State.Round)
+	require.Len(t, test.instances[0].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(test.instances[0].State.Lambda)), 0)
 
 	spectesting.RequireReturnedTrueNoError(t, test.instances[1].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 3, test.instances[1].State.Round)
+	require.Len(t, test.instances[1].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(test.instances[1].State.Lambda)), 0)
 
 	spectesting.RequireReturnedTrueNoError(t, test.instances[2].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 4, test.instances[2].State.Round)
+	require.Len(t, test.instances[2].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(test.instances[2].State.Lambda)), 0)
 
 	spectesting.RequireReturnedFalseNoError(t, test.instances[3].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 3, test.instances[3].State.Round)
+	require.Len(t, test.instances[3].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(test.instances[3].State.Lambda)), 4)
+
+	spectesting.RequireReturnedFalseNoError(t, test.instances[4].ProcessChangeRoundPartialQuorum)
+	require.EqualValues(t, 4, test.instances[4].State.Round)
+	require.Len(t, test.instances[4].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(test.instances[4].State.Lambda)), 1)
 }
