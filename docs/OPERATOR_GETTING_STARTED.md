@@ -124,6 +124,15 @@ BeaconNodeAddr: prater.stage.blox.com:80
 ETH1Addr: ws://eth1.stage.blox.com/ws
 ```
 
+  #### 5.1 Debug Configuration
+
+  In order to see `debug` level logs, please add the corresponding section in the `config.yaml`:
+
+  ```
+  yq w -i config.yaml global.LogLevel "debug"
+  ```
+
+
 ### 6. Start Node in Docker
 
 Run the docker image from the same folder you created the `config.yaml`:
