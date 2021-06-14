@@ -587,6 +587,140 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 }
 
+func TestChangeRoundMsgValidationPipeline(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+
+	tests := []struct {
+		name          string
+		msg           *proto.SignedMessage
+		expectedError string
+	}{
+		{
+			"valid",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+			}),
+			"",
+		},
+		{
+			"invalid pk",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+				ValidatorPk: sks[2].GetPublicKey().Serialize(),
+			}),
+			"invalid message validator PK",
+		},
+		{
+			"invalid change round data",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: []byte("ad"),
+				}),
+				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+			}),
+			"change round justification msg is nil",
+		},
+		{
+			"invalid seq number",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 2,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+			}),
+			"invalid message sequence number",
+		},
+
+		{
+			"invalid lambda",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambdaa"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+			}),
+			"message Lambda (lambdaa) does not equal expected Lambda (lambda)",
+		},
+		{
+			"valid with different round",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     4,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+			}),
+			"",
+		},
+		{
+			"invalid msg type",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_Decided,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+			}),
+			"message type is wrong",
+		},
+	}
+
+	instance := &Instance{
+		Config: proto.DefaultConsensusParams(),
+		ValidatorShare: &storage.Share{
+			Committee: nodes,
+			PublicKey: sks[1].GetPublicKey(), // just placeholder
+		},
+		State: &proto.State{
+			Round:     1,
+			SeqNumber: 1,
+			Lambda:    []byte("lambda"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := instance.changeRoundMsgValidationPipeline().Run(test.msg)
+			if len(test.expectedError) > 0 {
+				require.EqualError(t, err, test.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestChangeRoundPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -600,6 +734,6 @@ func TestChangeRoundPipeline(t *testing.T) {
 			Round: 1,
 		},
 	}
-	pipeline := instance.changeRoundMsgPipeline()
+	pipeline := instance.changeRoundFullQuorumMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: type check, lambda, validator PK, sequence, authorize, validate msg, , round, add change round msg, upon change round full quorum, ", pipeline.Name())
 }

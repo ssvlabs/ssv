@@ -25,7 +25,7 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	)
 }
 
-func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.changeRoundMsgValidationPipeline(),
 		auth.ValidateRound(i.State.Round),
@@ -128,13 +128,6 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 	msgs := i.ChangeRoundMessages.ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*2
-	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
-}
-
-func (i *Instance) changeRoundPartialQuorum(msgs []*proto.SignedMessage) (quorum bool, t int, n int) {
-	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	// TODO - refactor a way to calculate partial quorum
-	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*1
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
 

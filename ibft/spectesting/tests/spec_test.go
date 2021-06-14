@@ -13,14 +13,14 @@ type SpecTest interface {
 }
 
 var tests = []SpecTest{
-	//&PrepareAtDifferentRound{},
-	//&ChangeRoundAndDecide{},
-	//&PrepareChangeRoundAndDecide{},
-	//&DecideDifferentValue{},
-	//&PrepareAtDifferentRound{},
-	//&NonJustifiedPrePrepapre{},
-	//&DuplicateMessages{},
-	//&ValidSimpleRun{},
+	&PrepareAtDifferentRound{},
+	&ChangeRoundAndDecide{},
+	&PrepareChangeRoundAndDecide{},
+	&DecideDifferentValue{},
+	&PrepareAtDifferentRound{},
+	&NonJustifiedPrePrepapre{},
+	&DuplicateMessages{},
+	&ValidSimpleRun{},
 	&ChangeRoundPartialQuorum{},
 }
 

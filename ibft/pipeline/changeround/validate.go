@@ -34,6 +34,9 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 	if data.PreparedValue == nil { // no justification
 		return nil
 	}
+	if data.JustificationMsg == nil {
+		return errors.New("change round justification msg is nil")
+	}
 	if data.JustificationMsg.Type != proto.RoundState_Prepare {
 		return errors.New("change round justification msg type not Prepare")
 	}
