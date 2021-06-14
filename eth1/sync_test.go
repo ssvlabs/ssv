@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 )
@@ -22,7 +23,7 @@ func TestSyncEth1(t *testing.T) {
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, "SSVNodeEth1Sync")
+	err := SyncEth1Events(logger, eth1Client, storage, "Eth1SyncTest")
 	require.NoError(t, err)
 	syncOffset, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -39,7 +40,7 @@ func TestFailedSyncEth1(t *testing.T) {
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, "SSVNodeEth1Sync")
+	err := SyncEth1Events(logger, eth1Client, storage, "FailedEth1SyncTest")
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, err = storage.GetSyncOffset()
@@ -48,8 +49,7 @@ func TestFailedSyncEth1(t *testing.T) {
 
 func setupStorageWithEth1ClientMock() (*zap.Logger, *eth1ClientMock, *syncStorageMock) {
 	logger := zap.L()
-	sub := pubsub.NewSubject()
-	eth1Client := eth1ClientMock{sub, 10 * time.Millisecond, nil}
+	eth1Client := eth1ClientMock{pubsub.NewSubject(), 50 * time.Millisecond, nil}
 	storage := syncStorageMock{[]byte{}}
 	return logger, &eth1Client, &storage
 }
@@ -70,7 +70,13 @@ func (ec *eth1ClientMock) Start() error {
 }
 
 func (ec *eth1ClientMock) Sync(fromBlock *big.Int) error {
-	time.Sleep(ec.syncTimeout)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(ec.syncTimeout)
+	}()
+	wg.Wait()
 	return ec.syncResponse
 }
 

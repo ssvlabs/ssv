@@ -16,10 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	eth1SyncTimeout = 20 * time.Second
-)
-
 // Node represents the behavior of SSV node
 type Node interface {
 	// Start starts the SSV node

@@ -109,7 +109,11 @@ func (exp *exporter) Start() error {
 func (exp *exporter) Sync() error {
 	exp.logger.Info("exporter.Sync()")
 	go exp.ibftDisptcher.Start()
-	return eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
+	err := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
+	if err != nil {
+		return errors.Wrap(err, "failed to sync eth1 contract events")
+	}
+	return nil
 }
 
 // ListenToEth1Events register for eth1 events

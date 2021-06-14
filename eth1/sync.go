@@ -30,14 +30,14 @@ func DefaultSyncOffset() *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, observerId string) error {
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, observerID string) error {
 	logger.Info("syncing eth1 contract events")
 
-	cn, err := client.EventsSubject().Register(observerId)
+	cn, err := client.EventsSubject().Register(observerID)
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}
-	defer client.EventsSubject().Deregister(observerId)
+	defer client.EventsSubject().Deregister(observerID)
 
 	// listen on the given channel
 	// will stop once SyncEndedEvent arrives
