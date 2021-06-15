@@ -83,7 +83,6 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 
 // fireEvent notifies observers about some contract event
 func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
-	ec.logger.Debug("notify observers on contract event")
 	e := eth1.Event{Log: log, Data: data}
 	ec.outSubject.Notify(e)
 }
@@ -133,7 +132,8 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 
 // syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string, fromBlock *big.Int) error {
-	ec.logger.Debug("syncing smart contract events")
+	ec.logger.Debug("syncing smart contract events",
+		zap.Uint64("fromBlock", fromBlock.Uint64()))
 
 	contractAbi, err := abi.JSON(strings.NewReader(contractABI))
 	if err != nil {
@@ -191,7 +191,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	case "ValidatorAdded":
-		event, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi, eventName)
+		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi, eventName)
 		if err != nil {
 			//ec.logger.Error("Failed to parse ValidatorAdded event", zap.Error(err))
 			return errors.Wrap(err, "Failed to parse ValidatorAdded event")
@@ -201,7 +201,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || operatorPriveKey == nil {
-			ec.fireEvent(vLog, *event)
+			ec.fireEvent(vLog, *parsed)
 		}
 	default:
 		ec.logger.Debug("Unknown contract event is received")

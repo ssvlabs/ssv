@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"fmt"
 	global_config "github.com/bloxapp/ssv/cli/config"
-	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -23,12 +22,10 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options   `yaml:"db"`
 	P2pNetworkConfig           p2p.Config       `yaml:"network"`
-	// TODO: remove ExporterOptions from yaml if not needed
-	ExporterOptions            exporter.Options `yaml:"exporter"`
 
 	ETH1Addr   string `yaml:"ETH1Addr" env-required:"true"`
 	PrivateKey string `yaml:"PrivateKey" env:"EXPORTER_NODE_PRIVATE_KEY" env-description:"exporter node private key (default will generate new)"`
-	Network    string `yaml:"Network" env-default:"pyrmont"`
+	Network    string `yaml:"Network" env-default:"prater"`
 }
 
 var cfg config
@@ -74,30 +71,28 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		var eth1Client eth1.Client
-		if cfg.ETH1Addr != "" {
-			eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
-				Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
-				// using an empty private key provider
-				// because the exporter doesn't run in the context of an operator
-				PrivKeyProvider: func() (*rsa.PrivateKey, error) {
-					return nil, nil
-				},
-			})
-			if err != nil {
-				Logger.Fatal("failed to create eth1 client", zap.Error(err))
-			}
-		} else {
+		if cfg.ETH1Addr == "" {
 			Logger.Fatal("eth1 address was not provided", zap.Error(err))
 		}
+		eth1Client, err := goeth.NewEth1Client(goeth.ClientOptions{
+			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
+			// using an empty private key provider
+			// because the exporter doesn't run in the context of an operator
+			PrivKeyProvider: func() (*rsa.PrivateKey, error) {
+				return nil, nil
+			},
+		})
+		if err != nil {
+			Logger.Fatal("failed to create eth1 client", zap.Error(err))
+		}
+		exporterOptions := new(exporter.Options)
+		exporterOptions.Eth1Client = eth1Client
+		exporterOptions.Logger = Logger
+		exporterOptions.Network = network
+		exporterOptions.DB = db
+		exporterOptions.Ctx = cmd.Context()
 
-		cfg.ExporterOptions.Eth1Client = eth1Client
-		cfg.ExporterOptions.Logger = Logger
-		cfg.ExporterOptions.Network = network
-		cfg.ExporterOptions.DB = db
-		cfg.ExporterOptions.Ctx = cmd.Context()
-
-		exporterNode := exporter.New(cfg.ExporterOptions)
+		exporterNode := exporter.New(*exporterOptions)
 
 		eth1EventChan, err := eth1Client.EventsSubject().Register("Eth1ExporterObserver")
 		if err != nil {
@@ -108,7 +103,6 @@ var StartExporterNodeCmd = &cobra.Command{
 		var syncProcess sync.WaitGroup
 		syncProcess.Add(1)
 		go func() {
-			Logger.Debug("about to sync exporter")
 			defer func() {
 				// 100ms delay after sync
 				time.Sleep(100 * time.Millisecond)

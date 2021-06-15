@@ -22,14 +22,8 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 			Pk:     oess.SharedPublicKey,
 		}
 
-		// silent mode allows to work with missing data
+		// silent mode allows to work with missing data.
 		// used in exporter scenario
-		//if silent {
-		//	oess.SharedPublicKey
-		//	validatorShare.PublicKey = &bls.PublicKey{}
-		//	validatorShare.ShareKey = &bls.SecretKey{}
-		//	validatorShare.NodeID = nodeID
-		//}
 		if silent || strings.EqualFold(string(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
 			validatorShare.NodeID = nodeID
 

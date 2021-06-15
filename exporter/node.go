@@ -108,7 +108,6 @@ func (exp *exporter) Start() error {
 //  1. ibft data from ssv nodes
 //  2. registry data (validator/operator added) from eth1 contract
 func (exp *exporter) Sync() error {
-	exp.logger.Info("exporter.Sync()")
 	err := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
 	if err != nil {
 		return errors.Wrap(err, "failed to sync eth1 contract events")
@@ -162,6 +161,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) error {
 	exp.logger.Info("operator added event",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
+
 	oi := collections.OperatorInformation{
 		PublicKey: event.PublicKey,
 		Name:      event.Name,
