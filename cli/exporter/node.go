@@ -14,14 +14,12 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
-	"sync"
-	"time"
 )
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options   `yaml:"db"`
-	P2pNetworkConfig           p2p.Config       `yaml:"network"`
+	DBOptions                  basedb.Options `yaml:"db"`
+	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 
 	ETH1Addr   string `yaml:"ETH1Addr" env-required:"true"`
 	PrivateKey string `yaml:"PrivateKey" env:"EXPORTER_NODE_PRIVATE_KEY" env-description:"exporter node private key (default will generate new)"`
@@ -40,7 +38,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
-
+		// configure logger and db
 		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel)
 		if err != nil {
@@ -51,28 +49,10 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
-		bootstrapNodeAddr := []string{
-			// deployemnt
-			// internal ip
-			//"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
-			//external ip
-			"enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
-			// ssh
-			//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
-		}
-		if cfg.P2pNetworkConfig.Enr != "" {
-			bootstrapNodeAddr = []string{
-				cfg.P2pNetworkConfig.Enr,
-			}
-		}
-		cfg.P2pNetworkConfig.BootstrapNodeAddr = bootstrapNodeAddr
+
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
-		}
-
-		if cfg.ETH1Addr == "" {
-			Logger.Fatal("eth1 address was not provided", zap.Error(err))
 		}
 		eth1Client, err := goeth.NewEth1Client(goeth.ClientOptions{
 			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
@@ -85,6 +65,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
+
 		exporterOptions := new(exporter.Options)
 		exporterOptions.Eth1Client = eth1Client
 		exporterOptions.Logger = Logger
@@ -94,30 +75,11 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode := exporter.New(*exporterOptions)
 
-		eth1EventChan, err := eth1Client.EventsSubject().Register("Eth1ExporterObserver")
-		if err != nil {
-			Logger.Fatal("could not register for eth1 events subject", zap.Error(err))
+		if err := exporterNode.StartEth1(); err != nil {
+			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
-		go exporterNode.ListenToEth1Events(eth1EventChan)
-
-		var syncProcess sync.WaitGroup
-		syncProcess.Add(1)
-		go func() {
-			defer func() {
-				// 100ms delay after sync
-				time.Sleep(100 * time.Millisecond)
-				syncProcess.Done()
-			}()
-			err := exporterNode.Sync()
-			if err != nil {
-				Logger.Error("failed to sync exporter node", zap.Error(err))
-			} else {
-				Logger.Debug("sync is done")
-			}
-		}()
-		syncProcess.Wait()
-		if err := exporterNode.Start(); err != nil {
-			Logger.Fatal("failed to start exporter node", zap.Error(err))
+		if err := exporterNode.StartIbft(); err != nil {
+			Logger.Fatal("failed to start ibft", zap.Error(err))
 		}
 	},
 }
@@ -125,3 +87,4 @@ var StartExporterNodeCmd = &cobra.Command{
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
+

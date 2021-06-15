@@ -18,6 +18,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -32,9 +33,8 @@ var (
 
 // Exporter represents the main interface of this package
 type Exporter interface {
-	Start() error
-	Sync() error
-	ListenToEth1Events(cn pubsub.SubjectChannel) chan error
+	StartEth1() error
+	StartIbft() error
 }
 
 // Options contains options to create the node
@@ -92,31 +92,53 @@ func New(opts Options) Exporter {
 	return &e
 }
 
-// Start starts the exporter
-func (exp *exporter) Start() error {
-	exp.logger.Debug("exporter.Start()")
+// StartIbft starts the ibft dispatcher for syncing data by validator
+func (exp *exporter) StartIbft() error {
+	exp.logger.Debug("StartIbft()")
 	go exp.ibftDisptcher.Start()
-	go exp.validatorSyncInterval()
-	err := exp.eth1Client.Start()
+	return nil
+}
+
+// StartEth1 starts the eth1 events sync and streaming
+func (exp *exporter) StartEth1() error {
+	exp.logger.Debug("StartEth1()")
+
+	eth1EventChan, err := exp.eth1Client.EventsSubject().Register("Eth1ExporterObserver")
+	if err != nil {
+		return errors.Wrap(err, "could not register for eth1 events subject")
+	}
+	go func() {
+		errCn := exp.listenToEth1Events(eth1EventChan)
+		for err := range errCn {
+			exp.logger.Warn("could not handle eth1 event", zap.Error(err))
+		}
+	}()
+
+	// sync events
+	var syncErr error
+	var syncProcess sync.WaitGroup
+	syncProcess.Add(1)
+	go func() {
+		defer syncProcess.Done()
+		syncErr = eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
+	}()
+	syncProcess.Wait()
+
+	if syncErr != nil {
+		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
+	} else {
+		exp.logger.Debug("sync was done successfully")
+	}
+	// start events stream
+	err = exp.eth1Client.Start()
 	if err != nil {
 		return errors.Wrap(err, "could not start eth1 client")
 	}
 	return nil
 }
 
-// Sync takes care of syncing an exporter node with:
-//  1. ibft data from ssv nodes
-//  2. registry data (validator/operator added) from eth1 contract
-func (exp *exporter) Sync() error {
-	err := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
-	if err != nil {
-		return errors.Wrap(err, "failed to sync eth1 contract events")
-	}
-	return nil
-}
-
 // ListenToEth1Events register for eth1 events
-func (exp *exporter) ListenToEth1Events(cn pubsub.SubjectChannel) chan error {
+func (exp *exporter) listenToEth1Events(cn pubsub.SubjectChannel) chan error {
 	cnErr := make(chan error)
 	go func() {
 		for e := range cn {
@@ -128,7 +150,6 @@ func (exp *exporter) ListenToEth1Events(cn pubsub.SubjectChannel) chan error {
 					err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
 				}
 				if err != nil {
-					exp.logger.Warn("could not handle eth1 event", zap.Error(err))
 					cnErr <- err
 				}
 			}
@@ -177,27 +198,19 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	return nil
 }
 
-func (exp *exporter) validatorSyncInterval() {
-	ticker := time.NewTicker(validatorSyncIntervalTick)
-	defer ticker.Stop()
-	for range ticker.C {
-		exp.triggerIBFTSyncAll()
-	}
-}
-
-func (exp *exporter) triggerIBFTSyncAll() {
-	shares, err := exp.validatorStorage.GetAllValidatorsShare()
-	if err != nil {
-		exp.logger.Error("could not read all validators shares", zap.Error(err))
-	}
-	exp.logger.Debug("all validators shares", zap.Int("len", len(shares)))
-	for _, share := range shares {
-		if err := exp.triggerIBFTSync(share.PublicKey); err != nil {
-			exp.logger.Warn("failed to trigger ibft sync", zap.Error(err),
-				zap.String("pubKeyHex", share.PublicKey.SerializeToHexStr()))
-		}
-	}
-}
+//func (exp *exporter) triggerIBFTSyncAll() {
+//	shares, err := exp.validatorStorage.GetAllValidatorsShare()
+//	if err != nil {
+//		exp.logger.Error("could not read all validators shares", zap.Error(err))
+//	}
+//	exp.logger.Debug("all validators shares", zap.Int("len", len(shares)))
+//	for _, share := range shares {
+//		if err := exp.triggerIBFTSync(share.PublicKey); err != nil {
+//			exp.logger.Warn("failed to trigger ibft sync", zap.Error(err),
+//				zap.String("pubKeyHex", share.PublicKey.SerializeToHexStr()))
+//		}
+//	}
+//}
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if !ibftSyncEnabled {

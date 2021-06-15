@@ -83,7 +83,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		n.host = host
 		n.cfg.HostID = host.ID()
 	} else if cfg.DiscoveryType == "discv5" {
-		dv5Nodes := n.parseBootStrapAddrs(n.cfg.BootstrapNodeAddr)
+		dv5Nodes := n.parseBootStrapAddrs(TransformEnr(n.cfg.Enr))
 		n.cfg.Discv5BootStrapAddr = dv5Nodes
 
 		_ipAddr = n.ipAddr()

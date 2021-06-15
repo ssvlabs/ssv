@@ -17,26 +17,20 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
-	"time"
 )
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options `yaml:"db"`
 	SSVOptions                 node.Options   `yaml:"ssv"`
+
 	Network                    string         `yaml:"Network" env-default:"prater"`
-	DiscoveryType              string         `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"mdns"`
-	Enr                        string         `yaml:"Enr" env:"ENR_KEY" env-description:"enr used in discovery" env-default:""`
 	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr                   string         `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
 	SmartContractAddr          string         `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
-	TCPPort                    int            `yaml:"TcpPort" env-default:"13000"`
-	UDPPort                    int            `yaml:"UdpPort" env-default:"12000"`
-	HostAddress                string         `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
-	HostDNS                    string         `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 
-	RequestTimeout time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
+	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 }
 
 var cfg config
@@ -56,7 +50,6 @@ var StartNodeCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 		}
-
 		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel)
 
@@ -76,35 +69,10 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create beacon client", zap.Error(err))
 		}
 
-		enr := []string{
-			// deployemnt
-			// internal ip
-			//"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
-			//external ip
-			"enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
-			// ssh
-			//"enr:-LK4QAkFwcROm9CByx3aabpd9Muqxwj8oQeqnr7vm8PAA8l1ZbDWVZTF_bosINKhN4QVRu5eLPtyGCccRPb3yKG2xjcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAOOJc2VjcDI1NmsxoQMCphx1UQ1PkBsdOb-4FRiSWM4JE7HoDarAzOp82SO4s4N0Y3CCE4iDdWRwgg-g",
-		}
-		if cfg.Enr != "" {
-			enr = []string{
-				cfg.Enr,
-			}
-		}
-
-		p2pCfg := p2p.Config{
-			DiscoveryType:     cfg.DiscoveryType,
-			BootstrapNodeAddr: enr,
-			UDPPort:           cfg.UDPPort,
-			TCPPort:           cfg.TCPPort,
-			HostDNS:           cfg.HostDNS,
-			HostAddress:       cfg.HostAddress,
-			RequestTimeout:    cfg.RequestTimeout,
-		}
-		network, err := p2p.New(cmd.Context(), Logger, &p2pCfg)
+		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
-
 		// end Non refactored
 
 		ctx := cmd.Context()
@@ -120,25 +88,23 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = network
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 
-		if cfg.ETH1Addr != "" {
-			operatorStorage := collections.NewOperatorStorage(db, Logger)
-			if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
-				Logger.Fatal("failed to setup operator private key", zap.Error(err))
-			}
-			// create new eth1 client
-			if  cfg.SmartContractAddr != "" {
-				Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
-				params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
-			}
-			cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
-				Ctx:             cmd.Context(),
-				Logger:          Logger,
-				NodeAddr:        cfg.ETH1Addr,
-				PrivKeyProvider: operatorStorage.GetPrivateKey,
-			})
-			if err != nil {
-				Logger.Error("failed to create eth1 client", zap.Error(err)) // TODO change to fatal when times comes
-			}
+		operatorStorage := collections.NewOperatorStorage(db, Logger)
+		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
+			Logger.Fatal("failed to setup operator private key", zap.Error(err))
+		}
+		// create new eth1 client
+		if  cfg.SmartContractAddr != "" {
+			Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
+			params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
+		}
+		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
+			Ctx:             cmd.Context(),
+			Logger:          Logger,
+			NodeAddr:        cfg.ETH1Addr,
+			PrivKeyProvider: operatorStorage.GetPrivateKey,
+		})
+		if err != nil {
+			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
 		ssvNode := node.New(cfg.SSVOptions)
