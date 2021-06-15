@@ -110,6 +110,7 @@ func (c *controller) setupValidators() map[string]*Validator {
 
 	res := make(map[string]*Validator)
 	for _, validatorShare := range validatorsShare {
+		printValidatorShare(c.logger, validatorShare)
 		res[validatorShare.PublicKey.SerializeToHexStr()] = New(Options{
 			Context:                    c.context,
 			SignatureCollectionTimeout: c.signatureCollectionTimeout,
@@ -243,3 +244,15 @@ func (c *controller) serializeValidatorAddedEvent(validatorAddedEvent eth1.Valid
 	validatorShare.Committee = ibftCommittee
 	return &validatorShare
 }
+
+func printValidatorShare(logger *zap.Logger, validatorShare *validatorstorage.Share) {
+	var committee []string
+	for _, c := range validatorShare.Committee {
+		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftId, c.Pk))
+	}
+	logger.Debug("setup validator",
+		zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()),
+		zap.Uint64("nodeID", validatorShare.NodeID),
+		zap.Strings("committee", committee))
+}
+
