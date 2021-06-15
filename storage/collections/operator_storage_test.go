@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"strings"
@@ -123,6 +124,7 @@ func TestOperatorStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	operatorInfo := OperatorInformation{
 		PublicKey: fixtures.RefPk[:],
 		Name:      "my_operator",
+		OwnerAddress: common.Address{},
 	}
 
 	t.Run("non-existing operator", func(t *testing.T) {

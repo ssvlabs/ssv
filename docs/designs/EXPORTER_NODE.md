@@ -27,15 +27,14 @@ Once sync is finished, the exporter is able to serve requests and listen to live
 
 The following information will be needed:
 * Operators 
-  * Name --> contract
-  * Public Key --> contract
-  * Performance --> contract (score) ?
-    * won't be needed as the explorer center calculates it
+  * Name --> contract event
+  * Public Key --> contract event
+  * Owner Address --> contract event
+  * Index --> a sequential index
 * Validators
-  * Public Key --> contract
-  * Owner Address --> contract
-  * Payment Address --> contract
-  * Assigned Operators (over time) --> contract (oess)
+  * Public Key --> contract event
+  * Operators --> contract event
+  * Index --> a sequential index
 * Duties (over time) 
   * Epoch --> calculated from Slot
   * Slot --> part of the lambda
@@ -87,20 +86,60 @@ In order to achieve HA, one of the following should be the way to go:
 
 #### Explorer Center
 
-Exporter Node will provide a `libp2p stream` endpoint for getting data. \
-The `stream` is a duplex channel, and will be used for:
-* push ibft data from exporter in an async manner
-* pull validators / operators information
+Exporter Node provides a WebSocket endpoint for reading the collected data. \
+The messages will support several use-cases:
+* push data by exporter, will be triggered on live data
+  * IBFT data - push once decided messages arrives
+  * Operators / Validators - push on contract events
+* request data by explorer
+  * requested with the corresponding filters
 
+##### Message Structure
 
-  ##### Get all operators
+Request holds a `filter` for making queries of specific data 
+and a `type` to distinguish between messages:
+```
+{
+  "type": "operator" | "validator" | "ibft"
+  "filter": {
+    "from": number,
+    "to": number,
+    "role": "ATTESTER" | "AGGREGATOR" | "PROPOSER",
+    "pubKey": string
+  }
+}
+```
+Response extends the Request with `values` that contains results:
+```
+{
+  "values": Operator[] | Validator[] | DecidedMessage[]
+}
+```
 
-  **TODO: finalize format (proto vs. json)**
-  
-  ##### Get all validators
+##### Examples
 
-  **TODO: finalize format (proto vs. json)**
-
-  ##### Push ibft data 
-
-  **TODO: finalize format (proto vs. json)**
+Request:
+```json
+{
+  "type": "operator",
+  "filter": {
+    "from": 0
+  }
+}
+```
+Response:
+```json
+{
+  "type": "operator",
+  "filter": {
+    "from": 0
+  },
+  "values": [
+    {
+      "publicKey": "...",
+      "name": "myOperator",
+      "ownerAddress": "..."
+    }
+  ]
+}
+```

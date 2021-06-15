@@ -95,7 +95,9 @@ func (d *dispatcher) Queue(task Task) {
 	defer d.mut.Unlock()
 
 	d.waiting = append(d.waiting, task)
-	d.logger.Debug("task was queued", zap.String("task-id", task.ID))
+	d.logger.Debug("task was queued",
+		zap.String("task-id", task.ID),
+		zap.Int("waitingTasks", len(d.waiting)))
 }
 
 func (d *dispatcher) nextTaskToRun() *Task {
@@ -105,6 +107,7 @@ func (d *dispatcher) nextTaskToRun() *Task {
 	if len(d.waiting) == 0 {
 		return nil
 	}
+	// pop first task in the waiting queue
 	task := d.waiting[0]
 	d.waiting = d.waiting[1:]
 	d.running++

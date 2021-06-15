@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	validatorSyncIntervalTick = 2 * time.Minute
-	ibftSyncDispatcherTick    = 2 * time.Second
+	validatorSyncIntervalTick = 5 * time.Minute
+	ibftSyncDispatcherTick    = 1 * time.Second
 )
 
 var (
@@ -165,6 +165,8 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	oi := collections.OperatorInformation{
 		PublicKey: event.PublicKey,
 		Name:      event.Name,
+		OwnerAddress: event.OwnerAddress,
+		// TODO add index
 	}
 	err := exp.operatorStorage.SaveOperatorInformation(&oi)
 	if err != nil {
@@ -199,7 +201,6 @@ func (exp *exporter) triggerIBFTSyncAll() {
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if !ibftSyncEnabled {
-		//exp.logger.Info("ibft sync is disabled")
 		return nil
 	}
 	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())

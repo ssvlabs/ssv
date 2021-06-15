@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -24,8 +25,10 @@ type IOperatorStorage interface {
 
 // OperatorInformation the public data of an operator
 type OperatorInformation struct {
-	PublicKey []byte
-	Name      string
+	PublicKey    []byte
+	Name         string
+	OwnerAddress common.Address
+	Index        int
 }
 
 // OperatorStorage implement IOperatorStorage
@@ -114,7 +117,7 @@ func (o *OperatorStorage) ListOperators() ([]OperatorInformation, error) {
 
 // GetOperatorInformation returns information of the given operator by public key
 func (o *OperatorStorage) GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error) {
-	obj, err := o.db.Get(o.prefix, operatorPubKey)
+	obj, err := o.db.Get(o.prefix, operatorKey(operatorPubKey))
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +132,7 @@ func (o *OperatorStorage) SaveOperatorInformation(operatorInformation *OperatorI
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
 	}
-	return o.db.Set(o.prefix, operatorInformation.PublicKey, raw)
+	return o.db.Set(o.prefix, operatorKey(operatorInformation.PublicKey), raw)
 }
 
 // SavePrivateKey save operator private key
@@ -155,4 +158,11 @@ func (o *OperatorStorage) verifyPrivateKeyExist(operatorKey string) (string, err
 		}
 	}
 	return "", nil // key already exist, no need to return sk
+}
+
+func operatorKey(pubKey []byte) []byte {
+	return bytes.Join([][]byte{
+		[]byte("operator/"),
+		pubKey[:],
+	}, []byte("/"))
 }
