@@ -2,7 +2,6 @@ db:
   Path: ./data/db/1
   Type: badger-db
 ssv:
-
   ValidatorOptions:
     Shares:
       - NodeID: 1
