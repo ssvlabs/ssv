@@ -18,6 +18,10 @@ As most of that logic already exist in SSV, the exporter is just a new executabl
 
 <img src="../resources/exporter-node-diagram.png" >
 
+The introduction of exporter requires to do some refactoring in the project structure as follows:
+
+<img src="../resources/exporter-node-packages.png" >
+
 ### Bootstrap
 
 On start, exporter will first finish syncing data and only afterwards will start. \
