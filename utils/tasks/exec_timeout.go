@@ -11,7 +11,7 @@ type Func = func() (interface{}, error)
 // funcResult is an internal struct, representing result of a function
 type funcResult struct {
 	Response interface{}
-	Error error
+	Error    error
 }
 
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed

@@ -13,9 +13,9 @@ func TestShareOptionsToShare(t *testing.T) {
 	origShare := generateRandomValidatorShare()
 
 	shareOpts := ShareOptions{
-		ShareKey: origShare.ShareKey.SerializeToHexStr(),
+		ShareKey:  origShare.ShareKey.SerializeToHexStr(),
 		PublicKey: origShare.ShareKey.GetPublicKey().SerializeToHexStr(),
-		NodeID: 1,
+		NodeID:    1,
 		Committee: map[string]int{},
 	}
 
@@ -42,9 +42,9 @@ func TestShareOptionsToShare(t *testing.T) {
 
 	t.Run("ShareOptions w/o committee", func(t *testing.T) {
 		emptyShareOpts := ShareOptions{
-			ShareKey: origShare.ShareKey.SerializeToHexStr(),
+			ShareKey:  origShare.ShareKey.SerializeToHexStr(),
 			PublicKey: origShare.ShareKey.GetPublicKey().SerializeToHexStr(),
-			NodeID: 1,
+			NodeID:    1,
 		}
 		share, err := emptyShareOpts.ToShare()
 		require.EqualError(t, err, "empty share")
