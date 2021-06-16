@@ -207,9 +207,18 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 		return
 	}
 
+	visitedRoles := map[string]bool{}
 	for _, role := range roles {
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
+			if visitedRoles[role.String()] {
+				l.Debug("skipping redundant role",
+					zap.String("role", role.String()))
+				return
+			} else {
+				visitedRoles[role.String()] = true
+			}
+			l.Debug("starting duty role")
 
 			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)
 			if err != nil {
