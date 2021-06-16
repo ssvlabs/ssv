@@ -93,6 +93,12 @@ func (i *ibftImpl) Init() {
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
+	i.logger.Debug("starting ibft instance",
+		zap.Uint64("slot", opts.Duty.AttesterSlot),
+		zap.Uint64("committeeIndex", opts.Duty.CommitteeIndex),
+		zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
+		zap.Uint64("seqNumber", opts.SeqNumber))
+
 	instanceOpts := i.instanceOptionsFromStartOptions(opts)
 
 	if err := i.canStartNewInstance(instanceOpts); err != nil {
