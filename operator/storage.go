@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"bytes"
 	"crypto/rsa"
 	"encoding/base64"
 	"github.com/bloxapp/ssv/eth1"
@@ -55,8 +54,8 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, error) {
 }
 
 // GetPrivateKey return rsa private key
-func (o *storage) GetPrivateKey() (*rsa.PrivateKey, error) {
-	obj, err := o.db.Get(prefix, []byte("private-key"))
+func (s *storage) GetPrivateKey() (*rsa.PrivateKey, error) {
+	obj, err := s.db.Get(prefix, []byte("private-key"))
 	if err != nil {
 		return nil, err
 	}
@@ -68,14 +67,14 @@ func (o *storage) GetPrivateKey() (*rsa.PrivateKey, error) {
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (o *storage) SetupPrivateKey(operatorKeyBase64 string) error {
+func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
 		return errors.Wrap(err, "Failed to decode base64")
 	}
 	var operatorKey = string(operatorKeyByte)
 
-	newSk, err := o.verifyPrivateKeyExist(operatorKey)
+	newSk, err := s.verifyPrivateKeyExist(operatorKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to verify operator private key")
 	}
@@ -84,12 +83,12 @@ func (o *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 			operatorKey = newSk
 		}
 
-		if err := o.savePrivateKey(operatorKey); err != nil {
+		if err := s.savePrivateKey(operatorKey); err != nil {
 			return errors.Wrap(err, "failed to save operator private key")
 		}
 	}
 
-	sk, err := o.GetPrivateKey()
+	sk, err := s.GetPrivateKey()
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
@@ -97,23 +96,23 @@ func (o *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to extract operator public key")
 	}
-	o.logger.Info("operator public key", zap.Any("key", operatorPublicKey))
+	s.logger.Info("operator public key", zap.Any("key", operatorPublicKey))
 	params.SsvConfig().OperatorPublicKey = operatorPublicKey
 	return nil
 }
 
 // SavePrivateKey save operator private key
-func (o *storage) savePrivateKey(operatorKey string) error {
-	if err := o.db.Set(prefix, []byte("private-key"), []byte(operatorKey)); err != nil {
+func (s *storage) savePrivateKey(operatorKey string) error {
+	if err := s.db.Set(prefix, []byte("private-key"), []byte(operatorKey)); err != nil {
 		return err
 	}
 	return nil
 }
 
 // verifyPrivateKeyExist return true if key exist and no new key passed else return new generated key
-func (o *storage) verifyPrivateKeyExist(operatorKey string) (string, error) {
+func (s *storage) verifyPrivateKeyExist(operatorKey string) (string, error) {
 	// check if sk is exist or passedKey is passed. if not, generate new operator key
-	if _, err := o.GetPrivateKey(); err != nil { // need to generate new operator key
+	if _, err := s.GetPrivateKey(); err != nil { // need to generate new operator key
 		if err.Error() == badger.ErrKeyNotFound.Error() && operatorKey == "" {
 			_, skByte, err := rsaencryption.GenerateKeys()
 			if err != nil {
@@ -125,11 +124,4 @@ func (o *storage) verifyPrivateKeyExist(operatorKey string) (string, error) {
 		}
 	}
 	return "", nil // key already exist, no need to return sk
-}
-
-func operatorKey(pubKey []byte) []byte {
-	return bytes.Join([][]byte{
-		[]byte("operator/"),
-		pubKey[:],
-	}, []byte("/"))
 }
