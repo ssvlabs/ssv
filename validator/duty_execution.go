@@ -208,7 +208,16 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 	}
 
 	for _, role := range roles {
+		currentIdentifier := fmt.Sprintf("%d_%s", slot, role.String())
+		if ok := v.markDutyExecuted(currentIdentifier); !ok {
+			logger.Debug("duty was already executed",
+				zap.String("identifier", currentIdentifier))
+			continue
+		}
 		go func(role beacon.Role) {
+			currentIdentifier := fmt.Sprintf("%d_%s", slot, role.String())
+			defer v.clearExecutedDuty(currentIdentifier)
+
 			l := logger.With(zap.String("role", role.String()))
 			l.Debug("starting duty role")
 
@@ -236,4 +245,33 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 			}
 		}(role)
 	}
+}
+
+func (v *Validator) isDutyExecuted(identifier string) bool {
+	v.executingMutex.RLock()
+	defer v.executingMutex.RUnlock()
+
+	return v.executing[identifier]
+}
+
+func (v *Validator) markDutyExecuted(identifier string) bool {
+	if v.isDutyExecuted(identifier) {
+		return false
+	}
+
+	v.executingMutex.Lock()
+	defer v.executingMutex.Unlock()
+	v.executing[identifier] = true
+	return true
+}
+
+func (v *Validator) clearExecutedDuty(identifier string) {
+	if !v.isDutyExecuted(identifier) {
+		return
+	}
+
+	v.executingMutex.Lock()
+	defer v.executingMutex.Unlock()
+
+	delete(v.executing, identifier)
 }
