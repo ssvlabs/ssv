@@ -14,10 +14,10 @@ var Logger *zap.Logger
 
 // RootCmd represents the root command of SSV CLI
 var RootCmd = &cobra.Command{
-	Use:  "ssvnode",
-	Short:  "ssv-node",
-	Long: `SSV node is a CLI for running SSV-related operations.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string){
+	Use:   "ssvnode",
+	Short: "ssv-node",
+	Long:  `SSV node is a CLI for running SSV-related operations.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 	},
 }
 
@@ -31,7 +31,7 @@ func Execute(appName, version string) {
 	}
 }
 
-func init()  {
+func init() {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(exporter.StartExporterNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)

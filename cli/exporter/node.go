@@ -87,4 +87,3 @@ var StartExporterNodeCmd = &cobra.Command{
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
-

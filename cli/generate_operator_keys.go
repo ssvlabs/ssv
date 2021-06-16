@@ -17,7 +17,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 		logger := logex.Build(RootCmd.Short, zapcore.DebugLevel)
 
 		pk, sk, err := rsaencryption.GenerateKeys()
-		if err != nil{
+		if err != nil {
 			logger.Fatal("Failed to generate operator keys", zap.Error(err))
 		}
 		logger.Info("generated public key (base64)", zap.Any("pk", pk))

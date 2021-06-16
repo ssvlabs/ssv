@@ -24,13 +24,13 @@ type config struct {
 	DBOptions                  basedb.Options   `yaml:"db"`
 	SSVOptions                 operator.Options `yaml:"ssv"`
 
-	Network                    string         `yaml:"Network" env-default:"prater"`
-	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	ETH1Addr                   string         `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
-	SmartContractAddr          string         `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
+	Network           string `yaml:"Network" env-default:"prater"`
+	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
+	OperatorKey       string `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	ETH1Addr          string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
+	SmartContractAddr string `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
 
-	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
+	P2pNetworkConfig p2p.Config `yaml:"p2p"`
 }
 
 var cfg config
@@ -93,7 +93,7 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
 		// create new eth1 client
-		if  cfg.SmartContractAddr != "" {
+		if cfg.SmartContractAddr != "" {
 			Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
 			params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
 		}

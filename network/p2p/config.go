@@ -25,6 +25,7 @@ type Config struct {
 	Discv5BootStrapAddr []string
 }
 
+// TransformEnr converts defaults enr value and convert it to slice
 func TransformEnr(enr string) []string {
 	if len(enr) == 0 {
 		// internal ip
