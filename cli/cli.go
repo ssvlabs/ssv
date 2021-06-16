@@ -3,7 +3,7 @@ package cli
 import (
 	"github.com/bloxapp/ssv/cli/bootnode"
 	"github.com/bloxapp/ssv/cli/exporter"
-	"github.com/bloxapp/ssv/cli/ssvnode"
+	"github.com/bloxapp/ssv/cli/operator"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
@@ -34,5 +34,5 @@ func Execute(appName, version string) {
 func init()  {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(exporter.StartExporterNodeCmd)
-	RootCmd.AddCommand(ssvnode.StartNodeCmd)
+	RootCmd.AddCommand(operator.StartNodeCmd)
 }

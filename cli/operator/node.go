@@ -1,4 +1,4 @@
-package ssvnode
+package operator
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/node"
+	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -21,8 +21,8 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options `yaml:"db"`
-	SSVOptions                 node.Options   `yaml:"ssv"`
+	DBOptions                  basedb.Options   `yaml:"db"`
+	SSVOptions                 operator.Options `yaml:"ssv"`
 
 	Network                    string         `yaml:"Network" env-default:"prater"`
 	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
@@ -107,8 +107,11 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
-		ssvNode := node.New(cfg.SSVOptions)
+		ssvNode := operator.New(cfg.SSVOptions)
 
+		if err := ssvNode.StartEth1(); err != nil {
+			Logger.Fatal("failed to start eth1", zap.Error(err))
+		}
 		if err := ssvNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
 		}

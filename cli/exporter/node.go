@@ -78,7 +78,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err := exporterNode.StartEth1(); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
-		if err := exporterNode.StartIbft(); err != nil {
+		if err := exporterNode.Start(); err != nil {
 			Logger.Fatal("failed to start ibft", zap.Error(err))
 		}
 	},

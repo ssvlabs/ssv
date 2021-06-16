@@ -1,4 +1,4 @@
-package node
+package operator
 
 import (
 	"github.com/bloxapp/ssv/eth1"
@@ -17,7 +17,7 @@ func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
 		Path:   "",
 	})
 	require.NoError(t, err)
-	s := NewSSVNodeStorage(db, logger)
+	s := NewOperatorNodeStorage(db, logger)
 
 	offset := new(eth1.SyncOffset)
 	offset.SetString("49e08f", 16)

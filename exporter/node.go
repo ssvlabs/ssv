@@ -23,8 +23,7 @@ import (
 )
 
 const (
-	validatorSyncIntervalTick = 5 * time.Minute
-	ibftSyncDispatcherTick    = 1 * time.Second
+	ibftSyncDispatcherTick = 1 * time.Second
 )
 
 var (
@@ -33,8 +32,8 @@ var (
 
 // Exporter represents the main interface of this package
 type Exporter interface {
+	Start() error
 	StartEth1() error
-	StartIbft() error
 }
 
 // Options contains options to create the node
@@ -92,16 +91,17 @@ func New(opts Options) Exporter {
 	return &e
 }
 
-// StartIbft starts the ibft dispatcher for syncing data by validator
-func (exp *exporter) StartIbft() error {
-	exp.logger.Debug("StartIbft()")
+// Start starts the IBFT dispatcher for syncing data nd listen to messages
+func (exp *exporter) Start() error {
+	exp.logger.Info("starting node -> IBFT")
+
 	go exp.ibftDisptcher.Start()
 	return nil
 }
 
 // StartEth1 starts the eth1 events sync and streaming
 func (exp *exporter) StartEth1() error {
-	exp.logger.Debug("StartEth1()")
+	exp.logger.Info("starting node -> eth1")
 
 	eth1EventChan, err := exp.eth1Client.EventsSubject().Register("Eth1ExporterObserver")
 	if err != nil {
@@ -184,8 +184,8 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
 	oi := collections.OperatorInformation{
-		PublicKey: event.PublicKey,
-		Name:      event.Name,
+		PublicKey:    event.PublicKey,
+		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
 		// TODO add index
 	}
@@ -197,20 +197,6 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 	return nil
 }
-
-//func (exp *exporter) triggerIBFTSyncAll() {
-//	shares, err := exp.validatorStorage.GetAllValidatorsShare()
-//	if err != nil {
-//		exp.logger.Error("could not read all validators shares", zap.Error(err))
-//	}
-//	exp.logger.Debug("all validators shares", zap.Int("len", len(shares)))
-//	for _, share := range shares {
-//		if err := exp.triggerIBFTSync(share.PublicKey); err != nil {
-//			exp.logger.Warn("failed to trigger ibft sync", zap.Error(err),
-//				zap.String("pubKeyHex", share.PublicKey.SerializeToHexStr()))
-//		}
-//	}
-//}
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if !ibftSyncEnabled {

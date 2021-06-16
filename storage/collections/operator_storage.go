@@ -40,12 +40,12 @@ type OperatorStorage struct {
 
 // NewOperatorStorage init new instance of operator storage
 func NewOperatorStorage(db basedb.IDb, logger *zap.Logger) IOperatorStorage {
-	validator := OperatorStorage{
+	os := OperatorStorage{
 		prefix: []byte("operator-"),
 		db:     db,
 		logger: logger,
 	}
-	return &validator
+	return &os
 }
 
 // GetPrivateKey return rsa private key

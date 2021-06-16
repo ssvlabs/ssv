@@ -1,4 +1,4 @@
-package node
+package operator
 
 import (
 	"github.com/bloxapp/ssv/eth1"
@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	prefix        = []byte("ssvnode/")
+	prefix        = []byte("operator/")
 	syncOffsetKey = []byte("syncOffset")
 )
 
@@ -22,8 +22,8 @@ type storage struct {
 	logger *zap.Logger
 }
 
-// NewSSVNodeStorage creates a new instance of Storage
-func NewSSVNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
+// NewOperatorNodeStorage creates a new instance of Storage
+func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	es := storage{db, logger}
 	return &es
 }

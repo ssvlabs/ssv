@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	valcheck2 "github.com/bloxapp/ssv/ibft/valcheck"
+	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/node/valcheck"
+	"github.com/bloxapp/ssv/utils/valcheck"
 	"github.com/pkg/errors"
 	"sync"
 	"time"
@@ -121,7 +121,7 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap.Logger, slot uint64, role beacon.Role, duty *ethpb.DutiesResponse_Duty) (int, []byte, []byte, error) {
 	var inputByts []byte
 	var err error
-	var valCheckInstance valcheck2.ValueCheck
+	var valCheckInstance ibftvalcheck.ValueCheck
 	switch role {
 	case beacon.RoleAttester:
 		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())

@@ -1,4 +1,4 @@
-package node
+package operator
 
 import (
 	"context"
@@ -18,8 +18,8 @@ import (
 
 // Node represents the behavior of SSV node
 type Node interface {
-	// Start starts the SSV node
 	Start() error
+	StartEth1() error
 }
 
 // Options contains options to create the node
@@ -39,8 +39,8 @@ type Options struct {
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 }
 
-// ssvNode implements Node interface
-type ssvNode struct {
+// operatorNode implements Node interface
+type operatorNode struct {
 	ethNetwork          core.Network
 	slotQueue           slotqueue.Queue
 	context             context.Context
@@ -54,11 +54,11 @@ type ssvNode struct {
 	eth1Client          eth1.Client
 }
 
-// New is the constructor of ssvNode
+// New is the constructor of operatorNode
 func New(opts Options) Node {
 	slotQueue := slotqueue.New(*opts.ETHNetwork)
 	opts.ValidatorOptions.SlotQueue = slotQueue
-	ssv := &ssvNode{
+	ssv := &operatorNode{
 		context:             opts.Context,
 		logger:              opts.Logger,
 		genesisEpoch:        opts.GenesisEpoch,
@@ -66,7 +66,7 @@ func New(opts Options) Node {
 		validatorController: validator.NewController(opts.ValidatorOptions),
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
-		storage:             NewSSVNodeStorage(opts.DB, opts.Logger),
+		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 		// TODO do we really need to pass the whole object or just SlotDurationSec
 		slotQueue:  slotQueue,
 		eth1Client: opts.Eth1Client,
@@ -75,13 +75,9 @@ func New(opts Options) Node {
 	return ssv
 }
 
-// Start implements Node interface
-func (n *ssvNode) Start() error {
-	n.logger.Info("starting ssv node")
-	if err := n.startEth1(); err != nil {
-		n.logger.Warn("eth1 sync failed", zap.Error(err))
-		return err
-	}
+// Start starts to stream duties and run IBFT instances
+func (n *operatorNode) Start() error {
+	n.logger.Info("starting node -> IBFT")
 
 	n.validatorController.StartValidators()
 	n.startStreamDuties()
@@ -105,8 +101,10 @@ func (n *ssvNode) Start() error {
 	}
 }
 
-// startEth1 starts to sync and listen to events
-func (n *ssvNode) startEth1() error {
+// StartEth1 starts the eth1 events sync and streaming
+func (n *operatorNode) StartEth1() error {
+	n.logger.Info("starting node -> eth1")
+
 	// setup validator controller to listen to ValidatorAdded events
 	// this will handle events from the sync as well
 	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
@@ -130,7 +128,7 @@ func (n *ssvNode) startEth1() error {
 	return nil
 }
 
-func (n *ssvNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
+func (n *operatorNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 	slots := collectSlots(duty)
 	if len(slots) == 0 {
 		n.logger.Debug("no slots found for the given duty")
@@ -174,7 +172,7 @@ func (n *ssvNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 }
 
 // startStreamDuties start to stream duties from the beacon chain
-func (n *ssvNode) startStreamDuties() {
+func (n *operatorNode) startStreamDuties() {
 	var err error
 	pubKeys := n.validatorController.GetValidatorsPubKeys()
 	n.logger.Debug("got pubkeys for stream duties", zap.Int("pubkeys count", len(pubKeys)))
@@ -187,21 +185,21 @@ func (n *ssvNode) startStreamDuties() {
 }
 
 // getSlotStartTime returns the start time for the given slot
-func (n *ssvNode) getSlotStartTime(slot uint64) time.Time {
+func (n *operatorNode) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(n.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
 
 // getCurrentSlot returns the current beacon node slot
-func (n *ssvNode) getCurrentSlot() int64 {
+func (n *operatorNode) getCurrentSlot() int64 {
 	genesisTime := int64(n.ethNetwork.MinGenesisTime())
 	currentTime := time.Now().Unix()
 	return (currentTime - genesisTime) / 12
 }
 
 // getEpochFirstSlot returns the beacon node first slot in epoch
-func (n *ssvNode) getEpochFirstSlot(epoch uint64) uint64 {
+func (n *operatorNode) getEpochFirstSlot(epoch uint64) uint64 {
 	return epoch * 32
 }
 
