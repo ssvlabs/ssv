@@ -209,6 +209,8 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 
 	visitedRoles := map[string]bool{}
 	for _, role := range roles {
+		logger.Debug("found duty role",
+			zap.String("role", role.String()))
 		if visitedRoles[role.String()] {
 			logger.Debug("skipping redundant role",
 				zap.String("role", role.String()))
