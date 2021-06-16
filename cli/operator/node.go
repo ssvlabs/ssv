@@ -11,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -88,7 +87,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = network
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 
-		operatorStorage := collections.NewOperatorStorage(db, Logger)
+		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}

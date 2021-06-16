@@ -53,8 +53,7 @@ type Options struct {
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
 	ctx              context.Context
-	store            Storage
-	operatorStorage  collections.IOperatorStorage
+	storage          Storage
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
 	logger           *zap.Logger
@@ -74,10 +73,9 @@ func New(opts Options) Exporter {
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
 	e := exporter{
 		ctx:              opts.Ctx,
-		store:            NewExporterStorage(opts.DB, opts.Logger),
+		storage:          NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
-		operatorStorage:  collections.NewOperatorStorage(opts.DB, opts.Logger),
 		logger:           opts.Logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
@@ -103,6 +101,7 @@ func (exp *exporter) Start() error {
 func (exp *exporter) StartEth1() error {
 	exp.logger.Info("starting node -> eth1")
 
+	// register for contract events that will arrive from eth1Client
 	eth1EventChan, err := exp.eth1Client.EventsSubject().Register("Eth1ExporterObserver")
 	if err != nil {
 		return errors.Wrap(err, "could not register for eth1 events subject")
@@ -113,22 +112,19 @@ func (exp *exporter) StartEth1() error {
 			exp.logger.Warn("could not handle eth1 event", zap.Error(err))
 		}
 	}()
-
 	// sync events
 	var syncErr error
 	var syncProcess sync.WaitGroup
 	syncProcess.Add(1)
 	go func() {
 		defer syncProcess.Done()
-		syncErr = eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.store, "ExporterSync")
+		syncErr = eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, "ExporterSync")
 	}()
 	syncProcess.Wait()
-
 	if syncErr != nil {
 		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
-	} else {
-		exp.logger.Debug("sync was done successfully")
 	}
+	exp.logger.Debug("sync was done successfully")
 	// start events stream
 	err = exp.eth1Client.Start()
 	if err != nil {
@@ -183,13 +179,13 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.logger.Info("operator added event",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
-	oi := collections.OperatorInformation{
+	oi := OperatorInformation{
 		PublicKey:    event.PublicKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
 		// TODO add index
 	}
-	err := exp.operatorStorage.SaveOperatorInformation(&oi)
+	err := exp.storage.SaveOperatorInformation(&oi)
 	if err != nil {
 		return err
 	}
