@@ -346,18 +346,18 @@ func TestValidateDecidedMsg(t *testing.T) {
 			}),
 			errors.New("message type is wrong"),
 		},
-		{
-			"invalid msg pk",
-			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				ValidatorPk: []byte{1, 2, 3, 4},
-				Lambda:      []byte("lambda_11"),
-				Value:       []byte("value"),
-			}),
-			errors.New("invalid message validator PK"),
-		},
+		//{
+		//	"invalid msg pk",
+		//	aggregateSign(t, sks, &proto.Message{
+		//		Type:        proto.RoundState_Commit,
+		//		Round:       3,
+		//		SeqNumber:   11,
+		//		ValidatorPk: []byte{1, 2, 3, 4},
+		//		Lambda:      []byte("lambda_11"),
+		//		Value:       []byte("value"),
+		//	}),
+		//	errors.New("invalid message validator PK"),
+		//},
 		{
 			"invalid msg sig",
 			aggregateInvalidSign(t, sks, &proto.Message{
