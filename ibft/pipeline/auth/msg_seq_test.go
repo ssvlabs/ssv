@@ -23,7 +23,7 @@ func TestMsgSeq(t *testing.T) {
 			"different msg seq",
 			1,
 			2,
-			"invalid message sequence number",
+			"invalid message sequence number; expected: 1, actual: 2",
 		},
 	}
 

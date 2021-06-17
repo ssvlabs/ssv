@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -44,9 +43,6 @@ type Validator struct {
 	network                    network.Network
 	slotQueue                  slotqueue.Queue
 	signatureCollectionTimeout time.Duration
-
-	executing map[string]bool
-	executingMutex sync.RWMutex
 }
 
 // New Validator creation
@@ -78,8 +74,6 @@ func New(opt Options, ibftStorage collections.Iibft) *Validator {
 		ibfts:                      ibfts,
 		ethNetwork:                 opt.ETHNetwork,
 		beacon:                     opt.Beacon,
-		executing: 					map[string]bool{},
-		executingMutex: 			sync.RWMutex{},
 	}
 }
 

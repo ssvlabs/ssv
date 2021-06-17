@@ -19,6 +19,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	dutyTime = 12 * time.Second
+)
+
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
 func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
 	// Collect signatures from other nodes
@@ -208,17 +212,12 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 	}
 
 	for _, role := range roles {
-		currentIdentifier := fmt.Sprintf("%d_%s", slot, role.String())
-		if ok := v.markDutyExecuted(currentIdentifier); !ok {
-			logger.Debug("duty was already executed",
-				zap.String("identifier", currentIdentifier))
-			continue
-		}
 		go func(role beacon.Role) {
-			currentIdentifier := fmt.Sprintf("%d_%s", slot, role.String())
-			defer v.clearExecutedDuty(currentIdentifier)
-
 			l := logger.With(zap.String("role", role.String()))
+			if v.isSlotTimedOut(slot) {
+				l.Warn("duty was timed-out, skipping role")
+				return
+			}
 			l.Debug("starting duty role")
 
 			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)
@@ -247,31 +246,8 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 	}
 }
 
-func (v *Validator) isDutyExecuted(identifier string) bool {
-	v.executingMutex.RLock()
-	defer v.executingMutex.RUnlock()
-
-	return v.executing[identifier]
-}
-
-func (v *Validator) markDutyExecuted(identifier string) bool {
-	if v.isDutyExecuted(identifier) {
-		return false
-	}
-
-	v.executingMutex.Lock()
-	defer v.executingMutex.Unlock()
-	v.executing[identifier] = true
-	return true
-}
-
-func (v *Validator) clearExecutedDuty(identifier string) {
-	if !v.isDutyExecuted(identifier) {
-		return
-	}
-
-	v.executingMutex.Lock()
-	defer v.executingMutex.Unlock()
-
-	delete(v.executing, identifier)
+func (v *Validator) isSlotTimedOut(slot uint64) bool {
+	t := v.getSlotStartTime(slot)
+	timeout := t.Add(dutyTime)
+	return timeout.Sub(t).Seconds() > dutyTime.Seconds()
 }
