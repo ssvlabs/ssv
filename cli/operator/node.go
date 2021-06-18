@@ -106,12 +106,12 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
-		ssvNode := operator.New(cfg.SSVOptions)
+		operatorNode := operator.New(cfg.SSVOptions)
 
-		if err := ssvNode.StartEth1(); err != nil {
+		if err := operatorNode.StartEth1(); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
-		if err := ssvNode.Start(); err != nil {
+		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},

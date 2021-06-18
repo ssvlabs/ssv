@@ -66,7 +66,7 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 	}()
 
-	readMsgData := func() (interface{}, error) {
+	readMsgData := func(stopper tasks.Stopper) (interface{}, error) {
 		msg, err := readMessageData(stream)
 		if msg == nil {
 			msg = &network.Message{}

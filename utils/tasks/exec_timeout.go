@@ -2,33 +2,46 @@ package tasks
 
 import (
 	"context"
+	"github.com/pkg/errors"
 	"time"
 )
 
-// Func is the interface of valid functions to trigger
-type Func = func() (interface{}, error)
+// Func is the interface of functions to trigger
+type Func = func(stopper Stopper) (interface{}, error)
 
 // funcResult is an internal struct, representing result of a function
 type funcResult struct {
-	Response interface{}
-	Error    error
+	res interface{}
+	err error
 }
 
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed
 func ExecWithTimeout(ctx context.Context, fn Func, t time.Duration) (bool, interface{}, error) {
-	c := make(chan funcResult)
+	c := make(chan funcResult, 1)
+	stopper := newStopper()
 
 	go func() {
-		res, err := fn()
+		defer func() {
+			if err := recover(); err != nil {
+				c <- funcResult{struct{}{}, errors.Errorf("panic: %s", err)}
+			}
+		}()
+		res, err := fn(stopper)
 		c <- funcResult{res, err}
 	}()
 
 	select {
 	case result := <-c:
-		return true, result.Response, result.Error
+		return true, result.res, result.err
 	case <-ctx.Done(): // cancelled by context
+		go func() {
+			stopper.stop()
+		}()
 		return false, struct{}{}, nil
 	case <-time.After(t):
+		go func() {
+			stopper.stop()
+		}()
 		return false, struct{}{}, nil
 	}
 }

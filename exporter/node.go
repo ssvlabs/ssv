@@ -106,8 +106,8 @@ func (exp *exporter) StartEth1() error {
 	if err != nil {
 		return errors.Wrap(err, "could not register for eth1 events subject")
 	}
+	errCn := exp.listenToEth1Events(eth1EventChan)
 	go func() {
-		errCn := exp.listenToEth1Events(eth1EventChan)
 		for err := range errCn {
 			exp.logger.Warn("could not handle eth1 event", zap.Error(err))
 		}
