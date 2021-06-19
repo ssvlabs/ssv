@@ -10,7 +10,9 @@ import (
 func ValidateSequenceNumber(seq uint64) pipeline.Pipeline {
 	return pipeline.WrapFunc("sequence", func(signedMessage *proto.SignedMessage) error {
 		if signedMessage.Message.SeqNumber != seq {
-			return errors.Errorf("invalid message sequence number; expected: %d, actual: %d", seq, signedMessage.Message.SeqNumber)
+			err := errors.Errorf("expected: %d, actual: %d",
+				seq, signedMessage.Message.SeqNumber)
+			return errors.Wrap(err, "invalid message sequence number")
 		}
 		return nil
 	})

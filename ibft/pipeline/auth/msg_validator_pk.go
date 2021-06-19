@@ -11,8 +11,9 @@ import (
 func ValidatePKs(pk []byte) pipeline.Pipeline {
 	return pipeline.WrapFunc("validator PK", func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.Message.ValidatorPk) != 48 || !bytes.Equal(pk, signedMessage.Message.ValidatorPk) {
-			return errors.Errorf("invalid message validator PK; expected: %x, actual: %x, len: %d",
-				pk, signedMessage.Message.ValidatorPk, len(signedMessage.Message.ValidatorPk))
+			err := errors.Errorf("expected: %x, actual: %x",
+				pk, signedMessage.Message.ValidatorPk)
+			return errors.Wrap(err, "invalid message validator PK")
 		}
 		return nil
 	})
