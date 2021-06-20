@@ -19,10 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	dutyTime = 12 * time.Second
-)
-
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
 func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
 	// Collect signatures from other nodes
@@ -214,10 +210,6 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 	for _, role := range roles {
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
-			if v.isSlotTimedOut(slot) {
-				l.Warn("duty was timed-out, skipping role")
-				return
-			}
 			l.Debug("starting duty role")
 
 			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)
@@ -244,10 +236,4 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 			}
 		}(role)
 	}
-}
-
-func (v *Validator) isSlotTimedOut(slot uint64) bool {
-	t := v.getSlotStartTime(slot)
-	timeout := t.Add(dutyTime)
-	return timeout.Sub(t).Seconds() > dutyTime.Seconds()
 }
