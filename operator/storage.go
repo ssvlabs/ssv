@@ -6,8 +6,8 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math/big"
@@ -113,13 +113,13 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 func (s *storage) verifyPrivateKeyExist(operatorKey string) (string, error) {
 	// check if sk is exist or passedKey is passed. if not, generate new operator key
 	if _, err := s.GetPrivateKey(); err != nil { // need to generate new operator key
-		if err.Error() == badger.ErrKeyNotFound.Error() && operatorKey == "" {
+		if err.Error() == kv.EntryNotFoundError && operatorKey == "" {
 			_, skByte, err := rsaencryption.GenerateKeys()
 			if err != nil {
 				return "", errors.Wrap(err, "failed to generate new keys")
 			}
 			return string(skByte), nil // new key generated
-		} else if err.Error() != badger.ErrKeyNotFound.Error() {
+		} else if err.Error() != kv.EntryNotFoundError {
 			return "", errors.Wrap(err, "failed to get private key")
 		}
 	}
