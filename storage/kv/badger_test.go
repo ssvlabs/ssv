@@ -8,10 +8,10 @@ import (
 )
 
 func TestBadgerEndToEnd(t *testing.T) {
-	options:= basedb.Options{
-		Type: "badger-memory",
+	options := basedb.Options{
+		Type:   "badger-memory",
 		Logger: zap.L(),
-		Path: "",
+		Path:   "",
 	}
 
 	db, err := New(options)

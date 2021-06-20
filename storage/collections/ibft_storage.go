@@ -5,14 +5,10 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
-)
-
-const (
-	// EntryNotFoundError is an error for a storage entry not found
-	EntryNotFoundError = "EntryNotFoundError"
 )
 
 // Iibft is an interface for persisting chain data
@@ -62,7 +58,7 @@ func (i *IbftStorage) SaveCurrentInstance(pk []byte, state *proto.State) error {
 func (i *IbftStorage) GetCurrentInstance(pk []byte) (*proto.State, error) {
 	val, err := i.get("current", pk)
 	if err != nil {
-		return nil, errors.New(EntryNotFoundError)
+		return nil, errors.New(kv.EntryNotFoundError)
 	}
 	ret := &proto.State{}
 	if err := json.Unmarshal(val, ret); err != nil {
@@ -84,7 +80,7 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 func (i *IbftStorage) GetDecided(pk []byte, seqNumber uint64) (*proto.SignedMessage, error) {
 	val, err := i.get("decided", pk, uInt64ToByteSlice(seqNumber))
 	if err != nil {
-		return nil, errors.New(EntryNotFoundError)
+		return nil, errors.New(kv.EntryNotFoundError)
 	}
 	ret := &proto.SignedMessage{}
 	if err := json.Unmarshal(val, ret); err != nil {
@@ -106,9 +102,6 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 func (i *IbftStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
 	val, err := i.get("highest", pk)
 	if err != nil {
-		if err.Error() == "not found" || err.Error() == "Key not found" { // TODO need to implement not found handle in db level
-			return nil, errors.New(EntryNotFoundError)
-		}
 		return nil, err
 	}
 	ret := &proto.SignedMessage{}

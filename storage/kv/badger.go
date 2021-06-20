@@ -8,6 +8,11 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// EntryNotFoundError is an error for a storage entry not found
+	EntryNotFoundError = "EntryNotFoundError"
+)
+
 // BadgerDb struct
 type BadgerDb struct {
 	db     *badger.DB
@@ -55,17 +60,19 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, error) {
 	err := b.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(append(prefix, key...))
 		if err != nil {
+			if err.Error() == "not found" || err.Error() == "Key not found" {
+				return errors.New(EntryNotFoundError)
+			}
 			return err
 		}
 		resValue, err = item.ValueCopy(nil)
 		return err
 	})
 	return basedb.Obj{
-		Key: key,
+		Key:   key,
 		Value: resValue,
 	}, err
 }
-
 
 // GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
 func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
@@ -86,7 +93,7 @@ func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 				continue
 			}
 			obj := basedb.Obj{
-				Key: trimmedResKey,
+				Key:   trimmedResKey,
 				Value: val,
 			}
 			res = append(res, obj)
@@ -96,9 +103,25 @@ func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	return res, err
 }
 
+// CountByCollection return the object count for all keys under specified prefix(bucket)
+func (b *BadgerDb) CountByCollection(prefix []byte) (int, error) {
+	var res int
+	err := b.db.View(func(txn *badger.Txn) error {
+		opt := badger.DefaultIteratorOptions
+		opt.Prefix = prefix
+		it := txn.NewIterator(opt)
+		defer it.Close()
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			res++
+		}
+		return nil
+	})
+	return res, err
+}
+
 // Close close db
 func (b *BadgerDb) Close() {
-	if err := b.db.Close(); err != nil{
+	if err := b.db.Close(); err != nil {
 		b.logger.Fatal("failed to close db", zap.Error(err))
 	}
 }

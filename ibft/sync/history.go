@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
@@ -48,7 +49,7 @@ func (s *HistorySync) Start() error {
 
 	// fetch local highest
 	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
-	if err != nil && err.Error() != collections.EntryNotFoundError { // if not found continue with sync
+	if err != nil && err.Error() != kv.EntryNotFoundError { // if not found, don't continue with sync
 		return errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 

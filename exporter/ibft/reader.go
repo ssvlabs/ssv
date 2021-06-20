@@ -8,6 +8,7 @@ import (
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -134,7 +135,7 @@ func (r *reader) processDecidedMessage(msg *proto.SignedMessage) error {
 
 func (r *reader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 	found, err := r.storage.GetDecided(msg.Message.ValidatorPk, msg.Message.SeqNumber)
-	if err != nil && err.Error() != collections.EntryNotFoundError {
+	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
 	return found != nil, nil
@@ -149,7 +150,7 @@ func (r *reader) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	}
 	highest, err := r.storage.GetHighestDecidedInstance(msg.Message.ValidatorPk)
 	if err != nil {
-		if err.Error() == collections.EntryNotFoundError {
+		if err.Error() == kv.EntryNotFoundError {
 			return msg.Message.SeqNumber > 0, nil
 		}
 		return false, errors.Wrap(err, "could not get highest decided instance from storage")

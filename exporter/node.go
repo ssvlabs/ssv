@@ -183,7 +183,6 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 		PublicKey:    event.PublicKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
-		// TODO add index
 	}
 	err := exp.storage.SaveOperatorInformation(&oi)
 	if err != nil {

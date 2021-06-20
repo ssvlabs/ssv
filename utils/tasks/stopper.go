@@ -37,7 +37,7 @@ func (s *stopper) IsStopped() bool {
 }
 
 func (s *stopper) Chan() chan bool {
-	cn, _ := s.sub.Register(chanId())
+	cn, _ := s.sub.Register(chanID())
 	res := make(chan bool, 1)
 	go func() {
 		<-cn
@@ -54,9 +54,9 @@ func (s *stopper) stop() {
 	s.sub.Notify(struct{}{})
 }
 
-func chanId() string {
+func chanID() string {
 	var i int64
-	r, err := rand.Int(rand.Reader, big.NewInt(1024))
+	r, err := rand.Int(rand.Reader, big.NewInt(2048))
 	if err != nil {
 		i = time.Now().UnixNano()
 	} else {
