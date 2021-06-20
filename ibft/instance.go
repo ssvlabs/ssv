@@ -86,7 +86,9 @@ func NewInstance(opts InstanceOptions) *Instance {
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID), zap.Uint64("seq_num", opts.SeqNumber)),
+		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
+			zap.Uint64("seq_num", opts.SeqNumber),
+			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
 
 		MsgQueue:            opts.Queue,
 		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
@@ -185,7 +187,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if i.State.Stage == proto.RoundState_Decided || i.State.Stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.State.Round; j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, j))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, j, i.ValidatorShare.PublicKey.Serialize()))
 		}
 	}
 

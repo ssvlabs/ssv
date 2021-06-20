@@ -210,6 +210,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 	for _, role := range roles {
 		go func(role beacon.Role) {
 			l := logger.With(zap.String("role", role.String()))
+			l.Debug("starting duty role")
 
 			signaturesCount, decidedValue, identifier, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)
 			if err != nil {

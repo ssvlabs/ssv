@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -18,7 +19,6 @@ import (
 	"go.uber.org/zap"
 	"strings"
 	"time"
-	"fmt"
 )
 
 // ControllerOptions for controller struct creation
@@ -171,15 +171,15 @@ func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 }
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
-	c.logger.Debug("handles validator added event",
-		zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
+	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
+	l.Debug("handles validator added event")
 	validatorShare := c.serializeValidatorAddedEvent(validatorAddedEvent)
 	if len(validatorShare.Committee) > 0 {
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-			c.logger.Error("failed to save validator share", zap.Error(err))
+			l.Error("failed to save validator share", zap.Error(err))
 			return
 		}
-		c.logger.Debug("validator share was saved")
+		l.Debug("validator share was saved")
 		c.onNewValidatorShare(validatorShare)
 	}
 }

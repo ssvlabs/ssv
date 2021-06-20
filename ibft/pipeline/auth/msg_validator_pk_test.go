@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -57,6 +58,8 @@ func TestMsgValidatorPK(t *testing.T) {
 			if len(test.expectedError) == 0 {
 				require.NoError(t, err)
 			} else {
+				test.expectedError += fmt.Sprintf(": expected: %x, actual: %x",
+					test.expectedPK, test.actualPK)
 				require.EqualError(t, err, test.expectedError)
 			}
 		})
