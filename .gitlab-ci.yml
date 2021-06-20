@@ -32,7 +32,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
-    - fix_seq_number
+    - stage
 
 Deploy to blox-infra-stage cluster:
   stage: deploy
@@ -46,7 +46,7 @@ Deploy to blox-infra-stage cluster:
     - mv kubectl /usr/bin/
     - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.bloxinfra.com $K8S_API_VERSION
   only:
-    - fix_seq_number
+    - stage
 
 #blox-infra-prod
 Build prod Docker image:
