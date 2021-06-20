@@ -113,10 +113,10 @@ and a `type` to distinguish between messages:
   }
 }
 ```
-Response extends the Request with `values` that contains results:
+Response extends the Request with a `data` section that contains the corresponding results:
 ```
 {
-  "values": Operator[] | Validator[] | DecidedMessage[]
+  "data": Operator[] | Validator[] | DecidedMessage[]
 }
 ```
 
@@ -138,7 +138,7 @@ Response:
   "filter": {
     "from": 0
   },
-  "values": [
+  "data": [
     {
       "publicKey": "...",
       "name": "myOperator",
