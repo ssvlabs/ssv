@@ -5,7 +5,28 @@
 
 # SSV - Operator Getting Started Guide
 
+* [Running a Local Network of Operators](#running-a-local-network-of-operators)
+    - [Prerequisites](#prerequisites)
+    - [1. Clone Repository](#1-clone-repository)
+    - [2. Build Binary](#2-build-binary)
+    - [3. Generate Operator Key](#3-generate-operator-key)
+    - [4. Split Validator Key](#4-split-validator-key)
+    - [5. Create Config Files](#5-create-config-files)
+      * [5.1. Node Config](#51-node-config)
+      * [5.2. Shares Config](#52-shares-config)
+    - [6. Run a local network with 4 nodes](#6-run-a-local-network-with-4-nodes)
+* [Setting AWS Server for Operator](#setting-aws-server-for-operator)
+  + [1. Setup](#1-setup)
+  + [2. Login with SSH](#2-login-with-ssh)
+  + [3. Installation Script](#3-installation-script)
+  + [4. Generate Operator Keys](#4-generate-operator-keys)
+  + [5. Create a Configuration File](#5-create-a-configuration-file)
+    - [5.1 Debug Configuration](#51-debug-configuration)
+  + [6. Start Node in Docker](#6-start-node-in-docker)
+
 ## Running a Local Network of Operators
+
+This section details the steps to run a local network of operator nodes.
 
 #### Prerequisites
 
@@ -29,7 +50,9 @@ $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
 #### 3. Generate Operator Key
 
-See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key).
+This step is optional as the operator private key will be auto-generated if not exist.
+
+See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key), and repeat the key generation for each of the operator nodes, each key should reside in the corresponding config yaml as mentioned below in [5.2. Shares Config](#52-shares-config).
 
 #### 4. Split Validator Key
 
@@ -52,6 +75,8 @@ $ make docker-debug
 ```
 
 ## Setting AWS Server for Operator
+
+This section details the steps to run an operator on AWS.
 
 ### 1. Setup
 
