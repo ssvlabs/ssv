@@ -55,7 +55,7 @@ func TestExecWithTimeout(t *testing.T) {
 			stopped.Wait()
 			require.False(t, completed)
 			require.NoError(t, err)
-			require.Equal(t, test.expectedCount, count)
+			require.GreaterOrEqual(t, count, test.expectedCount)
 		})
 	}
 }
