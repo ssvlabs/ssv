@@ -33,7 +33,7 @@ var (
 // Exporter represents the main interface of this package
 type Exporter interface {
 	Start() error
-	StartEth1() error
+	StartEth1(syncOffset *eth1.SyncOffset) error
 }
 
 // Options contains options to create the node
@@ -98,7 +98,7 @@ func (exp *exporter) Start() error {
 }
 
 // StartEth1 starts the eth1 events sync and streaming
-func (exp *exporter) StartEth1() error {
+func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	exp.logger.Info("starting node -> eth1")
 
 	// register for contract events that will arrive from eth1Client
@@ -118,7 +118,7 @@ func (exp *exporter) StartEth1() error {
 	syncProcess.Add(1)
 	go func() {
 		defer syncProcess.Done()
-		syncErr = eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, "ExporterSync")
+		syncErr = eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, "ExporterSync", syncOffset)
 	}()
 	syncProcess.Wait()
 	if syncErr != nil {

@@ -23,7 +23,7 @@ func TestSyncEth1(t *testing.T) {
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, "Eth1SyncTest")
+	err := SyncEth1Events(logger, eth1Client, storage, "Eth1SyncTest", nil)
 	require.NoError(t, err)
 	syncOffset, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestFailedSyncEth1(t *testing.T) {
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, "FailedEth1SyncTest")
+	err := SyncEth1Events(logger, eth1Client, storage, "FailedEth1SyncTest", nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, err = storage.GetSyncOffset()

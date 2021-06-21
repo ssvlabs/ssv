@@ -24,13 +24,21 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
+	return NewSyncOffset(defaultSyncOffset)
+}
+
+// NewSyncOffset returns the default value (block number of the first event from the contract)
+func NewSyncOffset(shex string) *SyncOffset {
+	if len(shex) == 0 {
+		return nil
+	}
 	offset := new(SyncOffset)
-	offset.SetString(defaultSyncOffset, 16)
+	offset.SetString(shex, 16)
 	return offset
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, observerID string) error {
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, observerID string, syncOffset *SyncOffset) error {
 	logger.Info("syncing eth1 contract events")
 
 	cn, err := client.EventsSubject().Register(observerID)
@@ -55,12 +63,17 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 		}
 	}()
-	// calling eth1 client to sync data from the last sync offset (or new if not exist)
-	syncOffset, err := storage.GetSyncOffset()
-	if err != nil {
-		logger.Debug("could not get sync offset for eth1 sync, using default offset",
-			zap.String("defaultSyncOffset", defaultSyncOffset))
-		syncOffset = DefaultSyncOffset()
+	// calling eth1 client to sync data, sync offset value is one of (by priority):
+	//   1. provided value (config)
+	//   2. last sync offset
+	//   3. default sync offset (the genesis block of the contract)
+	if syncOffset == nil {
+		syncOffset, err = storage.GetSyncOffset()
+		if err != nil {
+			logger.Debug("could not get sync offset for eth1 sync, using default offset",
+				zap.String("defaultSyncOffset", defaultSyncOffset))
+			syncOffset = DefaultSyncOffset()
+		}
 	}
 	err = client.Sync(syncOffset)
 	if err != nil {

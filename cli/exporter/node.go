@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	global_config "github.com/bloxapp/ssv/cli/config"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -21,9 +22,10 @@ type config struct {
 	DBOptions                  basedb.Options `yaml:"db"`
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 
-	ETH1Addr   string `yaml:"ETH1Addr" env-required:"true"`
-	PrivateKey string `yaml:"PrivateKey" env:"EXPORTER_NODE_PRIVATE_KEY" env-description:"exporter node private key (default will generate new)"`
-	Network    string `yaml:"Network" env-default:"prater"`
+	ETH1Addr       string `yaml:"ETH1Addr" env-required:"true"`
+	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
+	PrivateKey     string `yaml:"PrivateKey" env:"EXPORTER_NODE_PRIVATE_KEY" env-description:"exporter node private key (default will generate new)"`
+	Network        string `yaml:"Network" env-default:"prater"`
 }
 
 var cfg config
@@ -75,7 +77,7 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode := exporter.New(*exporterOptions)
 
-		if err := exporterNode.StartEth1(); err != nil {
+		if err := exporterNode.StartEth1(eth1.NewSyncOffset(cfg.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := exporterNode.Start(); err != nil {

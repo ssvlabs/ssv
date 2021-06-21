@@ -19,7 +19,7 @@ import (
 // Node represents the behavior of SSV node
 type Node interface {
 	Start() error
-	StartEth1() error
+	StartEth1(syncOffset *eth1.SyncOffset) error
 }
 
 // Options contains options to create the node
@@ -102,7 +102,7 @@ func (n *operatorNode) Start() error {
 }
 
 // StartEth1 starts the eth1 events sync and streaming
-func (n *operatorNode) StartEth1() error {
+func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	n.logger.Info("starting node -> eth1")
 
 	// setup validator controller to listen to ValidatorAdded events
@@ -114,7 +114,7 @@ func (n *operatorNode) StartEth1() error {
 	go n.validatorController.ListenToEth1Events(cnValidators)
 
 	// sync past events
-	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, "SSVNodeEth1Sync"); err != nil {
+	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, "SSVNodeEth1Sync", syncOffset); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	n.logger.Info("manage to sync contract events")
