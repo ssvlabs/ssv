@@ -5,11 +5,11 @@ ssv:
 
   ValidatorOptions:
     Shares:
-      - NodeID: 1
-        PublicKey: xxx-validator-pubkey
-        ShareKey: xxx-share-privkey
-        Committee: # <share-pub-key>: <node-id>
-          share-pubkey-node1: 1
-          share-pubkey-node2: 2
-          share-pubkey-node3: 3
-          share-pubkey-node4: 4
+      - NodeID: <node-id>
+        PublicKey: <validator-pubkey>
+        ShareKey: <share-priv-key>
+        Committee:
+          <share-pubkey-node1>: <node1-id>
+          <share-pubkey-node2>: <node2-id>
+          <share-pubkey-node3>: <node3-id>
+          <share-pubkey-node4>: <node4-id>
