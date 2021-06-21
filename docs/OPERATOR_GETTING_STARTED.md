@@ -7,6 +7,14 @@
 
 ## Running a Local Network of Operators
 
+#### Prerequisites
+
+In order to run a local environment, the following are required:
+* git
+* go (1.15)
+* docker
+* make
+
 #### 1. Clone Repository
 
 ```bash
