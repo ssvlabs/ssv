@@ -2,7 +2,10 @@ package goeth
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"math/big"
+	"strings"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
@@ -13,8 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math/big"
-	"strings"
 )
 
 // ClientOptions are the options for the client
@@ -40,7 +41,7 @@ type eth1Client struct {
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	logger := opts.Logger
 	// Create an IPC based RPC connection to a remote node
-	logger.Info("dialing beacon node", zap.String("addr", opts.NodeAddr))
+	logger.Info("dialing node", zap.String("addr", opts.NodeAddr))
 	conn, err := ethclient.Dial(opts.NodeAddr)
 	if err != nil {
 		logger.Error("Failed to connect to the Ethereum client", zap.Error(err))
@@ -171,7 +172,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
-		ec.logger.Warn("Failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
+		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
 		return nil
 	}
 	operatorPriveKey, err := ec.operatorPrivKeyProvider()
@@ -184,7 +185,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, vLog.Data, contractAbi, eventName)
 		if err != nil {
 			//ec.logger.Error("Failed to parse OperatorAdded event", zap.Error(err))
-			return errors.Wrap(err, "Failed to parse OperatorAdded event")
+			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || operatorPriveKey == nil {
@@ -193,18 +194,18 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	case "ValidatorAdded":
 		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi, eventName)
 		if err != nil {
-			//ec.logger.Error("Failed to parse ValidatorAdded event", zap.Error(err))
-			return errors.Wrap(err, "Failed to parse ValidatorAdded event")
+			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
 		if !isEventBelongsToOperator {
-			ec.logger.Debug("Validator doesn't belong to operator")
+			ec.logger.Debug("Validator doesn't belong to operator",
+				zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)))
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || operatorPriveKey == nil {
 			ec.fireEvent(vLog, *parsed)
 		}
 	default:
-		ec.logger.Debug("Unknown contract event is received")
+		ec.logger.Debug("unknown contract event was received")
 	}
 	return nil
 }
