@@ -14,6 +14,7 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,
+				ValidatorPk: []byte{1, 1, 1, 1},
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,
@@ -28,10 +29,10 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 		Type: network.NetworkMsg_SignatureType,
 	})
 
-	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 1)
+	require.Len(t, msgQ.queue["lambda_01020304_round_1_pubKey_01010101"], 1)
 	require.Len(t, msgQ.queue["sig_lambda_01020304"], 1)
 
-	msgQ.PurgeIndexedMessages(IBFTRoundIndexKey([]byte{1, 2, 3, 4}, 1))
+	msgQ.PurgeIndexedMessages(IBFTRoundIndexKey([]byte{1, 2, 3, 4}, 1, []byte{1, 1, 1, 1}))
 	require.Len(t, msgQ.queue["lambda_01020304_round_1"], 0)
 	require.Len(t, msgQ.queue["sig_lambda_01020304"], 1)
 
@@ -47,22 +48,24 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,
+				ValidatorPk: []byte{1, 1, 1, 1},
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,
 	})
-	require.NotNil(t, msgQ.queue["lambda_01020304_round_1"])
+	require.NotNil(t, msgQ.queue["lambda_01020304_round_1_pubKey_01010101"])
 
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 5},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 7,
+				ValidatorPk: []byte{1, 1, 1, 1},
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,
 	})
-	require.NotNil(t, msgQ.queue["lambda_01020305_round_7"])
+	require.NotNil(t, msgQ.queue["lambda_01020305_round_7_pubKey_01010101"])
 
 	// custom index
 	msgQ.indexFuncs = append(msgQ.indexFuncs, func(msg *network.Message) []string {
