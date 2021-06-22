@@ -13,5 +13,3 @@ ssv:
           <share-pubkey-node2>: <node2-id>
           <share-pubkey-node3>: <node3-id>
           <share-pubkey-node4>: <node4-id>
-
-OperatorPrivateKey:
