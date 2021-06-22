@@ -73,6 +73,7 @@ services:
 #    ports:
 #      - 40005:40005
     environment:
+      RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40005
       CONFIG_PATH: ./config/config.yaml
@@ -84,6 +85,7 @@ services:
 #    ports:
 #      - 40006:40006
     environment:
+      RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40006
       CONFIG_PATH: ./config/config.yaml
@@ -95,6 +97,7 @@ services:
 #    ports:
 #      - 40007:40007
     environment:
+      RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40007
       CONFIG_PATH: ./config/config.yaml
@@ -106,6 +109,7 @@ services:
 #    ports:
 #      - 40008:40008
     environment:
+      RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40008
       CONFIG_PATH: ./config/config.yaml
