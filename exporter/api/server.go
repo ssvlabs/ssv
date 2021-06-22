@@ -62,12 +62,12 @@ func (ws *wsServer) handleQuery(conn Connection) {
 	}
 	ws.inbound.Notify(nm)
 
-	ws.processOutboundForConnection(conn, ws.adapter.ConnectionID(conn))
+	ws.processOutboundForConnection(conn, ConnectionID(conn))
 }
 
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleStream(conn Connection) {
-	ws.processOutboundForConnection(conn, ws.adapter.ConnectionID(conn))
+	ws.processOutboundForConnection(conn, ConnectionID(conn))
 }
 
 func (ws *wsServer) processOutboundForConnection(conn Connection, cid string) {

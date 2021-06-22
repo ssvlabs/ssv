@@ -1,13 +1,16 @@
 package api
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/pubsub"
-	"io"
+	"net"
+	"time"
 )
 
 // Connection is an interface to abstract the actual websocket connection implementation
 type Connection interface {
-	io.ReadWriteCloser
+	Close() error
+	LocalAddr() net.Addr
 }
 
 // NetworkMessage wraps an actual message with more information
@@ -32,5 +35,12 @@ type WebSocketAdapter interface {
 	RegisterHandler(endPoint string, handler EndPointHandler)
 	Send(conn Connection, v interface{}) error
 	Receive(conn Connection, v interface{}) error
-	ConnectionID(conn Connection) string
+}
+
+func ConnectionID(conn Connection) string {
+	if conn == nil {
+		return ""
+	}
+	return fmt.Sprintf("conn-%s-%d",
+		conn.LocalAddr().String(), time.Now().UnixNano())
 }
