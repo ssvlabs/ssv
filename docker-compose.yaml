@@ -22,6 +22,8 @@ x-base-dev:
     context: .
     dockerfile: dev.Dockerfile
   command:  air
+  environment:
+    RUN_CMD: start-node
   security_opt:
     - "seccomp:unconfined"
   cap_add:
@@ -57,6 +59,12 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share4.yaml
+
+  exporter-node:
+    <<: *default-base
+    container_name: exporter-node
+    environment:
+      CONFIG_PATH: ./config/config.exporter.yaml
 
 
   ssv-node-1-dev:
@@ -102,6 +110,17 @@ services:
       DEBUG_PORT: 40008
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share4.yaml
+
+  exporter-node-dev:
+    << : *default-dev
+    container_name: exporter-node-dev
+#    ports:
+#      - 40009:40009
+    environment:
+      RUN_CMD: start-exporter
+      BUILD_PATH: /bin/tmp/ssv
+      DEBUG_PORT: 40009
+      CONFIG_PATH: ./config/config.exporter.yaml
 
 #networks:
 #  bloxapp-docker:

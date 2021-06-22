@@ -14,16 +14,16 @@ bin = "${BUILD_PATH}/cmd/ssvnode"
 
 # Customize binary.
 # This is how you start to run your application. Since my application will works like CLI, so to run it, like to make a CLI call.
-full_bin="make BUILD_PATH=${BUILD_PATH} start-node"
+full_bin="make BUILD_PATH=${BUILD_PATH} ${RUN_CMD}"
 
 # This log file places in your tmp_dir.
 log = "air_errors.log"
 # Watch these filename extensions.
 include_ext = ["go", "yaml"]
 # Ignore these filename extensions or directories.
-exclude_dir = ["/bin"]
+exclude_dir = ["/bin", "/data"]
 # It's not necessary to trigger build each time file changes if it's too frequent.
-delay = 1000 # ms
+delay = 10000 # ms
 
 [log]
 # Show log time

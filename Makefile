@@ -51,11 +51,6 @@ full-test:
 build:
 	CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
-#Build Exporter
-.PHONY: build-exporter
-build-exporter:
-	CGO_ENABLED=1 go build -o ./bin/exporter ./cmd/exporter/
-
 .PHONY: start-node
 start-node:
 	@echo "Build ${BUILD_PATH}"
@@ -82,7 +77,6 @@ docker-image:
 	@echo "node ${NODES_ID}"
 	@sudo docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node
 
-
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-all
 docker-all:
@@ -104,7 +98,7 @@ start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
 
-.PHONY: start-exporter-node
-start-exporter-node:
-	@echo "Running start-exporter-node"
-	${BUILD_PATH} start-exporter -c=./config/config.exporter.yaml
+.PHONY: start-exporter
+start-exporter:
+	@echo "Running start-exporter"
+	${BUILD_PATH} start-exporter ${NODE_COMMAND}

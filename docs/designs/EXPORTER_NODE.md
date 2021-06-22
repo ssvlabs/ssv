@@ -147,3 +147,23 @@ Response:
   ]
 }
 ```
+
+## Usage
+
+### Run Locally
+
+```shell
+make CONFIG_PATH=./config/config.exporter.yaml start-exporter
+```
+
+### Run in Docker
+
+```shell
+make NODES=exporter-node docker-all
+```
+
+### Run in Docker (debug)
+
+```shell
+make DEBUG_NODES=exporter-node-dev docker-debug
+```
