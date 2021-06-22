@@ -39,23 +39,26 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		operatorInfoFromDB, err := storage.GetOperatorInformation(fixtures.RefPk[:])
 		require.NoError(t, err)
 		require.Equal(t, "my_operator", operatorInfoFromDB.Name)
-		require.Equal(t, 0, operatorInfoFromDB.Index)
+		require.Equal(t, int64(0), operatorInfoFromDB.Index)
 		require.True(t, bytes.Equal(operatorInfoFromDB.PublicKey, fixtures.RefPk[:]))
 	})
 
 	t.Run("create existing operator", func(t *testing.T) {
-		err := storage.SaveOperatorInformation(&OperatorInformation{
+		oi := OperatorInformation{
 			PublicKey:    []byte{1, 1, 1, 1, 1, 1},
 			Name:         "my_operator1",
 			OwnerAddress: common.Address{},
-		})
+		}
+		err := storage.SaveOperatorInformation(&oi)
 		require.NoError(t, err)
-		err = storage.SaveOperatorInformation(&OperatorInformation{
+		oiDup := OperatorInformation{
 			PublicKey:    []byte{1, 1, 1, 1, 1, 1},
 			Name:         "my_operator2",
 			OwnerAddress: common.Address{},
-		})
-		require.Errorf(t, err, "operator [%x] already exist", []byte{1, 1, 1, 1})
+		}
+		err = storage.SaveOperatorInformation(&oiDup)
+		require.NoError(t, err)
+		require.Equal(t, oiDup.Index, oi.Index)
 	})
 
 	t.Run("create and get multiple operators", func(t *testing.T) {
