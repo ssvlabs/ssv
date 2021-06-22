@@ -95,12 +95,23 @@ Create a server of your choice and expose it on ports 12000 UDP and 13000 TCP
 
 ### 2. Login with SSH
 
+Mac\Linux:
+
 ```
 $ cd ./{path to the folder to which the key pair file was downloaded}
 
 $ chmod 400 {key pair file name}
 
 $ ssh -i {key pair file name} ubuntu@{instance public IP}
+
+type yes when prompted
+```
+Windows:
+
+```
+cd\{path to the folder to which the key pair file was downloaded}
+
+ssh -i {key pair file name} ubuntu@{instance public IP}
 
 type yes when prompted
 ```
