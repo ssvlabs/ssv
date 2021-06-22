@@ -43,8 +43,8 @@ func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty *ethpb.DutiesRe
 }
 
 // SignAggregation signs the given aggregation data
-func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, shareKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
-	sig, err := b.aggregateAndProofSig(ctx, data, shareKey)
+func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
+	sig, err := b.aggregateAndProofSig(ctx, data, secretKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign aggregate and proof")
 	}
@@ -82,7 +82,7 @@ func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen 
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
 
-	b.logger.Info("check if is aggregator", zap.Int("committee", committeeLen), zap.Uint64("slot", slot), zap.Any("hash little endian", binary.LittleEndian.Uint64(hash[:8])), zap.Uint64("modulo", binary.LittleEndian.Uint64(hash[:8])%modulo))
+	b.logger.Debug("check if is aggregator", zap.Int("committee", committeeLen), zap.Uint64("slot", slot), zap.Any("hash little endian", binary.LittleEndian.Uint64(hash[:8])), zap.Uint64("modulo", binary.LittleEndian.Uint64(hash[:8])%modulo))
 	return val, nil
 }
 

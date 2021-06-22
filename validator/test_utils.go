@@ -127,7 +127,7 @@ func (t *testBeacon) GetAggregationData(ctx context.Context, duty *ethpb.DutiesR
 	return nil, nil
 }
 
-func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
+func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
 	return nil, nil
 }
 

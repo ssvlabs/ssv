@@ -52,7 +52,7 @@ type Beacon interface {
 	GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error)
 
 	// SignAggregation signs the given aggregation data
-	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error)
+	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error)
 
 	// SubmitAggregation submits the given signed aggregation data
 	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
