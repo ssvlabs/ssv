@@ -24,7 +24,6 @@ type config struct {
 
 	ETH1Addr       string `yaml:"ETH1Addr" env-required:"true"`
 	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
-	PrivateKey     string `yaml:"PrivateKey" env:"EXPORTER_NODE_PRIVATE_KEY" env-description:"exporter node private key (default will generate new)"`
 	Network        string `yaml:"Network" env-default:"prater"`
 }
 
@@ -81,7 +80,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := exporterNode.Start(); err != nil {
-			Logger.Fatal("failed to start ibft", zap.Error(err))
+			Logger.Fatal("failed to start exporter", zap.Error(err))
 		}
 	},
 }

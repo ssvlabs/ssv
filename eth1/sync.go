@@ -47,8 +47,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	defer client.EventsSubject().Deregister(observerID)
 
-	// listen on the given channel
-	// will stop once SyncEndedEvent arrives
+	// Stop once SyncEndedEvent arrives
 	var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
 	syncWg.Add(1)
@@ -63,19 +62,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 		}
 	}()
-	// calling eth1 client to sync data, sync offset value is one of (by priority):
-	//   1. provided value (config)
-	//   2. last sync offset
-	//   3. default sync offset (the genesis block of the contract)
-	if syncOffset == nil {
-		syncOffset, err = storage.GetSyncOffset()
-		if err != nil {
-			logger.Debug("could not get sync offset for eth1 sync, using default offset",
-				zap.String("defaultSyncOffset", defaultSyncOffset))
-			syncOffset = DefaultSyncOffset()
-		}
-	}
-	err = client.Sync(syncOffset)
+	err = client.Sync(determineSyncOffset(logger, storage, syncOffset))
 	if err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
@@ -90,7 +77,7 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 	nResults := len(syncEndedEvent.Logs)
 	if nResults > 0 {
 		if !syncEndedEvent.Success {
-			logger.Warn("could not parse all events from eth1, sync offset will not be upgraded")
+			logger.Warn("could not parse all events from eth1")
 		} else if rawOffset := syncEndedEvent.Logs[nResults-1].BlockNumber; rawOffset > syncOffset.Uint64() {
 			logger.Debug("upgrading sync offset", zap.Uint64("syncOffset", rawOffset))
 			syncOffset.SetUint64(rawOffset)
@@ -100,4 +87,21 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 		}
 	}
 	return nil
+}
+
+// determineSyncOffset decides what is the value of sync offset by using one of (by priority):
+//   1. provided value (from config)
+//   2. last sync offset
+//   3. default sync offset (the genesis block of the contract)
+func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset) *SyncOffset {
+	if syncOffset == nil {
+		var err error
+		syncOffset, err = storage.GetSyncOffset()
+		if err != nil {
+			logger.Debug("could not get sync offset for eth1 sync, using default offset",
+				zap.String("defaultSyncOffset", defaultSyncOffset))
+			syncOffset = DefaultSyncOffset()
+		}
+	}
+	return syncOffset
 }

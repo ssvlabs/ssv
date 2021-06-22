@@ -2,6 +2,7 @@ package eth1
 
 import (
 	"github.com/bloxapp/ssv/pubsub"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -45,6 +46,37 @@ func TestFailedSyncEth1(t *testing.T) {
 
 	_, err = storage.GetSyncOffset()
 	require.NotNil(t, err)
+}
+
+func TestDetermineSyncOffset(t *testing.T) {
+	logger := zap.L()
+
+	t.Run("default sync offset", func(t *testing.T) {
+		storage := syncStorageMock{[]byte{}}
+		so := determineSyncOffset(logger, &storage, nil)
+		require.NotNil(t, so)
+		require.Equal(t, defaultSyncOffset, so.Text(16))
+	})
+
+	t.Run("persisted sync offset", func(t *testing.T) {
+		storage := syncStorageMock{[]byte{}}
+		so := new(SyncOffset)
+		persistedSyncOffset := "60e08f"
+		so.SetString(persistedSyncOffset, 16)
+		storage.SaveSyncOffset(so)
+		so = determineSyncOffset(logger, &storage, nil)
+		require.NotNil(t, so)
+		require.Equal(t, persistedSyncOffset, so.Text(16))
+	})
+
+	t.Run("sync offset from config", func(t *testing.T) {
+		storage := syncStorageMock{[]byte{}}
+		soConfig := new(SyncOffset)
+		soConfig.SetString("61e08f", 16)
+		so := determineSyncOffset(logger, &storage, soConfig)
+		require.NotNil(t, so)
+		require.Equal(t, "61e08f", so.Text(16))
+	})
 }
 
 func setupStorageWithEth1ClientMock() (*zap.Logger, *eth1ClientMock, *syncStorageMock) {
@@ -93,7 +125,7 @@ func (ssm *syncStorageMock) SaveSyncOffset(offset *SyncOffset) error {
 // GetSyncOffset returns the offset
 func (ssm *syncStorageMock) GetSyncOffset() (*SyncOffset, error) {
 	if len(ssm.syncOffset) == 0 {
-		return nil, errors.New("could not find syncOffset")
+		return nil, errors.New(kv.EntryNotFoundError)
 	}
 	offset := new(SyncOffset)
 	offset.SetBytes(ssm.syncOffset)
