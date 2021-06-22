@@ -52,7 +52,7 @@ $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 
 This step is optional as the operator private key will be auto-generated if not exist.
 
-See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key), and repeat the key generation for each of the operator nodes, each key should reside in the corresponding config yaml as mentioned below in [5.2. Shares Config](#52-shares-config).
+See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key), and repeat the key generation for each of the operator nodes, each key should reside in the corresponding share config as mentioned below in [5.2. Shares Config](#52-shares-config).
 
 #### 4. Split Validator Key
 
