@@ -9,7 +9,7 @@ import (
 
 // ProcessMessage pulls messages from the queue to be processed sequentially
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
-	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
+	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round, i.ValidatorShare.PublicKey.Serialize())); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:

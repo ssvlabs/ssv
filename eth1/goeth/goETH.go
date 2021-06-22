@@ -60,7 +60,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 }
 
 // Subject returns the events subject
-func (ec *eth1Client) Subject() pubsub.Subscriber {
+func (ec *eth1Client) EventsSubject() pubsub.Subscriber {
 	return ec.outSubject
 }
 
@@ -75,11 +75,7 @@ func (ec *eth1Client) Start() error {
 
 // Sync reads events history
 func (ec *eth1Client) Sync(fromBlock *big.Int) error {
-	err := ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
-	if err != nil {
-		ec.logger.Error("Failed to sync contract events", zap.Error(err))
-	}
-	return err
+	return ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
 }
 
 // fireEvent notifies observers about some contract event
@@ -161,9 +157,9 @@ func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string,
 			continue
 		}
 	}
-	ec.logger.Debug(fmt.Sprintf("%d event logs were handled successfuly", nResults))
+	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nResults))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nResults == len(logs)})
 
 	return nil
 }
@@ -172,8 +168,9 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	ec.logger.Debug("handling smart contract event")
 
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
-	if err != nil {
-		return errors.Wrap(err, "Failed to find event type")
+	if err != nil { // unknown event -> ignored
+		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
+		return nil
 	}
 	operatorPriveKey, err := ec.operatorPrivKeyProvider()
 	if err != nil {
@@ -185,7 +182,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		parsed, isEventBelongsToOperator, err := ec.parseOperatorAddedEvent(vLog.Data, contractAbi, eventName)
 		if err != nil {
 			//ec.logger.Error("Failed to parse OperatorAdded event", zap.Error(err))
-			return errors.Wrap(err, "Failed to parse OperatorAdded event")
+			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || operatorPriveKey == nil {
@@ -194,18 +191,18 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	case "ValidatorAdded":
 		event, isEventBelongsToOperator, err := ec.parseValidatorAddedEvent(vLog.Data, contractAbi, eventName)
 		if err != nil {
-			//ec.logger.Error("Failed to parse ValidatorAdded event", zap.Error(err))
-			return errors.Wrap(err, "Failed to parse ValidatorAdded event")
+			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
 		if !isEventBelongsToOperator {
-			ec.logger.Debug("ValidatorAdded Event doesn't belong to operator")
+			ec.logger.Debug("ValidatorAdded event doesn't belong to operator",
+				zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || operatorPriveKey == nil {
 			ec.fireEvent(vLog, *event)
 		}
 	default:
-		ec.logger.Debug("Unknown contract event is received")
+		ec.logger.Debug("unknown contract event was received")
 	}
 	return nil
 }

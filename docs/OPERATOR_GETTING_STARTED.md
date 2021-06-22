@@ -5,7 +5,36 @@
 
 # SSV - Operator Getting Started Guide
 
+* [Running a Local Network of Operators](#running-a-local-network-of-operators)
+    - [Prerequisites](#prerequisites)
+    - [1. Clone Repository](#1-clone-repository)
+    - [2. Build Binary](#2-build-binary)
+    - [3. Generate Operator Key](#3-generate-operator-key)
+    - [4. Split Validator Key](#4-split-validator-key)
+    - [5. Create Config Files](#5-create-config-files)
+      * [5.1. Node Config](#51-node-config)
+      * [5.2. Shares Config](#52-shares-config)
+    - [6. Run a local network with 4 nodes](#6-run-a-local-network-with-4-nodes)
+* [Setting AWS Server for Operator](#setting-aws-server-for-operator)
+  + [1. Setup](#1-setup)
+  + [2. Login with SSH](#2-login-with-ssh)
+  + [3. Installation Script](#3-installation-script)
+  + [4. Generate Operator Keys](#4-generate-operator-keys)
+  + [5. Create a Configuration File](#5-create-a-configuration-file)
+    - [5.1 Debug Configuration](#51-debug-configuration)
+  + [6. Start Node in Docker](#6-start-node-in-docker)
+
 ## Running a Local Network of Operators
+
+This section details the steps to run a local network of operator nodes.
+
+#### Prerequisites
+
+In order to run a local environment, the following are required:
+* git
+* go (1.15)
+* docker
+* make
 
 #### 1. Clone Repository
 
@@ -19,11 +48,13 @@ $ git clone https://github.com/ethereum/eth2-ssv.git
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 ```
 
-#### 3. Generate Operator Key 
+#### 3. Generate Operator Key
 
-See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key).
+This step is optional as the operator private key will be auto-generated if not exist.
 
-#### 4. Split Validator Key 
+See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key), and repeat the key generation for each of the operator nodes, each key should reside in the corresponding config yaml as mentioned below in [5.2. Shares Config](#52-shares-config).
+
+#### 4. Split Validator Key
 
 See [Dev Guide > Splitting a Validator Key](./DEV_GUIDE.md#splitting-a-validator-key).
 
@@ -45,51 +76,36 @@ $ make docker-debug
 
 ## Setting AWS Server for Operator
 
-### Setup
+This section details the steps to run an operator on AWS.
 
-Create a server of your choice and expose on ports 12000 UDP and 13000 TCP.
-- In the search bar search for "ec2"
-- Launch new instance
-- Choose "ubuntu server 20.04"
-- Choose "t2.micro" (free tire)
-- Skip to "security group" section
-- make sure you have 3 rules. UDP, TCP and SSH -
-  ![security_permission](./resources/security_permission.png)
-- after launch, add new key pair and download the ssh file
-- launch instance
+### 1. Setup
 
-### Login with SSH
+Create a server of your choice and expose it on ports 12000 UDP and 13000 TCP
+- In the search bar search for "ec2" and then click on EC2 in the search results
+- In the EC2 Dashboard, select Launch Instance
+- Select "Ubuntu Server 20.04"
+- Choose "t2.micro" (free tier, should be selected by default)
+- Go to the "Configure Security Group" tab at the top
+- Make sure you have 3 rules (use the Add Rule button as necessary) - Custom UDP, Custom TCP and SSH, and make sure to set their Port Range and Source attributes as seen in the screenshot below -
+![security_permission](./resources/security_permission.png)
+- Click on "Review and Launch" and then "Launch"
+- In the key pair pop-up, select "Create a new key pair" in the drop-down, then name this key pair and download it
+- Click Launch Instances and then View Instances
+- In the instances table, take note of the Public IP of your newly created instance
 
-```
-$ cd ./{path to where the ssh downloaded}
-
-$ chmod 400 {ssh file name}
-
-$ ssh -i {ssh file name} ubuntu@{server public ip}
-```
-
-### Create .env file
-
-Export all required params and fill the required fields.
+### 2. Login with SSH
 
 ```
-$ touch .env
+$ cd ./{path to the folder to which the key pair file was downloaded}
 
-$ echo "CONSENSUS_TYPE=validation" >> .env
-$ echo "STORAGE_PATH={db data path}" >> .env
-$ echo "NETWORK=pyrmont" >> .env
-$ echo "BEACON_NODE_ADDR={ETH 2.0 node}" >> .env
-$ echo "OPERATOR_PRIVKEY={privkey of the operator}" >> .env
-$ echo "VALIDATOR_PUBLIC_KEY={validator public key}" >> .env
-$ echo "NODE_ID={provided node index}" >> .env
-$ echo "SSV_PRIVATE_KEY={provided node private key}" >> .env
-$ echo "PUBKEY_NODE_1={provided node index 1 public key}" >> .env
-$ echo "PUBKEY_NODE_2={provided node index 2 public key}" >> .env
-$ echo "PUBKEY_NODE_3={provided node index 3 public key}" >> .env 
-$ echo "PUBKEY_NODE_4={provided node index 4 public key}" >> .env
+$ chmod 400 {key pair file name}
+
+$ ssh -i {key pair file name} ubuntu@{instance public IP}
+
+type yes when prompted
 ```
 
-### Installation Script
+### 3. Installation Script
 
 Download and run the installation script.
 
@@ -101,4 +117,62 @@ $ wget https://raw.githubusercontent.com/ethereum/eth2-ssv/stage/install.sh
 $ chmod +x install.sh
 
 $ ./install.sh
+```
+
+### 4. Generate Operator Keys
+
+The following command will generate your operator's public and private keys (appear as "pk" and "sk" in the output). 
+
+```
+$ docker run -d --name=ssv_node_op_key -it 'bloxstaking/ssv-node:latest' \
+/go/bin/ssvnode generate-operator-keys && docker logs ssv_node_op_key --follow \
+&& docker stop ssv_node_op_key && docker rm ssv_node_op_key
+```
+
+### 5. Create a Configuration File
+
+Fill all the placeholders (e.g. `<ETH 2.0 node>` or `<db folder>`) with actual values,
+and run the command below to create a `config.yaml` file.
+
+
+```
+$ yq n db.Path "<db folder>" | tee config.yaml \
+  && yq w -i config.yaml db.Type "badger-db" \
+  && yq w -i config.yaml Network "prater" \
+  && yq w -i config.yaml DiscoveryType "discv5" \
+  && yq w -i config.yaml BeaconNodeAddr "<ETH 2.0 node>" \
+  && yq w -i config.yaml ETH1Addr "<ETH1 node>" \
+  && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>" \
+  && yq w -i config.yaml SmartContractAddr "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b"
+```
+
+`config.yaml` example:
+
+```yaml
+db:
+  Path: ./data/db/node_1
+  Type: badger-db
+
+Network: prater
+DiscoveryType: discv5
+BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
+ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
+```
+
+  #### 5.1 Debug Configuration
+
+  In order to see `debug` level logs, add the corresponding section to the `config.yaml` by running:
+
+  ```
+$ yq w -i config.yaml global.LogLevel "debug"
+  ```
+
+
+### 6. Start Node in Docker
+
+Run the docker image in the same folder you created the `config.yaml`:
+
+```
+$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13000:13000 -p 12000:12000 -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
+  && docker logs ssv_node --follow
 ```

@@ -57,18 +57,21 @@ func (s *Collection) LoadMultipleFromConfig(items []ShareOptions) error {
 // LoadFromConfig fetch validator share from config and save it to db
 func (s *Collection) LoadFromConfig(options ShareOptions) error {
 	var err error
+	var pubKey string
 	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
 		share, e := options.ToShare()
 		if e != nil {
 			err = e
 			s.logger.Fatal("failed to create share object:", zap.Error(err))
 		} else if share != nil {
-			s.logger.Info("share added", zap.String("public key", share.ShareKey.SerializeToHexStr()))
+			pubKey = share.ShareKey.SerializeToHexStr()
+			s.logger.Debug("share added", zap.String("pubKey", pubKey))
 			err = s.SaveValidatorShare(share)
 		}
 	}
 	if err == nil {
-		s.logger.Info("validator share has been loaded from config")
+		s.logger.Info("validator share has been loaded from config",
+			zap.String("pubKey", pubKey))
 	}
 	return err
 }

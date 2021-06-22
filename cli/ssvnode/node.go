@@ -24,11 +24,11 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options `yaml:"db"`
 	SSVOptions                 node.Options   `yaml:"ssv"`
-	Network                    string         `yaml:"Network" env-default:"pyrmont"`
+	Network                    string         `yaml:"Network" env-default:"prater"`
 	DiscoveryType              string         `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"mdns"`
 	Enr                        string         `yaml:"Enr" env:"ENR_KEY" env-description:"enr used in discovery" env-default:""`
 	BeaconNodeAddr             string         `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	OperatorKey                string         `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	OperatorKey                string         `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr                   string         `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
 	SmartContractAddr          string         `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
 	TCPPort                    int            `yaml:"TcpPort" env-default:"13000"`
@@ -110,6 +110,7 @@ var StartNodeCmd = &cobra.Command{
 		ctx := cmd.Context()
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
+		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = &beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network

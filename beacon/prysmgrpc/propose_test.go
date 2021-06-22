@@ -38,7 +38,7 @@ func TestProposeBlock_BroadcastsBlock(t *testing.T) {
 	require.NoError(t, json.Unmarshal(_byteArray(refBlockByts), block))
 
 	domain := &eth.DomainResponse{
-		SignatureDomain:      _byteArray(refDomain),
+		SignatureDomain: _byteArray(refDomain),
 	}
 	signBlock, err := b.SignProposal(context.Background(), domain, block, pk)
 	require.NoError(t, err)
