@@ -62,7 +62,8 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 		}
 	}()
-	err = client.Sync(determineSyncOffset(logger, storage, syncOffset))
+	syncOffset = determineSyncOffset(logger, storage, syncOffset)
+	err = client.Sync(syncOffset)
 	if err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
