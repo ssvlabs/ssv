@@ -49,6 +49,8 @@ type Options struct {
 	Network network.Network
 
 	DB basedb.IDb
+
+	WS api.WebSocketServer
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -86,7 +88,7 @@ func New(opts Options) Exporter {
 			Logger:   opts.Logger,
 			Interval: ibftSyncDispatcherTick,
 		}),
-		//ws: api.NewWsServer(opts.Logger),
+		ws: opts.WS,
 	}
 
 	return &e
@@ -102,21 +104,20 @@ func (exp *exporter) Start() error {
 		return nil
 	}
 
-	go exp.listenIncomingExportReq()
+	go func() {
+		cn, err := exp.ws.IncomingSubject().Register("exporter-node")
+		if err != nil {
+			exp.logger.Error("could not register for incoming messages", zap.Error(err))
+		}
+		defer exp.ws.IncomingSubject().Deregister("exporter-node")
+
+		exp.listenIncomingExportReq(cn, exp.ws.OutboundSubject())
+	}()
 
 	return exp.ws.Start("localhost:8089")
 }
 
-func (exp *exporter) listenIncomingExportReq() {
-	if exp.ws == nil {
-		return
-	}
-	cn, err := exp.ws.IncomingSubject().Register("exporter-node")
-	if err != nil {
-		exp.logger.Error("could not register for incoming messages", zap.Error(err))
-	}
-	defer exp.ws.IncomingSubject().Deregister("exporter-node")
-
+func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound pubsub.Publisher) {
 	for raw := range cn {
 		exp.logger.Debug("got new net message")
 		nm, ok := raw.(api.NetworkMessage)
@@ -133,7 +134,7 @@ func (exp *exporter) listenIncomingExportReq() {
 			}
 			res.Data = operators
 			nm.Msg = *res
-			exp.ws.OutboundSubject().Notify(nm)
+			outbound.Notify(nm)
 		case api.TypeValidator:
 			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
 			validators, err := exp.validatorStorage.GetAllValidatorsShare()
@@ -142,7 +143,7 @@ func (exp *exporter) listenIncomingExportReq() {
 			}
 			res.Data = validators
 			nm.Msg = *res
-			exp.ws.OutboundSubject().Notify(nm)
+			outbound.Notify(nm)
 		case api.TypeIBFT:
 			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
 		default:
@@ -224,7 +225,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	validatorMsg := validatorShare.ToValidatorMessage()
 	// TODO: add index
 	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: 0}, Data: validatorMsg}
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg})//, Conn: nil})
+	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg, Conn: nil})
 	// triggers a sync for the given validator
 	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to trigger ibft sync")
@@ -251,7 +252,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 
 	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: oi.Index}, Data: oi}
 
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg})//, Conn: nil})
+	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg, Conn: nil})
 
 	return nil
 }
