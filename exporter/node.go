@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -60,6 +61,7 @@ type exporter struct {
 	network          network.Network
 	eth1Client       eth1.Client
 	ibftDisptcher    tasks.Dispatcher
+	ws               api.WebSocketServer
 }
 
 // New creates a new Exporter instance
@@ -84,6 +86,7 @@ func New(opts Options) Exporter {
 			Logger:   opts.Logger,
 			Interval: ibftSyncDispatcherTick,
 		}),
+		//ws: api.NewWsServer(opts.Logger),
 	}
 
 	return &e
@@ -91,10 +94,61 @@ func New(opts Options) Exporter {
 
 // Start starts the IBFT dispatcher for syncing data nd listen to messages
 func (exp *exporter) Start() error {
-	exp.logger.Info("starting node -> IBFT")
+	exp.logger.Info("starting node")
 
 	go exp.ibftDisptcher.Start()
-	return nil
+
+	if exp.ws == nil {
+		return nil
+	}
+
+	go exp.listenIncomingExportReq()
+
+	return exp.ws.Start("localhost:8089")
+}
+
+func (exp *exporter) listenIncomingExportReq() {
+	if exp.ws == nil {
+		return
+	}
+	cn, err := exp.ws.IncomingSubject().Register("exporter-node")
+	if err != nil {
+		exp.logger.Error("could not register for incoming messages", zap.Error(err))
+	}
+	defer exp.ws.IncomingSubject().Deregister("exporter-node")
+
+	for raw := range cn {
+		exp.logger.Debug("got new net message")
+		nm, ok := raw.(api.NetworkMessage)
+		if !ok {
+			exp.logger.Warn("could not parse network message")
+			continue
+		}
+		res := nm.Msg.Response()
+		switch nm.Msg.Type {
+		case api.TypeOperator:
+			operators, err := exp.storage.ListOperators(0)
+			if err != nil {
+				exp.logger.Error("could not get operators", zap.Error(err))
+			}
+			res.Data = operators
+			nm.Msg = *res
+			exp.ws.OutboundSubject().Notify(nm)
+		case api.TypeValidator:
+			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
+			validators, err := exp.validatorStorage.GetAllValidatorsShare()
+			if err != nil {
+				exp.logger.Error("could not get validators", zap.Error(err))
+			}
+			res.Data = validators
+			nm.Msg = *res
+			exp.ws.OutboundSubject().Notify(nm)
+		case api.TypeIBFT:
+			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
+		default:
+			exp.logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
+		}
+	}
 }
 
 // StartEth1 starts the eth1 events sync and streaming
@@ -165,8 +219,12 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
 		return errors.Wrap(err, "failed to save validator share")
 	}
-
 	exp.logger.Debug("validator share was saved", zap.String("pubKey", pubKeyHex))
+	// notifies open websocket streams
+	validatorMsg := validatorShare.ToValidatorMessage()
+	// TODO: add index
+	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: 0}, Data: validatorMsg}
+	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg})//, Conn: nil})
 	// triggers a sync for the given validator
 	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to trigger ibft sync")
@@ -190,6 +248,11 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	}
 	exp.logger.Debug("managed to save operator information",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
+
+	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: oi.Index}, Data: oi}
+
+	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg})//, Conn: nil})
+
 	return nil
 }
 

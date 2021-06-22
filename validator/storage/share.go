@@ -126,3 +126,22 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		Committee: value.Committee,
 	}, nil
 }
+
+// ValidatorMsg represents a transferable object
+type ValidatorMsg struct {
+	NodeID    uint64
+	ShareKey  []byte
+	PublicKey  []byte
+	Committee map[uint64]*proto.Node
+}
+
+// ToValidatorMessage returns a transferable object
+func (s *Share) ToValidatorMessage() *ValidatorMsg {
+	res := ValidatorMsg{
+		NodeID:    s.NodeID,
+		ShareKey:  s.ShareKey.Serialize(),
+		Committee: s.Committee,
+		PublicKey: s.PublicKey.Serialize(),
+	}
+	return &res
+}

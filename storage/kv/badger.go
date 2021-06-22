@@ -104,8 +104,8 @@ func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 }
 
 // CountByCollection return the object count for all keys under specified prefix(bucket)
-func (b *BadgerDb) CountByCollection(prefix []byte) (int, error) {
-	var res int
+func (b *BadgerDb) CountByCollection(prefix []byte) (int64, error) {
+	var res int64
 	err := b.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
 		opt.Prefix = prefix

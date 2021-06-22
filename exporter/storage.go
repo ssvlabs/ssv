@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -23,7 +24,7 @@ type Storage interface {
 
 	GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error)
 	SaveOperatorInformation(operatorInformation *OperatorInformation) error
-	ListOperators() ([]OperatorInformation, error)
+	ListOperators(index int64) ([]OperatorInformation, error)
 }
 
 // OperatorInformation the public data of an operator
@@ -31,7 +32,7 @@ type OperatorInformation struct {
 	PublicKey    []byte
 	Name         string
 	OwnerAddress common.Address
-	Index        int
+	Index        int64
 }
 
 type exporterStorage struct {
@@ -62,18 +63,19 @@ func (es *exporterStorage) GetSyncOffset() (*eth1.SyncOffset, error) {
 }
 
 // ListOperators returns information of all the known operators
-func (es *exporterStorage) ListOperators() ([]OperatorInformation, error) {
+func (es *exporterStorage) ListOperators(index int64) ([]OperatorInformation, error) {
 	objs, err := es.db.GetAllByCollection(append(storagePrefix, operatorsPrefix...))
 	if err != nil {
 		return nil, err
 	}
 	var operators []OperatorInformation
 	for _, obj := range objs {
-		var operatorInformation OperatorInformation
-		err = json.Unmarshal(obj.Value, &operatorInformation)
-		operators = append(operators, operatorInformation)
+		var oi OperatorInformation
+		err = json.Unmarshal(obj.Value, &oi)
+		if oi.Index >= index {
+			operators = append(operators, oi)
+		}
 	}
-
 	return operators, err
 }
 
@@ -95,7 +97,11 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 		return errors.Wrap(err, "could not read information from DB")
 	}
 	if existing != nil {
-		return errors.Errorf("operator [%x] already exist", operatorInformation.PublicKey)
+		es.logger.Debug("operator already exist",
+			zap.String("pubKey", hex.EncodeToString(operatorInformation.PublicKey)))
+		operatorInformation.Index = existing.Index
+		// TODO: update operator information for updating operator
+		return nil
 	}
 	operatorInformation.Index, err = es.nextOperatorIndex()
 	if err != nil {
@@ -109,7 +115,7 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 }
 
 // nextOperatorIndex returns the next index for operator
-func (es *exporterStorage) nextOperatorIndex() (int, error) {
+func (es *exporterStorage) nextOperatorIndex() (int64, error) {
 	n, err := es.db.CountByCollection(append(storagePrefix, operatorsPrefix...))
 	if err != nil {
 		return 0, err
