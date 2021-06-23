@@ -9,12 +9,11 @@
     - [Prerequisites](#prerequisites)
     - [1. Clone Repository](#1-clone-repository)
     - [2. Build Binary](#2-build-binary)
-    - [3. Generate Operator Key](#3-generate-operator-key)
-    - [4. Split Validator Key](#4-split-validator-key)
-    - [5. Create Config Files](#5-create-config-files)
-      * [5.1. Node Config](#51-node-config)
-      * [5.2. Shares Config](#52-shares-config)
-    - [6. Run a local network with 4 nodes](#6-run-a-local-network-with-4-nodes)
+    - [3. Split Validator Key](#4-split-validator-key)
+    - [4. Create Config Files](#5-create-config-files)
+      * [4.1. Node Config](#51-node-config)
+      * [4.2. Shares Config](#52-shares-config)
+    - [5. Run a local network with 4 nodes](#6-run-a-local-network-with-4-nodes)
 * [Setting AWS Server for Operator](#setting-aws-server-for-operator)
   + [1. Setup](#1-setup)
   + [2. Login with SSH](#2-login-with-ssh)
@@ -48,28 +47,22 @@ $ git clone https://github.com/ethereum/eth2-ssv.git
 $ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
 ```
 
-#### 3. Generate Operator Key
-
-This step is optional as the operator private key will be auto-generated if not exist.
-
-See [Dev Guide > Generating an Operator Key](./DEV_GUIDE.md#generating-an-operator-key), and repeat the key generation for each of the operator nodes, each key should reside in the corresponding config yaml as mentioned below in [5.2. Shares Config](#52-shares-config).
-
-#### 4. Split Validator Key
+#### 3. Split Validator Key
 
 See [Dev Guide > Splitting a Validator Key](./DEV_GUIDE.md#splitting-a-validator-key).
 
-#### 5. Create Config Files
+#### 4. Create Config Files
 
-  ##### 5.1. Node Config
+  ##### 4.1. Node Config
 
-  Fill the required fields in [config.yaml](../config/config.yaml) file
+  Fill the required fields in [config.yaml](../config/config.yaml) file. Note - there's no need to fill the OperatorPrivateKey field.
 
-  ##### 5.2. Shares Config
+  ##### 4.2. Shares Config
 
   Create 4 .yaml files with the corresponding configuration, based on the [template file](../config/example_share.yaml). \
   The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
 
-#### 6. Run a local network with 4 nodes
+#### 5. Run a local network with 4 nodes
 ```bash
 $ make docker-debug 
 ```
@@ -95,12 +88,23 @@ Create a server of your choice and expose it on ports 12000 UDP and 13000 TCP
 
 ### 2. Login with SSH
 
+Mac\Linux:
+
 ```
 $ cd ./{path to the folder to which the key pair file was downloaded}
 
 $ chmod 400 {key pair file name}
 
 $ ssh -i {key pair file name} ubuntu@{instance public IP}
+
+type yes when prompted
+```
+Windows:
+
+```
+cd\{path to the folder to which the key pair file was downloaded}
+
+ssh -i {key pair file name} ubuntu@{instance public IP}
 
 type yes when prompted
 ```
