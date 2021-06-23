@@ -19,7 +19,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
 	"time"
 )
 
@@ -169,23 +168,18 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	}
 	errCn := exp.listenToEth1Events(eth1EventChan)
 	go func() {
+		// log errors while processing events
 		for err := range errCn {
 			exp.logger.Warn("could not handle eth1 event", zap.Error(err))
 		}
 	}()
 	// sync events
-	var syncErr error
-	var syncProcess sync.WaitGroup
-	syncProcess.Add(1)
-	go func() {
-		defer syncProcess.Done()
-		syncErr = eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, "ExporterSync", syncOffset)
-	}()
-	syncProcess.Wait()
+	syncErr := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, "ExporterSync", syncOffset)
 	if syncErr != nil {
 		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
 	}
-	exp.logger.Debug("sync was done successfully")
+	exp.logger.Info("manage to sync contract events")
+
 	// start events stream
 	err = exp.eth1Client.Start()
 	if err != nil {
@@ -231,7 +225,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	validatorMsg := toValidatorMessage(validatorShare)
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
-		Filter: api.MessageFilter{From: 0},
+		Filter: api.MessageFilter{From: 0, To: 0},
 		Data:   []api.ValidatorMsg{*validatorMsg},
 	}, Conn: nil})
 	// triggers a sync for the given validator
@@ -258,7 +252,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.logger.Debug("managed to save operator information",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
-	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: oi.Index}, Data: oi}
+	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: oi.Index, To: oi.Index}, Data: oi}
 
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg, Conn: nil})
 
