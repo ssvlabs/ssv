@@ -42,9 +42,11 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
-			if err := i.validateDecidedMsg(msg); err == nil { // might need better solution here
-				i.ProcessDecidedMessage(msg)
-			}
+			i.msgQueue.AddMessage(&network.Message{
+				Lambda:        msg.Message.Lambda,
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_DecidedType,
+			})
 		}
 	}()
 }
@@ -53,8 +55,12 @@ func (i *ibftImpl) listenToSyncMessages() {
 	// sync messages
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
-		for msg := range syncChan { // TODO add validator pubkey validation?
-			i.ProcessSyncMessage(msg) // TODO verify duty type?
+		for msg := range syncChan {
+			i.msgQueue.AddMessage(&network.Message{
+				SyncMessage: msg.Msg,
+				Stream:      msg.Stream,
+				Type:        network.NetworkMsg_SyncType,
+			})
 		}
 	}()
 }

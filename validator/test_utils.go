@@ -49,10 +49,13 @@ testIBFT
 type testIBFT struct {
 	decided         bool
 	signaturesCount int
+	identifier      []byte
 }
 
 func (t *testIBFT) Init() {
-
+	pk := &bls.PublicKey{}
+	_ = pk.Deserialize(refPk)
+	t.identifier = []byte(ibft.IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
@@ -79,6 +82,10 @@ func (t *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
 			Pk:     refSplitSharesPubKeys[3],
 		},
 	}
+}
+
+func (t *testIBFT) GetIdentifier() []byte {
+	return t.identifier
 }
 
 func (t *testIBFT) NextSeqNumber() (uint64, error) {
@@ -152,25 +159,27 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Dutie
 }
 
 func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validator {
+	threshold.Init()
+
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
 	ret.ibfts = make(map[beacon.Role]ibft.IBFT)
 	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon.RoleAttester].Init()
 
 	// nodes
 	ret.network = local.NewLocalNetwork()
 	ret.msgQueue = msgqueue.New()
 
 	// validatorStorage pk
-	threshold.Init()
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
 
 	ret.Share = &storage.Share{
-		NodeID:      1,
+		NodeID:    1,
 		PublicKey: pk,
-		ShareKey:    nil,
+		ShareKey:  nil,
 		Committee: map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,

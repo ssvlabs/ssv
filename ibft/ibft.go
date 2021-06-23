@@ -1,6 +1,8 @@
 package ibft
 
 import (
+	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
@@ -21,7 +23,6 @@ type StartOptions struct {
 	Logger         *zap.Logger
 	ValueCheck     valcheck.ValueCheck
 	PrevInstance   []byte
-	Identifier     []byte
 	SeqNumber      uint64
 	Value          []byte
 	Duty           *ethpb.DutiesResponse_Duty
@@ -42,6 +43,9 @@ type IBFT interface {
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[uint64]*proto.Node
+
+	// GetIdentifier returns ibft identifier made of public key and role (type)
+	GetIdentifier() []byte
 }
 
 // ibftImpl implements IBFT interface
@@ -55,6 +59,7 @@ type ibftImpl struct {
 	msgQueue            *msgqueue.MessageQueue
 	instanceConfig      *proto.InstanceConfig
 	ValidatorShare      *storage.Share
+	Identifier          []byte
 	leaderSelector      leader.Selector
 
 	// flags
@@ -72,6 +77,7 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 		msgQueue:            queue,
 		instanceConfig:      instanceConfig,
 		ValidatorShare:      ValidatorShare,
+		Identifier:          []byte(IdentifierFormat(ValidatorShare.PublicKey.Serialize(), role)),
 		leaderSelector:      &leader.Deterministic{},
 
 		// flags
@@ -85,6 +91,8 @@ func (i *ibftImpl) Init() {
 	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
+	i.listenToDecidedQueueMessages()
+	i.listenToSyncQueueMessages(i.ValidatorShare.PublicKey.Serialize()) // pass the pubkey byte to avoid deadlock
 	i.initFinished = true
 }
 
@@ -101,7 +109,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	go newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
 
-	err := i.resetLeaderSelection(opts.Identifier) // Important for deterministic leader selection
+	err := i.resetLeaderSelection(i.Identifier) // Important for deterministic leader selection
 	if err != nil {
 		newInstance.Logger.Error("could not reset leader selection", zap.Error(err))
 		return false, 0, nil
@@ -144,7 +152,17 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 	return i.ValidatorShare.Committee
 }
 
+// GetIdentifier returns ibft identifier made of public key and role (type)
+func (i *ibftImpl) GetIdentifier() []byte {
+	return i.Identifier
+}
+
 // resetLeaderSelection resets leader selection with seed and round 1
 func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
 	return i.leaderSelector.SetSeed(seed, 1)
+}
+
+// IdentifierFormat return base format for lambda
+func IdentifierFormat(pubKey []byte, role beacon.Role) string {
+	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), role.String())
 }

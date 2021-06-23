@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
+	"time"
 )
 
 func validatorPK(sks map[uint64]*bls.SecretKey) *bls.PublicKey {
@@ -45,7 +46,7 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 	for i := 0; i <= highestSeq; i++ {
-		lambda := []byte(IdentifierFormat(uint64(i), beacon.RoleAttester))
+		lambda := []byte(IdentifierFormat(nil, beacon.RoleAttester))
 
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
 			Type:        proto.RoundState_Commit,
@@ -81,6 +82,8 @@ func populatedIbft(
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
 	ret.(*ibftImpl).listenToSyncMessages()
+	ret.(*ibftImpl).listenToDecidedQueueMessages()
+	ret.(*ibftImpl).listenToSyncQueueMessages(share.PublicKey.Serialize())
 	return ret
 }
 
@@ -136,6 +139,7 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 	_ = populatedIbft(2, network, populatedStorage(t, sks, 100), sks, nodes)
 
 	i1.(*ibftImpl).SyncIBFT()
+	time.Sleep(time.Millisecond * 500) // wait for sync to complete
 	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 	require.NoError(t, err)
 	require.EqualValues(t, 100, highest.Message.SeqNumber)
@@ -158,6 +162,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.EqualError(t, err, "EntryNotFoundError")
 
 		i1.(*ibftImpl).SyncIBFT()
+		time.Sleep(time.Second * 1) // wait for sync to complete
 
 		// test after sync
 		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
@@ -181,6 +186,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.EqualError(t, err, "EntryNotFoundError")
 
 		i1.(*ibftImpl).SyncIBFT()
+		time.Sleep(time.Second * 1) // wait for sync to complete
 
 		// test after sync
 		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
