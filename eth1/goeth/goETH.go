@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"math/big"
-	"strings"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/shared/params"
@@ -16,6 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math/big"
+	"strings"
 )
 
 // ClientOptions are the options for the client

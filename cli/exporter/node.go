@@ -25,7 +25,7 @@ type config struct {
 	DBOptions                  basedb.Options `yaml:"db"`
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 
-	ExporterConfig             exporter.Options `yaml:"exporter"`
+	ExporterConfig exporter.Options `yaml:"exporter"`
 
 	ETH1Addr       string `yaml:"ETH1Addr" env-required:"true"`
 	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
