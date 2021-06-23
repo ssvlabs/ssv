@@ -25,19 +25,19 @@ variables:
 Build stage Docker image:
   stage: build
   tags:
-    - blox-infra-multi-duties
+    - blox-infra-stage
   script:
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
-    - stage
+    - multi-duties
 
 Deploy to blox-infra-stage cluster:
   stage: deploy
   tags:
-    - blox-infra-multi-duties
+    - blox-infra-stage
   script:
     - apk add bash
     - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
@@ -46,7 +46,7 @@ Deploy to blox-infra-stage cluster:
     - mv kubectl /usr/bin/
     - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.bloxinfra.com $K8S_API_VERSION
   only:
-    - stage
+    - multi-duties
 
 #blox-infra-prod
 Build prod Docker image:
