@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
 	"time"
@@ -35,7 +36,7 @@ type Validator struct {
 	ctx    context.Context
 	logger *zap.Logger
 	Share  *storage.Share
-	//ibftStorage                collections.Iibft
+	//db                collections.Iibft
 	ethNetwork                 *core.Network
 	beacon                     beacon.Beacon
 	ibfts                      map[beacon.Role]ibft.IBFT
@@ -46,22 +47,19 @@ type Validator struct {
 }
 
 // New Validator creation
-func New(opt Options, ibftStorage collections.Iibft) *Validator {
+func New(opt Options, db basedb.IDb) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", opt.Share.NodeID))
 
 	msgQueue := msgqueue.New()
-
 	ibfts := make(map[beacon.Role]ibft.IBFT)
-	ibfts[beacon.RoleAttester] = ibft.New(
-		logger,
-		ibftStorage,
-		opt.Network,
-		msgQueue,
-		proto.DefaultConsensusParams(),
-		opt.Share,
-	)
-	go ibfts[beacon.RoleAttester].Init()
+	ibfts[beacon.RoleAttester] = setupIbftController(beacon.RoleAttester, logger, db, opt.Network, msgQueue, opt.Share)
+	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
+	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
+
+	for _, ib := range ibfts { // init all ibfts
+		go ib.Init()
+	}
 
 	return &Validator{
 		ctx:                        opt.Context,
@@ -117,7 +115,6 @@ func (v *Validator) listenToNetworkMessages() {
 			v.logger.Debug("got nil message")
 			continue
 		}
-		v.logger.Debug("got new message", zap.String("sigMsg", sigMsg.String()))
 		v.msgQueue.AddMessage(&network.Message{
 			Lambda:        sigMsg.Message.Lambda,
 			SignedMessage: sigMsg,
@@ -131,4 +128,17 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(v.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(v.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
+}
+
+func setupIbftController(role int, logger *zap.Logger, db basedb.IDb, network network.Network, msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.IBFT {
+	ibftStorage := collections.NewIbft(db, logger, beacon.Role(role).String())
+	return ibft.New(
+		beacon.Role(role),
+		logger,
+		&ibftStorage,
+		network,
+		msgQueue,
+		proto.DefaultConsensusParams(),
+		share,
+	)
 }

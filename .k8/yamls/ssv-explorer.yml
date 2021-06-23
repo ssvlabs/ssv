@@ -1,0 +1,180 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-explorer
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-explorer
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12000
+      protocol: UDP
+      targetPort: 12000
+      name: port-12000
+    - port: 13000
+      protocol: TCP
+      targetPort: 13000
+      name: port-13000        
+  selector:
+    app: ssv-explorer
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-explorer
+  name: ssv-explorer
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-explorer
+  template:
+    metadata:
+      labels:
+        app: ssv-explorer
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-1
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-2
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-3
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: name
+                  operator: In
+                  values:
+                  - ssv-node-v2-4
+              topologyKey: kubernetes.io/hostname
+            weight: 1              
+      containers:
+      - name: ssv-explorer
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        command: ["make", "start-explorer"]
+        ports:
+        - containerPort: 12000
+          name: port-12000
+          hostPort: 12000            
+          protocol: UDP
+        - containerPort: 13000
+          name: port-13000
+          hostPort: 13000
+        env:
+        - name: SHARE_CONFIG
+          value: "./data/share.yaml"
+        - name: NODE_ID
+          value: "1"
+        - name: SSV_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: ssv_explorer
+        - name: VALIDATOR_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: validator_public_key_v2
+        - name: BEACON_NODE_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: beacon_node_addr
+        - name: PUBKEY_NODE_2
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_2
+        - name: PUBKEY_NODE_3
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_3
+        - name: PUBKEY_NODE_4
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: pubkey_node_v2_4
+        - name: ETH_1_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth1_addr
+        - name: CONFIG_PATH
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: config_path
+        - name: ENR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: enr_key
+        - name: SMART_CONTRACT_ADDR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: smart_contract_addr_key
+        - name: LOG_LEVEL
+          value: "debug"
+        - name: DISCOVERY_TYPE_KEY
+          value: "discv5"
+        - name: NETWORK
+          value: "prater"
+        - name: CONSENSUS_TYPE
+          value: "validation"
+        - name: HOST_DNS
+          value: ""
+        - name: HOST_ADDRESS
+          value: ""
+        - name: GENESIS_EPOCH
+          value: "1"
+        - name: LOGGER_LEVEL
+          value: "debug"
+        - name: STORAGE_PATH
+          value: "./data/db"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-explorer
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-explorer-cm
+      volumes:
+      - name: ssv-explorer
+        persistentVolumeClaim:
+          claimName: ssv-explorer
+      - name: ssv-explorer-cm
+        configMap:
+          name: ssv-explorer-cm
+      hostNetwork: true      

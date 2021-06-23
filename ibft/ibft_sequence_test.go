@@ -30,7 +30,6 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"valid next instance start",
 			StartOptions{
-				Identifier: []byte("lambda_10"),
 				SeqNumber:  11,
 				Duty:       nil,
 				ValidatorShare: validatorstorage.Share{
@@ -47,7 +46,6 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"valid first instance",
 			StartOptions{
-				Identifier: []byte("lambda_0"),
 				SeqNumber:  0,
 				Duty:       nil,
 				ValidatorShare: validatorstorage.Share{
@@ -64,7 +62,6 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"didn't finish initialization",
 			StartOptions{
-				Identifier: []byte("lambda_0"),
 				SeqNumber:  0,
 				Duty:       nil,
 				ValidatorShare: validatorstorage.Share{
@@ -81,7 +78,6 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"sequence skips",
 			StartOptions{
-				Identifier: []byte("lambda_12"),
 				SeqNumber:  12,
 				Duty:       nil,
 				ValidatorShare: validatorstorage.Share{
@@ -98,7 +94,6 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"past instance",
 			StartOptions{
-				Identifier: []byte("lambda_10"),
 				SeqNumber:  10,
 				Duty:       nil,
 				ValidatorShare: validatorstorage.Share{

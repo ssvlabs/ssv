@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -50,10 +49,13 @@ testIBFT
 type testIBFT struct {
 	decided         bool
 	signaturesCount int
+	identifier      []byte
 }
 
 func (t *testIBFT) Init() {
-
+	pk := &bls.PublicKey{}
+	_ = pk.Deserialize(refPk)
+	t.identifier = []byte(ibft.IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
@@ -80,6 +82,10 @@ func (t *testIBFT) GetIBFTCommittee() map[uint64]*proto.Node {
 			Pk:     refSplitSharesPubKeys[3],
 		},
 	}
+}
+
+func (t *testIBFT) GetIdentifier() []byte {
+	return t.identifier
 }
 
 func (t *testIBFT) NextSeqNumber() (uint64, error) {
@@ -124,11 +130,11 @@ func (t *testBeacon) SubmitAttestation(ctx context.Context, attestation *ethpb.A
 	return nil
 }
 
-func (t *testBeacon) GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error) {
+func (t *testBeacon) GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error) {
+func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
 	return nil, nil
 }
 
@@ -136,11 +142,11 @@ func (t *testBeacon) SubmitAggregation(ctx context.Context, data *ethpb.SignedAg
 	return nil
 }
 
-func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64, duty slotqueue.Duty) (*ethpb.BeaconBlock, error) {
+func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64, shareKey *bls.SecretKey) (*ethpb.BeaconBlock, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) (*ethpb.SignedBeaconBlock, error) {
+func (t *testBeacon) SignProposal(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error) {
 	return nil, nil
 }
 
@@ -153,25 +159,27 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Dutie
 }
 
 func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validator {
+	threshold.Init()
+
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
 	ret.ibfts = make(map[beacon.Role]ibft.IBFT)
 	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon.RoleAttester].Init()
 
 	// nodes
 	ret.network = local.NewLocalNetwork()
 	ret.msgQueue = msgqueue.New()
 
 	// validatorStorage pk
-	threshold.Init()
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
 
 	ret.Share = &storage.Share{
-		NodeID:      1,
+		NodeID:    1,
 		PublicKey: pk,
-		ShareKey:    nil,
+		ShareKey:  nil,
 		Committee: map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,

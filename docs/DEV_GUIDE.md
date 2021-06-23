@@ -31,10 +31,10 @@ We split an eth2 BLS validator key into shares via Shamir-Secret-Sharing(SSS) to
 
 ```bash
 # Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
-$ ./bin/ssvnode export-keys --mnemonic={mnemonic} --index={keyIndex}
+$ ./bin/ssvnode export-keys --mnemonic="<mnemonic>" --index={keyIndex}
 
 # Generate threshold keys
-$ ./bin/ssvnode create-threshold --count {# of ssv nodes} --private-key {privateKey}
+$ ./bin/ssvnode create-threshold --count <number of ssv nodes> --private-key <privateKey>
 ```
 
 #### Generating an Operator Key
