@@ -110,7 +110,7 @@ var StartNodeCmd = &cobra.Command{
 
 		operatorNode := operator.New(cfg.SSVOptions)
 
-		if err := operatorNode.StartEth1(eth1.NewSyncOffset(cfg.ETH1SyncOffset)); err != nil {
+		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := operatorNode.Start(); err != nil {

@@ -81,7 +81,7 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode := exporter.New(cfg.ExporterConfig)
 
-		if err := exporterNode.StartEth1(eth1.NewSyncOffset(cfg.ETH1SyncOffset)); err != nil {
+		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := exporterNode.Start(); err != nil {

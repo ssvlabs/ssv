@@ -24,11 +24,11 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
-	return NewSyncOffset(defaultSyncOffset)
+	return HexStringToSyncOffset(defaultSyncOffset)
 }
 
-// NewSyncOffset returns the default value (block number of the first event from the contract)
-func NewSyncOffset(shex string) *SyncOffset {
+// HexStringToSyncOffset converts an hex string to SyncOffset
+func HexStringToSyncOffset(shex string) *SyncOffset {
 	if len(shex) == 0 {
 		return nil
 	}
