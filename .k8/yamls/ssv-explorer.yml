@@ -174,7 +174,7 @@ spec:
       - name: ssv-explorer
         persistentVolumeClaim:
           claimName: ssv-explorer
-      - name: ssv-explorer
+      - name: ssv-explorer-cm
         configMap:
           name: ssv-explorer-cm
       hostNetwork: true      
