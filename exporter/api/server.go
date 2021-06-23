@@ -69,15 +69,15 @@ func (ws *wsServer) handleQuery(conn Connection) {
 	}
 	ws.inbound.Notify(nm)
 
-	ws.processOutboundForConnection(conn, ConnectionID(conn))
+	ws.processOutboundForConnection(conn, ConnectionID(conn), true)
 }
 
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleStream(conn Connection) {
-	ws.processOutboundForConnection(conn, ConnectionID(conn))
+	ws.processOutboundForConnection(conn, ConnectionID(conn), false)
 }
 
-func (ws *wsServer) processOutboundForConnection(conn Connection, cid string) {
+func (ws *wsServer) processOutboundForConnection(conn Connection, cid string, once bool) {
 	out, err := ws.outbound.Register(cid)
 	if err != nil {
 		ws.logger.Error("could not register outbound subject",
@@ -98,6 +98,8 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, cid string) {
 			err := ws.adapter.Send(conn, nm.Msg)
 			if err != nil {
 				ws.logger.Error("could not send message", zap.Error(err))
+			} else if once {
+				break
 			}
 		}
 	}

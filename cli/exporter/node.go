@@ -25,6 +25,8 @@ type config struct {
 	DBOptions                  basedb.Options `yaml:"db"`
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 
+	ExporterConfig             exporter.Options `yaml:"exporter"`
+
 	ETH1Addr       string `yaml:"ETH1Addr" env-required:"true"`
 	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
 	Network        string `yaml:"Network" env-default:"prater"`
@@ -70,15 +72,14 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
-		exporterOptions := new(exporter.Options)
-		exporterOptions.Eth1Client = eth1Client
-		exporterOptions.Logger = Logger
-		exporterOptions.Network = network
-		exporterOptions.DB = db
-		exporterOptions.Ctx = cmd.Context()
-		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
+		cfg.ExporterConfig.Eth1Client = eth1Client
+		cfg.ExporterConfig.Logger = Logger
+		cfg.ExporterConfig.Network = network
+		cfg.ExporterConfig.DB = db
+		cfg.ExporterConfig.Ctx = cmd.Context()
+		cfg.ExporterConfig.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
 
-		exporterNode := exporter.New(*exporterOptions)
+		exporterNode := exporter.New(cfg.ExporterConfig)
 
 		if err := exporterNode.StartEth1(eth1.NewSyncOffset(cfg.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))

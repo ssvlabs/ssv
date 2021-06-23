@@ -50,7 +50,8 @@ type Options struct {
 
 	DB basedb.IDb
 
-	WS api.WebSocketServer
+	WS        api.WebSocketServer
+	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -64,6 +65,7 @@ type exporter struct {
 	eth1Client       eth1.Client
 	ibftDisptcher    tasks.Dispatcher
 	ws               api.WebSocketServer
+	wsAPIPort        int
 }
 
 // New creates a new Exporter instance
@@ -88,7 +90,8 @@ func New(opts Options) Exporter {
 			Logger:   opts.Logger.With(zap.String("component", "tasks/dispatcher")),
 			Interval: ibftSyncDispatcherTick,
 		}),
-		ws: opts.WS,
+		ws:        opts.WS,
+		wsAPIPort: opts.WsAPIPort,
 	}
 
 	return &e
@@ -114,12 +117,11 @@ func (exp *exporter) Start() error {
 		exp.listenIncomingExportReq(cn, exp.ws.OutboundSubject())
 	}()
 
-	return exp.ws.Start("localhost:8089")
+	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
 
 func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound pubsub.Publisher) {
 	for raw := range cn {
-		exp.logger.Debug("got new net message")
 		nm, ok := raw.(api.NetworkMessage)
 		if !ok {
 			exp.logger.Warn("could not parse network message")
@@ -128,7 +130,6 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 		res := nm.Msg.Response()
 		switch nm.Msg.Type {
 		case api.TypeOperator:
-			exp.logger.Debug("get operators")
 			operators, err := exp.storage.ListOperators(0)
 			if err != nil {
 				exp.logger.Error("could not get operators", zap.Error(err))
@@ -137,7 +138,6 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 			nm.Msg = *res
 			outbound.Notify(nm)
 		case api.TypeValidator:
-			exp.logger.Debug("get validators")
 			validators, err := exp.validatorStorage.GetAllValidatorsShare()
 			if err != nil {
 				exp.logger.Error("could not get validators", zap.Error(err))
@@ -230,9 +230,9 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	// notifies open streams
 	validatorMsg := toValidatorMessage(validatorShare)
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
-		Type: api.TypeOperator,
+		Type:   api.TypeOperator,
 		Filter: api.MessageFilter{From: 0},
-		Data: []api.ValidatorMsg{*validatorMsg},
+		Data:   []api.ValidatorMsg{*validatorMsg},
 	}, Conn: nil})
 	// triggers a sync for the given validator
 	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
@@ -299,12 +299,12 @@ func toValidatorMessage(s *validatorstorage.Share) *api.ValidatorMsg {
 	committee := map[uint64]*proto.Node{}
 	for i, o := range s.Committee {
 		committee[i] = &proto.Node{
-			Pk: o.Pk,
+			Pk:     o.Pk,
 			IbftId: o.IbftId,
 		}
 	}
 	res := api.ValidatorMsg{
-		Index: 1, // TODO: use actual index
+		Index:     1, // TODO: use actual index
 		Committee: committee,
 		PublicKey: s.PublicKey.SerializeToHexStr(),
 	}

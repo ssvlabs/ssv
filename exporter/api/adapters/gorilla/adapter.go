@@ -32,11 +32,19 @@ func NewGorillaAdapter(logger *zap.Logger) api.WebSocketAdapter {
 func (ga *gorillaAdapter) RegisterHandler(mux *http.ServeMux, endPoint string, handler api.EndPointHandler) {
 	mux.HandleFunc(endPoint, func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, w.Header())
+		logger := ga.logger.With(zap.String("cid", api.ConnectionID(conn)))
 		if err != nil {
-			ga.logger.Error("could not upgrade connection", zap.Error(err))
+			logger.Error("could not upgrade connection", zap.Error(err))
 			return
 		}
-		defer conn.Close()
+		logger.Debug("new websocket connection")
+		defer func() {
+			logger.Debug("closing connection")
+			err := conn.Close()
+			if err != nil {
+				logger.Error("could not close connection", zap.Error(err))
+			}
+		}()
 		handler(conn)
 	})
 }
