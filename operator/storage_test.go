@@ -1,9 +1,10 @@
-package collections
+package operator
 
 import (
 	"encoding/base64"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/shared/params"
-	"github.com/bloxapp/ssv/storage"
+	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
@@ -18,18 +19,17 @@ var (
 )
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
-	options:= basedb.Options{
-		Type: "badger-memory",
+	options := basedb.Options{
+		Type:   "badger-memory",
 		Logger: zap.L(),
-		Path: "",
+		Path:   "",
 	}
 
-	db, err := storage.GetStorageFactory(options)
+	db, err := ssvstorage.GetStorageFactory(options)
 	require.NoError(t, err)
 	defer db.Close()
 
-	operatorStorage := OperatorStorage{
-		prefix: []byte("operator-"),
+	operatorStorage := storage{
 		db:     db,
 		logger: nil,
 	}
@@ -74,18 +74,17 @@ func TestSetupPrivateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			options:= basedb.Options{
-				Type: "badger-memory",
+			options := basedb.Options{
+				Type:   "badger-memory",
 				Logger: zap.L(),
-				Path: "",
+				Path:   "",
 			}
 
-			db, err := storage.GetStorageFactory(options)
+			db, err := ssvstorage.GetStorageFactory(options)
 			require.NoError(t, err)
 			defer db.Close()
 
-			operatorStorage := OperatorStorage{
-				prefix: []byte("operator-"),
+			operatorStorage := storage{
 				db:     db,
 				logger: zap.L(),
 			}
@@ -109,4 +108,24 @@ func TestSetupPrivateKey(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
+	logger := zap.L()
+	db, err := ssvstorage.GetStorageFactory(basedb.Options{
+		Type:   "badger-memory",
+		Logger: logger,
+		Path:   "",
+	})
+	require.NoError(t, err)
+	s := NewOperatorNodeStorage(db, logger)
+
+	offset := new(eth1.SyncOffset)
+	offset.SetString("49e08f", 16)
+	err = s.SaveSyncOffset(offset)
+	require.NoError(t, err)
+
+	o, err := s.GetSyncOffset()
+	require.NoError(t, err)
+	require.Zero(t, offset.Cmp(o))
 }

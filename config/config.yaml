@@ -14,9 +14,10 @@ ssv:
 OperatorPrivateKey:
 BeaconNodeAddr: prater-4000.stage.bloxinfra.com:80
 ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
-HostAddress: example.ip
-TcpPort:
-UdpPort:
+p2p:
+  HostAddress: example.ip
+  TcpPort:
+  UdpPort:
 
 bootnode:
   ExternalIP:

@@ -3,6 +3,7 @@ db:
   Type: badger-db
 
 ssv:
+
   ValidatorOptions:
     Shares:
       - NodeID: <node-id>

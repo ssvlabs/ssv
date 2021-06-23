@@ -16,7 +16,6 @@ endif
 # node command builder
 NODE_COMMAND=--config=${CONFIG_PATH}
 
-
 ifneq ($(SHARE_CONFIG),)
   NODE_COMMAND+= --share-config=${SHARE_CONFIG}
 endif
@@ -62,7 +61,6 @@ ifdef DEBUG_PORT
 	@echo "Running node-${NODE_ID} in debug mode"
 	@dlv  --continue --accept-multiclient --headless --listen=:${DEBUG_PORT} --api-version=2 exec \
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
-
 else
 	@echo "Running node on address: ${HOST_ADDRESS})"
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
@@ -78,7 +76,6 @@ docker:
 docker-image:
 	@echo "node ${NODES_ID}"
 	@sudo docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node
-
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-all
@@ -96,8 +93,12 @@ docker-debug:
 stop:
 	@docker-compose  down
 
-
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
+
+.PHONY: start-exporter
+start-exporter:
+	@echo "Running start-exporter"
+	${BUILD_PATH} start-exporter ${NODE_COMMAND}

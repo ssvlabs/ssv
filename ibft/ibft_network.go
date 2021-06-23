@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+
+
 func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 	tasks.ExecWithInterval(func(lastTick time.Duration) (bool, bool) {
 		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
@@ -37,8 +39,9 @@ func (i *ibftImpl) listenToNetworkMessages() {
 			})
 		}
 	}()
+}
 
-	// decided messages
+func (i *ibftImpl) listenToNetworkDecidedMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {

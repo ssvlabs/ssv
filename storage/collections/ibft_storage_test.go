@@ -32,7 +32,7 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 
 	// not found
 	_, err = storage.GetDecided([]byte{1, 2, 3, 3}, 1)
-	require.EqualError(t, err, EntryNotFoundError)
+	require.EqualError(t, err, kv.EntryNotFoundError)
 }
 
 func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
@@ -50,7 +50,7 @@ func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
 
 	// not found
 	_, err = storage.GetCurrentInstance([]byte{1, 2, 3, 3})
-	require.EqualError(t, err, EntryNotFoundError)
+	require.EqualError(t, err, kv.EntryNotFoundError)
 }
 
 func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
@@ -76,7 +76,7 @@ func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
 
 	// not found
 	_, err = storage.GetHighestDecidedInstance([]byte{1, 2, 3, 3})
-	require.EqualError(t, err, EntryNotFoundError)
+	require.EqualError(t, err, kv.EntryNotFoundError)
 }
 
 func newInMemDb() basedb.IDb {

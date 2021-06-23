@@ -34,10 +34,10 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
-	options:= basedb.Options{
-		Type: "badger-memory",
+	options := basedb.Options{
+		Type:   "badger-memory",
 		Logger: zap.L(),
-		Path: "",
+		Path:   "",
 	}
 
 	db, err := storage.GetStorageFactory(options)
@@ -90,9 +90,9 @@ func generateRandomValidatorShare() Share {
 	}
 
 	return Share{
-		NodeID:      1,
+		NodeID:    1,
 		PublicKey: sk.GetPublicKey(),
-		ShareKey:    &sk,
-		Committee:   ibftCommittee,
+		ShareKey:  &sk,
+		Committee: ibftCommittee,
 	}
 }

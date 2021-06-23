@@ -66,7 +66,7 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 	}()
 
-	readMsgData := func() (interface{}, error) {
+	readMsgData := func(stopper tasks.Stopper) (interface{}, error) {
 		msg, err := readMessageData(stream)
 		if msg == nil {
 			msg = &network.Message{}
@@ -99,7 +99,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Sync
 	}
 
 	res, err := n.sendAndReadSyncResponse(peerID, msg)
-	if err != nil {
+	if err != nil || res == nil {
 		return nil, err
 	}
 	return res.SyncMessage, nil

@@ -103,7 +103,7 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 func (c *controller) setupValidators() map[string]*Validator {
 	validatorsShare, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
-		c.logger.Fatal("Failed to get validatorStorage share", zap.Error(err))
+		c.logger.Fatal("Failed to get validators shares", zap.Error(err))
 	}
 
 	res := make(map[string]*Validator)
