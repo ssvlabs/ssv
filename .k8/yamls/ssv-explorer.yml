@@ -169,12 +169,12 @@ spec:
           name: ssv-explorer
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-explorer
+          name: ssv-explorer-cm
       volumes:
       - name: ssv-explorer
         persistentVolumeClaim:
           claimName: ssv-explorer
       - name: ssv-explorer
         configMap:
-          name: ssv-explorer
+          name: ssv-explorer-cm
       hostNetwork: true      
