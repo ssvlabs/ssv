@@ -1,5 +1,9 @@
 package api
 
+import (
+	"github.com/bloxapp/ssv/ibft/proto"
+)
+
 // Message represents an exporter message
 type Message struct {
 	// Type is the type of message
@@ -57,9 +61,9 @@ func (m *Message) Response() *Message {
 	return &res
 }
 
-//// Validator the data of an validator
-//type Validator struct {
-//	PublicKey []byte                 `json:"publicKey"`
-//	Operators map[uint64]*proto.Node `json:"operators"`
-//	Index     int64                  `json:"index"`
-//}
+// ValidatorMsg represents a transferable object
+type ValidatorMsg struct {
+	Index     int64                  `json:"index"`
+	PublicKey string                 `json:"publicKey"`
+	Committee map[uint64]*proto.Node `json:"operators"`
+}

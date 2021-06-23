@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/pubsub"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -30,6 +31,9 @@ func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, mux *http.ServeMu
 }
 
 func (ws *wsServer) Start(addr string) error {
+	if ws.adapter == nil {
+		return errors.New("websocket adapter is missing")
+	}
 	ws.adapter.RegisterHandler(ws.router, "/query", ws.handleQuery)
 	ws.adapter.RegisterHandler(ws.router, "/stream", ws.handleStream)
 

@@ -138,12 +138,16 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 			outbound.Notify(nm)
 		case api.TypeValidator:
 			exp.logger.Debug("get validators")
-			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
 			validators, err := exp.validatorStorage.GetAllValidatorsShare()
 			if err != nil {
 				exp.logger.Error("could not get validators", zap.Error(err))
 			}
-			res.Data = validators
+			var validatorMsgs []api.ValidatorMsg
+			for _, v := range validators {
+				validatorMsg := toValidatorMessage(v)
+				validatorMsgs = append(validatorMsgs, *validatorMsg)
+			}
+			res.Data = validatorMsgs
 			nm.Msg = *res
 			outbound.Notify(nm)
 		case api.TypeIBFT:
@@ -223,11 +227,13 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 		return errors.Wrap(err, "failed to save validator share")
 	}
 	exp.logger.Debug("validator share was saved", zap.String("pubKey", pubKeyHex))
-	// notifies open websocket streams
-	validatorMsg := validatorShare.ToValidatorMessage()
-	// TODO: add index
-	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: 0}, Data: validatorMsg}
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg, Conn: nil})
+	// notifies open streams
+	validatorMsg := toValidatorMessage(validatorShare)
+	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
+		Type: api.TypeOperator,
+		Filter: api.MessageFilter{From: 0},
+		Data: []api.ValidatorMsg{*validatorMsg},
+	}, Conn: nil})
 	// triggers a sync for the given validator
 	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to trigger ibft sync")
@@ -286,4 +292,21 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
 	tid := fmt.Sprintf("ibft:sync/%s", pubKeyHex)
 	return *tasks.NewTask(ibftReader.Sync, tid)
+}
+
+// toValidatorMessage returns a transferable object
+func toValidatorMessage(s *validatorstorage.Share) *api.ValidatorMsg {
+	committee := map[uint64]*proto.Node{}
+	for i, o := range s.Committee {
+		committee[i] = &proto.Node{
+			Pk: o.Pk,
+			IbftId: o.IbftId,
+		}
+	}
+	res := api.ValidatorMsg{
+		Index: 1, // TODO: use actual index
+		Committee: committee,
+		PublicKey: s.PublicKey.SerializeToHexStr(),
+	}
+	return &res
 }
