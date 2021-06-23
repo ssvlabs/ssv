@@ -2,18 +2,21 @@ package ibft
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
+	"time"
 )
 
 func validatorPK(sks map[uint64]*bls.SecretKey) *bls.PublicKey {
@@ -43,7 +46,8 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 	for i := 0; i <= highestSeq; i++ {
-		lambda := []byte(fmt.Sprintf("lambda_%d", i))
+		lambda := []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester))
+
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
 			Type:        proto.RoundState_Commit,
 			Round:       3,
@@ -74,17 +78,12 @@ func populatedIbft(
 		ShareKey:    sks[nodeID],
 		Committee:   nodes,
 	}
-	ret := New(
-		zap.L(),
-		ibftStorage,
-		network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
-		queue,
-		proto.DefaultConsensusParams(),
-		share,
-	)
+	ret := New(beacon.RoleAttester, logex.Build("", zap.DebugLevel), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, proto.DefaultConsensusParams(), share)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
 	ret.(*ibftImpl).listenToSyncMessages()
+	ret.(*ibftImpl).listenToDecidedQueueMessages()
+	ret.(*ibftImpl).listenToSyncQueueMessages(share.PublicKey.Serialize())
 	return ret
 }
 
@@ -140,6 +139,7 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 	_ = populatedIbft(2, network, populatedStorage(t, sks, 100), sks, nodes)
 
 	i1.(*ibftImpl).SyncIBFT()
+	time.Sleep(time.Millisecond * 500) // wait for sync to complete
 	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
 	require.NoError(t, err)
 	require.EqualValues(t, 100, highest.Message.SeqNumber)
@@ -162,6 +162,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.EqualError(t, err, "EntryNotFoundError")
 
 		i1.(*ibftImpl).SyncIBFT()
+		time.Sleep(time.Second * 1) // wait for sync to complete
 
 		// test after sync
 		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
@@ -185,6 +186,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.EqualError(t, err, "EntryNotFoundError")
 
 		i1.(*ibftImpl).SyncIBFT()
+		time.Sleep(time.Second * 1) // wait for sync to complete
 
 		// test after sync
 		highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())

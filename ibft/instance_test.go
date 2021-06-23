@@ -106,7 +106,7 @@ func TestInstanceStop(t *testing.T) {
 	// verify
 	require.Nil(t, instance.roundChangeTimer)
 	require.EqualValues(t, proto.RoundState_Stopped, instance.Stage())
-	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTRoundIndexKey(instance.State.Lambda, instance.State.Round, instance.ValidatorShare.PublicKey.Serialize())))
-	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(instance.State.Lambda, instance.State.Round, instance.ValidatorShare.PublicKey.Serialize()))
+	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTRoundIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round)))
+	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
 }

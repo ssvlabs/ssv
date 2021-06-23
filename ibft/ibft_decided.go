@@ -4,17 +4,32 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/sync"
+	ibft_sync "github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
+
+// listenToDecidedQueueMessages is listen for all the ibft decided msg's and process them
+func (i *ibftImpl) listenToDecidedQueueMessages() {
+	go func() {
+		for {
+			if decidedMsg := i.msgQueue.PopMessage(msgqueue.DecidedIndexKey(i.GetIdentifier())); decidedMsg != nil {
+				i.ProcessDecidedMessage(decidedMsg.SignedMessage)
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
+	}()
+}
+
 
 func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 	p := pipeline.Combine(
 		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
+		//auth.ValidateLambdasRole(i.role.String()),
 		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
@@ -60,7 +75,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 			i.currentInstance.Stop()
 		}
 		// sync
-		s := sync.NewHistorySync(i.logger, msg.Message.ValidatorPk, i.network, i.ibftStorage, i.validateDecidedMsg)
+		s := ibft_sync.NewHistorySync(i.logger, msg.Message.ValidatorPk, i.network, i.ibftStorage, i.validateDecidedMsg)
 		go func() {
 			err := s.Start()
 			if err != nil {

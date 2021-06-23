@@ -60,7 +60,8 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 	for i := startSeq; i <= endSeq; i++ {
 		decidedMsg, err := s.storage.GetDecided(msg.Msg.ValidatorPk, i)
 		if err != nil {
-			panic("implement")
+			s.logger.Error("failed to get decided", zap.Error(err))
+			continue
 		}
 
 		ret = append(ret, decidedMsg)

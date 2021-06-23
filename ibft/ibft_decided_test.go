@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -270,7 +271,7 @@ func TestSyncAfterDecided(t *testing.T) {
 		Round:       3,
 		SeqNumber:   10,
 		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte("Lambda"),
+		Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 		Value:       []byte("value"),
 	})
 
@@ -300,7 +301,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Round:       3,
 		SeqNumber:   10,
 		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte("Lambda"),
+		Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 		Value:       []byte("value"),
 	})
 
@@ -329,7 +330,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			nil,
@@ -341,7 +342,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			errors.New("message type is wrong"),
@@ -353,7 +354,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: []byte{1, 2, 3, 4},
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			errors.Errorf("invalid message validator PK: expected: %x, actual: %x",
@@ -366,7 +367,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			errors.New("could not verify message signature"),
@@ -378,7 +379,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   0,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_0"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			nil,

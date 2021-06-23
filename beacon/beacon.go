@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
@@ -50,19 +49,19 @@ type Beacon interface {
 	SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64, key *bls.PublicKey) error
 
 	// GetAggregationData returns aggregation data for the given slot and committee index
-	GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error)
+	GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error)
 
 	// SignAggregation signs the given aggregation data
-	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error)
+	SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error)
 
 	// SubmitAggregation submits the given signed aggregation data
 	SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error
 
 	// GetProposalData returns proposal block for the given slot
-	GetProposalData(ctx context.Context, slot uint64, duty slotqueue.Duty) (*ethpb.BeaconBlock, error)
+	GetProposalData(ctx context.Context, slot uint64, shareKey *bls.SecretKey) (*ethpb.BeaconBlock, error)
 
 	// SignProposal signs the given proposal block
-	SignProposal(ctx context.Context, block *ethpb.BeaconBlock, duty slotqueue.Duty) (*ethpb.SignedBeaconBlock, error)
+	SignProposal(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error)
 
 	// SubmitProposal submits the given signed block
 	SubmitProposal(ctx context.Context, block *ethpb.SignedBeaconBlock) error

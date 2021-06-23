@@ -53,9 +53,9 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"non supported role",
 			false,
 			3,
-			beacon.RoleAggregator,
+			beacon.RoleUnknown,
 			refAttestationDataByts,
-			"unknown role: AGGREGATOR",
+			"unknown role: UNKNOWN",
 		},
 	}
 
@@ -171,7 +171,8 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			for index, sig := range test.sigs {
 				err := validator.network.BroadcastSignature(&proto.SignedMessage{
 					Message: &proto.Message{
-						Lambda:      []byte("id"),
+						Lambda:      validator.ibfts[beacon.RoleAttester].GetIdentifier(),
+						SeqNumber:   0,
 						ValidatorPk: pk.Serialize(),
 					},
 					Signature: sig,
@@ -180,7 +181,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err = validator.postConsensusDutyExecution(context.Background(), validator.logger, []byte("id"), decidedValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
+			err = validator.postConsensusDutyExecution(context.Background(), validator.logger, 0, decidedValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {

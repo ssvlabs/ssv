@@ -162,9 +162,9 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			PreparedValue: nil,
 		},
 		ValidatorShare: &storage.Share{
-			Committee:   nodes,
-			NodeID:      1,
-			ShareKey:    secretKeys[1],
+			Committee: nodes,
+			NodeID:    1,
+			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
@@ -258,8 +258,8 @@ func TestPrePreparePipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
-			Committee:   nodes,
-			NodeID:      1,
+			Committee: nodes,
+			NodeID:    1,
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{

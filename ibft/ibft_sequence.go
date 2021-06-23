@@ -57,7 +57,7 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) InstanceOp
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: i.leaderSelector,
 		Config:         i.instanceConfig,
-		Lambda:         opts.Identifier,
+		Lambda:         i.Identifier,
 		SeqNumber:      opts.SeqNumber,
 	}
 }
