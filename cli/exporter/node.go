@@ -8,7 +8,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
-	//"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
+	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -76,8 +76,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Network = network
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
-		//exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
-		exporterOptions.WS = api.NewWsServer(Logger, nil, http.NewServeMux())
+		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
 
 		exporterNode := exporter.New(*exporterOptions)
 
