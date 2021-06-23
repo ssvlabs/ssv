@@ -55,7 +55,7 @@ func New(opt Options, db basedb.IDb) *Validator {
 	ibfts := make(map[beacon.Role]ibft.IBFT)
 	ibfts[beacon.RoleAttester] = setupIbftController(beacon.RoleAttester, logger, db, opt.Network, msgQueue, opt.Share)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
-	ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share)
+	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
 	for _, ib := range ibfts { // init all ibfts
 		go ib.Init()
