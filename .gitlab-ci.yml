@@ -25,7 +25,7 @@ variables:
 Build stage Docker image:
   stage: build
   tags:
-    - blox-infra-stage
+    - blox-infra-multi-duties
   script:
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
@@ -37,7 +37,7 @@ Build stage Docker image:
 Deploy to blox-infra-stage cluster:
   stage: deploy
   tags:
-    - blox-infra-stage
+    - blox-infra-multi-duties
   script:
     - apk add bash
     - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION

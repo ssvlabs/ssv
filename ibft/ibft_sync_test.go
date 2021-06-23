@@ -46,7 +46,7 @@ func aggregateSign(t *testing.T, sks map[uint64]*bls.SecretKey, msg *proto.Messa
 func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq int) collections.Iibft {
 	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 	for i := 0; i <= highestSeq; i++ {
-		lambda := []byte(IdentifierFormat(nil, beacon.RoleAttester))
+		lambda := []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester))
 
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
 			Type:        proto.RoundState_Commit,
