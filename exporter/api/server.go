@@ -15,28 +15,31 @@ type wsServer struct {
 	outbound pubsub.Subject
 
 	adapter WebSocketAdapter
+
+	router *http.ServeMux
 }
 
 // NewWsServer creates a new instance
-func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter) WebSocketServer {
-	l := logger.With(zap.String("component", "wsServer"))
-	ws := wsServer{l, pubsub.NewSubject(), pubsub.NewSubject(), adapter}
+func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, mux *http.ServeMux) WebSocketServer {
+	ws := wsServer{
+		logger.With(zap.String("component", "exporter/api/server")),
+		pubsub.NewSubject(), pubsub.NewSubject(),
+		adapter, mux,
+	}
 	return &ws
 }
 
 func (ws *wsServer) Start(addr string) error {
-	ws.adapter.RegisterHandler("/query", ws.handleQuery)
-	ws.adapter.RegisterHandler("/stream", ws.handleStream)
+	ws.adapter.RegisterHandler(ws.router, "/query", ws.handleQuery)
+	ws.adapter.RegisterHandler(ws.router, "/stream", ws.handleStream)
 
-	ws.logger.Info("starting a websocket server", zap.String("addr", addr))
+	ws.logger.Info("starting websocket server",
+		zap.String("addr", addr),
+		zap.Strings("endPoints", []string{"/query", "/stream"}))
 
-	err := http.ListenAndServe(addr, nil)
+	err := http.ListenAndServe(addr, ws.router)
 	if err != nil {
 		ws.logger.Warn("could not start http server", zap.Error(err))
-	} else {
-		ws.logger.Info("exporter endpoints (ws) are ready",
-			zap.String("addr", addr),
-			zap.Strings("endPoints", []string{"/query", "/stream"}))
 	}
 	return err
 }
@@ -84,8 +87,11 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, cid string) {
 			ws.logger.Warn("could not parse message")
 			continue
 		}
+		ws.logger.Debug("sending outbound",
+			zap.String("cid", cid),
+			zap.String("msg type", string(nm.Msg.Type)))
 		if nm.Conn == conn || nm.Conn == nil {
-			err := ws.adapter.Send(conn, &nm.Msg)
+			err := ws.adapter.Send(conn, nm.Msg)
 			if err != nil {
 				ws.logger.Error("could not send message", zap.Error(err))
 			}

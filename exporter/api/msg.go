@@ -56,3 +56,10 @@ func (m *Message) Response() *Message {
 
 	return &res
 }
+
+//// Validator the data of an validator
+//type Validator struct {
+//	PublicKey []byte                 `json:"publicKey"`
+//	Operators map[uint64]*proto.Node `json:"operators"`
+//	Index     int64                  `json:"index"`
+//}

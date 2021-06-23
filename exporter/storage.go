@@ -29,10 +29,10 @@ type Storage interface {
 
 // OperatorInformation the public data of an operator
 type OperatorInformation struct {
-	PublicKey    []byte
-	Name         string
-	OwnerAddress common.Address
-	Index        int64
+	PublicKey    []byte         `json:"publicKey"`
+	Name         string         `json:"name"`
+	OwnerAddress common.Address `json:"ownerAddress"`
+	Index        int64          `json:"index"`
 }
 
 type exporterStorage struct {
@@ -42,7 +42,7 @@ type exporterStorage struct {
 
 // NewExporterStorage creates a new instance of Storage
 func NewExporterStorage(db basedb.IDb, logger *zap.Logger) Storage {
-	es := exporterStorage{db, logger}
+	es := exporterStorage{db, logger.With(zap.String("component", "exporter/storage"))}
 	return &es
 }
 
@@ -100,7 +100,7 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 		es.logger.Debug("operator already exist",
 			zap.String("pubKey", hex.EncodeToString(operatorInformation.PublicKey)))
 		operatorInformation.Index = existing.Index
-		// TODO: update operator information for updating operator
+		// TODO: update operator information (i.e. other fields such aas "name") for updating operator scenario
 		return nil
 	}
 	operatorInformation.Index, err = es.nextOperatorIndex()

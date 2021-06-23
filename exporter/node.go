@@ -80,12 +80,12 @@ func New(opts Options) Exporter {
 		storage:          NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
-		logger:           opts.Logger,
+		logger:           opts.Logger.With(zap.String("component", "exporter/node")),
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
 		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
 			Ctx:      opts.Ctx,
-			Logger:   opts.Logger,
+			Logger:   opts.Logger.With(zap.String("component", "tasks/dispatcher")),
 			Interval: ibftSyncDispatcherTick,
 		}),
 		ws: opts.WS,
@@ -128,6 +128,7 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 		res := nm.Msg.Response()
 		switch nm.Msg.Type {
 		case api.TypeOperator:
+			exp.logger.Debug("get operators")
 			operators, err := exp.storage.ListOperators(0)
 			if err != nil {
 				exp.logger.Error("could not get operators", zap.Error(err))
@@ -136,6 +137,7 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 			nm.Msg = *res
 			outbound.Notify(nm)
 		case api.TypeValidator:
+			exp.logger.Debug("get validators")
 			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
 			validators, err := exp.validatorStorage.GetAllValidatorsShare()
 			if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/pubsub"
 	"net"
+	"net/http"
 	"time"
 )
 
@@ -32,11 +33,12 @@ type EndPointHandler = func(conn Connection)
 
 // WebSocketAdapter is an abstraction to decouple actual library implementation
 type WebSocketAdapter interface {
-	RegisterHandler(endPoint string, handler EndPointHandler)
+	RegisterHandler(mux *http.ServeMux, endPoint string, handler EndPointHandler)
 	Send(conn Connection, v interface{}) error
 	Receive(conn Connection, v interface{}) error
 }
 
+// ConnectionID calculates the id of the given Connection
 func ConnectionID(conn Connection) string {
 	if conn == nil {
 		return ""
