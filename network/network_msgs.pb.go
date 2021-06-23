@@ -159,8 +159,8 @@ type Message struct {
 	Lambda               []byte                `protobuf:"bytes,1,opt,name=Lambda,proto3" json:"Lambda,omitempty"`
 	SignedMessage        *proto1.SignedMessage `protobuf:"bytes,2,opt,name=SignedMessage,proto3" json:"SignedMessage,omitempty"`
 	SyncMessage          *SyncMessage          `protobuf:"bytes,3,opt,name=SyncMessage,proto3" json:"SyncMessage,omitempty"`
-	Stream               SyncStream            `protobuf:"bytes,4,opt,name=Stream,proto3" json:"Stream,omitempty"`
-	Type                 NetworkMsg            `protobuf:"varint,5,opt,name=Type,proto3,enum=network.NetworkMsg" json:"Type,omitempty"`
+	Type                 NetworkMsg            `protobuf:"varint,4,opt,name=Type,proto3,enum=network.NetworkMsg" json:"Type,omitempty"`
+	Stream               SyncStream           `protobuf:"bytes,5,opt,name=Stream,proto3" json:"Stream,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`

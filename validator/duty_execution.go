@@ -60,7 +60,7 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 				logger.Error("received invalid signature", zap.Error(err))
 				continue
 			}
-			logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]))
+			logger.Info("signature verified", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]))
 
 			lock.Lock()
 			signatures[msg.SignedMessage.SignerIds[0]] = msg.SignedMessage.Signature
@@ -92,6 +92,7 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 		Message: &proto.Message{
 			Lambda:      identifier,
 			ValidatorPk: duty.PublicKey,
+			SeqNumber:   seqNumber,
 		},
 		Signature: sig,
 		SignerIds: []uint64{v.Share.NodeID},

@@ -115,7 +115,6 @@ func (v *Validator) listenToNetworkMessages() {
 			v.logger.Debug("got nil message")
 			continue
 		}
-		v.logger.Debug("got new message", zap.String("sigMsg", sigMsg.String()))
 		v.msgQueue.AddMessage(&network.Message{
 			Lambda:        sigMsg.Message.Lambda,
 			SignedMessage: sigMsg,

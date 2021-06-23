@@ -87,12 +87,12 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 }
 
 func (i *ibftImpl) Init() {
+	i.listenToDecidedQueueMessages()
+	i.listenToSyncQueueMessages(i.ValidatorShare.PublicKey.Serialize()) // pass the pubkey byte to avoid deadlock
 	i.listenToSyncMessages()
 	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
-	i.listenToDecidedQueueMessages()
-	i.listenToSyncQueueMessages(i.ValidatorShare.PublicKey.Serialize()) // pass the pubkey byte to avoid deadlock
 	i.initFinished = true
 }
 
