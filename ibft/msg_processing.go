@@ -12,7 +12,7 @@ import (
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 	i.msgProcessingLock.Lock()
 	defer i.msgProcessingLock.Unlock()
-	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.Round)); netMsg != nil {
+	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.SeqNumber, i.State.Round)); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:

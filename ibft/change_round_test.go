@@ -1,7 +1,9 @@
 package ibft
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
@@ -621,7 +623,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				}),
 				ValidatorPk: sks[2].GetPublicKey().Serialize(),
 			}),
-			"invalid message validator PK",
+			fmt.Sprintf("invalid message validator PK: expected: %s, actual: %s", hex.EncodeToString(sks[1].GetPublicKey().Serialize()), hex.EncodeToString(sks[2].GetPublicKey().Serialize())),
 		},
 		{
 			"invalid change round data",
@@ -649,7 +651,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				}),
 				ValidatorPk: sks[1].GetPublicKey().Serialize(),
 			}),
-			"invalid message sequence number",
+			"invalid message sequence number: expected: 1, actual: 2",
 		},
 
 		{

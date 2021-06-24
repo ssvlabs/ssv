@@ -55,8 +55,8 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		},
 		Type: network.NetworkMsg_IBFTType,
 	})
-	require.NotNil(t, msgQ.queue["lambda_01020304_round_1"])
-	require.NotNil(t, msgQ.allMessages[msgQ.queue["lambda_01020304_round_1"][0].id])
+	require.NotNil(t, msgQ.queue["lambda_01020304_seqNumber_1_round_1"])
+	require.NotNil(t, msgQ.allMessages[msgQ.queue["lambda_01020304_seqNumber_1_round_1"][0].id])
 
 	msgQ.AddMessage(&network.Message{
 		Lambda: []byte{1, 2, 3, 5},
@@ -69,8 +69,8 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		},
 		Type: network.NetworkMsg_IBFTType,
 	})
-	require.NotNil(t, msgQ.queue["lambda_01020305_round_7"])
-	require.NotNil(t, msgQ.allMessages[msgQ.queue["lambda_01020305_round_7"][0].id])
+	require.NotNil(t, msgQ.queue["lambda_01020305_seqNumber_2_round_7"])
+	require.NotNil(t, msgQ.allMessages[msgQ.queue["lambda_01020305_seqNumber_2_round_7"][0].id])
 
 	// custom index
 	msgQ.indexFuncs = append(msgQ.indexFuncs, func(msg *network.Message) []string {

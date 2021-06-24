@@ -93,13 +93,13 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	var ret *network.Message
 	if q.MsgCount(index) > 0 {
 		c := q.queue[index][0]
-		ret = c.msg
+		ret := c.msg
 
 		// delete all indexes
 		q.DeleteMessagesWithIds([]string{c.id})
+		return ret
 	}
 	return nil
 }
