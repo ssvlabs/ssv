@@ -8,6 +8,7 @@ import (
 
 // SyncChanObj is a wrapper object for streaming of sync messages
 type SyncChanObj struct {
+	Lambda []byte
 	Msg    *SyncMessage
 	Stream SyncStream
 }
@@ -51,16 +52,16 @@ type Network interface {
 
 	// GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 	// If peer list is nil, broadcasts to all.
-	GetHighestDecidedInstance(peerID string, msg *SyncMessage) (*SyncMessage, error)
+	GetHighestDecidedInstance(identifier []byte, peerStr string, msg *SyncMessage) (*SyncMessage, error)
 
 	// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 	RespondToHighestDecidedInstance(stream SyncStream, msg *SyncMessage) error
 
 	// GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-	GetDecidedByRange(peerID string, msg *SyncMessage) (*SyncMessage, error)
+	GetDecidedByRange(identifier []byte, peerStr string, msg *SyncMessage) (*SyncMessage, error)
 
 	// RespondToGetDecidedByRange responds to a GetDecidedByRange
-	RespondToGetDecidedByRange(stream SyncStream, msg *SyncMessage) error
+	RespondToGetDecidedByRange(identifier []byte, stream SyncStream, msg *SyncMessage) error
 
 	// ReceivedSyncMsgChan returns the channel for sync messages
 	ReceivedSyncMsgChan() <-chan *SyncChanObj

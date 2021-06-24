@@ -20,19 +20,15 @@ type HistorySync struct {
 	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
 	validatorPK         []byte
+	identifier          []byte
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(
-	logger *zap.Logger,
-	validatorPK []byte,
-	network network.Network,
-	ibftStorage collections.Iibft,
-	validateDecidedMsgF func(msg *proto.SignedMessage) error,
-) *HistorySync {
+func NewHistorySync(logger *zap.Logger, identifier []byte, pubKey []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error, ) *HistorySync {
 	return &HistorySync{
 		logger:              logger,
-		validatorPK:         validatorPK,
+		validatorPK:         pubKey,
+		identifier:          identifier,
 		network:             network,
 		validateDecidedMsgF: validateDecidedMsgF,
 		ibftStorage:         ibftStorage,
@@ -102,7 +98,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	for i, p := range usedPeers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
-			res, err := s.network.GetHighestDecidedInstance(peer, &network.SyncMessage{
+			res, err := s.network.GetHighestDecidedInstance(s.identifier, peer, &network.SyncMessage{
 				Type:        network.Sync_GetHighestType,
 				ValidatorPk: s.validatorPK,
 			})
@@ -175,7 +171,7 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			return highestSaved, nil
 		}
 
-		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
+		res, err := s.network.GetDecidedByRange(s.identifier, fromPeer, &network.SyncMessage{
 			ValidatorPk: s.validatorPK,
 			Params:      []uint64{start, endSeq},
 			Type:        network.Sync_GetInstanceRange,

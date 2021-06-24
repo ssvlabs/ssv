@@ -13,18 +13,18 @@ import (
 type ReqHandler struct {
 	// paginationMaxSize is the max number of returned elements in a single response
 	paginationMaxSize uint64
-	validatorPK       []byte
+	identifier        []byte
 	network           network.Network
 	storage           collections.Iibft
 	logger            *zap.Logger
 }
 
 // NewReqHandler returns a new instance of ReqHandler
-func NewReqHandler(logger *zap.Logger, validatorPK []byte, network network.Network, storage collections.Iibft) *ReqHandler {
+func NewReqHandler(logger *zap.Logger, identifier []byte, network network.Network, storage collections.Iibft) *ReqHandler {
 	return &ReqHandler{
 		paginationMaxSize: 25, // TODO - change to be a param
 		logger:            logger,
-		validatorPK:       validatorPK,
+		identifier:        identifier,
 		network:           network,
 		storage:           storage,
 	}
@@ -73,7 +73,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 		ValidatorPk:    msg.Msg.ValidatorPk,
 		Type:           network.Sync_GetInstanceRange,
 	}
-	if err := s.network.RespondToGetDecidedByRange(msg.Stream, retMsg); err != nil {
+	if err := s.network.RespondToGetDecidedByRange(s.identifier, msg.Stream, retMsg); err != nil {
 		s.logger.Error("failed to send get decided by range response", zap.Error(err))
 	}
 }

@@ -112,11 +112,12 @@ func (n *Local) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 
 // GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 // If peer list is nil, broadcasts to all.
-func (n *Local) GetHighestDecidedInstance(peerID string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	if toChan, found := n.syncPeers[peerID]; found {
-		stream := NewLocalStream(msg.FromPeerID, peerID)
+func (n *Local) GetHighestDecidedInstance(identifier []byte, peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerStr]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
 			toChan <- &network.SyncChanObj{
+				Lambda: identifier,
 				Msg:    msg,
 				Stream: stream,
 			}
@@ -146,11 +147,12 @@ func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-func (n *Local) GetDecidedByRange(peerID string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	if toChan, found := n.syncPeers[peerID]; found {
-		stream := NewLocalStream(msg.FromPeerID, peerID)
+func (n *Local) GetDecidedByRange(identifier []byte, peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerStr]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
 			toChan <- &network.SyncChanObj{
+				Lambda: identifier,
 				Msg:    msg,
 				Stream: stream,
 			}
@@ -163,7 +165,7 @@ func (n *Local) GetDecidedByRange(peerID string, msg *network.SyncMessage) (*net
 }
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
-func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+func (n *Local) RespondToGetDecidedByRange(identifier []byte, stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = string(n.localPeerID)
 	_, _ = stream.(*Stream).WriteSynMsg(msg)
 	return nil

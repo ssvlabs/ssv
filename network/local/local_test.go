@@ -117,7 +117,7 @@ func TestGetHighestDecided(t *testing.T) {
 		})
 	}()
 
-	res, err := net.GetHighestDecidedInstance("1", &network.SyncMessage{
+	res, err := net.GetHighestDecidedInstance(nil, "1", &network.SyncMessage{
 		ValidatorPk: []byte{1, 2, 3, 4},
 		FromPeerID:  "0",
 		Type:        network.Sync_GetHighestType,
@@ -134,14 +134,14 @@ func TestGetDecidedByRange(t *testing.T) {
 		msg := <-c2
 		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.ValidatorPk)
 		require.EqualValues(t, network.Sync_GetHighestType, msg.Msg.Type)
-		net.RespondToGetDecidedByRange(msg.Stream, &network.SyncMessage{
+		net.RespondToGetDecidedByRange(nil, msg.Stream, &network.SyncMessage{
 			ValidatorPk: []byte{1, 1, 1, 1},
 			FromPeerID:  "1",
 			Type:        network.Sync_GetHighestType,
 		})
 	}()
 
-	res, err := net.GetDecidedByRange("1", &network.SyncMessage{
+	res, err := net.GetDecidedByRange(nil, "1", &network.SyncMessage{
 		ValidatorPk: []byte{1, 2, 3, 4},
 		FromPeerID:  "0",
 		Type:        network.Sync_GetHighestType,

@@ -8,11 +8,11 @@ import (
 	"time"
 )
 
-// listenToSyncQueueMessages is listen for all the ibft sync msg's and process them
-func (i *ibftImpl) listenToSyncQueueMessages(pubKey []byte) {
+// processSyncQueueMessages is listen for all the ibft sync msg's and process them
+func (i *ibftImpl) processSyncQueueMessages() {
 	go func() {
 		for {
-			if syncMsg := i.msgQueue.PopMessage(msgqueue.SyncIndexKey(pubKey)); syncMsg != nil {
+			if syncMsg := i.msgQueue.PopMessage(msgqueue.SyncIndexKey(i.Identifier)); syncMsg != nil {
 				i.ProcessSyncMessage(&network.SyncChanObj{
 					Msg:    syncMsg.SyncMessage,
 					Stream: syncMsg.Stream,
@@ -24,13 +24,13 @@ func (i *ibftImpl) listenToSyncQueueMessages(pubKey []byte) {
 }
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
-	s := ibft_sync.NewReqHandler(i.logger, msg.Msg.ValidatorPk, i.network, i.ibftStorage)
+	s := ibft_sync.NewReqHandler(i.logger, i.Identifier, i.network, i.ibftStorage)
 	go s.Process(msg)
 }
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
 func (i *ibftImpl) SyncIBFT() {
-	s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.network, i.ibftStorage, i.validateDecidedMsg)
+	s := ibft_sync.NewHistorySync(i.logger, i.GetIdentifier(),i.ValidatorShare.PublicKey.Serialize(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	err := s.Start()
 	if err != nil {
 		i.logger.Error("history sync failed", zap.Error(err))

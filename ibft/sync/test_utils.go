@@ -61,17 +61,17 @@ func (n *testNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 	return nil
 }
 
-func (n *testNetwork) GetHighestDecidedInstance(peer string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *testNetwork) GetHighestDecidedInstance(identifier []byte, peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
-	if highest, found := n.highestDecidedReceived[peer]; found {
+	if highest, found := n.highestDecidedReceived[peerStr]; found {
 		if !bytes.Equal(msg.ValidatorPk, highest.Message.ValidatorPk) {
 			return nil, errors.New("could not find highest")
 		}
 
 		return &network.SyncMessage{
 			SignedMessages: []*proto.SignedMessage{highest},
-			FromPeerID:     peer,
+			FromPeerID:     peerStr,
 			Type:           network.Sync_GetInstanceRange,
 		}, nil
 	}
@@ -82,14 +82,14 @@ func (n *testNetwork) RespondToHighestDecidedInstance(stream network.SyncStream,
 	return nil
 }
 
-func (n *testNetwork) GetDecidedByRange(fromPeer string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *testNetwork) GetDecidedByRange(identifier []byte, peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
 	if n.retError != nil {
 		return nil, n.retError
 	}
 
-	if arr, found := n.decidedArr[fromPeer]; found {
+	if arr, found := n.decidedArr[peerStr]; found {
 		if !bytes.Equal(msg.ValidatorPk, arr[0].Message.ValidatorPk) {
 			return nil, errors.New("could not find highest")
 		}
@@ -106,7 +106,7 @@ func (n *testNetwork) GetDecidedByRange(fromPeer string, msg *network.SyncMessag
 
 		return &network.SyncMessage{
 			SignedMessages: ret,
-			FromPeerID:     fromPeer,
+			FromPeerID:     peerStr,
 			ValidatorPk:    msg.ValidatorPk,
 			Type:           network.Sync_GetInstanceRange,
 		}, nil
@@ -115,7 +115,7 @@ func (n *testNetwork) GetDecidedByRange(fromPeer string, msg *network.SyncMessag
 }
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
-func (n *testNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+func (n *testNetwork) RespondToGetDecidedByRange(identifier []byte, stream network.SyncStream, msg *network.SyncMessage) error {
 	panic("implement")
 }
 
