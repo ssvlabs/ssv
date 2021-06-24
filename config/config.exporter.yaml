@@ -1,0 +1,13 @@
+global:
+  LogLevel: info
+
+db:
+  Path: ./data/db/exporter
+  Type: badger-db
+
+BeaconNodeAddr: prater-4000.stage.bloxinfra.com:80
+ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
+
+p2p:
+  HostAddress: 84.110.33.146
+

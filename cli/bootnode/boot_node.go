@@ -13,7 +13,7 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	Options bootnode.Options `yaml:"bootnode"`
+	Options                    bootnode.Options `yaml:"bootnode"`
 }
 
 var cfg config
@@ -33,7 +33,7 @@ var StartBootNodeCmd = &cobra.Command{
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel)
 
 		if err != nil {
-			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel),zap.Error(err))
+			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
 		}
 
 		cfg.Options.Logger = Logger

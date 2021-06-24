@@ -3,8 +3,8 @@ package prysmgrpc
 import (
 	"context"
 	"encoding/binary"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
@@ -20,18 +20,19 @@ import (
 )
 
 // GetAggregationData returns aggregation data
-func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty slotqueue.Duty) (*ethpb.AggregateAttestationAndProof, error) {
-	b.waitToSlotTwoThirds(ctx, duty.Duty.AttesterSlot)
+func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, publicKey *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error) {
+	// TODO add aggr to cache in order to prevent duplicate aggr
+	b.waitToSlotTwoThirds(ctx, duty.AttesterSlot)
 
-	slotSig, err := b.signSlot(ctx, duty.Duty.AttesterSlot, duty.ShareSK)
+	slotSig, err := b.signSlot(ctx, duty.AttesterSlot, shareKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign slot")
 	}
 
 	res, err := b.validatorClient.SubmitAggregateSelectionProof(ctx, &ethpb.AggregateSelectionRequest{
-		Slot:           duty.Duty.AttesterSlot,
-		CommitteeIndex: duty.Duty.CommitteeIndex,
-		PublicKey:      duty.ValidatorPK.Serialize(),
+		Slot:           duty.AttesterSlot,
+		CommitteeIndex: duty.CommitteeIndex,
+		PublicKey:      publicKey.Serialize(),
 		SlotSignature:  slotSig,
 	})
 	if err != nil {
@@ -42,8 +43,8 @@ func (b *prysmGRPC) GetAggregationData(ctx context.Context, duty slotqueue.Duty)
 }
 
 // SignAggregation signs the given aggregation data
-func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, duty slotqueue.Duty) (*ethpb.SignedAggregateAttestationAndProof, error) {
-	sig, err := b.aggregateAndProofSig(ctx, data, duty.ShareSK)
+func (b *prysmGRPC) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
+	sig, err := b.aggregateAndProofSig(ctx, data, secretKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign aggregate and proof")
 	}
@@ -68,18 +69,20 @@ func (b *prysmGRPC) SubmitAggregation(ctx context.Context, data *ethpb.SignedAgg
 
 // isAggregator returns true if the given slot is aggregator
 func (b *prysmGRPC) isAggregator(ctx context.Context, slot uint64, committeeLen int, shareKey *bls.SecretKey) (bool, error) {
-	slotSig, err := b.signSlot(ctx, slot, shareKey)
-	if err != nil {
-		return false, err
-	}
-
 	modulo := uint64(1)
 	if committeeLen/int(params.BeaconConfig().TargetAggregatorsPerCommittee) > 1 {
 		modulo = uint64(committeeLen) / params.BeaconConfig().TargetAggregatorsPerCommittee
 	}
 
+	slotSig, err := b.signSlot(ctx, slot, shareKey)
+	if err != nil {
+		return false, err
+	}
+
 	hash := hashutil.Hash(slotSig)
 	val := binary.LittleEndian.Uint64(hash[:8])%modulo == 0
+
+	b.logger.Debug("check if is aggregator", zap.Int("committee", committeeLen), zap.Uint64("slot", slot), zap.Any("hash little endian", binary.LittleEndian.Uint64(hash[:8])), zap.Uint64("modulo", binary.LittleEndian.Uint64(hash[:8])%modulo))
 	return val, nil
 }
 

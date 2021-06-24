@@ -36,6 +36,8 @@ func New() *MessageQueue {
 			iBFTMessageIndex(),
 			iBFTAllRoundChangeIndex(),
 			sigMessageIndex(),
+			decidedMessageIndex(),
+			syncMessageIndex(),
 		},
 	}
 }
@@ -99,7 +101,7 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 		// delete all indexes
 		q.DeleteMessagesWithIds([]string{c.id})
 	}
-	return ret
+	return nil
 }
 
 // MsgCount will return a count of messages by their index

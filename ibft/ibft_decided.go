@@ -4,11 +4,26 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/sync"
-	"github.com/bloxapp/ssv/storage/collections"
+	ibft_sync "github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
+
+// listenToDecidedQueueMessages is listen for all the ibft decided msg's and process them
+func (i *ibftImpl) listenToDecidedQueueMessages() {
+	go func() {
+		for {
+			if decidedMsg := i.msgQueue.PopMessage(msgqueue.DecidedIndexKey(i.GetIdentifier())); decidedMsg != nil {
+				i.ProcessDecidedMessage(decidedMsg.SignedMessage)
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
+	}()
+}
+
 
 func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 	p := pipeline.Combine(
@@ -60,7 +75,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 			i.currentInstance.Stop()
 		}
 		// sync
-		s := sync.NewHistorySync(i.logger, msg.Message.ValidatorPk, i.network, i.ibftStorage, i.validateDecidedMsg)
+		s := ibft_sync.NewHistorySync(i.logger, msg.Message.ValidatorPk, i.network, i.ibftStorage, i.validateDecidedMsg)
 		go func() {
 			err := s.Start()
 			if err != nil {
@@ -73,7 +88,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 // HighestKnownDecided returns the highest known decided instance
 func (i *ibftImpl) HighestKnownDecided() (*proto.SignedMessage, error) {
 	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.ValidatorShare.PublicKey.Serialize())
-	if err != nil && err.Error() != collections.EntryNotFoundError {
+	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return nil, err
 	}
 	return highestKnown, nil
@@ -81,7 +96,7 @@ func (i *ibftImpl) HighestKnownDecided() (*proto.SignedMessage, error) {
 
 func (i *ibftImpl) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 	found, err := i.ibftStorage.GetDecided(msg.Message.ValidatorPk, msg.Message.SeqNumber)
-	if err != nil && err.Error() != collections.EntryNotFoundError {
+	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
 	return found != nil, nil
@@ -106,7 +121,7 @@ func (i *ibftImpl) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 
 	highest, err := i.ibftStorage.GetHighestDecidedInstance(msg.Message.ValidatorPk)
 	if err != nil {
-		if err.Error() == collections.EntryNotFoundError {
+		if err.Error() == kv.EntryNotFoundError {
 			return msg.Message.SeqNumber > 0, nil
 		}
 		return false, errors.Wrap(err, "could not get highest decided instance from storage")

@@ -45,29 +45,48 @@ func (v *Validator) signDuty(ctx context.Context, decidedValue []byte, role beac
 	case beacon.RoleAttester:
 		s := &proto.InputValue_Attestation{}
 		if err := json.Unmarshal(decidedValue, s); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
 		}
 		signedAttestation, r, e := v.beacon.SignAttestation(ctx, s.Attestation.Data, duty, shareKey)
+		if e != nil{
+			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
+		}
 		retValueStruct.SignedData = s
 		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
 		err = e
 		sig = signedAttestation.GetSignature()
 		root = r
-	//case beacon.RoleAggregator:
-	//	signedAggregation, e := v.beacon.SignAggregation(ctx, inputValue.GetAggregationData())
-	//	inputValue.SignedData = &proto.InputValue_Aggregation{
-	//		Aggregation: signedAggregation,
-	//	}
-	//	err = e
-	//	sig = signedAggregation.GetSignature()
-	//case beacon.RoleProposer:
-	//	signedProposal, e := v.beacon.SignProposal(ctx, inputValue.GetBeaconBlock())
-	//	inputValue.SignedData = &proto.InputValue_Block{
-	//		Block: signedProposal,
-	//	}
-	//	err = e
-	//	sig = signedProposal.GetSignature()
+	case beacon.RoleAggregator:
+		s := &proto.InputValue_Aggregation{}
+		if err := json.Unmarshal(decidedValue, s); err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to marshal aggregator")
+		}
+		signedAggregation, e := v.beacon.SignAggregation(ctx, s.Aggregation.Message, v.Share.ShareKey)
+		if e != nil{
+			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
+		}
+		retValueStruct.SignedData = s
+		retValueStruct.GetAggregation().Signature = signedAggregation.Signature
+		retValueStruct.GetAggregation().Message = signedAggregation.Message
+		err = e
+		sig = signedAggregation.GetSignature()
+	case beacon.RoleProposer:
+		s := &proto.InputValue_Block{}
+		if err := json.Unmarshal(decidedValue, s); err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to marshal aggregator")
+		}
+
+		signedProposal, e := v.beacon.SignProposal(ctx, nil, s.Block.Block, v.Share.ShareKey)
+		if e != nil{
+			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
+		}
+
+		retValueStruct.SignedData = s
+		retValueStruct.GetBlock().Signature = signedProposal.Signature
+		retValueStruct.GetBlock().Block = signedProposal.Block
+		err = e
+		sig = signedProposal.GetSignature()
 	default:
 		return nil, nil, nil, errors.New("unsupported role, can't sign")
 	}
@@ -98,16 +117,16 @@ func (v *Validator) reconstructAndBroadcastSignature(ctx context.Context, logger
 		if err := v.beacon.SubmitAttestation(ctx, inputValue.GetAttestation(), duty.GetValidatorIndex(), v.Share.PublicKey); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
-	//case beacon.RoleAggregator:
-	//	inputValue.GetAggregation().Signature = signature.Serialize()
-	//	if err := v.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
-	//		return errors.Wrap(err, "failed to broadcast aggregation")
-	//	}
-	//case beacon.RoleProposer:
-	//	inputValue.GetBlock().Signature = signature.Serialize()
-	//	if err := v.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
-	//		return errors.Wrap(err, "failed to broadcast proposal")
-	//	}
+	case beacon.RoleAggregator:
+		inputValue.GetAggregation().Signature = signature.Serialize()
+		if err := v.beacon.SubmitAggregation(ctx, inputValue.GetAggregation()); err != nil {
+			return errors.Wrap(err, "failed to broadcast aggregation")
+		}
+	case beacon.RoleProposer:
+		inputValue.GetBlock().Signature = signature.Serialize()
+		if err := v.beacon.SubmitProposal(ctx, inputValue.GetBlock()); err != nil {
+			return errors.Wrap(err, "failed to broadcast proposal")
+		}
 	default:
 		return errors.New("role is undefined, can't reconstruct signature")
 	}

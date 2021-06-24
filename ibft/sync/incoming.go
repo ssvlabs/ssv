@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/kv"
 	"go.uber.org/zap"
 )
 
@@ -60,7 +61,8 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 	for i := startSeq; i <= endSeq; i++ {
 		decidedMsg, err := s.storage.GetDecided(msg.Msg.ValidatorPk, i)
 		if err != nil {
-			panic("implement")
+			s.logger.Error("failed to get decided", zap.Error(err))
+			continue
 		}
 
 		ret = append(ret, decidedMsg)
@@ -79,7 +81,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
 	highest, err := s.storage.GetHighestDecidedInstance(msg.Msg.ValidatorPk)
 	if err != nil {
-		if err.Error() != collections.EntryNotFoundError {
+		if err.Error() != kv.EntryNotFoundError {
 			s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))
 		}
 	}

@@ -1,12 +1,13 @@
 package ibft
 
 import (
-	"errors"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -270,7 +271,7 @@ func TestSyncAfterDecided(t *testing.T) {
 		Round:       3,
 		SeqNumber:   10,
 		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte("Lambda"),
+		Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 		Value:       []byte("value"),
 	})
 
@@ -300,7 +301,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Round:       3,
 		SeqNumber:   10,
 		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte("Lambda"),
+		Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 		Value:       []byte("value"),
 	})
 
@@ -329,7 +330,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			nil,
@@ -341,7 +342,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			errors.New("message type is wrong"),
@@ -353,10 +354,11 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: []byte{1, 2, 3, 4},
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
-			errors.New("invalid message validator PK"),
+			errors.Errorf("invalid message validator PK: expected: %x, actual: %x",
+				validatorPK(sks).Serialize(), []byte{1, 2, 3, 4}),
 		},
 		{
 			"invalid msg sig",
@@ -365,7 +367,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   11,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_11"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			errors.New("could not verify message signature"),
@@ -377,7 +379,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Round:       3,
 				SeqNumber:   0,
 				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte("lambda_0"),
+				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
 				Value:       []byte("value"),
 			}),
 			nil,
@@ -387,7 +389,8 @@ func TestValidateDecidedMsg(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.expectedError != nil {
-				require.EqualError(t, ibft.(*ibftImpl).validateDecidedMsg(test.msg), test.expectedError.Error())
+				err := ibft.(*ibftImpl).validateDecidedMsg(test.msg)
+				require.EqualError(t, err, test.expectedError.Error())
 			} else {
 				require.NoError(t, ibft.(*ibftImpl).validateDecidedMsg(test.msg))
 			}

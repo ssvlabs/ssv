@@ -2,6 +2,8 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -11,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
@@ -50,9 +51,9 @@ type controller struct {
 	slotQueue                  slotqueue.Queue
 	beacon                     beacon.Beacon
 	// TODO remove after IBFT refactor
-	network     network.Network
-	ibftStorage collections.IbftStorage
-	ethNetwork  *core.Network
+	network    network.Network
+	db         basedb.IDb
+	ethNetwork *core.Network
 
 	validatorsMap       map[string]*Validator
 	newValidatorSubject pubsub.Subject
@@ -60,8 +61,6 @@ type controller struct {
 
 // NewController creates new validator controller
 func NewController(options ControllerOptions) IController {
-	ibftStorage := collections.NewIbft(options.DB, options.Logger, "attestation")
-
 	collection := validatorstorage.NewCollection(validatorstorage.CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
@@ -79,7 +78,7 @@ func NewController(options ControllerOptions) IController {
 		signatureCollectionTimeout: options.SignatureCollectionTimeout,
 		slotQueue:                  options.SlotQueue,
 		beacon:                     options.Beacon,
-		ibftStorage:                ibftStorage,
+		db:                         options.DB,
 		network:                    options.Network,
 		ethNetwork:                 options.ETHNetwork,
 		newValidatorSubject:        pubsub.NewSubject(),
@@ -104,11 +103,12 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 func (c *controller) setupValidators() map[string]*Validator {
 	validatorsShare, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
-		c.logger.Fatal("Failed to get validatorStorage share", zap.Error(err))
+		c.logger.Fatal("Failed to get validators shares", zap.Error(err))
 	}
 
 	res := make(map[string]*Validator)
 	for _, validatorShare := range validatorsShare {
+		printValidatorShare(c.logger, validatorShare)
 		res[validatorShare.PublicKey.SerializeToHexStr()] = New(Options{
 			Context:                    c.context,
 			SignatureCollectionTimeout: c.signatureCollectionTimeout,
@@ -118,7 +118,7 @@ func (c *controller) setupValidators() map[string]*Validator {
 			Network:                    c.network,
 			ETHNetwork:                 c.ethNetwork,
 			Beacon:                     c.beacon,
-		}, &c.ibftStorage)
+		}, c.db)
 	}
 	c.validatorsMap = res
 	c.logger.Info("setup validators done successfully", zap.Int("count", len(res)))
@@ -162,23 +162,32 @@ func (c *controller) AddValidator(pubKey string, v *Validator) bool {
 	return false
 }
 
-// Subject returns the subject
+// NewValidatorSubject returns the validators subject
 func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 	return c.newValidatorSubject
 }
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
+	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
+	l.Debug("handles validator added event")
 	validatorShare := c.serializeValidatorAddedEvent(validatorAddedEvent)
 	if len(validatorShare.Committee) > 0 {
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-			c.logger.Error("failed to save validator share", zap.Error(err))
+			l.Error("failed to save validator share", zap.Error(err))
 			return
 		}
-		c.handleNewValidatorShare(validatorShare)
+		l.Debug("validator share was saved")
+		c.onNewValidatorShare(validatorShare)
 	}
 }
 
-func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Share) {
+func (c *controller) onNewValidatorShare(validatorShare *validatorstorage.Share) {
+	pubKeyHex := validatorShare.PublicKey.SerializeToHexStr()
+	if _, exist := c.GetValidator(pubKeyHex); exist {
+		c.logger.Debug("skip setup for known validator",
+			zap.String("pubKeyHex", pubKeyHex))
+		return
+	}
 	// setup validator
 	validatorOpts := Options{
 		Context:                    c.context,
@@ -190,11 +199,14 @@ func (c *controller) handleNewValidatorShare(validatorShare *validatorstorage.Sh
 		SlotQueue:                  c.slotQueue,
 		SignatureCollectionTimeout: c.signatureCollectionTimeout,
 	}
-	v := New(validatorOpts, &c.ibftStorage)
-	if added := c.AddValidator(validatorShare.PublicKey.SerializeToHexStr(), v); added {
+	v := New(validatorOpts, c.db)
+	if added := c.AddValidator(pubKeyHex, v); added {
 		// start validator
 		if err := v.Start(); err != nil {
-			c.logger.Error("failed to start validator", zap.Error(err))
+			c.logger.Error("failed to start validator",
+				zap.Error(err), zap.String("pubKeyHex", pubKeyHex))
+		} else {
+			c.logger.Debug("validator started", zap.String("pubKeyHex", pubKeyHex))
 		}
 		c.newValidatorSubject.Notify(*v)
 	}
@@ -230,3 +242,15 @@ func (c *controller) serializeValidatorAddedEvent(validatorAddedEvent eth1.Valid
 	validatorShare.Committee = ibftCommittee
 	return &validatorShare
 }
+
+func printValidatorShare(logger *zap.Logger, validatorShare *validatorstorage.Share) {
+	var committee []string
+	for _, c := range validatorShare.Committee {
+		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftId, c.Pk))
+	}
+	logger.Debug("setup validator",
+		zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()),
+		zap.Uint64("nodeID", validatorShare.NodeID),
+		zap.Strings("committee", committee))
+}
+
