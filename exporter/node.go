@@ -50,7 +50,7 @@ type Options struct {
 	DB basedb.IDb
 
 	WS        api.WebSocketServer
-	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
+	WsAPIPort int
 }
 
 // exporter is the internal implementation of Exporter interface

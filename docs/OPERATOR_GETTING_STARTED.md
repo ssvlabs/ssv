@@ -142,8 +142,8 @@ and run the command below to create a `config.yaml` file.
 ```
 $ yq n db.Path "<db folder>" | tee config.yaml \
   && yq w -i config.yaml db.Type "badger-db" \
+  && yq w -i config.yaml p2p.DiscoveryType "discv5" \
   && yq w -i config.yaml Network "prater" \
-  && yq w -i config.yaml DiscoveryType "discv5" \
   && yq w -i config.yaml BeaconNodeAddr "<ETH 2.0 node>" \
   && yq w -i config.yaml ETH1Addr "<ETH1 node>" \
   && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>" \
@@ -156,9 +156,9 @@ $ yq n db.Path "<db folder>" | tee config.yaml \
 db:
   Path: ./data/db/node_1
   Type: badger-db
-
+p2p:
+  DiscoveryType: discv5
 Network: prater
-DiscoveryType: discv5
 BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
 ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
 ```
