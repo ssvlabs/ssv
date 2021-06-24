@@ -69,7 +69,7 @@ func (r *reader) Sync() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
-	hs := ibftsync.NewHistorySync(r.logger, validatorPubkey, nil, r.network, r.storage, r.validateDecidedMsg)
+	hs := ibftsync.NewHistorySync(r.logger, nil, validatorPubkey, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
 	return hs.Start()
 }
 
