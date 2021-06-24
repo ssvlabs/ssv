@@ -95,10 +95,11 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, cid string, on
 			zap.String("cid", cid),
 			zap.String("msg type", string(nm.Msg.Type)))
 		if nm.Conn == conn || nm.Conn == nil {
-			err := ws.adapter.Send(conn, nm.Msg)
+			err := ws.adapter.Send(conn, &nm.Msg)
 			if err != nil {
 				ws.logger.Error("could not send message", zap.Error(err))
-			} else if once {
+			}
+			if once {
 				break
 			}
 		}
