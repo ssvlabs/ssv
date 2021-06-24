@@ -6,15 +6,15 @@ metadata:
   namespace: REPLACE_NAMESPACE
 spec:
   hosts:
-    - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
+  - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
   gateways:
-    - ssv-explorer
+  - ssv-explorer
   http:
-    - route:
-        - destination:
-            host: ssv-explorer
-            port:
-              number: 80
+  - route:
+    - destination:
+        host: ssv-explorer
+        port:
+          number: 80
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
@@ -25,12 +25,12 @@ spec:
   selector:
     istio: ingressgateway-int
   servers:
-    - port:
-        number: 80
-        name: http
-        protocol: HTTP
-      hosts:
-        - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
 ---
 apiVersion: v1
 kind: Service
