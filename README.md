@@ -73,12 +73,12 @@ included in our repository in the `LICENSE` file.
 ## Road Map
 [X] Free standing, reference iBFT Go implementation\
 [X] SSV specific iBFT implementor\
-[X] Port POC code to Glang\
+[X] Port POC code to Golang\
 [ ] Externalize remote signer\
-[ ] Multi BN implementation support
+[\\] Multi BN implementation support
 [X] Networking and discovery\
-[X] db, persistance and recovery (Sync)\
-[X] Between instance persistence (pevent starting a new instance if previous not decided)\
+[X] db, persistence and recovery (Sync)\
+[X] Between instance persistence (prevent starting a new instance if previous not decided)\
 [X] Multi network support (being part of multiple SSV groups)\
 [ ] Aggregation support\
 [\\] Proposal support\
