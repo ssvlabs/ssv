@@ -14,12 +14,8 @@ import (
 
 func TestHandleQuery(t *testing.T) {
 	logger := zap.L()
-	adapter := adapterMock{
-		logger: logger,
-		in:     make(chan Message),
-		out:    make(chan Message),
-	}
-	ws := NewWsServer(logger, &adapter, nil).(*wsServer)
+	adapter := newAdapterMock(logger)
+	ws := NewWsServer(logger, adapter, nil).(*wsServer)
 
 	inCn, err := ws.IncomingSubject().Register("TestHandleQuery")
 	require.NoError(t, err)
@@ -39,7 +35,7 @@ func TestHandleQuery(t *testing.T) {
 			nm, ok := incoming.(NetworkMessage)
 			require.True(t, ok)
 			require.Equal(t, &conn, nm.Conn)
-			nm.Msg.Data = []ValidatorMsg{
+			nm.Msg.Data = []ValidatorInformation{
 				{PublicKey: "pubkey1"},
 				{PublicKey: "pubkey2"},
 			}
@@ -66,12 +62,8 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	logger := zap.L()
-	adapter := adapterMock{
-		logger: logger,
-		in:     make(chan Message),
-		out:    make(chan Message, 3),
-	}
-	ws := NewWsServer(logger, &adapter, nil).(*wsServer)
+	adapter := newAdapterMock(logger)
+	ws := NewWsServer(logger, adapter, nil).(*wsServer)
 
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
 	require.NoError(t, err)
@@ -82,7 +74,7 @@ func TestHandleStream(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		for {
-			<-adapter.out
+			<- adapter.out
 			wg.Done()
 		}
 	}()
@@ -93,7 +85,7 @@ func TestHandleStream(t *testing.T) {
 			Msg: Message{
 				Type:   TypeValidator,
 				Filter: MessageFilter{From: 0},
-				Data: []ValidatorMsg{
+				Data: []ValidatorInformation{
 					{PublicKey: "pubkey1"},
 					{PublicKey: "pubkey2"},
 				},
@@ -104,13 +96,13 @@ func TestHandleStream(t *testing.T) {
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []ValidatorMsg{
+		nm.Msg.Data = []ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []ValidatorMsg{
+		nm.Msg.Data = []ValidatorInformation{
 			{PublicKey: "pubkey4"},
 		}
 		ws.OutboundSubject().Notify(nm)
@@ -139,6 +131,15 @@ type adapterMock struct {
 	logger *zap.Logger
 	in     chan Message
 	out    chan Message
+}
+
+func newAdapterMock(logger *zap.Logger) *adapterMock {
+	adapter := adapterMock{
+		logger: logger,
+		in:     make(chan Message),
+		out:    make(chan Message, 3),
+	}
+	return &adapter
 }
 
 func (am *adapterMock) RegisterHandler(mux *http.ServeMux, endPoint string, handler EndPointHandler) {

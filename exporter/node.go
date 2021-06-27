@@ -113,44 +113,47 @@ func (exp *exporter) Start() error {
 		}
 		defer exp.ws.IncomingSubject().Deregister("exporter-node")
 
-		exp.listenIncomingExportReq(cn, exp.ws.OutboundSubject())
+		exp.processIncomingExportReq(cn, exp.ws.OutboundSubject())
 	}()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
 
-func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound pubsub.Publisher) {
+// processIncomingExportReq waits for incoming messages and
+func (exp *exporter) processIncomingExportReq(cn pubsub.SubjectChannel, outbound pubsub.Publisher) {
 	for raw := range cn {
 		nm, ok := raw.(api.NetworkMessage)
 		if !ok {
 			exp.logger.Warn("could not parse network message")
 			continue
 		}
-		res := api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-		}
 		switch nm.Msg.Type {
 		case api.TypeOperator:
-			operators, err := exp.storage.ListOperators(0)
+			operators, err := exp.storage.ListOperators(nm.Msg.Filter.From, nm.Msg.Filter.To)
 			if err != nil {
 				exp.logger.Error("could not get operators", zap.Error(err))
 			}
-			res.Data = operators
-			nm.Msg = res
+			nm.Msg = api.Message{
+				Type:   nm.Msg.Type,
+				Filter: nm.Msg.Filter,
+				Data: operators,
+			}
 			outbound.Notify(nm)
 		case api.TypeValidator:
 			validators, err := exp.validatorStorage.GetAllValidatorsShare()
 			if err != nil {
 				exp.logger.Error("could not get validators", zap.Error(err))
 			}
-			var validatorMsgs []api.ValidatorMsg
+			var validatorMsgs []api.ValidatorInformation
 			for _, v := range validators {
 				validatorMsg := toValidatorMessage(v)
 				validatorMsgs = append(validatorMsgs, *validatorMsg)
 			}
-			res.Data = validatorMsgs
-			nm.Msg = res
+			nm.Msg = api.Message{
+				Type:   nm.Msg.Type,
+				Filter: nm.Msg.Filter,
+				Data: validatorMsgs,
+			}
 			outbound.Notify(nm)
 		case api.TypeIBFT:
 			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
@@ -231,7 +234,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
 		Filter: api.MessageFilter{From: 0, To: 0},
-		Data:   []api.ValidatorMsg{*validatorMsg},
+		Data:   []api.ValidatorInformation{*validatorMsg},
 	}, Conn: nil})
 	// triggers a sync for the given validator
 	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
@@ -245,7 +248,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.logger.Info("operator added event",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
-	oi := OperatorInformation{
+	oi := api.OperatorInformation{
 		PublicKey:    event.PublicKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
@@ -294,7 +297,7 @@ func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
 }
 
 // toValidatorMessage returns a transferable object
-func toValidatorMessage(s *validatorstorage.Share) *api.ValidatorMsg {
+func toValidatorMessage(s *validatorstorage.Share) *api.ValidatorInformation {
 	committee := map[uint64]*proto.Node{}
 	for i, o := range s.Committee {
 		committee[i] = &proto.Node{
@@ -302,7 +305,7 @@ func toValidatorMessage(s *validatorstorage.Share) *api.ValidatorMsg {
 			IbftId: o.IbftId,
 		}
 	}
-	res := api.ValidatorMsg{
+	res := api.ValidatorInformation{
 		Index:     1, // TODO: use actual index
 		Committee: committee,
 		PublicKey: s.PublicKey.SerializeToHexStr(),

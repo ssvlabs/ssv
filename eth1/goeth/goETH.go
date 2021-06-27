@@ -182,7 +182,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, vLog.Data, contractAbi, eventName)
+		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, vLog.Data, contractAbi)
 		if err != nil {
 			//ec.logger.Error("Failed to parse OperatorAdded event", zap.Error(err))
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
@@ -192,7 +192,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	case "ValidatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi, eventName)
+		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}

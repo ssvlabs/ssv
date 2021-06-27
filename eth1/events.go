@@ -38,9 +38,9 @@ type OperatorAddedEvent struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func ParseOperatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI, eventName string) (*OperatorAddedEvent, bool, error) {
+func ParseOperatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
 	var operatorAddedEvent OperatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, eventName, data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "Failed to unpack OperatorAdded event")
 	}
@@ -53,9 +53,9 @@ func ParseOperatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.AB
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI, eventName string) (*ValidatorAddedEvent, bool, error) {
+func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
 	var validatorAddedEvent ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventName, data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
 	}
