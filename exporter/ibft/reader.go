@@ -54,7 +54,6 @@ func NewIbftReadOnly(opts ReaderOptions) Reader {
 
 // Sync will fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *reader) Sync() error {
-	validatorPubkey := r.validatorShare.PublicKey.Serialize()
 	// subscribe to topic so we could find relevant nodes
 	err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey)
 	if err != nil {
@@ -69,7 +68,7 @@ func (r *reader) Sync() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
-	hs := ibftsync.NewHistorySync(r.logger, nil, validatorPubkey, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
+	hs := ibftsync.NewHistorySync(r.logger, nil, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
 	return hs.Start()
 }
 
@@ -100,7 +99,6 @@ func (r *reader) validateDecidedMsg(msg *proto.SignedMessage) error {
 	r.logger.Debug("validating a new decided message", zap.String("msg", msg.String()))
 	p := pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidatePKs(r.validatorShare.PublicKey.Serialize()),
 		auth.AuthorizeMsg(r.validatorShare),
 		auth.ValidateQuorum(r.validatorShare.ThresholdSize()),
 	)
@@ -128,13 +126,13 @@ func (r *reader) processDecidedMessage(msg *proto.SignedMessage) error {
 	}
 	if shouldSync {
 		r.logger.Warn("[not implemented yet] should sync validator data",
-			zap.String("validatorPubkey", hex.EncodeToString(msg.Message.ValidatorPk)))
+			zap.String("lambda", hex.EncodeToString(msg.Message.Lambda)))
 	}
 	return nil
 }
 
 func (r *reader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
-	found, err := r.storage.GetDecided(msg.Message.ValidatorPk, msg.Message.SeqNumber)
+	found, err := r.storage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
@@ -148,7 +146,7 @@ func (r *reader) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	if msg.Message.SeqNumber == 0 {
 		return false, nil
 	}
-	highest, err := r.storage.GetHighestDecidedInstance(msg.Message.ValidatorPk)
+	highest, err := r.storage.GetHighestDecidedInstance(msg.Message.Lambda)
 	if err != nil {
 		if err.Error() == kv.EntryNotFoundError {
 			return msg.Message.SeqNumber > 0, nil

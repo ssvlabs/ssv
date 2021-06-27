@@ -31,7 +31,6 @@ type InstanceOptions struct {
 	Config         *proto.InstanceConfig
 	Lambda         []byte
 	SeqNumber      uint64
-	//ValidatorPK    []byte
 }
 
 // Instance defines the instance attributes
@@ -260,7 +259,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
 	if i.network != nil {
-		return i.network.Broadcast(signedMessage)
+		return i.network.Broadcast(i.ValidatorShare.PublicKey.Serialize(), signedMessage)
 	}
 
 	switch msg.Type {

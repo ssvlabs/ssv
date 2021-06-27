@@ -87,7 +87,7 @@ type SyncMessage struct {
 	SignedMessages       []*proto1.SignedMessage `protobuf:"bytes,1,rep,name=SignedMessages,proto3" json:"SignedMessages,omitempty"`
 	FromPeerID           string                  `protobuf:"bytes,2,opt,name=FromPeerID,proto3" json:"FromPeerID,omitempty"`
 	Params               []uint64                `protobuf:"varint,3,rep,packed,name=params,proto3" json:"params,omitempty"`
-	ValidatorPk          []byte                  `protobuf:"bytes,4,opt,name=validator_pk,json=validatorPk,proto3" json:"validator_pk,omitempty"`
+	Lambda               []byte                  `protobuf:"bytes,4,opt,name=Lambda,json=Lambda,proto3" json:"Lambda,omitempty"`
 	Type                 Sync                    `protobuf:"varint,5,opt,name=Type,proto3,enum=network.Sync" json:"Type,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
 	XXX_unrecognized     []byte                  `json:"-"`
@@ -140,9 +140,9 @@ func (m *SyncMessage) GetParams() []uint64 {
 	return nil
 }
 
-func (m *SyncMessage) GetValidatorPk() []byte {
+func (m *SyncMessage) GetLambda() []byte {
 	if m != nil {
-		return m.ValidatorPk
+		return m.Lambda
 	}
 	return nil
 }
@@ -160,7 +160,7 @@ type Message struct {
 	SignedMessage        *proto1.SignedMessage `protobuf:"bytes,2,opt,name=SignedMessage,proto3" json:"SignedMessage,omitempty"`
 	SyncMessage          *SyncMessage          `protobuf:"bytes,3,opt,name=SyncMessage,proto3" json:"SyncMessage,omitempty"`
 	Type                 NetworkMsg            `protobuf:"varint,4,opt,name=Type,proto3,enum=network.NetworkMsg" json:"Type,omitempty"`
-	Stream               SyncStream           `protobuf:"bytes,5,opt,name=Stream,proto3" json:"Stream,omitempty"`
+	Stream               SyncStream            `protobuf:"bytes,5,opt,name=Stream,proto3" json:"Stream,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`

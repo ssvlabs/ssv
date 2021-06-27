@@ -50,7 +50,6 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 			Message: &proto.Message{
 				Round:       1,
 				SeqNumber:   1,
-				ValidatorPk: []byte{1, 1, 1, 1},
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,
@@ -63,7 +62,6 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 			Message: &proto.Message{
 				Round:       7,
 				SeqNumber:   2,
-				ValidatorPk: []byte{1, 1, 1, 1},
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,

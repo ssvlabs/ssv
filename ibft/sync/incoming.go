@@ -59,7 +59,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 
 	ret := make([]*proto.SignedMessage, 0)
 	for i := startSeq; i <= endSeq; i++ {
-		decidedMsg, err := s.storage.GetDecided(msg.Msg.ValidatorPk, i)
+		decidedMsg, err := s.storage.GetDecided(msg.Msg.Lambda, i)
 		if err != nil {
 			s.logger.Error("failed to get decided", zap.Error(err))
 			continue
@@ -70,16 +70,16 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 
 	retMsg := &network.SyncMessage{
 		SignedMessages: ret,
-		ValidatorPk:    msg.Msg.ValidatorPk,
+		Lambda:         msg.Msg.Lambda,
 		Type:           network.Sync_GetInstanceRange,
 	}
-	if err := s.network.RespondToGetDecidedByRange(s.identifier, msg.Stream, retMsg); err != nil {
+	if err := s.network.RespondToGetDecidedByRange(msg.Stream, retMsg); err != nil {
 		s.logger.Error("failed to send get decided by range response", zap.Error(err))
 	}
 }
 
 func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
-	highest, err := s.storage.GetHighestDecidedInstance(msg.Msg.ValidatorPk)
+	highest, err := s.storage.GetHighestDecidedInstance(msg.Msg.Lambda)
 	if err != nil {
 		if err.Error() != kv.EntryNotFoundError {
 			s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))

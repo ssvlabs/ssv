@@ -58,7 +58,7 @@ func (i *ibftImpl) listenToSyncMessages() {
 	go func() {
 		for msg := range syncChan {
 			i.msgQueue.AddMessage(&network.Message{
-				Lambda:      msg.Lambda,
+				Lambda:      msg.Msg.Lambda,
 				SyncMessage: msg.Msg,
 				Stream:      msg.Stream,
 				Type:        network.NetworkMsg_SyncType,

@@ -55,7 +55,7 @@ func TestFetchDecided(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	tests := []struct {
 		name           string
-		valdiatorPK    []byte
+		identifier     []byte
 		peers          []string
 		fromPeer       string
 		rangeParams    []uint64
@@ -66,32 +66,29 @@ func TestFetchDecided(t *testing.T) {
 	}{
 		{
 			"valid fetch no pagination",
-			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
 			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 3},
 			map[string][]*proto.SignedMessage{
 				"2": {
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-						Type:        proto.RoundState_Decided,
-						Round:       1,
-						Lambda:      []byte("lambda"),
-						SeqNumber:   1,
-						ValidatorPk: []byte{1, 2, 3, 4},
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    []byte("lambda"),
+						SeqNumber: 1,
 					}),
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-						Type:        proto.RoundState_Decided,
-						Round:       1,
-						Lambda:      []byte("lambda"),
-						SeqNumber:   2,
-						ValidatorPk: []byte{1, 2, 3, 4},
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    []byte("lambda"),
+						SeqNumber: 2,
 					}),
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-						Type:        proto.RoundState_Decided,
-						Round:       1,
-						Lambda:      []byte("lambda"),
-						SeqNumber:   3,
-						ValidatorPk: []byte{1, 2, 3, 4},
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    []byte("lambda"),
+						SeqNumber: 3,
 					}),
 				},
 			},
@@ -101,32 +98,29 @@ func TestFetchDecided(t *testing.T) {
 		},
 		{
 			"valid fetch with pagination",
-			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
 			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 2},
 			map[string][]*proto.SignedMessage{
 				"2": {
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-						Type:        proto.RoundState_Decided,
-						Round:       1,
-						Lambda:      []byte("lambda"),
-						SeqNumber:   1,
-						ValidatorPk: []byte{1, 2, 3, 4},
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    []byte("lambda"),
+						SeqNumber: 1,
 					}),
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-						Type:        proto.RoundState_Decided,
-						Round:       1,
-						Lambda:      []byte("lambda"),
-						SeqNumber:   2,
-						ValidatorPk: []byte{1, 2, 3, 4},
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    []byte("lambda"),
+						SeqNumber: 2,
 					}),
 					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-						Type:        proto.RoundState_Decided,
-						Round:       1,
-						Lambda:      []byte("lambda"),
-						SeqNumber:   3,
-						ValidatorPk: []byte{1, 2, 3, 4},
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    []byte("lambda"),
+						SeqNumber: 3,
 					}),
 				},
 			},
@@ -136,7 +130,7 @@ func TestFetchDecided(t *testing.T) {
 		},
 		{
 			"force error",
-			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
 			[]string{"2"},
 			"2",
 			[]uint64{1, 3, 2},
@@ -158,7 +152,7 @@ func TestFetchDecided(t *testing.T) {
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
 			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
-			s := NewHistorySync(logger, test.valdiatorPK, test.valdiatorPK, network, &storage, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(logger, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])
@@ -177,23 +171,21 @@ func TestFetchDecided(t *testing.T) {
 func TestFindHighest(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	highest1 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-		Type:        proto.RoundState_Decided,
-		Round:       1,
-		Lambda:      []byte("lambda"),
-		SeqNumber:   1,
-		ValidatorPk: []byte{1, 2, 3, 4},
+		Type:      proto.RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte("lambda"),
+		SeqNumber: 1,
 	})
 	highest2 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-		Type:        proto.RoundState_Decided,
-		Round:       1,
-		Lambda:      []byte("lambda"),
-		SeqNumber:   1,
-		ValidatorPk: []byte{1, 2, 3, 4},
+		Type:      proto.RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte("lambda"),
+		SeqNumber: 1,
 	})
 
 	tests := []struct {
 		name               string
-		valdiatorPK        []byte
+		identifier         []byte
 		peers              []string
 		highestMap         map[string]*proto.SignedMessage
 		expectedHighestSeq uint64
@@ -201,7 +193,7 @@ func TestFindHighest(t *testing.T) {
 	}{
 		{
 			"valid",
-			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
 			[]string{"2"},
 			map[string]*proto.SignedMessage{
 				"2": highest1,
@@ -211,7 +203,7 @@ func TestFindHighest(t *testing.T) {
 		},
 		{
 			"valid multi responses",
-			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{
 				"2": highest1,
@@ -222,30 +214,19 @@ func TestFindHighest(t *testing.T) {
 		},
 		{
 			"valid multi responses different seq",
-			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{
 				"2": highest1,
 				"3": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-					Type:        proto.RoundState_Decided,
-					Round:       1,
-					Lambda:      []byte("lambda"),
-					SeqNumber:   10,
-					ValidatorPk: []byte{1, 2, 3, 4},
+					Type:      proto.RoundState_Decided,
+					Round:     1,
+					Lambda:    []byte("lambda"),
+					SeqNumber: 10,
 				}),
 			},
 			10,
 			"",
-		},
-		{
-			"invalid validator pk",
-			[]byte{1, 1, 1, 1},
-			[]string{"2"},
-			map[string]*proto.SignedMessage{
-				"2": highest1,
-			},
-			1,
-			"could not fetch highest decided from peers",
 		},
 		//
 		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
@@ -267,16 +248,15 @@ func TestFindHighest(t *testing.T) {
 		//	"could not fetch highest decided from peers",
 		//},
 		{
-			"wrong pk",
+			"wrong identifier",
 			[]byte{1, 1, 1, 1},
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{
 				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-					Type:        proto.RoundState_Decided,
-					Round:       1,
-					Lambda:      []byte("lambda"),
-					SeqNumber:   1,
-					ValidatorPk: []byte{1, 2, 3, 4},
+					Type:      proto.RoundState_Decided,
+					Round:     1,
+					Lambda:    []byte("lambda"),
+					SeqNumber: 1,
 				}),
 			},
 			1,
@@ -305,7 +285,7 @@ func TestFindHighest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(zap.L(), test.valdiatorPK, test.valdiatorPK, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(zap.L(), test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, _, err := s.findHighestInstance()

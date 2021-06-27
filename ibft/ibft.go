@@ -121,7 +121,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(newInstance.ValidatorShare.PublicKey.Serialize(), newInstance.State); err != nil {
+			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), newInstance.State); err != nil {
 				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
@@ -138,7 +138,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
 				i.logger.Error("could not save highest decided message to storage", zap.Error(err))
 			}
-			if err := i.network.BroadcastDecided(agg); err != nil {
+			if err := i.network.BroadcastDecided(nil, agg); err != nil {
 				i.logger.Error("could not broadcast decided message", zap.Error(err))
 			}
 			i.currentInstance = nil

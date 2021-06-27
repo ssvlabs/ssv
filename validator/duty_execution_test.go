@@ -169,11 +169,10 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 			// send sigs
 			for index, sig := range test.sigs {
-				err := validator.network.BroadcastSignature(&proto.SignedMessage{
+				err := validator.network.BroadcastSignature(nil, &proto.SignedMessage{
 					Message: &proto.Message{
-						Lambda:      validator.ibfts[beacon.RoleAttester].GetIdentifier(),
-						SeqNumber:   0,
-						ValidatorPk: pk.Serialize(),
+						Lambda:    validator.ibfts[beacon.RoleAttester].GetIdentifier(),
+						SeqNumber: 0,
 					},
 					Signature: sig,
 					SignerIds: []uint64{index},

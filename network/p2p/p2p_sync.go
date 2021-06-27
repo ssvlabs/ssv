@@ -20,7 +20,7 @@ func peerFromString(peerStr string) (peer.ID, error) {
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // Peer list must not be nil or empty if stream is nil.
 // returns a stream closed for writing
-func (n *p2pNetwork) sendSyncMessage(identifier []byte, stream network.SyncStream, peer peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
+func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
 	if stream == nil {
 		if len(peer) == 0 {
 			return nil, errors.New("peer ID nil")
@@ -35,7 +35,6 @@ func (n *p2pNetwork) sendSyncMessage(identifier []byte, stream network.SyncStrea
 
 	// message to bytes
 	msgBytes, err := json.Marshal(network.Message{
-		Lambda: identifier,
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 	})
@@ -53,9 +52,9 @@ func (n *p2pNetwork) sendSyncMessage(identifier []byte, stream network.SyncStrea
 }
 
 // sendAndReadResponse sends a reques sync msg, waits to a response and parses it. Includes timeout as well
-func (n *p2pNetwork) sendAndReadSyncResponse(identifier []byte, peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
+func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
 	var err error
-	stream, err := n.sendSyncMessage(identifier, nil, peer, msg)
+	stream, err := n.sendSyncMessage(nil, peer, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not send sync msg")
 	}
@@ -93,13 +92,13 @@ func (n *p2pNetwork) sendAndReadSyncResponse(identifier []byte, peer peer.ID, ms
 }
 
 // GetHighestDecidedInstance asks peers for SyncMessage
-func (n *p2pNetwork) GetHighestDecidedInstance(identifier []byte, peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	peerID, err := peerFromString(peerStr)
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(identifier, peerID, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
@@ -109,27 +108,27 @@ func (n *p2pNetwork) GetHighestDecidedInstance(identifier []byte, peerStr string
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(nil, stream, "", msg)
+	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-func (n *p2pNetwork) GetDecidedByRange(identifier []byte, peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	peerID, err := peerFromString(peerStr)
 	if err != nil {
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(identifier, peerID, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, msg)
 	if err != nil {
 		return nil, err
 	}
 	return res.SyncMessage, nil
 }
 
-func (n *p2pNetwork) RespondToGetDecidedByRange(identifier []byte, stream network.SyncStream, msg *network.SyncMessage) error {
+func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(identifier, stream, "", msg)
+	_, err := n.sendSyncMessage(stream, "", msg)
 	return err
 }
 

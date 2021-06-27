@@ -88,10 +88,9 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 
 	identifier := v.ibfts[role].GetIdentifier()
 	// TODO - should we construct it better?
-	if err := v.network.BroadcastSignature(&proto.SignedMessage{
+	if err := v.network.BroadcastSignature(v.Share.PublicKey.Serialize(), &proto.SignedMessage{
 		Message: &proto.Message{
 			Lambda:      identifier,
-			ValidatorPk: duty.PublicKey,
 			SeqNumber:   seqNumber,
 		},
 		Signature: sig,

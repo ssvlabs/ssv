@@ -19,15 +19,13 @@ type HistorySync struct {
 	network             network.Network
 	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
-	validatorPK         []byte
 	identifier          []byte
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(logger *zap.Logger, identifier []byte, pubKey []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error, ) *HistorySync {
+func NewHistorySync(logger *zap.Logger, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error, ) *HistorySync {
 	return &HistorySync{
 		logger:              logger,
-		validatorPK:         pubKey,
 		identifier:          identifier,
 		network:             network,
 		validateDecidedMsgF: validateDecidedMsgF,
@@ -44,7 +42,7 @@ func (s *HistorySync) Start() error {
 	}
 
 	// fetch local highest
-	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.validatorPK)
+	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.identifier)
 	if err != nil && err.Error() != kv.EntryNotFoundError { // if not found, don't continue with sync
 		return errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
@@ -84,7 +82,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	// TODO - why 4? should be set as param?
 	// TODO select peers by quality/ score?
 	// TODO - should be changed to support multi duty
-	usedPeers, err := s.network.AllPeers(s.validatorPK)
+	usedPeers, err := s.network.AllPeers(s.identifier)
 	if err != nil {
 		return nil, "", err
 	}
@@ -98,13 +96,13 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	for i, p := range usedPeers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
-			res, err := s.network.GetHighestDecidedInstance(s.identifier, peer, &network.SyncMessage{
-				Type:        network.Sync_GetHighestType,
-				ValidatorPk: s.validatorPK,
+			res, err := s.network.GetHighestDecidedInstance(peer, &network.SyncMessage{
+				Type:   network.Sync_GetHighestType,
+				Lambda: s.identifier,
 			})
 			if err != nil {
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
-					zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
+					zap.String("identifier", hex.EncodeToString(s.identifier)))
 			} else {
 				results[index] = res
 			}
@@ -124,7 +122,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 
 		if len(res.SignedMessages) != 1 || res.SignedMessages[0] == nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err),
-				zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
+				zap.String("identifier", hex.EncodeToString(s.identifier)))
 			continue
 		}
 
@@ -133,7 +131,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 		// validate
 		if err := s.validateDecidedMsgF(signedMsg); err != nil {
 			s.logger.Debug("received invalid highest decided", zap.Error(err),
-				zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
+				zap.String("identifier", hex.EncodeToString(s.identifier)))
 			continue
 		}
 
@@ -149,7 +147,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 
 	if ret == nil {
 		s.logger.Debug("could not fetch highest decided from peers",
-			zap.String("validatorPubKey", hex.EncodeToString(s.validatorPK)))
+			zap.String("identifier", hex.EncodeToString(s.identifier)))
 		return nil, "", errors.New("could not fetch highest decided from peers")
 	}
 
@@ -171,10 +169,10 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			return highestSaved, nil
 		}
 
-		res, err := s.network.GetDecidedByRange(s.identifier, fromPeer, &network.SyncMessage{
-			ValidatorPk: s.validatorPK,
-			Params:      []uint64{start, endSeq},
-			Type:        network.Sync_GetInstanceRange,
+		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
+			Lambda: s.identifier,
+			Params: []uint64{start, endSeq},
+			Type:   network.Sync_GetInstanceRange,
 		})
 		if err != nil {
 			failCount++

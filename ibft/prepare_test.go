@@ -88,5 +88,5 @@ func TestPreparePipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.prepareMsgPipeline()
-	require.EqualValues(t, "combination of: type check, lambda, round, validator PK, sequence, authorize, upon prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: type check, lambda, round, sequence, authorize, upon prepare msg, ", pipeline.Name())
 }

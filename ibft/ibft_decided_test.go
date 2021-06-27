@@ -18,12 +18,12 @@ type testStorage struct {
 }
 
 // SaveCurrentInstance implementation
-func (s *testStorage) SaveCurrentInstance(pk []byte, _ *proto.State) error {
+func (s *testStorage) SaveCurrentInstance(identifier []byte, state *proto.State) error {
 	return nil
 }
 
 // GetCurrentInstance implementation
-func (s *testStorage) GetCurrentInstance(_ []byte) (*proto.State, error) {
+func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
 	return nil, nil
 }
 
@@ -43,7 +43,7 @@ func (s *testStorage) SaveHighestDecidedInstance(_ *proto.SignedMessage) error {
 }
 
 // GetHighestDecidedInstance implementation
-func (s *testStorage) GetHighestDecidedInstance(_ []byte) (*proto.SignedMessage, error) {
+func (s *testStorage) GetHighestDecidedInstance(lambda []byte) (*proto.SignedMessage, error) {
 	return s.highestDecided, nil
 }
 
@@ -262,7 +262,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
@@ -270,7 +270,6 @@ func TestSyncAfterDecided(t *testing.T) {
 		Type:        proto.RoundState_Commit,
 		Round:       3,
 		SeqNumber:   10,
-		ValidatorPk: validatorPK(sks).Serialize(),
 		Lambda:      identifier,
 		Value:       []byte("value"),
 	})
@@ -278,7 +277,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -302,7 +301,6 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Type:        proto.RoundState_Commit,
 		Round:       3,
 		SeqNumber:   10,
-		ValidatorPk: validatorPK(sks).Serialize(),
 		Lambda:      identifier,
 		Value:       []byte("value"),
 	})
@@ -310,7 +308,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -332,7 +330,6 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
-				ValidatorPk: validatorPK(sks).Serialize(),
 				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
@@ -344,24 +341,10 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Prepare,
 				Round:       3,
 				SeqNumber:   11,
-				ValidatorPk: validatorPK(sks).Serialize(),
 				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
 			errors.New("message type is wrong"),
-		},
-		{
-			"invalid msg pk",
-			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				ValidatorPk: []byte{1, 2, 3, 4},
-				Lambda:      identifier,
-				Value:       []byte("value"),
-			}),
-			errors.Errorf("invalid message validator PK: expected: %x, actual: %x",
-				validatorPK(sks).Serialize(), []byte{1, 2, 3, 4}),
 		},
 		{
 			"invalid msg sig",
@@ -369,7 +352,6 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
-				ValidatorPk: validatorPK(sks).Serialize(),
 				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
@@ -381,7 +363,6 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   0,
-				ValidatorPk: validatorPK(sks).Serialize(),
 				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
