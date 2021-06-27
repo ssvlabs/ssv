@@ -74,16 +74,19 @@ included in our repository in the `LICENSE` file.
 [X] Free standing, reference iBFT Go implementation\
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Glang\
-[ ] Single standing instance running with Prysm's validator client\
+[ ] Externalize remote signer\
+[ ] Multi BN implementation support
 [X] Networking and discovery\
-[X] db, persistance and recovery\
-[ ] Between instance persistence (pevent starting a new instance if previous not decided)\
-[ ] Multi network support (being part of multiple SSV groups)\
-[ ] Aggregation and Proposal support\
+[X] db, persistance and recovery (Sync)\
+[X] Between instance persistence (pevent starting a new instance if previous not decided)\
+[X] Multi network support (being part of multiple SSV groups)\
+[ ] Aggregation support\
+[\\] Proposal support\
 [X] Key sharing\
 [X] Deployment\
 [\\] Documentation\
 [X] Phase 1 testing\
+[\\] Full iBFT spec\
 [ ] Audit
 
 ** X=done, \\=WIP
