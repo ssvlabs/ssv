@@ -22,14 +22,9 @@ The introduction of exporter requires to do some refactoring in the project stru
 
 <img src="../resources/exporter-node-packages.png" >
 
-### Bootstrap
+### Data Sources
 
-On start, exporter will first finish syncing data and only afterwards will start. \
-Once sync is finished, the exporter is able to serve requests and listen to live events from the contract.
-
-### Data
-
-The following information will be needed:
+The following information will be stored and served by exporter:
 * Operators 
   * Name --> contract event
   * Public Key --> contract event
@@ -54,10 +49,12 @@ Events to listen:
 * `ValidatorAdded`
 * `OessAdded`
 
-##### Sync
+#### Contract Sync
 
 In order to have all the needed data, exporter needs to [read all events logs](https://goethereumbook.org/event-read/) 
-of the specified events. 
+of the specified events.
+
+On start, exporter will first finish syncing data. Once sync is finished, the exporter will be able to serve requests and listen to live events from the contract.
 
 [`FilterLogs()`](https://github.com/ethereum/go-ethereum/blob/master/ethclient/ethclient.go#L387) 
 accepts [`FilterQuery`](https://github.com/ethereum/go-ethereum/blob/master/interfaces.go#L138) 
@@ -68,7 +65,7 @@ A genesis block for the contract can be used as a baseline block (the block to s
 
 #### IBFT Data
 
-Interaction with SSV nodes can be done using the existing sync end-point (`libp2p` stream)
+Interaction with SSV nodes can be done using the existing history sync end-point.
   
 ### Persistency
 
@@ -79,7 +76,7 @@ A storage for Exporter Node should support persistence of:
 
 #### Database
 
-A Key-Value Store (e.g. Badger) is a good candidate because the Explorer Center does the indexing with ES. 
+A Key-Value Store (`Badger`) is a sufficient storage as the indexing of the data will be done by exporter consumers (Explorer). 
 
 Badger is an embedded DB (stored in FS), therefore won't support HA. \
 In order to achieve HA, one of the following should be the way to go:
@@ -88,17 +85,16 @@ In order to achieve HA, one of the following should be the way to go:
 
 ### APIs
 
-#### Explorer Center
+Exporter Node provides WebSocket endpoints for reading the collected data. \
+There are 2 types of end-points:
 
-Exporter Node provides a WebSocket endpoint for reading the collected data. \
-The messages will support several use-cases:
-* push data by exporter, will be triggered on live data
-  * IBFT data - push once decided messages arrives
-  * Operators / Validators - push on contract events
-* request data by explorer
-  * requested with the corresponding filters
+- `stream` - exporter pushes live data
+  - IBFT data - notify once decided messages arrives
+  - Operators / Validators - notify on contract events
+- `query` - consumer request data on demand
+  - requested with the corresponding filters
 
-##### Message Structure
+#### Message Structure
 
 Request holds a `filter` for making queries of specific data 
 and a `type` to distinguish between messages:
@@ -120,9 +116,13 @@ Response extends the Request with a `data` section that contains the correspondi
 }
 ```
 
-##### Examples
+#### End Points
 
-Request:
+##### Query
+
+`/query` is an API that allows some consumer to request data, by specifying filter.
+
+For example, a request to get all available operators:
 ```json
 {
   "type": "operator",
@@ -131,7 +131,7 @@ Request:
   }
 }
 ```
-Response:
+Exporter will produce the following response:
 ```json
 {
   "type": "operator",
@@ -142,11 +142,42 @@ Response:
     {
       "publicKey": "...",
       "name": "myOperator",
-      "ownerAddress": "..."
+      "ownerAddress": "...",
+      "index": 0
+    },
+    {
+      "publicKey": "...",
+      "name": "myOperator",
+      "ownerAddress": "...",
+      "index": 1
+    },
+    ...
+  ]
+}
+```
+
+##### Stream
+
+`/stream` is an API that allows consumers to get live data that is collected by the exporter, which will push the information it receives (validator, operator or duties) from SSV nodes or contract. 
+
+For example, exporter will push a message if a new validator was added to the network:
+```json
+{
+  "type": "validator",
+  "filter": {
+    "from": 2430,
+    "to": 2431,
+  },
+  "data": [
+    {
+      "publicKey": "...",
+      "operators": [...],
+      "index": 2341
     }
   ]
 }
 ```
+
 
 ## Usage
 
@@ -167,3 +198,6 @@ make NODES=exporter-node docker-all
 ```shell
 make DEBUG_NODES=exporter-node-dev docker-debug
 ```
+
+
+
