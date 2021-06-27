@@ -1,4 +1,4 @@
-# Exporter Node
+# Exporter
 
 ## Intro
 
