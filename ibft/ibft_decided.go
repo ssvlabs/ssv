@@ -73,7 +73,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 			i.currentInstance.Stop()
 		}
 		// sync
-		s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey, i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
+		s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 		go func() {
 			err := s.Start()
 			if err != nil {

@@ -55,6 +55,7 @@ func TestFetchDecided(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	tests := []struct {
 		name           string
+		validatorPk    []byte
 		identifier     []byte
 		peers          []string
 		fromPeer       string
@@ -66,6 +67,7 @@ func TestFetchDecided(t *testing.T) {
 	}{
 		{
 			"valid fetch no pagination",
+			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2"},
 			"2",
@@ -98,6 +100,7 @@ func TestFetchDecided(t *testing.T) {
 		},
 		{
 			"valid fetch with pagination",
+			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2"},
 			"2",
@@ -130,6 +133,7 @@ func TestFetchDecided(t *testing.T) {
 		},
 		{
 			"force error",
+			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2"},
 			"2",
@@ -152,7 +156,7 @@ func TestFetchDecided(t *testing.T) {
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
 			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
-			s := NewHistorySync(logger, nil, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(logger, test.validatorPk, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])
@@ -185,6 +189,7 @@ func TestFindHighest(t *testing.T) {
 
 	tests := []struct {
 		name               string
+		valdiatorPK        []byte
 		identifier         []byte
 		peers              []string
 		highestMap         map[string]*proto.SignedMessage
@@ -193,6 +198,7 @@ func TestFindHighest(t *testing.T) {
 	}{
 		{
 			"valid",
+			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2"},
 			map[string]*proto.SignedMessage{
@@ -203,6 +209,7 @@ func TestFindHighest(t *testing.T) {
 		},
 		{
 			"valid multi responses",
+			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{
@@ -214,6 +221,7 @@ func TestFindHighest(t *testing.T) {
 		},
 		{
 			"valid multi responses different seq",
+			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{
@@ -249,6 +257,7 @@ func TestFindHighest(t *testing.T) {
 		//},
 		{
 			"wrong identifier",
+			[]byte{1, 2, 3, 4},
 			[]byte{1, 1, 1, 1},
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{

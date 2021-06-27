@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
@@ -17,7 +16,7 @@ import (
 // fetching decided messages from the network
 type HistorySync struct {
 	logger              *zap.Logger
-	publicKey           *bls.PublicKey
+	publicKey           []byte
 	network             network.Network
 	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
@@ -25,7 +24,7 @@ type HistorySync struct {
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(logger *zap.Logger, publicKey *bls.PublicKey, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error, ) *HistorySync {
+func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error, ) *HistorySync {
 	return &HistorySync{
 		logger:              logger,
 		publicKey:           publicKey,
@@ -85,7 +84,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	// TODO - why 4? should be set as param?
 	// TODO select peers by quality/ score?
 	// TODO - should be changed to support multi duty
-	usedPeers, err := s.network.AllPeers(s.publicKey.Serialize())
+	usedPeers, err := s.network.AllPeers(s.publicKey)
 	if err != nil {
 		return nil, "", err
 	}
