@@ -16,11 +16,11 @@ It provides a way for validator to inspect the operators' performance, duties hi
 Exporter node is new type of peer that needs to pull and store data from SSV nodes or smart contract. \
 As most of that logic already exist in SSV, the exporter is just a new executable, re-using existing code from SSV and have slightly different configuration.
 
-<img src="../resources/exporter-node-diagram.png" >
+<img src="../docs/resources/exporter-node-diagram.png" >
 
 The introduction of exporter requires to do some refactoring in the project structure as follows:
 
-<img src="../resources/exporter-node-packages.png" >
+<img src="../docs/resources/exporter-node-packages.png" >
 
 ### Data Sources
 
