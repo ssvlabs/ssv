@@ -20,11 +20,11 @@ type Iibft interface {
 	// SaveDecided saves a signed message for an ibft instance with decided justification
 	SaveDecided(signedMsg *proto.SignedMessage) error
 	// GetDecided returns a signed message for an ibft instance which decided by identifier
-	GetDecided(lambda []byte, seqNumber uint64) (*proto.SignedMessage, error)
+	GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error)
 	// SaveHighestDecidedInstance saves a signed message for an ibft instance which is currently highest
 	SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error
 	// GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
-	GetHighestDecidedInstance(lambda []byte) (*proto.SignedMessage, error)
+	GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error)
 }
 
 // IbftStorage struct
@@ -77,8 +77,8 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 }
 
 // GetDecided returns a signed message for an ibft instance which decided by identifier
-func (i *IbftStorage) GetDecided(lambda []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-	val, err := i.get("decided", lambda, uInt64ToByteSlice(seqNumber))
+func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error) {
+	val, err := i.get("decided", identifier, uInt64ToByteSlice(seqNumber))
 	if err != nil {
 		return nil, errors.New(kv.EntryNotFoundError)
 	}
@@ -99,8 +99,8 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 }
 
 // GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
-func (i *IbftStorage) GetHighestDecidedInstance(lambda []byte) (*proto.SignedMessage, error) {
-	val, err := i.get("highest", lambda)
+func (i *IbftStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error) {
+	val, err := i.get("highest", identifier)
 	if err != nil {
 		return nil, err
 	}

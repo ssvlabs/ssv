@@ -33,7 +33,7 @@ func (s *testStorage) SaveDecided(_ *proto.SignedMessage) error {
 }
 
 // GetDecided implementation
-func (s *testStorage) GetDecided(_ []byte, _ uint64) (*proto.SignedMessage, error) {
+func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error) {
 	return nil, nil
 }
 
@@ -43,7 +43,7 @@ func (s *testStorage) SaveHighestDecidedInstance(_ *proto.SignedMessage) error {
 }
 
 // GetHighestDecidedInstance implementation
-func (s *testStorage) GetHighestDecidedInstance(lambda []byte) (*proto.SignedMessage, error) {
+func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error) {
 	return s.highestDecided, nil
 }
 

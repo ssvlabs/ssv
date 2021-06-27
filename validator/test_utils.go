@@ -55,7 +55,7 @@ type testIBFT struct {
 func (t *testIBFT) Init() {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
-	t.identifier = []byte(ibft.IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
+	t.identifier = []byte(IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
