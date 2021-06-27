@@ -160,7 +160,7 @@ type Message struct {
 	SignedMessage        *proto1.SignedMessage `protobuf:"bytes,2,opt,name=SignedMessage,proto3" json:"SignedMessage,omitempty"`
 	SyncMessage          *SyncMessage          `protobuf:"bytes,3,opt,name=SyncMessage,proto3" json:"SyncMessage,omitempty"`
 	Type                 NetworkMsg            `protobuf:"varint,4,opt,name=Type,proto3,enum=network.NetworkMsg" json:"Type,omitempty"`
-	Stream               SyncStream            `protobuf:"bytes,5,opt,name=Stream,proto3" json:"Stream,omitempty"`
+	Stream               SyncStream            `protobuf:"bytes,5,opt,name=Stream,proto3" json:"Stream,omitempty"` //TODO (proto is not updated with stream field) need to find better solution!!!
 	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
 	XXX_unrecognized     []byte                `json:"-"`
 	XXX_sizecache        int32                 `json:"-"`
