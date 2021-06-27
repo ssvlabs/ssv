@@ -138,7 +138,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
 				i.logger.Error("could not save highest decided message to storage", zap.Error(err))
 			}
-			if err := i.network.BroadcastDecided(nil, agg); err != nil {
+			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
 				i.logger.Error("could not broadcast decided message", zap.Error(err))
 			}
 			i.currentInstance = nil

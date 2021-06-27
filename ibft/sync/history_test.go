@@ -152,7 +152,7 @@ func TestFetchDecided(t *testing.T) {
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
 			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
-			s := NewHistorySync(logger, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(logger, nil, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])
@@ -285,7 +285,7 @@ func TestFindHighest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(zap.L(), test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(zap.L(), nil, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, _, err := s.findHighestInstance()
