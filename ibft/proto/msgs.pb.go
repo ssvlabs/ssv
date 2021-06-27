@@ -68,7 +68,6 @@ type Message struct {
 	// sequence number is an incremental number for each instance, much like a block number would be in a blockchain
 	SeqNumber            uint64   `protobuf:"varint,4,opt,name=seq_number,json=seqNumber,proto3" json:"seq_number,omitempty"`
 	Value                []byte   `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
-	//ValidatorPk          []byte   `protobuf:"bytes,6,opt,name=validator_pk,json=validatorPk,proto3" json:"validator_pk,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
