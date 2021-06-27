@@ -58,26 +58,7 @@ func (ws *wsServer) OutboundSubject() pubsub.Publisher {
 
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleQuery(conn Connection) {
-	var nm NetworkMessage
-	var incoming Message
-	err := ws.adapter.Receive(conn, &incoming)
-	if err != nil {
-		ws.logger.Warn("could not read incoming message", zap.Error(err))
-		nm = NetworkMessage{incoming, err, conn}
-	} else {
-		nm = NetworkMessage{incoming, nil, conn}
-	}
-	ws.inbound.Notify(nm)
-
-	ws.processOutboundForConnection(conn, ConnectionID(conn), true)
-}
-
-// handleQuery receives query message and respond async
-func (ws *wsServer) handleStream(conn Connection) {
-	ws.processOutboundForConnection(conn, ConnectionID(conn), false)
-}
-
-func (ws *wsServer) processOutboundForConnection(conn Connection, cid string, once bool) {
+	cid := ConnectionID(conn)
 	out, err := ws.outbound.Register(cid)
 	if err != nil {
 		ws.logger.Error("could not register outbound subject",
@@ -85,19 +66,51 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, cid string, on
 	}
 	defer ws.outbound.Deregister(cid)
 
+	for {
+		var nm NetworkMessage
+		var incoming Message
+		err := ws.adapter.Receive(conn, &incoming)
+		if err != nil {
+			ws.logger.Warn("could not read incoming message", zap.Error(err))
+			nm = NetworkMessage{incoming, err, conn}
+		} else {
+			nm = NetworkMessage{incoming, nil, conn}
+		}
+		ws.inbound.Notify(nm)
+
+		ws.processOutboundForConnection(conn, out, true)
+	}
+}
+
+// handleQuery receives query message and respond async
+func (ws *wsServer) handleStream(conn Connection) {
+	cid := ConnectionID(conn)
+	out, err := ws.outbound.Register(cid)
+	if err != nil {
+		ws.logger.Error("could not register outbound subject",
+			zap.Error(err), zap.String("cid", cid))
+	}
+	defer ws.outbound.Deregister(cid)
+
+	ws.processOutboundForConnection(conn, out, false)
+}
+
+func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.SubjectChannel, once bool) {
+	logger := ws.logger.
+		With(zap.String("cid", ConnectionID(conn)))
+
 	for m := range out {
 		nm, ok := m.(NetworkMessage)
 		if !ok {
-			ws.logger.Warn("could not parse message")
+			logger.Warn("could not parse message")
 			continue
 		}
-		ws.logger.Debug("sending outbound",
-			zap.String("cid", cid),
-			zap.String("msg type", string(nm.Msg.Type)))
+		logger.Debug("sending outbound",
+			zap.String("msg.type", string(nm.Msg.Type)))
 		if nm.Conn == conn || nm.Conn == nil {
 			err := ws.adapter.Send(conn, &nm.Msg)
 			if err != nil {
-				ws.logger.Error("could not send message", zap.Error(err))
+				logger.Error("could not send message", zap.Error(err))
 			}
 			if once {
 				break

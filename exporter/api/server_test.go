@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 )
@@ -46,7 +47,7 @@ func TestHandleQuery(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 		msg := Message{
 			Type:   TypeOperator,
-			Filter: MessageFilter{ From: 1 },
+			Filter: MessageFilter{From: 1},
 		}
 		adapter.in <- msg
 	}()
@@ -55,7 +56,7 @@ func TestHandleQuery(t *testing.T) {
 		ws.handleQuery(&conn)
 	}()
 
-	<- adapter.out
+	<-adapter.out
 }
 
 func TestHandleStream(t *testing.T) {
@@ -63,7 +64,7 @@ func TestHandleStream(t *testing.T) {
 	adapter := adapterMock{
 		logger: logger,
 		in:     make(chan Message),
-		out:    make(chan Message),
+		out:    make(chan Message, 3),
 	}
 	ws := NewWsServer(logger, &adapter, nil).(*wsServer)
 
@@ -71,10 +72,21 @@ func TestHandleStream(t *testing.T) {
 	require.NoError(t, err)
 	conn := connectionMock{addr: ipAddr}
 
+	// expecting outbound messages
+	var wg sync.WaitGroup
+	wg.Add(2)
 	go func() {
+		for {
+			<-adapter.out
+			wg.Done()
+		}
+	}()
+
+	go func() {
+		// sending 3 messages in the stream channel
 		nm := NetworkMessage{
-			Msg:  Message{
-				Type: TypeValidator,
+			Msg: Message{
+				Type:   TypeValidator,
 				Filter: MessageFilter{From: 0},
 				Data: []ValidatorMsg{
 					{PublicKey: "pubkey1"},
@@ -86,14 +98,13 @@ func TestHandleStream(t *testing.T) {
 		}
 		ws.OutboundSubject().Notify(nm)
 
-		// second message
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		nm.Msg.Data = []ValidatorMsg{
 			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
-		// third message
-		time.Sleep(5 * time.Millisecond)
+
+		time.Sleep(10 * time.Millisecond)
 		nm.Msg.Data = []ValidatorMsg{
 			{PublicKey: "pubkey4"},
 		}
@@ -104,9 +115,7 @@ func TestHandleStream(t *testing.T) {
 		ws.handleStream(&conn)
 	}()
 
-	<- adapter.out
-	<- adapter.out
-	<- adapter.out
+	wg.Wait()
 }
 
 type connectionMock struct {
@@ -123,8 +132,8 @@ func (cm *connectionMock) LocalAddr() net.Addr {
 
 type adapterMock struct {
 	logger *zap.Logger
-	in chan Message
-	out chan Message
+	in     chan Message
+	out    chan Message
 }
 
 func (am *adapterMock) RegisterHandler(mux *http.ServeMux, endPoint string, handler EndPointHandler) {
@@ -141,7 +150,7 @@ func (am *adapterMock) Send(conn Connection, v interface{}) error {
 }
 
 func (am *adapterMock) Receive(conn Connection, v interface{}) error {
-	msg := <- am.in
+	msg := <-am.in
 	raw, _ := json.Marshal(&msg)
 	return json.Unmarshal(raw, v)
 }

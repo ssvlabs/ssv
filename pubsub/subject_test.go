@@ -4,6 +4,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestSubject_Register_MultipleObservers(t *testing.T) {
@@ -46,5 +47,7 @@ func TestSubject_Deregister(t *testing.T) {
 	observer := s.(*subject).observers["test-observer2"]
 	s.Deregister("test-observer2")
 	require.Equal(t, 1, len(s.(*subject).observers))
-	require.False(t, observer.active)
+	// sleeping 1ms as the observer will be closed in a new goroutine
+	time.Sleep(1 * time.Millisecond)
+	require.False(t, observer.isActive())
 }

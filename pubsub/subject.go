@@ -13,15 +13,12 @@ type SubjectChannel chan SubjectEvent
 
 // Subscriber represents the base functionality of a subject (used by observers)
 type Subscriber interface {
-	// Register adds a new observer
 	Register(id string) (SubjectChannel, error)
-	// Deregister removes an observer
 	Deregister(id string)
 }
 
 // Publisher introduces "write" capabilities on the subject
 type Publisher interface {
-	// Notify emits an event
 	Notify(e SubjectEvent)
 }
 
@@ -34,13 +31,13 @@ type Subject interface {
 // subject is the internal implementation of Subject
 type subject struct {
 	observers map[string]*observer
-	mut       sync.RWMutex
+	mut       sync.Mutex
 }
 
 // NewSubject creates a new instance of the internal struct
 func NewSubject() Subject {
 	outs := map[string]*observer{}
-	s := subject{outs, sync.RWMutex{}}
+	s := subject{outs, sync.Mutex{}}
 	return &s
 }
 
@@ -63,18 +60,16 @@ func (s *subject) Deregister(id string) {
 
 	if ob, exist := s.observers[id]; exist {
 		delete(s.observers, id)
-		ob.close()
+		go ob.close()
 	}
 }
 
 // Notify emits an event
 func (s *subject) Notify(e SubjectEvent) {
-	go func() {
-		s.mut.RLock()
-		defer s.mut.RUnlock()
+	s.mut.Lock()
+	defer s.mut.Unlock()
 
-		for _, ob := range s.observers {
-			ob.notifyCallback(e)
-		}
-	}()
+	for _, ob := range s.observers {
+		go ob.notifyCallback(e)
+	}
 }
