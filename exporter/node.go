@@ -120,8 +120,8 @@ func (exp *exporter) Start() error {
 }
 
 // processIncomingExportReq waits for incoming messages and
-func (exp *exporter) processIncomingExportReq(cn pubsub.SubjectChannel, outbound pubsub.Publisher) {
-	for raw := range cn {
+func (exp *exporter) processIncomingExportReq(incoming pubsub.SubjectChannel, outbound pubsub.Publisher) {
+	for raw := range incoming {
 		nm, ok := raw.(api.NetworkMessage)
 		if !ok {
 			exp.logger.Warn("could not parse network message")
