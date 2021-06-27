@@ -1,4 +1,37 @@
 ---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-explorer
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-explorer
+  http:
+  - route:
+    - destination:
+        host: ssv-explorer
+        port:
+          number: 14000
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-explorer
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,7 +49,11 @@ spec:
     - port: 13000
       protocol: TCP
       targetPort: 13000
-      name: port-13000        
+      name: port-13000
+    - port: 14000
+      protocol: TCP
+      targetPort: 14000
+      name: port-14000
   selector:
     app: ssv-explorer
 ---
@@ -82,7 +119,7 @@ spec:
       - name: ssv-explorer
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
-        command: ["make", "start-explorer"]
+        command: ["make", "start-exporter"]
         ports:
         - containerPort: 12000
           name: port-12000
@@ -91,79 +128,38 @@ spec:
         - containerPort: 13000
           name: port-13000
           hostPort: 13000
+        - containerPort: 14000
+          name: port-14000
+          hostPort: 14000
         env:
-        - name: SHARE_CONFIG
-          value: "./data/share.yaml"
-        - name: NODE_ID
-          value: "1"
-        - name: SSV_PRIVATE_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: ssv_explorer
-        - name: VALIDATOR_PUBLIC_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: validator_public_key_v2
-        - name: BEACON_NODE_ADDR
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: beacon_node_addr
-        - name: PUBKEY_NODE_2
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_2
-        - name: PUBKEY_NODE_3
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_3
-        - name: PUBKEY_NODE_4
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_4
-        - name: ETH_1_ADDR
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: eth1_addr
-        - name: CONFIG_PATH
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: config_path
-        - name: ENR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: enr_key
-        - name: SMART_CONTRACT_ADDR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: smart_contract_addr_key
-        - name: LOG_LEVEL
-          value: "debug"
-        - name: DISCOVERY_TYPE_KEY
-          value: "discv5"
-        - name: NETWORK
-          value: "prater"
-        - name: CONSENSUS_TYPE
-          value: "validation"
-        - name: HOST_DNS
-          value: ""
-        - name: HOST_ADDRESS
-          value: ""
-        - name: GENESIS_EPOCH
-          value: "1"
-        - name: LOGGER_LEVEL
-          value: "debug"
-        - name: STORAGE_PATH
-          value: "./data/db"
+          - name: ETH_1_ADDR
+            valueFrom:
+              secretKeyRef:
+                key: eth1_addr
+                name: config-secrets
+          - name: CONFIG_PATH
+            valueFrom:
+              secretKeyRef:
+                key: config_path
+                name: config-secrets
+          - name: ENR_KEY
+            valueFrom:
+              secretKeyRef:
+                key: enr_key
+                name: config-secrets
+          - name: SMART_CONTRACT_ADDR_KEY
+            valueFrom:
+              secretKeyRef:
+                key: smart_contract_addr_key
+                name: config-secrets
+          - name: LOG_LEVEL
+            value: debug
+          - name: DISCOVERY_TYPE_KEY
+            value: discv5
+          - name: NETWORK
+            value: prater
+          - name: STORAGE_PATH
+            value: ./data/db
         volumeMounts:
         - mountPath: /data
           name: ssv-explorer
