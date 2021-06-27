@@ -126,7 +126,10 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 			exp.logger.Warn("could not parse network message")
 			continue
 		}
-		res := nm.Msg.Response()
+		res := api.Message{
+			Type:   nm.Msg.Type,
+			Filter: nm.Msg.Filter,
+		}
 		switch nm.Msg.Type {
 		case api.TypeOperator:
 			operators, err := exp.storage.ListOperators(0)
@@ -134,7 +137,7 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 				exp.logger.Error("could not get operators", zap.Error(err))
 			}
 			res.Data = operators
-			nm.Msg = *res
+			nm.Msg = res
 			outbound.Notify(nm)
 		case api.TypeValidator:
 			validators, err := exp.validatorStorage.GetAllValidatorsShare()
@@ -147,7 +150,7 @@ func (exp *exporter) listenIncomingExportReq(cn pubsub.SubjectChannel, outbound 
 				validatorMsgs = append(validatorMsgs, *validatorMsg)
 			}
 			res.Data = validatorMsgs
-			nm.Msg = *res
+			nm.Msg = res
 			outbound.Notify(nm)
 		case api.TypeIBFT:
 			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
