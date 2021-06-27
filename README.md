@@ -35,6 +35,7 @@ to run validators in a decentralized and trustless way.
 * [iBFT Paper](https://arxiv.org/pdf/2002.03613.pdf)
 * [iBFT annotated paper (By Blox)](./ibft/IBFT.md)
 * [EIP650](https://github.com/ethereum/EIPs/issues/650)
+* [Security proof for n-t honest parties](https://notes.ethereum.org/DYU-NrRBTxS3X0fu_MidnA)
 
 
 ## Getting Started
