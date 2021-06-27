@@ -30,6 +30,11 @@ func TestHandleQuery(t *testing.T) {
 	conn := connectionMock{addr: ipAddr}
 
 	go func() {
+		// notify outbound using a bad struct -> should do nothing (except warning log)
+		ws.OutboundSubject().Notify(struct{id string}{ "bad-struct" })
+	}()
+
+	go func() {
 		for incoming := range inCn {
 			nm, ok := incoming.(NetworkMessage)
 			require.True(t, ok)

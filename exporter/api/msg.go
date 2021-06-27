@@ -50,17 +50,6 @@ const (
 	RoleProposer DutyRole = "PROPOSER"
 )
 
-// Response creates a response of some request message
-func (m *Message) Response() *Message {
-	res := Message{
-		Type:   m.Type,
-		Filter: m.Filter,
-		Data:   struct{}{},
-	}
-
-	return &res
-}
-
 // ValidatorMsg represents a transferable object
 type ValidatorMsg struct {
 	Index     int64                  `json:"index"`
