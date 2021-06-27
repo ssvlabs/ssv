@@ -14,7 +14,7 @@ spec:
     - destination:
         host: ssv-explorer
         port:
-          number: 80
+          number: 14000
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
