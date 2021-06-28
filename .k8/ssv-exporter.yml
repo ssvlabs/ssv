@@ -2,7 +2,7 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: ssv-explorer
+  name: ssv-exporter
   namespace: ssv
 spec:
   accessModes:
