@@ -70,6 +70,6 @@ func (s *subject) Notify(e SubjectEvent) {
 	defer s.mut.Unlock()
 
 	for _, ob := range s.observers {
-		go ob.notifyCallback(e)
+		ob.notifyCallback(e)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"math/big"
-	"sync"
 	"testing"
 	"time"
 )
@@ -19,7 +18,7 @@ func TestSyncEth1(t *testing.T) {
 	rawOffset := DefaultSyncOffset().Uint64()
 	rawOffset += 10
 	go func() {
-		logs := []types.Log{types.Log{BlockNumber: rawOffset - 1}, types.Log{BlockNumber: rawOffset}}
+		logs := []types.Log{{BlockNumber: rawOffset - 1}, {BlockNumber: rawOffset}}
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
@@ -36,7 +35,7 @@ func TestFailedSyncEth1(t *testing.T) {
 	logger, eth1Client, storage := setupStorageWithEth1ClientMock()
 	eth1Client.syncResponse = errors.New("eth1-sync-test")
 	go func() {
-		logs := []types.Log{types.Log{}, types.Log{BlockNumber: DefaultSyncOffset().Uint64()}}
+		logs := []types.Log{{}, {BlockNumber: DefaultSyncOffset().Uint64()}}
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
 		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
@@ -102,13 +101,7 @@ func (ec *eth1ClientMock) Start() error {
 }
 
 func (ec *eth1ClientMock) Sync(fromBlock *big.Int) error {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(ec.syncTimeout)
-	}()
-	wg.Wait()
+	<- time.After(ec.syncTimeout)
 	return ec.syncResponse
 }
 
