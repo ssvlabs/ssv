@@ -260,7 +260,11 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.logger.Debug("managed to save operator information",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
-	msg := api.Message{Type: api.TypeOperator, Filter: api.MessageFilter{From: oi.Index, To: oi.Index}, Data: oi}
+	msg := api.Message{
+		Type: api.TypeOperator,
+		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
+		Data: []api.OperatorInformation{oi},
+	}
 
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg, Conn: nil})
 
