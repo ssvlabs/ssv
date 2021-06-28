@@ -13,6 +13,7 @@ import (
 
 func testIBFTInstance(t *testing.T) *ibftImpl {
 	return &ibftImpl{
+		Identifier: []byte("lambda_11"),
 		//instances: make([]*Instance, 0),
 	}
 }
@@ -121,7 +122,7 @@ func TestCanStartNewInstance(t *testing.T) {
 					Logger: zap.L(),
 					Path:   "",
 				}
-				// TODO do we must create new db instnce for each test?
+				// creating new db instance each time to get cleared one (without no data)
 				db, err := storage.GetStorageFactory(options)
 				require.NoError(t, err)
 				s := collections.NewIbft(db, options.Logger, "attestation")

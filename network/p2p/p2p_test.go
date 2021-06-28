@@ -43,7 +43,6 @@ func TestP2PNetworker(t *testing.T) {
 			Round:       1,
 			Lambda:      lambda,
 			Value:       []byte("test-value"),
-			ValidatorPk: refPk,
 		},
 	}
 
@@ -54,7 +53,7 @@ func TestP2PNetworker(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	err = peer1.Broadcast(messageToBroadcast)
+	err = peer1.Broadcast(pk.Serialize(), messageToBroadcast)
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)

@@ -32,7 +32,7 @@ func TestMsgChan(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 100)
-	net.Broadcast(testMsg)
+	net.Broadcast([]byte{1}, testMsg)
 	time.Sleep(time.Millisecond * 500)
 
 	lock.Lock()
@@ -63,7 +63,7 @@ func TestSigChan(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 100)
-	net.BroadcastSignature(testMsg)
+	net.BroadcastSignature([]byte{1}, testMsg)
 	time.Sleep(time.Millisecond * 100)
 
 	lock.Lock()
@@ -94,7 +94,7 @@ func TestDecidedChan(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 100)
-	net.BroadcastDecided(testMsg)
+	net.BroadcastDecided([]byte{1}, testMsg)
 	time.Sleep(time.Millisecond * 100)
 
 	lock.Lock()
@@ -108,22 +108,22 @@ func TestGetHighestDecided(t *testing.T) {
 
 	go func() {
 		msg := <-c2
-		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.ValidatorPk)
+		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.Lambda)
 		require.EqualValues(t, network.Sync_GetHighestType, msg.Msg.Type)
 		net.RespondToHighestDecidedInstance(msg.Stream, &network.SyncMessage{
-			ValidatorPk: []byte{1, 1, 1, 1},
-			FromPeerID:  "1",
-			Type:        network.Sync_GetHighestType,
+			Lambda:     []byte{1, 1, 1, 1},
+			FromPeerID: "1",
+			Type:       network.Sync_GetHighestType,
 		})
 	}()
 
 	res, err := net.GetHighestDecidedInstance("1", &network.SyncMessage{
-		ValidatorPk: []byte{1, 2, 3, 4},
-		FromPeerID:  "0",
-		Type:        network.Sync_GetHighestType,
+		Lambda:     []byte{1, 2, 3, 4},
+		FromPeerID: "0",
+		Type:       network.Sync_GetHighestType,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, []byte{1, 1, 1, 1}, res.ValidatorPk)
+	require.EqualValues(t, []byte{1, 1, 1, 1}, res.Lambda)
 }
 
 func TestGetDecidedByRange(t *testing.T) {
@@ -132,22 +132,22 @@ func TestGetDecidedByRange(t *testing.T) {
 
 	go func() {
 		msg := <-c2
-		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.ValidatorPk)
+		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.Lambda)
 		require.EqualValues(t, network.Sync_GetHighestType, msg.Msg.Type)
 		net.RespondToGetDecidedByRange(msg.Stream, &network.SyncMessage{
-			ValidatorPk: []byte{1, 1, 1, 1},
-			FromPeerID:  "1",
-			Type:        network.Sync_GetHighestType,
+			Lambda:     []byte{1, 1, 1, 1},
+			FromPeerID: "1",
+			Type:       network.Sync_GetHighestType,
 		})
 	}()
 
 	res, err := net.GetDecidedByRange("1", &network.SyncMessage{
-		ValidatorPk: []byte{1, 2, 3, 4},
-		FromPeerID:  "0",
-		Type:        network.Sync_GetHighestType,
+		Lambda:     []byte{1, 2, 3, 4},
+		FromPeerID: "0",
+		Type:       network.Sync_GetHighestType,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, []byte{1, 1, 1, 1}, res.ValidatorPk)
+	require.EqualValues(t, []byte{1, 1, 1, 1}, res.Lambda)
 }
 
 func TestGetAllPeers(t *testing.T) {

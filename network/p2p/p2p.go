@@ -259,7 +259,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 // getTopic return topic by validator public key
 func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 	if validatorPK == nil {
-		return nil, errors.New("ValidatorPk is nil in signMsg")
+		return nil, errors.New("ValidatorPk is nil")
 	}
 	pk := &bls.PublicKey{}
 	if err := pk.Deserialize(validatorPK); err != nil {

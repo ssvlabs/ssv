@@ -601,5 +601,5 @@ func TestChangeRoundPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundMsgPipeline()
-	require.EqualValues(t, "combination of: type check, lambda, round, validator PK, sequence, authorize, validate msg, add change round msg, upon partial quorum, upon change round full quorum, ", pipeline.Name())
+	require.EqualValues(t, "combination of: type check, lambda, round, sequence, authorize, validate msg, add change round msg, upon partial quorum, upon change round full quorum, ", pipeline.Name())
 }

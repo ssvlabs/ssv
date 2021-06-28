@@ -67,7 +67,7 @@ func (n *Local) ReceivedSignatureChan() <-chan *proto.SignedMessage {
 }
 
 // Broadcast implements network.Local interface
-func (n *Local) Broadcast(signed *proto.SignedMessage) error {
+func (n *Local) Broadcast(topicName []byte, signed *proto.SignedMessage) error {
 	go func() {
 		for _, c := range n.msgC {
 			c <- signed
@@ -78,7 +78,7 @@ func (n *Local) Broadcast(signed *proto.SignedMessage) error {
 }
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *Local) BroadcastSignature(msg *proto.SignedMessage) error {
+func (n *Local) BroadcastSignature(topicName []byte, msg *proto.SignedMessage) error {
 	n.createChannelMutex.Lock()
 	go func() {
 		for _, c := range n.sigC {
@@ -90,7 +90,7 @@ func (n *Local) BroadcastSignature(msg *proto.SignedMessage) error {
 }
 
 // BroadcastDecided broadcasts a decided instance with collected signatures
-func (n *Local) BroadcastDecided(msg *proto.SignedMessage) error {
+func (n *Local) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error {
 	n.createChannelMutex.Lock()
 	go func() {
 		for _, c := range n.decidedC {
@@ -112,9 +112,9 @@ func (n *Local) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 
 // GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 // If peer list is nil, broadcasts to all.
-func (n *Local) GetHighestDecidedInstance(peerID string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	if toChan, found := n.syncPeers[peerID]; found {
-		stream := NewLocalStream(msg.FromPeerID, peerID)
+func (n *Local) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerStr]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
 			toChan <- &network.SyncChanObj{
 				Msg:    msg,
@@ -146,9 +146,9 @@ func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-func (n *Local) GetDecidedByRange(peerID string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	if toChan, found := n.syncPeers[peerID]; found {
-		stream := NewLocalStream(msg.FromPeerID, peerID)
+func (n *Local) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerStr]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
 			toChan <- &network.SyncChanObj{
 				Msg:    msg,

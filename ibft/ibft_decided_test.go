@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -19,12 +18,12 @@ type testStorage struct {
 }
 
 // SaveCurrentInstance implementation
-func (s *testStorage) SaveCurrentInstance(pk []byte, _ *proto.State) error {
+func (s *testStorage) SaveCurrentInstance(identifier []byte, state *proto.State) error {
 	return nil
 }
 
 // GetCurrentInstance implementation
-func (s *testStorage) GetCurrentInstance(_ []byte) (*proto.State, error) {
+func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
 	return nil, nil
 }
 
@@ -34,7 +33,7 @@ func (s *testStorage) SaveDecided(_ *proto.SignedMessage) error {
 }
 
 // GetDecided implementation
-func (s *testStorage) GetDecided(_ []byte, _ uint64) (*proto.SignedMessage, error) {
+func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error) {
 	return nil, nil
 }
 
@@ -44,7 +43,7 @@ func (s *testStorage) SaveHighestDecidedInstance(_ *proto.SignedMessage) error {
 }
 
 // GetHighestDecidedInstance implementation
-func (s *testStorage) GetHighestDecidedInstance(_ []byte) (*proto.SignedMessage, error) {
+func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error) {
 	return s.highestDecided, nil
 }
 
@@ -256,13 +255,14 @@ func TestSyncAfterDecided(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	network := local.NewLocalNetwork()
 
+	identifier := []byte("lambda_11")
 	s1 := populatedStorage(t, sks, 4)
-	i1 := populatedIbft(1, network, s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
 
-	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
@@ -270,15 +270,14 @@ func TestSyncAfterDecided(t *testing.T) {
 		Type:        proto.RoundState_Commit,
 		Round:       3,
 		SeqNumber:   10,
-		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
+		Lambda:      identifier,
 		Value:       []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -291,24 +290,25 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Path:   "",
 		Logger: zap.L(),
 	})
-	s1 := collections.NewIbft(db, zap.L(), "attestation")
-	i1 := populatedIbft(1, network, &s1, sks, nodes)
 
-	_ = populatedIbft(2, network, populatedStorage(t, sks, 10), sks, nodes)
+	identifier := []byte("lambda_11")
+	s1 := collections.NewIbft(db, zap.L(), "attestation")
+	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
 		Type:        proto.RoundState_Commit,
 		Round:       3,
 		SeqNumber:   10,
-		ValidatorPk: validatorPK(sks).Serialize(),
-		Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
+		Lambda:      identifier,
 		Value:       []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(validatorPK(sks).Serialize())
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -316,7 +316,8 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 func TestValidateDecidedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	network := local.NewLocalNetwork()
-	ibft := populatedIbft(1, network, populatedStorage(t, sks, 10), sks, nodes)
+	identifier := []byte("lambda_11")
+	ibft := populatedIbft(1, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	tests := []struct {
 		name          string
@@ -329,8 +330,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
-				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
+				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
 			nil,
@@ -341,24 +341,10 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Prepare,
 				Round:       3,
 				SeqNumber:   11,
-				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
+				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
 			errors.New("message type is wrong"),
-		},
-		{
-			"invalid msg pk",
-			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				ValidatorPk: []byte{1, 2, 3, 4},
-				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
-				Value:       []byte("value"),
-			}),
-			errors.Errorf("invalid message validator PK: expected: %x, actual: %x",
-				validatorPK(sks).Serialize(), []byte{1, 2, 3, 4}),
 		},
 		{
 			"invalid msg sig",
@@ -366,8 +352,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   11,
-				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
+				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
 			errors.New("could not verify message signature"),
@@ -378,8 +363,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Type:        proto.RoundState_Commit,
 				Round:       3,
 				SeqNumber:   0,
-				ValidatorPk: validatorPK(sks).Serialize(),
-				Lambda:      []byte(IdentifierFormat(validatorPK(sks).Serialize(), beacon.RoleAttester)),
+				Lambda:      identifier,
 				Value:       []byte("value"),
 			}),
 			nil,

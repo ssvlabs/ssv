@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-
-
 func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 	tasks.ExecWithInterval(func(lastTick time.Duration) (bool, bool) {
 		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
@@ -60,6 +58,7 @@ func (i *ibftImpl) listenToSyncMessages() {
 	go func() {
 		for msg := range syncChan {
 			i.msgQueue.AddMessage(&network.Message{
+				Lambda:      msg.Msg.Lambda,
 				SyncMessage: msg.Msg,
 				Stream:      msg.Stream,
 				Type:        network.NetworkMsg_SyncType,

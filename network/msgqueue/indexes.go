@@ -53,14 +53,14 @@ func decidedMessageIndex() IndexFunc {
 }
 
 // SyncIndexKey is the ibft sync index key
-func SyncIndexKey(pubKey []byte) string {
-	return fmt.Sprintf("sync_publicKey_%s", hex.EncodeToString(pubKey))
+func SyncIndexKey(lambda []byte) string {
+	return fmt.Sprintf("sync_lambda_%s", hex.EncodeToString(lambda))
 }
 func syncMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
 		if msg.Type == network.NetworkMsg_SyncType {
 			return []string{
-				SyncIndexKey(msg.SyncMessage.ValidatorPk),
+				SyncIndexKey(msg.Lambda),
 			}
 		}
 		return []string{}

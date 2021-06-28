@@ -17,7 +17,6 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
-		auth.ValidatePKs(i.ValidatorShare.PublicKey.Serialize()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		i.uponPrepareMsg(),
@@ -107,6 +106,5 @@ func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 		Lambda:      i.State.Lambda,
 		SeqNumber:   i.State.SeqNumber,
 		Value:       value,
-		ValidatorPk: i.ValidatorShare.PublicKey.Serialize(),
 	}
 }

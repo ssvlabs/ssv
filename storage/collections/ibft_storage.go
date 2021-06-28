@@ -14,17 +14,17 @@ import (
 // Iibft is an interface for persisting chain data
 type Iibft interface {
 	// SaveCurrentInstance saves the state for the current running (not yet decided) instance
-	SaveCurrentInstance(pk []byte, state *proto.State) error
+	SaveCurrentInstance(identifier []byte, state *proto.State) error
 	// GetCurrentInstance returns the state for the current running (not yet decided) instance
-	GetCurrentInstance(pk []byte) (*proto.State, error)
+	GetCurrentInstance(identifier []byte) (*proto.State, error)
 	// SaveDecided saves a signed message for an ibft instance with decided justification
 	SaveDecided(signedMsg *proto.SignedMessage) error
 	// GetDecided returns a signed message for an ibft instance which decided by identifier
-	GetDecided(pk []byte, seqNumber uint64) (*proto.SignedMessage, error)
+	GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error)
 	// SaveHighestDecidedInstance saves a signed message for an ibft instance which is currently highest
 	SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error
 	// GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
-	GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error)
+	GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error)
 }
 
 // IbftStorage struct
@@ -46,17 +46,17 @@ func NewIbft(db basedb.IDb, logger *zap.Logger, instanceType string) IbftStorage
 }
 
 // SaveCurrentInstance func implementation
-func (i *IbftStorage) SaveCurrentInstance(pk []byte, state *proto.State) error {
+func (i *IbftStorage) SaveCurrentInstance(identifier []byte, state *proto.State) error {
 	value, err := json.Marshal(state)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, "current", pk)
+	return i.save(value, "current", identifier)
 }
 
 // GetCurrentInstance func implementation
-func (i *IbftStorage) GetCurrentInstance(pk []byte) (*proto.State, error) {
-	val, err := i.get("current", pk)
+func (i *IbftStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
+	val, err := i.get("current", identifier)
 	if err != nil {
 		return nil, errors.New(kv.EntryNotFoundError)
 	}
@@ -73,12 +73,12 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, "decided", signedMsg.Message.ValidatorPk, uInt64ToByteSlice(signedMsg.Message.SeqNumber))
+	return i.save(value, "decided", signedMsg.Message.Lambda, uInt64ToByteSlice(signedMsg.Message.SeqNumber))
 }
 
 // GetDecided returns a signed message for an ibft instance which decided by identifier
-func (i *IbftStorage) GetDecided(pk []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-	val, err := i.get("decided", pk, uInt64ToByteSlice(seqNumber))
+func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error) {
+	val, err := i.get("decided", identifier, uInt64ToByteSlice(seqNumber))
 	if err != nil {
 		return nil, errors.New(kv.EntryNotFoundError)
 	}
@@ -95,12 +95,12 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, "highest", signedMsg.Message.ValidatorPk)
+	return i.save(value, "highest", signedMsg.Message.Lambda)
 }
 
 // GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
-func (i *IbftStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
-	val, err := i.get("highest", pk)
+func (i *IbftStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error) {
+	val, err := i.get("highest", identifier)
 	if err != nil {
 		return nil, err
 	}

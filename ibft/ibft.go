@@ -1,8 +1,6 @@
 package ibft
 
 import (
-	"encoding/hex"
-	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
@@ -10,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+	"strconv"
 	"sync"
 
 	"go.uber.org/zap"
@@ -67,7 +66,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
+func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
 	ret := &ibftImpl{
 		role:                role,
 		ibftStorage:         storage,
@@ -77,7 +76,7 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 		msgQueue:            queue,
 		instanceConfig:      instanceConfig,
 		ValidatorShare:      ValidatorShare,
-		Identifier:          []byte(IdentifierFormat(ValidatorShare.PublicKey.Serialize(), role)),
+		Identifier:          identifier,
 		leaderSelector:      &leader.Deterministic{},
 
 		// flags
@@ -87,8 +86,8 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 }
 
 func (i *ibftImpl) Init() {
-	i.listenToDecidedQueueMessages()
-	i.listenToSyncQueueMessages(i.ValidatorShare.PublicKey.Serialize()) // pass the pubkey byte to avoid deadlock
+	i.processDecidedQueueMessages()
+	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
 	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	i.SyncIBFT()
@@ -110,7 +109,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	go newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
 
-	err := i.resetLeaderSelection(i.Identifier) // Important for deterministic leader selection
+	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
 	if err != nil {
 		newInstance.Logger.Error("could not reset leader selection", zap.Error(err))
 		return false, 0, nil
@@ -122,7 +121,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(newInstance.ValidatorShare.PublicKey.Serialize(), newInstance.State); err != nil {
+			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), newInstance.State); err != nil {
 				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
 				return false, 0, nil
 			}
@@ -139,7 +138,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
 				i.logger.Error("could not save highest decided message to storage", zap.Error(err))
 			}
-			if err := i.network.BroadcastDecided(agg); err != nil {
+			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
 				i.logger.Error("could not broadcast decided message", zap.Error(err))
 			}
 			i.currentInstance = nil
@@ -155,7 +154,7 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *ibftImpl) GetIdentifier() []byte {
-	return i.Identifier
+	return i.Identifier //TODO should use mutex to lock var?
 }
 
 // resetLeaderSelection resets leader selection with seed and round 1
@@ -163,7 +162,3 @@ func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
 	return i.leaderSelector.SetSeed(seed, 1)
 }
 
-// IdentifierFormat return base format for lambda
-func IdentifierFormat(pubKey []byte, role beacon.Role) string {
-	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), role.String())
-}

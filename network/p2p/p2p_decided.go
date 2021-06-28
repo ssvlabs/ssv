@@ -9,7 +9,7 @@ import (
 )
 
 // BroadcastDecided broadcasts a decided instance with collected signatures
-func (n *p2pNetwork) BroadcastDecided(msg *proto.SignedMessage) error {
+func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
 		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
@@ -19,7 +19,7 @@ func (n *p2pNetwork) BroadcastDecided(msg *proto.SignedMessage) error {
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
-	topic, err := n.getTopic(msg.Message.GetValidatorPk())
+	topic, err := n.getTopic(topicName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get topic")
 	}

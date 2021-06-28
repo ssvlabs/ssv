@@ -16,7 +16,6 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 			Type:        proto.RoundState_Decided,
 			Round:       2,
 			Lambda:      []byte{1, 2, 3, 4},
-			ValidatorPk: []byte{1, 2, 3, 4},
 			SeqNumber:   1,
 		},
 		Signature: []byte{1, 2, 3, 4},
@@ -26,7 +25,7 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 
 	value, err := storage.GetDecided([]byte{1, 2, 3, 4}, 1)
 	require.NoError(t, err)
-	require.EqualValues(t, []byte{1, 2, 3, 4}, value.Message.ValidatorPk)
+	require.EqualValues(t, []byte{1, 2, 3, 4}, value.Message.Lambda)
 	require.EqualValues(t, 1, value.Message.SeqNumber)
 	require.EqualValues(t, []byte{1, 2, 3, 4}, value.Signature)
 
@@ -60,7 +59,6 @@ func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
 			Type:        proto.RoundState_Decided,
 			Round:       2,
 			Lambda:      []byte{1, 2, 3, 4},
-			ValidatorPk: []byte{1, 2, 3, 4},
 			SeqNumber:   1,
 		},
 		Signature: []byte{1, 2, 3, 4},
@@ -70,7 +68,7 @@ func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
 
 	value, err := storage.GetHighestDecidedInstance([]byte{1, 2, 3, 4})
 	require.NoError(t, err)
-	require.EqualValues(t, []byte{1, 2, 3, 4}, value.Message.ValidatorPk)
+	require.EqualValues(t, []byte{1, 2, 3, 4}, value.Message.Lambda)
 	require.EqualValues(t, 1, value.Message.SeqNumber)
 	require.EqualValues(t, []byte{1, 2, 3, 4}, value.Signature)
 
