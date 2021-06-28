@@ -230,9 +230,9 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	// notifies open streams
 	validatorMsg := toValidatorMessage(validatorShare)
 	// TODO: aggregate validators in sync scenario
-	// currently this will overload the network with WS stream messages
+	// otherwise the network will be overloaded with multiple messages
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
-		Type:   api.TypeOperator,
+		Type:   api.TypeValidator,
 		Filter: api.MessageFilter{From: 0, To: 0},
 		Data:   []api.ValidatorInformation{*validatorMsg},
 	}, Conn: nil})
