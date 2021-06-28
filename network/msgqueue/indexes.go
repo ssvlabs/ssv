@@ -24,8 +24,8 @@ func iBFTMessageIndex() IndexFunc {
 }
 
 // IBFTAllRoundChangeIndexKey is the ibft index key for all round change msgs
-func IBFTAllRoundChangeIndexKey(lambda []byte) string {
-	return fmt.Sprintf("lambda_%s_all_round_changes", hex.EncodeToString(lambda))
+func IBFTAllRoundChangeIndexKey(lambda []byte, seqNumber uint64) string {
+	return fmt.Sprintf("lambda_%s_seqNumber_%d_all_round_changes", hex.EncodeToString(lambda), seqNumber)
 }
 func iBFTAllRoundChangeIndex() IndexFunc {
 	return func(msg *network.Message) []string {
@@ -34,7 +34,7 @@ func iBFTAllRoundChangeIndex() IndexFunc {
 			msg.SignedMessage.Message != nil &&
 			msg.SignedMessage.Message.Type == proto.RoundState_ChangeRound {
 			return []string{
-				IBFTAllRoundChangeIndexKey(msg.Lambda),
+				IBFTAllRoundChangeIndexKey(msg.Lambda, msg.SignedMessage.Message.SeqNumber),
 			}
 		}
 		return []string{}

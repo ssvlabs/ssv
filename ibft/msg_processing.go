@@ -39,7 +39,7 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
 	i.msgProcessingLock.Lock()
 	defer i.msgProcessingLock.Unlock()
-	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda)); msgsMap != nil {
+	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)); msgsMap != nil {
 		// get values and keys slices
 		msgs := make([]*network.Message, 0)
 		msgsIds := make([]string, 0)
