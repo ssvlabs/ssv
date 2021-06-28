@@ -7,6 +7,7 @@ import (
 	"net/http"
 )
 
+// NewAdapterMock creates a new adapter for tests
 func NewAdapterMock(logger *zap.Logger) WebSocketAdapter {
 	adapter := AdapterMock{
 		logger: logger,
@@ -16,16 +17,19 @@ func NewAdapterMock(logger *zap.Logger) WebSocketAdapter {
 	return &adapter
 }
 
+// AdapterMock is a mock websocket adapter
 type AdapterMock struct {
 	logger *zap.Logger
 	In     chan Message
 	Out    chan Message
 }
 
+// RegisterHandler not implemented
 func (am *AdapterMock) RegisterHandler(mux *http.ServeMux, endPoint string, handler EndPointHandler) {
 	am.logger.Warn("not implemented")
 }
 
+// Send sends the given struct to the out channel
 func (am *AdapterMock) Send(conn Connection, v interface{}) error {
 	msg, ok := v.(*Message)
 	if !ok {
@@ -35,6 +39,7 @@ func (am *AdapterMock) Send(conn Connection, v interface{}) error {
 	return nil
 }
 
+// Receive reads a struct from the in channel
 func (am *AdapterMock) Receive(conn Connection, v interface{}) error {
 	msg := <-am.In
 	raw, _ := json.Marshal(&msg)
