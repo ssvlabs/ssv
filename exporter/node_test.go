@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/api/adapters/mock"
 	"github.com/bloxapp/ssv/pubsub"
-	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
@@ -69,7 +68,7 @@ func TestExporter_ProcessIncomingExportReq(t *testing.T) {
 
 func newMockExporter() (*exporter, error) {
 	logger := zap.L()
-	db, err := ssvstorage.GetStorageFactory(basedb.Options{
+	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Logger: logger,
 		Path:   "",
@@ -78,7 +77,7 @@ func newMockExporter() (*exporter, error) {
 		return nil, err
 	}
 
-	adapter := mock.NewAdapterMock(logger)
+	adapter := api.NewAdapterMock(logger)
 	ws := api.NewWsServer(logger, adapter, nil)
 
 	opts := Options{
