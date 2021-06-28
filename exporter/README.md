@@ -199,5 +199,21 @@ make NODES=exporter-node docker-all
 make DEBUG_NODES=exporter-node-dev docker-debug
 ```
 
+### Explore API
 
+Use a tool for WebSockets (such as [wscat](https://www.npmjs.com/package/wscat)) to interact with the API.
 
+```shell
+wscat -c ws://ws-exporter.stage.ssv.network/query
+```
+
+Once connection is ready, type your query:
+
+```shell
+> { "type": "operator", "filter": { "from": 0, "to": 4 } }
+```
+
+The expected results contains a list of desired operators, in our case in index `[0, 4]`
+```shell
+< { "type": "operator", "filter": { "from": 0, "to": 4}, "data":[...] }
+```
