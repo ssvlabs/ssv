@@ -9,7 +9,7 @@ import (
 )
 
 // BroadcastSignature broadcasts the given signature for the given lambda
-func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
+func (n *p2pNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
 		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
@@ -18,7 +18,7 @@ func (n *p2pNetwork) BroadcastSignature(msg *proto.SignedMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic, err := n.getTopic(msg.Message.GetValidatorPk())
+	topic, err := n.getTopic(topicName)
 	if err != nil {
 		return errors.Wrap(err, "failed to get topic")
 	}

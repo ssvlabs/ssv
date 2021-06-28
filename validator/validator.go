@@ -132,13 +132,6 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 
 func setupIbftController(role int, logger *zap.Logger, db basedb.IDb, network network.Network, msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.IBFT {
 	ibftStorage := collections.NewIbft(db, logger, beacon.Role(role).String())
-	return ibft.New(
-		beacon.Role(role),
-		logger,
-		&ibftStorage,
-		network,
-		msgQueue,
-		proto.DefaultConsensusParams(),
-		share,
-	)
+	identifier := []byte(IdentifierFormat(share.PublicKey.Serialize(), beacon.Role(role)))
+	return ibft.New(beacon.Role(role), identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
 }

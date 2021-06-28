@@ -243,6 +243,5 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 		Lambda:      i.State.Lambda,
 		SeqNumber:   i.State.SeqNumber,
 		Value:       data,
-		ValidatorPk: i.ValidatorShare.PublicKey.Serialize(),
 	}, nil
 }

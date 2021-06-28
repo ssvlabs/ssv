@@ -68,7 +68,10 @@ func (n *p2pNetwork) handleStream() {
 				switch cm.Type {
 				case network.NetworkMsg_SyncType:
 					cm.SyncMessage.FromPeerID = stream.Conn().RemotePeer().String()
-					ls.syncCh <- &network.SyncChanObj{Msg: cm.SyncMessage, Stream: netSyncStream}
+					ls.syncCh <- &network.SyncChanObj{
+						Msg:    cm.SyncMessage,
+						Stream: netSyncStream,
+					}
 				}
 			}(ls)
 		}

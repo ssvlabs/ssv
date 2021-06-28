@@ -13,18 +13,18 @@ import (
 type ReqHandler struct {
 	// paginationMaxSize is the max number of returned elements in a single response
 	paginationMaxSize uint64
-	validatorPK       []byte
+	identifier        []byte
 	network           network.Network
 	storage           collections.Iibft
 	logger            *zap.Logger
 }
 
 // NewReqHandler returns a new instance of ReqHandler
-func NewReqHandler(logger *zap.Logger, validatorPK []byte, network network.Network, storage collections.Iibft) *ReqHandler {
+func NewReqHandler(logger *zap.Logger, identifier []byte, network network.Network, storage collections.Iibft) *ReqHandler {
 	return &ReqHandler{
 		paginationMaxSize: 25, // TODO - change to be a param
 		logger:            logger,
-		validatorPK:       validatorPK,
+		identifier:        identifier,
 		network:           network,
 		storage:           storage,
 	}
@@ -59,7 +59,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 
 	ret := make([]*proto.SignedMessage, 0)
 	for i := startSeq; i <= endSeq; i++ {
-		decidedMsg, err := s.storage.GetDecided(msg.Msg.ValidatorPk, i)
+		decidedMsg, err := s.storage.GetDecided(msg.Msg.Lambda, i)
 		if err != nil {
 			s.logger.Error("failed to get decided", zap.Error(err))
 			continue
@@ -70,7 +70,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 
 	retMsg := &network.SyncMessage{
 		SignedMessages: ret,
-		ValidatorPk:    msg.Msg.ValidatorPk,
+		Lambda:         msg.Msg.Lambda,
 		Type:           network.Sync_GetInstanceRange,
 	}
 	if err := s.network.RespondToGetDecidedByRange(msg.Stream, retMsg); err != nil {
@@ -79,7 +79,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 }
 
 func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
-	highest, err := s.storage.GetHighestDecidedInstance(msg.Msg.ValidatorPk)
+	highest, err := s.storage.GetHighestDecidedInstance(msg.Msg.Lambda)
 	if err != nil {
 		if err.Error() != kv.EntryNotFoundError {
 			s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))

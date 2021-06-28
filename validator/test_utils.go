@@ -55,11 +55,11 @@ type testIBFT struct {
 func (t *testIBFT) Init() {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
-	t.identifier = []byte(ibft.IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
+	t.identifier = []byte(IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
-func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
-	return t.decided, t.signaturesCount, opts.Value
+func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte, error) {
+	return t.decided, t.signaturesCount, opts.Value, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

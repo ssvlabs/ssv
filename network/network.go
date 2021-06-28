@@ -32,32 +32,32 @@ type SyncStream interface {
 // Network represents the behavior of the network
 type Network interface {
 	// Broadcast propagates a signed message to all peers
-	Broadcast(msg *proto.SignedMessage) error
+	Broadcast(topicName []byte, msg *proto.SignedMessage) error
 
 	// ReceivedMsgChan is a channel that forwards new propagated messages to a subscriber
 	ReceivedMsgChan() <-chan *proto.SignedMessage
 
 	// BroadcastSignature broadcasts the given signature for the given lambda
-	BroadcastSignature(msg *proto.SignedMessage) error
+	BroadcastSignature(topicName []byte, msg *proto.SignedMessage) error
 
 	// ReceivedSignatureChan returns the channel with signatures
 	ReceivedSignatureChan() <-chan *proto.SignedMessage
 
 	// BroadcastDecided broadcasts a decided instance with collected signatures
-	BroadcastDecided(msg *proto.SignedMessage) error
+	BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error
 
 	// ReceivedDecidedChan returns the channel for decided messages
 	ReceivedDecidedChan() <-chan *proto.SignedMessage
 
 	// GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 	// If peer list is nil, broadcasts to all.
-	GetHighestDecidedInstance(peerID string, msg *SyncMessage) (*SyncMessage, error)
+	GetHighestDecidedInstance(peerStr string, msg *SyncMessage) (*SyncMessage, error)
 
 	// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 	RespondToHighestDecidedInstance(stream SyncStream, msg *SyncMessage) error
 
 	// GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-	GetDecidedByRange(peerID string, msg *SyncMessage) (*SyncMessage, error)
+	GetDecidedByRange(peerStr string, msg *SyncMessage) (*SyncMessage, error)
 
 	// RespondToGetDecidedByRange responds to a GetDecidedByRange
 	RespondToGetDecidedByRange(stream SyncStream, msg *SyncMessage) error

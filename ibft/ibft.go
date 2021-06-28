@@ -1,8 +1,12 @@
 package ibft
 
 import (
-	"encoding/hex"
-	"fmt"
+	"strconv"
+	"sync"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
@@ -10,9 +14,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
-	"sync"
-
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -35,7 +36,7 @@ type IBFT interface {
 	Init()
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (bool, int, []byte)
+	StartInstance(opts StartOptions) (bool, int, []byte, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
@@ -67,7 +68,8 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
+func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
+	logger = logger.With(zap.String("role", role.String()))
 	ret := &ibftImpl{
 		role:                role,
 		ibftStorage:         storage,
@@ -77,7 +79,7 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 		msgQueue:            queue,
 		instanceConfig:      instanceConfig,
 		ValidatorShare:      ValidatorShare,
-		Identifier:          []byte(IdentifierFormat(ValidatorShare.PublicKey.Serialize(), role)),
+		Identifier:          identifier,
 		leaderSelector:      &leader.Deterministic{},
 
 		// flags
@@ -87,8 +89,8 @@ func New(role beacon.Role, logger *zap.Logger, storage collections.Iibft, networ
 }
 
 func (i *ibftImpl) Init() {
-	i.listenToDecidedQueueMessages()
-	i.listenToSyncQueueMessages(i.ValidatorShare.PublicKey.Serialize()) // pass the pubkey byte to avoid deadlock
+	i.processDecidedQueueMessages()
+	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
 	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	i.SyncIBFT()
@@ -97,11 +99,11 @@ func (i *ibftImpl) Init() {
 	i.initFinished = true
 }
 
-func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
+func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 	instanceOpts := i.instanceOptionsFromStartOptions(opts)
 
 	if err := i.canStartNewInstance(instanceOpts); err != nil {
-		opts.Logger.Error("can't start new iBFT instance", zap.Error(err))
+		return false, 0, nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
 	newInstance := NewInstance(instanceOpts)
@@ -110,10 +112,9 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 	go newInstance.StartMessagePipeline()
 	stageChan := newInstance.GetStageChan()
 
-	err := i.resetLeaderSelection(i.Identifier) // Important for deterministic leader selection
+	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
 	if err != nil {
-		newInstance.Logger.Error("could not reset leader selection", zap.Error(err))
-		return false, 0, nil
+		return false, 0, nil, errors.WithMessage(err, "could not reset leader selection")
 	}
 	go newInstance.Start(opts.Value)
 
@@ -122,28 +123,25 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(newInstance.ValidatorShare.PublicKey.Serialize(), newInstance.State); err != nil {
-				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
-				return false, 0, nil
+			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), newInstance.State); err != nil {
+				return false, 0, nil, errors.WithMessage(err, "could not save prepare msg to storage")
 			}
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
-				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
-				return false, 0, nil
+				return false, 0, nil, errors.WithMessage(err, "could not get aggregated commit msg and save to storage")
 			}
 			if err := i.ibftStorage.SaveDecided(agg); err != nil {
-				newInstance.Logger.Error("could not save aggregated commit msg to storage", zap.Error(err))
-				return false, 0, nil
+				return false, 0, nil, errors.WithMessage(err, "could not save aggregated commit msg to storage")
 			}
 			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
-				i.logger.Error("could not save highest decided message to storage", zap.Error(err))
+				return false, 0, nil, errors.WithMessage(err, "could not save highest decided message to storage")
 			}
-			if err := i.network.BroadcastDecided(agg); err != nil {
-				i.logger.Error("could not broadcast decided message", zap.Error(err))
+			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
+				return false, 0, nil, errors.WithMessage(err, "could not broadcast decided message")
 			}
 			i.currentInstance = nil
-			return true, len(agg.GetSignerIds()), agg.Message.Value
+			return true, len(agg.GetSignerIds()), agg.Message.Value, nil
 		}
 	}
 }
@@ -155,7 +153,7 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *ibftImpl) GetIdentifier() []byte {
-	return i.Identifier
+	return i.Identifier //TODO should use mutex to lock var?
 }
 
 // resetLeaderSelection resets leader selection with seed and round 1
@@ -163,7 +161,3 @@ func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
 	return i.leaderSelector.SetSeed(seed, 1)
 }
 
-// IdentifierFormat return base format for lambda
-func IdentifierFormat(pubKey []byte, role beacon.Role) string {
-	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), role.String())
-}

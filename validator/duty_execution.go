@@ -30,6 +30,11 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 
 	// start timeout
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				v.logger.Error("recovered in waitForSignatureCollection", zap.Any("error", r))
+			}
+		}()
 		<-time.After(v.signatureCollectionTimeout)
 		lock.Lock()
 		defer lock.Unlock()
@@ -47,6 +52,11 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 		}
 		if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier, seqNumber)); msg != nil {
 			if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
+				v.logger.Error("missing signer id", zap.Any("msg", msg.SignedMessage))
+				continue
+			}
+			if len(msg.SignedMessage.Signature) == 0 { // no signer, empty sig
+				v.logger.Error("missing sig", zap.Any("msg", msg.SignedMessage))
 				continue
 			}
 			if _, found := signatures[msg.SignedMessage.SignerIds[0]]; found { // sig already exists
@@ -88,11 +98,10 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 
 	identifier := v.ibfts[role].GetIdentifier()
 	// TODO - should we construct it better?
-	if err := v.network.BroadcastSignature(&proto.SignedMessage{
+	if err := v.network.BroadcastSignature(v.Share.PublicKey.Serialize(), &proto.SignedMessage{
 		Message: &proto.Message{
-			Lambda:      identifier,
-			ValidatorPk: duty.PublicKey,
-			SeqNumber:   seqNumber,
+			Lambda:    identifier,
+			SeqNumber: seqNumber,
 		},
 		Signature: sig,
 		SignerIds: []uint64{v.Share.NodeID},
@@ -123,6 +132,12 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	var inputByts []byte
 	var err error
 	var valCheckInstance ibftvalcheck.ValueCheck
+
+	l := logger.With(zap.String("role", role.String()))
+	if _, ok := v.ibfts[role]; !ok {
+		return 0, nil, 0, errors.Errorf("no ibft for this role [%s]", role.String())
+	}
+
 	switch role {
 	case beacon.RoleAttester:
 		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
@@ -172,19 +187,13 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		return 0, nil, 0, errors.Errorf("unknown role: %s", role.String())
 	}
 
-	l := logger.With(zap.String("role", role.String()))
-
-	if _, ok := v.ibfts[role]; !ok {
-		return 0, nil, 0, errors.Errorf("no ibft for this role [%s]", role.String())
-	}
-
 	// calculate next seq
 	seqNumber, err := v.ibfts[role].NextSeqNumber()
 	if err != nil {
 		return 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	decided, signaturesCount, decidedValue := v.ibfts[role].StartInstance(ibft.StartOptions{
+	decided, signaturesCount, decidedValue, err := v.ibfts[role].StartInstance(ibft.StartOptions{
 		Duty:           duty,
 		ValidatorShare: *v.Share,
 		Logger:         l,
@@ -192,7 +201,9 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		SeqNumber:      seqNumber,
 		Value:          inputByts,
 	})
-
+	if err != nil{
+		return 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
+	}
 	if !decided {
 		return 0, nil, 0, errors.New("ibft did not decide, not executing role")
 	}

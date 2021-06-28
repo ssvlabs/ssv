@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Message represents an exporter message
@@ -50,20 +51,27 @@ const (
 	RoleProposer DutyRole = "PROPOSER"
 )
 
-// Response creates a response of some request message
-func (m *Message) Response() *Message {
-	res := Message{
-		Type:   m.Type,
-		Filter: m.Filter,
-		Data:   struct{}{},
-	}
-
-	return &res
-}
-
-// ValidatorMsg represents a transferable object
-type ValidatorMsg struct {
+// ValidatorInformation represents a transferable object
+type ValidatorInformation struct {
 	Index     int64                  `json:"index"`
 	PublicKey string                 `json:"publicKey"`
 	Committee map[uint64]*proto.Node `json:"operators"`
+}
+
+// ValidatorsMessage represents message for validators response
+type ValidatorsMessage struct {
+	Data []ValidatorInformation `json:"data,omitempty"`
+}
+
+// OperatorInformation the public data of an operator
+type OperatorInformation struct {
+	PublicKey    []byte         `json:"publicKey"`
+	Name         string         `json:"name"`
+	OwnerAddress common.Address `json:"ownerAddress"`
+	Index        int64          `json:"index"`
+}
+
+// OperatorsMessage represents message for operators response
+type OperatorsMessage struct {
+	Data []OperatorInformation `json:"data,omitempty"`
 }

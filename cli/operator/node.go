@@ -26,7 +26,7 @@ type config struct {
 
 	Network           string `yaml:"Network" env-default:"prater"`
 	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	OperatorKey       string `yaml:"OperatorKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	OperatorKey       string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr          string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
 	ETH1SyncOffset    string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
 	SmartContractAddr string `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`

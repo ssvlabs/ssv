@@ -47,7 +47,6 @@ func TestInstanceStop(t *testing.T) {
 		Lambda:      []byte("Lambda"),
 		Value:       []byte(time.Now().Weekday().String()),
 		SeqNumber:   1,
-		ValidatorPk: secretKeys[1].GetPublicKey().Serialize(),
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
 		Lambda:        msg.Message.Lambda,
@@ -62,7 +61,6 @@ func TestInstanceStop(t *testing.T) {
 		Lambda:      []byte("Lambda"),
 		Value:       []byte(time.Now().Weekday().String()),
 		SeqNumber:   1,
-		ValidatorPk: secretKeys[1].GetPublicKey().Serialize(),
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
 		Lambda:        msg.Message.Lambda,
@@ -75,7 +73,6 @@ func TestInstanceStop(t *testing.T) {
 		Lambda:      []byte("Lambda"),
 		Value:       []byte(time.Now().Weekday().String()),
 		SeqNumber:   1,
-		ValidatorPk: secretKeys[1].GetPublicKey().Serialize(),
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
 		Lambda:        msg.Message.Lambda,
@@ -94,7 +91,6 @@ func TestInstanceStop(t *testing.T) {
 		Lambda:      []byte("Lambda"),
 		Value:       []byte(time.Now().Weekday().String()),
 		SeqNumber:   1,
-		ValidatorPk: secretKeys[1].GetPublicKey().Serialize(),
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
 		Lambda:        msg.Message.Lambda,

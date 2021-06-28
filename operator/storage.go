@@ -74,7 +74,7 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	}
 	var operatorKey = string(operatorKeyByte)
 
-	newSk, err := s.verifyPrivateKeyExist(operatorKey)
+	newSk, exist, err := s.verifyPrivateKeyExist(operatorKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to verify operator private key")
 	}
@@ -85,6 +85,12 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 
 		if err := s.savePrivateKey(operatorKey); err != nil {
 			return errors.Wrap(err, "failed to save operator private key")
+		}
+	} else if operatorKey != "" {
+		if !exist {
+			s.logger.Info("using operator key from config")
+		} else {
+			s.logger.Info("overriding operator key with config")
 		}
 	}
 
@@ -110,18 +116,22 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 }
 
 // verifyPrivateKeyExist return true if key exist and no new key passed else return new generated key
-func (s *storage) verifyPrivateKeyExist(operatorKey string) (string, error) {
+func (s *storage) verifyPrivateKeyExist(operatorKey string) (string, bool, error) {
 	// check if sk is exist or passedKey is passed. if not, generate new operator key
-	if _, err := s.GetPrivateKey(); err != nil { // need to generate new operator key
+	_, err := s.GetPrivateKey()
+	if err != nil { // need to generate new operator key
 		if err.Error() == kv.EntryNotFoundError && operatorKey == "" {
 			_, skByte, err := rsaencryption.GenerateKeys()
 			if err != nil {
-				return "", errors.Wrap(err, "failed to generate new keys")
+				return "", false, errors.Wrap(err, "failed to generate new keys")
 			}
-			return string(skByte), nil // new key generated
+			s.logger.Info("using new generated operator key")
+			return string(skByte), false, nil // new key generated
 		} else if err.Error() != kv.EntryNotFoundError {
-			return "", errors.Wrap(err, "failed to get private key")
+			return "", false, errors.Wrap(err, "failed to get private key")
 		}
 	}
-	return "", nil // key already exist, no need to return sk
+	exist := err == nil || err.Error() != kv.EntryNotFoundError
+	s.logger.Info("using operator key from storage")
+	return "", exist, nil // key already exist, no need to return sk
 }
