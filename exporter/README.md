@@ -109,10 +109,19 @@ and a `type` to distinguish between messages:
   }
 }
 ```
+
 Response extends the Request with a `data` section that contains the corresponding results:
 ```
 {
   "data": Operator[] | Validator[] | DecidedMessage[]
+}
+```
+
+In addition, response might reflect an error, see [Error Handling](#error-handling):
+```
+{
+  "type": "error",
+  "data": string[]
 }
 ```
 
@@ -156,6 +165,41 @@ Exporter will produce the following response:
 }
 ```
 
+###### Error Handling
+
+In case of bad request or some internal error, the response will be of `type` "error".
+
+Bad input (corrupted JSON) produces:
+```json
+{
+  "type": "error",
+  "filter": {
+    "from": 0,
+    "to": 0
+  },
+  "data": [
+    "could not parse network message"
+  ]
+}
+```
+
+Unknown message type results:
+
+```json
+{
+  "type": "error",
+  "filter": {
+    "from": 0,
+    "to": 0
+  },
+  "data": [
+    "bad request - unknown message type 'foo'"
+  ]
+}
+```
+
+
+
 ##### Stream
 
 `/stream` is an API that allows consumers to get live data that is collected by the exporter, which will push the information it receives (validator, operator or duties) from SSV nodes or contract. 
@@ -178,13 +222,18 @@ For example, exporter will push a message if a new validator was added to the ne
 }
 ```
 
-
 ## Usage
 
 ### Run Locally
 
+Make sure you have the executable:
 ```shell
-make CONFIG_PATH=./config/config.exporter.yaml start-exporter
+make build
+```
+
+Then run with:
+```shell
+make CONFIG_PATH=./config/config.exporter.yaml BUILD_PATH=./bin/ssvnode start-exporter
 ```
 
 ### Run in Docker
