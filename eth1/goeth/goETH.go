@@ -177,14 +177,13 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	}
 	operatorPriveKey, err := ec.operatorPrivKeyProvider()
 	if err != nil {
-		return errors.Wrap(err, "Failed to get operator private key")
+		return errors.Wrap(err, "failed to get operator private key")
 	}
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
 		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, vLog.Data, contractAbi)
 		if err != nil {
-			//ec.logger.Error("Failed to parse OperatorAdded event", zap.Error(err))
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
