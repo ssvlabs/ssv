@@ -122,15 +122,16 @@ func (exp *exporter) Start() error {
 // processIncomingExportRequests waits for incoming messages and
 func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChannel, outbound pubsub.Publisher) {
 	for raw := range incoming {
-		exp.logger.Debug("got incoming export request")
 		nm, ok := raw.(api.NetworkMessage)
 		if !ok {
-			exp.logger.Warn("could not parse network message")
+			exp.logger.Warn("could not parse export request message")
 			nm = api.NetworkMessage{Msg: api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}}
 		}
 		if nm.Err != nil {
 			nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
 		}
+		exp.logger.Debug("got incoming export request",
+			zap.String("type", string(nm.Msg.Type)))
 		switch nm.Msg.Type {
 		case api.TypeOperator:
 			handleOperatorsQuery(exp.logger, exp.storage, &nm)
@@ -139,9 +140,7 @@ func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChanne
 		case api.TypeIBFT:
 			handleDutiesQuery(exp.logger, &nm)
 		case api.TypeError:
-			if errs, ok := nm.Msg.Data.([]string); !ok || len(errs) == 0 {
-				nm.Msg.Data = []string{"unknown error"}
-			}
+			handleErrorQuery(exp.logger, &nm)
 		default:
 			handleUnknownQuery(exp.logger, &nm)
 		}

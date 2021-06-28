@@ -8,6 +8,9 @@ import (
 )
 
 func handleOperatorsQuery(logger *zap.Logger, storage Storage, nm *api.NetworkMessage) {
+	logger.Debug("handles operators request",
+		zap.Int64("from", nm.Msg.Filter.From),
+		zap.Int64("to", nm.Msg.Filter.To))
 	operators, err := storage.ListOperators(nm.Msg.Filter.From, nm.Msg.Filter.To)
 	if err != nil {
 		logger.Error("could not get operators", zap.Error(err))
@@ -17,6 +20,8 @@ func handleOperatorsQuery(logger *zap.Logger, storage Storage, nm *api.NetworkMe
 			Data:   []string{"internal error - could not get operators"},
 		}
 	} else {
+		logger.Debug("found operators",
+			zap.Int("count", len(operators)))
 		nm.Msg = api.Message{
 			Type:   nm.Msg.Type,
 			Filter: nm.Msg.Filter,
@@ -53,6 +58,24 @@ func handleDutiesQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 	nm.Msg = api.Message{
 		Type: api.TypeError,
 		Data: []string{"bad request - not implemented yet"},
+	}
+}
+
+func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
+	logger.Warn("handles error message")
+	if _, ok := nm.Msg.Data.([]string); !ok {
+		nm.Msg.Data = []string{}
+	}
+	errs := nm.Msg.Data.([]string)
+	if nm.Err != nil {
+		errs = append(errs, nm.Err.Error())
+	}
+	if len(errs) == 0 {
+		errs = append(errs, "unknown error")
+	}
+	nm.Msg = api.Message{
+		Type: api.TypeError,
+		Data: errs,
 	}
 }
 

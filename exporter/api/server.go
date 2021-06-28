@@ -71,6 +71,10 @@ func (ws *wsServer) handleQuery(conn Connection) {
 		var incoming Message
 		err := ws.adapter.Receive(conn, &incoming)
 		if err != nil {
+			if ws.adapter.IsCloseError(err) { // stop on any close error
+				ws.logger.Debug("failed to read message as the connection was closed", zap.Error(err))
+				return
+			}
 			ws.logger.Warn("could not read incoming message", zap.Error(err))
 			nm = NetworkMessage{incoming, err, conn}
 		} else {
