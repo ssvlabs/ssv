@@ -5,11 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math"
 )
 
 var (
@@ -22,17 +23,9 @@ var (
 type Storage interface {
 	eth1.SyncOffsetStorage
 
-	GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error)
-	SaveOperatorInformation(operatorInformation *OperatorInformation) error
-	ListOperators(index int64) ([]OperatorInformation, error)
-}
-
-// OperatorInformation the public data of an operator
-type OperatorInformation struct {
-	PublicKey    []byte         `json:"publicKey"`
-	Name         string         `json:"name"`
-	OwnerAddress common.Address `json:"ownerAddress"`
-	Index        int64          `json:"index"`
+	GetOperatorInformation(operatorPubKey []byte) (*api.OperatorInformation, error)
+	SaveOperatorInformation(operatorInformation *api.OperatorInformation) error
+	ListOperators(from int64, to int64) ([]api.OperatorInformation, error)
 }
 
 type exporterStorage struct {
@@ -63,16 +56,20 @@ func (es *exporterStorage) GetSyncOffset() (*eth1.SyncOffset, error) {
 }
 
 // ListOperators returns information of all the known operators
-func (es *exporterStorage) ListOperators(index int64) ([]OperatorInformation, error) {
+// when 'to' equals zero, all operators will be returned
+func (es *exporterStorage) ListOperators(from int64, to int64) ([]api.OperatorInformation, error) {
 	objs, err := es.db.GetAllByCollection(append(storagePrefix, operatorsPrefix...))
 	if err != nil {
 		return nil, err
 	}
-	var operators []OperatorInformation
+	if to == 0 {
+		to = math.MaxInt64
+	}
+	var operators []api.OperatorInformation
 	for _, obj := range objs {
-		var oi OperatorInformation
+		var oi api.OperatorInformation
 		err = json.Unmarshal(obj.Value, &oi)
-		if oi.Index >= index {
+		if oi.Index >= from && oi.Index <= to {
 			operators = append(operators, oi)
 		}
 	}
@@ -80,18 +77,18 @@ func (es *exporterStorage) ListOperators(index int64) ([]OperatorInformation, er
 }
 
 // GetOperatorInformation returns information of the given operator by public key
-func (es *exporterStorage) GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error) {
+func (es *exporterStorage) GetOperatorInformation(operatorPubKey []byte) (*api.OperatorInformation, error) {
 	obj, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
 	if err != nil {
 		return nil, err
 	}
-	var operatorInformation OperatorInformation
+	var operatorInformation api.OperatorInformation
 	err = json.Unmarshal(obj.Value, &operatorInformation)
 	return &operatorInformation, err
 }
 
 // SaveOperatorInformation saves operator information by its public key
-func (es *exporterStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
+func (es *exporterStorage) SaveOperatorInformation(operatorInformation *api.OperatorInformation) error {
 	existing, err := es.GetOperatorInformation(operatorInformation.PublicKey)
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return errors.Wrap(err, "could not read information from DB")
