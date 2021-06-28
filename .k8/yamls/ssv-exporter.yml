@@ -2,24 +2,24 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
-  name: ssv-explorer
+  name: ssv-exporter
   namespace: REPLACE_NAMESPACE
 spec:
   hosts:
   - "ws-exporter.REPLACE_DOMAIN_SUFFIX"
   gateways:
-  - ssv-explorer
+  - ssv-exporter
   http:
   - route:
     - destination:
-        host: ssv-explorer
+        host: ssv-exporter
         port:
           number: 14000
 ---
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
-  name: ssv-explorer
+  name: ssv-exporter
   namespace: REPLACE_NAMESPACE
 spec:
   selector:
@@ -35,10 +35,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssv-explorer
+  name: ssv-exporter
   namespace: REPLACE_NAMESPACE
   labels:
-    app: ssv-explorer
+    app: ssv-exporter
 spec:
   type: ClusterIP
   ports:
@@ -55,14 +55,14 @@ spec:
       targetPort: 14000
       name: port-14000
   selector:
-    app: ssv-explorer
+    app: ssv-exporter
 ---
 apiVersion: REPLACE_API_VERSION 
 kind: Deployment
 metadata:
   labels:
-    app: ssv-explorer
-  name: ssv-explorer
+    app: ssv-exporter
+  name: ssv-exporter
   namespace: REPLACE_NAMESPACE
 spec:
   replicas: REPLACE_REPLICAS
@@ -70,11 +70,11 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: ssv-explorer
+      app: ssv-exporter
   template:
     metadata:
       labels:
-        app: ssv-explorer
+        app: ssv-exporter
     spec:
       affinity:
         podAntiAffinity:
@@ -116,7 +116,7 @@ spec:
               topologyKey: kubernetes.io/hostname
             weight: 1              
       containers:
-      - name: ssv-explorer
+      - name: ssv-exporter
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
         command: ["make", "start-exporter"]
@@ -162,15 +162,15 @@ spec:
             value: ./data/db
         volumeMounts:
         - mountPath: /data
-          name: ssv-explorer
+          name: ssv-exporter
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-explorer-cm
+          name: ssv-exporter-cm
       volumes:
-      - name: ssv-explorer
+      - name: ssv-exporter
         persistentVolumeClaim:
-          claimName: ssv-explorer
-      - name: ssv-explorer-cm
+          claimName: ssv-exporter
+      - name: ssv-exporter-cm
         configMap:
-          name: ssv-explorer-cm
+          name: ssv-exporter-cm
       hostNetwork: true      
