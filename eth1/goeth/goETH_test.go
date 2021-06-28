@@ -32,7 +32,6 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	cn, err := ec.EventsSubject().Register("ObserverForTest")
 	require.NoError(t, err)
 	var eventsWg sync.WaitGroup
-	eventsWg.Add(2)
 	go func() {
 		for e := range cn {
 			event, ok := e.(eth1.Event)
@@ -50,9 +49,14 @@ func TestEth1Client_handleEvent(t *testing.T) {
 		}
 	}()
 
-	ec.handleEvent(vLogOperatorAdded, contractAbi)
+	eventsWg.Add(1)
+	err = ec.handleEvent(vLogOperatorAdded, contractAbi)
+	require.NoError(t, err)
+
 	time.Sleep(10 * time.Millisecond)
-	ec.handleEvent(vLogValidatorAdded, contractAbi)
+	eventsWg.Add(1)
+	err = ec.handleEvent(vLogValidatorAdded, contractAbi)
+	require.NoError(t, err)
 
 	eventsWg.Wait()
 }

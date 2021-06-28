@@ -32,7 +32,7 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
-	parsed, isEventBelongsToOperator, err := ParseOperatorAddedEvent(zap.L(), vLogOperatorAdded.Data, contractAbi, "OperatorAdded")
+	parsed, isEventBelongsToOperator, err := ParseOperatorAddedEvent(zap.L(), vLogOperatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	require.False(t, isEventBelongsToOperator)
@@ -61,7 +61,7 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 
-	parsed, isEventBelongsToOperator, err := ParseValidatorAddedEvent(zap.L(), nil, vLogValidatorAdded.Data, contractAbi, "ValidatorAdded")
+	parsed, isEventBelongsToOperator, err := ParseValidatorAddedEvent(zap.L(), nil, vLogValidatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	require.False(t, isEventBelongsToOperator)

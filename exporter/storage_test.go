@@ -3,6 +3,7 @@ package exporter
 import (
 	"bytes"
 	"fmt"
+	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/fixtures"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -21,7 +22,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	require.NotNil(t, storage)
 	defer done()
 
-	operatorInfo := OperatorInformation{
+	operatorInfo := api.OperatorInformation{
 		PublicKey:    fixtures.RefPk[:],
 		Name:         "my_operator",
 		OwnerAddress: common.Address{},
@@ -44,14 +45,14 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	})
 
 	t.Run("create existing operator", func(t *testing.T) {
-		oi := OperatorInformation{
+		oi := api.OperatorInformation{
 			PublicKey:    []byte{1, 1, 1, 1, 1, 1},
 			Name:         "my_operator1",
 			OwnerAddress: common.Address{},
 		}
 		err := storage.SaveOperatorInformation(&oi)
 		require.NoError(t, err)
-		oiDup := OperatorInformation{
+		oiDup := api.OperatorInformation{
 			PublicKey:    []byte{1, 1, 1, 1, 1, 1},
 			Name:         "my_operator2",
 			OwnerAddress: common.Address{},
@@ -65,7 +66,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		i, err := storage.(*exporterStorage).nextOperatorIndex()
 		require.NoError(t, err)
 
-		ois := []OperatorInformation{
+		ois := []api.OperatorInformation{
 			{
 				PublicKey:    []byte{1, 1, 1, 1},
 				Name:         "my_operator1",
@@ -105,7 +106,7 @@ func TestStorage_ListOperators(t *testing.T) {
 	for i := 0; i < n; i++ {
 		pk, _, err := rsaencryption.GenerateKeys()
 		require.NoError(t, err)
-		operator := OperatorInformation{
+		operator := api.OperatorInformation{
 			PublicKey: pk,
 			Name:      fmt.Sprintf("operator-%d", i+1),
 		}
@@ -113,7 +114,7 @@ func TestStorage_ListOperators(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	operators, err := storage.ListOperators(0)
+	operators, err := storage.ListOperators(0, 0)
 	require.NoError(t, err)
 	require.Equal(t, 5, len(operators))
 	for _, operator := range operators {
