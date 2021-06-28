@@ -13,11 +13,10 @@ func TestGrouping(t *testing.T) {
 	msgs := []*network.Message{
 		{
 			SignedMessage: SignMsg(t, 1, sks[1], &proto.Message{
-				Type:        proto.RoundState_ChangeRound,
-				Round:       1,
-				SeqNumber:   1,
-				Lambda:      []byte("lambda"),
-				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				SeqNumber: 1,
+				Lambda:    []byte("lambda"),
 				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedValue: nil,
 				}),
@@ -25,11 +24,10 @@ func TestGrouping(t *testing.T) {
 		},
 		{
 			SignedMessage: SignMsg(t, 1, sks[1], &proto.Message{
-				Type:        proto.RoundState_ChangeRound,
-				Round:       1,
-				SeqNumber:   1,
-				Lambda:      []byte("lambda"),
-				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				SeqNumber: 1,
+				Lambda:    []byte("lambda"),
 				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedValue: nil,
 				}),
@@ -37,11 +35,10 @@ func TestGrouping(t *testing.T) {
 		},
 		{
 			SignedMessage: SignMsg(t, 1, sks[1], &proto.Message{
-				Type:        proto.RoundState_ChangeRound,
-				Round:       2,
-				SeqNumber:   1,
-				Lambda:      []byte("lambda"),
-				ValidatorPk: sks[1].GetPublicKey().Serialize(),
+				Type:      proto.RoundState_ChangeRound,
+				Round:     2,
+				SeqNumber: 1,
+				Lambda:    []byte("lambda"),
 				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
 					PreparedValue: nil,
 				}),
