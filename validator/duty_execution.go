@@ -90,8 +90,8 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 	// TODO - should we construct it better?
 	if err := v.network.BroadcastSignature(v.Share.PublicKey.Serialize(), &proto.SignedMessage{
 		Message: &proto.Message{
-			Lambda:      identifier,
-			SeqNumber:   seqNumber,
+			Lambda:    identifier,
+			SeqNumber: seqNumber,
 		},
 		Signature: sig,
 		SignerIds: []uint64{v.Share.NodeID},
@@ -122,6 +122,12 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	var inputByts []byte
 	var err error
 	var valCheckInstance ibftvalcheck.ValueCheck
+
+	l := logger.With(zap.String("role", role.String()))
+	if _, ok := v.ibfts[role]; !ok {
+		return 0, nil, 0, errors.Errorf("no ibft for this role [%s]", role.String())
+	}
+
 	switch role {
 	case beacon.RoleAttester:
 		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
@@ -169,12 +175,6 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		valCheckInstance = &valcheck.ProposerValueCheck{}
 	default:
 		return 0, nil, 0, errors.Errorf("unknown role: %s", role.String())
-	}
-
-	l := logger.With(zap.String("role", role.String()))
-
-	if _, ok := v.ibfts[role]; !ok {
-		return 0, nil, 0, errors.Errorf("no ibft for this role [%s]", role.String())
 	}
 
 	// calculate next seq
