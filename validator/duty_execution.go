@@ -47,6 +47,11 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 		}
 		if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier, seqNumber)); msg != nil {
 			if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
+				v.logger.Error("missing signer id", zap.Any("msg", msg.SignedMessage))
+				continue
+			}
+			if len(msg.SignedMessage.Signature) == 0 { // no signer, empty sig
+				v.logger.Error("missing sig", zap.Any("msg", msg.SignedMessage))
 				continue
 			}
 			if _, found := signatures[msg.SignedMessage.SignerIds[0]]; found { // sig already exists

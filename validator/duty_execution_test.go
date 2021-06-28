@@ -55,7 +55,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleUnknown,
 			refAttestationDataByts,
-			"unknown role: UNKNOWN",
+			"no ibft for this role [UNKNOWN]",
 		},
 	}
 
