@@ -31,12 +31,14 @@ type MessageFilter struct {
 type MessageType string
 
 const (
-	// TypeValidator is an enum for validator type
+	// TypeValidator is an enum for validator type messages
 	TypeValidator MessageType = "validator"
-	// TypeOperator is an enum for validator type
+	// TypeOperator is an enum for operator type messages
 	TypeOperator MessageType = "operator"
-	// TypeIBFT is an enum for validator type
+	// TypeIBFT is an enum for ibft type messages
 	TypeIBFT MessageType = "ibft"
+	// TypeError is an enum for error type messages
+	TypeError MessageType = "error"
 )
 
 // DutyRole is the role of the duty

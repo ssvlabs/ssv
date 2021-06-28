@@ -113,53 +113,39 @@ func (exp *exporter) Start() error {
 		}
 		defer exp.ws.IncomingSubject().Deregister("exporter-node")
 
-		exp.processIncomingExportReq(cn, exp.ws.OutboundSubject())
+		exp.processIncomingExportRequests(cn, exp.ws.OutboundSubject())
 	}()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
 
-// processIncomingExportReq waits for incoming messages and
-func (exp *exporter) processIncomingExportReq(incoming pubsub.SubjectChannel, outbound pubsub.Publisher) {
+// processIncomingExportRequests waits for incoming messages and
+func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChannel, outbound pubsub.Publisher) {
 	for raw := range incoming {
+		exp.logger.Debug("got incoming export request")
 		nm, ok := raw.(api.NetworkMessage)
 		if !ok {
 			exp.logger.Warn("could not parse network message")
-			continue
+			nm = api.NetworkMessage{Msg: api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}}
+		}
+		if nm.Err != nil {
+			nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
 		}
 		switch nm.Msg.Type {
 		case api.TypeOperator:
-			operators, err := exp.storage.ListOperators(nm.Msg.Filter.From, nm.Msg.Filter.To)
-			if err != nil {
-				exp.logger.Error("could not get operators", zap.Error(err))
-			}
-			nm.Msg = api.Message{
-				Type:   nm.Msg.Type,
-				Filter: nm.Msg.Filter,
-				Data: operators,
-			}
-			outbound.Notify(nm)
+			handleOperatorsQuery(exp.logger, exp.storage, &nm)
 		case api.TypeValidator:
-			validators, err := exp.validatorStorage.GetAllValidatorsShare()
-			if err != nil {
-				exp.logger.Error("could not get validators", zap.Error(err))
-			}
-			var validatorMsgs []api.ValidatorInformation
-			for _, v := range validators {
-				validatorMsg := toValidatorMessage(v)
-				validatorMsgs = append(validatorMsgs, *validatorMsg)
-			}
-			nm.Msg = api.Message{
-				Type:   nm.Msg.Type,
-				Filter: nm.Msg.Filter,
-				Data: validatorMsgs,
-			}
-			outbound.Notify(nm)
+			handleValidatorsQuery(exp.logger, exp.validatorStorage, &nm)
 		case api.TypeIBFT:
-			exp.logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
+			handleDutiesQuery(exp.logger, &nm)
+		case api.TypeError:
+			if errs, ok := nm.Msg.Data.([]string); !ok || len(errs) == 0 {
+				nm.Msg.Data = []string{"unknown error"}
+			}
 		default:
-			exp.logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
+			handleUnknownQuery(exp.logger, &nm)
 		}
+		outbound.Notify(nm)
 	}
 }
 
@@ -233,7 +219,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	// otherwise the network will be overloaded with multiple messages
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeValidator,
-		Filter: api.MessageFilter{From: 0, To: 0},
+		Filter: api.MessageFilter{From: validatorMsg.Index, To: validatorMsg.Index},
 		Data:   []api.ValidatorInformation{*validatorMsg},
 	}, Conn: nil})
 	// triggers a sync for the given validator
@@ -260,13 +246,11 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.logger.Debug("managed to save operator information",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
-	msg := api.Message{
-		Type: api.TypeOperator,
+	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
+		Type:   api.TypeOperator,
 		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
-		Data: []api.OperatorInformation{oi},
-	}
-
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: msg, Conn: nil})
+		Data:   []api.OperatorInformation{oi},
+	}, Conn: nil})
 
 	return nil
 }

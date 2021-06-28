@@ -24,7 +24,7 @@ func TestHandleQuery(t *testing.T) {
 
 	go func() {
 		// notify outbound using a bad struct -> should do nothing (except warning log)
-		ws.OutboundSubject().Notify(struct{id string}{ "bad-struct" })
+		ws.OutboundSubject().Notify(struct{ id string }{"bad-struct"})
 	}()
 
 	go func() {
@@ -71,7 +71,7 @@ func TestHandleStream(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		for {
-			<- adapter.Out
+			<-adapter.Out
 			wg.Done()
 		}
 	}()

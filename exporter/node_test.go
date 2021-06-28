@@ -15,7 +15,7 @@ import (
 	"testing"
 )
 
-func TestExporter_ProcessIncomingExportReq(t *testing.T) {
+func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
 	exp, err := newMockExporter()
 
 	require.NoError(t, err)
@@ -30,7 +30,7 @@ func TestExporter_ProcessIncomingExportReq(t *testing.T) {
 	defer outbound.Deregister("TestExporter_ProcessIncomingExportReq")
 
 	var wg sync.WaitGroup
-	go exp.processIncomingExportReq(cnIn, outbound)
+	go exp.processIncomingExportRequests(cnIn, outbound)
 
 	wg.Add(2)
 	go func() {
@@ -42,7 +42,7 @@ func TestExporter_ProcessIncomingExportReq(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		m := <- cnOut
+		m := <-cnOut
 		nm, ok := m.(api.NetworkMessage)
 		require.True(t, ok)
 		require.Equal(t, api.TypeValidator, nm.Msg.Type)
@@ -56,7 +56,7 @@ func TestExporter_ProcessIncomingExportReq(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		m = <- cnOut
+		m = <-cnOut
 		nm, ok = m.(api.NetworkMessage)
 		require.True(t, ok)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
@@ -99,7 +99,7 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 				err = json.Unmarshal(raw, &validators)
 				require.NoError(t, err)
 				require.Equal(t, len(validators.Data), 1)
-				require.Equal(t, "91db3a13ab428a6c9c20e7104488cb6961abeab60e56cf4ba199" +
+				require.Equal(t, "91db3a13ab428a6c9c20e7104488cb6961abeab60e56cf4ba199"+
 					"eed3b5f6e7ced670ecb066c9704dc2fa93133792381c",
 					validators.Data[0].PublicKey)
 				wg.Done()
@@ -192,4 +192,3 @@ func operatorAddedMockEvent(t *testing.T) eth1.Event {
 	require.NoError(t, err)
 	return eth1.Event{Log: types.Log{}, Data: parsed}
 }
-
