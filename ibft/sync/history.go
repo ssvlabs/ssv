@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
+	"time"
 )
 
 // HistorySync is responsible for syncing and iBFT instance when needed by
@@ -37,6 +38,7 @@ func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, net
 
 // Start the sync
 func (s *HistorySync) Start() error {
+	start := time.Now()
 	// fetch remote highest
 	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
@@ -56,7 +58,7 @@ func (s *HistorySync) Start() error {
 
 	// check we are behind and need to sync
 	if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
-		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber))
+		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber), zap.String("duration", time.Since(start).String()))
 		return nil
 	}
 
@@ -73,7 +75,7 @@ func (s *HistorySync) Start() error {
 		}
 	}
 
-	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber))
+	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
 
 	return nil
 }
