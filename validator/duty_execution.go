@@ -30,6 +30,11 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 
 	// start timeout
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				v.logger.Error("recovered in waitForSignatureCollection", zap.Any("error", r))
+			}
+		}()
 		<-time.After(v.signatureCollectionTimeout)
 		lock.Lock()
 		defer lock.Unlock()
