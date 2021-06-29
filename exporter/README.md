@@ -106,7 +106,7 @@ and a `type` to distinguish between messages:
     "from": number,
     "to": number,
     "role": "ATTESTER" | "AGGREGATOR" | "PROPOSER",
-    "pubKey": string
+    "publicKey": string
   }
 }
 ```

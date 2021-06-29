@@ -36,9 +36,9 @@ func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	go exp.processIncomingExportRequests(cnIn, outbound)
 
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
-		cnIn <- api.NetworkMessage{
+		netMsg := api.NetworkMessage{
 			Msg: api.Message{
 				Type:   api.TypeValidator,
 				Filter: api.MessageFilter{From: 0},
@@ -46,24 +46,27 @@ func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
+		cnIn <- netMsg
 		m := <-cnOut
 		nm, ok := m.(api.NetworkMessage)
 		require.True(t, ok)
 		require.Equal(t, api.TypeValidator, nm.Msg.Type)
 		wg.Done()
 
-		cnIn <- api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeOperator,
-				Filter: api.MessageFilter{From: 0},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
+		netMsg.Msg.Type = api.TypeOperator
+		cnIn <- netMsg
 		m = <-cnOut
 		nm, ok = m.(api.NetworkMessage)
 		require.True(t, ok)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
+		wg.Done()
+
+		netMsg.Msg.Type = "foo"
+		cnIn <- netMsg
+		m = <-cnOut
+		nm, ok = m.(api.NetworkMessage)
+		require.True(t, ok)
+		require.Equal(t, api.TypeError, nm.Msg.Type)
 		wg.Done()
 	}()
 
@@ -123,7 +126,6 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 			}
 		}
 	}()
-
 	// pushing 2 events and waits for handling
 	// TODO: uncomment once fixed -> error in ShareFromValidatorAddedEvent() [./validator/utils.go:31]
 	wg.Add(1)

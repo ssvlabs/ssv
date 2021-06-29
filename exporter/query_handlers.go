@@ -31,8 +31,8 @@ func handleOperatorsQuery(logger *zap.Logger, storage storage.Storage, nm *api.N
 
 func getOperators(s storage.Storage, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
 	var operators []storage.OperatorInformation
-	if len(filter.PubKey) > 0 {
-		operator, err := s.GetOperatorInformation([]byte(filter.PubKey))
+	if len(filter.PublicKey) > 0 {
+		operator, err := s.GetOperatorInformation([]byte(filter.PublicKey))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read operator")
 		}
@@ -51,7 +51,7 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.Storage, nm *api.Networ
 	logger.Debug("handles validators request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
-		zap.String("pk", nm.Msg.Filter.PubKey))
+		zap.String("pk", nm.Msg.Filter.PublicKey))
 	validators, err := getValidators(s, nm.Msg.Filter)
 	if err != nil {
 		logger.Warn("failed to get validators", zap.Error(err))
@@ -71,8 +71,8 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.Storage, nm *api.Networ
 
 func getValidators(s storage.Storage, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
 	var validators []storage.ValidatorInformation
-	if len(filter.PubKey) > 0 {
-		validator, err := s.GetValidatorInformation([]byte(filter.PubKey))
+	if len(filter.PublicKey) > 0 {
+		validator, err := s.GetValidatorInformation([]byte(filter.PublicKey))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read validator")
 		}

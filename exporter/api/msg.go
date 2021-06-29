@@ -20,8 +20,8 @@ type MessageFilter struct {
 	To int64 `json:"to"`
 	// Role is the duty type enum, optional as it's relevant for IBFT data
 	Role DutyRole `json:"role,omitempty"`
-	// PubKey is optional as it's relevant for IBFT data
-	PubKey string `json:"pubKey,omitempty"`
+	// PublicKey is optional as it's relevant for IBFT data
+	PublicKey string `json:"publicKey,omitempty"`
 }
 
 // MessageType is the type of message being sent
