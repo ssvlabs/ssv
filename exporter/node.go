@@ -242,9 +242,8 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 }
 
 func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) error {
-	exp.logger.Info("operator added event",
-		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
-
+	l := exp.logger.With(zap.String("pubKey", string(event.PublicKey)))
+	l.Info("operator added event")
 	oi := storage.OperatorInformation{
 		PublicKey:    event.PublicKey,
 		Name:         event.Name,
@@ -254,8 +253,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	if err != nil {
 		return err
 	}
-	exp.logger.Debug("managed to save operator information",
-		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
+	l.Debug("managed to save operator information")
 
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
