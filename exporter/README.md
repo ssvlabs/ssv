@@ -26,21 +26,22 @@ The introduction of exporter requires to do some refactoring in the project stru
 
 The following information will be stored and served by exporter:
 * Operators 
-  * Name --> contract event
-  * Public Key --> contract event
-  * Owner Address --> contract event
-  * Index --> a sequential index
+  * Name (`name: string`) --> contract event
+  * Public Key (`publicKey: string`) --> contract event
+  * Owner Address (`ownerAddress: string`) --> contract event
+  * Index (`index: uint`) --> a sequential index
 * Validators
-  * Public Key --> contract event
-  * Operators --> contract event
-  * Index --> a sequential index
+  * Public Key (`publicKey: string`) --> contract event
+  * Operators (`operators: []`) --> contract event
+    * Operator Public Key (`publicKey: string`)
+    * IBFT/Node ID (`ibftId: uint`)
+  * Index (`index: uint`) --> a sequential index
 * Duties (over time) 
   * Epoch --> calculated from Slot
   * Slot --> part of the lambda
   * Duty type / role --> part of the lambda
   * Status (failed | success)
-  * Operators --> signer_ids + id lookup in contract information (oess > index)
-    * operators with the corresponding indication for each operator on the duty
+  * Operators --> signer_ids + id lookup in contract information
 
 #### Contract Data
 
@@ -169,34 +170,34 @@ Exporter will produce the following response:
 
 In case of bad request or some internal error, the response will be of `type` "error".
 
-Bad input (corrupted JSON) produces:
-```json
-{
-  "type": "error",
-  "filter": {
-    "from": 0,
-    "to": 0
-  },
-  "data": [
-    "could not parse network message"
-  ]
-}
-```
+Some Examples:
 
-Unknown message type results:
-
-```json
-{
-  "type": "error",
-  "filter": {
-    "from": 0,
-    "to": 0
-  },
-  "data": [
-    "bad request - unknown message type 'foo'"
-  ]
-}
-```
+- Bad input (corrupted JSON) produces:
+  ```json
+  {
+    "type": "error",
+    "filter": {
+      "from": 0,
+      "to": 0
+    },
+    "data": [
+      "could not parse network message"
+    ]
+  }
+  ```
+- Unknown message type results:
+  ```json
+  {
+    "type": "error",
+    "filter": {
+      "from": 0,
+      "to": 0
+    },
+    "data": [
+      "bad request - unknown message type 'foo'"
+    ]
+  }
+  ```
 
 
 
@@ -226,7 +227,7 @@ For example, exporter will push a message if a new validator was added to the ne
 
 ### Run Locally
 
-Make sure you have the executable:
+Build if you don't have the executable:
 ```shell
 make build
 ```
