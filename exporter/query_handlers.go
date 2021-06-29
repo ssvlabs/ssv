@@ -3,15 +3,16 @@ package exporter
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-func handleOperatorsQuery(logger *zap.Logger, storage Storage, nm *api.NetworkMessage) {
+func handleOperatorsQuery(logger *zap.Logger, storage storage.Storage, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To))
-	operators, err := storage.ListOperators(nm.Msg.Filter.From, nm.Msg.Filter.To)
+	operators, err := getOperators(storage, nm.Msg.Filter)
 	if err != nil {
 		logger.Error("could not get operators", zap.Error(err))
 		nm.Msg = api.Message{
@@ -20,8 +21,6 @@ func handleOperatorsQuery(logger *zap.Logger, storage Storage, nm *api.NetworkMe
 			Data:   []string{"internal error - could not get operators"},
 		}
 	} else {
-		logger.Debug("found operators",
-			zap.Int("count", len(operators)))
 		nm.Msg = api.Message{
 			Type:   nm.Msg.Type,
 			Filter: nm.Msg.Filter,
@@ -30,27 +29,62 @@ func handleOperatorsQuery(logger *zap.Logger, storage Storage, nm *api.NetworkMe
 	}
 }
 
-func handleValidatorsQuery(logger *zap.Logger, validatorStorage validatorstorage.ICollection, nm *api.NetworkMessage) {
-	validators, err := validatorStorage.GetAllValidatorsShare()
+func getOperators(s storage.Storage, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
+	var operators []storage.OperatorInformation
+	if len(filter.PubKey) > 0 {
+		operator, err := s.GetOperatorInformation([]byte(filter.PubKey))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read operator")
+		}
+		operators = append(operators, *operator)
+	} else {
+		var err error
+		operators, err = s.ListOperators(filter.From, filter.To)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read operators")
+		}
+	}
+	return operators, nil
+}
+
+func handleValidatorsQuery(logger *zap.Logger, s storage.Storage, nm *api.NetworkMessage) {
+	logger.Debug("handles validators request",
+		zap.Int64("from", nm.Msg.Filter.From),
+		zap.Int64("to", nm.Msg.Filter.To),
+		zap.String("pk", nm.Msg.Filter.PubKey))
+	validators, err := getValidators(s, nm.Msg.Filter)
 	if err != nil {
-		logger.Warn("could not get validators", zap.Error(err))
+		logger.Warn("failed to get validators", zap.Error(err))
 		nm.Msg = api.Message{
 			Type:   nm.Msg.Type,
 			Filter: nm.Msg.Filter,
 			Data:   []string{"internal error - could not get validators"},
 		}
 	} else {
-		var validatorMsgs []api.ValidatorInformation
-		for _, v := range validators {
-			validatorMsg := toValidatorMessage(v)
-			validatorMsgs = append(validatorMsgs, *validatorMsg)
-		}
 		nm.Msg = api.Message{
 			Type:   nm.Msg.Type,
 			Filter: nm.Msg.Filter,
-			Data:   validatorMsgs,
+			Data:   validators,
 		}
 	}
+}
+
+func getValidators(s storage.Storage, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
+	var validators []storage.ValidatorInformation
+	if len(filter.PubKey) > 0 {
+		validator, err := s.GetValidatorInformation([]byte(filter.PubKey))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read validator")
+		}
+		validators = append(validators, *validator)
+	} else {
+		var err error
+		validators, err = s.ListValidators(filter.From, filter.To)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read validators")
+		}
+	}
+	return validators, nil
 }
 
 func handleDutiesQuery(logger *zap.Logger, nm *api.NetworkMessage) {

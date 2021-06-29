@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
+	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
@@ -56,7 +57,7 @@ type Options struct {
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
 	ctx              context.Context
-	storage          Storage
+	storage          storage.Storage
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
 	logger           *zap.Logger
@@ -78,7 +79,7 @@ func New(opts Options) Exporter {
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
 	e := exporter{
 		ctx:              opts.Ctx,
-		storage:          NewExporterStorage(opts.DB, opts.Logger),
+		storage:          storage.NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
 		logger:           opts.Logger.With(zap.String("component", "exporter/node")),
@@ -136,7 +137,7 @@ func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChanne
 		case api.TypeOperator:
 			handleOperatorsQuery(exp.logger, exp.storage, &nm)
 		case api.TypeValidator:
-			handleValidatorsQuery(exp.logger, exp.validatorStorage, &nm)
+			handleValidatorsQuery(exp.logger, exp.storage, &nm)
 		case api.TypeIBFT:
 			handleDutiesQuery(exp.logger, &nm)
 		case api.TypeError:
@@ -203,24 +204,35 @@ func (exp *exporter) listenToEth1Events(cn pubsub.SubjectChannel) chan error {
 // handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator
 func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) error {
 	pubKeyHex := hex.EncodeToString(event.PublicKey)
-	exp.logger.Info("validator added event", zap.String("pubKey", pubKeyHex))
-	validatorShare, err := validator.ShareFromValidatorAddedEvent(event, true)
+	logger := exp.logger.With(zap.String("pubKey", pubKeyHex))
+	logger.Info("validator added event")
+	// save the share to be able to reuse IBFT functionality
+	validatorShare, err := validator.ShareFromValidatorAddedEvent(event)
 	if err != nil {
 		return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
 	}
 	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
 		return errors.Wrap(err, "failed to save validator share")
 	}
-	exp.logger.Debug("validator share was saved", zap.String("pubKey", pubKeyHex))
-	// notifies open streams
-	validatorMsg := toValidatorMessage(validatorShare)
+	logger.Debug("validator share was saved")
+	// save information for exporting validators
+	vi, err := storage.ToValidatorInformation(event)
+	if err != nil {
+		return errors.Wrap(err, "could not create ValidatorInformation")
+	}
+	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
+		return errors.Wrap(err, "failed to save validator information")
+	}
+	logger.Debug("validator information was saved")
+
 	// TODO: aggregate validators in sync scenario
 	// otherwise the network will be overloaded with multiple messages
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeValidator,
-		Filter: api.MessageFilter{From: validatorMsg.Index, To: validatorMsg.Index},
-		Data:   []api.ValidatorInformation{*validatorMsg},
+		Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
+		Data:   []storage.ValidatorInformation{*vi},
 	}, Conn: nil})
+
 	// triggers a sync for the given validator
 	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to trigger ibft sync")
@@ -233,7 +245,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.logger.Info("operator added event",
 		zap.String("pubKey", hex.EncodeToString(event.PublicKey)))
 
-	oi := api.OperatorInformation{
+	oi := storage.OperatorInformation{
 		PublicKey:    event.PublicKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
@@ -248,7 +260,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
 		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
-		Data:   []api.OperatorInformation{oi},
+		Data:   []storage.OperatorInformation{oi},
 	}, Conn: nil})
 
 	return nil
@@ -281,21 +293,4 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
 	tid := fmt.Sprintf("ibft:sync/%s", pubKeyHex)
 	return *tasks.NewTask(ibftReader.Sync, tid)
-}
-
-// toValidatorMessage returns a transferable object
-func toValidatorMessage(s *validatorstorage.Share) *api.ValidatorInformation {
-	committee := map[uint64]*proto.Node{}
-	for i, o := range s.Committee {
-		committee[i] = &proto.Node{
-			Pk:     o.Pk,
-			IbftId: o.IbftId,
-		}
-	}
-	res := api.ValidatorInformation{
-		Index:     1, // TODO: use actual index
-		Committee: committee,
-		PublicKey: s.PublicKey.SerializeToHexStr(),
-	}
-	return &res
 }

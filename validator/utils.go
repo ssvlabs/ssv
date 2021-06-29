@@ -14,8 +14,15 @@ import (
 )
 
 // ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share
-func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, silent bool) (*validatorstorage.Share, error) {
+func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) (*validatorstorage.Share, error) {
 	validatorShare := validatorstorage.Share{}
+
+	validatorShare.PublicKey = &bls.PublicKey{}
+	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
+		return nil, errors.Wrap(err, "failed to deserialize share public key")
+	}
+	validatorShare.ShareKey = &bls.SecretKey{}
+
 	ibftCommittee := map[uint64]*proto.Node{}
 	for i := range validatorAddedEvent.OessList {
 		oess := validatorAddedEvent.OessList[i]
@@ -24,22 +31,12 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 			IbftId: nodeID,
 			Pk:     oess.SharedPublicKey,
 		}
-
-		// silent mode allows to work with missing data.
-		// used in exporter scenario
-		if silent || strings.EqualFold(string(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+		if strings.EqualFold(string(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+			ibftCommittee[nodeID].Pk = oess.SharedPublicKey
 			validatorShare.NodeID = nodeID
 
-			validatorShare.PublicKey = &bls.PublicKey{}
-			if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-				return nil, errors.Wrap(err, "failed to deserialize share public key")
-			}
-
-			validatorShare.ShareKey = &bls.SecretKey{}
-			if !silent {
-				if err := validatorShare.ShareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
-					return nil, errors.Wrap(err, "failed to deserialize share private key")
-				}
+			if err := validatorShare.ShareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
+				return nil, errors.Wrap(err, "failed to deserialize share private key")
 			}
 			ibftCommittee[nodeID].Sk = validatorShare.ShareKey.Serialize()
 		}

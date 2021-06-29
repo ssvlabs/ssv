@@ -34,7 +34,7 @@ The following information will be stored and served by exporter:
   * Public Key (`publicKey: string`) --> contract event
   * Operators (`operators: []`) --> contract event
     * Operator Public Key (`publicKey: string`)
-    * IBFT/Node ID (`ibftId: uint`)
+    * IBFT/Node ID (`nodeId: uint`)
   * Index (`index: uint`) --> a sequential index
 * Duties (over time) 
   * Epoch --> calculated from Slot
