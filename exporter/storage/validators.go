@@ -2,7 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -29,13 +28,13 @@ type ValidatorsCollection interface {
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
 
-// OperatorNodeLink links a validator to some operator
+// OperatorNodeLink links a validator to an operator
 type OperatorNodeLink struct {
 	ID        uint64 `json:"nodeId"`
 	PublicKey string `json:"publicKey"`
 }
 
-// ListValidators returns information of all the known operators
+// ListValidators returns information of all the known validators
 // when 'to' equals zero, all validators will be returned
 func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInformation, error) {
 	objs, err := es.db.GetAllByCollection(append(storagePrefix, validatorsPrefix...))
@@ -54,7 +53,7 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 	return validators, err
 }
 
-// GetValidatorInformation returns information of the given operator by public key
+// GetValidatorInformation returns information of the given validator by public key
 func (es *exporterStorage) GetValidatorInformation(validatorPubKey []byte) (*ValidatorInformation, error) {
 	obj, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
 	if err != nil {
@@ -65,26 +64,26 @@ func (es *exporterStorage) GetValidatorInformation(validatorPubKey []byte) (*Val
 	return &vi, err
 }
 
-// SaveValidatorInformation saves operator information by its public key
+// SaveValidatorInformation saves validator information by its public key
 func (es *exporterStorage) SaveValidatorInformation(validatorInformation *ValidatorInformation) error {
 	existing, err := es.GetValidatorInformation([]byte(validatorInformation.PublicKey))
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return errors.Wrap(err, "could not read information from DB")
 	}
 	if existing != nil {
-		es.logger.Debug("operator already exist",
+		es.logger.Debug("validator already exist",
 			zap.String("pubKey", validatorInformation.PublicKey))
 		validatorInformation.Index = existing.Index
-		// TODO: update validator information (i.e. other fields such aas "name") for updating operator scenario
+		// TODO: update validator information (i.e. change operator)
 		return nil
 	}
 	validatorInformation.Index, err = es.nextIndex(validatorsPrefix)
 	if err != nil {
-		return errors.Wrap(err, "could not calculate next operator index")
+		return errors.Wrap(err, "could not calculate next validator index")
 	}
 	raw, err := json.Marshal(validatorInformation)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal operator information")
+		return errors.Wrap(err, "could not marshal validator information")
 	}
 	return es.db.Set(storagePrefix, validatorKey([]byte(validatorInformation.PublicKey)), raw)
 }
@@ -101,7 +100,7 @@ func ToValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*Vali
 		oess := validatorAddedEvent.OessList[i]
 		nodeID := oess.Index.Uint64() + 1
 		operators = append(operators, OperatorNodeLink{
-			ID: nodeID, PublicKey: hex.EncodeToString(oess.OperatorPublicKey),
+			ID: nodeID, PublicKey: string(oess.OperatorPublicKey),
 		})
 	}
 
