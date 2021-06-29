@@ -69,7 +69,7 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 		es.logger.Debug("operator already exist",
 			zap.String("pubKey", hex.EncodeToString(operatorInformation.PublicKey)))
 		operatorInformation.Index = existing.Index
-		// TODO: update operator information (i.e. other fields such aas "name") for updating operator scenario
+		// TODO: update operator information (i.e. change name)
 		return nil
 	}
 	operatorInformation.Index, err = es.nextIndex(operatorsPrefix)

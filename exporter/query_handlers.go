@@ -8,10 +8,15 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	unknownError = "unknown error"
+)
+
 func handleOperatorsQuery(logger *zap.Logger, storage storage.Storage, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
 		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To))
+		zap.Int64("to", nm.Msg.Filter.To),
+		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
 	if err != nil {
 		logger.Error("could not get operators", zap.Error(err))
@@ -105,7 +110,7 @@ func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 		errs = append(errs, nm.Err.Error())
 	}
 	if len(errs) == 0 {
-		errs = append(errs, "unknown error")
+		errs = append(errs, unknownError)
 	}
 	nm.Msg = api.Message{
 		Type: api.TypeError,
