@@ -13,6 +13,7 @@ import (
 type testNetwork struct {
 	t                      *testing.T
 	highestDecidedReceived map[string]*proto.SignedMessage
+	errorsMap              map[string]error
 	decidedArr             map[string][]*proto.SignedMessage
 	maxBatch               int
 	peers                  []string
@@ -24,6 +25,7 @@ func newTestNetwork(
 	t *testing.T, peers []string,
 	maxBatch int,
 	highestDecidedReceived map[string]*proto.SignedMessage,
+	errorsMap map[string]error,
 	decidedArr map[string][]*proto.SignedMessage,
 	retError error,
 ) *testNetwork {
@@ -32,6 +34,7 @@ func newTestNetwork(
 		peers:                  peers,
 		maxBatch:               maxBatch,
 		highestDecidedReceived: highestDecidedReceived,
+		errorsMap:              errorsMap,
 		decidedArr:             decidedArr,
 		retError:               retError,
 	}
@@ -64,7 +67,20 @@ func (n *testNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 func (n *testNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
+	if err, found := n.errorsMap[peerStr]; found {
+		return nil, err
+	}
+
 	if highest, found := n.highestDecidedReceived[peerStr]; found {
+		if highest == nil {
+			// as if no highest.
+			return &network.SyncMessage{
+				SignedMessages: []*proto.SignedMessage{},
+				FromPeerID:     peerStr,
+				Type:           network.Sync_GetInstanceRange,
+			}, nil
+		}
+
 		if !bytes.Equal(msg.Lambda, highest.Message.Lambda) {
 			return nil, errors.New("could not find highest")
 		}

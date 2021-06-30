@@ -1,6 +1,12 @@
 package ibft
 
 import (
+	"strconv"
+	"sync"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
@@ -8,10 +14,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
-	"strconv"
-	"sync"
-
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -34,7 +36,7 @@ type IBFT interface {
 	Init()
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (bool, int, []byte)
+	StartInstance(opts StartOptions) (bool, int, []byte, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
@@ -67,6 +69,7 @@ type ibftImpl struct {
 
 // New is the constructor of IBFT
 func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
+	logger = logger.With(zap.String("role", role.String()))
 	ret := &ibftImpl{
 		role:                role,
 		ibftStorage:         storage,
@@ -96,11 +99,11 @@ func (i *ibftImpl) Init() {
 	i.initFinished = true
 }
 
-func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
+func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 	instanceOpts := i.instanceOptionsFromStartOptions(opts)
 
 	if err := i.canStartNewInstance(instanceOpts); err != nil {
-		opts.Logger.Error("can't start new iBFT instance", zap.Error(err))
+		return false, 0, nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
 	newInstance := NewInstance(instanceOpts)
@@ -111,8 +114,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 
 	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
 	if err != nil {
-		newInstance.Logger.Error("could not reset leader selection", zap.Error(err))
-		return false, 0, nil
+		return false, 0, nil, errors.WithMessage(err, "could not reset leader selection")
 	}
 	go newInstance.Start(opts.Value)
 
@@ -122,27 +124,24 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte) {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
 			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), newInstance.State); err != nil {
-				newInstance.Logger.Error("could not save prepare msg to storage", zap.Error(err))
-				return false, 0, nil
+				return false, 0, nil, errors.WithMessage(err, "could not save prepare msg to storage")
 			}
 		case proto.RoundState_Decided:
 			agg, err := newInstance.CommittedAggregatedMsg()
 			if err != nil {
-				newInstance.Logger.Error("could not get aggregated commit msg and save to storage", zap.Error(err))
-				return false, 0, nil
+				return false, 0, nil, errors.WithMessage(err, "could not get aggregated commit msg and save to storage")
 			}
 			if err := i.ibftStorage.SaveDecided(agg); err != nil {
-				newInstance.Logger.Error("could not save aggregated commit msg to storage", zap.Error(err))
-				return false, 0, nil
+				return false, 0, nil, errors.WithMessage(err, "could not save aggregated commit msg to storage")
 			}
 			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
-				i.logger.Error("could not save highest decided message to storage", zap.Error(err))
+				return false, 0, nil, errors.WithMessage(err, "could not save highest decided message to storage")
 			}
 			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
-				i.logger.Error("could not broadcast decided message", zap.Error(err))
+				return false, 0, nil, errors.WithMessage(err, "could not broadcast decided message")
 			}
 			i.currentInstance = nil
-			return true, len(agg.GetSignerIds()), agg.Message.Value
+			return true, len(agg.GetSignerIds()), agg.Message.Value, nil
 		}
 	}
 }

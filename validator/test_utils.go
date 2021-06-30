@@ -58,8 +58,8 @@ func (t *testIBFT) Init() {
 	t.identifier = []byte(IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
-func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte) {
-	return t.decided, t.signaturesCount, opts.Value
+func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte, error) {
+	return t.decided, t.signaturesCount, opts.Value, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

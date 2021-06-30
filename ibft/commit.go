@@ -54,19 +54,6 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 	return ret, nil
 }
 
-func (i *Instance) commitQuorum(round uint64, inputValue []byte) (quorum bool, t int, n int) {
-	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	cnt := 0
-	msgs := i.CommitMessages.ReadOnlyMessagesByRound(round)
-	for _, v := range msgs {
-		if bytes.Equal(inputValue, v.Message.Value) {
-			cnt++
-		}
-	}
-	quorum = cnt*3 >= i.ValidatorShare.CommitteeSize()*2
-	return quorum, cnt, i.ValidatorShare.CommitteeSize()
-}
-
 /**
 upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ messages do:
 	set timer i to stopped
@@ -85,11 +72,11 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 			i.Logger.Info("already decided, not processing commit message")
 			return nil // no reason to commit again
 		}
-		quorum, t, n := i.commitQuorum(signedMessage.Message.Round, signedMessage.Message.Value)
+		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value)
 		if quorum {
 			i.Logger.Info("decided iBFT instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
-				zap.Int("got_votes", t), zap.Int("total_votes", n))
+				zap.Int("got_votes", len(sigs)))
 
 			// mark instance decided
 			i.SetStage(proto.RoundState_Decided)
@@ -101,10 +88,10 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 	return &proto.Message{
-		Type:        proto.RoundState_Commit,
-		Round:       i.State.Round,
-		Lambda:      i.State.Lambda,
-		SeqNumber:   i.State.SeqNumber,
-		Value:       value,
+		Type:      proto.RoundState_Commit,
+		Round:     i.State.Round,
+		Lambda:    i.State.Lambda,
+		SeqNumber: i.State.SeqNumber,
+		Value:     value,
 	}
 }

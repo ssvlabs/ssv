@@ -193,7 +193,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		return 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	decided, signaturesCount, decidedValue := v.ibfts[role].StartInstance(ibft.StartOptions{
+	decided, signaturesCount, decidedValue, err := v.ibfts[role].StartInstance(ibft.StartOptions{
 		Duty:           duty,
 		ValidatorShare: *v.Share,
 		Logger:         l,
@@ -201,7 +201,9 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 		SeqNumber:      seqNumber,
 		Value:          inputByts,
 	})
-
+	if err != nil{
+		return 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
+	}
 	if !decided {
 		return 0, nil, 0, errors.New("ibft did not decide, not executing role")
 	}
