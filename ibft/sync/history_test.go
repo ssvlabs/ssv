@@ -155,7 +155,7 @@ func TestFetchDecided(t *testing.T) {
 			})
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
-			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, test.decidedArr, nil)
+			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, nil, test.decidedArr, nil)
 			s := NewHistorySync(logger, test.validatorPk, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
@@ -193,7 +193,8 @@ func TestFindHighest(t *testing.T) {
 		identifier         []byte
 		peers              []string
 		highestMap         map[string]*proto.SignedMessage
-		expectedHighestSeq uint64
+		errorMap           map[string]error
+		expectedHighestSeq int64
 		expectedError      string
 	}{
 		{
@@ -203,6 +204,47 @@ func TestFindHighest(t *testing.T) {
 			[]string{"2"},
 			map[string]*proto.SignedMessage{
 				"2": highest1,
+			},
+			nil,
+			1,
+			"",
+		},
+		{
+			"all responses are empty",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"1": nil,
+				"2": nil,
+			},
+			nil,
+			-1,
+			"",
+		},
+		{
+			"all errors",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{},
+			map[string]error{
+				"1": errors.New("error"),
+				"2": errors.New("error"),
+			},
+			-1,
+			"could not fetch highest decided from peers",
+		},
+		{
+			"some errors, some valid",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": highest1,
+			},
+			map[string]error{
+				"1": errors.New("error"),
 			},
 			1,
 			"",
@@ -216,6 +258,7 @@ func TestFindHighest(t *testing.T) {
 				"2": highest1,
 				"3": highest2,
 			},
+			nil,
 			1,
 			"",
 		},
@@ -233,6 +276,7 @@ func TestFindHighest(t *testing.T) {
 					SeqNumber: 10,
 				}),
 			},
+			nil,
 			10,
 			"",
 		},
@@ -255,22 +299,25 @@ func TestFindHighest(t *testing.T) {
 		//	1,
 		//	"could not fetch highest decided from peers",
 		//},
-		{
-			"wrong identifier",
-			[]byte{1, 2, 3, 4},
-			[]byte{1, 1, 1, 1},
-			[]string{"2", "3"},
-			map[string]*proto.SignedMessage{
-				"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-					Type:      proto.RoundState_Decided,
-					Round:     1,
-					Lambda:    []byte("lambda"),
-					SeqNumber: 1,
-				}),
-			},
-			1,
-			"could not fetch highest decided from peers",
-		},
+		//
+		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
+		//
+		//{
+		//	"wrong identifier",
+		//	[]byte{1, 2, 3, 4},
+		//	[]byte{1, 1, 1, 1},
+		//	[]string{"2", "3"},
+		//	map[string]*proto.SignedMessage{
+		//		"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		//			Type:      proto.RoundState_Decided,
+		//			Round:     1,
+		//			Lambda:    []byte("lambda"),
+		//			SeqNumber: 1,
+		//		}),
+		//	},
+		//	1,
+		//	"could not fetch highest decided from peers",
+		//},
 		//
 		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
 		//
@@ -294,7 +341,7 @@ func TestFindHighest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(zap.L(), nil, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(zap.L(), nil, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, _, err := s.findHighestInstance()
@@ -303,7 +350,11 @@ func TestFindHighest(t *testing.T) {
 				require.EqualError(t, err, test.expectedError)
 			} else {
 				require.NoError(t, err)
-				require.EqualValues(t, test.expectedHighestSeq, res.Message.SeqNumber)
+				if test.expectedHighestSeq == -1 {
+					require.Nil(t, res)
+				} else {
+					require.EqualValues(t, test.expectedHighestSeq, res.Message.SeqNumber)
+				}
 			}
 		})
 	}
