@@ -42,13 +42,21 @@ func ParseOperatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.AB
 	var operatorAddedEvent OperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "Failed to unpack OperatorAdded event")
+		return nil, false, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
-	operatorPubkeyHex := hex.EncodeToString(operatorAddedEvent.PublicKey)
+	outAbi, err := getOutAbi()
+	if err != nil {
+		return nil, false, err
+	}
+	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
+	if err != nil {
+		return nil, false, err
+	}
+	operatorAddedEvent.PublicKey = []byte(pubKey)
 	logger.Debug("OperatorAdded Event",
-		zap.String("Operator PublicKey", operatorPubkeyHex),
+		zap.String("Operator PublicKey", pubKey),
 		zap.String("Payment Address", operatorAddedEvent.PaymentAddress.String()))
-	isEventBelongsToOperator := strings.EqualFold(operatorPubkeyHex, params.SsvConfig().OperatorPublicKey)
+	isEventBelongsToOperator := strings.EqualFold(pubKey, params.SsvConfig().OperatorPublicKey)
 	return &operatorAddedEvent, isEventBelongsToOperator, nil
 }
 
@@ -69,41 +77,54 @@ func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Privat
 	for i := range validatorAddedEvent.OessList {
 		validatorShare := &validatorAddedEvent.OessList[i]
 
-		def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]` //TODO need to set as var?
-		outAbi, err := abi.JSON(strings.NewReader(def))
+		outAbi, err := getOutAbi()
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to define ABI")
 		}
-
-		outOperatorPublicKey, err := outAbi.Unpack("method", validatorShare.OperatorPublicKey)
+		operatorPublicKey, err := readOperatorPubKey(validatorShare.OperatorPublicKey, outAbi)
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to unpack OperatorPublicKey")
 		}
 
-		if operatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
-			validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
-			if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
-				if operatorPrivateKey == nil {
-					continue
-				}
+		validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
+		if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
+			if operatorPrivateKey == nil {
+				continue
+			}
+			out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
+			if err != nil {
+				return nil, false, errors.Wrap(err, "failed to unpack EncryptedKey")
+			}
 
-				out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
+			if encryptedSharePrivateKey, ok := out[0].(string); ok {
+				decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedSharePrivateKey)
+				decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 				if err != nil {
-					return nil, false, errors.Wrap(err, "failed to unpack EncryptedKey")
+					return nil, false, errors.Wrap(err, "failed to decrypt share private key")
 				}
-
-				if encryptedSharePrivateKey, ok := out[0].(string); ok {
-					decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedSharePrivateKey)
-					decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
-					if err != nil {
-						return nil, false, errors.Wrap(err, "failed to decrypt share private key")
-					}
-					validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
-					isEventBelongsToOperator = true
-				}
+				validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
+				isEventBelongsToOperator = true
 			}
 		}
 	}
 
 	return &validatorAddedEvent, isEventBelongsToOperator, nil
+}
+
+func readOperatorPubKey(operatorPublicKey []byte, outAbi abi.ABI) (string, error) {
+	outOperatorPublicKey, err := outAbi.Unpack("method", operatorPublicKey)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to unpack OperatorPublicKey")
+	}
+
+	if operatorPublicKey, ok := outOperatorPublicKey[0].(string); ok {
+		return operatorPublicKey, nil
+	}
+
+	return "", errors.Wrap(err, "failed to read OperatorPublicKey")
+}
+
+func getOutAbi() (abi.ABI, error) {
+	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+	return abi.JSON(strings.NewReader(def))
 }
