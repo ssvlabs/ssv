@@ -29,10 +29,10 @@ func TestHandleUnknownQuery(t *testing.T) {
 func TestHandleErrorQuery(t *testing.T) {
 	logger := zap.L()
 
-	tests := []struct{
+	tests := []struct {
 		expectedErr string
-		netErr error
-		name string
+		netErr      error
+		name        string
 	}{
 		{
 			"dummy",

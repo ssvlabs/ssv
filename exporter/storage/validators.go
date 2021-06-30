@@ -23,7 +23,7 @@ type ValidatorInformation struct {
 
 // ValidatorsCollection is the interface for managing validators information
 type ValidatorsCollection interface {
-	GetValidatorInformation(validatorPubKey []byte) (*ValidatorInformation, error)
+	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, error)
 	SaveValidatorInformation(validatorInformation *ValidatorInformation) error
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
@@ -54,7 +54,7 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 }
 
 // GetValidatorInformation returns information of the given validator by public key
-func (es *exporterStorage) GetValidatorInformation(validatorPubKey []byte) (*ValidatorInformation, error) {
+func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, error) {
 	obj, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
 	if err != nil {
 		return nil, err
@@ -66,7 +66,7 @@ func (es *exporterStorage) GetValidatorInformation(validatorPubKey []byte) (*Val
 
 // SaveValidatorInformation saves validator information by its public key
 func (es *exporterStorage) SaveValidatorInformation(validatorInformation *ValidatorInformation) error {
-	existing, err := es.GetValidatorInformation([]byte(validatorInformation.PublicKey))
+	existing, err := es.GetValidatorInformation(validatorInformation.PublicKey)
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return errors.Wrap(err, "could not read information from DB")
 	}
@@ -85,7 +85,7 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 	if err != nil {
 		return errors.Wrap(err, "could not marshal validator information")
 	}
-	return es.db.Set(storagePrefix, validatorKey([]byte(validatorInformation.PublicKey)), raw)
+	return es.db.Set(storagePrefix, validatorKey(validatorInformation.PublicKey), raw)
 }
 
 // ToValidatorInformation converts raw event to ValidatorInformation
@@ -112,9 +112,9 @@ func ToValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*Vali
 	return &vi, nil
 }
 
-func validatorKey(pubKey []byte) []byte {
+func validatorKey(pubKey string) []byte {
 	return bytes.Join([][]byte{
 		validatorsPrefix[:],
-		pubKey[:],
+		[]byte(pubKey),
 	}, []byte("/"))
 }

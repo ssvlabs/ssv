@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -18,13 +17,13 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	defer done()
 
 	operatorInfo := OperatorInformation{
-		PublicKey:    fixtures.RefPk[:],
+		PublicKey:    string(fixtures.RefPk[:]),
 		Name:         "my_operator",
 		OwnerAddress: common.Address{},
 	}
 
 	t.Run("get non-existing operator", func(t *testing.T) {
-		nonExistingOperator, err := storage.GetOperatorInformation([]byte("dummyPK"))
+		nonExistingOperator, err := storage.GetOperatorInformation("dummyPK")
 		require.Nil(t, nonExistingOperator)
 		require.EqualError(t, err, kv.EntryNotFoundError)
 	})
@@ -32,23 +31,23 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	t.Run("create and get operator", func(t *testing.T) {
 		err := storage.SaveOperatorInformation(&operatorInfo)
 		require.NoError(t, err)
-		operatorInfoFromDB, err := storage.GetOperatorInformation(fixtures.RefPk[:])
+		operatorInfoFromDB, err := storage.GetOperatorInformation(operatorInfo.PublicKey)
 		require.NoError(t, err)
 		require.Equal(t, "my_operator", operatorInfoFromDB.Name)
 		require.Equal(t, int64(0), operatorInfoFromDB.Index)
-		require.True(t, bytes.Equal(operatorInfoFromDB.PublicKey, fixtures.RefPk[:]))
+		require.True(t, strings.EqualFold(operatorInfoFromDB.PublicKey, operatorInfo.PublicKey))
 	})
 
 	t.Run("create existing operator", func(t *testing.T) {
 		oi := OperatorInformation{
-			PublicKey:    []byte{1, 1, 1, 1, 1, 1},
+			PublicKey:    "010101010101",
 			Name:         "my_operator1",
 			OwnerAddress: common.Address{},
 		}
 		err := storage.SaveOperatorInformation(&oi)
 		require.NoError(t, err)
 		oiDup := OperatorInformation{
-			PublicKey:    []byte{1, 1, 1, 1, 1, 1},
+			PublicKey:    "010101010101",
 			Name:         "my_operator2",
 			OwnerAddress: common.Address{},
 		}
@@ -63,15 +62,15 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 
 		ois := []OperatorInformation{
 			{
-				PublicKey:    []byte{1, 1, 1, 1},
+				PublicKey:    "01010101",
 				Name:         "my_operator1",
 				OwnerAddress: common.Address{},
 			}, {
-				PublicKey:    []byte{2, 2, 2, 2},
+				PublicKey:    "02020202",
 				Name:         "my_operator2",
 				OwnerAddress: common.Address{},
 			}, {
-				PublicKey:    []byte{3, 3, 3, 3},
+				PublicKey:    "03030303",
 				Name:         "my_operator3",
 				OwnerAddress: common.Address{},
 			},
@@ -86,7 +85,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, oi.Name, operatorInfoFromDB.Name)
 			require.Equal(t, i, operatorInfoFromDB.Index)
-			require.True(t, bytes.Equal(operatorInfoFromDB.PublicKey, oi.PublicKey))
+			require.Equal(t, operatorInfoFromDB.PublicKey, oi.PublicKey)
 			i++
 		}
 	})
@@ -102,7 +101,7 @@ func TestStorage_ListOperators(t *testing.T) {
 		pk, _, err := rsaencryption.GenerateKeys()
 		require.NoError(t, err)
 		operator := OperatorInformation{
-			PublicKey: pk,
+			PublicKey: string(pk),
 			Name:      fmt.Sprintf("operator-%d", i+1),
 		}
 		err = storage.SaveOperatorInformation(&operator)

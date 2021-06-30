@@ -36,7 +36,7 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 	}
 
 	t.Run("get non-existing validator", func(t *testing.T) {
-		nonExistingOperator, err := storage.GetValidatorInformation([]byte("dummyPK"))
+		nonExistingOperator, err := storage.GetValidatorInformation("dummyPK")
 		require.Nil(t, nonExistingOperator)
 		require.EqualError(t, err, kv.EntryNotFoundError)
 	})
@@ -44,7 +44,7 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 	t.Run("create and get validator", func(t *testing.T) {
 		err := storage.SaveValidatorInformation(&validatorInfo)
 		require.NoError(t, err)
-		validatorInfoFromDB, err := storage.GetValidatorInformation([]byte(validatorInfo.PublicKey))
+		validatorInfoFromDB, err := storage.GetValidatorInformation(validatorInfo.PublicKey)
 		require.NoError(t, err)
 		require.Equal(t, "kds6E6tCimycIOcQRIjLaWGr6rYOVs9LoZnu07X2587WcOywZslwTcL6kxM3kjgc",
 			validatorInfoFromDB.PublicKey)
@@ -90,7 +90,7 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 		}
 
 		for _, vi := range vis {
-			validatorInfoFromDB, err := storage.GetValidatorInformation([]byte(vi.PublicKey))
+			validatorInfoFromDB, err := storage.GetValidatorInformation(vi.PublicKey)
 			require.NoError(t, err)
 			require.Equal(t, i, validatorInfoFromDB.Index)
 			require.Equal(t, validatorInfoFromDB.PublicKey, vi.PublicKey)

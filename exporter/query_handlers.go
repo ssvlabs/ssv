@@ -37,7 +37,7 @@ func handleOperatorsQuery(logger *zap.Logger, storage storage.Storage, nm *api.N
 func getOperators(s storage.Storage, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
 	var operators []storage.OperatorInformation
 	if len(filter.PublicKey) > 0 {
-		operator, err := s.GetOperatorInformation([]byte(filter.PublicKey))
+		operator, err := s.GetOperatorInformation(filter.PublicKey)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read operator")
 		}
@@ -77,7 +77,7 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.Storage, nm *api.Networ
 func getValidators(s storage.Storage, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
 	var validators []storage.ValidatorInformation
 	if len(filter.PublicKey) > 0 {
-		validator, err := s.GetValidatorInformation([]byte(filter.PublicKey))
+		validator, err := s.GetValidatorInformation(filter.PublicKey)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read validator")
 		}

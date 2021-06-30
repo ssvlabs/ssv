@@ -245,7 +245,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	l := exp.logger.With(zap.String("pubKey", string(event.PublicKey)))
 	l.Info("operator added event")
 	oi := storage.OperatorInformation{
-		PublicKey:    event.PublicKey,
+		PublicKey:    string(event.PublicKey),
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
 	}

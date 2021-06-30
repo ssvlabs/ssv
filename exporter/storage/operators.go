@@ -2,7 +2,6 @@ package storage
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ethereum/go-ethereum/common"
@@ -16,7 +15,7 @@ var (
 
 // OperatorInformation the public data of an operator
 type OperatorInformation struct {
-	PublicKey    []byte         `json:"publicKey"`
+	PublicKey    string         `json:"publicKey"`
 	Name         string         `json:"name"`
 	OwnerAddress common.Address `json:"ownerAddress"`
 	Index        int64          `json:"index"`
@@ -24,7 +23,7 @@ type OperatorInformation struct {
 
 // OperatorsCollection is the interface for managing operators information
 type OperatorsCollection interface {
-	GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error)
+	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, error)
 	SaveOperatorInformation(operatorInformation *OperatorInformation) error
 	ListOperators(from int64, to int64) ([]OperatorInformation, error)
 }
@@ -49,7 +48,7 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 }
 
 // GetOperatorInformation returns information of the given operator by public key
-func (es *exporterStorage) GetOperatorInformation(operatorPubKey []byte) (*OperatorInformation, error) {
+func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, error) {
 	obj, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
 	if err != nil {
 		return nil, err
@@ -67,7 +66,7 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 	}
 	if existing != nil {
 		es.logger.Debug("operator already exist",
-			zap.String("pubKey", hex.EncodeToString(operatorInformation.PublicKey)))
+			zap.String("pubKey", operatorInformation.PublicKey))
 		operatorInformation.Index = existing.Index
 		// TODO: update operator information (i.e. change name)
 		return nil
@@ -83,9 +82,9 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 	return es.db.Set(storagePrefix, operatorKey(operatorInformation.PublicKey), raw)
 }
 
-func operatorKey(pubKey []byte) []byte {
+func operatorKey(pubKey string) []byte {
 	return bytes.Join([][]byte{
 		operatorsPrefix[:],
-		pubKey[:],
+		[]byte(pubKey),
 	}, []byte("/"))
 }
