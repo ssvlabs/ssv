@@ -157,13 +157,13 @@ func TestHandleValidatorsQuery(t *testing.T) {
 
 	vis := []storage.ValidatorInformation{
 		{
-			PublicKey:    "01010101",
+			PublicKey: "01010101",
 			Operators: getMockOperatorLinks(),
 		}, {
-			PublicKey:    "02020202",
+			PublicKey: "02020202",
 			Operators: getMockOperatorLinks(),
 		}, {
-			PublicKey:    "03030303",
+			PublicKey: "03030303",
 			Operators: getMockOperatorLinks(),
 		},
 	}

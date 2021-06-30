@@ -34,24 +34,6 @@ func handleOperatorsQuery(logger *zap.Logger, storage storage.OperatorsCollectio
 	}
 }
 
-func getOperators(s storage.OperatorsCollection, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
-	var operators []storage.OperatorInformation
-	if len(filter.PublicKey) > 0 {
-		operator, err := s.GetOperatorInformation(filter.PublicKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read operator")
-		}
-		operators = append(operators, *operator)
-	} else {
-		var err error
-		operators, err = s.ListOperators(filter.From, filter.To)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read operators")
-		}
-	}
-	return operators, nil
-}
-
 func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles validators request",
 		zap.Int64("from", nm.Msg.Filter.From),
@@ -72,24 +54,6 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 			Data:   validators,
 		}
 	}
-}
-
-func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
-	var validators []storage.ValidatorInformation
-	if len(filter.PublicKey) > 0 {
-		validator, err := s.GetValidatorInformation(filter.PublicKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read validator")
-		}
-		validators = append(validators, *validator)
-	} else {
-		var err error
-		validators, err = s.ListValidators(filter.From, filter.To)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read validators")
-		}
-	}
-	return validators, nil
 }
 
 func handleDutiesQuery(logger *zap.Logger, nm *api.NetworkMessage) {
@@ -124,4 +88,40 @@ func handleUnknownQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 		Type: api.TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
 	}
+}
+
+func getOperators(s storage.OperatorsCollection, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
+	var operators []storage.OperatorInformation
+	if len(filter.PublicKey) > 0 {
+		operator, err := s.GetOperatorInformation(filter.PublicKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read operator")
+		}
+		operators = append(operators, *operator)
+	} else {
+		var err error
+		operators, err = s.ListOperators(filter.From, filter.To)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read operators")
+		}
+	}
+	return operators, nil
+}
+
+func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
+	var validators []storage.ValidatorInformation
+	if len(filter.PublicKey) > 0 {
+		validator, err := s.GetValidatorInformation(filter.PublicKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read validator")
+		}
+		validators = append(validators, *validator)
+	} else {
+		var err error
+		validators, err = s.ListValidators(filter.From, filter.To)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read validators")
+		}
+	}
+	return validators, nil
 }

@@ -22,7 +22,7 @@ import (
 
 var once sync.Once
 
-func initBls(){
+func initBls() {
 	once.Do(func() {
 		bls.Init(bls.BLS12_381)
 	})

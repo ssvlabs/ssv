@@ -94,14 +94,14 @@ func TestHandleStream(t *testing.T) {
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []storage.ValidatorInformation{
-			{PublicKey: "pubkey3"},
+		nm.Msg.Data = []storage.OperatorInformation{
+			{PublicKey: "pubkey-operator"},
 		}
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
 		nm.Msg.Data = []storage.ValidatorInformation{
-			{PublicKey: "pubkey4"},
+			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
 	}()

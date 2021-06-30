@@ -36,12 +36,13 @@ The following information will be stored and served by exporter:
     * Operator Public Key (`publicKey: string`)
     * IBFT/Node ID (`nodeId: uint`)
   * Index (`index: uint`) --> a sequential index
-* Duties (over time) 
-  * Epoch --> calculated from Slot
-  * Slot --> part of the lambda
-  * Duty type / role --> part of the lambda
-  * Status (failed | success)
-  * Operators --> signer_ids + id lookup in contract information
+* Duties
+  * Validator Public Key (`publicKey: string`)
+  * Epoch (`epoch: uint64`) --> calculated from Slot
+  * Slot (`slot: uint64`) --> part of the lambda
+  * Duty type / role (`slot: string`) --> part of the lambda
+  * Status (`status: bool`) - failed | success
+  * Operators --> signer_ids
 
 #### Contract Data
 
