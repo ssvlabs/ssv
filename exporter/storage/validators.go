@@ -3,9 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -86,30 +84,6 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 		return errors.Wrap(err, "could not marshal validator information")
 	}
 	return es.db.Set(storagePrefix, validatorKey(validatorInformation.PublicKey), raw)
-}
-
-// ToValidatorInformation converts raw event to ValidatorInformation
-func ToValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*ValidatorInformation, error) {
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize validator public key")
-	}
-
-	var operators []OperatorNodeLink
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
-		operators = append(operators, OperatorNodeLink{
-			ID: nodeID, PublicKey: string(oess.OperatorPublicKey),
-		})
-	}
-
-	vi := ValidatorInformation{
-		PublicKey: pubKey.SerializeToHexStr(),
-		Operators: operators,
-	}
-
-	return &vi, nil
 }
 
 func validatorKey(pubKey string) []byte {

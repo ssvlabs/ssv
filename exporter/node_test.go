@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -18,6 +19,14 @@ import (
 	"sync"
 	"testing"
 )
+
+var once sync.Once
+
+func initBls(){
+	once.Do(func() {
+		bls.Init(bls.BLS12_381)
+	})
+}
 
 func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
 	exp, err := newMockExporter()
@@ -74,7 +83,7 @@ func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
 }
 
 func TestExporter_ListenToEth1Events(t *testing.T) {
-	bls.Init(bls.BLS12_381)
+	initBls()
 	origOpPubKey := params.SsvConfig().OperatorPublicKey
 	params.SsvConfig().OperatorPublicKey = ""
 	defer func() {
@@ -172,6 +181,18 @@ func newMockExporter() (*exporter, error) {
 	e := New(opts)
 
 	return e.(*exporter), nil
+}
+
+func TestToValidatorInformation(t *testing.T) {
+	initBls()
+	e := validatorAddedMockEvent(t)
+	vae, ok := e.Data.(eth1.ValidatorAddedEvent)
+	require.True(t, ok)
+
+	vi, err := toValidatorInformation(vae)
+	require.NoError(t, err)
+	require.NotNil(t, vi)
+	require.True(t, strings.EqualFold(hex.EncodeToString(vae.PublicKey), vi.PublicKey))
 }
 
 func validatorAddedMockEvent(t *testing.T) eth1.Event {

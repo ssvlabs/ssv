@@ -216,7 +216,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	}
 	logger.Debug("validator share was saved")
 	// save information for exporting validators
-	vi, err := storage.ToValidatorInformation(event)
+	vi, err := toValidatorInformation(event)
 	if err != nil {
 		return errors.Wrap(err, "could not create ValidatorInformation")
 	}
@@ -262,6 +262,30 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	}, Conn: nil})
 
 	return nil
+}
+
+// toValidatorInformation converts raw event to ValidatorInformation
+func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*storage.ValidatorInformation, error) {
+	pubKey := &bls.PublicKey{}
+	if err := pubKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
+		return nil, errors.Wrap(err, "failed to deserialize validator public key")
+	}
+
+	var operators []storage.OperatorNodeLink
+	for i := range validatorAddedEvent.OessList {
+		oess := validatorAddedEvent.OessList[i]
+		nodeID := oess.Index.Uint64() + 1
+		operators = append(operators, storage.OperatorNodeLink{
+			ID: nodeID, PublicKey: string(oess.OperatorPublicKey),
+		})
+	}
+
+	vi := storage.ValidatorInformation{
+		PublicKey: pubKey.SerializeToHexStr(),
+		Operators: operators,
+	}
+
+	return &vi, nil
 }
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
