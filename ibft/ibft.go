@@ -68,7 +68,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
+func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share) IBFT {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &ibftImpl{
 		role:                role,
@@ -110,6 +110,8 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 	i.currentInstance = newInstance
 	go newInstance.StartEventLoop()
 	go newInstance.StartMessagePipeline()
+	go newInstance.PartialChangeRoundLoop()
+
 	stageChan := newInstance.GetStageChan()
 
 	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
@@ -160,4 +162,3 @@ func (i *ibftImpl) GetIdentifier() []byte {
 func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
 	return i.leaderSelector.SetSeed(seed, 1)
 }
-

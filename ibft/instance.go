@@ -86,7 +86,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
+		Logger: opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
 			zap.Uint64("seq_num", opts.SeqNumber),
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
 
@@ -240,6 +240,20 @@ func (i *Instance) StartMessagePipeline() {
 		if i.Stage() == proto.RoundState_Decided {
 			break
 		}
+	}
+}
+
+// PartialChangeRoundLoop continuously tries to find partial change round quorum
+func (i *Instance) PartialChangeRoundLoop() {
+	for {
+		found, err := i.ProcessChangeRoundPartialQuorum()
+		if err != nil {
+			i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
+		}
+		if found {
+			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
+		}
+		time.Sleep(time.Second * 1) // TODO - why second?
 	}
 }
 
