@@ -169,6 +169,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent)
 	if err != nil {
 		l.Error("failed to create share", zap.Error(err))
+		return
 	}
 	if len(validatorShare.Committee) > 0 {
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
