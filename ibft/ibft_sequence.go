@@ -1,7 +1,7 @@
 package ibft
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 )
 
 /**
@@ -14,7 +14,9 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 	if !i.initFinished {
 		return errors.New("iBFT hasn't initialized yet")
 	}
-
+	if i.currentInstance != nil {
+		return errors.Errorf("current instance (seqNumber - %d) is still running", i.currentInstance.State.SeqNumber)
+	}
 	highestKnown, err := i.HighestKnownDecided()
 	if err != nil {
 		return err
