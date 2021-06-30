@@ -64,3 +64,9 @@ func (ga *gorillaAdapter) Receive(conn api.Connection, v interface{}) error {
 	}
 	return c.ReadJSON(v)
 }
+
+// IsCloseError returns true if the error originate as part of some close procedure
+func (ga *gorillaAdapter) IsCloseError(err error) bool {
+	_, ok := err.(*websocket.CloseError)
+	return ok
+}

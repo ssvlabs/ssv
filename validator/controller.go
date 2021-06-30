@@ -7,16 +7,12 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
-	"strings"
 	"time"
 )
 
@@ -170,7 +166,11 @@ func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
 	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
 	l.Debug("handles validator added event")
-	validatorShare := c.serializeValidatorAddedEvent(validatorAddedEvent)
+	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent)
+	if err != nil {
+		l.Error("failed to create share", zap.Error(err))
+		return
+	}
 	if len(validatorShare.Committee) > 0 {
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			l.Error("failed to save validator share", zap.Error(err))
@@ -212,37 +212,6 @@ func (c *controller) onNewValidatorShare(validatorShare *validatorstorage.Share)
 	}
 }
 
-func (c *controller) serializeValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) *validatorstorage.Share {
-	validatorShare := validatorstorage.Share{}
-	ibftCommittee := map[uint64]*proto.Node{}
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
-		ibftCommittee[nodeID] = &proto.Node{
-			IbftId: nodeID,
-			Pk:     oess.SharedPublicKey,
-		}
-		if strings.EqualFold(string(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
-			validatorShare.NodeID = nodeID
-
-			validatorShare.PublicKey = &bls.PublicKey{}
-			if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-				c.logger.Error("failed to deserialize share public key", zap.Error(err))
-				return nil
-			}
-
-			validatorShare.ShareKey = &bls.SecretKey{}
-			if err := validatorShare.ShareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
-				c.logger.Error("failed to deserialize share private key", zap.Error(err))
-				return nil
-			}
-			ibftCommittee[nodeID].Sk = validatorShare.ShareKey.Serialize()
-		}
-	}
-	validatorShare.Committee = ibftCommittee
-	return &validatorShare
-}
-
 func printValidatorShare(logger *zap.Logger, validatorShare *validatorstorage.Share) {
 	var committee []string
 	for _, c := range validatorShare.Committee {
@@ -253,4 +222,3 @@ func printValidatorShare(logger *zap.Logger, validatorShare *validatorstorage.Sh
 		zap.Uint64("nodeID", validatorShare.NodeID),
 		zap.Strings("committee", committee))
 }
-

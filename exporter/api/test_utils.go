@@ -45,3 +45,8 @@ func (am *AdapterMock) Receive(conn Connection, v interface{}) error {
 	raw, _ := json.Marshal(&msg)
 	return json.Unmarshal(raw, v)
 }
+
+// IsCloseError returns true if the error originate as part of some close procedure
+func (am *AdapterMock) IsCloseError(err error) bool {
+	return false
+}

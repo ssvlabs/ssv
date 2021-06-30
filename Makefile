@@ -22,7 +22,7 @@ endif
 
 COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
-	COV_CMD=-coverpkg="${$(go list ./... | grep -v fixtures | tr '\n' ',')}" -covermode="atomic" -coverprofile="coverage.out"
+	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
 UNFORMATTED=$(shell gofmt -s -l .)
 

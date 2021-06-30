@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"net"
@@ -24,7 +25,7 @@ func TestHandleQuery(t *testing.T) {
 
 	go func() {
 		// notify outbound using a bad struct -> should do nothing (except warning log)
-		ws.OutboundSubject().Notify(struct{id string}{ "bad-struct" })
+		ws.OutboundSubject().Notify(struct{ id string }{"bad-struct"})
 	}()
 
 	go func() {
@@ -32,7 +33,7 @@ func TestHandleQuery(t *testing.T) {
 			nm, ok := incoming.(NetworkMessage)
 			require.True(t, ok)
 			require.Equal(t, &conn, nm.Conn)
-			nm.Msg.Data = []ValidatorInformation{
+			nm.Msg.Data = []storage.ValidatorInformation{
 				{PublicKey: "pubkey1"},
 				{PublicKey: "pubkey2"},
 			}
@@ -71,7 +72,7 @@ func TestHandleStream(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		for {
-			<- adapter.Out
+			<-adapter.Out
 			wg.Done()
 		}
 	}()
@@ -82,7 +83,7 @@ func TestHandleStream(t *testing.T) {
 			Msg: Message{
 				Type:   TypeValidator,
 				Filter: MessageFilter{From: 0},
-				Data: []ValidatorInformation{
+				Data: []storage.ValidatorInformation{
 					{PublicKey: "pubkey1"},
 					{PublicKey: "pubkey2"},
 				},
@@ -93,14 +94,14 @@ func TestHandleStream(t *testing.T) {
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []ValidatorInformation{
-			{PublicKey: "pubkey3"},
+		nm.Msg.Data = []storage.OperatorInformation{
+			{PublicKey: "pubkey-operator"},
 		}
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []ValidatorInformation{
-			{PublicKey: "pubkey4"},
+		nm.Msg.Data = []storage.ValidatorInformation{
+			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
 	}()
