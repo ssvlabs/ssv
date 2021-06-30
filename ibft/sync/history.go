@@ -25,7 +25,7 @@ type HistorySync struct {
 }
 
 // NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error, ) *HistorySync {
+func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *HistorySync {
 	return &HistorySync{
 		logger:              logger,
 		publicKey:           publicKey,
@@ -43,6 +43,10 @@ func (s *HistorySync) Start() error {
 	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
 		return errors.Wrap(err, "could not fetch highest instance during sync")
+	}
+	if remoteHighest == nil { // could not find highest, there isn't one
+		s.logger.Info("node is synced: could not find any peer with highest decided, assuming sequence number is 0", zap.String("duration", time.Since(start).String()))
+		return nil
 	}
 
 	// fetch local highest
@@ -76,7 +80,6 @@ func (s *HistorySync) Start() error {
 	}
 
 	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
-
 	return nil
 }
 
@@ -96,7 +99,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 
 	// fetch response
 	wg := &sync.WaitGroup{}
-	results := make([]*network.SyncMessage, 4)
+	results := make([]*network.SyncMessage, 0)
 	for i, p := range usedPeers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
@@ -108,7 +111,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
 			} else {
-				results[index] = res
+				results = append(results, res)
 			}
 			wg.Done()
 		}(i, p, wg)
@@ -116,15 +119,27 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 
 	wg.Wait()
 
+	if len(results) == 0 {
+		return nil, "", errors.New("could not fetch highest decided from peers")
+	}
+
 	// validate response and find highest decided
 	var ret *proto.SignedMessage
 	var fromPeer string
+	foundAtLeastOne := false
 	for _, res := range results {
 		if res == nil {
 			continue
 		}
 
-		if len(res.SignedMessages) != 1 || res.SignedMessages[0] == nil {
+		// no highest decided
+		if len(res.SignedMessages) == 0 {
+			continue
+		}
+		foundAtLeastOne = true
+
+		// too many responses, invalid
+		if len(res.SignedMessages) > 1 {
 			s.logger.Debug("received invalid highest decided", zap.Error(err),
 				zap.String("identifier", hex.EncodeToString(s.identifier)))
 			continue
@@ -149,12 +164,19 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 		}
 	}
 
+	// if all responses had no decided msgs and no errors than we don't have any highest decided.
+	if !foundAtLeastOne {
+		return nil, "", nil
+	}
+
+	// if we did find at least one response with a decided msg but all were invalid we return an error
 	if ret == nil {
 		s.logger.Debug("could not fetch highest decided from peers",
 			zap.String("identifier", hex.EncodeToString(s.identifier)))
 		return nil, "", errors.New("could not fetch highest decided from peers")
 	}
 
+	// found a valid highest decided
 	return ret, fromPeer, nil
 }
 

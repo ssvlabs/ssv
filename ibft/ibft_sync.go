@@ -33,6 +33,6 @@ func (i *ibftImpl) SyncIBFT() {
 	s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	err := s.Start()
 	if err != nil {
-		i.logger.Error("history sync failed", zap.Error(err))
+		i.logger.Fatal("history sync failed", zap.Error(err))
 	}
 }
