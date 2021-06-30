@@ -4,12 +4,12 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/validator/storage"
+	"math"
 	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft/leader"
 
-	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/msgcont"
@@ -85,7 +85,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
-		Logger:         opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
+		Logger: opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
 			zap.Uint64("seq_num", opts.SeqNumber),
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
 
@@ -288,7 +288,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 	i.stopRoundChangeTimer()
 
 	// stat new timer
-	roundTimeout := uint64(i.Config.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDuration), float64(i.State.Round))
 	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 	i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 	go func() {
