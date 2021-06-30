@@ -57,7 +57,7 @@ func (s *HistorySync) Start() error {
 
 	syncStartSeqNumber := uint64(0)
 	if localHighest != nil {
-		syncStartSeqNumber = localHighest.Message.SeqNumber + 1
+		syncStartSeqNumber = localHighest.Message.SeqNumber
 	}
 
 	// check we are behind and need to sync

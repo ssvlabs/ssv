@@ -60,6 +60,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		return
 	}
 	if known {
+		i.logger.Debug("decided is known, skipped")
 		return
 	}
 
