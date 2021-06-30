@@ -12,7 +12,7 @@ const (
 	unknownError = "unknown error"
 )
 
-func handleOperatorsQuery(logger *zap.Logger, storage storage.Storage, nm *api.NetworkMessage) {
+func handleOperatorsQuery(logger *zap.Logger, storage storage.OperatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
@@ -34,7 +34,7 @@ func handleOperatorsQuery(logger *zap.Logger, storage storage.Storage, nm *api.N
 	}
 }
 
-func getOperators(s storage.Storage, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
+func getOperators(s storage.OperatorsCollection, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
 	var operators []storage.OperatorInformation
 	if len(filter.PublicKey) > 0 {
 		operator, err := s.GetOperatorInformation(filter.PublicKey)
@@ -52,7 +52,7 @@ func getOperators(s storage.Storage, filter api.MessageFilter) ([]storage.Operat
 	return operators, nil
 }
 
-func handleValidatorsQuery(logger *zap.Logger, s storage.Storage, nm *api.NetworkMessage) {
+func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles validators request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
@@ -74,7 +74,7 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.Storage, nm *api.Networ
 	}
 }
 
-func getValidators(s storage.Storage, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
+func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
 	var validators []storage.ValidatorInformation
 	if len(filter.PublicKey) > 0 {
 		validator, err := s.GetValidatorInformation(filter.PublicKey)
