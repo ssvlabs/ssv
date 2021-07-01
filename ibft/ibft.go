@@ -68,7 +68,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share, ) IBFT {
+func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share) IBFT {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &ibftImpl{
 		role:                role,
@@ -106,28 +106,27 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 		return false, 0, nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
-	newInstance := NewInstance(instanceOpts)
-	i.currentInstance = newInstance
-	go newInstance.StartEventLoop()
-	go newInstance.StartMessagePipeline()
-	stageChan := newInstance.GetStageChan()
+	i.currentInstance = NewInstance(instanceOpts)
+	i.currentInstance.Init()
+	stageChan := i.currentInstance.GetStageChan()
 
+	// reset leader seed for sequence
 	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
 	if err != nil {
 		return false, 0, nil, errors.WithMessage(err, "could not reset leader selection")
 	}
-	go newInstance.Start(opts.Value)
+	i.currentInstance.Start(opts.Value)
 
 	// Store prepared round and value and decided stage.
 	for {
 		switch stage := <-stageChan; stage {
 		// TODO - complete values
 		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), newInstance.State); err != nil {
+			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
 				return false, 0, nil, errors.WithMessage(err, "could not save prepare msg to storage")
 			}
 		case proto.RoundState_Decided:
-			agg, err := newInstance.CommittedAggregatedMsg()
+			agg, err := i.currentInstance.CommittedAggregatedMsg()
 			if err != nil {
 				return false, 0, nil, errors.WithMessage(err, "could not get aggregated commit msg and save to storage")
 			}
@@ -160,4 +159,3 @@ func (i *ibftImpl) GetIdentifier() []byte {
 func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
 	return i.leaderSelector.SetSeed(seed, 1)
 }
-
