@@ -55,6 +55,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 	groupedMsgs := i.groupPartialChangeRoundMsgs(msgs)
 	foundPartialQuorum, lowestChangeRound := i.findPartialQuorum(groupedMsgs)
 
+	// TODO - could have a race condition where msgs are processed in a different thread and then we trigger round change here
 	if foundPartialQuorum {
 		i.stopRoundChangeTimer()
 		i.State.Round = lowestChangeRound
