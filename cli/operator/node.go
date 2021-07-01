@@ -24,7 +24,7 @@ type config struct {
 	DBOptions                  basedb.Options   `yaml:"db"`
 	SSVOptions                 operator.Options `yaml:"ssv"`
 
-	Network           string `yaml:"Network" env-default:"prater"`
+	Network           string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	OperatorKey       string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	ETH1Addr          string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
