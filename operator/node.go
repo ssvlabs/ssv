@@ -150,11 +150,11 @@ func (n *operatorNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 				With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
 				With(zap.Uint64("current slot", currentSlot)).
 				With(zap.Uint64("slot", slot)).
-				With(zap.Uint64("epoch", slot / 32)).
+				With(zap.Uint64("epoch", slot/32)).
 				With(zap.String("pubKey", hex.EncodeToString(duty.PublicKey))).
 				With(zap.Time("start_time", n.getSlotStartTime(slot)))
 			// execute task if slot already began and not pass 1 epoch
-			if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
+			if currentSlot >= slot && currentSlot-slot <= n.dutyLimit {
 				pubKey := &bls.PublicKey{}
 				if err := pubKey.Deserialize(duty.PublicKey); err != nil {
 					logger.Error("failed to deserialize pubkey from duty")
