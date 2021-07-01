@@ -11,8 +11,8 @@ type Config struct {
 	// yaml/env arguments
 	Enr              string        `yaml:"Enr" env:"ENR_KEY" env-description:"enr used in discovery" env-default:""`
 	DiscoveryType    string        `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"mdns"`
-	TCPPort          int           `yaml:"TcpPort" env-default:"13000"`
-	UDPPort          int           `yaml:"UdpPort" env-default:"12000"`
+	TCPPort          int           `yaml:"TcpPort" env:"TCP_PORT" env-default:"13000"`
+	UDPPort          int           `yaml:"UdpPort" env:"UDP_PORT" env-default:"12000"`
 	HostAddress      string        `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
 	HostDNS          string        `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`

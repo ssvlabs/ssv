@@ -28,7 +28,7 @@ type config struct {
 
 	ETH1Addr       string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
 	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
-	Network        string `yaml:"Network" env-default:"prater"`
+	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	// Exporter WS API
 	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
 }
