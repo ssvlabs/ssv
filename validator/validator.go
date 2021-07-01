@@ -93,18 +93,23 @@ func (v *Validator) Start() error {
 func (v *Validator) startSlotQueueListener() {
 	v.logger.Info("start listening slot queue")
 
-	for {
-		slot, duty, ok, err := v.slotQueue.Next(v.Share.PublicKey.Serialize())
-		if err != nil {
-			v.logger.Error("failed to get next slot data", zap.Error(err))
-			continue
-		}
+	ch, err := v.slotQueue.RegisterToNext(v.Share.PublicKey.Serialize())
+	if err != nil{
+		v.logger.Error("failed to register validator to slot queue", zap.Error(err))
+		return
+	}
 
-		if !ok {
-			v.logger.Debug("no duties for slot scheduled")
+	for e := range ch {
+		if event, ok := e.(slotqueue.SlotEvent); ok {
+			if !event.Ok {
+				v.logger.Debug("no duties for slot scheduled")
+				continue
+			}
+			go v.ExecuteDuty(v.ctx, event.Slot, event.Duty)
+		}else {
+			v.logger.Error("slot queue event is not ok")
 			continue
 		}
-		go v.ExecuteDuty(v.ctx, slot, duty)
 	}
 }
 
