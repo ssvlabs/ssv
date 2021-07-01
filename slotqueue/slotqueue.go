@@ -20,7 +20,7 @@ type Queue interface {
 	// Schedule schedules execution of the given slot and puts it into the queue
 	Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error
 
-	// listenToTicker and notify for all the observers when tick triggers
+	// listenToTicker and notify for all the observers when ticker triggers
 	listenToTicker()
 }
 
@@ -31,6 +31,7 @@ type queue struct {
 	tickerSubjects map[string]pubsub.Subject
 }
 
+// SlotEvent represents the notify event fire for each pubkey subject with the proper duty
 type SlotEvent struct {
 	Slot uint64
 	Duty *ethpb.DutiesResponse_Duty
