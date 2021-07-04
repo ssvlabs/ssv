@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/validator/storage"
-	"math"
 	"sync"
 	"time"
 
