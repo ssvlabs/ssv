@@ -130,7 +130,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			populatedStorage(t, sks, 10),
 			true,
 			&Instance{State: &proto.State{SeqNumber: 10}},
-			fmt.Sprintf("current instance (seqNumber - %d) is still running", 10),
+			fmt.Sprintf("current instance (%d) is still running", 10),
 		},
 	}
 

@@ -2,12 +2,14 @@ package eventqueue
 
 import "sync"
 
+// Queue is a simple struct that manages a queue of functions. Thread safe
 type Queue struct {
 	stop  bool
 	queue []func()
 	lock  sync.Mutex
 }
 
+// New returns a new instance of Queue
 func New() *Queue {
 	return &Queue{
 		queue: make([]func(), 0),
@@ -15,6 +17,7 @@ func New() *Queue {
 	}
 }
 
+// Add will add an an item to the queue, thread safe.
 func (q *Queue) Add(f func()) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -26,6 +29,7 @@ func (q *Queue) Add(f func()) {
 	q.queue = append(q.queue, f)
 }
 
+// Pop will return and delete an an item from the queue, thread safe.
 func (q *Queue) Pop() func() {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -42,6 +46,7 @@ func (q *Queue) Pop() func() {
 	return nil
 }
 
+// ClearAndStop will clear the queue disable adding more items to it, thread safe.
 func (q *Queue) ClearAndStop() {
 	q.lock.Lock()
 	defer q.lock.Unlock()

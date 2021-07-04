@@ -169,6 +169,7 @@ func (i *Instance) Stop() {
 	i.Logger.Info("stopping iBFT instance...")
 }
 
+// Stopped returns true if instance is stopped
 func (i *Instance) Stopped() bool {
 	i.stopLock.Lock()
 	defer i.stopLock.Unlock()
