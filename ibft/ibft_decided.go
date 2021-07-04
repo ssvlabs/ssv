@@ -72,6 +72,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	if shouldSync {
 		if i.currentInstance != nil {
 			i.currentInstance.Stop()
+			i.currentInstance = nil // make sure instance is closed
 		}
 		// sync
 		s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
