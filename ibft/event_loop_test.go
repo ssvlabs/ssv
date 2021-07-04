@@ -1,0 +1,49 @@
+package ibft
+
+import (
+	"github.com/bloxapp/ssv/ibft/eventqueue"
+	"github.com/bloxapp/ssv/ibft/leader"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+	"testing"
+	"time"
+)
+
+func TestChangeRoundTimer(t *testing.T) {
+	secretKeys, nodes := GenerateNodes(4)
+	instance := &Instance{
+		MsgQueue:            msgqueue.New(),
+		eventQueue:          eventqueue.New(),
+		ChangeRoundMessages: msgcontinmem.New(3),
+		PrepareMessages:     msgcontinmem.New(3),
+		Config: &proto.InstanceConfig{
+			RoundChangeDuration:   int64(time.Millisecond * 200),
+			LeaderPreprepareDelay: int64(time.Millisecond * 100),
+		},
+		State: &proto.State{
+			Round:     1,
+			Stage:     proto.RoundState_PrePrepare,
+			Lambda:    []byte("Lambda"),
+			SeqNumber: 1,
+		},
+		ValidatorShare: &storage.Share{
+			Committee: nodes,
+			NodeID:    1,
+			ShareKey:  secretKeys[1],
+			PublicKey: secretKeys[1].GetPublicKey(),
+		},
+		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
+		LeaderSelector: &leader.Constant{LeaderIndex: 1},
+		Logger:         zaptest.NewLogger(t),
+	}
+
+	instance.triggerRoundChangeOnTimer()
+	time.Sleep(time.Millisecond * 500)
+	instance.eventQueue.Pop()()
+	require.EqualValues(t, 2, instance.State.Round)
+}

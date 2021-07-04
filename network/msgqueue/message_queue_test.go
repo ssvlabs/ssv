@@ -33,7 +33,7 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 	require.Len(t, msgQ.queue["lambda_01020304_seqNumber_1_round_1"], 1)
 	require.Len(t, msgQ.queue["sig_lambda_01020304_seqNumber_1"], 1)
 
-	msgQ.PurgeIndexedMessages(IBFTRoundIndexKey([]byte{1, 2, 3, 4}, 1, 1))
+	msgQ.PurgeIndexedMessages(IBFTMessageIndexKey([]byte{1, 2, 3, 4}, 1, 1))
 	require.Len(t, msgQ.queue["lambda_01020304_seqNumber_1_round_1"], 0)
 	require.Len(t, msgQ.queue["sig_lambda_01020304_seqNumber_1"], 1)
 
@@ -48,8 +48,8 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		Lambda: []byte{1, 2, 3, 4},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
-				Round:       1,
-				SeqNumber:   1,
+				Round:     1,
+				SeqNumber: 1,
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,
@@ -60,8 +60,8 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		Lambda: []byte{1, 2, 3, 5},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
-				Round:       7,
-				SeqNumber:   2,
+				Round:     7,
+				SeqNumber: 2,
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,

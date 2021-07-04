@@ -6,8 +6,8 @@ import (
 	"github.com/bloxapp/ssv/network"
 )
 
-// IBFTRoundIndexKey is the ibft index key
-func IBFTRoundIndexKey(lambda []byte, seqNumber uint64, round uint64) string {
+// IBFTMessageIndexKey is the ibft index key
+func IBFTMessageIndexKey(lambda []byte, seqNumber uint64, round uint64) string {
 	return fmt.Sprintf("lambda_%s_seqNumber_%d_round_%d", hex.EncodeToString(lambda), seqNumber, round)
 }
 
@@ -15,7 +15,7 @@ func iBFTMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
 		if msg.Type == network.NetworkMsg_IBFTType {
 			return []string{
-				IBFTRoundIndexKey(msg.Lambda, msg.SignedMessage.Message.SeqNumber, msg.SignedMessage.Message.Round),
+				IBFTMessageIndexKey(msg.Lambda, msg.SignedMessage.Message.SeqNumber, msg.SignedMessage.Message.Round),
 			}
 		}
 		return []string{}
