@@ -28,7 +28,7 @@ func TestExecWithTimeout(t *testing.T) {
 			"Long_function",
 			context.TODO(),
 			7 * time.Millisecond,
-			4,
+			3,
 		},
 	}
 
@@ -51,7 +51,7 @@ func TestExecWithTimeout(t *testing.T) {
 					}
 				}
 			}
-			completed, _, err := ExecWithTimeout(context.TODO(), fn, 7 * time.Millisecond)
+			completed, _, err := ExecWithTimeout(context.TODO(), fn, test.t)
 			stopped.Wait()
 			require.False(t, completed)
 			require.NoError(t, err)

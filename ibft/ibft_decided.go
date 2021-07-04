@@ -60,6 +60,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		return
 	}
 	if known {
+		i.logger.Debug("decided is known, skipped")
 		return
 	}
 
@@ -72,6 +73,8 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		if i.currentInstance != nil {
 			i.currentInstance.Stop()
 		}
+		i.currentInstance = nil
+
 		// sync
 		s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 		go func() {

@@ -36,6 +36,7 @@ type WebSocketAdapter interface {
 	RegisterHandler(mux *http.ServeMux, endPoint string, handler EndPointHandler)
 	Send(conn Connection, v interface{}) error
 	Receive(conn Connection, v interface{}) error
+	IsCloseError(err error) bool
 }
 
 // ConnectionID calculates the id of the given Connection

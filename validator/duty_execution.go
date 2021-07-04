@@ -216,6 +216,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.Du
 		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
 		zap.Uint64("slot", slot))
 
+	logger.Debug("executing duty...")
 	roles, err := v.beacon.RolesAt(ctx, slot, duty, v.Share.PublicKey, v.Share.ShareKey)
 	if err != nil {
 		logger.Error("failed to get roles for duty", zap.Error(err))

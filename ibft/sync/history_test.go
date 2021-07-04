@@ -341,7 +341,7 @@ func TestFindHighest(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(zap.L(), nil, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
+			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, _, err := s.findHighestInstance()

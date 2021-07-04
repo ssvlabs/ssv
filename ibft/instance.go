@@ -2,6 +2,8 @@ package ibft
 
 import (
 	"encoding/hex"
+	"errors"
+	"github.com/bloxapp/ssv/ibft/eventqueue"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/validator/storage"
 	"math"
@@ -35,7 +37,6 @@ type InstanceOptions struct {
 
 // Instance defines the instance attributes
 type Instance struct {
-	//Me               *proto.Node
 	ValidatorShare   *storage.Share
 	State            *proto.State
 	network          network.Network
@@ -52,29 +53,25 @@ type Instance struct {
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
 
+	// event loop
+	eventQueue *eventqueue.Queue
+
 	// channels
-	changeRoundChan   chan bool
 	stageChangedChans []chan proto.RoundState
 
 	// flags
-	stop bool
+	stopped     bool
+	initialized bool
 
 	// locks
-	stageChangedChansLock sync.Mutex
 	stopLock              sync.Mutex
+	stageChangedChansLock sync.Mutex
 	stageLock             sync.Mutex
 }
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts InstanceOptions) *Instance {
-	//// make sure secret key is not nil, otherwise the node can't operate
-	//if opts.Me.Sk == nil || len(opts.Me.Sk) == 0 {
-	//	opts.Logger.Fatal("can't create Instance with invalid secret key")
-	//	return nil
-	//}
-
 	return &Instance{
-		//Me: opts.Me,
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
 			Stage:     proto.RoundState_NotStarted,
@@ -95,8 +92,9 @@ func NewInstance(opts InstanceOptions) *Instance {
 		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 
+		eventQueue: eventqueue.New(),
+
 		// chan
-		changeRoundChan:   make(chan bool),
 		stageChangedChans: make([]chan proto.RoundState, 0),
 
 		// locks
@@ -104,6 +102,14 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
 	}
+}
+
+// Init must be called before start can be
+func (i *Instance) Init() {
+	//go i.StartEventLoop()
+	go i.StartMessagePipeline()
+	go i.StartMainEventLoop()
+	i.initialized = true
 }
 
 // Start implements the Algorithm 1 IBFT pseudocode for process pi: constants, State variables, and ancillary procedures
@@ -116,9 +122,12 @@ func NewInstance(opts InstanceOptions) *Instance {
 // 	if leader(hi, ri) = pi then
 // 		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
 // 		set timer to running and expire after t(ri)
-func (i *Instance) Start(inputValue []byte) {
+func (i *Instance) Start(inputValue []byte) error {
+	if !i.initialized {
+		return errors.New("can't start instance a non initialized instance")
+	}
 	if i.State.Lambda == nil {
-		i.Logger.Fatal("can't start instance with invalid Lambda")
+		return errors.New("can't start instance with invalid Lambda")
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
@@ -142,25 +151,29 @@ func (i *Instance) Start(inputValue []byte) {
 		}()
 	}
 	i.triggerRoundChangeOnTimer()
+	return nil
 }
 
-// Stop will trigger a stop for the entire instance
+// Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
-	i.stopLock.Lock()
-	defer i.stopLock.Unlock()
+	i.eventQueue.Add(func() {
+		i.stopLock.Lock()
+		defer i.stopLock.Unlock()
 
-	i.stop = true
-	i.stopRoundChangeTimer()
-	i.SetStage(proto.RoundState_Stopped)
+		i.stopped = true
+		i.stopRoundChangeTimer()
+		i.SetStage(proto.RoundState_Stopped)
+		i.eventQueue.ClearAndStop()
+		i.Logger.Info("stopped iBFT instance")
+	})
 	i.Logger.Info("stopping iBFT instance...")
 }
 
-// IsStopped returns true if msg stopped, false if not
-func (i *Instance) IsStopped() bool {
+// Stopped returns true if instance is stopped
+func (i *Instance) Stopped() bool {
 	i.stopLock.Lock()
 	defer i.stopLock.Unlock()
-
-	return i.stop
+	return i.stopped
 }
 
 // BumpRound is used to set round in the instance's MsgQueue - the message broker
@@ -186,7 +199,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if i.State.Stage == proto.RoundState_Decided || i.State.Stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.State.Round; j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.SeqNumber, j))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
 		}
 	}
 
@@ -206,39 +219,6 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 	i.stageChangedChans = append(i.stageChangedChans, ch)
 	i.stageChangedChansLock.Unlock()
 	return ch
-}
-
-// StartEventLoop - starts the main event loop for the instance.
-// Events are messages our timer that change the behaviour of the instance upon triggering them
-func (i *Instance) StartEventLoop() {
-	for range i.changeRoundChan {
-		go i.uponChangeRoundTrigger()
-	}
-}
-
-// StartMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
-// each message type has it's own pipeline of checks and actions, called by the networker implementation.
-// Internal chan monitor if the instance reached decision or if a round change is required.
-func (i *Instance) StartMessagePipeline() {
-	for {
-		if i.IsStopped() {
-			i.Logger.Info("stopping iBFT message pipeline...")
-			break
-		}
-
-		processedMsg, err := i.ProcessMessage()
-		if err != nil {
-			i.Logger.Error("msg pipeline error", zap.Error(err))
-		}
-		if !processedMsg {
-			time.Sleep(time.Millisecond * 100)
-		}
-
-		// In case instance was decided, exit message pipeline
-		if i.Stage() == proto.RoundState_Decided {
-			break
-		}
-	}
 }
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
@@ -274,33 +254,4 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	}
 
 	return nil
-}
-
-/**
-"Timer:
-	In addition to the State variables, each correct process pi also maintains a timer represented by timeri,
-	which is used to trigger a round change when the algorithm does not sufficiently progress.
-	The timer can be in one of two states: running or expired.
-	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the State changes to expired."
-*/
-func (i *Instance) triggerRoundChangeOnTimer() {
-	// make sure previous timer is stopped
-	i.stopRoundChangeTimer()
-
-	// stat new timer
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDuration), float64(i.State.Round))
-	i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
-	i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
-	go func() {
-		<-i.roundChangeTimer.C
-		i.changeRoundChan <- true
-		i.stopRoundChangeTimer()
-	}()
-}
-
-func (i *Instance) stopRoundChangeTimer() {
-	if i.roundChangeTimer != nil {
-		i.roundChangeTimer.Stop()
-		i.roundChangeTimer = nil
-	}
 }

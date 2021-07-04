@@ -19,7 +19,7 @@ func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 			zap.Int("current peer count", len(peers)),
 			zap.Int64("last interval ms", lastTick.Milliseconds()))
 		if len(peers) >= minPeerCount {
-			// stop interval if we found enough peers
+			// stopped interval if we found enough peers
 			return true, false
 		}
 		return false, false

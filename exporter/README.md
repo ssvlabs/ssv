@@ -26,21 +26,23 @@ The introduction of exporter requires to do some refactoring in the project stru
 
 The following information will be stored and served by exporter:
 * Operators 
-  * Name --> contract event
-  * Public Key --> contract event
-  * Owner Address --> contract event
-  * Index --> a sequential index
+  * Name (`name: string`) --> contract event
+  * Public Key (`publicKey: string`) --> contract event
+  * Owner Address (`ownerAddress: string`) --> contract event
+  * Index (`index: uint`) --> a sequential index
 * Validators
-  * Public Key --> contract event
-  * Operators --> contract event
-  * Index --> a sequential index
-* Duties (over time) 
-  * Epoch --> calculated from Slot
-  * Slot --> part of the lambda
-  * Duty type / role --> part of the lambda
-  * Status (failed | success)
-  * Operators --> signer_ids + id lookup in contract information (oess > index)
-    * operators with the corresponding indication for each operator on the duty
+  * Public Key (`publicKey: string`) --> contract event
+  * Operators (`operators: []`) --> contract event
+    * Operator Public Key (`publicKey: string`)
+    * IBFT/Node ID (`nodeId: uint`)
+  * Index (`index: uint`) --> a sequential index
+* Duties
+  * Validator Public Key (`publicKey: string`)
+  * Epoch (`epoch: uint64`) --> calculated from Slot
+  * Slot (`slot: uint64`) --> part of the lambda
+  * Duty type / role (`slot: string`) --> part of the lambda
+  * Status (`status: bool`) - failed | success
+  * Operators --> signer_ids
 
 #### Contract Data
 
@@ -105,14 +107,23 @@ and a `type` to distinguish between messages:
     "from": number,
     "to": number,
     "role": "ATTESTER" | "AGGREGATOR" | "PROPOSER",
-    "pubKey": string
+    "publicKey": string
   }
 }
 ```
+
 Response extends the Request with a `data` section that contains the corresponding results:
 ```
 {
   "data": Operator[] | Validator[] | DecidedMessage[]
+}
+```
+
+In addition, response might reflect an error, see [Error Handling](#error-handling):
+```
+{
+  "type": "error",
+  "data": string[]
 }
 ```
 
@@ -156,6 +167,41 @@ Exporter will produce the following response:
 }
 ```
 
+###### Error Handling
+
+In case of bad request or some internal error, the response will be of `type` "error".
+
+Some Examples:
+
+- Bad input (corrupted JSON) produces:
+  ```json
+  {
+    "type": "error",
+    "filter": {
+      "from": 0,
+      "to": 0
+    },
+    "data": [
+      "could not parse network message"
+    ]
+  }
+  ```
+- Unknown message type results:
+  ```json
+  {
+    "type": "error",
+    "filter": {
+      "from": 0,
+      "to": 0
+    },
+    "data": [
+      "bad request - unknown message type 'foo'"
+    ]
+  }
+  ```
+
+
+
 ##### Stream
 
 `/stream` is an API that allows consumers to get live data that is collected by the exporter, which will push the information it receives (validator, operator or duties) from SSV nodes or contract. 
@@ -178,13 +224,18 @@ For example, exporter will push a message if a new validator was added to the ne
 }
 ```
 
-
 ## Usage
 
 ### Run Locally
 
+Build if you don't have the executable:
 ```shell
-make CONFIG_PATH=./config/config.exporter.yaml start-exporter
+make build
+```
+
+Then run with:
+```shell
+make CONFIG_PATH=./config/config.exporter.yaml BUILD_PATH=./bin/ssvnode start-exporter
 ```
 
 ### Run in Docker
@@ -199,5 +250,21 @@ make NODES=exporter-node docker-all
 make DEBUG_NODES=exporter-node-dev docker-debug
 ```
 
+### Explore API
 
+Use a tool for WebSockets (such as [wscat](https://www.npmjs.com/package/wscat)) to interact with the API.
 
+```shell
+wscat -c ws://ws-exporter.stage.ssv.network/query
+```
+
+Once connection is ready, type your query:
+
+```shell
+> { "type": "operator", "filter": { "from": 0, "to": 4 } }
+```
+
+The expected results contains a list of desired operators, in our case in index `[0, 4]`
+```shell
+< { "type": "operator", "filter": { "from": 0, "to": 4}, "data":[...] }
+```
