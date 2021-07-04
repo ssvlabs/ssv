@@ -70,7 +70,6 @@ type Instance struct {
 // NewInstance is the constructor of Instance
 func NewInstance(opts InstanceOptions) *Instance {
 	return &Instance{
-		//Me: opts.Me,
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
 			Stage:     proto.RoundState_NotStarted,
