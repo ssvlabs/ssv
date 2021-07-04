@@ -28,7 +28,7 @@ Other events->   |
 // StartMainEventLoop start the main event loop queue for the iBFT instance which iterates events in the queue, if non found it will wait before trying again.
 func (i *Instance) StartMainEventLoop() {
 	for {
-		if i.stopped {
+		if i.Stopped() {
 			return
 		}
 
@@ -45,7 +45,7 @@ func (i *Instance) StartMainEventLoop() {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
 	for {
-		if i.stopped {
+		if i.Stopped() {
 			return
 		}
 
