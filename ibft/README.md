@@ -5,7 +5,7 @@
 - **[Blox IBFT implementation](#blox-ibft-implementation)**
 - **[Codebase Structure](#codebase-structure)**
 - **[Starting SSV environment locally](#how-to-start-ssv-environment-locally)**
-- **[threading](./docs/threading.md)**
+- **[Threading](./docs/THREADING.md)**
 ---
 ### Blox IBFT implementation
 
