@@ -97,6 +97,7 @@ func (i *ibftImpl) Init() {
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
 	i.initFinished = true
+	i.logger.Debug("iBFT implementation init finished")
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {

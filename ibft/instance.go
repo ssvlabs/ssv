@@ -63,6 +63,7 @@ type Instance struct {
 	initialized bool
 
 	// locks
+	runInitOnce           sync.Once
 	stopLock              sync.Mutex
 	stageChangedChansLock sync.Mutex
 	stageLock             sync.Mutex
@@ -97,6 +98,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stageChangedChans: make([]chan proto.RoundState, 0),
 
 		// locks
+		runInitOnce:           sync.Once{},
 		stopLock:              sync.Mutex{},
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
@@ -105,10 +107,12 @@ func NewInstance(opts InstanceOptions) *Instance {
 
 // Init must be called before start can be
 func (i *Instance) Init() {
-	//go i.StartEventLoop()
-	go i.StartMessagePipeline()
-	go i.StartMainEventLoop()
-	i.initialized = true
+	i.runInitOnce.Do(func() {
+		go i.StartMessagePipeline()
+		go i.StartMainEventLoop()
+		i.initialized = true
+		i.Logger.Debug("iBFT instance init finished")
+	})
 }
 
 // Start implements the Algorithm 1 IBFT pseudocode for process pi: constants, State variables, and ancillary procedures
@@ -123,7 +127,7 @@ func (i *Instance) Init() {
 // 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
-		return errors.New("can't start instance a non initialized instance")
+		return errors.New("can't start a non initialized instance")
 	}
 	if i.State.Lambda == nil {
 		return errors.New("can't start instance with invalid Lambda")
