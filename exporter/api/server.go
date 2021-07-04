@@ -24,7 +24,8 @@ type wsServer struct {
 func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
 		logger.With(zap.String("component", "exporter/api/server")),
-		pubsub.NewSubject(), pubsub.NewSubject(),
+		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/inbound-subject"))),
+		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/outbound-subject"))),
 		adapter, mux,
 	}
 	return &ws
@@ -109,9 +110,10 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.Sub
 			logger.Warn("could not parse message")
 			continue
 		}
-		logger.Debug("sending outbound",
-			zap.String("msg.type", string(nm.Msg.Type)))
+		// send message only for this connection (originates in /query) or any connection (/stream)
 		if nm.Conn == conn || nm.Conn == nil {
+			logger.Debug("sending outbound",
+				zap.String("msg.type", string(nm.Msg.Type)))
 			err := ws.adapter.Send(conn, &nm.Msg)
 			if err != nil {
 				logger.Error("could not send message", zap.Error(err))

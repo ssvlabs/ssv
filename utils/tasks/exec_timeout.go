@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -16,9 +17,9 @@ type funcResult struct {
 }
 
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed
-func ExecWithTimeout(ctx context.Context, fn Func, t time.Duration) (bool, interface{}, error) {
+func ExecWithTimeout(ctx context.Context, fn Func, t time.Duration, logger *zap.Logger) (bool, interface{}, error) {
 	c := make(chan funcResult, 1)
-	stopper := newStopper()
+	stopper := newStopper(logger)
 
 	go func() {
 		defer func() {

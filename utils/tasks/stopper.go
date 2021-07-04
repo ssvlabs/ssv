@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"github.com/bloxapp/ssv/pubsub"
+	"go.uber.org/zap"
 	"math/big"
 	"sync"
 	"time"
@@ -19,13 +20,14 @@ type Stopper interface {
 }
 
 type stopper struct {
+	logger  *zap.Logger
 	stopped bool
 	sub     pubsub.Subject
 	mut     sync.RWMutex
 }
 
-func newStopper() *stopper {
-	s := stopper{sub: pubsub.NewSubject()}
+func newStopper(logger *zap.Logger) *stopper {
+	s := stopper{sub: pubsub.NewSubject(logger), logger: logger}
 	return &s
 }
 
