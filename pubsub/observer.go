@@ -35,6 +35,12 @@ func (so *observer) isActive() bool {
 }
 
 func (so *observer) close() {
+	defer func() {
+		if err := recover(); err != nil {
+			// catch "close of closed channel"
+		}
+	}()
+
 	so.mut.Lock()
 	defer so.mut.Unlock()
 
@@ -45,13 +51,17 @@ func (so *observer) close() {
 }
 
 func (so *observer) notifyCallback(e SubjectEvent) {
-	if so.isActive() {
+	so.mut.Lock()
+	if so.active {
 		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					// catch "send on closed channel"
+				}
+			}()
 			// in case the channel is blocking - the observer should be locked
 			// and therefore the lock is acquired again
-			so.mut.Lock()
 			defer so.mut.Unlock()
-
 			so.channel <- e
 		}()
 	}
