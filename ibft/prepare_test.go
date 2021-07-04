@@ -79,8 +79,8 @@ func TestPreparePipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
-			Committee:   nodes,
-			NodeID:      1,
+			Committee: nodes,
+			NodeID:    1,
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
@@ -88,5 +88,5 @@ func TestPreparePipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.prepareMsgPipeline()
-	require.EqualValues(t, "combination of: type check, lambda, round, sequence, authorize, upon prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, upon prepare msg, ", pipeline.Name())
 }

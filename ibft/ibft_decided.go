@@ -26,9 +26,8 @@ func (i *ibftImpl) processDecidedQueueMessages() {
 
 func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 	p := pipeline.Combine(
-		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
 	)

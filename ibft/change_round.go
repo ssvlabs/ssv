@@ -16,6 +16,7 @@ import (
 
 func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
@@ -225,10 +226,10 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 	}
 
 	return &proto.Message{
-		Type:        proto.RoundState_ChangeRound,
-		Round:       i.State.Round,
-		Lambda:      i.State.Lambda,
-		SeqNumber:   i.State.SeqNumber,
-		Value:       data,
+		Type:      proto.RoundState_ChangeRound,
+		Round:     i.State.Round,
+		Lambda:    i.State.Lambda,
+		SeqNumber: i.State.SeqNumber,
+		Value:     data,
 	}, nil
 }

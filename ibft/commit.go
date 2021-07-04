@@ -14,6 +14,7 @@ import (
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
