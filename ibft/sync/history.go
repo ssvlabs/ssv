@@ -100,7 +100,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	// fetch response
 	wg := &sync.WaitGroup{}
 	results := make([]*network.SyncMessage, 0)
-	resultsMut := sync.Mutex{}
+	lock := sync.Mutex{}
 	for i, p := range usedPeers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
@@ -112,9 +112,9 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
 			} else {
-				resultsMut.Lock()
+				lock.Lock()
 				results = append(results, res)
-				resultsMut.Unlock()
+				lock.Unlock()
 			}
 			wg.Done()
 		}(i, p, wg)

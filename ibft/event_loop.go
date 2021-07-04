@@ -2,8 +2,8 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
+	"math"
 	"time"
 )
 
@@ -76,7 +76,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 		i.stopRoundChangeTimer()
 
 		// stat new timer
-		roundTimeout := uint64(i.Config.RoundChangeDuration) * mathutil.PowerOf2(i.State.Round)
+		roundTimeout := math.Pow(float64(i.Config.RoundChangeDuration), float64(i.State.Round))
 		i.roundChangeTimer = time.NewTimer(time.Duration(roundTimeout))
 		i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
 
