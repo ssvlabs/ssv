@@ -69,7 +69,7 @@ func newEth1Client() *eth1Client {
 		operatorPrivKeyProvider: func() (*rsa.PrivateKey, error) {
 			return nil, nil
 		},
-		outSubject: pubsub.NewSubject(),
+		outSubject: pubsub.NewSubject(zap.L()),
 	}
 	return &ec
 }

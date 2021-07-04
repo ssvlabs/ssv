@@ -63,6 +63,7 @@ services:
   exporter-node:
     <<: *default-base
     container_name: exporter-node
+    command: make start-exporter
     environment:
       CONFIG_PATH: ./config/config.exporter.yaml
 

@@ -1,6 +1,7 @@
 package pubsub
 
 import (
+	"go.uber.org/zap"
 	"sync"
 )
 
@@ -15,13 +16,15 @@ type observer struct {
 	channel SubjectChannel
 	active  bool
 	mut     sync.Mutex
+	logger *zap.Logger
 }
 
-func newSubjectObserver() *observer {
+func newSubjectObserver(logger *zap.Logger) *observer {
 	so := observer{
 		newChannel(defaultChannelBuffer),
 		true,
 		sync.Mutex{},
+		logger,
 	}
 	return &so
 }
@@ -35,6 +38,14 @@ func (so *observer) isActive() bool {
 }
 
 func (so *observer) close() {
+	defer func() {
+		if err := recover(); err != nil {
+			// catch "close of closed channel"
+			so.logger.Debug("recovering from panic", zap.Error(err.(error)))
+			//fmt.Printf("recovering from panic: %s\n", err)
+		}
+	}()
+
 	so.mut.Lock()
 	defer so.mut.Unlock()
 
@@ -45,13 +56,19 @@ func (so *observer) close() {
 }
 
 func (so *observer) notifyCallback(e SubjectEvent) {
-	if so.isActive() {
+	so.mut.Lock()
+	if so.active {
 		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					// catch "send on closed channel"
+					so.logger.Debug("recovering from panic", zap.Error(err.(error)))
+					//fmt.Printf("recovering from panic: %s\n", err)
+				}
+			}()
 			// in case the channel is blocking - the observer should be locked
 			// and therefore the lock is acquired again
-			so.mut.Lock()
 			defer so.mut.Unlock()
-
 			so.channel <- e
 		}()
 	}

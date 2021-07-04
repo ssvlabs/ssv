@@ -77,8 +77,9 @@ func NewController(options ControllerOptions) IController {
 		db:                         options.DB,
 		network:                    options.Network,
 		ethNetwork:                 options.ETHNetwork,
-		newValidatorSubject:        pubsub.NewSubject(),
-		validatorsMap:              make(map[string]*Validator),
+		newValidatorSubject: pubsub.NewSubject(options.Logger.With(
+			zap.String("which", "validator/controller/validator-subject"))),
+		validatorsMap: make(map[string]*Validator),
 	}
 
 	return &ctrl
