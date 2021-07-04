@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/prysmaticlabs/prysm/shared/mathutil"
 	"go.uber.org/zap"
@@ -29,6 +28,10 @@ Other events->   |
 // StartMainEventLoop start the main event loop queue for the iBFT instance which iterates events in the queue, if non found it will wait before trying again.
 func (i *Instance) StartMainEventLoop() {
 	for {
+		if i.stopped {
+			return
+		}
+
 		if f := i.eventQueue.Pop(); f != nil {
 			f()
 		} else {
@@ -42,9 +45,8 @@ func (i *Instance) StartMainEventLoop() {
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
 	for {
-		if i.IsStopped() {
-			i.Logger.Info("stopping iBFT message pipeline...")
-			break
+		if i.stopped {
+			return
 		}
 
 		// TODO - refactor
@@ -57,11 +59,6 @@ func (i *Instance) StartMessagePipeline() {
 			})
 		} else {
 			time.Sleep(time.Millisecond * 100)
-		}
-
-		// In case instance was decided, exit message pipeline
-		if i.Stage() == proto.RoundState_Decided {
-			break
 		}
 	}
 }

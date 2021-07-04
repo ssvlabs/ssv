@@ -60,12 +60,11 @@ type Instance struct {
 	stageChangedChans []chan proto.RoundState
 
 	// flags
-	stop        bool
+	stopped     bool
 	initialized bool
 
 	// locks
 	stageChangedChansLock sync.Mutex
-	stopLock              sync.Mutex
 	stageLock             sync.Mutex
 }
 
@@ -99,7 +98,6 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stageChangedChans: make([]chan proto.RoundState, 0),
 
 		// locks
-		stopLock:              sync.Mutex{},
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
 	}
@@ -154,23 +152,16 @@ func (i *Instance) Start(inputValue []byte) {
 	i.triggerRoundChangeOnTimer()
 }
 
-// Stop will trigger a stop for the entire instance
+// Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
-	i.stopLock.Lock()
-	defer i.stopLock.Unlock()
-
-	i.stop = true
-	i.stopRoundChangeTimer()
-	i.SetStage(proto.RoundState_Stopped)
+	i.eventQueue.Add(func() {
+		i.stopped = true
+		i.stopRoundChangeTimer()
+		i.SetStage(proto.RoundState_Stopped)
+		i.eventQueue.ClearAndStop()
+		i.Logger.Info("stopped iBFT instance")
+	})
 	i.Logger.Info("stopping iBFT instance...")
-}
-
-// IsStopped returns true if msg stopped, false if not
-func (i *Instance) IsStopped() bool {
-	i.stopLock.Lock()
-	defer i.stopLock.Unlock()
-
-	return i.stop
 }
 
 // BumpRound is used to set round in the instance's MsgQueue - the message broker

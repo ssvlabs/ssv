@@ -80,7 +80,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 
 			// mark instance decided
 			i.SetStage(proto.RoundState_Decided)
-			i.stopRoundChangeTimer()
+			i.Stop()
 		}
 		return nil
 	})

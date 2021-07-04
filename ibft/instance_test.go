@@ -84,7 +84,7 @@ func TestInstanceStop(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 200)
 
-	// stop instance and then send another msg which should not be processed
+	// stopped instance and then send another msg which should not be processed
 	instance.Stop()
 	time.Sleep(time.Millisecond * 200)
 
