@@ -50,7 +50,7 @@ func (i *Instance) StartMessagePipeline() {
 		}
 
 		// TODO - refactor
-		if i.MsgQueue.MsgCount(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.SeqNumber, i.State.Round)) > 0 {
+		if i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, i.State.Round)) > 0 {
 			i.eventQueue.Add(func() {
 				_, err := i.ProcessMessage()
 				if err != nil {

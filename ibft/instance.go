@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
+	"errors"
 	"github.com/bloxapp/ssv/ibft/eventqueue"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/validator/storage"
@@ -120,12 +121,12 @@ func (i *Instance) Init() {
 // 	if leader(hi, ri) = pi then
 // 		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
 // 		set timer to running and expire after t(ri)
-func (i *Instance) Start(inputValue []byte) {
+func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
-		i.Logger.Fatal("can't start instance a non  fgs instance")
+		return errors.New("can't start instance a non initialized instance")
 	}
 	if i.State.Lambda == nil {
-		i.Logger.Fatal("can't start instance with invalid Lambda")
+		return errors.New("can't start instance with invalid Lambda")
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
@@ -149,6 +150,7 @@ func (i *Instance) Start(inputValue []byte) {
 		}()
 	}
 	i.triggerRoundChangeOnTimer()
+	return nil
 }
 
 // Stop will trigger a stopped for the entire instance
@@ -196,7 +198,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if i.State.Stage == proto.RoundState_Decided || i.State.Stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.State.Round; j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTRoundIndexKey(i.State.Lambda, i.State.SeqNumber, j))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
 		}
 	}
 

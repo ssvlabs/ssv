@@ -115,7 +115,9 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 	if err != nil {
 		return false, 0, nil, errors.WithMessage(err, "could not reset leader selection")
 	}
-	i.currentInstance.Start(opts.Value)
+	if err := i.currentInstance.Start(opts.Value); err != nil {
+		return false, 0, nil, errors.WithMessage(err, "could not start iBFT instance")
+	}
 
 	// Store prepared round and value and decided stage.
 	for {
