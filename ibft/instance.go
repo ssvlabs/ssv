@@ -35,7 +35,6 @@ type InstanceOptions struct {
 
 // Instance defines the instance attributes
 type Instance struct {
-	//Me               *proto.Node
 	ValidatorShare   *storage.Share
 	State            *proto.State
 	network          network.Network
@@ -56,7 +55,6 @@ type Instance struct {
 	eventQueue *eventqueue.Queue
 
 	// channels
-	//changeRoundChan   chan bool
 	stageChangedChans []chan proto.RoundState
 
 	// flags
