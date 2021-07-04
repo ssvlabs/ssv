@@ -142,6 +142,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
 				return false, 0, nil, errors.WithMessage(err, "could not broadcast decided message")
 			}
+			i.logger.Debug("decided, reset instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 			i.currentInstance = nil
 			return true, len(agg.GetSignerIds()), agg.Message.Value, nil
 		}
