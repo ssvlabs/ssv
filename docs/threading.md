@@ -3,66 +3,18 @@
 <br>
 <br>
 
-# SSV - Development Guide
+# SSV - Threading
 
-## Usage
+## Background
+iBFT and SSV are both message driven protocols, changing their internal state by incoming messages from the network.\
+This presents a challenge as the messages are asynchronous.\
+Every message has it's own pipeline of validations and upon procedures.
 
-### Common Commands
 
-#### Build
-```bash
-$ make build
-```
+### iBFT round instance design pattern
+The iBFT [instance](https://github.com/bloxapp/ssv/blob/stage/ibft/instance.go#L37) struct adopted a single thread design with an event queue as a message broker.\
+Several events (round messages, timers, stop command, etc.) are added into an async queue, popped by a single event loop running on a single thread.
 
-#### Test
-```bash
-$ make full-test
-```
+#### iBFT round wrapper
+TBD
 
-#### Lint
-```bash
-$ make lint-prepare
-$ make lint
-```
-
-#### Splitting a Validator Key
-
-We split an eth2 BLS validator key into shares via Shamir-Secret-Sharing(SSS) to be used between the SSV nodes.
-
-```bash
-# Extract Private keys from mnemonic (optional, skip if you have the public/private keys ) 
-$ ./bin/ssvnode export-keys --mnemonic="<mnemonic>" --index={keyIndex}
-
-# Generate threshold keys
-$ ./bin/ssvnode create-threshold --count <number of ssv nodes> --private-key <privateKey>
-```
-
-#### Generating an Operator Key
-
-```bash
-$ ./bin/ssvnode generate-operator-keys
-```
-
-### Config Files
-
-Config files are located in `./config` directory:
-
-#### Node Config 
-
-Specifies general configuration regards the current node. \
-Example yaml - [config.yaml](../config/config.yaml)
-
-#### Shares Config
-
-For a 4 node SSV network, 4 share<nodeId>.yaml files need to be created, based on the [template file](../config/example_share.yaml). \
-E.g. `./config/share1.yaml`, `./config/share2.yaml`, etc.
-
-## Standards
-
-Please make sure your contributions adhere to our coding guidelines:
-
-* Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting)
-  guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
-* Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary)
-  guidelines.
-* Pull requests need to be based on and opened against the `stage` branch.
