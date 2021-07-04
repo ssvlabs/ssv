@@ -109,9 +109,10 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.Sub
 			logger.Warn("could not parse message")
 			continue
 		}
-		logger.Debug("sending outbound",
-			zap.String("msg.type", string(nm.Msg.Type)))
+		// send message only for this connection (originates in /query) or any connection (/stream)
 		if nm.Conn == conn || nm.Conn == nil {
+			logger.Debug("sending outbound",
+				zap.String("msg.type", string(nm.Msg.Type)))
 			err := ws.adapter.Send(conn, &nm.Msg)
 			if err != nil {
 				logger.Error("could not send message", zap.Error(err))
