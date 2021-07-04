@@ -24,7 +24,8 @@ type wsServer struct {
 func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
 		logger.With(zap.String("component", "exporter/api/server")),
-		pubsub.NewSubject(), pubsub.NewSubject(),
+		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/inbound-subject"))),
+		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/outbound-subject"))),
 		adapter, mux,
 	}
 	return &ws

@@ -57,7 +57,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	slotQueue := slotqueue.New(*opts.ETHNetwork)
+	slotQueue := slotqueue.New(*opts.ETHNetwork, opts.Logger)
 	opts.ValidatorOptions.SlotQueue = slotQueue
 	ssv := &operatorNode{
 		context:             opts.Context,

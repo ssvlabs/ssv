@@ -29,15 +29,16 @@ func initBls() {
 }
 
 func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
+	l := zap.L()
 	exp, err := newMockExporter()
 
 	require.NoError(t, err)
-	incoming := pubsub.NewSubject()
+	incoming := pubsub.NewSubject(l)
 	cnIn, err := incoming.Register("TestExporter_ProcessIncomingExportReq")
 	require.NoError(t, err)
 	defer incoming.Deregister("TestExporter_ProcessIncomingExportReq")
 
-	outbound := pubsub.NewSubject()
+	outbound := pubsub.NewSubject(l)
 	cnOut, err := outbound.Register("TestExporter_ProcessIncomingExportReq")
 	require.NoError(t, err)
 	defer outbound.Deregister("TestExporter_ProcessIncomingExportReq")
@@ -92,7 +93,7 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	exp, err := newMockExporter()
 	require.NoError(t, err)
 
-	sub := pubsub.NewSubject()
+	sub := pubsub.NewSubject(zap.L())
 	cn, err := sub.Register("TestExporter_ListenToEth1Events")
 	require.NoError(t, err)
 	defer sub.Deregister("TestExporter_ListenToEth1Events")

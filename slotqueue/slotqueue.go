@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/pubsub"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -29,6 +30,8 @@ type queue struct {
 	data           *cache.Cache
 	ticker         *slotutil.SlotTicker
 	tickerSubjects map[string]pubsub.Subject
+
+	logger *zap.Logger
 }
 
 // SlotEvent represents the notify event fire for each pubkey subject with the proper duty
@@ -39,13 +42,14 @@ type SlotEvent struct {
 }
 
 // New is the constructor of queue
-func New(network core.Network) Queue {
+func New(network core.Network, logger *zap.Logger) Queue {
 	genesisTime := time.Unix(int64(network.MinGenesisTime()), 0)
 	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(network.SlotDurationSec().Seconds()))
 	queue := &queue{
 		data:           cache.New(time.Minute*30, time.Minute*31),
 		ticker:         slotTicker,
 		tickerSubjects: make(map[string]pubsub.Subject),
+		logger:         logger,
 	}
 	go queue.listenToTicker()
 	return queue
@@ -86,7 +90,7 @@ func (q *queue) RegisterToNext(pubKey []byte) (pubsub.SubjectChannel, error) {
 	if pub, ok := q.tickerSubjects[hex.EncodeToString(pubKey)]; ok {
 		return pub.Register(hex.EncodeToString(pubKey))
 	}
-	q.tickerSubjects[hex.EncodeToString(pubKey)] = pubsub.NewSubject()
+	q.tickerSubjects[hex.EncodeToString(pubKey)] = pubsub.NewSubject(q.logger)
 	return q.tickerSubjects[hex.EncodeToString(pubKey)].Register(hex.EncodeToString(pubKey))
 }
 

@@ -53,7 +53,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		conn:                    conn,
 		logger:                  logger,
 		operatorPrivKeyProvider: opts.PrivKeyProvider,
-		outSubject:              pubsub.NewSubject(),
+		outSubject:              pubsub.NewSubject(logger),
 	}
 
 	return &ec, nil

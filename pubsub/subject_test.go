@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"strings"
 	"sync"
 	"testing"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestSubject_Register_MultipleObservers(t *testing.T) {
-	s := NewSubject()
+	s := NewSubject(zap.L())
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -36,7 +37,7 @@ func TestSubject_Register_MultipleObservers(t *testing.T) {
 }
 
 func TestSubject_Deregister(t *testing.T) {
-	s := NewSubject()
+	s := NewSubject(zap.L())
 	var wg1 sync.WaitGroup
 	var wg2 sync.WaitGroup
 
@@ -79,7 +80,7 @@ func TestSubject_Deregister(t *testing.T) {
 }
 
 func TestSubject_ClosedChannel(t *testing.T) {
-	s := NewSubject()
+	s := NewSubject(zap.L())
 	var wg sync.WaitGroup
 
 	wg.Add(1)
