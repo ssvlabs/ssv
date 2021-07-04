@@ -39,8 +39,6 @@ func TestInstanceStop(t *testing.T) {
 		LeaderSelector: &leader.Constant{LeaderIndex: 1},
 		Logger:         zaptest.NewLogger(t),
 	}
-	//go instance.StartMessagePipeline()
-	//go instance.StartEventLoop()
 	instance.Init()
 
 	// pre prepare
@@ -108,4 +106,25 @@ func TestInstanceStop(t *testing.T) {
 	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round)))
 	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
+}
+
+func TestInit(t *testing.T) {
+	instance := &Instance{
+		MsgQueue:   msgqueue.New(),
+		eventQueue: eventqueue.New(),
+		Config:     proto.DefaultConsensusParams(),
+		State: &proto.State{
+			Round:     1,
+			Stage:     proto.RoundState_PrePrepare,
+			Lambda:    []byte("Lambda"),
+			SeqNumber: 1,
+		},
+		Logger: zaptest.NewLogger(t),
+	}
+	instance.Init()
+	require.True(t, instance.initialized)
+
+	instance.initialized = false
+	instance.Init()
+	require.False(t, instance.initialized)
 }
