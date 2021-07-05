@@ -4,8 +4,8 @@
 package network
 
 import (
-	proto1 "../proto"
 	fmt "fmt"
+	proto1 "github.com/bloxapp/ssv/ibft/proto"
 	proto "github.com/golang/protobuf/proto"
 	math "math"
 )
