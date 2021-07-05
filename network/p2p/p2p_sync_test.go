@@ -3,15 +3,17 @@ package p2p
 import (
 	"context"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 )
 
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger := logex.Build("test", zap.DebugLevel)
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{

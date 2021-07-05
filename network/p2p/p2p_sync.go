@@ -73,7 +73,7 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 		return *msg, err
 	}
-	completed, res, err := tasks.ExecWithTimeout(n.ctx, readMsgData, n.cfg.RequestTimeout, n.logger)
+	completed, res, err := tasks.ExecWithTimeout(n.ctx, readMsgData, n.cfg.RequestTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read sync msg")
 	}

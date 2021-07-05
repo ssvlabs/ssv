@@ -77,7 +77,7 @@ func (i *Instance) triggerRoundChangeOnTimer() {
 		// stat new timer
 		roundTimeout := i.roundTimeoutSeconds()
 		i.roundChangeTimer = time.NewTimer(roundTimeout)
-		i.Logger.Info("started timeout clock", zap.Float64("seconds", time.Duration(roundTimeout).Seconds()))
+		i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()))
 
 		<-i.roundChangeTimer.C
 		i.eventQueue.Add(func() {
