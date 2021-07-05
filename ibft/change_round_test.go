@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
+	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -602,4 +603,65 @@ func TestChangeRoundPipeline(t *testing.T) {
 	}
 	pipeline := instance.changeRoundMsgPipeline()
 	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate msg, add change round msg, upon partial quorum, upon change round full quorum, ", pipeline.Name())
+}
+
+func TestRoundTimeoutSeconds(t *testing.T) {
+	tests := []struct {
+		name            string
+		round           uint64
+		roundChangeBase int64
+		expectedTimeout time.Duration
+	}{
+		{
+			"round 1, base 1",
+			1,
+			1,
+			time.Duration(1),
+		},
+		{
+			"round 1, base 2",
+			1,
+			2,
+			time.Duration(2),
+		},
+		{
+			"round 2, base 1",
+			1,
+			1,
+			time.Duration(1),
+		},
+		{
+			"round 2, base 2",
+			2,
+			2,
+			time.Duration(4),
+		},
+		{
+			"round 3, base 3",
+			3,
+			3,
+			time.Duration(27),
+		},
+		{
+			"round 4, base 3",
+			4,
+			3,
+			time.Duration(81),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := &Instance{
+				Config: &proto.InstanceConfig{
+					RoundChangeDuration: test.roundChangeBase, // 1 second
+				},
+				State: &proto.State{
+					Round: test.round,
+				},
+			}
+
+			require.EqualValues(t, test.expectedTimeout, instance.roundTimeoutSeconds())
+		})
+	}
 }

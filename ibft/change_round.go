@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"math"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -232,4 +234,9 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 		SeqNumber: i.State.SeqNumber,
 		Value:     data,
 	}, nil
+}
+
+func (i *Instance) roundTimeoutSeconds() time.Duration {
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDuration), float64(i.State.Round))
+	return time.Duration(roundTimeout)
 }
