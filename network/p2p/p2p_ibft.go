@@ -11,7 +11,6 @@ import (
 // Broadcast propagates a signed message to all peers
 func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
-		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
