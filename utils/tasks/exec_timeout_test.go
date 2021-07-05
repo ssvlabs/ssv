@@ -2,7 +2,9 @@ package tasks
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,6 +12,7 @@ import (
 )
 
 func TestExecWithTimeout(t *testing.T) {
+	logex.Build("test", zap.DebugLevel)
 	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 7*time.Millisecond)
 	defer cancel()
 	tests := []struct {
