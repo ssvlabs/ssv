@@ -55,7 +55,6 @@ type testIBFT struct {
 func (t *testIBFT) Init() {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
-	t.identifier = []byte(IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte, error) {
@@ -158,7 +157,7 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Dutie
 	return nil, nil
 }
 
-func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validator {
+func testingValidator(t *testing.T, decided bool, signaturesCount int, identifier []byte) *Validator {
 	threshold.Init()
 
 	ret := &Validator{}
@@ -166,6 +165,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	ret.logger = zap.L()
 	ret.ibfts = make(map[beacon.Role]ibft.IBFT)
 	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon.RoleAttester].(*testIBFT).identifier = identifier
 	ret.ibfts[beacon.RoleAttester].Init()
 
 	// nodes
@@ -205,7 +205,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	// timeout
 	ret.signatureCollectionTimeout = time.Second * 2
 
-	go ret.listenToNetworkMessages()
+	go ret.listenToSignatureMessages()
 	return ret
 }
 
