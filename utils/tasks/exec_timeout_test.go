@@ -3,7 +3,6 @@ package tasks
 import (
 	"context"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -52,7 +51,7 @@ func TestExecWithTimeout(t *testing.T) {
 					}
 				}
 			}
-			completed, _, err := ExecWithTimeout(context.TODO(), fn, test.t, zap.L())
+			completed, _, err := ExecWithTimeout(context.TODO(), fn, test.t)
 			stopped.Wait()
 			require.False(t, completed)
 			require.NoError(t, err)
@@ -66,7 +65,7 @@ func TestExecWithTimeout_ShortFunc(t *testing.T) {
 		time.Sleep(2 * time.Millisecond)
 		return true, nil
 	}
-	completed, res, err := ExecWithTimeout(context.TODO(), longExec, 10*time.Millisecond, zap.L())
+	completed, res, err := ExecWithTimeout(context.TODO(), longExec, 10*time.Millisecond)
 	require.True(t, completed)
 	require.True(t, res.(bool))
 	require.NoError(t, err)
