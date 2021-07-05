@@ -6,6 +6,14 @@ import (
 	"io"
 )
 
+// Message is a container for network messages.
+type Message struct {
+	SignedMessage *proto.SignedMessage
+	SyncMessage   *SyncMessage
+	Stream        SyncStream
+	Type          NetworkMsg
+}
+
 // SyncChanObj is a wrapper object for streaming of sync messages
 type SyncChanObj struct {
 	Msg    *SyncMessage

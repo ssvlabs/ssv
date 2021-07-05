@@ -35,7 +35,6 @@ func (test *DecideDifferentValue) Prepare(t *testing.T) {
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
 		test.instance.MsgQueue.AddMessage(&network.Message{
-			Lambda:        test.lambda,
 			SignedMessage: msg,
 			Type:          network.NetworkMsg_IBFTType,
 		})

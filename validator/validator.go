@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"context"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -85,7 +86,7 @@ func (v *Validator) Start() error {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	go v.startSlotQueueListener()
-	go v.listenToNetworkMessages()
+	go v.listenToSignatureMessages()
 	return nil
 }
 
@@ -94,7 +95,7 @@ func (v *Validator) startSlotQueueListener() {
 	v.logger.Info("start listening slot queue")
 
 	ch, err := v.slotQueue.RegisterToNext(v.Share.PublicKey.Serialize())
-	if err != nil{
+	if err != nil {
 		v.logger.Error("failed to register validator to slot queue", zap.Error(err))
 		return
 	}
@@ -106,25 +107,27 @@ func (v *Validator) startSlotQueueListener() {
 				continue
 			}
 			go v.ExecuteDuty(v.ctx, event.Slot, event.Duty)
-		}else {
+		} else {
 			v.logger.Error("slot queue event is not ok")
 			continue
 		}
 	}
 }
 
-func (v *Validator) listenToNetworkMessages() {
+func (v *Validator) listenToSignatureMessages() {
 	sigChan := v.network.ReceivedSignatureChan()
 	for sigMsg := range sigChan {
 		if sigMsg == nil {
 			v.logger.Debug("got nil message")
 			continue
 		}
-		v.msgQueue.AddMessage(&network.Message{
-			Lambda:        sigMsg.Message.Lambda,
-			SignedMessage: sigMsg,
-			Type:          network.NetworkMsg_SignatureType,
-		})
+
+		if sigMsg.Message != nil && v.oneOfIBFTIdentifiers(sigMsg.Message.Lambda) {
+			v.msgQueue.AddMessage(&network.Message{
+				SignedMessage: sigMsg,
+				Type:          network.NetworkMsg_SignatureType,
+			})
+		}
 	}
 }
 
@@ -139,4 +142,14 @@ func setupIbftController(role int, logger *zap.Logger, db basedb.IDb, network ne
 	ibftStorage := collections.NewIbft(db, logger, beacon.Role(role).String())
 	identifier := []byte(IdentifierFormat(share.PublicKey.Serialize(), beacon.Role(role)))
 	return ibft.New(beacon.Role(role), identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
+}
+
+// oneOfIBFTIdentifiers will return true if provided identifier matches one of the iBFT instances.
+func (v *Validator) oneOfIBFTIdentifiers(toMatch []byte) bool {
+	for _, i := range v.ibfts {
+		if bytes.Equal(i.GetIdentifier(), toMatch) {
+			return true
+		}
+	}
+	return false
 }
