@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package proto;
 
-option go_package = "github.com/bloxapp/ssv/ibft/proto";
+option go_package = "../proto";
 
-import "github.com/bloxapp/ssv/ibft/proto/msgs.proto";
+import "msgs.proto";
 
 message State {
     RoundState stage        = 1;

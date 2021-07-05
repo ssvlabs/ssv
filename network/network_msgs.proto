@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package network;
 
-option go_package = "github.com/bloxapp/ssv/network";
+option go_package = "/network";
 
 import "msgs.proto";
 
