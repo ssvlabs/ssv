@@ -3,11 +3,20 @@ package logex
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+var once sync.Once
+var logger *zap.Logger
+
+// GetLogger returns an instance with some context, expressed as fields
+func GetLogger(fields... zap.Field) *zap.Logger {
+	return logger.With(fields...)
+}
 
 // Build builds the default zap logger, and sets the global zap logger to the configured logger instance.
 func Build(appName string, level zapcore.Level) *zap.Logger {
@@ -29,13 +38,16 @@ func Build(appName string, level zapcore.Level) *zap.Logger {
 		},
 	}
 
-	logger, err := cfg.Build()
-	if err != nil {
-		log.Fatalf("err making logger: %+v", err)
-	}
+	once.Do(func() {
+		var err error
+		logger, err = cfg.Build()
+		if err != nil {
+			log.Fatalf("err making logger: %+v", err)
+		}
+		logger = logger.With(zap.String("app", appName))
+		zap.ReplaceGlobals(logger)
+	})
 
-	logger = logger.With(zap.String("app", appName))
-	zap.ReplaceGlobals(logger)
 	return logger
 }
 
