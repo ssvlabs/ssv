@@ -25,9 +25,8 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options `yaml:"db"`
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
+	ETH1Options                eth1.Options   `yaml:"eth1"`
 
-	ETH1Addr       string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
-	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
 	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	// Exporter WS API
 	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
@@ -66,7 +65,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		params.SsvConfig().OperatorPublicKey = ""
 
 		eth1Client, err := goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
+			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Options.ETH1Addr, SmartContractAddr: cfg.ETH1Options.SmartContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
 			PrivKeyProvider: func() (*rsa.PrivateKey, error) {
@@ -88,7 +87,7 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode := exporter.New(*exporterOptions)
 
-		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
+		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := exporterNode.Start(); err != nil {

@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -23,13 +22,11 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options   `yaml:"db"`
 	SSVOptions                 operator.Options `yaml:"ssv"`
+	ETH1Options                eth1.Options     `yaml:"eth1"`
 
 	Network           string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	OperatorKey       string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	ETH1Addr          string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
-	ETH1SyncOffset    string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
-	SmartContractAddr string `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
 
 	P2pNetworkConfig p2p.Config `yaml:"p2p"`
 }
@@ -94,14 +91,13 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
 		// create new eth1 client
-		if cfg.SmartContractAddr != "" {
-			Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
-			params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
-		}
+		Logger.Info("using smart contract address", zap.String("addr", cfg.ETH1Options.SmartContractAddr))
 		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
 			Ctx:             cmd.Context(),
 			Logger:          Logger,
-			NodeAddr:        cfg.ETH1Addr,
+			NodeAddr:        cfg.ETH1Options.ETH1Addr,
+			//ContractABI:
+			SmartContractAddr: cfg.ETH1Options.SmartContractAddr,
 			PrivKeyProvider: operatorStorage.GetPrivateKey,
 		})
 		if err != nil {
@@ -110,7 +106,7 @@ var StartNodeCmd = &cobra.Command{
 
 		operatorNode := operator.New(cfg.SSVOptions)
 
-		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
+		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := operatorNode.Start(); err != nil {

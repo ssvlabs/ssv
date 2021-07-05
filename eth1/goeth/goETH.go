@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,10 +19,12 @@ import (
 
 // ClientOptions are the options for the client
 type ClientOptions struct {
-	Ctx             context.Context
-	Logger          *zap.Logger
-	NodeAddr        string
-	PrivKeyProvider eth1.OperatorPrivateKeyProvider
+	Ctx               context.Context
+	Logger            *zap.Logger
+	NodeAddr          string
+	SmartContractAddr string
+	ContractABI       string
+	PrivKeyProvider   eth1.OperatorPrivateKeyProvider
 }
 
 // eth1Client is the internal implementation of Client
@@ -33,6 +34,9 @@ type eth1Client struct {
 	logger *zap.Logger
 
 	operatorPrivKeyProvider eth1.OperatorPrivateKeyProvider
+
+	smartContractAddr string
+	contractABI       string
 
 	outSubject pubsub.Subject
 }
@@ -53,6 +57,8 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		conn:                    conn,
 		logger:                  logger,
 		operatorPrivKeyProvider: opts.PrivKeyProvider,
+		smartContractAddr:       opts.SmartContractAddr,
+		contractABI:             opts.ContractABI,
 		outSubject:              pubsub.NewSubject(logger),
 	}
 
@@ -66,7 +72,7 @@ func (ec *eth1Client) EventsSubject() pubsub.Subscriber {
 
 // Start streams events from the contract
 func (ec *eth1Client) Start() error {
-	err := ec.streamSmartContractEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI)
+	err := ec.streamSmartContractEvents()
 	if err != nil {
 		ec.logger.Error("Failed to init operator contract address subject", zap.Error(err))
 	}
@@ -75,7 +81,7 @@ func (ec *eth1Client) Start() error {
 
 // Sync reads events history
 func (ec *eth1Client) Sync(fromBlock *big.Int) error {
-	err := ec.syncSmartContractsEvents(params.SsvConfig().OperatorContractAddress, params.SsvConfig().ContractABI, fromBlock)
+	err := ec.syncSmartContractsEvents(fromBlock)
 	if err != nil {
 		ec.logger.Error("Failed to sync contract events", zap.Error(err))
 	}
@@ -89,15 +95,15 @@ func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
 }
 
 // streamSmartContractEvents sync events history of the given contract
-func (ec *eth1Client) streamSmartContractEvents(contractAddr, contractABI string) error {
+func (ec *eth1Client) streamSmartContractEvents() error {
 	ec.logger.Debug("streaming smart contract events")
 
-	contractAbi, err := abi.JSON(strings.NewReader(contractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
 
-	contractAddress := common.HexToAddress(contractAddr)
+	contractAddress := common.HexToAddress(ec.smartContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 	}
@@ -132,15 +138,15 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 }
 
 // syncSmartContractsEvents sync events history of the given contract
-func (ec *eth1Client) syncSmartContractsEvents(contractAddr, contractABI string, fromBlock *big.Int) error {
+func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	ec.logger.Debug("syncing smart contract events",
 		zap.Uint64("fromBlock", fromBlock.Uint64()))
 
-	contractAbi, err := abi.JSON(strings.NewReader(contractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
-	contractAddress := common.HexToAddress(contractAddr)
+	contractAddress := common.HexToAddress(ec.smartContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		FromBlock: fromBlock,
