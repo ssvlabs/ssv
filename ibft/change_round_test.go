@@ -616,37 +616,37 @@ func TestRoundTimeoutSeconds(t *testing.T) {
 			"round 1, base 1",
 			1,
 			1,
-			time.Duration(time.Second * 1),
+			time.Second * 1,
 		},
 		{
 			"round 1, base 2",
 			1,
 			2,
-			time.Duration(time.Second * 2),
+			time.Second * 2,
 		},
 		{
 			"round 2, base 1",
 			1,
 			1,
-			time.Duration(time.Second * 1),
+			time.Second * 1,
 		},
 		{
 			"round 2, base 2",
 			2,
 			2,
-			time.Duration(time.Second * 4),
+			time.Second * 4,
 		},
 		{
 			"round 3, base 3",
 			3,
 			3,
-			time.Duration(time.Second * 27),
+			time.Second * 27,
 		},
 		{
 			"round 4, base 3",
 			4,
 			3,
-			time.Duration(time.Second * 81),
+			time.Second * 81,
 		},
 	}
 

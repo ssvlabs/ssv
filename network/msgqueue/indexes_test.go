@@ -12,40 +12,53 @@ func TestSigRoundIndexKey(t *testing.T) {
 }
 
 func TestSigMessageIndex(t *testing.T) {
-	require.EqualValues(t, []string{"sig_lambda_01020304_seqNumber_2"}, sigMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: 2,
+	t.Run("valid", func(t *testing.T) {
+		require.EqualValues(t, []string{"sig_lambda_01020304_seqNumber_2"}, sigMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda:    []byte{1, 2, 3, 4},
+					SeqNumber: 2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_SignatureType,
-	}))
+			Type: network.NetworkMsg_SignatureType,
+		}))
+	})
 
-	require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				SeqNumber: 2,
+	t.Run("invalid - no lambda", func(t *testing.T) {
+		require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					SeqNumber: 2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_SignatureType,
-	}))
-	require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{},
-		Type:          network.NetworkMsg_SignatureType,
-	}))
-	require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
-		Type: network.NetworkMsg_SignatureType,
-	}))
-	require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: 2,
+			Type: network.NetworkMsg_SignatureType,
+		}))
+	})
+
+	t.Run("invalid - no message", func(t *testing.T) {
+		require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{},
+			Type:          network.NetworkMsg_SignatureType,
+		}))
+	})
+
+	t.Run("invalid - no signed msg", func(t *testing.T) {
+		require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
+			Type: network.NetworkMsg_SignatureType,
+		}))
+	})
+
+	t.Run("invalid - wrong type", func(t *testing.T) {
+		require.EqualValues(t, []string{}, sigMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda:    []byte{1, 2, 3, 4},
+					SeqNumber: 2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_IBFTType,
-	}))
+			Type: network.NetworkMsg_IBFTType,
+		}))
+	})
 }
 
 func TestSyncIndexKey(t *testing.T) {
@@ -53,34 +66,47 @@ func TestSyncIndexKey(t *testing.T) {
 }
 
 func TestSyncMessageIndex(t *testing.T) {
-	require.EqualValues(t, []string{"sync_lambda_01020304"}, syncMessageIndex()(&network.Message{
-		SyncMessage: &network.SyncMessage{
-			Lambda: []byte{1, 2, 3, 4},
-		},
-		Type: network.NetworkMsg_SyncType,
-	}))
-
-	require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
-		SyncMessage: &network.SyncMessage{},
-		Type:        network.NetworkMsg_SyncType,
-	}))
-	require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{},
-		Type:          network.NetworkMsg_SyncType,
-	}))
-	require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
-		Type: network.NetworkMsg_SyncType,
-	}))
-	require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: 1,
-				Round:     2,
+	t.Run("valid", func(t *testing.T) {
+		require.EqualValues(t, []string{"sync_lambda_01020304"}, syncMessageIndex()(&network.Message{
+			SyncMessage: &network.SyncMessage{
+				Lambda: []byte{1, 2, 3, 4},
 			},
-		},
-		Type: network.NetworkMsg_SignatureType,
-	}))
+			Type: network.NetworkMsg_SyncType,
+		}))
+	})
+
+	t.Run("invalid - no lambda", func(t *testing.T) {
+		require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
+			SyncMessage: &network.SyncMessage{},
+			Type:        network.NetworkMsg_SyncType,
+		}))
+	})
+
+	t.Run("invalid - no sync message", func(t *testing.T) {
+		require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{},
+			Type:          network.NetworkMsg_SyncType,
+		}))
+	})
+
+	t.Run("invalid - no sync message", func(t *testing.T) {
+		require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
+			Type: network.NetworkMsg_SyncType,
+		}))
+	})
+
+	t.Run("invalid - wrong type", func(t *testing.T) {
+		require.EqualValues(t, []string{}, syncMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda:    []byte{1, 2, 3, 4},
+					SeqNumber: 1,
+					Round:     2,
+				},
+			},
+			Type: network.NetworkMsg_SignatureType,
+		}))
+	})
 }
 
 func TestIBFTMessageIndexKey(t *testing.T) {
@@ -88,42 +114,55 @@ func TestIBFTMessageIndexKey(t *testing.T) {
 }
 
 func TestIBFTMessageIndex(t *testing.T) {
-	require.EqualValues(t, []string{"lambda_01020304_seqNumber_1_round_2"}, iBFTMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: 1,
-				Round:     2,
+	t.Run("valid", func(t *testing.T) {
+		require.EqualValues(t, []string{"lambda_01020304_seqNumber_1_round_2"}, iBFTMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda:    []byte{1, 2, 3, 4},
+					SeqNumber: 1,
+					Round:     2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_IBFTType,
-	}))
+			Type: network.NetworkMsg_IBFTType,
+		}))
+	})
 
-	require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				SeqNumber: 2,
+	t.Run("invalid - no lambda", func(t *testing.T) {
+		require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					SeqNumber: 2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_IBFTType,
-	}))
-	require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{},
-		Type:          network.NetworkMsg_IBFTType,
-	}))
-	require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
-		Type: network.NetworkMsg_IBFTType,
-	}))
-	require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: 1,
-				Round:     2,
+			Type: network.NetworkMsg_IBFTType,
+		}))
+	})
+
+	t.Run("invalid - no message", func(t *testing.T) {
+		require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{},
+			Type:          network.NetworkMsg_IBFTType,
+		}))
+	})
+
+	t.Run("invalid - no signed msg", func(t *testing.T) {
+		require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
+			Type: network.NetworkMsg_IBFTType,
+		}))
+	})
+
+	t.Run("invalid - wrong type", func(t *testing.T) {
+		require.EqualValues(t, []string{}, iBFTMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda:    []byte{1, 2, 3, 4},
+					SeqNumber: 1,
+					Round:     2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_SignatureType,
-	}))
+			Type: network.NetworkMsg_SignatureType,
+		}))
+	})
 }
 
 func TestDecidedIndexKey(t *testing.T) {
@@ -131,38 +170,52 @@ func TestDecidedIndexKey(t *testing.T) {
 }
 
 func TestDecidedMessageIndex(t *testing.T) {
-	require.EqualValues(t, []string{"decided_lambda_01020304"}, decidedMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda: []byte{1, 2, 3, 4},
+	t.Run("valid", func(t *testing.T) {
+		require.EqualValues(t, []string{"decided_lambda_01020304"}, decidedMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda: []byte{1, 2, 3, 4},
+				},
 			},
-		},
-		Type: network.NetworkMsg_DecidedType,
-	}))
+			Type: network.NetworkMsg_DecidedType,
+		}))
+	})
 
-	require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				SeqNumber: 2,
+	t.Run("invalid - no lambda", func(t *testing.T) {
+		require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					SeqNumber: 2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_DecidedType,
-	}))
-	require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{},
-		Type:          network.NetworkMsg_DecidedType,
-	}))
-	require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
-		Type: network.NetworkMsg_DecidedType,
-	}))
-	require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
-		SignedMessage: &proto.SignedMessage{
-			Message: &proto.Message{
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: 1,
-				Round:     2,
+			Type: network.NetworkMsg_DecidedType,
+		}))
+	})
+
+	t.Run("invalid - no message", func(t *testing.T) {
+		require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{},
+			Type:          network.NetworkMsg_DecidedType,
+		}))
+	})
+
+	t.Run("invalid - no signed msg", func(t *testing.T) {
+		require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
+			Type: network.NetworkMsg_DecidedType,
+		}))
+	})
+
+	t.Run("invalid - wrong type", func(t *testing.T) {
+		require.EqualValues(t, []string{}, decidedMessageIndex()(&network.Message{
+			SignedMessage: &proto.SignedMessage{
+				Message: &proto.Message{
+					Lambda:    []byte{1, 2, 3, 4},
+					SeqNumber: 1,
+					Round:     2,
+				},
 			},
-		},
-		Type: network.NetworkMsg_SignatureType,
-	}))
+			Type: network.NetworkMsg_SignatureType,
+		}))
+	})
+
 }
