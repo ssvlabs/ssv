@@ -180,7 +180,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		for _, topic := range n.cfg.Topics {
-			n.logger.Info("topic peers status", zap.Any("peers", topic.ListPeers()))
+			n.logger.Debug("topic peers status", zap.Any("peers", topic.ListPeers()))
 		}
 	})
 
