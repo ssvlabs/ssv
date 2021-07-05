@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -103,7 +102,6 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 		return errors.Wrap(err, "failed to extract operator public key")
 	}
 	s.logger.Info("operator public key", zap.Any("key", operatorPublicKey))
-	params.SsvConfig().OperatorPublicKey = operatorPublicKey
 	return nil
 }
 

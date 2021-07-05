@@ -188,7 +188,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}

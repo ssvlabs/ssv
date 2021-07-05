@@ -24,9 +24,9 @@ type config struct {
 	SSVOptions                 operator.Options `yaml:"ssv"`
 	ETH1Options                eth1.Options     `yaml:"eth1"`
 
-	Network           string `yaml:"Network" env:"NETWORK" env-default:"prater"`
-	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	OperatorKey       string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
+	OperatorKey    string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 
 	P2pNetworkConfig p2p.Config `yaml:"p2p"`
 }
@@ -90,20 +90,21 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
+		cfg.SSVOptions.ValidatorOptions.OperatorPrivateKeyProvider = operatorStorage.GetPrivateKey
+
 		// create new eth1 client
 		Logger.Info("using smart contract address", zap.String("addr", cfg.ETH1Options.SmartContractAddr))
 		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx:             cmd.Context(),
-			Logger:          Logger,
-			NodeAddr:        cfg.ETH1Options.ETH1Addr,
+			Ctx:      cmd.Context(),
+			Logger:   Logger,
+			NodeAddr: cfg.ETH1Options.ETH1Addr,
 			//ContractABI:
 			SmartContractAddr: cfg.ETH1Options.SmartContractAddr,
-			PrivKeyProvider: operatorStorage.GetPrivateKey,
+			PrivKeyProvider:   operatorStorage.GetPrivateKey,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
-
 		operatorNode := operator.New(cfg.SSVOptions)
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {

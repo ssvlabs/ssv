@@ -3,7 +3,6 @@ package operator
 import (
 	"encoding/base64"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/shared/params"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -98,9 +97,6 @@ func TestSetupPrivateKey(t *testing.T) {
 			sk, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)
 
-			if test.existKey == "" && test.passedKey == "" { // new key generated
-				require.NotNil(t, params.SsvConfig().OperatorPublicKey)
-			}
 			if test.passedKey != "" { // passed key set
 				passedKeyByte, err := base64.StdEncoding.DecodeString(test.passedKey)
 				require.NoError(t, err)

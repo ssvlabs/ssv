@@ -3,7 +3,6 @@ package eth1
 import (
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
@@ -29,10 +28,10 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 	var vLogOperatorAdded types.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(ContractABI))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
-	parsed, isEventBelongsToOperator, err := ParseOperatorAddedEvent(zap.L(), vLogOperatorAdded.Data, contractAbi)
+	parsed, isEventBelongsToOperator, err := ParseOperatorAddedEvent(zap.L(), nil, vLogOperatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	require.False(t, isEventBelongsToOperator)
@@ -57,7 +56,7 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 	var vLogValidatorAdded types.Log
 	err := json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(ContractABI))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 

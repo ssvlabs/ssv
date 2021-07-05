@@ -3,7 +3,6 @@ package eth1
 import (
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/pkg/errors"
@@ -12,6 +11,11 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+)
+
+const (
+	// ContractABI holds the abi of the ssv-network contract
+	ContractABI = `[{"anonymous":false,"inputs":[{"indexed":false,"internalType":"bytes","name":"validatorPublicKey","type":"bytes"},{"indexed":false,"internalType":"uint256","name":"index","type":"uint256"},{"indexed":false,"internalType":"bytes","name":"operatorPublicKey","type":"bytes"},{"indexed":false,"internalType":"bytes","name":"sharedPublicKey","type":"bytes"},{"indexed":false,"internalType":"bytes","name":"encryptedKey","type":"bytes"}],"name":"OessAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"name","type":"string"},{"indexed":false,"internalType":"address","name":"ownerAddress","type":"address"},{"indexed":false,"internalType":"bytes","name":"publicKey","type":"bytes"}],"name":"OperatorAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"address","name":"ownerAddress","type":"address"},{"indexed":false,"internalType":"bytes","name":"publicKey","type":"bytes"},{"components":[{"internalType":"uint256","name":"index","type":"uint256"},{"internalType":"bytes","name":"operatorPublicKey","type":"bytes"},{"internalType":"bytes","name":"sharedPublicKey","type":"bytes"},{"internalType":"bytes","name":"encryptedKey","type":"bytes"}],"indexed":false,"internalType":"struct ISSVNetwork.Oess[]","name":"oessList","type":"tuple[]"}],"name":"ValidatorAdded","type":"event"},{"inputs":[{"internalType":"string","name":"_name","type":"string"},{"internalType":"address","name":"_ownerAddress","type":"address"},{"internalType":"bytes","name":"_publicKey","type":"bytes"}],"name":"addOperator","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_ownerAddress","type":"address"},{"internalType":"bytes","name":"_publicKey","type":"bytes"},{"internalType":"bytes[]","name":"_operatorPublicKeys","type":"bytes[]"},{"internalType":"bytes[]","name":"_sharesPublicKeys","type":"bytes[]"},{"internalType":"bytes[]","name":"_encryptedKeys","type":"bytes[]"}],"name":"addValidator","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"operatorCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes","name":"","type":"bytes"}],"name":"operators","outputs":[{"internalType":"string","name":"name","type":"string"},{"internalType":"address","name":"ownerAddress","type":"address"},{"internalType":"bytes","name":"publicKey","type":"bytes"},{"internalType":"uint256","name":"score","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"validatorCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]`
 )
 
 // Oess struct stands for operator encrypted secret share
@@ -38,7 +42,7 @@ type OperatorAddedEvent struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func ParseOperatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
+func ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
 	var operatorAddedEvent OperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
@@ -56,7 +60,14 @@ func ParseOperatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.AB
 	logger.Debug("OperatorAdded Event",
 		zap.String("Operator PublicKey", pubKey),
 		zap.String("Payment Address", operatorAddedEvent.PaymentAddress.String()))
-	isEventBelongsToOperator := strings.EqualFold(pubKey, params.SsvConfig().OperatorPublicKey)
+	var nodeOperatorPubKey string
+	if operatorPrivateKey != nil {
+		nodeOperatorPubKey, err = rsaencryption.ExtractPublicKey(operatorPrivateKey)
+		if err != nil {
+			return nil, false, errors.Wrap(err, "failed to extract public key")
+		}
+	}
+	isEventBelongsToOperator := strings.EqualFold(pubKey, nodeOperatorPubKey)
 	return &operatorAddedEvent, isEventBelongsToOperator, nil
 }
 
@@ -87,10 +98,14 @@ func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Privat
 		}
 
 		validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
-		if strings.EqualFold(operatorPublicKey, params.SsvConfig().OperatorPublicKey) {
-			if operatorPrivateKey == nil {
-				continue
-			}
+		if operatorPrivateKey == nil {
+			continue
+		}
+		nodeOperatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+		if err != nil {
+			return nil, false, errors.Wrap(err, "failed to extract public key")
+		}
+		if strings.EqualFold(operatorPublicKey, nodeOperatorPubKey) {
 			out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
 			if err != nil {
 				return nil, false, errors.Wrap(err, "failed to unpack EncryptedKey")
