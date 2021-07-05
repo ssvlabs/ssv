@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	defaultSyncOffset string = "49e08f"
+	defaultSyncOffset string = "4D9EF3"
 )
 
 // SyncOffset is the type of variable used for passing around the offset
