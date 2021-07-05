@@ -30,13 +30,20 @@ type StartOptions struct {
 	ValidatorShare storage.Share
 }
 
+// InstanceResult is a struct holding the result of a single iBFT instance
+type InstanceResult struct {
+	Decided bool
+	Msg     *proto.SignedMessage
+	Error   error
+}
+
 // IBFT represents behavior of the IBFT
 type IBFT interface {
 	// Init should be called after creating an IBFT instance to init the instance, sync it, etc.
 	Init()
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (bool, int, []byte, error)
+	StartInstance(opts StartOptions) (chan *InstanceResult, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
@@ -65,6 +72,9 @@ type ibftImpl struct {
 
 	// flags
 	initFinished bool
+
+	// channels
+	CurrentInstanceResultChan chan *InstanceResult
 }
 
 // New is the constructor of IBFT
@@ -101,11 +111,11 @@ func (i *ibftImpl) Init() {
 	i.logger.Debug("iBFT implementation init finished")
 }
 
-func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
+func (i *ibftImpl) StartInstance(opts StartOptions) (chan *InstanceResult, error) {
 	instanceOpts := i.instanceOptionsFromStartOptions(opts)
 
 	if err := i.canStartNewInstance(instanceOpts); err != nil {
-		return false, 0, nil, errors.WithMessage(err, "can't start new iBFT instance")
+		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
 	i.currentInstance = NewInstance(instanceOpts)
@@ -115,39 +125,63 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
 	// reset leader seed for sequence
 	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
 	if err != nil {
-		return false, 0, nil, errors.WithMessage(err, "could not reset leader selection")
+		return nil, errors.WithMessage(err, "could not reset leader selection")
 	}
 	if err := i.currentInstance.Start(opts.Value); err != nil {
-		return false, 0, nil, errors.WithMessage(err, "could not start iBFT instance")
+		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	// Store prepared round and value and decided stage.
-	for {
-		switch stage := <-stageChan; stage {
-		// TODO - complete values
-		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not save prepare msg to storage")
+	i.CurrentInstanceResultChan = make(chan *InstanceResult)
+
+	// main instance callback loop
+	go func() {
+		for {
+			switch stage := <-stageChan; stage {
+			case proto.RoundState_Prepare:
+				if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
+					i.logger.Error("could not save prepare msg to storage", zap.Error(err))
+				}
+			case proto.RoundState_Decided:
+				agg, err := i.currentInstance.CommittedAggregatedMsg()
+				if err != nil {
+					i.CurrentInstanceResultChan <- &InstanceResult{
+						Decided: true,
+						Error:   errors.WithMessage(err, "could not get aggregated commit msg and save to storage"),
+					}
+				}
+				if err := i.ibftStorage.SaveDecided(agg); err != nil {
+					i.CurrentInstanceResultChan <- &InstanceResult{
+						Decided: true,
+						Error:   errors.WithMessage(err, "could not save aggregated commit msg to storage"),
+					}
+				}
+				if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
+					i.CurrentInstanceResultChan <- &InstanceResult{
+						Decided: true,
+						Error:   errors.WithMessage(err, "could not save highest decided message to storage"),
+					}
+				}
+				if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
+					i.CurrentInstanceResultChan <- &InstanceResult{
+						Decided: true,
+						Error:   errors.WithMessage(err, "could not broadcast decided message"),
+					}
+				}
+				i.logger.Debug("decided, reset instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
+				i.currentInstance = nil
+				i.CurrentInstanceResultChan <- &InstanceResult{
+					Decided: true,
+					Msg:     agg,
+					Error:   nil,
+				}
+				i.closeCurrentInstanceResultChan()
+				return
+			case proto.RoundState_Stopped:
+				return
 			}
-		case proto.RoundState_Decided:
-			agg, err := i.currentInstance.CommittedAggregatedMsg()
-			if err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not get aggregated commit msg and save to storage")
-			}
-			if err := i.ibftStorage.SaveDecided(agg); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not save aggregated commit msg to storage")
-			}
-			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not save highest decided message to storage")
-			}
-			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not broadcast decided message")
-			}
-			i.logger.Debug("decided, reset instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
-			i.currentInstance = nil
-			return true, len(agg.GetSignerIds()), agg.Message.Value, nil
 		}
-	}
+	}()
+	return i.CurrentInstanceResultChan, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
@@ -163,4 +197,11 @@ func (i *ibftImpl) GetIdentifier() []byte {
 // resetLeaderSelection resets leader selection with seed and round 1
 func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
 	return i.leaderSelector.SetSeed(seed, 1)
+}
+
+func (i *ibftImpl) closeCurrentInstanceResultChan() {
+	if i.CurrentInstanceResultChan != nil {
+		close(i.CurrentInstanceResultChan)
+	}
+	i.CurrentInstanceResultChan = nil
 }

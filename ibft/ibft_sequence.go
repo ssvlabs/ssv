@@ -17,7 +17,7 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 	if i.currentInstance != nil {
 		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State.SeqNumber)
 	}
-	highestKnown, err := i.HighestKnownDecided()
+	highestKnown, err := i.highestKnownDecided()
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
 func (i *ibftImpl) NextSeqNumber() (uint64, error) {
-	knownDecided, err := i.HighestKnownDecided()
+	knownDecided, err := i.highestKnownDecided()
 	if err != nil {
 		return 0, err
 	}
