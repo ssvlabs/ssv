@@ -50,7 +50,6 @@ func TestInstanceStop(t *testing.T) {
 		SeqNumber: 1,
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
-		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
@@ -64,7 +63,6 @@ func TestInstanceStop(t *testing.T) {
 		SeqNumber: 1,
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
-		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
@@ -76,7 +74,6 @@ func TestInstanceStop(t *testing.T) {
 		SeqNumber: 1,
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
-		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
@@ -94,7 +91,6 @@ func TestInstanceStop(t *testing.T) {
 		SeqNumber: 1,
 	})
 	instance.MsgQueue.AddMessage(&network.Message{
-		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})

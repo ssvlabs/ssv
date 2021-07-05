@@ -237,6 +237,6 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDuration), float64(i.State.Round))
-	return time.Duration(roundTimeout)
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round))
+	return time.Second * time.Duration(roundTimeout)
 }

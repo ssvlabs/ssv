@@ -142,9 +142,9 @@ func (i *Instance) Start(inputValue []byte) error {
 			i.Logger.Info("Node is leader for round 1")
 			i.SetStage(proto.RoundState_PrePrepare)
 
-			// LeaderPreprepareDelay waits to let other nodes complete their instance start or round change.
+			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
-			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelay))
+			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
 			msg := i.generatePrePrepareMessage(i.State.InputValue)
 			//
