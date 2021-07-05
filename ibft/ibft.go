@@ -88,6 +88,7 @@ func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collec
 	return ret
 }
 
+// Init sets all major processes of iBFT while blocking until completed.
 func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
