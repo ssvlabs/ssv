@@ -19,12 +19,12 @@ import (
 
 // ClientOptions are the options for the client
 type ClientOptions struct {
-	Ctx               context.Context
-	Logger            *zap.Logger
-	NodeAddr          string
-	SmartContractAddr string
-	ContractABI       string
-	PrivKeyProvider   eth1.OperatorPrivateKeyProvider
+	Ctx                  context.Context
+	Logger               *zap.Logger
+	NodeAddr             string
+	RegistryContractAddr string
+	ContractABI          string
+	PrivKeyProvider      eth1.OperatorPrivateKeyProvider
 }
 
 // eth1Client is the internal implementation of Client
@@ -35,8 +35,8 @@ type eth1Client struct {
 
 	operatorPrivKeyProvider eth1.OperatorPrivateKeyProvider
 
-	smartContractAddr string
-	contractABI       string
+	registryContractAddr string
+	contractABI          string
 
 	outSubject pubsub.Subject
 }
@@ -57,7 +57,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		conn:                    conn,
 		logger:                  logger,
 		operatorPrivKeyProvider: opts.PrivKeyProvider,
-		smartContractAddr:       opts.SmartContractAddr,
+		registryContractAddr:    opts.RegistryContractAddr,
 		contractABI:             opts.ContractABI,
 		outSubject:              pubsub.NewSubject(logger),
 	}
@@ -103,7 +103,7 @@ func (ec *eth1Client) streamSmartContractEvents() error {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
 
-	contractAddress := common.HexToAddress(ec.smartContractAddr)
+	contractAddress := common.HexToAddress(ec.registryContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 	}
@@ -146,7 +146,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
-	contractAddress := common.HexToAddress(ec.smartContractAddr)
+	contractAddress := common.HexToAddress(ec.registryContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		FromBlock: fromBlock,

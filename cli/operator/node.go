@@ -93,14 +93,14 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorPrivateKeyProvider = operatorStorage.GetPrivateKey
 
 		// create new eth1 client
-		Logger.Info("using smart contract address", zap.String("addr", cfg.ETH1Options.SmartContractAddr))
+		Logger.Info("using smart contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
 		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
 			Ctx:      cmd.Context(),
 			Logger:   Logger,
 			NodeAddr: cfg.ETH1Options.ETH1Addr,
 			//ContractABI:
-			SmartContractAddr: cfg.ETH1Options.SmartContractAddr,
-			PrivKeyProvider:   operatorStorage.GetPrivateKey,
+			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
+			PrivKeyProvider:      operatorStorage.GetPrivateKey,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))

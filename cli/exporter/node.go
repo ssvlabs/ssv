@@ -61,7 +61,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 
 		eth1Client, err := goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Options.ETH1Addr, SmartContractAddr: cfg.ETH1Options.SmartContractAddr,
+			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Options.ETH1Addr, RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
 			PrivKeyProvider: func() (*rsa.PrivateKey, error) {
