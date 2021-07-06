@@ -99,14 +99,11 @@ func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 		}
 
 		// push to chan
-		if i.CurrentInstanceResultChan != nil {
-			i.CurrentInstanceResultChan <- &InstanceResult{
-				Decided: true,
-				Msg:     msg,
-				Error:   nil,
-			}
-		}
-		i.closeCurrentInstanceResultChan()
+		i.pushAndCloseInstanceResultChan(&InstanceResult{
+			Decided: true,
+			Msg:     msg,
+			Error:   nil,
+		})
 		return true
 	}
 	return false

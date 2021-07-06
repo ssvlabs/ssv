@@ -27,43 +27,47 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 			case proto.RoundState_Prepare:
 				if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
 					i.logger.Error("could not save prepare msg to storage", zap.Error(err))
+					return
 				}
 			case proto.RoundState_Decided:
 				agg, err := i.currentInstance.CommittedAggregatedMsg()
 				if err != nil {
-					i.CurrentInstanceResultChan <- &InstanceResult{
+					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not get aggregated commit msg and save to storage"),
-					}
+					})
+					return
 				}
 				if err := i.ibftStorage.SaveDecided(agg); err != nil {
-					i.CurrentInstanceResultChan <- &InstanceResult{
+					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not save aggregated commit msg to storage"),
-					}
+					})
+					return
 				}
 				if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
-					i.CurrentInstanceResultChan <- &InstanceResult{
+					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not save highest decided message to storage"),
-					}
+					})
+					return
 				}
 				if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
-					i.CurrentInstanceResultChan <- &InstanceResult{
+					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not broadcast decided message"),
-					}
+					})
+					return
 				}
 				i.logger.Debug("decided, reset instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
-				i.currentInstance = nil
-				i.CurrentInstanceResultChan <- &InstanceResult{
+				i.pushAndCloseInstanceResultChan(&InstanceResult{
 					Decided: true,
 					Msg:     agg,
 					Error:   nil,
-				}
-				i.closeCurrentInstanceResultChan()
+				})
 				return
 			case proto.RoundState_Stopped:
+				i.currentInstance = nil
 				// Don't close result chan as other processes will handle it (like decided or sync)
 				return
 			}
@@ -72,7 +76,15 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 	return i.CurrentInstanceResultChan, nil
 }
 
-func (i *ibftImpl) closeCurrentInstanceResultChan() {
+func (i *ibftImpl) pushAndCloseInstanceResultChan(res *InstanceResult) {
+	i.instanceResultChanLock.Lock()
+	defer i.instanceResultChanLock.Unlock()
+
+	if i.CurrentInstanceResultChan != nil {
+		i.CurrentInstanceResultChan <- res
+	}
+
+	// close
 	if i.CurrentInstanceResultChan != nil {
 		close(i.CurrentInstanceResultChan)
 	}

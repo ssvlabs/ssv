@@ -72,6 +72,9 @@ type ibftImpl struct {
 
 	// channels
 	CurrentInstanceResultChan chan *InstanceResult
+
+	// mutex
+	instanceResultChanLock sync.Mutex
 }
 
 // New is the constructor of IBFT
@@ -90,6 +93,9 @@ func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collec
 
 		// flags
 		initFinished: false,
+
+		// mutex
+		instanceResultChanLock: sync.Mutex{},
 	}
 	return ret
 }
