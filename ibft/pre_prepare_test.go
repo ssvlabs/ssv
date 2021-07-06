@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
@@ -261,6 +262,7 @@ func TestPrePreparePipeline(t *testing.T) {
 		State: &proto.State{
 			Round: 1,
 		},
+		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
 	pipeline := instance.prePrepareMsgPipeline()
 	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate pre-prepare, upon pre-prepare msg, ", pipeline.Name())

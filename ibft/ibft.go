@@ -71,7 +71,7 @@ type ibftImpl struct {
 	initFinished bool
 
 	// channels
-	CurrentInstanceResultChan chan *InstanceResult
+	instanceResultChan chan *InstanceResult
 
 	// mutex
 	instanceResultChanLock sync.Mutex

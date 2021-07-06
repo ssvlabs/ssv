@@ -18,7 +18,7 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	i.CurrentInstanceResultChan = make(chan *InstanceResult)
+	i.instanceResultChan = make(chan *InstanceResult)
 
 	// main instance callback loop
 	go func() {
@@ -68,20 +68,20 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 			}
 		}
 	}()
-	return i.CurrentInstanceResultChan, nil
+	return i.instanceResultChan, nil
 }
 
 func (i *ibftImpl) pushAndCloseInstanceResultChan(res *InstanceResult) {
 	i.instanceResultChanLock.Lock()
 	defer i.instanceResultChanLock.Unlock()
 
-	if i.CurrentInstanceResultChan != nil {
-		i.CurrentInstanceResultChan <- res
+	if i.instanceResultChan != nil {
+		i.instanceResultChan <- res
 	}
 
 	// close
-	if i.CurrentInstanceResultChan != nil {
-		close(i.CurrentInstanceResultChan)
+	if i.instanceResultChan != nil {
+		close(i.instanceResultChan)
 	}
-	i.CurrentInstanceResultChan = nil
+	i.instanceResultChan = nil
 }

@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
+	"github.com/bloxapp/ssv/ibft/leader/constant"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -34,8 +35,9 @@ func TestInstanceStop(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
-		Logger:     zaptest.NewLogger(t),
+		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:         zaptest.NewLogger(t),
+		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
 	instance.Init()
 
