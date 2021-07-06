@@ -7,3 +7,4 @@ The following metrics will be collected:
 * `count_validators{}`
 * `all_connected_peers{}`
 * `validator_connected_peers{pubKey}`
+* `validator_ibft_status{pubKey,role,seqNumber}`

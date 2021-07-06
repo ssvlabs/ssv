@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/slotqueue"
@@ -81,6 +82,8 @@ func NewController(options ControllerOptions) IController {
 			zap.String("which", "validator/controller/validator-subject"))),
 		validatorsMap: make(map[string]*Validator),
 	}
+
+	metrics.AddCollector(newMetricsCollector(options.Logger, &ctrl, options.Network))
 
 	return &ctrl
 }

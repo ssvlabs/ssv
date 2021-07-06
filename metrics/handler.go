@@ -9,19 +9,18 @@ import (
 
 // Handler handles incoming metrics requests
 type Handler interface {
-	// Start starts an http server, listening to metrics requests
+	// Start starts an http server, listening to /metrics requests
 	Start(mux *http.ServeMux, addr string) error
 }
 
 // NewMetricsHandler creates a new instance
-func NewMetricsHandler(logger *zap.Logger, collector Collector) Handler {
-	mh := metricsHandler{logger.With(zap.String("component", "metrics/handler")), collector}
+func NewMetricsHandler(logger *zap.Logger) Handler {
+	mh := metricsHandler{logger.With(zap.String("component", "metrics/handler"))}
 	return &mh
 }
 
 type metricsHandler struct {
-	logger    *zap.Logger
-	collector Collector
+	logger *zap.Logger
 }
 
 func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
@@ -39,9 +38,9 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	return nil
 }
 
-func (mh *metricsHandler) handleHTTP(res http.ResponseWriter, req *http.Request) (err error) {
+func (mh *metricsHandler) handleHTTP(res http.ResponseWriter, _ *http.Request) (err error) {
 	var metrics []string
-	if metrics, err = mh.collector.Collect(); err != nil {
+	if metrics, err = Collect(); err != nil {
 		mh.logger.Error("failed to collect metrics", zap.Error(err))
 		return err
 	}

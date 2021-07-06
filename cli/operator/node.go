@@ -124,10 +124,9 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		go func() {
-			metricsCollector := metrics.NewCollector(Logger, validatorCtrl, network)
-			metricsHandler := metrics.NewMetricsHandler(Logger, metricsCollector)
+			metricsHandler := metrics.NewMetricsHandler(Logger)
 			if err := metricsHandler.Start(http.NewServeMux(), ":15000"); err != nil {
-				// TODO: stop node if metrics setup failed
+				// TODO: stop node if metrics setup failed?
 				Logger.Error("failed to start metrics handler", zap.Error(err))
 			}
 		}()
