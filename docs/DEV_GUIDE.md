@@ -25,6 +25,12 @@ $ make lint-prepare
 $ make lint
 ```
 
+#### Specify Version
+
+```bash
+$ ./bin/ssvnode version
+```
+
 #### Splitting a Validator Key
 
 We split an eth2 BLS validator key into shares via Shamir-Secret-Sharing(SSS) to be used between the SSV nodes.
