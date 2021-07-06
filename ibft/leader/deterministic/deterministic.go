@@ -1,4 +1,4 @@
-package leader
+package deterministic
 
 import (
 	"crypto/sha256"
@@ -10,24 +10,26 @@ import (
 // Deterministic Round robin leader selection is a fair and sequential leader selection.
 // Each instance/ round change the next leader is selected one-by-one.
 type Deterministic struct {
-	index   uint64
-	baseInt uint64
+	baseInt       uint64
+	committeeSize uint64
 }
 
-// Current returns the current leader
-func (rr *Deterministic) Current(committeeSize uint64) uint64 {
-	return (rr.baseInt + rr.index) % committeeSize
+// New returns a new Deterministic instance or error
+func New(seed []byte, committeeSize uint64) (*Deterministic, error) {
+	ret := &Deterministic{committeeSize: committeeSize}
+	if err := ret.setSeed(seed); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
-// Bump to the index
-func (rr *Deterministic) Bump() {
-	rr.index++
+// Calculate returns the current leader
+func (rr *Deterministic) Calculate(index uint64) uint64 {
+	return (rr.baseInt + index) % rr.committeeSize
 }
 
-// SetSeed takes []byte and converts to uint64,returns error if fails.
-func (rr *Deterministic) SetSeed(seed []byte, index uint64) error {
-	rr.index = index
-
+// setSeed takes []byte and converts to uint64,returns error if fails.
+func (rr *Deterministic) setSeed(seed []byte) error {
 	s, err := prepareBytes(seed)
 	if err != nil {
 		return err
@@ -38,7 +40,7 @@ func (rr *Deterministic) SetSeed(seed []byte, index uint64) error {
 }
 
 func prepareBytes(input []byte) ([]byte, error) {
-	if input == nil || len(input) == 0 {
+	if len(input) == 0 {
 		return nil, errors.New("input seed can't be nil or of length 0")
 	}
 

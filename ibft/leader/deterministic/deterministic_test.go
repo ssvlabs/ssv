@@ -1,4 +1,4 @@
-package leader
+package deterministic
 
 import (
 	"fmt"
@@ -8,17 +8,11 @@ import (
 )
 
 func TestDeterministic_Bump(t *testing.T) {
-	d := &Deterministic{}
-	require.NoError(t, d.SetSeed([]byte{1, 1, 1, 1, 1, 1, 1, 1}, 1))
-
-	t.Run("no bump", func(t *testing.T) {
-		require.EqualValues(t, uint64(1), d.Current(4))
-	})
-
+	d, err := New([]byte{1, 1, 1, 1, 1, 1, 1, 1}, 4)
+	require.NoError(t, err)
 	for i := 1; i < 50; i++ {
 		t.Run(fmt.Sprintf("bump %d", i), func(t *testing.T) {
-			d.Bump()
-			require.EqualValues(t, uint64((i+1)%4), d.Current(4))
+			require.EqualValues(t, uint64(i%4), d.Calculate(uint64(i)))
 		})
 	}
 }
@@ -112,12 +106,12 @@ func TestDeterministic_SetSeed(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			d := &Deterministic{}
+			d, err := New(test.seed, test.committeeSize)
 			if len(test.expectedErr) > 0 {
-				require.EqualError(t, d.SetSeed(test.seed, 0), test.expectedErr)
+				require.EqualError(t, err, test.expectedErr)
 			} else {
-				require.NoError(t, d.SetSeed(test.seed, 0))
-				require.EqualValues(t, test.expectedLeader, d.Current(test.committeeSize))
+				require.NoError(t, err)
+				require.EqualValues(t, test.expectedLeader, d.Calculate(test.committeeSize))
 			}
 
 		})
