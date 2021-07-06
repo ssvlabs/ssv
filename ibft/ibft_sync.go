@@ -35,7 +35,6 @@ func (i *ibftImpl) SyncIBFT() {
 	// stop current instance and return any waiting chan.
 	if i.currentInstance != nil {
 		i.currentInstance.Stop()
-		i.currentInstance = nil
 	}
 	i.pushAndCloseInstanceResultChan(&InstanceResult{
 		Decided: false,

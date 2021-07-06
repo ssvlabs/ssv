@@ -91,7 +91,6 @@ func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 		if i.currentInstance != nil {
 			i.currentInstance.Stop()
 		}
-		i.currentInstance = nil
 
 		// save to db
 		if err := i.ibftStorage.SaveDecided(msg); err != nil {
