@@ -18,7 +18,7 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateRound(i.State.Round),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
-		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.State.Round),
+		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ThisRoundLeader()),
 		i.UponPrePrepareMsg(),
 	)
 }
