@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
-	"github.com/bloxapp/ssv/ibft/leader"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -37,9 +36,8 @@ func TestChangeRoundTimer(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
-		LeaderSelector: &leader.Constant{LeaderIndex: 1},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	instance.triggerRoundChangeOnTimer()

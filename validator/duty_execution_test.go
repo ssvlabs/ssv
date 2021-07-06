@@ -47,7 +47,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleAttester,
 			refAttestationDataByts,
-			"ibft did not decide, not executing role",
+			"instance did not decide",
 		},
 		{
 			"non supported role",

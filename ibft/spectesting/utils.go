@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -106,9 +106,9 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
 		ValueCheck:     bytesval.New(TestInputValue()),
-		LeaderSelector: &leader.Constant{LeaderIndex: 1},
 		Config:         proto.DefaultConsensusParams(),
 		Lambda:         lambda,
+		LeaderSelector: &constant.Constant{LeaderIndex: 0},
 	}
 
 	return ibft.NewInstance(opts)
@@ -118,28 +118,28 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 func TestShares() map[uint64]*storage.Share {
 	return map[uint64]*storage.Share{
 		1: {
-			NodeID:      1,
+			NodeID:    1,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[0],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[0],
+			Committee: TestNodes(),
 		},
 		2: {
-			NodeID:      2,
+			NodeID:    2,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[1],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[1],
+			Committee: TestNodes(),
 		},
 		3: {
-			NodeID:      3,
+			NodeID:    3,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[2],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[2],
+			Committee: TestNodes(),
 		},
 		4: {
-			NodeID:      4,
+			NodeID:    4,
 			PublicKey: TestValidatorPK(),
-			ShareKey:    TestSKs()[3],
-			Committee:   TestNodes(),
+			ShareKey:  TestSKs()[3],
+			Committee: TestNodes(),
 		},
 	}
 }
@@ -217,7 +217,7 @@ func TestInputValue() []byte {
 
 // SimulateTimeout simulates instance timeout
 func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
-	instance.BumpRound(toRound)
+	instance.BumpRound()
 	instance.SetStage(proto.RoundState_ChangeRound)
 }
 
