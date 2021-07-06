@@ -59,14 +59,14 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 					})
 					return
 				}
-				i.logger.Debug("decided, reset instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
+				i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 				i.pushAndCloseInstanceResultChan(&InstanceResult{
 					Decided: true,
 					Msg:     agg,
 					Error:   nil,
 				})
-				return
 			case proto.RoundState_Stopped:
+				i.logger.Info("current iBFT instance stopped, nilling currentInstance")
 				i.currentInstance = nil
 				// Don't close result chan as other processes will handle it (like decided or sync)
 				return
