@@ -209,12 +209,13 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	if result == nil {
 		return 0, nil, seqNumber, errors.Wrap(err, "instance result returned nil")
 	}
+	if result.Error != nil {
+		return 0, nil, seqNumber, errors.Wrap(err, "instance returned with error")
+	}
 	if !result.Decided {
-		if result.Error != nil {
-			return 0, nil, seqNumber, errors.Wrap(err, "instance did not decide")
-		}
 		return 0, nil, seqNumber, errors.New("instance did not decide")
 	}
+
 	return len(result.Msg.SignerIds), result.Msg.Message.Value, seqNumber, nil
 }
 

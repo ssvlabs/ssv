@@ -27,7 +27,6 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 			case proto.RoundState_Prepare:
 				if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
 					i.logger.Error("could not save prepare msg to storage", zap.Error(err))
-					return
 				}
 			case proto.RoundState_Decided:
 				agg, err := i.currentInstance.CommittedAggregatedMsg()
@@ -36,28 +35,24 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not get aggregated commit msg and save to storage"),
 					})
-					return
 				}
 				if err := i.ibftStorage.SaveDecided(agg); err != nil {
 					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not save aggregated commit msg to storage"),
 					})
-					return
 				}
 				if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
 					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not save highest decided message to storage"),
 					})
-					return
 				}
 				if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
 					i.pushAndCloseInstanceResultChan(&InstanceResult{
 						Decided: true,
 						Error:   errors.WithMessage(err, "could not broadcast decided message"),
 					})
-					return
 				}
 				i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 				i.pushAndCloseInstanceResultChan(&InstanceResult{
