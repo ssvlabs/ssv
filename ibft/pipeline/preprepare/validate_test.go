@@ -1,7 +1,6 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
@@ -43,20 +42,8 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *pr
 	}
 }
 
-type testLeaderSelector struct {
-}
-
-func (s *testLeaderSelector) Current(committeeSize uint64) uint64 {
-	return 1
-}
-func (s *testLeaderSelector) Bump()                                   {}
-func (s *testLeaderSelector) SetSeed(seed []byte, index uint64) error { return nil }
-
 func TestValidatePrePrepareValue(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
-	share := &storage.Share{
-		Committee: nodes,
-	}
+	sks, _ := GenerateNodes(4)
 	consensus := bytesval.New([]byte(time.Now().Weekday().String()))
 
 	tests := []struct {
@@ -104,7 +91,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		},
 		{
 			"non-leader sender",
-			"pre-prepare message sender is not the round's leader",
+			"pre-prepare message sender (id 2) is not the round's leader (expected 1)",
 			SignMsg(t, 2, sks[2], &proto.Message{
 				Type:   proto.RoundState_PrePrepare,
 				Round:  1,
@@ -125,7 +112,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidatePrePrepareMsg(consensus, &testLeaderSelector{}, share).Run(test.msg)
+			err := ValidatePrePrepareMsg(consensus, 1).Run(test.msg)
 			if len(test.err) > 0 {
 				require.EqualError(t, err, test.err)
 			} else {

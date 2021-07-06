@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -67,7 +66,6 @@ type ibftImpl struct {
 	instanceConfig      *proto.InstanceConfig
 	ValidatorShare      *storage.Share
 	Identifier          []byte
-	leaderSelector      leader.Selector
 
 	// flags
 	initFinished bool
@@ -89,7 +87,6 @@ func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collec
 		instanceConfig:      instanceConfig,
 		ValidatorShare:      ValidatorShare,
 		Identifier:          identifier,
-		leaderSelector:      &leader.Deterministic{},
 
 		// flags
 		initFinished: false,
@@ -111,13 +108,16 @@ func (i *ibftImpl) Init() {
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (chan *InstanceResult, error) {
-	instanceOpts := i.instanceOptionsFromStartOptions(opts)
+	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
+	if err != nil {
+		return nil, errors.WithMessage(err, "can't generate instance options")
+	}
 
-	if err := i.canStartNewInstance(instanceOpts); err != nil {
+	if err := i.canStartNewInstance(*instanceOpts); err != nil {
 		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
-	return i.startInstanceWithOptions(instanceOpts, opts.Value)
+	return i.startInstanceWithOptions(*instanceOpts, opts.Value)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

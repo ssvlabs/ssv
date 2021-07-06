@@ -181,8 +181,7 @@ func (i *Instance) Stopped() bool {
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.State.Round += 1
-	i.LeaderSelector.Bump()
+	i.State.Round++
 }
 
 // Stage returns the instance message state

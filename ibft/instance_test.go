@@ -1,9 +1,7 @@
 package ibft
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/ibft/eventqueue"
-	"github.com/bloxapp/ssv/ibft/leader"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -12,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-	"strconv"
 	"testing"
 	"time"
 )
@@ -37,9 +34,8 @@ func TestInstanceStop(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
-		LeaderSelector: &leader.Constant{LeaderIndex: 1},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:     zaptest.NewLogger(t),
 	}
 	instance.Init()
 
@@ -125,29 +121,4 @@ func TestInit(t *testing.T) {
 	instance.initialized = false
 	instance.Init()
 	require.False(t, instance.initialized)
-}
-
-func TestBumpRound(t *testing.T) {
-	_, nodes := GenerateNodes(4)
-	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3),
-		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare:  &storage.Share{Committee: nodes},
-		State: &proto.State{
-			Round:         1,
-			PreparedRound: 0,
-			PreparedValue: nil,
-		},
-		LeaderSelector: &leader.Deterministic{},
-	}
-
-	require.NoError(t, instance.LeaderSelector.SetSeed(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 1))
-	require.EqualValues(t, uint64(1), instance.ThisRoundLeader())
-	for i := 1; i < 50; i++ {
-		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
-			instance.BumpRound()
-			require.EqualValues(t, uint64(i%4+1), instance.ThisRoundLeader())
-			require.EqualValues(t, uint64(i+1), instance.State.Round)
-		})
-	}
 }

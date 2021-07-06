@@ -4,7 +4,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strconv"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
@@ -15,10 +14,6 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 	stageChan := i.currentInstance.GetStageChan()
 
 	// reset leader seed for sequence
-	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
-	if err != nil {
-		return nil, errors.WithMessage(err, "could not reset leader selection")
-	}
 	if err := i.currentInstance.Start(value); err != nil {
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
@@ -75,11 +70,6 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 		}
 	}()
 	return i.CurrentInstanceResultChan, nil
-}
-
-// resetLeaderSelection resets leader selection with seed and round 1
-func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
-	return i.leaderSelector.SetSeed(seed, 1)
 }
 
 func (i *ibftImpl) closeCurrentInstanceResultChan() {

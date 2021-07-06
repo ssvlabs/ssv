@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
@@ -32,9 +31,8 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
 		},
-		ValueCheck:     bytesval.New(value),
-		LeaderSelector: &leader.Constant{},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New(value),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
@@ -107,9 +105,8 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
 		},
-		ValueCheck:     bytesval.New(value),
-		LeaderSelector: &leader.Constant{},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New(value),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
@@ -167,9 +164,8 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
-		LeaderSelector: &leader.Constant{},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	// test happy flow
