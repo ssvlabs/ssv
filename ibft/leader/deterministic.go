@@ -1,8 +1,10 @@
 package leader
 
 import (
-	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
+	"errors"
+	"fmt"
 )
 
 // Deterministic Round robin leader selection is a fair and sequential leader selection.
@@ -11,6 +13,7 @@ type Deterministic struct {
 	index   uint64
 	baseInt uint64
 }
+
 // Current returns the current leader
 func (rr *Deterministic) Current(committeeSize uint64) uint64 {
 	return (rr.baseInt + rr.index) % committeeSize
@@ -24,12 +27,27 @@ func (rr *Deterministic) Bump() {
 // SetSeed takes []byte and converts to uint64,returns error if fails.
 func (rr *Deterministic) SetSeed(seed []byte, index uint64) error {
 	rr.index = index
-	return binary.Read(bytes.NewBuffer(maxEightByteSlice(seed)), binary.LittleEndian, &rr.baseInt)
+
+	s, err := prepareBytes(seed)
+	if err != nil {
+		return err
+	}
+	rr.baseInt = binary.LittleEndian.Uint64(s)
+	fmt.Printf("%d\n", rr.baseInt)
+	return nil
 }
 
-func maxEightByteSlice(input []byte) []byte {
-	if len(input) > 8 {
-		return input[0:8]
+func prepareBytes(input []byte) ([]byte, error) {
+	if input == nil || len(input) == 0 {
+		return nil, errors.New("input seed can't be nil or of length 0")
 	}
-	return input
+
+	// hash input
+	s := sha256.New()
+	if _, err := s.Write(input); err != nil {
+		return nil, err
+	}
+	h := s.Sum(nil)
+
+	return h[0:8], nil
 }

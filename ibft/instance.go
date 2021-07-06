@@ -179,9 +179,9 @@ func (i *Instance) Stopped() bool {
 	return i.stopped
 }
 
-// BumpRound is used to set round in the instance's MsgQueue - the message broker
-func (i *Instance) BumpRound(round uint64) {
-	i.State.Round = round
+// BumpRound is used to set bump round by 1
+func (i *Instance) BumpRound() {
+	i.State.Round += 1
 	i.LeaderSelector.Bump()
 }
 
