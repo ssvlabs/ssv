@@ -10,31 +10,35 @@ import (
 )
 
 const (
-	prefix = "ssv."
+	prefix                  = "ssv."
 	validatorConnectedPeers = "validator_connected_peers"
-	allConnectedPeers = "all_connected_peers"
-	countValidators = "count_validators"
+	allConnectedPeers       = "all_connected_peers"
+	countValidators         = "count_validators"
 )
 
+// Collector interface that represents a specific collector
 type Collector interface {
 	Collect() ([]string, error)
 }
 
+// NewCollector creates a new instance
 func NewCollector(logger *zap.Logger, validatorCtrl validator.IController, p2pNetwork network.Network) Collector {
 	c := collector{
-		logger: logger.With(zap.String("component", "metrics/collector")),
+		logger:        logger.With(zap.String("component", "metrics/collector")),
 		validatorCtrl: validatorCtrl, p2pNetwork: p2pNetwork,
 	}
 	return &c
 }
 
 type collector struct {
-	logger *zap.Logger
+	logger        *zap.Logger
 	validatorCtrl validator.IController
 	p2pNetwork    network.Network
 }
 
 func (c *collector) Collect() ([]string, error) {
+	c.logger.Debug("collecting information")
+
 	var results []string
 
 	allPeers := map[string]bool{}
@@ -62,4 +66,3 @@ func (c *collector) Collect() ([]string, error) {
 
 	return results, nil
 }
-
