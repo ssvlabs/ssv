@@ -11,11 +11,9 @@ import (
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/shared/params"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -111,12 +109,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
-		slotQueue := slotqueue.New(*cfg.SSVOptions.ETHNetwork, Logger)
-		cfg.SSVOptions.SlotQueue = slotQueue
-		cfg.SSVOptions.ValidatorOptions.SlotQueue = slotQueue
-
-		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
-		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode := operator.New(cfg.SSVOptions)
 

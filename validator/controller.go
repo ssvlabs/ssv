@@ -83,7 +83,7 @@ func NewController(options ControllerOptions) IController {
 		validatorsMap: make(map[string]*Validator),
 	}
 
-	metrics.AddCollector(newMetricsCollector(options.Logger, &ctrl, options.Network))
+	metrics.Register(newMetricsCollector(options.Logger, &ctrl, options.Network))
 
 	return &ctrl
 }

@@ -17,7 +17,7 @@ var (
 	collectorsMut = sync.RWMutex{}
 )
 
-func AddCollector(c Collector) {
+func Register(c Collector) {
 	collectorsMut.Lock()
 	defer collectorsMut.Unlock()
 

@@ -31,8 +31,6 @@ type Options struct {
 	Logger              *zap.Logger
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
-	SlotQueue           slotqueue.Queue
-	ValidatorController validator.IController
 
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
@@ -59,17 +57,19 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
+	slotQueue := slotqueue.New(*opts.ETHNetwork, opts.Logger)
+	opts.ValidatorOptions.SlotQueue = slotQueue
 	ssv := &operatorNode{
 		context:             opts.Context,
 		logger:              opts.Logger,
 		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
-		validatorController: opts.ValidatorController,
+		validatorController: validator.NewController(opts.ValidatorOptions),
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 		// TODO do we really need to pass the whole object or just SlotDurationSec
-		slotQueue:  opts.SlotQueue,
+		slotQueue:  slotQueue,
 		eth1Client: opts.Eth1Client,
 	}
 
