@@ -160,6 +160,7 @@ func (i *Instance) Start(inputValue []byte) error {
 // Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
 	i.eventQueue.Add(func() {
+		i.Logger.Info("stopping iBFT instance...")
 		i.stopLock.Lock()
 		defer i.stopLock.Unlock()
 
@@ -169,7 +170,6 @@ func (i *Instance) Stop() {
 		i.eventQueue.ClearAndStop()
 		i.Logger.Info("stopped iBFT instance")
 	})
-	i.Logger.Info("stopping iBFT instance...")
 }
 
 // Stopped returns true if instance is stopped
