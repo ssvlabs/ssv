@@ -14,7 +14,7 @@ type Collector interface {
 
 type collectorRef struct {
 	enabled bool
-	ref Collector
+	ref     Collector
 }
 
 var (
@@ -95,6 +95,9 @@ func Collect() ([]string, []error) {
 	return results, errs
 }
 
+// ParseMetricsConfig takes a metrics config string and parse it to collector ids
+// metricsCfg has the following pattern: {collector},{collector},....
+// e.g. "validator,network"
 func ParseMetricsConfig(metricsCfg string) []string {
 	if len(metricsCfg) == 0 {
 		return []string{}

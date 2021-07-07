@@ -76,6 +76,11 @@ func TestParseMetricsConfig(t *testing.T) {
 		cids := ParseMetricsConfig("")
 		require.Equal(t, 0, len(cids))
 	})
+
+	t.Run("broken string", func(t *testing.T) {
+		cids := ParseMetricsConfig(",,")
+		require.Equal(t, 0, len(cids))
+	})
 }
 
 type mockCollector struct {
