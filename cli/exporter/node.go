@@ -60,8 +60,19 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
+			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
+			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
+			}
+		}
 		eth1Client, err := goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Options.ETH1Addr, RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
+			Ctx:                  cmd.Context(),
+			Logger:               Logger,
+			NodeAddr:             cfg.ETH1Options.ETH1Addr,
+			ContractABI:          eth1.ContractABI(),
+			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
 			PrivKeyProvider: func() (*rsa.PrivateKey, error) {

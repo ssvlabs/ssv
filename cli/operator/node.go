@@ -93,12 +93,18 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorPrivateKeyProvider = operatorStorage.GetPrivateKey
 
 		// create new eth1 client
-		Logger.Info("using smart contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
+			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
+			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
+			}
+		}
 		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx:      cmd.Context(),
-			Logger:   Logger,
-			NodeAddr: cfg.ETH1Options.ETH1Addr,
-			//ContractABI:
+			Ctx:                  cmd.Context(),
+			Logger:               Logger,
+			NodeAddr:             cfg.ETH1Options.ETH1Addr,
+			ContractABI:          eth1.ContractABI(),
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			PrivKeyProvider:      operatorStorage.GetPrivateKey,
 		})

@@ -207,7 +207,7 @@ func validatorAddedMockEvent(t *testing.T) eth1.Event {
 	var vLogValidatorAdded types.Log
 	err := json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	parsed, _, err := eth1.ParseValidatorAddedEvent(zap.L(), nil, vLogValidatorAdded.Data, contractAbi)
@@ -233,7 +233,7 @@ func operatorAddedMockEvent(t *testing.T) eth1.Event {
 	var vLogOperatorAdded types.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	parsed, _, err := eth1.ParseOperatorAddedEvent(zap.L(), nil, vLogOperatorAdded.Data, contractAbi)

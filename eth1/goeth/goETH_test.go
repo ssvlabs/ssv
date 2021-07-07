@@ -18,7 +18,7 @@ import (
 
 func TestEth1Client_handleEvent(t *testing.T) {
 	ec := newEth1Client()
-	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	var vLogOperatorAdded types.Log
