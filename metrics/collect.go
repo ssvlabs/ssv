@@ -14,9 +14,10 @@ type Collector interface {
 var (
 	prefix        = "ssv"
 	collectors    = map[string]Collector{}
-	collectorsMut = sync.RWMutex{}
+	collectorsMut = sync.Mutex{}
 )
 
+// Register adds a collector to be called when metrics are collected
 func Register(c Collector) {
 	collectorsMut.Lock()
 	defer collectorsMut.Unlock()
@@ -24,20 +25,46 @@ func Register(c Collector) {
 	collectors[c.ID()] = c
 }
 
-func Collect() ([]string, error) {
-	collectorsMut.RLock()
-	defer collectorsMut.RUnlock()
+// Deregister removes a collector
+func Deregister(c Collector) {
+	collectorsMut.Lock()
+	defer collectorsMut.Unlock()
 
+	delete(collectors, c.ID())
+}
+
+// Collect collects metrics from all the registered collectors
+func Collect() ([]string, []error) {
+	collectorsMut.Lock()
+	defer collectorsMut.Unlock()
+
+	var collectorsWg sync.WaitGroup
+
+	var errsMut sync.Mutex
+	var errs []error
+	var resultsMut sync.Mutex
 	var results []string
+
 	for _, c := range collectors {
-		metrics, err := c.Collect()
-		if err != nil {
-			return nil, err
-		}
-		for i, _ := range metrics {
-			metrics[i] = fmt.Sprintf("%s.%s.%s", prefix, c.ID(), metrics[i])
-		}
-		results = append(results, metrics...)
+		collectorsWg.Add(1)
+		go func(c Collector) {
+			defer collectorsWg.Done()
+			metrics, err := c.Collect()
+			if err != nil {
+				errsMut.Lock()
+				errs = append(errs, err)
+				errsMut.Unlock()
+				return
+			}
+			resultsMut.Lock()
+			for _, m := range metrics {
+				results = append(results, fmt.Sprintf("%s.%s.%s", prefix, c.ID(), m))
+			}
+			resultsMut.Unlock()
+		}(c)
 	}
-	return results, nil
+
+	collectorsWg.Wait()
+
+	return results, errs
 }

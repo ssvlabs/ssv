@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
 	"strings"
@@ -40,9 +41,10 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 
 func (mh *metricsHandler) handleHTTP(res http.ResponseWriter, _ *http.Request) (err error) {
 	var metrics []string
-	if metrics, err = Collect(); err != nil {
-		mh.logger.Error("failed to collect metrics", zap.Error(err))
-		return err
+	var errs []error
+	if metrics, errs = Collect(); len(errs) > 0 {
+		mh.logger.Error("failed to collect metrics", zap.Errors("metricsCollectErrs", errs))
+		return errors.New("failed to collect metrics")
 	}
 	if _, err = fmt.Fprintln(res, strings.Join(metrics, "\n")); err != nil {
 		mh.logger.Error("failed to send metrics", zap.Error(err))

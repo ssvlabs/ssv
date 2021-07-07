@@ -19,18 +19,14 @@ func TestCollect(t *testing.T) {
 	}
 	mc2 := mockCollector{records2, "mockCollector2"}
 
-	//fc := failedCollector{nil}
 	Register(&mc1)
+	defer Deregister(&mc1)
 	Register(&mc2)
+	defer Deregister(&mc2)
 
-	done := make(chan bool)
-	go func() {
-		defer close(done)
-		results, err := Collect()
-		require.NoError(t, err)
-		require.Equal(t, 20, len(results))
-	}()
-	<-done
+	results, errs := Collect()
+	require.Equal(t, 0, len(errs))
+	require.Equal(t, 20, len(results))
 }
 
 func TestCollect_FailedCollectors(t *testing.T) {
@@ -42,17 +38,14 @@ func TestCollect_FailedCollectors(t *testing.T) {
 	expectedErr := errors.New("failedCollectorErr")
 	fc := failedCollector{expectedErr}
 	Register(&mc)
+	defer Deregister(&mc)
 	Register(&fc)
+	defer Deregister(&fc)
 
-	done := make(chan bool)
-	go func() {
-		defer close(done)
-		results, err := Collect()
-		require.Nil(t, results)
-		require.Error(t, err)
-		require.Equal(t, expectedErr, err)
-	}()
-	<-done
+	results, errs := Collect()
+	require.Equal(t, 1, len(errs))
+	require.Equal(t, expectedErr, errs[0])
+	require.Equal(t, 10, len(results))
 }
 
 type mockCollector struct {

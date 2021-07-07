@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	collectorId             = "validator"
+	collectorID             = "validator"
 	validatorConnectedPeers = "validator_connected_peers"
 	allConnectedPeers       = "all_connected_peers"
 	countValidators         = "count_validators"
@@ -33,7 +33,7 @@ type validatorsCollector struct {
 }
 
 func (c *validatorsCollector) ID() string {
-	return collectorId
+	return collectorID
 }
 
 func (c *validatorsCollector) Collect() ([]string, error) {
@@ -55,6 +55,10 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 		}
 		// counting connected peers
 		peers, err := c.p2pNetwork.AllPeers(pk)
+		if err != nil {
+			c.logger.Warn("failed to get peers", zap.Error(err), zap.String("pubKey", hex.EncodeToString(pk)))
+			return nil, err
+		}
 		for _, p := range peers {
 			allPeers[p] = true
 		}
