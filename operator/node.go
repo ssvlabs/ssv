@@ -25,12 +25,12 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork          *core.Network
-	Beacon              *beacon.Beacon
-	Context             context.Context
-	Logger              *zap.Logger
-	Eth1Client          eth1.Client
-	DB                  basedb.IDb
+	ETHNetwork *core.Network
+	Beacon     *beacon.Beacon
+	Context    context.Context
+	Logger     *zap.Logger
+	Eth1Client eth1.Client
+	DB         basedb.IDb
 
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
