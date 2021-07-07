@@ -29,8 +29,8 @@ type SyncEndedEvent struct {
 	Logs []types.Log
 }
 
-// OperatorPrivateKeyProvider is a function that returns the operator private key
-type OperatorPrivateKeyProvider = func() (*rsa.PrivateKey, error)
+// ShareEncryptionKeyProvider is a function that returns the operator private key
+type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, error)
 
 // Client represents the required interface for eth1 client
 type Client interface {

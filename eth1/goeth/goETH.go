@@ -19,12 +19,12 @@ import (
 
 // ClientOptions are the options for the client
 type ClientOptions struct {
-	Ctx                  context.Context
-	Logger               *zap.Logger
-	NodeAddr             string
-	RegistryContractAddr string
-	ContractABI          string
-	PrivKeyProvider      eth1.OperatorPrivateKeyProvider
+	Ctx                        context.Context
+	Logger                     *zap.Logger
+	NodeAddr                   string
+	RegistryContractAddr       string
+	ContractABI                string
+	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // eth1Client is the internal implementation of Client
@@ -33,7 +33,7 @@ type eth1Client struct {
 	conn   *ethclient.Client
 	logger *zap.Logger
 
-	operatorPrivKeyProvider eth1.OperatorPrivateKeyProvider
+	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
 	registryContractAddr string
 	contractABI          string
@@ -53,13 +53,13 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	}
 
 	ec := eth1Client{
-		ctx:                     opts.Ctx,
-		conn:                    conn,
-		logger:                  logger,
-		operatorPrivKeyProvider: opts.PrivKeyProvider,
-		registryContractAddr:    opts.RegistryContractAddr,
-		contractABI:             opts.ContractABI,
-		outSubject:              pubsub.NewSubject(logger),
+		ctx:                        opts.Ctx,
+		conn:                       conn,
+		logger:                     logger,
+		shareEncryptionKeyProvider: opts.ShareEncryptionKeyProvider,
+		registryContractAddr:       opts.RegistryContractAddr,
+		contractABI:                opts.ContractABI,
+		outSubject:                 pubsub.NewSubject(logger),
 	}
 
 	return &ec, nil
@@ -181,23 +181,23 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
 		return nil
 	}
-	operatorPriveKey, err := ec.operatorPrivKeyProvider()
+	shareEncryptionKey, err := ec.shareEncryptionKeyProvider()
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, shareEncryptionKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
-		if isEventBelongsToOperator || operatorPriveKey == nil {
+		if isEventBelongsToOperator || shareEncryptionKey == nil {
 			ec.fireEvent(vLog, *parsed)
 		}
 	case "ValidatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, operatorPriveKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, shareEncryptionKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
@@ -206,7 +206,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 				zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)))
 		}
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
-		if isEventBelongsToOperator || operatorPriveKey == nil {
+		if isEventBelongsToOperator || shareEncryptionKey == nil {
 			ec.fireEvent(vLog, *parsed)
 		}
 	default:

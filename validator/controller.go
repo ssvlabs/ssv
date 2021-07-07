@@ -28,7 +28,7 @@ type ControllerOptions struct {
 	SlotQueue                  slotqueue.Queue
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
-	OperatorPrivateKeyProvider eth1.OperatorPrivateKeyProvider
+	OperatorPrivateKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // IController interface
@@ -56,7 +56,7 @@ type controller struct {
 	validatorsMap       map[string]*Validator
 	newValidatorSubject pubsub.Subject
 
-	operatorPrivateKeyProvider eth1.OperatorPrivateKeyProvider
+	operatorPrivateKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // NewController creates new validator controller

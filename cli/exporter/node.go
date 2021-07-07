@@ -75,7 +75,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
-			PrivKeyProvider: func() (*rsa.PrivateKey, error) {
+			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, error) {
 				return nil, nil
 			},
 		})

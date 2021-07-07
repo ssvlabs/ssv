@@ -101,12 +101,12 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx:                  cmd.Context(),
-			Logger:               Logger,
-			NodeAddr:             cfg.ETH1Options.ETH1Addr,
-			ContractABI:          eth1.ContractABI(),
-			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
-			PrivKeyProvider:      operatorStorage.GetPrivateKey,
+			Ctx:                        cmd.Context(),
+			Logger:                     Logger,
+			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
+			ContractABI:                eth1.ContractABI(),
+			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
+			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
