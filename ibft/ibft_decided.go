@@ -94,7 +94,18 @@ func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 
 		// save to db
 		if err := i.ibftStorage.SaveDecided(msg); err != nil {
-			i.logger.Error("failed to save decided msg", zap.Error(err))
+			i.pushAndCloseInstanceResultChan(&InstanceResult{
+				Decided: true,
+				Error:   errors.WithMessage(err, "could not save decided message to storage"),
+			})
+			return true
+		}
+		if err := i.ibftStorage.SaveHighestDecidedInstance(msg); err != nil {
+			i.pushAndCloseInstanceResultChan(&InstanceResult{
+				Decided: true,
+				Error:   errors.WithMessage(err, "could not save highest decided message to storage"),
+			})
+			return true
 		}
 
 		// push to chan
