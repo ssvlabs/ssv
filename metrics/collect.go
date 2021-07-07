@@ -18,7 +18,7 @@ type collectorRef struct {
 }
 
 var (
-	prefix        = "ssv"
+	prefix        = "ssv-collect"
 	collectors    = map[string]collectorRef{}
 	collectorsMut = sync.Mutex{}
 )
@@ -45,6 +45,7 @@ func Register(c Collector) {
 		collectors[c.ID()] = collectorRef{ref: c}
 	} else {
 		cr.ref = c
+		collectors[c.ID()] = cr
 	}
 }
 
