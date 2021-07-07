@@ -52,6 +52,9 @@ type IBFT interface {
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte
+
+	// CurrentState returns the state of the running instance
+	CurrentState() *proto.State
 }
 
 // ibftImpl implements IBFT interface
@@ -135,3 +138,15 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 func (i *ibftImpl) GetIdentifier() []byte {
 	return i.Identifier //TODO should use mutex to lock var?
 }
+
+// CurrentState returns the state of the running instance
+func (i *ibftImpl) CurrentState() *proto.State {
+	state, err := i.ibftStorage.GetCurrentInstance(i.Identifier)
+	if err != nil {
+		i.logger.Warn("could not get current instance",
+			zap.String("identifier", string(i.Identifier)))
+		return nil
+	}
+	return state
+}
+

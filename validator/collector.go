@@ -10,10 +10,14 @@ import (
 )
 
 const (
-	collectorID             = "validator"
-	validatorConnectedPeers = "validator_connected_peers"
-	allConnectedPeers       = "all_connected_peers"
-	countValidators         = "count_validators"
+	collectorID = "validator"
+	// metrics:
+	validatorConnectedPeers    = "validator_connected_peers"
+	ibftInstanceState          = "ibft_instance_state"
+	runningIbftsValidatorCount = "running_ibfts_validator_count"
+	runningIbftsCount          = "running_ibfts_count"
+	allConnectedPeers          = "all_connected_peers"
+	countValidators            = "count_validators"
 )
 
 // newMetricsCollector creates a new instance
@@ -45,7 +49,7 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 
 	pubKeys := c.validatorCtrl.GetValidatorsPubKeys()
 	results = append(results, fmt.Sprintf("%s{} %d", countValidators, len(pubKeys)))
-
+	runningIbfts := 0
 	for _, pk := range pubKeys {
 		pubKey := bls.PublicKey{}
 		err := pubKey.Deserialize(pk)
@@ -53,6 +57,26 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 			c.logger.Warn("failed to deserialize key", zap.Error(err))
 			return nil, err
 		}
+
+		v, exist := c.validatorCtrl.GetValidator(pubKey.SerializeToHexStr())
+		if !exist {
+			continue
+		}
+		runningIbftsValidator := 0
+		for _, i := range v.ibfts {
+			istate := i.CurrentState()
+			if istate != nil {
+				runningIbfts++
+				runningIbftsValidator++
+				results = append(results,
+					fmt.Sprintf("%s{identifier=\"%s\",stage=\"%s\",round=\"%d\"} %d",
+						ibftInstanceState, string(i.GetIdentifier()), istate.GetStage().String(), istate.GetRound(), istate.GetSeqNumber()),
+				)
+			}
+		}
+		results = append(results, fmt.Sprintf("%s{pubKey=\"%v\"} %d",
+			runningIbftsValidatorCount, hex.EncodeToString(pk), runningIbftsValidator))
+
 		// counting connected peers
 		peers, err := c.p2pNetwork.AllPeers(pk)
 		if err != nil {
@@ -67,6 +91,7 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 	}
 
 	results = append(results, fmt.Sprintf("%s{} %d", allConnectedPeers, len(allPeers)))
+	results = append(results, fmt.Sprintf("%s{} %d", runningIbftsCount, runningIbfts))
 
 	return results, nil
 }
