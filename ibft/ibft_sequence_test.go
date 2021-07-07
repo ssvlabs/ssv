@@ -159,9 +159,10 @@ func TestCanStartNewInstance(t *testing.T) {
 			i.ValidatorShare = &test.opts.ValidatorShare
 			i.instanceConfig = proto.DefaultConsensusParams()
 			//i.instances = test.prevInstances
-			instanceOpts := i.instanceOptionsFromStartOptions(test.opts)
+			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
+			require.NoError(t, err)
 			//instanceOpts.SeqNumber = test.seqNumber
-			err := i.canStartNewInstance(instanceOpts)
+			err = i.canStartNewInstance(*instanceOpts)
 
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)

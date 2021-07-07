@@ -1,9 +1,8 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/ibft/leader"
+	"fmt"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
@@ -11,14 +10,14 @@ import (
 )
 
 // ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, leaderSelector leader.Selector, share *storage.Share) pipeline.Pipeline {
+func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, expectedLeader uint64) pipeline.Pipeline {
 	return pipeline.WrapFunc("validate pre-prepare", func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")
 		}
 
-		if signedMessage.SignerIds[0] != leaderSelector.Current(uint64(share.CommitteeSize())) {
-			return errors.New("pre-prepare message sender is not the round's leader")
+		if signedMessage.SignerIds[0] != expectedLeader {
+			return errors.New(fmt.Sprintf("pre-prepare message sender (id %d) is not the round's leader (expected %d)", signedMessage.SignerIds[0], expectedLeader))
 		}
 
 		if err := valueCheck.Check(signedMessage.Message.Value); err != nil {

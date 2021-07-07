@@ -79,7 +79,7 @@ func (s *HistorySync) Start() error {
 		}
 	}
 
-	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
+	s.logger.Info("finished syncing", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
 	return nil
 }
 
