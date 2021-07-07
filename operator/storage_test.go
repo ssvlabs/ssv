@@ -96,7 +96,12 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.NoError(t, operatorStorage.SetupPrivateKey(test.passedKey))
 			sk, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)
-
+			require.NotNil(t, sk)
+			if test.existKey == "" && test.passedKey == "" { // new key generated
+				pk, err := rsaencryption.ExtractPublicKey(sk)
+				require.NoError(t, err)
+				require.GreaterOrEqual(t, len(pk), 600)
+			}
 			if test.passedKey != "" { // passed key set
 				passedKeyByte, err := base64.StdEncoding.DecodeString(test.passedKey)
 				require.NoError(t, err)
