@@ -56,7 +56,7 @@ type Instance struct {
 	eventQueue *eventqueue.Queue
 
 	// channels
-	stageChangedChans []chan proto.RoundState
+	stageChangedChan chan proto.RoundState
 
 	// flags
 	stopped     bool
@@ -93,9 +93,6 @@ func NewInstance(opts InstanceOptions) *Instance {
 		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 
 		eventQueue: eventqueue.New(),
-
-		// chan
-		stageChangedChans: make([]chan proto.RoundState, 0),
 
 		// locks
 		runInitOnce:           sync.Once{},
@@ -205,31 +202,28 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 		}
 	}
 
-	// Non blocking send to channel
-	for _, ch := range i.stageChangedChans {
-		select {
-		case ch <- stage:
-		default:
+	// blocking send to channel
+	if i.stageChangedChan != nil {
+		i.stageChangedChan <- stage
+
+		// if decided, close chan
+		if i.State.Stage == proto.RoundState_Stopped {
+			close(i.stageChangedChan)
+			i.stageChangedChan = nil
 		}
 	}
 }
 
 // GetStageChan returns a RoundState channel added to the stateChangesChans array
 func (i *Instance) GetStageChan() chan proto.RoundState {
-	ch := make(chan proto.RoundState)
-	i.stageChangedChansLock.Lock()
-	i.stageChangedChans = append(i.stageChangedChans, ch)
-	i.stageChangedChansLock.Unlock()
-	return ch
+	if i.stageChangedChan == nil {
+		i.stageChangedChan = make(chan proto.RoundState)
+	}
+	return i.stageChangedChan
 }
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	//sk := &bls.SecretKey{}
-	//if err := sk.Deserialize(i.Me.Sk); err != nil { // TODO - cache somewhere
-	//	return err
-	//}
-
 	sig, err := msg.Sign(i.ValidatorShare.ShareKey)
 	if err != nil {
 		return err
