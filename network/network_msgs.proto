@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package network;
 
-option go_package = "github.com/bloxapp/ssv/network";
+option go_package = "/network";
 
 import "msgs.proto";
 
@@ -28,14 +28,6 @@ message SyncMessage {
   repeated proto.SignedMessage SignedMessages = 1;
   string FromPeerID                           = 2;
   repeated uint64 params                      = 3;
-  bytes validator_pk                          = 4;
+  bytes Lambda                                = 4;
   Sync Type                                   = 5;
-}
-
-// Message is a wrapper struct for all network message types
-message Message {
-  bytes Lambda = 1;
-  proto.SignedMessage SignedMessage = 2;
-  SyncMessage SyncMessage = 3;
-  NetworkMsg Type = 4;
 }

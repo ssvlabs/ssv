@@ -10,9 +10,9 @@ import (
 func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 	msgQ := New()
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 4},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
+				Lambda:    []byte{1, 2, 3, 4},
 				Round:     1,
 				SeqNumber: 1,
 			},
@@ -20,9 +20,9 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 		Type: network.NetworkMsg_IBFTType,
 	})
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 4},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
+				Lambda:    []byte{1, 2, 3, 4},
 				Round:     1,
 				SeqNumber: 1,
 			},
@@ -45,9 +45,9 @@ func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 func TestMessageQueue_AddMessage(t *testing.T) {
 	msgQ := New()
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 4},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
+				Lambda:    []byte{1, 2, 3, 4},
 				Round:     1,
 				SeqNumber: 1,
 			},
@@ -57,9 +57,9 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 	require.NotNil(t, msgQ.queue["lambda_01020304_seqNumber_1_round_1"])
 
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 5},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
+				Lambda:    []byte{1, 2, 3, 5},
 				Round:     7,
 				SeqNumber: 2,
 			},
@@ -73,10 +73,10 @@ func TestMessageQueue_AddMessage(t *testing.T) {
 		return []string{"a", "b", "c"}
 	})
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 5},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
-				Round: 3,
+				Lambda: []byte{1, 2, 3, 5},
+				Round:  3,
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,
@@ -96,10 +96,10 @@ func TestMessageQueue_PopMessage(t *testing.T) {
 		},
 	}
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 4},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
-				Round: 1,
+				Lambda: []byte{1, 2, 3, 4},
+				Round:  1,
 			},
 		},
 		Type: network.NetworkMsg_IBFTType,

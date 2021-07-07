@@ -47,7 +47,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleAttester,
 			refAttestationDataByts,
-			"ibft did not decide, not executing role",
+			"instance did not decide",
 		},
 		{
 			"non supported role",
@@ -61,7 +61,8 @@ func TestConsensusOnInputValue(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingValidator(t, test.decided, test.signaturesCount)
+			identifier := _byteArray("6139636633363061613135666231643164333065653262353738646335383834383233633139363631383836616538623839323737356363623362643936623764373334353536396132616130623134653464303135633534613661306335345f4154544553544552")
+			node := testingValidator(t, test.decided, test.signaturesCount, identifier)
 			duty := &ethpb.DutiesResponse_Duty{
 				Committee:      nil,
 				CommitteeIndex: 0,
@@ -136,7 +137,8 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			validator := testingValidator(t, true, test.expectedSignaturesCount)
+			identifier := _byteArray("6139636633363061613135666231643164333065653262353738646335383834383233633139363631383836616538623839323737356363623362643936623764373334353536396132616130623134653464303135633534613661306335345f4154544553544552")
+			validator := testingValidator(t, true, test.expectedSignaturesCount, identifier)
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 

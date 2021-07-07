@@ -142,9 +142,9 @@ func (i *Instance) Start(inputValue []byte) error {
 			i.Logger.Info("Node is leader for round 1")
 			i.SetStage(proto.RoundState_PrePrepare)
 
-			// LeaderPreprepareDelay waits to let other nodes complete their instance start or round change.
+			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
-			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelay))
+			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
 			msg := i.generatePrePrepareMessage(i.State.InputValue)
 			//
@@ -160,6 +160,7 @@ func (i *Instance) Start(inputValue []byte) error {
 // Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
 	i.eventQueue.Add(func() {
+		i.Logger.Info("stopping iBFT instance...")
 		i.stopLock.Lock()
 		defer i.stopLock.Unlock()
 
@@ -169,7 +170,6 @@ func (i *Instance) Stop() {
 		i.eventQueue.ClearAndStop()
 		i.Logger.Info("stopped iBFT instance")
 	})
-	i.Logger.Info("stopping iBFT instance...")
 }
 
 // Stopped returns true if instance is stopped
@@ -179,10 +179,9 @@ func (i *Instance) Stopped() bool {
 	return i.stopped
 }
 
-// BumpRound is used to set round in the instance's MsgQueue - the message broker
-func (i *Instance) BumpRound(round uint64) {
-	i.State.Round = round
-	i.LeaderSelector.Bump()
+// BumpRound is used to set bump round by 1
+func (i *Instance) BumpRound() {
+	i.State.Round++
 }
 
 // Stage returns the instance message state

@@ -13,12 +13,19 @@ func IBFTMessageIndexKey(lambda []byte, seqNumber uint64, round uint64) string {
 
 func iBFTMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		if msg.Type == network.NetworkMsg_IBFTType {
-			return []string{
-				IBFTMessageIndexKey(msg.Lambda, msg.SignedMessage.Message.SeqNumber, msg.SignedMessage.Message.Round),
-			}
+		if msg.Type != network.NetworkMsg_IBFTType {
+			return []string{}
 		}
-		return []string{}
+		if msg.SignedMessage == nil || msg.SignedMessage.Message == nil {
+			return []string{}
+		}
+		if msg.SignedMessage.Message.Lambda == nil {
+			return []string{}
+		}
+
+		return []string{
+			IBFTMessageIndexKey(msg.SignedMessage.Message.Lambda, msg.SignedMessage.Message.SeqNumber, msg.SignedMessage.Message.Round),
+		}
 	}
 }
 
@@ -28,12 +35,19 @@ func SigRoundIndexKey(lambda []byte, seqNumber uint64) string {
 }
 func sigMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		if msg.Type == network.NetworkMsg_SignatureType {
-			return []string{
-				SigRoundIndexKey(msg.Lambda, msg.SignedMessage.Message.SeqNumber),
-			}
+		if msg.Type != network.NetworkMsg_SignatureType {
+			return []string{}
 		}
-		return []string{}
+		if msg.SignedMessage == nil || msg.SignedMessage.Message == nil {
+			return []string{}
+		}
+		if msg.SignedMessage.Message.Lambda == nil {
+			return []string{}
+		}
+
+		return []string{
+			SigRoundIndexKey(msg.SignedMessage.Message.Lambda, msg.SignedMessage.Message.SeqNumber),
+		}
 	}
 }
 
@@ -43,12 +57,19 @@ func DecidedIndexKey(lambda []byte) string {
 }
 func decidedMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		if msg.Type == network.NetworkMsg_DecidedType {
-			return []string{
-				DecidedIndexKey(msg.Lambda),
-			}
+		if msg.Type != network.NetworkMsg_DecidedType {
+			return []string{}
 		}
-		return []string{}
+		if msg.SignedMessage == nil || msg.SignedMessage.Message == nil {
+			return []string{}
+		}
+		if msg.SignedMessage.Message.Lambda == nil {
+			return []string{}
+		}
+
+		return []string{
+			DecidedIndexKey(msg.SignedMessage.Message.Lambda),
+		}
 	}
 }
 
@@ -58,11 +79,18 @@ func SyncIndexKey(lambda []byte) string {
 }
 func syncMessageIndex() IndexFunc {
 	return func(msg *network.Message) []string {
-		if msg.Type == network.NetworkMsg_SyncType {
-			return []string{
-				SyncIndexKey(msg.Lambda),
-			}
+		if msg.Type != network.NetworkMsg_SyncType {
+			return []string{}
 		}
-		return []string{}
+		if msg.SyncMessage == nil {
+			return []string{}
+		}
+		if msg.SyncMessage.Lambda == nil {
+			return []string{}
+		}
+
+		return []string{
+			SyncIndexKey(msg.SyncMessage.Lambda),
+		}
 	}
 }

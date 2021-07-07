@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"bytes"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"go.uber.org/zap"
@@ -30,11 +31,12 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	msgChan := i.network.ReceivedMsgChan()
 	go func() {
 		for msg := range msgChan {
-			i.msgQueue.AddMessage(&network.Message{
-				Lambda:        msg.Message.Lambda,
-				SignedMessage: msg,
-				Type:          network.NetworkMsg_IBFTType,
-			})
+			if msg.Message != nil && i.equalIdentifier(msg.Message.Lambda) {
+				i.msgQueue.AddMessage(&network.Message{
+					SignedMessage: msg,
+					Type:          network.NetworkMsg_IBFTType,
+				})
+			}
 		}
 	}()
 }
@@ -43,11 +45,12 @@ func (i *ibftImpl) listenToNetworkDecidedMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
-			i.msgQueue.AddMessage(&network.Message{
-				Lambda:        msg.Message.Lambda,
-				SignedMessage: msg,
-				Type:          network.NetworkMsg_DecidedType,
-			})
+			if msg.Message != nil && i.equalIdentifier(msg.Message.Lambda) {
+				i.msgQueue.AddMessage(&network.Message{
+					SignedMessage: msg,
+					Type:          network.NetworkMsg_DecidedType,
+				})
+			}
 		}
 	}()
 }
@@ -57,12 +60,17 @@ func (i *ibftImpl) listenToSyncMessages() {
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan {
-			i.msgQueue.AddMessage(&network.Message{
-				Lambda:      msg.Msg.Lambda,
-				SyncMessage: msg.Msg,
-				Stream:      msg.Stream,
-				Type:        network.NetworkMsg_SyncType,
-			})
+			if msg.Msg != nil && i.equalIdentifier(msg.Msg.Lambda) {
+				i.msgQueue.AddMessage(&network.Message{
+					SyncMessage: msg.Msg,
+					Stream:      msg.Stream,
+					Type:        network.NetworkMsg_SyncType,
+				})
+			}
 		}
 	}()
+}
+
+func (i *ibftImpl) equalIdentifier(toCheck []byte) bool {
+	return bytes.Equal(toCheck, i.Identifier)
 }

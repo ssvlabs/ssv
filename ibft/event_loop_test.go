@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
-	"github.com/bloxapp/ssv/ibft/leader"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -22,8 +21,8 @@ func TestChangeRoundTimer(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		PrepareMessages:     msgcontinmem.New(3),
 		Config: &proto.InstanceConfig{
-			RoundChangeDuration:   int64(time.Millisecond * 200),
-			LeaderPreprepareDelay: int64(time.Millisecond * 100),
+			RoundChangeDurationSeconds:   0.2,
+			LeaderPreprepareDelaySeconds: 0.1,
 		},
 		State: &proto.State{
 			Round:     1,
@@ -37,9 +36,8 @@ func TestChangeRoundTimer(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
-		LeaderSelector: &leader.Constant{LeaderIndex: 1},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	instance.triggerRoundChangeOnTimer()

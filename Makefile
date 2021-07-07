@@ -49,7 +49,7 @@ full-test:
 #Build
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Version=`git tag | tail -n 1`" ./cmd/ssvnode/
 
 .PHONY: start-node
 start-node:

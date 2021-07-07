@@ -11,7 +11,6 @@ import (
 // BroadcastDecided broadcasts a decided instance with collected signatures
 func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
-		Lambda:        msg.Message.Lambda,
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
 	})

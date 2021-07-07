@@ -609,44 +609,44 @@ func TestRoundTimeoutSeconds(t *testing.T) {
 	tests := []struct {
 		name            string
 		round           uint64
-		roundChangeBase int64
+		roundChangeBase float32
 		expectedTimeout time.Duration
 	}{
 		{
 			"round 1, base 1",
 			1,
 			1,
-			time.Duration(1),
+			time.Second * 1,
 		},
 		{
 			"round 1, base 2",
 			1,
 			2,
-			time.Duration(2),
+			time.Second * 2,
 		},
 		{
 			"round 2, base 1",
 			1,
 			1,
-			time.Duration(1),
+			time.Second * 1,
 		},
 		{
 			"round 2, base 2",
 			2,
 			2,
-			time.Duration(4),
+			time.Second * 4,
 		},
 		{
 			"round 3, base 3",
 			3,
 			3,
-			time.Duration(27),
+			time.Second * 27,
 		},
 		{
 			"round 4, base 3",
 			4,
 			3,
-			time.Duration(81),
+			time.Second * 81,
 		},
 	}
 
@@ -654,7 +654,7 @@ func TestRoundTimeoutSeconds(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			instance := &Instance{
 				Config: &proto.InstanceConfig{
-					RoundChangeDuration: test.roundChangeBase, // 1 second
+					RoundChangeDurationSeconds: test.roundChangeBase, // 1 second
 				},
 				State: &proto.State{
 					Round: test.round,

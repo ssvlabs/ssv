@@ -169,7 +169,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 
 func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
-	i.BumpRound(i.State.Round + 1)
+	i.BumpRound()
 	// mark stage
 	i.SetStage(proto.RoundState_ChangeRound)
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round))
@@ -237,6 +237,6 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDuration), float64(i.State.Round))
-	return time.Duration(roundTimeout)
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round))
+	return time.Second * time.Duration(roundTimeout)
 }

@@ -55,11 +55,25 @@ type testIBFT struct {
 func (t *testIBFT) Init() {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
-	t.identifier = []byte(IdentifierFormat(pk.Serialize(), beacon.RoleAttester))
 }
 
-func (t *testIBFT) StartInstance(opts ibft.StartOptions) (bool, int, []byte, error) {
-	return t.decided, t.signaturesCount, opts.Value, nil
+func (t *testIBFT) StartInstance(opts ibft.StartOptions) (chan *ibft.InstanceResult, error) {
+	ret := make(chan *ibft.InstanceResult)
+
+	go func() {
+		time.Sleep(time.Millisecond * 200)
+		ret <- &ibft.InstanceResult{
+			Decided: t.decided,
+			Msg: &proto.SignedMessage{
+				Message: &proto.Message{
+					Value: opts.Value,
+				},
+				SignerIds: make([]uint64, t.signaturesCount),
+			},
+			Error: nil,
+		}
+	}()
+	return ret, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
@@ -158,7 +172,7 @@ func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.Dutie
 	return nil, nil
 }
 
-func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validator {
+func testingValidator(t *testing.T, decided bool, signaturesCount int, identifier []byte) *Validator {
 	threshold.Init()
 
 	ret := &Validator{}
@@ -166,6 +180,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	ret.logger = zap.L()
 	ret.ibfts = make(map[beacon.Role]ibft.IBFT)
 	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon.RoleAttester].(*testIBFT).identifier = identifier
 	ret.ibfts[beacon.RoleAttester].Init()
 
 	// nodes
@@ -205,7 +220,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int) *Validato
 	// timeout
 	ret.signatureCollectionTimeout = time.Second * 2
 
-	go ret.listenToNetworkMessages()
+	go ret.listenToSignatureMessages()
 	return ret
 }
 
