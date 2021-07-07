@@ -7,15 +7,16 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
+	"sort"
 )
 
 const (
 	collectorID = "validator"
 	// metrics:
-	validatorConnectedPeers    = "validator_connected_peers"
+	connectedPeers             = "connected_peers"
 	ibftInstanceState          = "ibft_instance_state"
-	runningIbftsValidatorCount = "running_ibfts_validator_count"
-	runningIbftsCount          = "running_ibfts_count"
+	runningIbftsCountValidator = "running_ibfts_count_validator"
+	runningIbftsCountAll       = "running_ibfts_count_all"
 	allConnectedPeers          = "all_connected_peers"
 	countValidators            = "count_validators"
 )
@@ -64,19 +65,26 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 		}
 		runningIbftsValidator := 0
 		for _, i := range v.ibfts {
-			istate := i.CurrentState()
+			istate, err := i.CurrentState()
+			if err != nil {
+				c.logger.Warn("failed to get current instance state",
+					zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
+				// TODO: decide if the error should stop the function or continue
+				continue
+			}
 			if istate != nil {
 				runningIbfts++
 				runningIbftsValidator++
+				lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.GetSeqNumber())
 				results = append(results,
 					fmt.Sprintf("%s{identifier=\"%s\",stage=\"%s\",round=\"%d\"} %d",
-						ibftInstanceState, string(i.GetIdentifier()), istate.GetStage().String(), istate.GetRound(), istate.GetSeqNumber()),
+						lbl, string(i.GetIdentifier()), istate.GetStage().String(),
+						istate.GetRound(), istate.GetSeqNumber()),
 				)
 			}
 		}
 		results = append(results, fmt.Sprintf("%s{pubKey=\"%v\"} %d",
-			runningIbftsValidatorCount, hex.EncodeToString(pk), runningIbftsValidator))
-
+			runningIbftsCountValidator, hex.EncodeToString(pk), runningIbftsValidator))
 		// counting connected peers
 		peers, err := c.p2pNetwork.AllPeers(pk)
 		if err != nil {
@@ -87,11 +95,13 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 			allPeers[p] = true
 		}
 		results = append(results, fmt.Sprintf("%s{pubKey=\"%v\"} %d",
-			validatorConnectedPeers, hex.EncodeToString(pk), len(peers)))
+			connectedPeers, hex.EncodeToString(pk), len(peers)))
 	}
 
 	results = append(results, fmt.Sprintf("%s{} %d", allConnectedPeers, len(allPeers)))
-	results = append(results, fmt.Sprintf("%s{} %d", runningIbftsCount, runningIbfts))
+	results = append(results, fmt.Sprintf("%s{} %d", runningIbftsCountAll, runningIbfts))
+
+	sort.Strings(results)
 
 	return results, nil
 }

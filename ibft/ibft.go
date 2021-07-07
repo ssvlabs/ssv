@@ -54,7 +54,7 @@ type IBFT interface {
 	GetIdentifier() []byte
 
 	// CurrentState returns the state of the running instance
-	CurrentState() *proto.State
+	CurrentState() (*proto.State, error)
 }
 
 // ibftImpl implements IBFT interface
@@ -140,13 +140,6 @@ func (i *ibftImpl) GetIdentifier() []byte {
 }
 
 // CurrentState returns the state of the running instance
-func (i *ibftImpl) CurrentState() *proto.State {
-	state, err := i.ibftStorage.GetCurrentInstance(i.Identifier)
-	if err != nil {
-		i.logger.Warn("could not get current instance",
-			zap.String("identifier", string(i.Identifier)))
-		return nil
-	}
-	return state
+func (i *ibftImpl) CurrentState() (*proto.State, error) {
+	return i.ibftStorage.GetCurrentInstance(i.Identifier)
 }
-
