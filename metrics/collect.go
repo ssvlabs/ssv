@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -11,18 +12,40 @@ type Collector interface {
 	ID() string
 }
 
+type collectorRef struct {
+	enabled bool
+	ref Collector
+}
+
 var (
 	prefix        = "ssv"
-	collectors    = map[string]Collector{}
+	collectors    = map[string]collectorRef{}
 	collectorsMut = sync.Mutex{}
 )
+
+// Enable sets the collector enabled flag to true
+func Enable(cid string) {
+	collectorsMut.Lock()
+	defer collectorsMut.Unlock()
+
+	if cr, ok := collectors[cid]; ok {
+		cr.enabled = true
+		collectors[cid] = cr
+	} else {
+		collectors[cid] = collectorRef{enabled: true}
+	}
+}
 
 // Register adds a collector to be called when metrics are collected
 func Register(c Collector) {
 	collectorsMut.Lock()
 	defer collectorsMut.Unlock()
 
-	collectors[c.ID()] = c
+	if cr, ok := collectors[c.ID()]; !ok {
+		collectors[c.ID()] = collectorRef{ref: c}
+	} else {
+		cr.ref = c
+	}
 }
 
 // Deregister removes a collector
@@ -45,7 +68,10 @@ func Collect() ([]string, []error) {
 	var resultsMut sync.Mutex
 	var results []string
 
-	for _, c := range collectors {
+	for _, cr := range collectors {
+		if !cr.enabled {
+			continue
+		}
 		collectorsWg.Add(1)
 		go func(c Collector) {
 			defer collectorsWg.Done()
@@ -61,10 +87,24 @@ func Collect() ([]string, []error) {
 				results = append(results, fmt.Sprintf("%s.%s.%s", prefix, c.ID(), m))
 			}
 			resultsMut.Unlock()
-		}(c)
+		}(cr.ref)
 	}
 
 	collectorsWg.Wait()
 
 	return results, errs
+}
+
+func ParseMetricsConfig(metricsCfg string) []string {
+	if len(metricsCfg) == 0 {
+		return []string{}
+	}
+	metricsPkgs := strings.Split(metricsCfg, ",")
+	var cids []string
+	for _, s := range metricsPkgs {
+		if len(s) > 0 {
+			cids = append(cids, s)
+		}
+	}
+	return cids
 }

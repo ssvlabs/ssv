@@ -26,6 +26,7 @@ type config struct {
 	DBOptions                  basedb.Options   `yaml:"db"`
 	SSVOptions                 operator.Options `yaml:"ssv"`
 
+	Metrics           string `yaml:"Metrics" env:"METRICS" env-default:"validator" env-description:"comma seperated list of packages to collect metrics from"`
 	Network           string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	OperatorKey       string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
@@ -115,13 +116,7 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
-		go func() {
-			metricsHandler := metrics.NewMetricsHandler(Logger)
-			if err := metricsHandler.Start(http.NewServeMux(), ":15000"); err != nil {
-				// TODO: stop node if metrics setup failed?
-				Logger.Error("failed to start metrics handler", zap.Error(err))
-			}
-		}()
+		go startMetricsHandler(Logger, cfg.Metrics)
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
@@ -130,4 +125,18 @@ var StartNodeCmd = &cobra.Command{
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+}
+
+func startMetricsHandler(logger *zap.Logger, metricsCfg string) {
+	cids := metrics.ParseMetricsConfig(metricsCfg)
+	if len(cids) > 0 {
+		for _, cid := range cids {
+			metrics.Enable(cid)
+		}
+		metricsHandler := metrics.NewMetricsHandler(logger)
+		if err := metricsHandler.Start(http.NewServeMux(), ":15000"); err != nil {
+			// TODO: stop node if metrics setup failed?
+			logger.Error("failed to start metrics handler", zap.Error(err))
+		}
+	}
 }
