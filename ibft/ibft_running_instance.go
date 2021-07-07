@@ -64,7 +64,7 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 				i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
 				i.currentInstance = nil
 				// Don't close result chan as other processes will handle it (like decided or sync)
-				break
+				return
 			}
 		}
 	}()

@@ -94,9 +94,6 @@ func NewInstance(opts InstanceOptions) *Instance {
 
 		eventQueue: eventqueue.New(),
 
-		// chan
-		stageChangedChan: make(chan proto.RoundState),
-
 		// locks
 		runInitOnce:           sync.Once{},
 		stopLock:              sync.Mutex{},
@@ -205,12 +202,23 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 		}
 	}
 
-	// Non blocking send to channel
-	i.GetStageChan() <- stage
+	// blocking send to channel
+	if i.stageChangedChan != nil {
+		i.stageChangedChan <- stage
+
+		// if decided, close chan
+		if i.State.Stage == proto.RoundState_Stopped {
+			close(i.stageChangedChan)
+			i.stageChangedChan = nil
+		}
+	}
 }
 
 // GetStageChan returns a RoundState channel added to the stateChangesChans array
 func (i *Instance) GetStageChan() chan proto.RoundState {
+	if i.stageChangedChan == nil {
+		i.stageChangedChan = make(chan proto.RoundState)
+	}
 	return i.stageChangedChan
 }
 
