@@ -42,7 +42,7 @@ func (c *processCollector) Collect() ([]string, error) {
 	runtime.ReadMemStats(&ms)
 	results = append(results, fmt.Sprintf("%s{alloc=\"%f\",sys=\"%f\",heapSys=\"%f\"} 1", memoryStats,
 		float64(ms.Alloc)/1000000.0, float64(ms.Sys)/1000000.0, float64(ms.HeapSys)/1000000.0))
-	diff := time.Now().Sub(time.Unix(0, int64(ms.LastGC)))
+	diff := time.Since(time.Unix(0, int64(ms.LastGC)))
 	results = append(results, fmt.Sprintf("%s{lastGCTime=\"%f\"} %d",
 		completedGCCycles, diff.Seconds(), ms.NumGC))
 
