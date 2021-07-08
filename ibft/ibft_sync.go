@@ -36,9 +36,6 @@ func (i *ibftImpl) SyncIBFT() {
 	if i.currentInstance != nil {
 		i.currentInstance.Stop()
 	}
-	i.pushAndCloseInstanceResultChan(&InstanceResult{
-		Decided: false,
-	})
 
 	// sync
 	s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)

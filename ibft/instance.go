@@ -165,6 +165,15 @@ func (i *Instance) Stop() {
 		i.stopRoundChangeTimer()
 		i.SetStage(proto.RoundState_Stopped)
 		i.eventQueue.ClearAndStop()
+
+		// stop stage chan
+		i.stageLock.Lock()
+		defer i.stageLock.Unlock()
+		if i.stageChangedChan != nil {
+			close(i.stageChangedChan)
+			i.stageChangedChan = nil
+		}
+
 		i.Logger.Info("stopped iBFT instance")
 	})
 }
@@ -205,12 +214,6 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	// blocking send to channel
 	if i.stageChangedChan != nil {
 		i.stageChangedChan <- stage
-
-		// if decided, close chan
-		if i.State.Stage == proto.RoundState_Stopped {
-			close(i.stageChangedChan)
-			i.stageChangedChan = nil
-		}
 	}
 }
 

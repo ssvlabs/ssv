@@ -57,23 +57,16 @@ func (t *testIBFT) Init() {
 	_ = pk.Deserialize(refPk)
 }
 
-func (t *testIBFT) StartInstance(opts ibft.StartOptions) (chan *ibft.InstanceResult, error) {
-	ret := make(chan *ibft.InstanceResult)
-
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		ret <- &ibft.InstanceResult{
-			Decided: t.decided,
-			Msg: &proto.SignedMessage{
-				Message: &proto.Message{
-					Value: opts.Value,
-				},
-				SignerIds: make([]uint64, t.signaturesCount),
+func (t *testIBFT) StartInstance(opts ibft.StartOptions) (*ibft.InstanceResult, error) {
+	return &ibft.InstanceResult{
+		Decided: t.decided,
+		Msg: &proto.SignedMessage{
+			Message: &proto.Message{
+				Value: opts.Value,
 			},
-			Error: nil,
-		}
-	}()
-	return ret, nil
+			SignerIds: make([]uint64, t.signaturesCount),
+		},
+	}, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
