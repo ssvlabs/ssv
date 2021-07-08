@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
 	"github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -25,10 +24,9 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options `yaml:"db"`
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
+	ETH1Options                eth1.Options   `yaml:"eth1"`
 
-	ETH1Addr       string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
-	ETH1SyncOffset string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
-	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	Network string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	// Exporter WS API
 	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
 }
@@ -62,14 +60,22 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		// set operator public key to empty string as it has a default value in shared/params/testnet_config.go
-		params.SsvConfig().OperatorPublicKey = ""
-
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
+			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
+			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
+			}
+		}
 		eth1Client, err := goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx: cmd.Context(), Logger: Logger, NodeAddr: cfg.ETH1Addr,
+			Ctx:                  cmd.Context(),
+			Logger:               Logger,
+			NodeAddr:             cfg.ETH1Options.ETH1Addr,
+			ContractABI:          eth1.ContractABI(),
+			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
-			PrivKeyProvider: func() (*rsa.PrivateKey, error) {
+			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, error) {
 				return nil, nil
 			},
 		})
@@ -88,7 +94,7 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode := exporter.New(*exporterOptions)
 
-		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
+		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if err := exporterNode.Start(); err != nil {

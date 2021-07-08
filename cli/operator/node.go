@@ -11,7 +11,6 @@ import (
 	metrics_ps "github.com/bloxapp/ssv/metrics/process"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -26,15 +25,13 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options   `yaml:"db"`
 	SSVOptions                 operator.Options `yaml:"ssv"`
+	ETH1Options                eth1.Options     `yaml:"eth1"`
 
 	Metrics           string `yaml:"Metrics" env:"METRICS" env-default:"" env-description:"comma seperated list of metrics collectors"`
 	MetricsAPIAddr    string `yaml:"MetricsAPIAddr" env:"METRICS_API_ADDR" env-default:":15000" env-description:"address of metrics api"`
-	Network           string `yaml:"Network" env:"NETWORK" env-default:"prater"`
-	BeaconNodeAddr    string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	OperatorKey       string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	ETH1Addr          string `yaml:"ETH1Addr" env:"ETH_1_ADDR" env-required:"true"`
-	ETH1SyncOffset    string `yaml:"ETH1SyncOffset" env:"ETH_1_SYNC_OFFSET"`
-	SmartContractAddr string `yaml:"SmartContractAddr" env:"SMART_CONTRACT_ADDR_KEY" env-description:"smart contract addr listen to event from" env-default:""`
+	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
+	OperatorKey    string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 
 	P2pNetworkConfig p2p.Config `yaml:"p2p"`
 }
@@ -98,24 +95,30 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
+		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
+
 		// create new eth1 client
-		if cfg.SmartContractAddr != "" {
-			Logger.Info("using smart contract addr from cfg", zap.String("addr", cfg.SmartContractAddr))
-			params.SsvConfig().OperatorContractAddress = cfg.SmartContractAddr // TODO need to remove config and use in eth2 option cfg
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
+			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
+			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
+			}
 		}
 		cfg.SSVOptions.Eth1Client, err = goeth.NewEth1Client(goeth.ClientOptions{
-			Ctx:             cmd.Context(),
-			Logger:          Logger,
-			NodeAddr:        cfg.ETH1Addr,
-			PrivKeyProvider: operatorStorage.GetPrivateKey,
+			Ctx:                        cmd.Context(),
+			Logger:                     Logger,
+			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
+			ContractABI:                eth1.ContractABI(),
+			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
+			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
-
 		operatorNode := operator.New(cfg.SSVOptions)
 
-		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1SyncOffset)); err != nil {
+		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		go startMetricsHandler(Logger, cfg)

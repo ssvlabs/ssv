@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -85,11 +84,7 @@ func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
 
 func TestExporter_ListenToEth1Events(t *testing.T) {
 	initBls()
-	origOpPubKey := params.SsvConfig().OperatorPublicKey
-	params.SsvConfig().OperatorPublicKey = ""
-	defer func() {
-		params.SsvConfig().OperatorPublicKey = origOpPubKey
-	}()
+
 	exp, err := newMockExporter()
 	require.NoError(t, err)
 
@@ -212,7 +207,7 @@ func validatorAddedMockEvent(t *testing.T) eth1.Event {
 	var vLogValidatorAdded types.Log
 	err := json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	parsed, _, err := eth1.ParseValidatorAddedEvent(zap.L(), nil, vLogValidatorAdded.Data, contractAbi)
@@ -238,10 +233,10 @@ func operatorAddedMockEvent(t *testing.T) eth1.Event {
 	var vLogOperatorAdded types.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
-	parsed, _, err := eth1.ParseOperatorAddedEvent(zap.L(), vLogOperatorAdded.Data, contractAbi)
+	parsed, _, err := eth1.ParseOperatorAddedEvent(zap.L(), nil, vLogOperatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
 	return eth1.Event{Log: types.Log{}, Data: *parsed}

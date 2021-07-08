@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"time"
@@ -28,6 +29,7 @@ type ControllerOptions struct {
 	SlotQueue                  slotqueue.Queue
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
+	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // IController interface
@@ -54,6 +56,8 @@ type controller struct {
 
 	validatorsMap       map[string]*Validator
 	newValidatorSubject pubsub.Subject
+
+	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // NewController creates new validator controller
@@ -80,7 +84,8 @@ func NewController(options ControllerOptions) IController {
 		ethNetwork:                 options.ETHNetwork,
 		newValidatorSubject: pubsub.NewSubject(options.Logger.With(
 			zap.String("which", "validator/controller/validator-subject"))),
-		validatorsMap: make(map[string]*Validator),
+		validatorsMap:              make(map[string]*Validator),
+		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
 	}
 
 	metrics.Register(newMetricsCollector(options.Logger, &ctrl, options.Network))
@@ -170,7 +175,20 @@ func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
 	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
 	l.Debug("handles validator added event")
-	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent)
+	operatorPrivKey, err := c.shareEncryptionKeyProvider()
+	if err != nil {
+		l.Error("failed to get operator private key")
+		return
+	}
+	var operatorPubKey string
+	if operatorPrivKey != nil {
+		operatorPubKey, err = rsaencryption.ExtractPublicKey(operatorPrivKey)
+		if err != nil {
+			l.Error("failed to extract operator public key")
+			return
+		}
+	}
+	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
 	if err != nil {
 		l.Error("failed to create share", zap.Error(err))
 		return

@@ -59,6 +59,7 @@ func TestHandleQuery(t *testing.T) {
 }
 
 func TestHandleStream(t *testing.T) {
+	msgCount := 3
 	logger := zap.L()
 	adapter := NewAdapterMock(logger).(*AdapterMock)
 	ws := NewWsServer(logger, adapter, nil).(*wsServer)
@@ -71,8 +72,16 @@ func TestHandleStream(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
+		i := 0
 		for {
 			<-adapter.Out
+			i++
+			if i >= msgCount {
+				if i > msgCount {
+					t.Error("should not send too many requests")
+				}
+				return
+			}
 			wg.Done()
 		}
 	}()

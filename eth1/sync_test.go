@@ -101,7 +101,7 @@ func (ec *eth1ClientMock) Start() error {
 }
 
 func (ec *eth1ClientMock) Sync(fromBlock *big.Int) error {
-	<- time.After(ec.syncTimeout)
+	<-time.After(ec.syncTimeout)
 	return ec.syncResponse
 }
 

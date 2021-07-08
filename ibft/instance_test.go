@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -123,4 +124,65 @@ func TestInit(t *testing.T) {
 	instance.initialized = false
 	instance.Init()
 	require.False(t, instance.initialized)
+}
+
+func TestSetStage(t *testing.T) {
+	instance := &Instance{
+		MsgQueue:   msgqueue.New(),
+		eventQueue: eventqueue.New(),
+		Config:     proto.DefaultConsensusParams(),
+		State: &proto.State{
+			Round:     1,
+			Stage:     proto.RoundState_PrePrepare,
+			Lambda:    []byte("Lambda"),
+			SeqNumber: 1,
+		},
+		Logger: zaptest.NewLogger(t),
+	}
+
+	c := instance.GetStageChan()
+
+	var prepare, decided, stopped bool
+	lock := sync.Mutex{}
+	go func() {
+		for {
+			switch stage := <-c; stage {
+			case proto.RoundState_Prepare:
+				lock.Lock()
+				prepare = true
+				lock.Unlock()
+			case proto.RoundState_Decided:
+				lock.Lock()
+				decided = true
+				lock.Unlock()
+			case proto.RoundState_Stopped:
+				lock.Lock()
+				stopped = true
+				lock.Unlock()
+				return
+			}
+		}
+	}()
+
+	instance.SetStage(proto.RoundState_Prepare)
+	time.Sleep(time.Millisecond * 20)
+	lock.Lock()
+	require.True(t, prepare)
+	lock.Unlock()
+	require.EqualValues(t, proto.RoundState_Prepare, instance.State.Stage)
+
+	instance.SetStage(proto.RoundState_Decided)
+	time.Sleep(time.Millisecond * 20)
+	lock.Lock()
+	require.True(t, decided)
+	lock.Unlock()
+	require.EqualValues(t, proto.RoundState_Decided, instance.State.Stage)
+
+	instance.SetStage(proto.RoundState_Stopped)
+	time.Sleep(time.Millisecond * 20)
+	lock.Lock()
+	require.True(t, stopped)
+	lock.Unlock()
+	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage)
+	require.NotNil(t, instance.stageChangedChan)
 }

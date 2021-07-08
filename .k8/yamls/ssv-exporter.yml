@@ -147,7 +147,7 @@ spec:
               secretKeyRef:
                 key: enr_key
                 name: config-secrets
-          - name: SMART_CONTRACT_ADDR_KEY
+          - name: REGISTRY_CONTRACT_ADDR_KEY
             valueFrom:
               secretKeyRef:
                 key: smart_contract_addr_key

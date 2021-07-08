@@ -63,9 +63,9 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	}
 
 	// decided for current instance
-	if i.forceDecideCurrentInstance(msg) {
-		return
-	}
+	//if i.forceDecideCurrentInstance(msg) {
+	//	return
+	//}
 
 	// decided for later instances which require a full sync
 	shouldSync, err := i.decidedRequiresSync(msg)
@@ -75,49 +75,47 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	}
 	if shouldSync {
 		i.logger.Info("stopping current instance and syncing..")
-		go func() {
-			i.SyncIBFT()
-		}()
+		i.SyncIBFT()
 	}
 }
 
 // forceDecideCurrentInstance will force the current instance to decide provided a signed decided msg.
 // will return true if executed, false otherwise
-func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
-	if i.decidedForCurrentInstance(msg) {
-		i.logger.Info("received decided msg for current instance.")
-
-		// stop current instance
-		if i.currentInstance != nil {
-			i.currentInstance.Stop()
-		}
-
-		// save to db
-		if err := i.ibftStorage.SaveDecided(msg); err != nil {
-			i.pushAndCloseInstanceResultChan(&InstanceResult{
-				Decided: true,
-				Error:   errors.WithMessage(err, "could not save decided message to storage"),
-			})
-			return true
-		}
-		if err := i.ibftStorage.SaveHighestDecidedInstance(msg); err != nil {
-			i.pushAndCloseInstanceResultChan(&InstanceResult{
-				Decided: true,
-				Error:   errors.WithMessage(err, "could not save highest decided message to storage"),
-			})
-			return true
-		}
-
-		// push to chan
-		i.pushAndCloseInstanceResultChan(&InstanceResult{
-			Decided: true,
-			Msg:     msg,
-			Error:   nil,
-		})
-		return true
-	}
-	return false
-}
+//func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
+//	if i.decidedForCurrentInstance(msg) {
+//		i.logger.Info("received decided msg for current instance.")
+//
+//		// stop current instance
+//		if i.currentInstance != nil {
+//			i.currentInstance.Stop()
+//		}
+//
+//		// save to db
+//		if err := i.ibftStorage.SaveDecided(msg); err != nil {
+//			i.pushAndCloseInstanceResultChan(&InstanceResult{
+//				Decided: true,
+//				Error:   errors.WithMessage(err, "could not save decided message to storage"),
+//			})
+//			return true
+//		}
+//		if err := i.ibftStorage.SaveHighestDecidedInstance(msg); err != nil {
+//			i.pushAndCloseInstanceResultChan(&InstanceResult{
+//				Decided: true,
+//				Error:   errors.WithMessage(err, "could not save highest decided message to storage"),
+//			})
+//			return true
+//		}
+//
+//		// push to chan
+//		i.pushAndCloseInstanceResultChan(&InstanceResult{
+//			Decided: true,
+//			Msg:     msg,
+//			Error:   nil,
+//		})
+//		return true
+//	}
+//	return false
+//}
 
 // highestKnownDecided returns the highest known decided instance
 func (i *ibftImpl) highestKnownDecided() (*proto.SignedMessage, error) {
