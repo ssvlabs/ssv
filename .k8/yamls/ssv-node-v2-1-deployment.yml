@@ -73,6 +73,10 @@ spec:
       - name: ssv-node-v2-1
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: 1024m
+            memory: 5120Mi
         command: ["make", "start-node"]
         ports:
         - containerPort: 12000
