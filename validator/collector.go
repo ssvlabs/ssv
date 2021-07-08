@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -59,32 +60,24 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 			return nil, err
 		}
 
-		v, exist := c.validatorCtrl.GetValidator(pubKey.SerializeToHexStr())
-		if !exist {
-			continue
-		}
-		runningIbftsValidator := 0
-		for _, i := range v.ibfts {
-			istate, err := i.CurrentState()
-			if err != nil {
-				c.logger.Warn("failed to get current instance state",
-					zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
-				// TODO: decide if the error should stop the function or continue
-				continue
-			}
-			if istate != nil {
+		if v, exist := c.validatorCtrl.GetValidator(pubKey.SerializeToHexStr()); exist {
+			runningIbftsValidator := 0
+			for _, i := range v.ibfts {
+				istate, err := i.CurrentState()
+				if err != nil || istate == nil {
+					c.logger.Warn("failed to get current instance state",
+						zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
+					// TODO: decide if the error should stop the function or continue
+					continue
+				}
 				runningIbfts++
 				runningIbftsValidator++
-				lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.GetSeqNumber())
-				results = append(results,
-					fmt.Sprintf("%s{identifier=\"%s\",stage=\"%s\",round=\"%d\"} %d",
-						lbl, string(i.GetIdentifier()), istate.GetStage().String(),
-						istate.GetRound(), istate.GetSeqNumber()),
-				)
+				results = append(results, ibftStateRecord(istate, string(i.GetIdentifier())))
 			}
+			results = append(results, fmt.Sprintf("%s{pubKey=\"%v\"} %d",
+				runningIbftsCountValidator, hex.EncodeToString(pk), runningIbftsValidator))
 		}
-		results = append(results, fmt.Sprintf("%s{pubKey=\"%v\"} %d",
-			runningIbftsCountValidator, hex.EncodeToString(pk), runningIbftsValidator))
+
 		// counting connected peers
 		peers, err := c.p2pNetwork.AllPeers(pk)
 		if err != nil {
@@ -104,4 +97,10 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 	sort.Strings(results)
 
 	return results, nil
+}
+
+func ibftStateRecord(istate *proto.State, identifier string) string {
+	lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.GetSeqNumber())
+	return fmt.Sprintf("%s{identifier=\"%s\",stage=\"%s\",round=\"%d\"} %d",
+		lbl, identifier, istate.GetStage().String(), istate.GetRound(), istate.GetSeqNumber())
 }

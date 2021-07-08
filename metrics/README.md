@@ -26,7 +26,7 @@ yaml:"MetricsAPIAddr" env:"METRICS_API_ADDR" default:":15000" description:"addre
 
 Example:
 ```
-Metrics: validator
+Metrics: process,validator
 MetricsAPIAddr: ":15001"
 ```
 
@@ -43,6 +43,14 @@ The following is a list of all collected metrics in SSV, grouped by containing p
 * `ssv-collect.validator.running_ibfts_count_all{} COUNT`
 * `ssv-collect.validator.running_ibfts_count_validator{pubKey} COUNT`
 
+#### Process
+
+* `ssv-collect.process.completed_gc_cycles{} COUNT`
+* `ssv-collect.process.cpus_count{} COUNT`
+* `ssv-collect.process.go_version{} GOVERSION`
+* `ssv-collect.process.goroutines_count{} COUNT`
+* `ssv-collect.process.memory_stats{alloc,sys} 1`
+
 ### Usage
 
 ```shell
@@ -52,6 +60,11 @@ $ curl http://localhost:15001/metrics
 Example output:
 
 ```
+ssv-collect.process.completed_gc_cycles{} 4
+ssv-collect.process.cpus_count{} 4
+ssv-collect.process.go_version{} go1.15.13
+ssv-collect.process.goroutines_count{} 214
+ssv-collect.process.memory_stats{alloc="220.803552",sys="283.142168"} 1
 ssv-collect.validator.all_connected_peers{} 3
 ssv-collect.validator.connected_peers{pubKey="82e9b36feb8147d3f82c1a03ba246d4a63ac1ce0b1dabbb6991940a06401ab46fb4afbf971a3c145fdad2d4bddd30e12"} 3
 ssv-collect.validator.connected_peers{pubKey="8ed3a53383a2c9b9ab0ab5437985ac443a8d50bf50b5f69eeaf9850285aeaad703beff14e3d15b4e6b5702f446a97db4"} 3

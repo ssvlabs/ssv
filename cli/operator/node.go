@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/metrics"
+	metrics_ps "github.com/bloxapp/ssv/metrics/process"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/shared/params"
@@ -134,6 +135,7 @@ func startMetricsHandler(logger *zap.Logger, cfg config) {
 		for _, cid := range cids {
 			metrics.Enable(cid)
 		}
+		metrics_ps.SetupProcessMetrics()
 		metricsHandler := metrics.NewMetricsHandler(logger)
 		if err := metricsHandler.Start(http.NewServeMux(), cfg.MetricsAPIAddr); err != nil {
 			// TODO: stop node if metrics setup failed?
