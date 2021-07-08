@@ -32,7 +32,6 @@ type StartOptions struct {
 type InstanceResult struct {
 	Decided bool
 	Msg     *proto.SignedMessage
-	Error   error
 }
 
 // IBFT represents behavior of the IBFT

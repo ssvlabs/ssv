@@ -66,7 +66,6 @@ func (t *testIBFT) StartInstance(opts ibft.StartOptions) (*ibft.InstanceResult, 
 			},
 			SignerIds: make([]uint64, t.signaturesCount),
 		},
-		Error: nil,
 	}, nil
 }
 

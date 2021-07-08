@@ -184,5 +184,5 @@ func TestSetStage(t *testing.T) {
 	require.True(t, stopped)
 	lock.Unlock()
 	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage)
-	require.Nil(t, instance.stageChangedChan)
+	require.NotNil(t, instance.stageChangedChan)
 }

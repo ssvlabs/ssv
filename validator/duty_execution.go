@@ -204,13 +204,8 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	if err != nil {
 		return 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
 	}
-
-	//result := <-resChan
 	if result == nil {
 		return 0, nil, seqNumber, errors.Wrap(err, "instance result returned nil")
-	}
-	if result.Error != nil {
-		return 0, nil, seqNumber, errors.Wrap(err, "instance returned with error")
 	}
 	if !result.Decided {
 		return 0, nil, seqNumber, errors.New("instance did not decide")
