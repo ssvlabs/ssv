@@ -41,7 +41,7 @@ type IBFT interface {
 	Init()
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (chan *InstanceResult, error)
+	StartInstance(opts StartOptions) (*InstanceResult, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
@@ -69,9 +69,6 @@ type ibftImpl struct {
 
 	// flags
 	initFinished bool
-
-	// channels
-	instanceResultChan chan *InstanceResult
 
 	// mutex
 	instanceResultChanLock sync.Mutex
@@ -113,7 +110,7 @@ func (i *ibftImpl) Init() {
 	i.logger.Debug("iBFT implementation init finished")
 }
 
-func (i *ibftImpl) StartInstance(opts StartOptions) (chan *InstanceResult, error) {
+func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
 	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
