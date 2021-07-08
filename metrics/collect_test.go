@@ -21,10 +21,8 @@ func TestCollect(t *testing.T) {
 
 	Register(&mc1)
 	defer Deregister(&mc1)
-	Enable(mc1.ID())
 	Register(&mc2)
 	defer Deregister(&mc2)
-	Enable(mc2.ID())
 
 	results, errs := Collect()
 	require.Equal(t, 0, len(errs))
@@ -41,10 +39,8 @@ func TestCollect_FailedCollectors(t *testing.T) {
 	fc := failedCollector{expectedErr}
 	Register(&mc)
 	defer Deregister(&mc)
-	Enable(mc.ID())
 	Register(&fc)
 	defer Deregister(&fc)
-	Enable(fc.ID())
 
 	results, errs := Collect()
 	require.Equal(t, 1, len(errs))

@@ -25,12 +25,25 @@ type metricsHandler struct {
 }
 
 func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
+	mh.logger.Info("setup metrics collection")
+
 	mux.HandleFunc("/metrics", func(res http.ResponseWriter, req *http.Request) {
 		if err := mh.handleHTTP(res, req); err != nil {
-			// TODO handle errors
+			// TODO: decide if we want to ignore errors
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}
 	})
+
+	// TODO add end-point for profiling
+	//mux.HandleFunc("/goroutines", func (res http.ResponseWriter, _ *http.Request) {
+	//	stack := debug.Stack()
+	//	if _, err := res.Write(stack); err != nil {
+	//		mh.logger.Error("failed to write goroutines stack", zap.Error(err))
+	//	}
+	//	if err := pprof.Lookup("goroutine").WriteTo(res, 2); err != nil {
+	//		mh.logger.Error("failed to write pprof goroutines", zap.Error(err))
+	//	}
+	//})
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		mh.logger.Error("failed to start metrics http end-point", zap.Error(err))

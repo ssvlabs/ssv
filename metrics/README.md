@@ -17,17 +17,15 @@ Once registered, a collector will be invoked on metrics requests.
 
 <img src="../docs/resources/metrics-collector.png" >
 
-The following configuration is available:
+`MetricsAPIPort` is used to enable metrics collection and expose the API on the given nodes: 
 
 ```
-yaml:"Metrics" env:"METRICS" description:"comma seperated list of metrics collectors"
-yaml:"MetricsAPIAddr" env:"METRICS_API_ADDR" default:":15000" description:"address of metrics api"
+yaml:"MetricsAPIPort" env:"METRICS_API_PORT" description:"port of metrics api"
 ```
 
 Example:
 ```
-Metrics: process,validator
-MetricsAPIAddr: ":15001"
+MetricsAPIPort: 15001
 ```
 
 ### Collected Metrics
@@ -60,7 +58,7 @@ $ curl http://localhost:15001/metrics
 Example output:
 
 ```
-ssv-collect.process.completed_gc_cycles{last="1625750701108015000",next="210697520"} 19
+ssv-collect.process.completed_gc_cycles{lastGCTime="1.551963"} 19
 ssv-collect.process.cpus_count{} 4
 ssv-collect.process.go_version{} go1.15.13
 ssv-collect.process.goroutines_count{} 214

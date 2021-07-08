@@ -1,11 +1,13 @@
-package validator
+package metrics
 
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"sort"
@@ -22,19 +24,23 @@ const (
 	countValidators            = "count_validators"
 )
 
-// newMetricsCollector creates a new instance
-func newMetricsCollector(logger *zap.Logger, validatorCtrl IController, p2pNetwork network.Network) metrics.Collector {
+var roles = []beacon.Role{
+	beacon.RoleAttester, beacon.RoleProposer, beacon.RoleAggregator,
+}
+
+// SetupMetricsCollector creates a new instance
+func SetupMetricsCollector(logger *zap.Logger, validatorCtrl validator.IController, p2pNetwork network.Network) {
 	c := validatorsCollector{
 		logger:        logger.With(zap.String("component", "validator/collector")),
 		validatorCtrl: validatorCtrl, p2pNetwork: p2pNetwork,
 	}
-	return &c
+	metrics.Register(&c)
 }
 
 // validatorsCollector implements metrics.Collector for validators information
 type validatorsCollector struct {
 	logger        *zap.Logger
-	validatorCtrl IController
+	validatorCtrl validator.IController
 	p2pNetwork    network.Network
 }
 
@@ -62,17 +68,19 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 
 		if v, exist := c.validatorCtrl.GetValidator(pubKey.SerializeToHexStr()); exist {
 			runningIbftsValidator := 0
-			for _, i := range v.ibfts {
-				istate, err := i.CurrentState()
-				if err != nil || istate == nil {
-					c.logger.Warn("failed to get current instance state",
-						zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
-					// TODO: decide if the error should stop the function or continue
-					continue
+			for _, r := range roles {
+				if i, exist := v.GetIBFT(r); exist {
+					istate, err := i.CurrentState()
+					if err != nil || istate == nil {
+						c.logger.Warn("failed to get current instance state",
+							zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
+						// TODO: decide if the error should stop the function or continue
+						continue
+					}
+					runningIbfts++
+					runningIbftsValidator++
+					results = append(results, ibftStateRecord(istate, string(i.GetIdentifier())))
 				}
-				runningIbfts++
-				runningIbftsValidator++
-				results = append(results, ibftStateRecord(istate, string(i.GetIdentifier())))
 			}
 			results = append(results, fmt.Sprintf("%s{pubKey=\"%v\"} %d",
 				runningIbftsCountValidator, hex.EncodeToString(pk), runningIbftsValidator))
