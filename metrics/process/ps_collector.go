@@ -39,9 +39,9 @@ func (c *processCollector) Collect() ([]string, error) {
 	results = append(results, fmt.Sprintf("%s{} %d", goroutinesCount, runtime.NumGoroutine()))
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	results = append(results, fmt.Sprintf("%s{alloc=\"%f\",sys=\"%f\"} 1", memoryStats,
-		float64(ms.Alloc)/1000000.0, float64(ms.Sys)/1000000.0))
-	results = append(results, fmt.Sprintf("%s{} %d", completedGCCycles, ms.NumGC))
+	results = append(results, fmt.Sprintf("%s{alloc=\"%f\",sys=\"%f\",heapSys=\"%f\"} 1", memoryStats,
+		float64(ms.Alloc)/1000000.0, float64(ms.Sys)/1000000.0, float64(ms.HeapSys)/1000000.0))
+	results = append(results, fmt.Sprintf("%s{last=\"%d\",next=\"%d\"} %d", completedGCCycles, ms.LastGC, ms.NextGC, ms.NumGC))
 
 	sort.Strings(results)
 

@@ -45,11 +45,11 @@ The following is a list of all collected metrics in SSV, grouped by containing p
 
 #### Process
 
-* `ssv-collect.process.completed_gc_cycles{} COUNT`
+* `ssv-collect.process.completed_gc_cycles{last,next} COUNT`
 * `ssv-collect.process.cpus_count{} COUNT`
 * `ssv-collect.process.go_version{} GOVERSION`
 * `ssv-collect.process.goroutines_count{} COUNT`
-* `ssv-collect.process.memory_stats{alloc,sys} 1`
+* `ssv-collect.process.memory_stats{alloc,sys,heapSys} 1`
 
 ### Usage
 
