@@ -23,30 +23,28 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 	var err error
 instanceLoop:
 	for {
-		select {
-		case stage := <-stageChan:
-			e, exit := i.instanceStageChange(stage)
+		stage := <-stageChan
+		exit, e := i.instanceStageChange(stage)
+		if e != nil {
+			err = e
+			break instanceLoop
+		}
+		if exit { // exited with no error means instance decided
+			// fetch decided msg and return
+			retMsg, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
 			if e != nil {
 				err = e
 				break instanceLoop
 			}
-			if exit { // exited with no error means instance decided
-				// fetch decided msg and return
-				retMsg, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
-				if e != nil {
-					err = e
-					break instanceLoop
-				}
-				if retMsg == nil {
-					err = errors.New("could not fetch decided msg after instance finished")
-					break instanceLoop
-				}
-				retRes = &InstanceResult{
-					Decided: true,
-					Msg:     retMsg,
-				}
+			if retMsg == nil {
+				err = errors.New("could not fetch decided msg after instance finished")
 				break instanceLoop
 			}
+			retRes = &InstanceResult{
+				Decided: true,
+				Msg:     retMsg,
+			}
+			break instanceLoop
 		}
 	}
 	// when main instance loop breaks, nil current instance
@@ -55,31 +53,31 @@ instanceLoop:
 }
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
-func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (error, bool) {
+func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 	switch stage {
 	case proto.RoundState_Prepare:
 		if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
-			return errors.Wrap(err, "could not save prepare msg to storage"), true
+			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case proto.RoundState_Decided:
 		agg, err := i.currentInstance.CommittedAggregatedMsg()
 		if err != nil {
-			return errors.Wrap(err, "could not get aggregated commit msg and save to storage"), true
+			return true, errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 		}
 		if err := i.ibftStorage.SaveDecided(agg); err != nil {
-			return errors.Wrap(err, "could not save aggregated commit msg to storage"), true
+			return true, errors.Wrap(err, "could not save aggregated commit msg to storage")
 		}
 		if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
-			return errors.Wrap(err, "could not save highest decided message to storage"), true
+			return true, errors.Wrap(err, "could not save highest decided message to storage")
 		}
 		if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
-			return errors.Wrap(err, "could not broadcast decided message"), true
+			return true, errors.Wrap(err, "could not broadcast decided message")
 		}
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
-		return nil, false
+		return false, nil
 	case proto.RoundState_Stopped:
 		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
-		return nil, true
+		return true, nil
 	}
-	return nil, false
+	return false, nil
 }
