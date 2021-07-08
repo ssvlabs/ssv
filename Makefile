@@ -22,7 +22,7 @@ endif
 
 COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
-	COV_CMD=-coverpkg="${$(go list ./... | grep -v fixtures | tr '\n' ',')}" -covermode="atomic" -coverprofile="coverage.out"
+	COV_CMD=-coverpkg=./... -covermode="atomic" -coverprofile="coverage.out"
 endif
 UNFORMATTED=$(shell gofmt -s -l .)
 
@@ -49,7 +49,7 @@ full-test:
 #Build
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
+	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Version=`git tag | tail -n 1`" ./cmd/ssvnode/
 
 .PHONY: start-node
 start-node:

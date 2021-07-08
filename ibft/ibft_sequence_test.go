@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -22,17 +23,18 @@ func TestCanStartNewInstance(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 
 	tests := []struct {
-		name          string
-		opts          StartOptions
-		storage       collections.Iibft
-		initFinished  bool
-		expectedError string
+		name            string
+		opts            StartOptions
+		storage         collections.Iibft
+		initFinished    bool
+		currentInstance *Instance
+		expectedError   string
 	}{
 		{
 			"valid next instance start",
 			StartOptions{
-				SeqNumber:  11,
-				Duty:       nil,
+				SeqNumber: 11,
+				Duty:      nil,
 				ValidatorShare: validatorstorage.Share{
 					NodeID:    1,
 					PublicKey: validatorPK(sks),
@@ -42,13 +44,14 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
+			nil,
 			"",
 		},
 		{
 			"valid first instance",
 			StartOptions{
-				SeqNumber:  0,
-				Duty:       nil,
+				SeqNumber: 0,
+				Duty:      nil,
 				ValidatorShare: validatorstorage.Share{
 					NodeID:    1,
 					PublicKey: validatorPK(sks),
@@ -58,13 +61,14 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			nil,
 			true,
+			nil,
 			"",
 		},
 		{
 			"didn't finish initialization",
 			StartOptions{
-				SeqNumber:  0,
-				Duty:       nil,
+				SeqNumber: 0,
+				Duty:      nil,
 				ValidatorShare: validatorstorage.Share{
 					NodeID:    1,
 					PublicKey: validatorPK(sks),
@@ -74,13 +78,14 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			nil,
 			false,
+			nil,
 			"iBFT hasn't initialized yet",
 		},
 		{
 			"sequence skips",
 			StartOptions{
-				SeqNumber:  12,
-				Duty:       nil,
+				SeqNumber: 12,
+				Duty:      nil,
 				ValidatorShare: validatorstorage.Share{
 					NodeID:    1,
 					PublicKey: validatorPK(sks),
@@ -90,13 +95,14 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
+			nil,
 			"instance seq invalid",
 		},
 		{
 			"past instance",
 			StartOptions{
-				SeqNumber:  10,
-				Duty:       nil,
+				SeqNumber: 10,
+				Duty:      nil,
 				ValidatorShare: validatorstorage.Share{
 					NodeID:    1,
 					PublicKey: validatorPK(sks),
@@ -106,7 +112,25 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
+			nil,
 			"instance seq invalid",
+		},
+		{
+			"didn't finish current instance",
+			StartOptions{
+				SeqNumber: 11,
+				Duty:      nil,
+				ValidatorShare: validatorstorage.Share{
+					NodeID:    1,
+					PublicKey: validatorPK(sks),
+					ShareKey:  sks[1],
+					Committee: nodes,
+				},
+			},
+			populatedStorage(t, sks, 10),
+			true,
+			&Instance{State: &proto.State{SeqNumber: 10}},
+			fmt.Sprintf("current instance (%d) is still running", 10),
 		},
 	}
 
@@ -114,6 +138,9 @@ func TestCanStartNewInstance(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
 			i.initFinished = test.initFinished
+			if test.currentInstance != nil {
+				i.currentInstance = test.currentInstance
+			}
 			if test.storage != nil {
 				i.ibftStorage = test.storage
 			} else {
@@ -132,9 +159,10 @@ func TestCanStartNewInstance(t *testing.T) {
 			i.ValidatorShare = &test.opts.ValidatorShare
 			i.instanceConfig = proto.DefaultConsensusParams()
 			//i.instances = test.prevInstances
-			instanceOpts := i.instanceOptionsFromStartOptions(test.opts)
+			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
+			require.NoError(t, err)
 			//instanceOpts.SeqNumber = test.seqNumber
-			err := i.canStartNewInstance(instanceOpts)
+			err = i.canStartNewInstance(*instanceOpts)
 
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)

@@ -1,7 +1,7 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
@@ -32,9 +32,8 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
 		},
-		ValueCheck:     bytesval.New(value),
-		LeaderSelector: &leader.Constant{},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New(value),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
@@ -107,9 +106,8 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
 		},
-		ValueCheck:     bytesval.New(value),
-		LeaderSelector: &leader.Constant{},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New(value),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	// change round no quorum
@@ -167,9 +165,8 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
-		LeaderSelector: &leader.Constant{},
-		Logger:         zaptest.NewLogger(t),
+		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:     zaptest.NewLogger(t),
 	}
 
 	// test happy flow
@@ -265,7 +262,8 @@ func TestPrePreparePipeline(t *testing.T) {
 		State: &proto.State{
 			Round: 1,
 		},
+		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
 	pipeline := instance.prePrepareMsgPipeline()
-	require.EqualValues(t, "combination of: type check, lambda, round, sequence, authorize, validate pre-prepare, upon pre-prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate pre-prepare, upon pre-prepare msg, ", pipeline.Name())
 }

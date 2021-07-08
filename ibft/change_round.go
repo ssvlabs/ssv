@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"math"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -16,6 +18,7 @@ import (
 
 func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
@@ -171,7 +174,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 
 func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
-	i.BumpRound(i.State.Round + 1)
+	i.BumpRound()
 	// mark stage
 	i.SetStage(proto.RoundState_ChangeRound)
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round))
@@ -243,4 +246,9 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 		SeqNumber: i.State.SeqNumber,
 		Value:     data,
 	}, nil
+}
+
+func (i *Instance) roundTimeoutSeconds() time.Duration {
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round))
+	return time.Second * time.Duration(roundTimeout)
 }

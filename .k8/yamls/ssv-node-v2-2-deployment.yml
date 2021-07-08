@@ -73,6 +73,9 @@ spec:
       - name: ssv-node-v2-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
+        resources:
+          limits:
+            memory: 5120Mi
         command: ["make", "start-node"]
         ports:
         - containerPort: 12000
@@ -132,7 +135,7 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: enr_key
-        - name: SMART_CONTRACT_ADDR_KEY
+        - name: REGISTRY_CONTRACT_ADDR_KEY
           valueFrom:
             secretKeyRef:
               name: config-secrets

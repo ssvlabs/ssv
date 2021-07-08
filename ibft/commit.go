@@ -14,11 +14,39 @@ import (
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
+		auth.ValidateRound(i.State.Round),
+		i.commitMsgValidationPipeline(),
+		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
+			i.Logger.Info("received valid commit message for round",
+				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
+				zap.Uint64("round", signedMessage.Message.Round))
+			i.CommitMessages.AddMessage(signedMessage)
+			return nil
+		}),
+		i.uponCommitMsg(),
+	)
+}
+
+func (i *Instance) commitMsgValidationPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateRound(i.State.Round),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
+	)
+}
+
+func (i *Instance) forceDecidedPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		i.commitMsgValidationPipeline(),
+		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
+			i.Logger.Info("received valid decided message for round",
+				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
+				zap.Uint64("round", signedMessage.Message.Round))
+			i.CommitMessages.OverrideMessages(signedMessage)
+			return nil
+		}),
 		i.uponCommitMsg(),
 	)
 }
@@ -61,26 +89,20 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon commit msg", func(signedMessage *proto.SignedMessage) error {
-		// add to prepare messages
-		i.CommitMessages.AddMessage(signedMessage)
-		i.Logger.Info("received valid commit message for round",
-			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
-			zap.Uint64("round", signedMessage.Message.Round))
-
 		// check if quorum achieved, act upon it.
 		if i.Stage() == proto.RoundState_Decided {
-			i.Logger.Info("already decided, not processing commit message")
+			i.Logger.Info("already commit, not processing commit message")
 			return nil // no reason to commit again
 		}
 		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value)
 		if quorum {
-			i.Logger.Info("decided iBFT instance",
+			i.Logger.Info("commit iBFT instance",
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", len(sigs)))
 
-			// mark instance decided
+			// mark instance commit
 			i.SetStage(proto.RoundState_Decided)
-			i.stopRoundChangeTimer()
+			i.Stop()
 		}
 		return nil
 	})

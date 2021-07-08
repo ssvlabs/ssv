@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
+	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"

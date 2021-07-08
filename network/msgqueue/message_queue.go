@@ -106,6 +106,8 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 
 // MsgCount will return a count of messages by their index
 func (q *MessageQueue) MsgCount(index string) int {
+	q.msgMutex.Lock()
+	defer q.msgMutex.Unlock()
 	return len(q.queue[index])
 }
 

@@ -100,3 +100,16 @@ func (c *messagesContainer) AddMessage(msg *proto.SignedMessage) {
 	}
 	c.messagesByRoundAndValue[msg.Message.Round][valueHex] = append(c.messagesByRoundAndValue[msg.Message.Round][valueHex], msg)
 }
+
+// OverrideMessages will override all current msgs in container with the provided msg
+func (c *messagesContainer) OverrideMessages(msg *proto.SignedMessage) {
+	c.lock.Lock()
+	// reset previous round data
+	delete(c.exitingMsgSigners, msg.Message.Round)
+	delete(c.messagesByRound, msg.Message.Round)
+	delete(c.messagesByRoundAndValue, msg.Message.Round)
+	c.lock.Unlock()
+
+	// override
+	c.AddMessage(msg)
+}

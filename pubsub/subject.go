@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"sync"
 )
 
@@ -30,14 +31,16 @@ type Subject interface {
 
 // subject is the internal implementation of Subject
 type subject struct {
+	logger *zap.Logger
+
 	observers map[string]*observer
 	mut       sync.Mutex
 }
 
 // NewSubject creates a new instance of the internal struct
-func NewSubject() Subject {
+func NewSubject(logger *zap.Logger) Subject {
 	outs := map[string]*observer{}
-	s := subject{outs, sync.Mutex{}}
+	s := subject{logger: logger, observers: outs, mut: sync.Mutex{}}
 	return &s
 }
 
@@ -49,7 +52,7 @@ func (s *subject) Register(id string) (SubjectChannel, error) {
 	if ob, exist := s.observers[id]; exist {
 		return ob.channel, errors.New("observer already exist")
 	}
-	s.observers[id] = newSubjectObserver()
+	s.observers[id] = newSubjectObserver(s.logger.With(zap.String("observerId", id)))
 	return s.observers[id].channel, nil
 }
 

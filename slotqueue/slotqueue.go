@@ -1,7 +1,10 @@
 package slotqueue
 
 import (
+	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/pubsub"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -13,54 +16,90 @@ import (
 // Queue represents the behavior of the slot queue
 type Queue interface {
 	// Next returns the next slot with its duties at its time
-	Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error)
+	RegisterToNext(pubKey []byte) (pubsub.SubjectChannel, error)
 
 	// Schedule schedules execution of the given slot and puts it into the queue
 	Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error
+
+	// listenToTicker and notify for all the observers when ticker triggers
+	listenToTicker()
 }
 
 // queue implements Queue
 type queue struct {
-	data   *cache.Cache
-	ticker *slotutil.SlotTicker
+	data           *cache.Cache
+	ticker         *slotutil.SlotTicker
+	tickerSubjects map[string]pubsub.Subject
+
+	logger *zap.Logger
+}
+
+// SlotEvent represents the notify event fire for each pubkey subject with the proper duty
+type SlotEvent struct {
+	Slot uint64
+	Duty *ethpb.DutiesResponse_Duty
+	Ok   bool
 }
 
 // New is the constructor of queue
-func New(network core.Network) Queue {
+func New(network core.Network, logger *zap.Logger) Queue {
 	genesisTime := time.Unix(int64(network.MinGenesisTime()), 0)
 	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(network.SlotDurationSec().Seconds()))
-	return &queue{
-		data:   cache.New(time.Minute*30, time.Minute*31),
-		ticker: slotTicker,
+	queue := &queue{
+		data:           cache.New(time.Minute*30, time.Minute*31),
+		ticker:         slotTicker,
+		tickerSubjects: make(map[string]pubsub.Subject),
+		logger:         logger,
+	}
+	go queue.listenToTicker()
+	return queue
+}
+
+func (q *queue) listenToTicker() {
+	for currentSlot := range q.ticker.C() {
+		for pubkey, pub := range q.tickerSubjects {
+			key := q.getKey(pubkey, currentSlot)
+			dataRaw, ok := q.data.Get(key)
+			if !ok {
+				continue
+			}
+
+			duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
+			if !ok {
+				continue
+			}
+
+			pub.Notify(SlotEvent{
+				Slot: currentSlot,
+				Duty: duty,
+				Ok:   true,
+			})
+		}
+	}
+	for _, pub := range q.tickerSubjects {
+		pub.Notify(SlotEvent{
+			Slot: 0,
+			Duty: nil,
+			Ok:   false,
+		})
 	}
 }
 
-// Next returns the next slot with its duties at its time
-func (q *queue) Next(pubKey []byte) (uint64, *ethpb.DutiesResponse_Duty, bool, error) {
-	for currentSlot := range q.ticker.C() {
-		key := q.getKey(pubKey, currentSlot)
-		dataRaw, ok := q.data.Get(key)
-		if !ok {
-			continue
-		}
-
-		duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
-		if !ok {
-			continue
-		}
-
-		return currentSlot, duty, true, nil
+// RegisterToNext check if subject exist if not create new one. Register to the subject and return the subject channel
+func (q *queue) RegisterToNext(pubKey []byte) (pubsub.SubjectChannel, error) {
+	if pub, ok := q.tickerSubjects[hex.EncodeToString(pubKey)]; ok {
+		return pub.Register(hex.EncodeToString(pubKey))
 	}
-
-	return 0, nil, false, nil
+	q.tickerSubjects[hex.EncodeToString(pubKey)] = pubsub.NewSubject(q.logger)
+	return q.tickerSubjects[hex.EncodeToString(pubKey)].Register(hex.EncodeToString(pubKey))
 }
 
 // Schedule schedules execution of the given slot and puts it into the queue
 func (q *queue) Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error {
-	q.data.SetDefault(q.getKey(pubKey, slot), duty)
+	q.data.SetDefault(q.getKey(hex.EncodeToString(pubKey), slot), duty)
 	return nil
 }
 
-func (q *queue) getKey(pubKey []byte, slot uint64) string {
-	return fmt.Sprintf("%d_%#v", slot, pubKey)
+func (q *queue) getKey(pubKey string, slot uint64) string {
+	return fmt.Sprintf("%d_%s", slot, pubKey)
 }

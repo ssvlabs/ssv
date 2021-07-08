@@ -31,7 +31,6 @@ func (test *NonJustifiedPrePrepapre) Prepare(t *testing.T) {
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
 		test.instance.MsgQueue.AddMessage(&network.Message{
-			Lambda:        test.lambda,
 			SignedMessage: msg,
 			Type:          network.NetworkMsg_IBFTType,
 		})
@@ -42,7 +41,7 @@ func (test *NonJustifiedPrePrepapre) Prepare(t *testing.T) {
 func (test *NonJustifiedPrePrepapre) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
-		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 2, 1),
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 2, 2),
 	}
 }
 

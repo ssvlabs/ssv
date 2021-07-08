@@ -8,50 +8,50 @@ import (
 )
 
 func TestVerifyPartialSignature(t *testing.T) {
-	tests := []struct{
-		name string
-		skByts []byte
-		root []byte
-		useWrongRoot bool
-		ibftID uint64
+	tests := []struct {
+		name          string
+		skByts        []byte
+		root          []byte
+		useWrongRoot  bool
+		ibftID        uint64
 		expectedError string
 	}{
 		{
-			"valid/ id 1"	,
+			"valid/ id 1",
 			refSplitShares[0],
-			[]byte{0,1,2,3,4,5,6,7,8,9},
+			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			false,
 			1,
 			"",
 		},
 		{
-			"valid/ id 2"	,
+			"valid/ id 2",
 			refSplitShares[1],
-			[]byte{0,1,2,3,4,5,6,7,8,1},
+			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 1},
 			false,
 			2,
 			"",
 		},
 		{
-			"valid/ id 3"	,
+			"valid/ id 3",
 			refSplitShares[2],
-			[]byte{0,1,2,3,4,5,6,7,8,2},
+			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
 			false,
 			3,
 			"",
 		},
 		{
-			"wrong ibft id"	,
+			"wrong ibft id",
 			refSplitShares[2],
-			[]byte{0,1,2,3,4,5,6,7,8,2},
+			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
 			false,
 			2,
 			"could not verify signature from iBFT member 2",
 		},
 		{
-			"wrong root"	,
+			"wrong root",
 			refSplitShares[2],
-			[]byte{0,1,2,3,4,5,6,7,8,2},
+			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
 			true,
 			3,
 			"could not verify signature from iBFT member 3",
@@ -60,7 +60,8 @@ func TestVerifyPartialSignature(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			node := testingValidator(t,true, 4)
+			identifier := _byteArray("6139636633363061613135666231643164333065653262353738646335383834383233633139363631383836616538623839323737356363623362643936623764373334353536396132616130623134653464303135633534613661306335345f4154544553544552")
+			node := testingValidator(t, true, 4, identifier)
 
 			sk := &bls.SecretKey{}
 			require.NoError(t, sk.Deserialize(test.skByts))
@@ -69,7 +70,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 
 			usedRoot := test.root
 			if test.useWrongRoot {
-				usedRoot = []byte{0,0,0,0,0,0,0}
+				usedRoot = []byte{0, 0, 0, 0, 0, 0, 0}
 			}
 
 			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID, node.ibfts[beacon.RoleAttester].GetIBFTCommittee()) // TODO need to fetch the committee from storage

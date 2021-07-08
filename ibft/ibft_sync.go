@@ -30,6 +30,14 @@ func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
 func (i *ibftImpl) SyncIBFT() {
+	i.logger.Info("syncing iBFT..")
+
+	// stop current instance and return any waiting chan.
+	if i.currentInstance != nil {
+		i.currentInstance.Stop()
+	}
+
+	// sync
 	s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	err := s.Start()
 	if err != nil {

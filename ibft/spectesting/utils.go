@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -106,9 +106,9 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
 		ValueCheck:     bytesval.New(TestInputValue()),
-		LeaderSelector: &leader.Constant{LeaderIndex: 1},
 		Config:         proto.DefaultConsensusParams(),
 		Lambda:         lambda,
+		LeaderSelector: &constant.Constant{LeaderIndex: 0},
 	}
 
 	return ibft.NewInstance(opts)
@@ -217,7 +217,7 @@ func TestInputValue() []byte {
 
 // SimulateTimeout simulates instance timeout
 func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
-	instance.BumpRound(toRound)
+	instance.BumpRound()
 	instance.SetStage(proto.RoundState_ChangeRound)
 }
 

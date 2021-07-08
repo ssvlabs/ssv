@@ -57,7 +57,7 @@ func (s *HistorySync) Start() error {
 
 	syncStartSeqNumber := uint64(0)
 	if localHighest != nil {
-		syncStartSeqNumber = localHighest.Message.SeqNumber + 1
+		syncStartSeqNumber = localHighest.Message.SeqNumber
 	}
 
 	// check we are behind and need to sync
@@ -79,7 +79,7 @@ func (s *HistorySync) Start() error {
 		}
 	}
 
-	s.logger.Info("node is synced", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
+	s.logger.Info("finished syncing", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
 	return nil
 }
 
@@ -100,6 +100,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	// fetch response
 	wg := &sync.WaitGroup{}
 	results := make([]*network.SyncMessage, 0)
+	lock := sync.Mutex{}
 	for i, p := range usedPeers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
@@ -111,7 +112,9 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
 			} else {
+				lock.Lock()
 				results = append(results, res)
+				lock.Unlock()
 			}
 			wg.Done()
 		}(i, p, wg)

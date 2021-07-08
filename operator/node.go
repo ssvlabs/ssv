@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -56,7 +57,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	slotQueue := slotqueue.New(*opts.ETHNetwork)
+	slotQueue := slotqueue.New(*opts.ETHNetwork, opts.Logger)
 	opts.ValidatorOptions.SlotQueue = slotQueue
 	ssv := &operatorNode{
 		context:             opts.Context,
@@ -138,7 +139,9 @@ func (n *operatorNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 	for _, slot := range slots {
 		if slot < n.getEpochFirstSlot(n.genesisEpoch) {
 			// wait until genesis epoch starts
-			n.logger.Debug("skipping slot, lower than genesis", zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)), zap.Uint64("slot", slot))
+			n.logger.Debug("skipping slot, lower than genesis",
+				zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)),
+				zap.Uint64("slot", slot))
 			continue
 		}
 		go func(slot uint64) {
@@ -147,12 +150,14 @@ func (n *operatorNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 				With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
 				With(zap.Uint64("current slot", currentSlot)).
 				With(zap.Uint64("slot", slot)).
+				With(zap.Uint64("epoch", slot/32)).
+				With(zap.String("pubKey", hex.EncodeToString(duty.PublicKey))).
 				With(zap.Time("start_time", n.getSlotStartTime(slot)))
 			// execute task if slot already began and not pass 1 epoch
-			if slot >= currentSlot && slot-currentSlot <= n.dutyLimit {
+			if currentSlot >= slot && currentSlot-slot <= n.dutyLimit {
 				pubKey := &bls.PublicKey{}
 				if err := pubKey.Deserialize(duty.PublicKey); err != nil {
-					n.logger.Error("failed to deserialize pubkey from duty")
+					logger.Error("failed to deserialize pubkey from duty")
 				}
 				v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
 				if ok {
@@ -164,7 +169,7 @@ func (n *operatorNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
 			} else {
 				logger.Info("scheduling duty processing start for slot")
 				if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
-					n.logger.Error("failed to schedule slot")
+					logger.Error("failed to schedule slot")
 				}
 			}
 		}(slot)

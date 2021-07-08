@@ -24,7 +24,8 @@ type wsServer struct {
 func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
 		logger.With(zap.String("component", "exporter/api/server")),
-		pubsub.NewSubject(), pubsub.NewSubject(),
+		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/inbound-subject"))),
+		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/outbound-subject"))),
 		adapter, mux,
 	}
 	return &ws
@@ -71,6 +72,10 @@ func (ws *wsServer) handleQuery(conn Connection) {
 		var incoming Message
 		err := ws.adapter.Receive(conn, &incoming)
 		if err != nil {
+			if ws.adapter.IsCloseError(err) { // stop on any close error
+				ws.logger.Debug("failed to read message as the connection was closed", zap.Error(err))
+				return
+			}
 			ws.logger.Warn("could not read incoming message", zap.Error(err))
 			nm = NetworkMessage{incoming, err, conn}
 		} else {
@@ -78,7 +83,7 @@ func (ws *wsServer) handleQuery(conn Connection) {
 		}
 		ws.inbound.Notify(nm)
 
-		ws.processOutboundForConnection(conn, out, true)
+		ws.processOutboundForConnection(conn, out, cid, true)
 	}
 }
 
@@ -92,12 +97,12 @@ func (ws *wsServer) handleStream(conn Connection) {
 	}
 	defer ws.outbound.Deregister(cid)
 
-	ws.processOutboundForConnection(conn, out, false)
+	ws.processOutboundForConnection(conn, out, cid, false)
 }
 
-func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.SubjectChannel, once bool) {
+func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.SubjectChannel, cid string, once bool) {
 	logger := ws.logger.
-		With(zap.String("cid", ConnectionID(conn)))
+		With(zap.String("cid", cid))
 
 	for m := range out {
 		nm, ok := m.(NetworkMessage)
@@ -105,12 +110,14 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.Sub
 			logger.Warn("could not parse message")
 			continue
 		}
-		logger.Debug("sending outbound",
-			zap.String("msg.type", string(nm.Msg.Type)))
+		// send message only for this connection (originates in /query) or any connection (/stream)
 		if nm.Conn == conn || nm.Conn == nil {
+			logger.Debug("sending outbound",
+				zap.String("msg.type", string(nm.Msg.Type)))
 			err := ws.adapter.Send(conn, &nm.Msg)
 			if err != nil {
 				logger.Error("could not send message", zap.Error(err))
+				break
 			}
 			if once {
 				break

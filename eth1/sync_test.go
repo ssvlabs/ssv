@@ -80,7 +80,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 func setupStorageWithEth1ClientMock() (*zap.Logger, *eth1ClientMock, *syncStorageMock) {
 	logger := zap.L()
-	eth1Client := eth1ClientMock{pubsub.NewSubject(), 50 * time.Millisecond, nil}
+	eth1Client := eth1ClientMock{pubsub.NewSubject(logger), 50 * time.Millisecond, nil}
 	storage := syncStorageMock{[]byte{}}
 	return logger, &eth1Client, &storage
 }
@@ -101,7 +101,7 @@ func (ec *eth1ClientMock) Start() error {
 }
 
 func (ec *eth1ClientMock) Sync(fromBlock *big.Int) error {
-	<- time.After(ec.syncTimeout)
+	<-time.After(ec.syncTimeout)
 	return ec.syncResponse
 }
 

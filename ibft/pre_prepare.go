@@ -12,12 +12,13 @@ import (
 
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State.Lambda),
 		auth.ValidateRound(i.State.Round),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
-		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.LeaderSelector, i.ValidatorShare),
+		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ThisRoundLeader()),
 		i.UponPrePrepareMsg(),
 	)
 }
@@ -80,10 +81,10 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 
 func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
-		Type:        proto.RoundState_PrePrepare,
-		Round:       i.State.Round,
-		Lambda:      i.State.Lambda,
-		SeqNumber:   i.State.SeqNumber,
-		Value:       value,
+		Type:      proto.RoundState_PrePrepare,
+		Round:     i.State.Round,
+		Lambda:    i.State.Lambda,
+		SeqNumber: i.State.SeqNumber,
+		Value:     value,
 	}
 }

@@ -1,9 +1,6 @@
 package api
 
-import (
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/ethereum/go-ethereum/common"
-)
+import "github.com/bloxapp/ssv/exporter/storage"
 
 // Message represents an exporter message
 type Message struct {
@@ -23,20 +20,22 @@ type MessageFilter struct {
 	To int64 `json:"to"`
 	// Role is the duty type enum, optional as it's relevant for IBFT data
 	Role DutyRole `json:"role,omitempty"`
-	// PubKey is optional as it's relevant for IBFT data
-	PubKey string `json:"pubKey,omitempty"`
+	// PublicKey is optional as it's relevant for IBFT data
+	PublicKey string `json:"publicKey,omitempty"`
 }
 
 // MessageType is the type of message being sent
 type MessageType string
 
 const (
-	// TypeValidator is an enum for validator type
+	// TypeValidator is an enum for validator type messages
 	TypeValidator MessageType = "validator"
-	// TypeOperator is an enum for validator type
+	// TypeOperator is an enum for operator type messages
 	TypeOperator MessageType = "operator"
-	// TypeIBFT is an enum for validator type
+	// TypeIBFT is an enum for ibft type messages
 	TypeIBFT MessageType = "ibft"
+	// TypeError is an enum for error type messages
+	TypeError MessageType = "error"
 )
 
 // DutyRole is the role of the duty
@@ -51,27 +50,12 @@ const (
 	RoleProposer DutyRole = "PROPOSER"
 )
 
-// ValidatorInformation represents a transferable object
-type ValidatorInformation struct {
-	Index     int64                  `json:"index"`
-	PublicKey string                 `json:"publicKey"`
-	Committee map[uint64]*proto.Node `json:"operators"`
-}
-
 // ValidatorsMessage represents message for validators response
 type ValidatorsMessage struct {
-	Data []ValidatorInformation `json:"data,omitempty"`
-}
-
-// OperatorInformation the public data of an operator
-type OperatorInformation struct {
-	PublicKey    []byte         `json:"publicKey"`
-	Name         string         `json:"name"`
-	OwnerAddress common.Address `json:"ownerAddress"`
-	Index        int64          `json:"index"`
+	Data []storage.ValidatorInformation `json:"data,omitempty"`
 }
 
 // OperatorsMessage represents message for operators response
 type OperatorsMessage struct {
-	Data []OperatorInformation `json:"data,omitempty"`
+	Data []storage.OperatorInformation `json:"data,omitempty"`
 }

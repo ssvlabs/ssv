@@ -2,7 +2,9 @@ package tasks
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,7 +12,8 @@ import (
 )
 
 func TestExecWithTimeout(t *testing.T) {
-	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 7 * time.Millisecond)
+	logex.Build("test", zap.DebugLevel)
+	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 7*time.Millisecond)
 	defer cancel()
 	tests := []struct {
 		name          string
@@ -28,7 +31,7 @@ func TestExecWithTimeout(t *testing.T) {
 			"Long_function",
 			context.TODO(),
 			7 * time.Millisecond,
-			4,
+			3,
 		},
 	}
 
@@ -51,7 +54,7 @@ func TestExecWithTimeout(t *testing.T) {
 					}
 				}
 			}
-			completed, _, err := ExecWithTimeout(context.TODO(), fn, 7 * time.Millisecond)
+			completed, _, err := ExecWithTimeout(context.TODO(), fn, test.t)
 			stopped.Wait()
 			require.False(t, completed)
 			require.NoError(t, err)
@@ -65,7 +68,7 @@ func TestExecWithTimeout_ShortFunc(t *testing.T) {
 		time.Sleep(2 * time.Millisecond)
 		return true, nil
 	}
-	completed, res, err := ExecWithTimeout(context.TODO(), longExec, 10 * time.Millisecond)
+	completed, res, err := ExecWithTimeout(context.TODO(), longExec, 10*time.Millisecond)
 	require.True(t, completed)
 	require.True(t, res.(bool))
 	require.NoError(t, err)

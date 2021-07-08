@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"net"
@@ -24,7 +25,7 @@ func TestHandleQuery(t *testing.T) {
 
 	go func() {
 		// notify outbound using a bad struct -> should do nothing (except warning log)
-		ws.OutboundSubject().Notify(struct{id string}{ "bad-struct" })
+		ws.OutboundSubject().Notify(struct{ id string }{"bad-struct"})
 	}()
 
 	go func() {
@@ -32,7 +33,7 @@ func TestHandleQuery(t *testing.T) {
 			nm, ok := incoming.(NetworkMessage)
 			require.True(t, ok)
 			require.Equal(t, &conn, nm.Conn)
-			nm.Msg.Data = []ValidatorInformation{
+			nm.Msg.Data = []storage.ValidatorInformation{
 				{PublicKey: "pubkey1"},
 				{PublicKey: "pubkey2"},
 			}
@@ -58,6 +59,7 @@ func TestHandleQuery(t *testing.T) {
 }
 
 func TestHandleStream(t *testing.T) {
+	msgCount := 3
 	logger := zap.L()
 	adapter := NewAdapterMock(logger).(*AdapterMock)
 	ws := NewWsServer(logger, adapter, nil).(*wsServer)
@@ -70,8 +72,16 @@ func TestHandleStream(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
+		i := 0
 		for {
-			<- adapter.Out
+			<-adapter.Out
+			i++
+			if i >= msgCount {
+				if i > msgCount {
+					t.Error("should not send too many requests")
+				}
+				return
+			}
 			wg.Done()
 		}
 	}()
@@ -82,7 +92,7 @@ func TestHandleStream(t *testing.T) {
 			Msg: Message{
 				Type:   TypeValidator,
 				Filter: MessageFilter{From: 0},
-				Data: []ValidatorInformation{
+				Data: []storage.ValidatorInformation{
 					{PublicKey: "pubkey1"},
 					{PublicKey: "pubkey2"},
 				},
@@ -93,14 +103,14 @@ func TestHandleStream(t *testing.T) {
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []ValidatorInformation{
-			{PublicKey: "pubkey3"},
+		nm.Msg.Data = []storage.OperatorInformation{
+			{PublicKey: "pubkey-operator"},
 		}
 		ws.OutboundSubject().Notify(nm)
 
 		time.Sleep(10 * time.Millisecond)
-		nm.Msg.Data = []ValidatorInformation{
-			{PublicKey: "pubkey4"},
+		nm.Msg.Data = []storage.ValidatorInformation{
+			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
 	}()

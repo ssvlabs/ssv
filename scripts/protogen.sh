@@ -11,5 +11,5 @@ set -eo pipefail
 # 2, clone https://github.com/gogo/protobuf to the same folder
 
 
-go generate $GOPATH/src/github.com/bloxapp/ssv/ibft/proto/generate.go
-go generate $GOPATH/src/github.com/bloxapp/ssv/network/generate.go
+go generate ./ibft/proto/generate.go
+go generate ./network/generate.go

@@ -4,7 +4,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
-	ibft_sync "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
@@ -26,9 +25,8 @@ func (i *ibftImpl) processDecidedQueueMessages() {
 
 func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
 	p := pipeline.Combine(
-		//decided.PrevInstanceDecided(prevInstanceStatus == proto.RoundState_Decided),
+		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		//auth.ValidateLambdas(msg.Message.Lambda, expectedPrevIdentifier),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
 	)
@@ -60,31 +58,42 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		return
 	}
 	if known {
+		i.logger.Debug("decided is known, skipped")
 		return
 	}
 
+	// decided for current instance
+	if i.forceDecideCurrentInstance(msg) {
+		return
+	}
+
+	// decided for later instances which require a full sync
 	shouldSync, err := i.decidedRequiresSync(msg)
 	if err != nil {
 		i.logger.Error("can't check decided msg", zap.Error(err))
 		return
 	}
 	if shouldSync {
-		if i.currentInstance != nil {
-			i.currentInstance.Stop()
-		}
-		// sync
-		s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
-		go func() {
-			err := s.Start()
-			if err != nil {
-				i.logger.Error("history sync failed", zap.Error(err))
-			}
-		}()
+		i.logger.Info("stopping current instance and syncing..")
+		i.SyncIBFT()
 	}
 }
 
-// HighestKnownDecided returns the highest known decided instance
-func (i *ibftImpl) HighestKnownDecided() (*proto.SignedMessage, error) {
+// forceDecideCurrentInstance will force the current instance to decide provided a signed decided msg.
+// will return true if executed, false otherwise
+func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
+	if i.decidedForCurrentInstance(msg) {
+		// stop current instance
+		if i.currentInstance != nil {
+			i.currentInstance.ForceDecide(msg)
+		}
+		return true
+	}
+	return false
+}
+
+// highestKnownDecided returns the highest known decided instance
+func (i *ibftImpl) highestKnownDecided() (*proto.SignedMessage, error) {
 	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.GetIdentifier())
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return nil, err

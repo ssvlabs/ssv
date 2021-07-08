@@ -2,7 +2,9 @@ package tasks
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -18,7 +20,9 @@ type funcResult struct {
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed
 func ExecWithTimeout(ctx context.Context, fn Func, t time.Duration) (bool, interface{}, error) {
 	c := make(chan funcResult, 1)
-	stopper := newStopper()
+	stopper := newStopper(logex.GetLogger(
+		zap.String("component", "stopper"),
+		zap.String("caller", "ExecWithTimeout")))
 
 	go func() {
 		defer func() {

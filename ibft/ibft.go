@@ -1,14 +1,12 @@
 package ibft
 
 import (
-	"strconv"
+	"github.com/pkg/errors"
 	"sync"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -30,13 +28,19 @@ type StartOptions struct {
 	ValidatorShare storage.Share
 }
 
+// InstanceResult is a struct holding the result of a single iBFT instance
+type InstanceResult struct {
+	Decided bool
+	Msg     *proto.SignedMessage
+}
+
 // IBFT represents behavior of the IBFT
 type IBFT interface {
 	// Init should be called after creating an IBFT instance to init the instance, sync it, etc.
 	Init()
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (bool, int, []byte, error)
+	StartInstance(opts StartOptions) (*InstanceResult, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
@@ -61,10 +65,12 @@ type ibftImpl struct {
 	instanceConfig      *proto.InstanceConfig
 	ValidatorShare      *storage.Share
 	Identifier          []byte
-	leaderSelector      leader.Selector
 
 	// flags
 	initFinished bool
+
+	// mutex
+	instanceResultChanLock sync.Mutex
 }
 
 // New is the constructor of IBFT
@@ -80,14 +86,17 @@ func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collec
 		instanceConfig:      instanceConfig,
 		ValidatorShare:      ValidatorShare,
 		Identifier:          identifier,
-		leaderSelector:      &leader.Deterministic{},
 
 		// flags
 		initFinished: false,
+
+		// mutex
+		instanceResultChanLock: sync.Mutex{},
 	}
 	return ret
 }
 
+// Init sets all major processes of iBFT while blocking until completed.
 func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
@@ -97,55 +106,20 @@ func (i *ibftImpl) Init() {
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
 	i.initFinished = true
+	i.logger.Debug("iBFT implementation init finished")
 }
 
-func (i *ibftImpl) StartInstance(opts StartOptions) (bool, int, []byte, error) {
-	instanceOpts := i.instanceOptionsFromStartOptions(opts)
-
-	if err := i.canStartNewInstance(instanceOpts); err != nil {
-		return false, 0, nil, errors.WithMessage(err, "can't start new iBFT instance")
-	}
-
-	newInstance := NewInstance(instanceOpts)
-	i.currentInstance = newInstance
-	go newInstance.StartEventLoop()
-	go newInstance.StartMessagePipeline()
-	go newInstance.PartialChangeRoundLoop()
-
-	stageChan := newInstance.GetStageChan()
-
-	err := i.resetLeaderSelection(append(i.Identifier, []byte(strconv.FormatUint(i.currentInstance.State.SeqNumber, 10))...)) // Important for deterministic leader selection
+func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
+	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
 	if err != nil {
-		return false, 0, nil, errors.WithMessage(err, "could not reset leader selection")
+		return nil, errors.WithMessage(err, "can't generate instance options")
 	}
-	go newInstance.Start(opts.Value)
 
-	// Store prepared round and value and decided stage.
-	for {
-		switch stage := <-stageChan; stage {
-		// TODO - complete values
-		case proto.RoundState_Prepare:
-			if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), newInstance.State); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not save prepare msg to storage")
-			}
-		case proto.RoundState_Decided:
-			agg, err := newInstance.CommittedAggregatedMsg()
-			if err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not get aggregated commit msg and save to storage")
-			}
-			if err := i.ibftStorage.SaveDecided(agg); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not save aggregated commit msg to storage")
-			}
-			if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not save highest decided message to storage")
-			}
-			if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
-				return false, 0, nil, errors.WithMessage(err, "could not broadcast decided message")
-			}
-			i.currentInstance = nil
-			return true, len(agg.GetSignerIds()), agg.Message.Value, nil
-		}
+	if err := i.canStartNewInstance(*instanceOpts); err != nil {
+		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
+
+	return i.startInstanceWithOptions(*instanceOpts, opts.Value)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
@@ -156,9 +130,4 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *ibftImpl) GetIdentifier() []byte {
 	return i.Identifier //TODO should use mutex to lock var?
-}
-
-// resetLeaderSelection resets leader selection with seed and round 1
-func (i *ibftImpl) resetLeaderSelection(seed []byte) error {
-	return i.leaderSelector.SetSeed(seed, 1)
 }
