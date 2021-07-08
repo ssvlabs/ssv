@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/shared/params"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -14,7 +13,7 @@ import (
 )
 
 // ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share
-func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) (*validatorstorage.Share, error) {
+func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, error) {
 	validatorShare := validatorstorage.Share{}
 
 	validatorShare.PublicKey = &bls.PublicKey{}
@@ -31,7 +30,7 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) 
 			IbftId: nodeID,
 			Pk:     oess.SharedPublicKey,
 		}
-		if strings.EqualFold(string(oess.OperatorPublicKey), params.SsvConfig().OperatorPublicKey) {
+		if strings.EqualFold(string(oess.OperatorPublicKey), operatorPubKey) {
 			ibftCommittee[nodeID].Pk = oess.SharedPublicKey
 			validatorShare.NodeID = nodeID
 

@@ -145,9 +145,9 @@ $ yq n db.Path "<db folder>" | tee config.yaml \
   && yq w -i config.yaml p2p.DiscoveryType "discv5" \
   && yq w -i config.yaml Network "prater" \
   && yq w -i config.yaml BeaconNodeAddr "<ETH 2.0 node>" \
-  && yq w -i config.yaml ETH1Addr "<ETH1 node>" \
   && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>" \
-  && yq w -i config.yaml SmartContractAddr "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b"
+  && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node>" \
+  && yq w -i config.yaml eth1.RegistryContractAddr "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b"
 ```
 
 `config.yaml` example:
@@ -160,7 +160,8 @@ p2p:
   DiscoveryType: discv5
 Network: prater
 BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
-ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
+eth1:
+  ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
 ```
 
   #### 5.1 Debug Configuration

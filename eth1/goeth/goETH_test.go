@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/shared/params"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
@@ -19,7 +18,7 @@ import (
 
 func TestEth1Client_handleEvent(t *testing.T) {
 	ec := newEth1Client()
-	contractAbi, err := abi.JSON(strings.NewReader(params.SsvConfig().ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	var vLogOperatorAdded types.Log
@@ -66,7 +65,7 @@ func newEth1Client() *eth1Client {
 		ctx:    context.TODO(),
 		conn:   nil,
 		logger: zap.L(),
-		operatorPrivKeyProvider: func() (*rsa.PrivateKey, error) {
+		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, error) {
 			return nil, nil
 		},
 		outSubject: pubsub.NewSubject(zap.L()),
