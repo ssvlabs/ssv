@@ -17,6 +17,10 @@ spec:
       protocol: TCP
       targetPort: 13000
       name: port-13000
+    - port: 15000
+      protocol: TCP
+      targetPort: 15000
+      name: port-15000
   selector:
     app: ssv-node-v2-4
 ---
@@ -82,6 +86,9 @@ spec:
         - containerPort: 13000
           name: port-13000
           hostPort: 13000
+        - containerPort: 15000
+          name: port-15000
+          hostPort: 15000
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -155,6 +162,8 @@ spec:
           value: "debug"
         - name: STORAGE_PATH
           value: "./data/db"
+        - name: MetricsAPIPort
+          value: "15000"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-4
