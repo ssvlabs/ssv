@@ -45,7 +45,7 @@ The following is a list of all collected metrics in SSV, grouped by containing p
 
 #### Process
 
-* `ssv-collect.process.completed_gc_cycles{last,next} COUNT`
+* `ssv-collect.process.completed_gc_cycles{lastGCTime} COUNT`
 * `ssv-collect.process.cpus_count{} COUNT`
 * `ssv-collect.process.go_version{} GOVERSION`
 * `ssv-collect.process.goroutines_count{} COUNT`
@@ -60,11 +60,11 @@ $ curl http://localhost:15001/metrics
 Example output:
 
 ```
-ssv-collect.process.completed_gc_cycles{} 4
+ssv-collect.process.completed_gc_cycles{last="1625750701108015000",next="210697520"} 19
 ssv-collect.process.cpus_count{} 4
 ssv-collect.process.go_version{} go1.15.13
 ssv-collect.process.goroutines_count{} 214
-ssv-collect.process.memory_stats{alloc="220.803552",sys="283.142168"} 1
+ssv-collect.process.memory_stats{alloc="156.281696",sys="355.054624",heapSys="329.187328"} 1
 ssv-collect.validator.all_connected_peers{} 3
 ssv-collect.validator.connected_peers{pubKey="82e9b36feb8147d3f82c1a03ba246d4a63ac1ce0b1dabbb6991940a06401ab46fb4afbf971a3c145fdad2d4bddd30e12"} 3
 ssv-collect.validator.connected_peers{pubKey="8ed3a53383a2c9b9ab0ab5437985ac443a8d50bf50b5f69eeaf9850285aeaad703beff14e3d15b4e6b5702f446a97db4"} 3
