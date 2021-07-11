@@ -80,7 +80,7 @@ func (q *MessageQueue) MessagesForIndex(index string) map[string]*network.Messag
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	ret := make(map[string]*network.Message, 0)
+	ret := make(map[string]*network.Message)
 	for _, cont := range q.queue[index] {
 		ret[cont.id] = cont.msg
 	}
@@ -109,6 +109,7 @@ func (q *MessageQueue) MsgCount(index string) int {
 	return len(q.queue[index])
 }
 
+// DeleteMessagesWithIds deletes all msgs by the given id
 func (q *MessageQueue) DeleteMessagesWithIds(ids []string) {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()

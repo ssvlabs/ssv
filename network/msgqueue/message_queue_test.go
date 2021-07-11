@@ -107,10 +107,10 @@ func TestMessageQueue_PopMessage(t *testing.T) {
 		Type: network.NetworkMsg_IBFTType,
 	})
 
-	msgId := msgQ.allMessages[msgQ.queue["a"][0].id]
+	msgID := msgQ.allMessages[msgQ.queue["a"][0].id]
 	require.NotNil(t, msgQ.PopMessage("a"))
 	require.Nil(t, msgQ.PopMessage("a"))
-	require.Nil(t, msgQ.allMessages[msgId.id])
+	require.Nil(t, msgQ.allMessages[msgID.id])
 	require.Nil(t, msgQ.PopMessage("b"))
 	require.Nil(t, msgQ.PopMessage("c"))
 }
@@ -131,10 +131,10 @@ func TestMessageQueue_DeleteMessagesWithIds(t *testing.T) {
 		Type: network.NetworkMsg_IBFTType,
 	})
 
-	msgId := msgQ.allMessages[msgQ.queue["a"][0].id]
-	msgQ.DeleteMessagesWithIds([]string{msgId.id})
+	msgID := msgQ.allMessages[msgQ.queue["a"][0].id]
+	msgQ.DeleteMessagesWithIds([]string{msgID.id})
 	require.Nil(t, msgQ.PopMessage("a"))
 	require.Nil(t, msgQ.PopMessage("b"))
 	require.Nil(t, msgQ.PopMessage("c"))
-	require.Nil(t, msgQ.allMessages[msgId.id])
+	require.Nil(t, msgQ.allMessages[msgID.id])
 }
