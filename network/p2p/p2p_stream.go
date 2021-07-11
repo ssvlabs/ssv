@@ -6,6 +6,7 @@ import (
 	core "github.com/libp2p/go-libp2p-core"
 	"go.uber.org/zap"
 	"io/ioutil"
+	"sync"
 )
 
 func readMessageData(stream network.SyncStream) (*network.Message, error) {
@@ -56,24 +57,33 @@ func (s *SyncStream) RemotePeer() string {
 func (n *p2pNetwork) handleStream() {
 	n.host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
 		netSyncStream := &SyncStream{stream: stream}
+		defer netSyncStream.Close()
+
 		cm, err := readMessageData(netSyncStream)
 		if err != nil {
 			n.logger.Error("could not read and parse stream", zap.Error(err))
 			return
 		}
-
-		// send to listeners
-		for _, ls := range n.listeners {
-			go func(ls listener) {
-				switch cm.Type {
-				case network.NetworkMsg_SyncType:
-					cm.SyncMessage.FromPeerID = stream.Conn().RemotePeer().String()
-					ls.syncCh <- &network.SyncChanObj{
-						Msg:    cm.SyncMessage,
-						Stream: netSyncStream,
-					}
-				}
-			}(ls)
-		}
+		n.propagateSyncMsg(cm, netSyncStream)
 	})
+}
+
+func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream *SyncStream) {
+	var wg sync.WaitGroup
+	pid := netSyncStream.stream.Conn().RemotePeer().String()
+	for _, ls := range n.listeners {
+		wg.Add(1)
+		go func(ls listener) {
+			defer wg.Done()
+			switch cm.Type {
+			case network.NetworkMsg_SyncType:
+				cm.SyncMessage.FromPeerID = pid
+				ls.syncCh <- &network.SyncChanObj{
+					Msg:    cm.SyncMessage,
+					Stream: netSyncStream,
+				}
+			}
+		}(ls)
+	}
+	wg.Wait()
 }
