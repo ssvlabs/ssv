@@ -154,6 +154,16 @@ func (i *Instance) Start(inputValue []byte) error {
 	return nil
 }
 
+// ForceDecide will attempt to decide the instance with provided decided signed msg.
+func (i *Instance) ForceDecide(msg *proto.SignedMessage) {
+	i.eventQueue.Add(func() {
+		i.Logger.Info("trying to force instance decision.")
+		if err := i.forceDecidedPipeline().Run(msg); err != nil {
+			i.Logger.Error("force decided pipeline error", zap.Error(err))
+		}
+	})
+}
+
 // Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
 	i.eventQueue.Add(func() {

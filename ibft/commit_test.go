@@ -84,5 +84,5 @@ func TestCommitPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.commitMsgPipeline()
-	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, upon commit msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: round, combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, upon commit msg, ", pipeline.Name())
 }

@@ -14,4 +14,7 @@ type MessageContainer interface {
 
 	// AddMessage adds the given message to the container
 	AddMessage(msg *proto.SignedMessage)
+
+	// OverrideMessages will override all current msgs in container with the provided msg
+	OverrideMessages(msg *proto.SignedMessage)
 }

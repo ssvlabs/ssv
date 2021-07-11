@@ -13,7 +13,6 @@ func ValidateRound(round uint64) pipeline.Pipeline {
 		if round != signedMessage.Message.Round {
 			return errors.Errorf("message round (%d) does not equal State round (%d)", signedMessage.Message.Round, round)
 		}
-
 		return nil
 	})
 }

@@ -6,6 +6,39 @@ import (
 	"testing"
 )
 
+func TestMessagesContainer_OverrideMessages(t *testing.T) {
+	c := New(3)
+	c.AddMessage(&proto.SignedMessage{
+		Message: &proto.Message{
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
+		},
+		Signature: nil,
+		SignerIds: []uint64{1, 4},
+	})
+	c.AddMessage(&proto.SignedMessage{
+		Message: &proto.Message{
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
+		},
+		Signature: nil,
+		SignerIds: []uint64{2, 3},
+	})
+
+	c.OverrideMessages(&proto.SignedMessage{
+		Message: &proto.Message{
+			Round:  1,
+			Lambda: nil,
+			Value:  []byte{1, 1, 1, 1},
+		},
+		Signature: nil,
+		SignerIds: []uint64{1},
+	})
+	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
+}
+
 func TestMessagesContainer_AddMessage(t *testing.T) {
 	c := New(3)
 	c.AddMessage(&proto.SignedMessage{
