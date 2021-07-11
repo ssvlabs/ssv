@@ -144,6 +144,7 @@ func init() {
 func startMetricsHandler(logger *zap.Logger, port int) {
 	// register process metrics
 	metrics_ps.SetupProcessMetrics()
+	p2p.SetupNetworkMetrics(logger, cfg.SSVOptions.ValidatorOptions.Network)
 	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(logger)
