@@ -147,7 +147,9 @@ func startMetricsHandler(logger *zap.Logger, port int) {
 	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(logger)
-	if err := metricsHandler.Start(http.NewServeMux(), fmt.Sprintf(":%d", port)); err != nil {
+	addr := fmt.Sprintf(":%d", port)
+	logger.Info("starting metrics handler", zap.String("addr", addr))
+	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))
 	}

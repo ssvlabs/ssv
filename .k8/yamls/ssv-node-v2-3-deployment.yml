@@ -165,7 +165,7 @@ spec:
           value: "debug"
         - name: STORAGE_PATH
           value: "./data/db"
-        - name: MetricsAPIPort
+        - name: METRICS_API_PORT
           value: "15000"
         volumeMounts:
         - mountPath: /data
