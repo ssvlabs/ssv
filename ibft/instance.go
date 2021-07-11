@@ -106,6 +106,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 func (i *Instance) Init() {
 	i.runInitOnce.Do(func() {
 		go i.StartMessagePipeline()
+		go i.StartPartialChangeRoundPipeline()
 		go i.StartMainEventLoop()
 		i.initialized = true
 		i.Logger.Debug("iBFT instance init finished")
@@ -233,20 +234,6 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 		i.stageChangedChan = make(chan proto.RoundState)
 	}
 	return i.stageChangedChan
-}
-
-// PartialChangeRoundLoop continuously tries to find partial change round quorum
-func (i *Instance) PartialChangeRoundLoop() {
-	for {
-		found, err := i.ProcessChangeRoundPartialQuorum()
-		if err != nil {
-			i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
-		}
-		if found {
-			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
-		}
-		time.Sleep(time.Second * 1) // TODO - why second?
-	}
 }
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
