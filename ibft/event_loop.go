@@ -26,9 +26,10 @@ Other events->   |
 
 // StartMainEventLoop start the main event loop queue for the iBFT instance which iterates events in the queue, if non found it will wait before trying again.
 func (i *Instance) StartMainEventLoop() {
+loop:
 	for {
 		if i.Stopped() {
-			return
+			break loop
 		}
 
 		if f := i.eventQueue.Pop(); f != nil {
@@ -37,15 +38,17 @@ func (i *Instance) StartMainEventLoop() {
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
+	i.Logger.Info("instance main event loop stopped")
 }
 
 // StartMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
 // each message type has it's own pipeline of checks and actions, called by the networker implementation.
 // Internal chan monitor if the instance reached decision or if a round change is required.
 func (i *Instance) StartMessagePipeline() {
+loop:
 	for {
 		if i.Stopped() {
-			return
+			break loop
 		}
 
 		// TODO - refactor
@@ -60,6 +63,7 @@ func (i *Instance) StartMessagePipeline() {
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
+	i.Logger.Info("instance msg pipeline loop stopped")
 }
 
 /**
