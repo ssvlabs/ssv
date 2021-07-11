@@ -5,6 +5,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
+	// required to serve pprof http endpoints.
 	_ "net/http/pprof"
 	"runtime/debug"
 	"runtime/pprof"
