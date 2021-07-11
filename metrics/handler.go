@@ -5,8 +5,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
-	// required to serve pprof http endpoints.
-	_ "net/http/pprof"
+	http_pprof "net/http/pprof"
 	"runtime/debug"
 	"runtime/pprof"
 	"strings"
@@ -40,15 +39,13 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		}
 	})
 
-	//http.HandleFunc("/debug/pprof/", Index)
-	//http.HandleFunc("/debug/pprof/cmdline", Cmdline)
-	//http.HandleFunc("/debug/pprof/profile", Profile)
-	//http.HandleFunc("/debug/pprof/symbol", Symbol)
-	//http.HandleFunc("/debug/pprof/trace", Trace)
-	//
-	//mux.HandleFunc("/prof", func (res http.ResponseWriter, req *http.Request) {
-	//	req.Header.Get("")
-	//})
+	// adding pprof routes manually on an own HTTPMux to avoid lint issue:
+	// `G108: Profiling endpoint is automatically exposed on /debug/pprof (gosec)`
+	mux.HandleFunc("/debug/pprof/", http_pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", http_pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", http_pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", http_pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
 
 	mux.HandleFunc("/goroutines", func (res http.ResponseWriter, _ *http.Request) {
 		stack := debug.Stack()
@@ -60,10 +57,12 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		}
 	})
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		mh.logger.Error("failed to start metrics http end-point", zap.Error(err))
-		return err
-	}
+	go func() {
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			mh.logger.Error("failed to start metrics http end-point", zap.Error(err))
+		}
+	}()
+
 	return nil
 }
 
