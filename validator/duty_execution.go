@@ -194,8 +194,7 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 	}
 
 	result, err := v.ibfts[role].StartInstance(ibft.StartOptions{
-		Duty:           duty,
-		ValidatorShare: *v.Share,
+		ValidatorShare: v.Share,
 		Logger:         l,
 		ValueCheck:     valCheckInstance,
 		SeqNumber:      seqNumber,
