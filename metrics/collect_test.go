@@ -48,37 +48,6 @@ func TestCollect_FailedCollectors(t *testing.T) {
 	require.Equal(t, 10, len(results))
 }
 
-func TestParseMetricsConfig(t *testing.T) {
-	t.Run("single collector", func(t *testing.T) {
-		cids := ParseMetricsConfig("validator")
-		require.Equal(t, 1, len(cids))
-		require.Equal(t, "validator", cids[0])
-	})
-
-	t.Run("single collector with comma", func(t *testing.T) {
-		cids := ParseMetricsConfig("validator,")
-		require.Equal(t, 1, len(cids))
-		require.Equal(t, "validator", cids[0])
-	})
-
-	t.Run("multiple collectors", func(t *testing.T) {
-		cids := ParseMetricsConfig("validator,network")
-		require.Equal(t, 2, len(cids))
-		require.Equal(t, "validator", cids[0])
-		require.Equal(t, "network", cids[1])
-	})
-
-	t.Run("empty string", func(t *testing.T) {
-		cids := ParseMetricsConfig("")
-		require.Equal(t, 0, len(cids))
-	})
-
-	t.Run("broken string", func(t *testing.T) {
-		cids := ParseMetricsConfig(",,")
-		require.Equal(t, 0, len(cids))
-	})
-}
-
 type mockCollector struct {
 	results []string
 	id      string

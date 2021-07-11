@@ -51,6 +51,8 @@ The following is a list of all collected metrics in SSV, grouped by containing p
 
 ### Usage
 
+#### Metrics
+
 ```shell
 $ curl http://localhost:15001/metrics
 ```
@@ -74,4 +76,17 @@ ssv-collect.validator.running_ibfts_count_all{} 2
 ssv-collect.validator.running_ibfts_count_validator{pubKey="82e9b36feb8147d3f82c1a03ba246d4a63ac1ce0b1dabbb6991940a06401ab46fb4afbf971a3c145fdad2d4bddd30e12"} 1
 ssv-collect.validator.running_ibfts_count_validator{pubKey="8ed3a53383a2c9b9ab0ab5437985ac443a8d50bf50b5f69eeaf9850285aeaad703beff14e3d15b4e6b5702f446a97db4"} 0
 ssv-collect.validator.running_ibfts_count_validator{pubKey="afc37265308c7adf734e6d2358bf2458943ee4b2c8598f115c434ea801f13dfa4706efde6c468b0979372d9cd61b14f7"} 1
+```
+
+
+#### Profiling
+
+```shell
+$ curl http://localhost:15001/debug/pprof/heap?seconds=10 --output heap.tar.gz
+$ go tool pprof heap.tar.gz
+```
+
+To visualize results in web
+```shell
+go tool pprof -web http://localhost:15001/debug/pprof/heap?seconds=10
 ```

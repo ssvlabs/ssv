@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 )
 
@@ -59,6 +58,7 @@ func Collect() ([]string, []error) {
 			}
 			resultsMut.Lock()
 			for _, m := range metrics {
+				// ssv-collect.<collectorID>.<metric{labels} value>
 				results = append(results, fmt.Sprintf("%s.%s.%s", prefix, c.ID(), m))
 			}
 			resultsMut.Unlock()
@@ -70,19 +70,3 @@ func Collect() ([]string, []error) {
 	return results, errs
 }
 
-// ParseMetricsConfig takes a metrics config string and parse it to collector ids
-// metricsCfg has the following pattern: {collector},{collector},....
-// e.g. "validator,network"
-func ParseMetricsConfig(metricsCfg string) []string {
-	if len(metricsCfg) == 0 {
-		return []string{}
-	}
-	metricsPkgs := strings.Split(metricsCfg, ",")
-	var cids []string
-	for _, s := range metricsPkgs {
-		if len(s) > 0 {
-			cids = append(cids, s)
-		}
-	}
-	return cids
-}

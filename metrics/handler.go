@@ -5,6 +5,9 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
+	_ "net/http/pprof"
+	"runtime/debug"
+	"runtime/pprof"
 	"strings"
 )
 
@@ -16,7 +19,9 @@ type Handler interface {
 
 // NewMetricsHandler creates a new instance
 func NewMetricsHandler(logger *zap.Logger) Handler {
-	mh := metricsHandler{logger.With(zap.String("component", "metrics/handler"))}
+	mh := metricsHandler{
+		logger: logger.With(zap.String("component", "metrics/handler")),
+	}
 	return &mh
 }
 
@@ -34,16 +39,25 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		}
 	})
 
-	// TODO add end-point for profiling
-	//mux.HandleFunc("/goroutines", func (res http.ResponseWriter, _ *http.Request) {
-	//	stack := debug.Stack()
-	//	if _, err := res.Write(stack); err != nil {
-	//		mh.logger.Error("failed to write goroutines stack", zap.Error(err))
-	//	}
-	//	if err := pprof.Lookup("goroutine").WriteTo(res, 2); err != nil {
-	//		mh.logger.Error("failed to write pprof goroutines", zap.Error(err))
-	//	}
+	//http.HandleFunc("/debug/pprof/", Index)
+	//http.HandleFunc("/debug/pprof/cmdline", Cmdline)
+	//http.HandleFunc("/debug/pprof/profile", Profile)
+	//http.HandleFunc("/debug/pprof/symbol", Symbol)
+	//http.HandleFunc("/debug/pprof/trace", Trace)
+	//
+	//mux.HandleFunc("/prof", func (res http.ResponseWriter, req *http.Request) {
+	//	req.Header.Get("")
 	//})
+
+	mux.HandleFunc("/goroutines", func (res http.ResponseWriter, _ *http.Request) {
+		stack := debug.Stack()
+		if _, err := res.Write(stack); err != nil {
+			mh.logger.Error("failed to write goroutines stack", zap.Error(err))
+		}
+		if err := pprof.Lookup("goroutine").WriteTo(res, 2); err != nil {
+			mh.logger.Error("failed to write pprof goroutines", zap.Error(err))
+		}
+	})
 
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		mh.logger.Error("failed to start metrics http end-point", zap.Error(err))
