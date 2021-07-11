@@ -81,12 +81,24 @@ ssv-collect.validator.running_ibfts_count_validator{pubKey="afc37265308c7adf734e
 
 #### Profiling
 
+##### Output to file
+
 ```shell
-$ curl http://localhost:15001/debug/pprof/heap?seconds=10 --output heap.tar.gz
-$ go tool pprof heap.tar.gz
+$ curl http://localhost:15001/debug/pprof/goroutine?seconds=40 --output goroutines.tar.gz
 ```
 
-To visualize results in web
+And open with pprof
 ```shell
-go tool pprof -web http://localhost:15001/debug/pprof/heap?seconds=10
+$ go tool pprof goroutines.tar.gz
+```
+The output file can be open in web view:
+```shell
+$ go tool pprof -web goroutines.tar.gz
+```
+
+##### Web UI
+
+To visualize results in web w/o extra files:
+```shell
+$ go tool pprof -web http://localhost:15001/debug/pprof/goroutine?minutes=5
 ```
