@@ -123,7 +123,6 @@ func TestMessageQueue_DeleteMessagesWithIds(t *testing.T) {
 		},
 	}
 	msgQ.AddMessage(&network.Message{
-		Lambda: []byte{1, 2, 3, 4},
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
 				Round: 1,

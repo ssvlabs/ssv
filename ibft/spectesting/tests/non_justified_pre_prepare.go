@@ -52,5 +52,5 @@ func (test *NonJustifiedPrePrepapre) Run(t *testing.T) {
 	spectesting.SimulateTimeout(test.instance, 2)
 
 	// try to broadcast unjustified pre-prepare
-	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "received un-justified pre-prepare message")
+	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "pre-prepare message sender (id 2) is not the round's leader (expected 1)")
 }

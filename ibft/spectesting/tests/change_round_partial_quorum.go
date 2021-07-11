@@ -36,7 +36,6 @@ func (test *ChangeRoundPartialQuorum) Prepare(t *testing.T) {
 		// load messages to queue
 		for _, msg := range msgs {
 			instance.MsgQueue.AddMessage(&network.Message{
-				Lambda:        test.lambda,
 				SignedMessage: msg,
 				Type:          network.NetworkMsg_IBFTType,
 			})

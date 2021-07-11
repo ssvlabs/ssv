@@ -41,7 +41,7 @@ func iBFTAllRoundChangeIndex() IndexFunc {
 			msg.SignedMessage.Message != nil &&
 			msg.SignedMessage.Message.Type == proto.RoundState_ChangeRound {
 			return []string{
-				IBFTAllRoundChangeIndexKey(msg.Lambda, msg.SignedMessage.Message.SeqNumber),
+				IBFTAllRoundChangeIndexKey(msg.SignedMessage.Message.Lambda, msg.SignedMessage.Message.SeqNumber),
 			}
 		}
 		return []string{}

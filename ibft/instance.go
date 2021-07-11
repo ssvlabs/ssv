@@ -99,7 +99,6 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stopLock:              sync.Mutex{},
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
-		msgProcessingLock:     sync.Mutex{},
 	}
 }
 

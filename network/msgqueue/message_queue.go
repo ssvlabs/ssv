@@ -93,13 +93,11 @@ func (q *MessageQueue) PopMessage(index string) *network.Message {
 	q.msgMutex.Lock()
 	defer q.msgMutex.Unlock()
 
-	if q.MsgCount(index) > 0 {
+	if len(q.queue[index]) > 0 {
 		c := q.queue[index][0]
-		ret := c.msg
-
-		// delete all indexes
-		q.DeleteMessagesWithIds([]string{c.id})
-		return ret
+		// delete the msg from all the indexes
+		q.deleteMessageFromAllIndexes(c.indexes, c.id)
+		return c.msg
 	}
 	return nil
 }
@@ -112,10 +110,11 @@ func (q *MessageQueue) MsgCount(index string) int {
 }
 
 func (q *MessageQueue) DeleteMessagesWithIds(ids []string) {
+	q.msgMutex.Lock()
+	defer q.msgMutex.Unlock()
 	for _, id := range ids {
 		if msg, found := q.allMessages[id]; found {
 			q.deleteMessageFromAllIndexes(msg.indexes, id)
-			q.allMessages[id] = nil
 		}
 	}
 }
@@ -130,6 +129,7 @@ func (q *MessageQueue) deleteMessageFromAllIndexes(indexes []string, id string) 
 		}
 		q.queue[indx] = newIndexQ
 	}
+	q.allMessages[id] = nil
 }
 
 // PurgeIndexedMessages will delete all indexed messages for the given index

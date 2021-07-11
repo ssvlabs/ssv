@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
-	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -716,5 +715,5 @@ func TestChangeRoundPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: type check, lambda, sequence, authorize, validate msg, , round, add change round msg, upon change round full quorum, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate msg, , round, add change round msg, upon change round full quorum, ", pipeline.Name())
 }

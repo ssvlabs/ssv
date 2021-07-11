@@ -59,7 +59,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 	if foundPartialQuorum {
 		i.stopRoundChangeTimer()
 		i.State.Round = lowestChangeRound
-		i.startRoundChangeOnTimer()
+		i.triggerRoundChangeOnTimer()
 
 		if err := i.broadcastChangeRound(); err != nil {
 			i.Logger.Error("could not broadcast round change message", zap.Error(err))
