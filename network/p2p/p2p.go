@@ -213,11 +213,6 @@ func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) b
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
-	//topics := n.cfg.Topics
-	//topic := sub.Topic()
-	//defer func() {
-	//	delete(topics, topic)
-	//}()
 	for {
 		select {
 		case <-n.ctx.Done():

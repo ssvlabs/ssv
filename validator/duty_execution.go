@@ -24,12 +24,12 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 	signatures := make(map[uint64][]byte, signaturesCount)
 	signedIndxes := make([]uint64, 0)
 	var err error
-
+	timer := time.NewTimer(v.signatureCollectionTimeout)
 	// loop through messages until timeout
 SigCollectionLoop:
 	for {
 		select {
-		case <-time.After(v.signatureCollectionTimeout):
+		case <- timer.C:
 			err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
 			break SigCollectionLoop
 		default:
@@ -58,6 +58,7 @@ SigCollectionLoop:
 				signatures[msg.SignedMessage.SignerIds[0]] = msg.SignedMessage.Signature
 				signedIndxes = append(signedIndxes, msg.SignedMessage.SignerIds[0])
 				if len(signedIndxes) >= signaturesCount {
+					timer.Stop()
 					break SigCollectionLoop
 				}
 			} else {
@@ -65,6 +66,7 @@ SigCollectionLoop:
 			}
 		}
 	}
+
 	return signatures, err
 }
 
