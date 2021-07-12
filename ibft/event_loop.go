@@ -68,9 +68,10 @@ loop:
 
 // StartPartialChangeRoundPipeline continuously tries to find partial change round quorum
 func (i *Instance) StartPartialChangeRoundPipeline() {
+loop:
 	for {
 		if i.Stopped() {
-			return
+			break loop
 		}
 
 		// TODO - refactor
@@ -88,6 +89,7 @@ func (i *Instance) StartPartialChangeRoundPipeline() {
 			time.Sleep(time.Second * 1)
 		}
 	}
+	i.Logger.Info("instance partial change round pipeline loop stopped")
 }
 
 /**
