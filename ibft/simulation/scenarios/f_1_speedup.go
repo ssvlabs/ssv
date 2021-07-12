@@ -9,22 +9,22 @@ import (
 	"time"
 )
 
-type f_1_speedup struct {
+type f1Speedup struct {
 	logger     *zap.Logger
 	nodes      []ibft.IBFT
 	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
 
-// NewF1Speedup returns initialized f_1_speedup scenario
+// NewF1Speedup returns initialized f1Speedup scenario
 func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
-	return &f_1_speedup{
+	return &f1Speedup{
 		logger:     logger,
 		valueCheck: valueCheck,
 	}
 }
 
-func (r *f_1_speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share) {
+func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share) {
 	r.nodes = nodes
 	r.shares = shares
 	nodeCount := len(nodes)
@@ -66,7 +66,7 @@ func (r *f_1_speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstora
 	wg.Wait()
 }
 
-func (r *f_1_speedup) startNode(node ibft.IBFT, index uint64) {
+func (r *f1Speedup) startNode(node ibft.IBFT, index uint64) {
 	res, err := node.StartInstance(ibft.StartOptions{
 		Logger:         r.logger.With(zap.Uint64("node id", index-1)),
 		ValueCheck:     r.valueCheck,
