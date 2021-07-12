@@ -221,22 +221,22 @@ func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 	instance.SetStage(proto.RoundState_ChangeRound)
 }
 
-// RequireProcessedMessage will call ProcessMessage and verifies it returns true and nil for execution
-func RequireProcessedMessage(t *testing.T, f func() (bool, error)) {
+// RequireReturnedTrueNoError will call ProcessMessage and verifies it returns true and nil for execution
+func RequireReturnedTrueNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
 	require.NoError(t, err)
 	require.True(t, res)
 }
 
-// RequireNotProcessedMessage will call ProcessMessage and verifies it returns false and nil for execution
-func RequireNotProcessedMessage(t *testing.T, f func() (bool, error)) {
+// RequireReturnedFalseNoError will call ProcessMessage and verifies it returns false and nil for execution
+func RequireReturnedFalseNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
 	require.NoError(t, err)
 	require.False(t, res)
 }
 
-// RequireProcessMessageError will call ProcessMessage and verifies it returns true and error for execution
-func RequireProcessMessageError(t *testing.T, f func() (bool, error), errStr string) {
+// RequireReturnedTrueWithError will call ProcessMessage and verifies it returns true and error for execution
+func RequireReturnedTrueWithError(t *testing.T, f func() (bool, error), errStr string) {
 	res, err := f()
 	require.EqualError(t, err, errStr)
 	require.True(t, res)

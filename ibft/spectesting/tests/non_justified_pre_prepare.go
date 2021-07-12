@@ -48,9 +48,9 @@ func (test *NonJustifiedPrePrepapre) MessagesSequence(t *testing.T) []*proto.Sig
 // Run runs the test
 func (test *NonJustifiedPrePrepapre) Run(t *testing.T) {
 	// pre-prepare
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.SimulateTimeout(test.instance, 2)
 
 	// try to broadcast unjustified pre-prepare
-	spectesting.RequireProcessMessageError(t, test.instance.ProcessMessage, "pre-prepare message sender (id 2) is not the round's leader (expected 1)")
+	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "pre-prepare message sender (id 2) is not the round's leader (expected 1)")
 }
