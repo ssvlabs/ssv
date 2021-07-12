@@ -68,7 +68,7 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 
 func (r *f1Speedup) startNode(node ibft.IBFT, index uint64) {
 	res, err := node.StartInstance(ibft.StartOptions{
-		Logger:         r.logger.With(zap.Uint64("node id", index-1)),
+		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,
 		SeqNumber:      1,
 		Value:          []byte("value"),
