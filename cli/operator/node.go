@@ -7,15 +7,21 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	"github.com/bloxapp/ssv/metrics"
+	metrics_ps "github.com/bloxapp/ssv/metrics/process"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/validator"
+	metrics_validator "github.com/bloxapp/ssv/validator/metrics"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
+	"net/http"
 )
 
 type config struct {
@@ -24,6 +30,7 @@ type config struct {
 	SSVOptions                 operator.Options `yaml:"ssv"`
 	ETH1Options                eth1.Options     `yaml:"eth1"`
 
+	MetricsAPIPort int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	OperatorKey    string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
@@ -60,7 +67,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
 
-		// TODO Not refactored yet Start:
 		eth2Network := core.NetworkFromString(cfg.Network)
 		beaconClient, err := prysmgrpc.New(cmd.Context(), Logger, eth2Network, []byte("BloxStaking"), cfg.BeaconNodeAddr)
 		if err != nil {
@@ -71,7 +77,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
-		// end Non refactored
 
 		ctx := cmd.Context()
 		cfg.SSVOptions.Context = ctx
@@ -90,7 +95,7 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
-		cfg.SSVOptions.ValidatorOptions.OperatorPrivateKeyProvider = operatorStorage.GetPrivateKey
+		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
 		// create new eth1 client
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
@@ -111,10 +116,20 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
+
+		slotQueue := slotqueue.New(*cfg.SSVOptions.ETHNetwork, Logger)
+		cfg.SSVOptions.SlotQueue = slotQueue
+		cfg.SSVOptions.ValidatorOptions.SlotQueue = slotQueue
+		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
+		cfg.SSVOptions.ValidatorController = validatorCtrl
+
 		operatorNode := operator.New(cfg.SSVOptions)
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
+		}
+		if cfg.MetricsAPIPort > 0 {
+			go startMetricsHandler(Logger, cfg.MetricsAPIPort)
 		}
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
@@ -124,4 +139,18 @@ var StartNodeCmd = &cobra.Command{
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+}
+
+func startMetricsHandler(logger *zap.Logger, port int) {
+	// register process metrics
+	metrics_ps.SetupProcessMetrics()
+	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
+	// init and start HTTP handler
+	metricsHandler := metrics.NewMetricsHandler(logger)
+	addr := fmt.Sprintf(":%d", port)
+	logger.Info("starting metrics handler", zap.String("addr", addr))
+	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
+		// TODO: stop node if metrics setup failed?
+		logger.Error("failed to start metrics handler", zap.Error(err))
+	}
 }

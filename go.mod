@@ -3,9 +3,12 @@ module github.com/bloxapp/ssv
 go 1.15
 
 require (
+	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/bloxapp/eth2-key-manager v1.0.6
 	github.com/dgraph-io/badger/v3 v3.2011.1
+	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf
 	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/docker/libnetwork v0.5.6 // indirect
 	github.com/ethereum/go-ethereum v1.9.25

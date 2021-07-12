@@ -22,11 +22,10 @@ func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 			i.logger.Info("found enough peers",
 				zap.Int("current peer count", len(peers)))
 			return true, false
-		} else {
-			i.logger.Info("waiting for min peer count",
-				zap.Int("current peer count", len(peers)),
-				zap.Int64("last interval ms", lastTick.Milliseconds()))
 		}
+		i.logger.Info("waiting for min peer count",
+			zap.Int("current peer count", len(peers)),
+			zap.Int64("last interval ms", lastTick.Milliseconds()))
 		return false, false
 	}, time.Second, time.Hour)
 }

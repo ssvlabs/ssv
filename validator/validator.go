@@ -153,3 +153,9 @@ func (v *Validator) oneOfIBFTIdentifiers(toMatch []byte) bool {
 	}
 	return false
 }
+
+// GetIBFT will return the IBFT of the corresponding role
+func (v *Validator) GetIBFT(r beacon.Role) (ibft.IBFT, bool) {
+	i, exist := v.ibfts[r]
+	return i, exist
+}

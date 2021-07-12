@@ -28,7 +28,7 @@ type ControllerOptions struct {
 	SlotQueue                  slotqueue.Queue
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
-	OperatorPrivateKeyProvider eth1.ShareEncryptionKeyProvider
+	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // IController interface
@@ -56,7 +56,7 @@ type controller struct {
 	validatorsMap       map[string]*Validator
 	newValidatorSubject pubsub.Subject
 
-	operatorPrivateKeyProvider eth1.ShareEncryptionKeyProvider
+	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
 // NewController creates new validator controller
@@ -84,7 +84,7 @@ func NewController(options ControllerOptions) IController {
 		newValidatorSubject: pubsub.NewSubject(options.Logger.With(
 			zap.String("which", "validator/controller/validator-subject"))),
 		validatorsMap:              make(map[string]*Validator),
-		operatorPrivateKeyProvider: options.OperatorPrivateKeyProvider,
+		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
 	}
 
 	return &ctrl
@@ -172,7 +172,7 @@ func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
 	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
 	l.Debug("handles validator added event")
-	operatorPrivKey, err := c.operatorPrivateKeyProvider()
+	operatorPrivKey, err := c.shareEncryptionKeyProvider()
 	if err != nil {
 		l.Error("failed to get operator private key")
 		return

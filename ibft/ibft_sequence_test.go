@@ -25,6 +25,7 @@ func TestCanStartNewInstance(t *testing.T) {
 	tests := []struct {
 		name            string
 		opts            StartOptions
+		share           *validatorstorage.Share
 		storage         collections.Iibft
 		initFinished    bool
 		currentInstance *Instance
@@ -34,13 +35,12 @@ func TestCanStartNewInstance(t *testing.T) {
 			"valid next instance start",
 			StartOptions{
 				SeqNumber: 11,
-				Duty:      nil,
-				ValidatorShare: validatorstorage.Share{
-					NodeID:    1,
-					PublicKey: validatorPK(sks),
-					ShareKey:  sks[1],
-					Committee: nodes,
-				},
+			},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				ShareKey:  sks[1],
+				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
 			true,
@@ -51,13 +51,12 @@ func TestCanStartNewInstance(t *testing.T) {
 			"valid first instance",
 			StartOptions{
 				SeqNumber: 0,
-				Duty:      nil,
-				ValidatorShare: validatorstorage.Share{
-					NodeID:    1,
-					PublicKey: validatorPK(sks),
-					ShareKey:  sks[1],
-					Committee: nodes,
-				},
+			},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				ShareKey:  sks[1],
+				Committee: nodes,
 			},
 			nil,
 			true,
@@ -66,15 +65,12 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"didn't finish initialization",
-			StartOptions{
-				SeqNumber: 0,
-				Duty:      nil,
-				ValidatorShare: validatorstorage.Share{
-					NodeID:    1,
-					PublicKey: validatorPK(sks),
-					ShareKey:  sks[1],
-					Committee: nodes,
-				},
+			StartOptions{},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				ShareKey:  sks[1],
+				Committee: nodes,
 			},
 			nil,
 			false,
@@ -85,13 +81,12 @@ func TestCanStartNewInstance(t *testing.T) {
 			"sequence skips",
 			StartOptions{
 				SeqNumber: 12,
-				Duty:      nil,
-				ValidatorShare: validatorstorage.Share{
-					NodeID:    1,
-					PublicKey: validatorPK(sks),
-					ShareKey:  sks[1],
-					Committee: nodes,
-				},
+			},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				ShareKey:  sks[1],
+				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
 			true,
@@ -102,13 +97,12 @@ func TestCanStartNewInstance(t *testing.T) {
 			"past instance",
 			StartOptions{
 				SeqNumber: 10,
-				Duty:      nil,
-				ValidatorShare: validatorstorage.Share{
-					NodeID:    1,
-					PublicKey: validatorPK(sks),
-					ShareKey:  sks[1],
-					Committee: nodes,
-				},
+			},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				ShareKey:  sks[1],
+				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
 			true,
@@ -119,13 +113,12 @@ func TestCanStartNewInstance(t *testing.T) {
 			"didn't finish current instance",
 			StartOptions{
 				SeqNumber: 11,
-				Duty:      nil,
-				ValidatorShare: validatorstorage.Share{
-					NodeID:    1,
-					PublicKey: validatorPK(sks),
-					ShareKey:  sks[1],
-					Committee: nodes,
-				},
+			},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				ShareKey:  sks[1],
+				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
 			true,
@@ -156,7 +149,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				i.ibftStorage = &s
 			}
 
-			i.ValidatorShare = &test.opts.ValidatorShare
+			i.ValidatorShare = test.share
 			i.instanceConfig = proto.DefaultConsensusParams()
 			//i.instances = test.prevInstances
 			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
