@@ -64,6 +64,7 @@ type Instance struct {
 
 	// locks
 	runInitOnce           sync.Once
+	runStopOnce           sync.Once
 	stopLock              sync.Mutex
 	stageChangedChansLock sync.Mutex
 	stageLock             sync.Mutex
@@ -96,6 +97,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 
 		// locks
 		runInitOnce:           sync.Once{},
+		runStopOnce:           sync.Once{},
 		stopLock:              sync.Mutex{},
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
@@ -166,25 +168,28 @@ func (i *Instance) ForceDecide(msg *proto.SignedMessage) {
 
 // Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
-	i.eventQueue.Add(func() {
-		i.Logger.Info("stopping iBFT instance...")
-		i.stopLock.Lock()
-		defer i.stopLock.Unlock()
+	// stop can be run just once
+	i.runStopOnce.Do(func() {
+		i.eventQueue.Add(func() {
+			i.Logger.Info("stopping iBFT instance...")
+			i.stopLock.Lock()
+			defer i.stopLock.Unlock()
 
-		i.stopped = true
-		i.stopRoundChangeTimer()
-		i.SetStage(proto.RoundState_Stopped)
-		i.eventQueue.ClearAndStop()
+			i.stopped = true
+			i.stopRoundChangeTimer()
+			i.SetStage(proto.RoundState_Stopped)
+			i.eventQueue.ClearAndStop()
 
-		// stop stage chan
-		i.stageLock.Lock()
-		defer i.stageLock.Unlock()
-		if i.stageChangedChan != nil {
-			close(i.stageChangedChan)
-			i.stageChangedChan = nil
-		}
+			// stop stage chan
+			i.stageLock.Lock()
+			defer i.stageLock.Unlock()
+			if i.stageChangedChan != nil {
+				close(i.stageChangedChan)
+				i.stageChangedChan = nil
+			}
 
-		i.Logger.Info("stopped iBFT instance")
+			i.Logger.Info("stopped iBFT instance")
+		})
 	})
 }
 

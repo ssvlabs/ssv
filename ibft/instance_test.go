@@ -23,6 +23,7 @@ func TestInstanceStop(t *testing.T) {
 		eventQueue:         eventqueue.New(),
 		PrepareMessages:    msgcontinmem.New(3),
 		PrePrepareMessages: msgcontinmem.New(3),
+		CommitMessages:     msgcontinmem.New(3),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:     1,
