@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"sync"
+	"time"
 )
 
 type AlwaysTrueValueCheck struct {
@@ -33,9 +34,10 @@ var (
 )
 
 func networking() network.Network {
-	//return local.NewLocalNetwork()
 	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
-		DiscoveryType: "mdns",
+		DiscoveryType:    "mdns",
+		MaxBatchResponse: 10,
+		RequestTimeout:   time.Second * 1,
 	})
 	if err != nil {
 		logger.Fatal("failed to create db", zap.Error(err))
@@ -127,8 +129,8 @@ func main() {
 
 	logger.Info("start instances")
 	for i := uint64(1); i <= uint64(NodeCount); i++ {
+		wg.Add(1)
 		go func(node ibft.IBFT) {
-			wg.Add(1)
 			defer wg.Done()
 			res, err := node.StartInstance(ibft.StartOptions{
 				Logger:         logger.With(zap.Uint64("node id", i-1)),

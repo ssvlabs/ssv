@@ -7,7 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zapcore"
 	"testing"
 	"time"
 )
@@ -17,22 +17,22 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType:     "mdns",
-		Enr: "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:           12000,
-		TCPPort:           13000,
-		MaxBatchResponse:  10,
-		RequestTimeout:    time.Second * 1,
+		DiscoveryType:    "mdns",
+		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		UDPPort:          12000,
+		TCPPort:          13000,
+		MaxBatchResponse: 10,
+		RequestTimeout:   time.Second * 1,
 	})
 	require.NoError(t, err)
 
 	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType:     "mdns",
-		Enr: "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:           12001,
-		TCPPort:           13001,
-		MaxBatchResponse:  10,
-		RequestTimeout:    time.Second * 1,
+		DiscoveryType:    "mdns",
+		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		UDPPort:          12001,
+		TCPPort:          13001,
+		MaxBatchResponse: 10,
+		RequestTimeout:   time.Second * 1,
 	})
 	require.NoError(t, err)
 
@@ -51,26 +51,26 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 }
 
 func TestSyncMessageBroadcasting(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger := logex.Build("test", zapcore.InfoLevel)
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType:     "mdns",
-		Enr: "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:           12000,
-		TCPPort:           13000,
-		MaxBatchResponse:  10,
-		RequestTimeout:    time.Second * 1,
+		DiscoveryType:    "mdns",
+		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		UDPPort:          12000,
+		TCPPort:          13000,
+		MaxBatchResponse: 10,
+		RequestTimeout:   time.Second * 1,
 	})
 	require.NoError(t, err)
 
 	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType:     "mdns",
-		Enr: "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:           12001,
-		TCPPort:           13001,
-		MaxBatchResponse:  10,
-		RequestTimeout:    time.Second * 1,
+		DiscoveryType:    "mdns",
+		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		UDPPort:          12001,
+		TCPPort:          13001,
+		MaxBatchResponse: 10,
+		RequestTimeout:   time.Second * 1,
 	})
 	require.NoError(t, err)
 
