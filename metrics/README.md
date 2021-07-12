@@ -74,3 +74,15 @@ To visualize results in web UI directly:
 ```shell
 $ go tool pprof -web http://localhost:15001/debug/pprof/heap?minutes=5
 ```
+
+##### Pull from stage
+
+```shell
+$ curl http://18.237.221.242:15000/metrics --output metrics.out
+$ curl http://18.237.221.242:15000/debug/pprof/goroutine\?minutes\=20 --output goroutines.tar.gz
+$ curl http://18.237.221.242:15000/debug/pprof/heap\?minutes\=20 --output heap.tar.gz
+```
+```shell
+$ go tool pprof -web goroutines.tar.gz 
+$ go tool pprof -web heap.tar.gz
+```
