@@ -79,8 +79,9 @@ loop:
 			break loop
 		}
 
-		// TODO - refactor
+		var wg sync.WaitGroup
 		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)) > 0 {
+			wg.Add(1)
 			i.eventQueue.Add(func() {
 				found, err := i.ProcessChangeRoundPartialQuorum()
 				if err != nil {
@@ -89,7 +90,10 @@ loop:
 				if found {
 					i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
 				}
+				wg.Done()
 			})
+			// If we added a task to the queue, wait for it to finish and then loop again to add more
+			wg.Wait()
 		} else {
 			time.Sleep(time.Second * 1)
 		}
