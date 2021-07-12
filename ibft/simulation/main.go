@@ -20,16 +20,17 @@ import (
 	"time"
 )
 
-type AlwaysTrueValueCheck struct {
+type alwaysTrueValueCheck struct {
 }
 
-func (i *AlwaysTrueValueCheck) Check(value []byte) error {
+// Check impl
+func (i *alwaysTrueValueCheck) Check(value []byte) error {
 	return nil
 }
 
 var (
-	NodeCount  = 4
-	Identifier = []byte("ibft identifier")
+	nodeCount  = 4
+	identifier = []byte("ibft identifier")
 	logger     = logex.Build("simulator", zapcore.InfoLevel)
 )
 
@@ -91,11 +92,11 @@ func generateShares(cnt uint64) map[uint64]*validatorstorage.Share {
 }
 
 func main() {
-	shares := generateShares(uint64(NodeCount))
+	shares := generateShares(uint64(nodeCount))
 
 	// generate iBFT nodes
 	nodes := make([]ibft.IBFT, 0)
-	for i := uint64(1); i <= uint64(NodeCount); i++ {
+	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		net := networking()
 		if err := net.SubscribeToValidatorNetwork(shares[i].PublicKey); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
@@ -103,7 +104,7 @@ func main() {
 
 		node := ibft.New(
 			beacon.RoleAttester,
-			Identifier,
+			identifier,
 			logger,
 			db(),
 			net,
@@ -116,7 +117,7 @@ func main() {
 
 	// init ibfts
 	var wg sync.WaitGroup
-	for i := uint64(1); i <= uint64(NodeCount); i++ {
+	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
 		go func(node ibft.IBFT) {
 			node.Init()
@@ -128,16 +129,16 @@ func main() {
 	wg.Wait()
 
 	logger.Info("start instances")
-	for i := uint64(1); i <= uint64(NodeCount); i++ {
+	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.IBFT) {
+		go func(node ibft.IBFT, index uint64) {
 			defer wg.Done()
 			res, err := node.StartInstance(ibft.StartOptions{
-				Logger:         logger.With(zap.Uint64("node id", i-1)),
-				ValueCheck:     &AlwaysTrueValueCheck{},
+				Logger:         logger.With(zap.Uint64("node id", index-1)),
+				ValueCheck:     &alwaysTrueValueCheck{},
 				SeqNumber:      1,
 				Value:          []byte("value"),
-				ValidatorShare: shares[i],
+				ValidatorShare: shares[index],
 			})
 			if err != nil {
 				logger.Error("instance returned error", zap.Error(err))
@@ -147,7 +148,7 @@ func main() {
 				logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Value)))
 			}
 
-		}(nodes[i-1])
+		}(nodes[i-1], i)
 	}
 
 	wg.Wait()

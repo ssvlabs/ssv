@@ -45,7 +45,7 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
 	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
 	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
-	require.EqualError(t, err, "no response for sync request")
+	require.EqualError(t, err, "sync response timeout")
 	time.Sleep(time.Millisecond * 100)
 	require.Nil(t, res)
 }
