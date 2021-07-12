@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -16,7 +18,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"sync"
 	"time"
 )
 
@@ -32,6 +33,8 @@ var (
 	nodeCount  = 4
 	identifier = []byte("ibft identifier")
 	logger     = logex.Build("simulator", zapcore.InfoLevel)
+	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
+	scenario   = scenarios.NewF1Speedup(logger, &alwaysTrueValueCheck{})
 )
 
 func networking() network.Network {
@@ -82,7 +85,7 @@ func generateShares(cnt uint64) map[uint64]*validatorstorage.Share {
 	for i := uint64(1); i <= cnt; i++ {
 		ret[i] = &validatorstorage.Share{
 			NodeID:    i,
-			PublicKey: sks[1].GetPublicKey(),
+			PublicKey: publicKey(),
 			ShareKey:  sks[i],
 			Committee: nodes,
 		}
@@ -91,14 +94,29 @@ func generateShares(cnt uint64) map[uint64]*validatorstorage.Share {
 	return ret
 }
 
+func publicKey() *bls.PublicKey {
+	_ = bls.Init(bls.BLS12_381)
+	byts, err := hex.DecodeString(pkHex)
+	if err != nil {
+		logger.Fatal("failed to decode pk", zap.Error(err))
+	}
+	ret := &bls.PublicKey{}
+	if err := ret.Deserialize(byts); err != nil {
+		logger.Fatal("failed to deserialize pk", zap.Error(err))
+	}
+	return ret
+}
+
 func main() {
 	shares := generateShares(uint64(nodeCount))
+	pk := publicKey()
+	logger.Info("pubkey", zap.String("pk", pkHex))
 
 	// generate iBFT nodes
 	nodes := make([]ibft.IBFT, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		net := networking()
-		if err := net.SubscribeToValidatorNetwork(shares[i].PublicKey); err != nil {
+		if err := net.SubscribeToValidatorNetwork(pk); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
 
@@ -115,42 +133,7 @@ func main() {
 		nodes = append(nodes, node)
 	}
 
-	// init ibfts
-	var wg sync.WaitGroup
-	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		wg.Add(1)
-		go func(node ibft.IBFT) {
-			node.Init()
-			wg.Done()
-		}(nodes[i-1])
-	}
+	scenario.Start(nodes, shares)
 
-	logger.Info("waiting for nodes to init")
-	wg.Wait()
-
-	logger.Info("start instances")
-	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		wg.Add(1)
-		go func(node ibft.IBFT, index uint64) {
-			defer wg.Done()
-			res, err := node.StartInstance(ibft.StartOptions{
-				Logger:         logger.With(zap.Uint64("node id", index-1)),
-				ValueCheck:     &alwaysTrueValueCheck{},
-				SeqNumber:      1,
-				Value:          []byte("value"),
-				ValidatorShare: shares[index],
-			})
-			if err != nil {
-				logger.Error("instance returned error", zap.Error(err))
-			} else if !res.Decided {
-				logger.Error("instance could not decide")
-			} else {
-				logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Value)))
-			}
-
-		}(nodes[i-1], i)
-	}
-
-	wg.Wait()
 	logger.Info("finished")
 }
