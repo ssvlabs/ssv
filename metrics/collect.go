@@ -69,4 +69,3 @@ func Collect() ([]string, []error) {
 
 	return results, errs
 }
-

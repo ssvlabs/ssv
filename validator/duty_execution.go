@@ -29,7 +29,7 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 SigCollectionLoop:
 	for {
 		select {
-		case <- timer.C:
+		case <-timer.C:
 			err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
 			break SigCollectionLoop
 		default:
