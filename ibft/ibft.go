@@ -7,25 +7,21 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
 )
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
 	Logger         *zap.Logger
 	ValueCheck     valcheck.ValueCheck
-	PrevInstance   []byte
 	SeqNumber      uint64
 	Value          []byte
-	Duty           *ethpb.DutiesResponse_Duty
-	ValidatorShare storage.Share
+	ValidatorShare *storage.Share
 }
 
 // InstanceResult is a struct holding the result of a single iBFT instance
@@ -71,9 +67,6 @@ type ibftImpl struct {
 
 	// flags
 	initFinished bool
-
-	// mutex
-	instanceResultChanLock sync.Mutex
 }
 
 // New is the constructor of IBFT
@@ -92,9 +85,6 @@ func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collec
 
 		// flags
 		initFinished: false,
-
-		// mutex
-		instanceResultChanLock: sync.Mutex{},
 	}
 	return ret
 }

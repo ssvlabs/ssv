@@ -108,7 +108,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
-	n.logger.Info("New peer created")
+	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
 
 	// Gossipsub registration is done before we add in any new peers
 	// due to libp2p's gossipsub implementation not taking into

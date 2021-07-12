@@ -3,6 +3,7 @@ package ibft
 import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -51,14 +52,18 @@ loop:
 			break loop
 		}
 
-		// TODO - refactor
+		var wg sync.WaitGroup
 		if i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, i.State.Round)) > 0 {
+			wg.Add(1)
 			i.eventQueue.Add(func() {
 				_, err := i.ProcessMessage()
 				if err != nil {
 					i.Logger.Error("msg pipeline error", zap.Error(err))
 				}
+				wg.Done()
 			})
+			// If we added a task to the queue, wait for it to finish and then loop again to add more
+			wg.Wait()
 		} else {
 			time.Sleep(time.Millisecond * 100)
 		}
