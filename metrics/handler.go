@@ -47,7 +47,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	mux.HandleFunc("/debug/pprof/symbol", http_pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
 
-	mux.HandleFunc("/goroutines", func (res http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/goroutines", func(res http.ResponseWriter, _ *http.Request) {
 		stack := debug.Stack()
 		if _, err := res.Write(stack); err != nil {
 			mh.logger.Error("failed to write goroutines stack", zap.Error(err))

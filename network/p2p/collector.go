@@ -11,9 +11,8 @@ import (
 const (
 	collectorID = "network"
 	// metrics:
-	peersCount             = "peers_count"
 	internalListenersCount = "internal_listeners_count"
-	pubsubTopicsCount = "pubsub_topics_count"
+	pubsubTopicsCount      = "pubsub_topics_count"
 )
 
 // SetupNetworkMetrics initialize collector for process metrics
@@ -24,7 +23,7 @@ func SetupNetworkMetrics(logger *zap.Logger, net network.Network) {
 
 // networkCollector implements metrics.Collector for validators information
 type networkCollector struct {
-	logger *zap.Logger
+	logger  *zap.Logger
 	network *p2pNetwork
 }
 
@@ -51,4 +50,3 @@ func (c *networkCollector) Collect() ([]string, error) {
 
 	return results, nil
 }
-

@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/valcheck"
 	"github.com/pkg/errors"
-	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -24,64 +23,46 @@ func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []
 	// TODO - change signature count to min threshold
 	signatures := make(map[uint64][]byte, signaturesCount)
 	signedIndxes := make([]uint64, 0)
-	lock := sync.Mutex{}
-	done := false
 	var err error
 
-	// start timeout
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				v.logger.Error("recovered in waitForSignatureCollection", zap.Any("error", r))
-			}
-		}()
-		<-time.After(v.signatureCollectionTimeout)
-		lock.Lock()
-		defer lock.Unlock()
-		err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
-		done = true
-	}()
 	// loop through messages until timeout
+SigCollectionLoop:
 	for {
-		lock.Lock()
-		if done {
-			lock.Unlock()
-			break
-		} else {
-			lock.Unlock()
-		}
-		if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier, seqNumber)); msg != nil {
-			if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
-				v.logger.Error("missing signer id", zap.Any("msg", msg.SignedMessage))
-				continue
-			}
-			if len(msg.SignedMessage.Signature) == 0 { // no signer, empty sig
-				v.logger.Error("missing sig", zap.Any("msg", msg.SignedMessage))
-				continue
-			}
-			if _, found := signatures[msg.SignedMessage.SignerIds[0]]; found { // sig already exists
-				continue
-			}
+		select {
+		case <-time.After(v.signatureCollectionTimeout):
+			err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
+			break SigCollectionLoop
+		default:
+			if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier, seqNumber)); msg != nil {
+				if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
+					v.logger.Error("missing signer id", zap.Any("msg", msg.SignedMessage))
+					continue SigCollectionLoop
+				}
+				if len(msg.SignedMessage.Signature) == 0 { // no signer, empty sig
+					v.logger.Error("missing sig", zap.Any("msg", msg.SignedMessage))
+					continue SigCollectionLoop
+				}
+				if _, found := signatures[msg.SignedMessage.SignerIds[0]]; found { // sig already exists
+					continue SigCollectionLoop
+				}
 
-			logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]), zap.Any("msg", msg))
+				logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]), zap.Any("msg", msg))
 
-			// verify sig
-			if err := v.verifyPartialSignature(msg.SignedMessage.Signature, sigRoot, msg.SignedMessage.SignerIds[0], committiee); err != nil {
-				logger.Error("received invalid signature", zap.Error(err))
-				continue
-			}
-			logger.Info("signature verified", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]))
+				// verify sig
+				if err := v.verifyPartialSignature(msg.SignedMessage.Signature, sigRoot, msg.SignedMessage.SignerIds[0], committiee); err != nil {
+					logger.Error("received invalid signature", zap.Error(err))
+					continue SigCollectionLoop
+				}
+				logger.Info("signature verified", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]))
 
-			lock.Lock()
-			signatures[msg.SignedMessage.SignerIds[0]] = msg.SignedMessage.Signature
-			signedIndxes = append(signedIndxes, msg.SignedMessage.SignerIds[0])
-			if len(signedIndxes) >= signaturesCount {
-				done = true
-				break
+				signatures[msg.SignedMessage.SignerIds[0]] = msg.SignedMessage.Signature
+				signedIndxes = append(signedIndxes, msg.SignedMessage.SignerIds[0])
+				if len(signedIndxes) >= signaturesCount {
+					break SigCollectionLoop
+				}
+			} else {
+				time.Sleep(time.Millisecond * 100)
 			}
-			lock.Unlock()
-		} else {
-			time.Sleep(time.Millisecond * 100)
 		}
 	}
 	return signatures, err
