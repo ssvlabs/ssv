@@ -21,13 +21,12 @@ import (
 	"time"
 )
 
-type alwaysTrueValueCheck struct {
-}
+/**
+IBFT Simulator
 
-// Check impl
-func (i *alwaysTrueValueCheck) Check(value []byte) error {
-	return nil
-}
+This simulator is a tool for running many iBFT scenarios for manual testing.
+The scenario interface can be overriden with any writen scenario to manually test the IBFT inner workings, debug and more.
+*/
 
 var (
 	nodeCount  = 4
@@ -36,6 +35,14 @@ var (
 	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
 	scenario   = scenarios.NewF1Speedup(logger, &alwaysTrueValueCheck{})
 )
+
+type alwaysTrueValueCheck struct {
+}
+
+// Check impl
+func (i *alwaysTrueValueCheck) Check(value []byte) error {
+	return nil
+}
 
 func networking() network.Network {
 	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
