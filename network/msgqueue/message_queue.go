@@ -20,18 +20,21 @@ type messageContainer struct {
 // To solve this issue we have a message broker from which the instance pulls new messages, this also reduces concurrency issues as the instance is now single threaded.
 // The message queue has internal logic to organize messages by their round.
 type MessageQueue struct {
-	msgMutex   sync.Mutex
-	indexFuncs []IndexFunc
-	queue      map[string][]*messageContainer // = map[index][messageContainer.id]messageContainer
+	msgMutex    sync.Mutex
+	indexFuncs  []IndexFunc
+	queue       map[string][]*messageContainer // = map[index][messageContainer.id]messageContainer
+	allMessages map[string]*messageContainer
 }
 
 // New is the constructor of MessageQueue
 func New() *MessageQueue {
 	return &MessageQueue{
-		msgMutex: sync.Mutex{},
-		queue:    make(map[string][]*messageContainer),
+		msgMutex:    sync.Mutex{},
+		queue:       make(map[string][]*messageContainer),
+		allMessages: make(map[string]*messageContainer),
 		indexFuncs: []IndexFunc{
 			iBFTMessageIndex(),
+			iBFTAllRoundChangeIndex(),
 			sigMessageIndex(),
 			decidedMessageIndex(),
 			syncMessageIndex(),
@@ -69,6 +72,20 @@ func (q *MessageQueue) AddMessage(msg *network.Message) {
 		}
 		q.queue[idx] = append(q.queue[idx], msgContainer)
 	}
+	q.allMessages[msgContainer.id] = msgContainer
+}
+
+// MessagesForIndex returns all messages for an index
+func (q *MessageQueue) MessagesForIndex(index string) map[string]*network.Message {
+	q.msgMutex.Lock()
+	defer q.msgMutex.Unlock()
+
+	ret := make(map[string]*network.Message)
+	for _, cont := range q.queue[index] {
+		ret[cont.id] = cont.msg
+	}
+
+	return ret
 }
 
 // PopMessage will return a message by its index if found, will also delete all other index occurrences of that message
@@ -92,6 +109,17 @@ func (q *MessageQueue) MsgCount(index string) int {
 	return len(q.queue[index])
 }
 
+// DeleteMessagesWithIds deletes all msgs by the given id
+func (q *MessageQueue) DeleteMessagesWithIds(ids []string) {
+	q.msgMutex.Lock()
+	defer q.msgMutex.Unlock()
+	for _, id := range ids {
+		if msg, found := q.allMessages[id]; found {
+			q.deleteMessageFromAllIndexes(msg.indexes, id)
+		}
+	}
+}
+
 func (q *MessageQueue) deleteMessageFromAllIndexes(indexes []string, id string) {
 	for _, indx := range indexes {
 		newIndexQ := make([]*messageContainer, 0)
@@ -102,6 +130,7 @@ func (q *MessageQueue) deleteMessageFromAllIndexes(indexes []string, id string) 
 		}
 		q.queue[indx] = newIndexQ
 	}
+	q.allMessages[id] = nil
 }
 
 // PurgeIndexedMessages will delete all indexed messages for the given index

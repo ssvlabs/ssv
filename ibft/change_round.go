@@ -16,17 +16,22 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
 		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateRound(i.State.Round),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		changeround.Validate(i.ValidatorShare),
+	)
+}
+
+func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		i.changeRoundMsgValidationPipeline(),
+		auth.ValidateRound(i.State.Round),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
-		changeround.UponPartialQuorum(),
 		i.uponChangeRoundFullQuorum(),
 	)
 }
@@ -177,13 +182,20 @@ func (i *Instance) uponChangeRoundTrigger() {
 	// set time for next round change
 	i.triggerRoundChangeOnTimer()
 	// broadcast round change
-	broadcastMsg, err := i.generateChangeRoundMessage()
-	if err != nil {
-		i.Logger.Error("could not generate change round msg", zap.Uint64("round", i.State.Round), zap.Error(err))
-	}
-	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
+	if err := i.broadcastChangeRound(); err != nil {
 		i.Logger.Error("could not broadcast round change message", zap.Error(err))
 	}
+}
+
+func (i *Instance) broadcastChangeRound() error {
+	broadcastMsg, err := i.generateChangeRoundMessage()
+	if err != nil {
+		return err
+	}
+	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
+		return err
+	}
+	return nil
 }
 
 /**

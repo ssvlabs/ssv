@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
-	"time"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -588,6 +587,120 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
 }
 
+func TestChangeRoundMsgValidationPipeline(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+
+	tests := []struct {
+		name          string
+		msg           *proto.SignedMessage
+		expectedError string
+	}{
+		{
+			"valid",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+			}),
+			"",
+		},
+		{
+			"invalid change round data",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: []byte("ad"),
+				}),
+			}),
+			"change round justification msg is nil",
+		},
+		{
+			"invalid seq number",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 2,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+			}),
+			"invalid message sequence number: expected: 1, actual: 2",
+		},
+
+		{
+			"invalid lambda",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     1,
+				Lambda:    []byte("lambdaa"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+			}),
+			"message Lambda (lambdaa) does not equal expected Lambda (lambda)",
+		},
+		{
+			"valid with different round",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_ChangeRound,
+				Round:     4,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+			}),
+			"",
+		},
+		{
+			"invalid msg type",
+			SignMsg(t, 1, sks[1], &proto.Message{
+				Type:      proto.RoundState_Decided,
+				Round:     1,
+				Lambda:    []byte("lambda"),
+				SeqNumber: 1,
+				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
+					PreparedValue: nil,
+				}),
+			}),
+			"message type is wrong",
+		},
+	}
+
+	instance := &Instance{
+		Config: proto.DefaultConsensusParams(),
+		ValidatorShare: &storage.Share{
+			Committee: nodes,
+			PublicKey: sks[1].GetPublicKey(), // just placeholder
+		},
+		State: &proto.State{
+			Round:     1,
+			SeqNumber: 1,
+			Lambda:    []byte("lambda"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := instance.changeRoundMsgValidationPipeline().Run(test.msg)
+			if len(test.expectedError) > 0 {
+				require.EqualError(t, err, test.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestChangeRoundPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -601,67 +714,6 @@ func TestChangeRoundPipeline(t *testing.T) {
 			Round: 1,
 		},
 	}
-	pipeline := instance.changeRoundMsgPipeline()
-	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate msg, add change round msg, upon partial quorum, upon change round full quorum, ", pipeline.Name())
-}
-
-func TestRoundTimeoutSeconds(t *testing.T) {
-	tests := []struct {
-		name            string
-		round           uint64
-		roundChangeBase float32
-		expectedTimeout time.Duration
-	}{
-		{
-			"round 1, base 1",
-			1,
-			1,
-			time.Second * 1,
-		},
-		{
-			"round 1, base 2",
-			1,
-			2,
-			time.Second * 2,
-		},
-		{
-			"round 2, base 1",
-			1,
-			1,
-			time.Second * 1,
-		},
-		{
-			"round 2, base 2",
-			2,
-			2,
-			time.Second * 4,
-		},
-		{
-			"round 3, base 3",
-			3,
-			3,
-			time.Second * 27,
-		},
-		{
-			"round 4, base 3",
-			4,
-			3,
-			time.Second * 81,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			instance := &Instance{
-				Config: &proto.InstanceConfig{
-					RoundChangeDurationSeconds: test.roundChangeBase, // 1 second
-				},
-				State: &proto.State{
-					Round: test.round,
-				},
-			}
-
-			require.EqualValues(t, test.expectedTimeout, instance.roundTimeoutSeconds())
-		})
-	}
+	pipeline := instance.changeRoundFullQuorumMsgPipeline()
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate msg, , round, add change round msg, upon change round full quorum, ", pipeline.Name())
 }

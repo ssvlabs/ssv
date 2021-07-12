@@ -71,6 +71,36 @@ loop:
 	i.Logger.Info("instance msg pipeline loop stopped")
 }
 
+// StartPartialChangeRoundPipeline continuously tries to find partial change round quorum
+func (i *Instance) StartPartialChangeRoundPipeline() {
+loop:
+	for {
+		if i.Stopped() {
+			break loop
+		}
+
+		var wg sync.WaitGroup
+		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)) > 0 {
+			wg.Add(1)
+			i.eventQueue.Add(func() {
+				found, err := i.ProcessChangeRoundPartialQuorum()
+				if err != nil {
+					i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
+				}
+				if found {
+					i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
+				}
+				wg.Done()
+			})
+			// If we added a task to the queue, wait for it to finish and then loop again to add more
+			wg.Wait()
+		} else {
+			time.Sleep(time.Second * 1)
+		}
+	}
+	i.Logger.Info("instance partial change round pipeline loop stopped")
+}
+
 /**
 "Timer:
 	In addition to the State variables, each correct process pi also maintains a timer represented by timeri,

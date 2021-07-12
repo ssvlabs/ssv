@@ -58,25 +58,25 @@ func (test *ValidSimpleRun) MessagesSequence(t *testing.T) []*proto.SignedMessag
 // Run runs the test
 func (test *ValidSimpleRun) Run(t *testing.T) {
 	// pre-prepare
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	// non qualified prepare quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
 	require.False(t, quorum)
 	// qualified prepare quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 	// non qualified commit quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.False(t, quorum)
 	// qualified commit quorum
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireProcessedMessage(t, test.instance.ProcessMessage)
-	spectesting.RequireNotProcessedMessage(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 
