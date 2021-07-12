@@ -213,11 +213,11 @@ func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) b
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
-	topics := n.cfg.Topics
-	topic := sub.Topic()
-	defer func() {
-		delete(topics, topic)
-	}()
+	//topics := n.cfg.Topics
+	//topic := sub.Topic()
+	//defer func() {
+	//	delete(topics, topic)
+	//}()
 	for {
 		select {
 		case <-n.ctx.Done():
@@ -243,25 +243,26 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 }
 
 func (n *p2pNetwork) propagateSignedMsg(cm network.Message) {
+	logger := n.logger.With(zap.String("func", "propagateSignedMsg"))
 	for _, ls := range n.listeners {
-		go func(ls listener) {
-			sm, err := cm.SignedMessage.DeepCopy()
-			if err != nil {
-				n.logger.Error("could not clone signed message", zap.Error(err))
-				return
-			}
-			defer n.logger.Debug("event was fired")
-			switch cm.Type {
+		go func(ls listener, sm proto.SignedMessage, msgType network.NetworkMsg) {
+			switch msgType {
 			case network.NetworkMsg_IBFTType:
-				ls.msgCh <- sm
+				if ls.msgCh != nil {
+					ls.msgCh <- &sm
+				}
 			case network.NetworkMsg_SignatureType:
-				ls.sigCh <- sm
+				if ls.sigCh != nil {
+					ls.sigCh <- &sm
+				}
 			case network.NetworkMsg_DecidedType:
-				ls.decidedCh <- sm
+				if ls.decidedCh != nil {
+					ls.decidedCh <- &sm
+				}
 			default:
-				n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
+				logger.Error("received unsupported message", zap.Int32("msg type", int32(msgType)))
 			}
-		}(ls)
+		}(ls, *cm.SignedMessage, cm.Type)
 	}
 }
 
