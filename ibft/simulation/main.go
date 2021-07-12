@@ -134,7 +134,10 @@ func main() {
 			db(),
 			net,
 			msgqueue.New(),
-			proto.DefaultConsensusParams(),
+			&proto.InstanceConfig{
+				RoundChangeDurationSeconds:   2,
+				LeaderPreprepareDelaySeconds: 1,
+			},
 			shares[i],
 		)
 		nodes = append(nodes, node)
