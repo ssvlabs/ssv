@@ -239,6 +239,10 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 
 func (n *p2pNetwork) propagateSignedMsg(cm network.Message) {
 	logger := n.logger.With(zap.String("func", "propagateSignedMsg"))
+	if cm.SignedMessage == nil {
+		logger.Debug("could not propagate nil message")
+		return
+	}
 	for _, ls := range n.listeners {
 		go func(ls listener, sm proto.SignedMessage, msgType network.NetworkMsg) {
 			switch msgType {
