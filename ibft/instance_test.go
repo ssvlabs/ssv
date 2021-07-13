@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
@@ -40,6 +41,7 @@ func TestInstanceStop(t *testing.T) {
 		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
 		Logger:         zaptest.NewLogger(t),
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
+		roundTimer:     roundtimer.New(),
 	}
 	instance.Init()
 
@@ -99,7 +101,7 @@ func TestInstanceStop(t *testing.T) {
 	time.Sleep(time.Millisecond * 200)
 
 	// verify
-	require.Nil(t, instance.roundChangeTimer)
+	require.True(t, instance.roundTimer.Stopped())
 	require.EqualValues(t, proto.RoundState_Stopped, instance.Stage())
 	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round)))
 	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round))
@@ -117,7 +119,8 @@ func TestInit(t *testing.T) {
 			Lambda:    []byte("Lambda"),
 			SeqNumber: 1,
 		},
-		Logger: zaptest.NewLogger(t),
+		Logger:     zaptest.NewLogger(t),
+		roundTimer: roundtimer.New(),
 	}
 	instance.Init()
 	require.True(t, instance.initialized)
@@ -138,7 +141,8 @@ func TestSetStage(t *testing.T) {
 			Lambda:    []byte("Lambda"),
 			SeqNumber: 1,
 		},
-		Logger: zaptest.NewLogger(t),
+		Logger:     zaptest.NewLogger(t),
+		roundTimer: roundtimer.New(),
 	}
 
 	c := instance.GetStageChan()

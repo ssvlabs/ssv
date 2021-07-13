@@ -57,9 +57,8 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 
 	// TODO - could have a race condition where msgs are processed in a different thread and then we trigger round change here
 	if foundPartialQuorum {
-		i.stopRoundChangeTimer()
 		i.State.Round = lowestChangeRound
-		i.triggerRoundChangeOnTimer()
+		i.resetRoundTimer()
 
 		if err := i.broadcastChangeRound(); err != nil {
 			i.Logger.Error("could not broadcast round change message", zap.Error(err))

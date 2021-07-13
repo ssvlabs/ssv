@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/validator/storage"
@@ -38,9 +39,13 @@ func TestChangeRoundTimer(t *testing.T) {
 		},
 		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
 		Logger:     zaptest.NewLogger(t),
+		roundTimer: roundtimer.New(),
 	}
+	go instance.startRoundTimerLoop()
+	instance.initialized = true
+	time.Sleep(time.Millisecond * 200)
 
-	instance.triggerRoundChangeOnTimer()
+	instance.resetRoundTimer()
 	time.Sleep(time.Millisecond * 500)
 	instance.eventQueue.Pop()()
 	require.EqualValues(t, 2, instance.State.Round)

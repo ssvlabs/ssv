@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/bloxapp/ssv/ibft/eventqueue"
+	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
@@ -36,14 +37,14 @@ type InstanceOptions struct {
 
 // Instance defines the instance attributes
 type Instance struct {
-	ValidatorShare   *storage.Share
-	State            *proto.State
-	network          network.Network
-	ValueCheck       valcheck.ValueCheck
-	LeaderSelector   leader.Selector
-	Config           *proto.InstanceConfig
-	roundChangeTimer *time.Timer
-	Logger           *zap.Logger
+	ValidatorShare *storage.Share
+	State          *proto.State
+	network        network.Network
+	ValueCheck     valcheck.ValueCheck
+	LeaderSelector leader.Selector
+	Config         *proto.InstanceConfig
+	roundTimer     *roundtimer.RoundTimer
+	Logger         *zap.Logger
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue
@@ -93,6 +94,8 @@ func NewInstance(opts InstanceOptions) *Instance {
 		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 
+		roundTimer: roundtimer.New(),
+
 		eventQueue: eventqueue.New(),
 
 		// locks
@@ -110,6 +113,7 @@ func (i *Instance) Init() {
 		go i.StartMessagePipeline()
 		go i.StartPartialChangeRoundPipeline()
 		go i.StartMainEventLoop()
+		go i.startRoundTimerLoop()
 		i.initialized = true
 		i.Logger.Debug("iBFT instance init finished")
 	})
@@ -153,7 +157,7 @@ func (i *Instance) Start(inputValue []byte) error {
 			}
 		}()
 	}
-	i.triggerRoundChangeOnTimer()
+	i.resetRoundTimer()
 	return nil
 }
 
@@ -177,7 +181,7 @@ func (i *Instance) Stop() {
 			defer i.stopLock.Unlock()
 
 			i.stopped = true
-			i.stopRoundChangeTimer()
+			i.roundTimer.Stop()
 			i.SetStage(proto.RoundState_Stopped)
 			i.eventQueue.ClearAndStop()
 

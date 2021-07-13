@@ -101,34 +101,36 @@ loop:
 	i.Logger.Info("instance partial change round pipeline loop stopped")
 }
 
+func (i *Instance) startRoundTimerLoop() {
+loop:
+	for {
+		if i.Stopped() {
+			break loop
+		}
+
+		res := <-i.roundTimer.ResultChan()
+		if res { // timed out
+			i.eventQueue.Add(func() {
+				i.uponChangeRoundTrigger()
+			})
+		} else { // stopped
+			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State.Round))
+		}
+	}
+}
+
 /**
 "Timer:
 	In addition to the State variables, each correct process pi also maintains a timer represented by timeri,
 	which is used to trigger a round change when the algorithm does not sufficiently progress.
 	The timer can be in one of two states: running or expired.
 	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the State changes to expired."
+
+	resetRoundTimer will reset the current timer (including stopping the previous one)
 */
-func (i *Instance) triggerRoundChangeOnTimer() {
-	go func() {
-		// make sure previous timer is stopped
-		i.stopRoundChangeTimer()
-
-		// stat new timer
-		roundTimeout := i.roundTimeoutSeconds()
-		i.roundChangeTimer = time.NewTimer(roundTimeout)
-		i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round))
-
-		<-i.roundChangeTimer.C
-		i.eventQueue.Add(func() {
-			i.stopRoundChangeTimer()
-			i.uponChangeRoundTrigger()
-		})
-	}()
-}
-
-func (i *Instance) stopRoundChangeTimer() {
-	if i.roundChangeTimer != nil {
-		i.roundChangeTimer.Stop()
-		i.roundChangeTimer = nil
-	}
+func (i *Instance) resetRoundTimer() {
+	// stat new timer
+	roundTimeout := i.roundTimeoutSeconds()
+	i.roundTimer.Reset(roundTimeout)
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round))
 }
