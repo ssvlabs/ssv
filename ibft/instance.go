@@ -112,8 +112,8 @@ func (i *Instance) Init() {
 	i.runInitOnce.Do(func() {
 		go i.StartMessagePipeline()
 		go i.StartPartialChangeRoundPipeline()
-		go i.StartMainEventLoop()
 		go i.startRoundTimerLoop()
+		go i.StartMainEventLoop()
 		i.initialized = true
 		i.Logger.Debug("iBFT instance init finished")
 	})
