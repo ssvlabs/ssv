@@ -61,19 +61,23 @@ func (n *p2pNetwork) handleStream() {
 			n.logger.Error("could not read and parse stream", zap.Error(err))
 			return
 		}
+		n.propagateSyncMsg(cm, netSyncStream)
+	})
+}
 
-		// send to listeners
-		for _, ls := range n.listeners {
-			go func(ls listener) {
-				switch cm.Type {
-				case network.NetworkMsg_SyncType:
-					cm.SyncMessage.FromPeerID = stream.Conn().RemotePeer().String()
+func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream *SyncStream) {
+	cm.SyncMessage.FromPeerID = netSyncStream.stream.Conn().RemotePeer().String()
+	for _, ls := range n.listeners {
+		go func(ls listener, nm network.Message) {
+			switch nm.Type {
+			case network.NetworkMsg_SyncType:
+				if ls.syncCh != nil {
 					ls.syncCh <- &network.SyncChanObj{
-						Msg:    cm.SyncMessage,
+						Msg:    nm.SyncMessage,
 						Stream: netSyncStream,
 					}
 				}
-			}(ls)
-		}
-	})
+			}
+		}(ls, *cm)
+	}
 }

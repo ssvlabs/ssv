@@ -24,7 +24,7 @@ func SetupProcessMetrics() {
 	metrics.Register(&c)
 }
 
-// validatorsCollector implements metrics.Collector for validators information
+// processCollector implements metrics.Collector for validators information
 type processCollector struct {
 }
 

@@ -20,7 +20,6 @@ const (
 	ibftInstanceState          = "ibft_instance_state"
 	runningIbftsCountValidator = "running_ibfts_count_validator"
 	runningIbftsCountAll       = "running_ibfts_count_all"
-	allConnectedPeers          = "all_connected_peers"
 	countValidators            = "count_validators"
 )
 
@@ -99,7 +98,6 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 			connectedPeers, hex.EncodeToString(pk), len(peers)))
 	}
 
-	results = append(results, fmt.Sprintf("%s{} %d", allConnectedPeers, len(allPeers)))
 	results = append(results, fmt.Sprintf("%s{} %d", runningIbftsCountAll, runningIbfts))
 
 	sort.Strings(results)

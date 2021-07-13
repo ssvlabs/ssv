@@ -21,7 +21,6 @@ type Config struct {
 	// objects / instances
 	HostID              peer.ID
 	Topics              map[string]*pubsub.Topic
-	Subs                []*pubsub.Subscription
 	Discv5BootStrapAddr []string
 }
 

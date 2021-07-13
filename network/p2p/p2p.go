@@ -198,9 +198,8 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	if err != nil {
 		return errors.Wrap(err, "failed to subscribe on Topic")
 	}
-	n.cfg.Subs = append(n.cfg.Subs, sub)
 
-	n.listen(sub)
+	go n.listen(sub)
 
 	return nil
 }
@@ -213,47 +212,53 @@ func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) b
 
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
-	go func(sub *pubsub.Subscription) {
-		n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
-
-		for {
-			select {
-			case <-n.ctx.Done():
-				if err := n.cfg.Topics[sub.Topic()].Close(); err != nil {
-					n.logger.Error("failed to close Topics", zap.Error(err))
-				}
-
-				sub.Cancel()
-			default:
-				msg, err := sub.Next(n.ctx)
-				if err != nil {
-					n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
-					return
-				}
-
-				var cm network.Message
-				if err := json.Unmarshal(msg.Data, &cm); err != nil {
-					n.logger.Error("failed to unmarshal message", zap.Error(err))
-					continue
-				}
-
-				for _, ls := range n.listeners {
-					go func(ls listener) {
-						switch cm.Type {
-						case network.NetworkMsg_IBFTType:
-							ls.msgCh <- cm.SignedMessage
-						case network.NetworkMsg_SignatureType:
-							ls.sigCh <- cm.SignedMessage
-						case network.NetworkMsg_DecidedType:
-							ls.decidedCh <- cm.SignedMessage
-						default:
-							n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
-						}
-					}(ls)
-				}
+	n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
+	for {
+		select {
+		case <-n.ctx.Done():
+			t := sub.Topic()
+			if err := n.cfg.Topics[t].Close(); err != nil {
+				n.logger.Error("failed to close Topics", zap.Error(err))
 			}
+			sub.Cancel()
+		default:
+			msg, err := sub.Next(n.ctx)
+			if err != nil {
+				n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
+				return
+			}
+			var cm network.Message
+			if err := json.Unmarshal(msg.Data, &cm); err != nil {
+				n.logger.Error("failed to unmarshal message", zap.Error(err))
+				continue
+			}
+			n.propagateSignedMsg(cm)
 		}
-	}(sub)
+	}
+}
+
+func (n *p2pNetwork) propagateSignedMsg(cm network.Message) {
+	logger := n.logger.With(zap.String("func", "propagateSignedMsg"))
+	for _, ls := range n.listeners {
+		go func(ls listener, sm proto.SignedMessage, msgType network.NetworkMsg) {
+			switch msgType {
+			case network.NetworkMsg_IBFTType:
+				if ls.msgCh != nil {
+					ls.msgCh <- &sm
+				}
+			case network.NetworkMsg_SignatureType:
+				if ls.sigCh != nil {
+					ls.sigCh <- &sm
+				}
+			case network.NetworkMsg_DecidedType:
+				if ls.decidedCh != nil {
+					ls.decidedCh <- &sm
+				}
+			default:
+				logger.Error("received unsupported message", zap.Int32("msg type", int32(msgType)))
+			}
+		}(ls, *cm.SignedMessage, cm.Type)
+	}
 }
 
 // getTopic return topic by validator public key
