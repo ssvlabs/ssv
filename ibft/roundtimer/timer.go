@@ -35,17 +35,16 @@ func (t *RoundTimer) ResultChan() chan bool {
 // Reset will return a channel that sends true if the timer lapsed or false if it was cancelled
 // If Start is called more than once, the first timer and chan are returned and used
 func (t *RoundTimer) Reset(d time.Duration) {
+	t.stoppedLock.Lock()
+	defer t.stoppedLock.Unlock()
+
 	if t.timer != nil {
-		if t.timer.Stop() {
-			<-t.timer.C
-		}
+		t.timer.Stop()
 		t.timer.Reset(d)
 	} else {
 		t.timer = time.NewTimer(d)
 	}
 
-	t.stoppedLock.Lock()
-	defer t.stoppedLock.Unlock()
 	t.stopped = false
 
 	go t.eventLoop()
@@ -74,13 +73,13 @@ func (t *RoundTimer) eventLoop() {
 		t.resC <- true
 
 		t.stoppedLock.Lock()
-		defer t.stoppedLock.Unlock()
 		t.stopped = true
+		t.stoppedLock.Unlock()
 	case <-t.cancelC:
 		t.resC <- false
 
 		t.stoppedLock.Lock()
-		defer t.stoppedLock.Unlock()
 		t.stopped = true
+		t.stoppedLock.Unlock()
 	}
 }
