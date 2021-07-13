@@ -180,7 +180,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round))
 
 	// set time for next round change
-	i.triggerRoundChangeOnTimer()
+	i.resetRoundTimer()
 	// broadcast round change
 	if err := i.broadcastChangeRound(); err != nil {
 		i.Logger.Error("could not broadcast round change message", zap.Error(err))
@@ -250,5 +250,5 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
 	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round))
-	return time.Second * time.Duration(roundTimeout)
+	return time.Duration(float64(time.Second) * roundTimeout)
 }
