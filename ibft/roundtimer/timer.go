@@ -71,15 +71,17 @@ func (t *RoundTimer) eventLoop() {
 	select {
 	case <-t.timer.C:
 		t.resC <- true
-
-		t.stoppedLock.Lock()
-		t.stopped = true
-		t.stoppedLock.Unlock()
+		t.markStopped()
 	case <-t.cancelC:
 		t.resC <- false
-
-		t.stoppedLock.Lock()
-		t.stopped = true
-		t.stoppedLock.Unlock()
+		t.markStopped()
 	}
+}
+
+// markStopped set stopped flag to true
+func (t *RoundTimer) markStopped() {
+	t.stoppedLock.Lock()
+	defer t.stoppedLock.Unlock()
+
+	t.stopped = true
 }
