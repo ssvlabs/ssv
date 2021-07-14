@@ -128,7 +128,7 @@ func main() {
 		}
 
 		node := ibft.New(
-			beacon.RoleAttester,
+			beacon.RoleTypeAttester,
 			identifier,
 			logger,
 			db(),

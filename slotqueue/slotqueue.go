@@ -3,13 +3,13 @@ package slotqueue
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/pubsub"
 	"go.uber.org/zap"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/patrickmn/go-cache"
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
 )
 
@@ -19,7 +19,7 @@ type Queue interface {
 	RegisterToNext(pubKey []byte) (pubsub.SubjectChannel, error)
 
 	// Schedule schedules execution of the given slot and puts it into the queue
-	Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error
+	Schedule(pubKey []byte, slot uint64, duty *beacon.Duty) error
 
 	// listenToTicker and notify for all the observers when ticker triggers
 	listenToTicker()
@@ -37,7 +37,7 @@ type queue struct {
 // SlotEvent represents the notify event fire for each pubkey subject with the proper duty
 type SlotEvent struct {
 	Slot uint64
-	Duty *ethpb.DutiesResponse_Duty
+	Duty *beacon.Duty
 	Ok   bool
 }
 
@@ -64,7 +64,7 @@ func (q *queue) listenToTicker() {
 				continue
 			}
 
-			duty, ok := dataRaw.(*ethpb.DutiesResponse_Duty)
+			duty, ok := dataRaw.(*beacon.Duty)
 			if !ok {
 				continue
 			}
@@ -95,7 +95,7 @@ func (q *queue) RegisterToNext(pubKey []byte) (pubsub.SubjectChannel, error) {
 }
 
 // Schedule schedules execution of the given slot and puts it into the queue
-func (q *queue) Schedule(pubKey []byte, slot uint64, duty *ethpb.DutiesResponse_Duty) error {
+func (q *queue) Schedule(pubKey []byte, slot uint64, duty *beacon.Duty) error {
 	q.data.SetDefault(q.getKey(hex.EncodeToString(pubKey), slot), duty)
 	return nil
 }

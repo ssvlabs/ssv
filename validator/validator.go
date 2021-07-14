@@ -40,7 +40,7 @@ type Validator struct {
 	//db                collections.Iibft
 	ethNetwork                 *core.Network
 	beacon                     beacon.Beacon
-	ibfts                      map[beacon.Role]ibft.IBFT
+	ibfts                      map[beacon.RoleType]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.Network
 	slotQueue                  slotqueue.Queue
@@ -53,8 +53,8 @@ func New(opt Options, db basedb.IDb) *Validator {
 		With(zap.Uint64("node_id", opt.Share.NodeID))
 
 	msgQueue := msgqueue.New()
-	ibfts := make(map[beacon.Role]ibft.IBFT)
-	ibfts[beacon.RoleAttester] = setupIbftController(beacon.RoleAttester, logger, db, opt.Network, msgQueue, opt.Share)
+	ibfts := make(map[beacon.RoleType]ibft.IBFT)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, db, opt.Network, msgQueue, opt.Share)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
@@ -85,6 +85,7 @@ func (v *Validator) Start() error {
 	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
+
 	go v.startSlotQueueListener()
 	go v.listenToSignatureMessages()
 	return nil
@@ -139,9 +140,9 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 }
 
 func setupIbftController(role int, logger *zap.Logger, db basedb.IDb, network network.Network, msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.IBFT {
-	ibftStorage := collections.NewIbft(db, logger, beacon.Role(role).String())
-	identifier := []byte(IdentifierFormat(share.PublicKey.Serialize(), beacon.Role(role)))
-	return ibft.New(beacon.Role(role), identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
+	ibftStorage := collections.NewIbft(db, logger, beacon.RoleType(role).String())
+	identifier := []byte(IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleType(role)))
+	return ibft.New(beacon.RoleType(role), identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
 }
 
 // oneOfIBFTIdentifiers will return true if provided identifier matches one of the iBFT instances.
@@ -155,7 +156,7 @@ func (v *Validator) oneOfIBFTIdentifiers(toMatch []byte) bool {
 }
 
 // GetIBFT will return the IBFT of the corresponding role
-func (v *Validator) GetIBFT(r beacon.Role) (ibft.IBFT, bool) {
+func (v *Validator) GetIBFT(r beacon.RoleType) (ibft.IBFT, bool) {
 	i, exist := v.ibfts[r]
 	return i, exist
 }

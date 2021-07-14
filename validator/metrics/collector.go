@@ -23,8 +23,8 @@ const (
 	countValidators            = "count_validators"
 )
 
-var roles = []beacon.Role{
-	beacon.RoleAttester, beacon.RoleProposer, beacon.RoleAggregator,
+var roles = []beacon.RoleType{
+	beacon.RoleTypeAttester, beacon.RoleTypeProposer, beacon.RoleTypeAggregator,
 }
 
 // SetupMetricsCollector creates a new instance

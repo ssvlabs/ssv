@@ -2,26 +2,23 @@ package validator
 
 import (
 	"context"
-	"encoding/json"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 )
 
 func marshalInputValueStructForAttestation(t *testing.T, attByts []byte) []byte {
-	attData := &ethpb.AttestationData{}
-	require.NoError(t, attData.Unmarshal(attByts))
-
-	iv := &proto.InputValue_Attestation{Attestation: &ethpb.Attestation{
-		Data: attData,
-	}}
-	ret, err := json.Marshal(iv)
+	ret := &testBeacon{}
+	ret.refAttestationData = &spec.AttestationData{}
+	err := ret.refAttestationData.UnmarshalSSZ(attByts) // ignore error
 	require.NoError(t, err)
-	return ret
+	val, err := ret.refAttestationData.MarshalSSZ()
+	require.NoError(t, err)
+	return val
 }
 
 func TestConsensusOnInputValue(t *testing.T) {
@@ -29,7 +26,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 		name                        string
 		decided                     bool
 		signaturesCount             int
-		role                        beacon.Role
+		role                        beacon.RoleType
 		expectedAttestationDataByts []byte
 		expectedError               string
 	}{
@@ -37,7 +34,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"valid consensus",
 			true,
 			3,
-			beacon.RoleAttester,
+			beacon.RoleTypeAttester,
 			marshalInputValueStructForAttestation(t, refAttestationDataByts),
 			"",
 		},
@@ -45,7 +42,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"not decided",
 			false,
 			3,
-			beacon.RoleAttester,
+			beacon.RoleTypeAttester,
 			refAttestationDataByts,
 			"instance did not decide",
 		},
@@ -53,7 +50,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"non supported role",
 			false,
 			3,
-			beacon.RoleUnknown,
+			beacon.RoleTypeUnknown,
 			refAttestationDataByts,
 			"no ibft for this role [UNKNOWN]",
 		},
@@ -63,17 +60,18 @@ func TestConsensusOnInputValue(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			identifier := _byteArray("6139636633363061613135666231643164333065653262353738646335383834383233633139363631383836616538623839323737356363623362643936623764373334353536396132616130623134653464303135633534613661306335345f4154544553544552")
 			node := testingValidator(t, test.decided, test.signaturesCount, identifier)
-			duty := &ethpb.DutiesResponse_Duty{
-				Committee:      nil,
-				CommitteeIndex: 0,
-				AttesterSlot:   0,
-				ProposerSlots:  nil,
-				PublicKey:      nil,
-				Status:         0,
-				ValidatorIndex: 0,
+			duty := &beacon.Duty{
+				Type:                    test.role,
+				PubKey:                  spec.BLSPubKey{},
+				Slot:                    0,
+				ValidatorIndex:          0,
+				CommitteeIndex:          0,
+				CommitteeLength:         0,
+				CommitteesAtSlot:        0,
+				ValidatorCommitteeIndex: 0,
 			}
 
-			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(context.Background(), node.logger, 0, test.role, duty)
+			signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(node.logger, duty)
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
 				return
@@ -142,38 +140,26 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 
-			// construct value
-			attData := &ethpb.AttestationData{}
-			require.NoError(t, attData.Unmarshal(test.expectedAttestationDataByts))
-
-			// marshal to decidedValue
-			d := &proto.InputValue_Attestation{
-				Attestation: &ethpb.Attestation{
-					Data: attData,
-				},
-			}
-			decidedValue, err := json.Marshal(d)
-			require.NoError(t, err)
-
-			duty := &ethpb.DutiesResponse_Duty{
-				Committee:      nil,
-				CommitteeIndex: 0,
-				AttesterSlot:   0,
-				ProposerSlots:  nil,
-				PublicKey:      nil,
-				Status:         0,
-				ValidatorIndex: 0,
+			duty := &beacon.Duty{
+				Type:                    beacon.RoleTypeAttester,
+				PubKey:                  spec.BLSPubKey{},
+				Slot:                    0,
+				ValidatorIndex:          0,
+				CommitteeIndex:          0,
+				CommitteeLength:         0,
+				CommitteesAtSlot:        0,
+				ValidatorCommitteeIndex: 0,
 			}
 
 			pk := &bls.PublicKey{}
-			err = pk.Deserialize(refPk)
+			err := pk.Deserialize(refPk)
 			require.NoError(t, err)
 
 			// send sigs
 			for index, sig := range test.sigs {
 				err := validator.network.BroadcastSignature(nil, &proto.SignedMessage{
 					Message: &proto.Message{
-						Lambda:    validator.ibfts[beacon.RoleAttester].GetIdentifier(),
+						Lambda:    validator.ibfts[beacon.RoleTypeAttester].GetIdentifier(),
 						SeqNumber: 0,
 					},
 					Signature: sig,
@@ -182,12 +168,12 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err = validator.postConsensusDutyExecution(context.Background(), validator.logger, 0, decidedValue, test.expectedSignaturesCount, beacon.RoleAttester, duty)
+			err = validator.postConsensusDutyExecution(context.Background(), validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
 				require.NoError(t, err)
-				require.EqualValues(t, test.expectedReconstructedSig, validator.beacon.(*testBeacon).LastSubmittedAttestation.GetSignature())
+				require.EqualValues(t, test.expectedReconstructedSig, validator.beacon.(*testBeacon).LastSubmittedAttestation.Signature[:])
 			}
 		})
 	}

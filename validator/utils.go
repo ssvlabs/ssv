@@ -46,6 +46,6 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 }
 
 // IdentifierFormat return base format for lambda
-func IdentifierFormat(pubKey []byte, role beacon.Role) string {
+func IdentifierFormat(pubKey []byte, role beacon.RoleType) string {
 	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), role.String())
 }
