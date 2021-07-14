@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -88,40 +87,4 @@ func handleUnknownQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 		Type: api.TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
 	}
-}
-
-func getOperators(s storage.OperatorsCollection, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
-	var operators []storage.OperatorInformation
-	if len(filter.PublicKey) > 0 {
-		operator, err := s.GetOperatorInformation(filter.PublicKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read operator")
-		}
-		operators = append(operators, *operator)
-	} else {
-		var err error
-		operators, err = s.ListOperators(filter.From, filter.To)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read operators")
-		}
-	}
-	return operators, nil
-}
-
-func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
-	var validators []storage.ValidatorInformation
-	if len(filter.PublicKey) > 0 {
-		validator, err := s.GetValidatorInformation(filter.PublicKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read validator")
-		}
-		validators = append(validators, *validator)
-	} else {
-		var err error
-		validators, err = s.ListValidators(filter.From, filter.To)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not read validators")
-		}
-	}
-	return validators, nil
 }
