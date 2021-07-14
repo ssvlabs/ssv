@@ -210,7 +210,7 @@ func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) b
 	return ok
 }
 
-// ReceivedMsgChan return a channel with messages
+// listen listens to some validator's topic
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
 	for {
@@ -232,13 +232,21 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
-			n.propagateSignedMsg(cm)
+			n.propagateSignedMsg(&cm)
 		}
 	}
 }
 
-func (n *p2pNetwork) propagateSignedMsg(cm network.Message) {
+// propagateSignedMsg takes an incoming message (from validator's topic)
+// and propagates it to the corresponding internal listeners
+func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 	logger := n.logger.With(zap.String("func", "propagateSignedMsg"))
+	// TODO: find a better way to deal with nil message
+	// 	i.e. avoid sending nil messages in the network
+	if cm == nil || cm.SignedMessage == nil {
+		logger.Debug("could not propagate nil message")
+		return
+	}
 	for _, ls := range n.listeners {
 		go func(ls listener, sm proto.SignedMessage, msgType network.NetworkMsg) {
 			switch msgType {

@@ -65,7 +65,15 @@ func (n *p2pNetwork) handleStream() {
 	})
 }
 
+// propagateSyncMsg takes an incoming sync message and propagates it on the internal sync channel
 func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream *SyncStream) {
+	logger := n.logger.With(zap.String("func", "propagateSyncMsg"))
+	// TODO: find a better way to deal with nil message
+	// 	i.e. avoid sending nil messages in the network
+	if netSyncStream == nil || cm == nil {
+		logger.Debug("could not propagate nil message")
+		return
+	}
 	cm.SyncMessage.FromPeerID = netSyncStream.stream.Conn().RemotePeer().String()
 	for _, ls := range n.listeners {
 		go func(ls listener, nm network.Message) {
