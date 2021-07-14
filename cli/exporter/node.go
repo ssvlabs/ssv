@@ -9,6 +9,9 @@ import (
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
+	"github.com/bloxapp/ssv/metrics"
+	metrics_ps "github.com/bloxapp/ssv/metrics/process"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -29,6 +32,8 @@ type config struct {
 	Network string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	// Exporter WS API
 	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
+
+	MetricsAPIPort int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 }
 
 var cfg config
@@ -97,6 +102,9 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
+		if cfg.MetricsAPIPort > 0 {
+			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort)
+		}
 		if err := exporterNode.Start(); err != nil {
 			Logger.Fatal("failed to start exporter", zap.Error(err))
 		}
@@ -105,4 +113,17 @@ var StartExporterNodeCmd = &cobra.Command{
 
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
+}
+
+func startMetricsHandler(logger *zap.Logger, net network.Network, port int) {
+	// register process metrics
+	metrics_ps.SetupProcessMetrics()
+	p2p.SetupNetworkMetrics(logger, net)
+	// init and start HTTP handler
+	metricsHandler := metrics.NewMetricsHandler(logger)
+	addr := fmt.Sprintf(":%d", port)
+	logger.Info("starting metrics handler", zap.String("addr", addr))
+	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
+		logger.Error("failed to start metrics handler", zap.Error(err))
+	}
 }
