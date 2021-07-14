@@ -54,6 +54,10 @@ spec:
       protocol: TCP
       targetPort: 14000
       name: port-14000
+    - port: 15000
+      protocol: TCP
+      targetPort: 15000
+      name: port-15000
   selector:
     app: ssv-exporter
 ---
@@ -131,6 +135,9 @@ spec:
         - containerPort: 14000
           name: port-14000
           hostPort: 14000
+        - containerPort: 15000
+          name: port-15000
+          hostPort: 15000
         env:
           - name: ETH_1_ADDR
             valueFrom:
@@ -160,6 +167,8 @@ spec:
             value: prater
           - name: STORAGE_PATH
             value: ./data/db
+          - name: METRICS_API_PORT
+            value: "15000"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter
