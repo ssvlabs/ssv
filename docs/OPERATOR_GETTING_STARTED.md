@@ -173,11 +173,21 @@ $ yq w -i config.yaml global.LogLevel "debug"
   ```
 
 
-### 6. Start Node in Docker
+### 6. Start SSV Node in Docker
 
 Run the docker image in the same folder you created the `config.yaml`:
 
-```
+```shell
 $ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13000:13000 -p 12000:12000 -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
   && docker logs ssv_node --follow
 ```
+
+### 7. Update SSV Node Image
+
+Kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
+```shell
+$ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
+```
+
+Once the new image was pulled, run the container again as specified above in step 6.
+
