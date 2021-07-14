@@ -54,7 +54,7 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	role                beacon.Role
+	role                beacon.RoleType
 	currentInstance     *Instance
 	currentInstanceLock sync.Locker
 	logger              *zap.Logger
@@ -70,7 +70,7 @@ type ibftImpl struct {
 }
 
 // New is the constructor of IBFT
-func New(role beacon.Role, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share) IBFT {
+func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share) IBFT {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &ibftImpl{
 		role:                role,

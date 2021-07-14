@@ -1,8 +1,9 @@
 package validator
 
 import (
-	"context"
 	"encoding/hex"
+	api "github.com/attestantio/go-eth2-client/api/v1"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
@@ -12,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -20,7 +20,8 @@ import (
 )
 
 var (
-	refAttestationDataByts = _byteArray("1a203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b2222122000000000000000000000000000000000000000000000000000000000000000002a24080212203a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b")
+	refAttestationDataByts = _byteArray("000000000000000000000000000000003a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b0000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000003a43a4bf26fb5947e809c1f24f7dc6857c8ac007e535d48e6e4eca2122fd776b")
+
 	//refSk                  = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
 	refPk = fixtures.RefPk
 
@@ -108,66 +109,51 @@ func (t *testIBFT) CurrentState() (*proto.State, error) {
 testBeacon
 */
 type testBeacon struct {
-	refAttestationData       *ethpb.AttestationData
-	LastSubmittedAttestation *ethpb.Attestation
+	refAttestationData       *spec.AttestationData
+	LastSubmittedAttestation *spec.Attestation
 }
+
 
 func newTestBeacon(t *testing.T) *testBeacon {
 	ret := &testBeacon{}
-	// parse ref att. data
-	ret.refAttestationData = &ethpb.AttestationData{}
-	err := ret.refAttestationData.Unmarshal(refAttestationDataByts) // ignore error
+	ret.refAttestationData = &spec.AttestationData{}
+	err := ret.refAttestationData.UnmarshalSSZ(refAttestationDataByts) // ignore error
 	require.NoError(t, err)
 	return ret
 }
 
-func (t *testBeacon) StreamDuties(ctx context.Context, pubKey [][]byte) (<-chan *ethpb.DutiesResponse_Duty, error) {
+func (b *testBeacon) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {
+}
+
+func (b *testBeacon) StartReceivingBlocks() {
+
+}
+
+func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error) {
 	return nil, nil
 }
 
-func (t *testBeacon) GetAttestationData(ctx context.Context, slot, committeeIndex uint64) (*ethpb.AttestationData, error) {
-	return t.refAttestationData, nil
+func (b *testBeacon) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
+	return nil, nil
 }
 
-func (t *testBeacon) SignAttestation(ctx context.Context, data *ethpb.AttestationData, duty *ethpb.DutiesResponse_Duty, key *bls.SecretKey) (*ethpb.Attestation, []byte, error) {
-	return &ethpb.Attestation{
+func (b *testBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
+	return b.refAttestationData, nil
+}
+
+func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {
+	sig := spec.BLSSignature{}
+	copy(sig[:], refAttestationSplitSigs[0])
+	return &spec.Attestation{
 		AggregationBits: nil,
 		Data:            data,
-		Signature:       refAttestationSplitSigs[0],
+		Signature:       sig,
 	}, refSigRoot, nil
 }
 
-func (t *testBeacon) SubmitAttestation(ctx context.Context, attestation *ethpb.Attestation, validatorIndex uint64, key *bls.PublicKey) error {
-	t.LastSubmittedAttestation = attestation
+func (b *testBeacon) SubmitAttestation(attestation *spec.Attestation) error {
+	b.LastSubmittedAttestation = attestation
 	return nil
-}
-
-func (t *testBeacon) GetAggregationData(ctx context.Context, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) (*ethpb.AggregateAttestationAndProof, error) {
-	return nil, nil
-}
-
-func (t *testBeacon) SignAggregation(ctx context.Context, data *ethpb.AggregateAttestationAndProof, secretKey *bls.SecretKey) (*ethpb.SignedAggregateAttestationAndProof, error) {
-	return nil, nil
-}
-
-func (t *testBeacon) SubmitAggregation(ctx context.Context, data *ethpb.SignedAggregateAttestationAndProof) error {
-	return nil
-}
-
-func (t *testBeacon) GetProposalData(ctx context.Context, slot uint64, shareKey *bls.SecretKey) (*ethpb.BeaconBlock, error) {
-	return nil, nil
-}
-
-func (t *testBeacon) SignProposal(ctx context.Context, domain *ethpb.DomainResponse, block *ethpb.BeaconBlock, shareKey *bls.SecretKey) (*ethpb.SignedBeaconBlock, error) {
-	return nil, nil
-}
-
-func (t *testBeacon) SubmitProposal(ctx context.Context, block *ethpb.SignedBeaconBlock) error {
-	return nil
-}
-
-func (t *testBeacon) RolesAt(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty, key *bls.PublicKey, shareKey *bls.SecretKey) ([]beacon.Role, error) {
-	return nil, nil
 }
 
 func testingValidator(t *testing.T, decided bool, signaturesCount int, identifier []byte) *Validator {
@@ -176,10 +162,10 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.ibfts = make(map[beacon.Role]ibft.IBFT)
-	ret.ibfts[beacon.RoleAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
-	ret.ibfts[beacon.RoleAttester].(*testIBFT).identifier = identifier
-	ret.ibfts[beacon.RoleAttester].Init()
+	ret.ibfts = make(map[beacon.RoleType]ibft.IBFT)
+	ret.ibfts[beacon.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
+	ret.ibfts[beacon.RoleTypeAttester].Init()
 
 	// nodes
 	ret.network = local.NewLocalNetwork()

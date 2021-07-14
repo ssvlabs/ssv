@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/hex"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -11,10 +12,9 @@ import (
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"time"
-
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+	"github.com/prysmaticlabs/prysm/shared/slotutil"
 	"go.uber.org/zap"
+	"time"
 )
 
 // Node represents the behavior of SSV node
@@ -52,8 +52,8 @@ type operatorNode struct {
 	storage             Storage
 	genesisEpoch        uint64
 	dutyLimit           uint64
-	streamDuties        <-chan *ethpb.DutiesResponse_Duty
 	eth1Client          eth1.Client
+	epochDutiesExist    bool // mark when received epoch duties in order to prevent fetching duties each slot tick
 }
 
 // New is the constructor of operatorNode
@@ -68,8 +68,9 @@ func New(opts Options) Node {
 		beacon:              *opts.Beacon,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 		// TODO do we really need to pass the whole object or just SlotDurationSec
-		slotQueue:  opts.SlotQueue,
-		eth1Client: opts.Eth1Client,
+		slotQueue:        opts.SlotQueue,
+		eth1Client:       opts.Eth1Client,
+		epochDutiesExist: false,
 	}
 
 	return ssv
@@ -78,27 +79,9 @@ func New(opts Options) Node {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("starting node -> IBFT")
-
+	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
 	n.validatorController.StartValidators()
-	n.startStreamDuties()
-
-	validatorsSubject := n.validatorController.NewValidatorSubject()
-	cnValidators, err := validatorsSubject.Register("SsvNodeObserver")
-	if err != nil {
-		n.logger.Warn("failed to register on validators events subject", zap.Error(err))
-		return err
-	}
-
-	for {
-		select {
-		case <-cnValidators:
-			n.logger.Debug("new processed validator, restarting stream duties")
-			n.startStreamDuties()
-			continue
-		case duty := <-n.streamDuties:
-			go n.onDuty(duty)
-		}
-	}
+	return n.startDutiesTicker()
 }
 
 // StartEth1 starts the eth1 events sync and streaming
@@ -128,64 +111,95 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	return nil
 }
 
-func (n *operatorNode) onDuty(duty *ethpb.DutiesResponse_Duty) {
-	slots := collectSlots(duty)
-	if len(slots) == 0 {
-		n.logger.Debug("no slots found for the given duty")
+func (n *operatorNode) onDuty(duty *beacon.Duty) {
+	if uint64(duty.Slot) < n.getEpochFirstSlot(n.genesisEpoch) {
+		// wait until genesis epoch starts
+		n.logger.Debug("skipping slot, lower than genesis",
+			zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)),
+			zap.Uint64("slot", uint64(duty.Slot)))
 		return
 	}
 
-	for _, slot := range slots {
-		if slot < n.getEpochFirstSlot(n.genesisEpoch) {
-			// wait until genesis epoch starts
-			n.logger.Debug("skipping slot, lower than genesis",
-				zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)),
-				zap.Uint64("slot", slot))
-			continue
+	currentSlot := uint64(n.getCurrentSlot())
+	logger := n.logger.
+		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
+		With(zap.Uint64("current slot", currentSlot)).
+		With(zap.Uint64("slot", uint64(duty.Slot))).
+		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
+		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
+		With(zap.Time("start_time", n.getSlotStartTime(uint64(duty.Slot))))
+	// execute task if slot already began and not pass 1 epoch
+	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= n.dutyLimit {
+		pubKey := &bls.PublicKey{}
+		if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
+			logger.Error("failed to deserialize pubkey from duty")
 		}
-		go func(slot uint64) {
-			currentSlot := uint64(n.getCurrentSlot())
-			logger := n.logger.
-				With(zap.Uint64("committee_index", duty.GetCommitteeIndex())).
-				With(zap.Uint64("current slot", currentSlot)).
-				With(zap.Uint64("slot", slot)).
-				With(zap.Uint64("epoch", slot/32)).
-				With(zap.String("pubKey", hex.EncodeToString(duty.PublicKey))).
-				With(zap.Time("start_time", n.getSlotStartTime(slot)))
-			// execute task if slot already began and not pass 1 epoch
-			if currentSlot >= slot && currentSlot-slot <= n.dutyLimit {
-				pubKey := &bls.PublicKey{}
-				if err := pubKey.Deserialize(duty.PublicKey); err != nil {
-					logger.Error("failed to deserialize pubkey from duty")
-				}
-				v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
-				if ok {
-					logger.Info("starting duty processing start for slot")
-					go v.ExecuteDuty(n.context, slot, duty)
-				} else {
-					logger.Info("could not find validator")
-				}
-			} else {
-				logger.Info("scheduling duty processing start for slot")
-				if err := n.slotQueue.Schedule(duty.PublicKey, slot, duty); err != nil {
-					logger.Error("failed to schedule slot")
-				}
-			}
-		}(slot)
+		v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
+		if ok {
+			logger.Info("starting duty processing start for slot")
+			go v.ExecuteDuty(n.context, uint64(duty.Slot), duty)
+		} else {
+			logger.Info("could not find validator")
+		}
+	} else {
+		logger.Info("scheduling duty processing start for slot")
+		if err := n.slotQueue.Schedule(duty.PubKey[:], uint64(duty.Slot), duty); err != nil {
+			logger.Error("failed to schedule slot")
+		}
 	}
 }
 
-// startStreamDuties start to stream duties from the beacon chain
-func (n *operatorNode) startStreamDuties() {
-	var err error
-	pubKeys := n.validatorController.GetValidatorsPubKeys()
-	n.logger.Debug("got pubkeys for stream duties", zap.Int("pubkeys count", len(pubKeys)))
-	n.streamDuties, err = n.beacon.StreamDuties(n.context, pubKeys)
-	n.logger.Debug("got stream duties")
-	if err != nil {
-		n.logger.Error("failed to open duties stream", zap.Error(err))
+// startDutiesTicker start to stream duties from the beacon chain
+func (n *operatorNode) startDutiesTicker() error {
+	genesisTime := time.Unix(int64(n.ethNetwork.MinGenesisTime()), 0)
+	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(n.ethNetwork.SlotDurationSec().Seconds()))
+	for currentSlot := range slotTicker.C() {
+		n.logger.Debug("slot ticker", zap.Uint64("slot", currentSlot))
+		if currentSlot%n.ethNetwork.SlotsPerEpoch() != 0 && n.epochDutiesExist {
+			//	Do nothing if not epoch start AND assignments already exist.
+			continue
+		}
+		n.epochDutiesExist = false
+
+		indices := n.validatorController.GetValidatorsIndices() // fetching all validator with index (will return only active once too)
+		n.logger.Debug("got indices for get duties", zap.Int("indices count", len(indices)))
+		esEpoch := n.ethNetwork.EstimatedEpochAtSlot(currentSlot)
+		epoch := spec.Epoch(esEpoch)
+		go n.getAttesterDuties(epoch, indices) // when scale need to support batches
+	//	 TODO add getProposerDuties here
 	}
-	n.logger.Info("start streaming duties")
+	return errors.New("ticker failed")
+}
+
+// getAttesterDuties request attest duties from beacon node for all active accounts
+func (n *operatorNode) getAttesterDuties(epoch spec.Epoch, indices []spec.ValidatorIndex) {
+	if indices == nil {
+		return
+	}
+	n.logger.Debug("fetching attest duties...", zap.Any("epoch", epoch), zap.Any("count", len(indices)))
+	resp, err := n.beacon.GetDuties(epoch, indices)
+	n.logger.Debug("duties received")
+	if err != nil {
+		n.logger.Error("failed to get attest duties", zap.Error(err))
+		return
+	}
+	if len(resp) == 0 {
+		n.logger.Debug("no duties...")
+		return
+	}
+	for _, duty := range resp {
+		go n.onDuty(&beacon.Duty{
+			Type:                    beacon.RoleTypeAttester,
+			PubKey:                  duty.PubKey,
+			Slot:                    duty.Slot,
+			ValidatorIndex:          duty.ValidatorIndex,
+			CommitteeIndex:          duty.CommitteeIndex,
+			CommitteeLength:         duty.CommitteeLength,
+			CommitteesAtSlot:        duty.CommitteesAtSlot,
+			ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
+		})
+	}
+	n.epochDutiesExist = true
 }
 
 // getSlotStartTime returns the start time for the given slot
@@ -205,12 +219,4 @@ func (n *operatorNode) getCurrentSlot() int64 {
 // getEpochFirstSlot returns the beacon node first slot in epoch
 func (n *operatorNode) getEpochFirstSlot(epoch uint64) uint64 {
 	return epoch * 32
-}
-
-// collectSlots collects slots from the given duty
-func collectSlots(duty *ethpb.DutiesResponse_Duty) []uint64 {
-	var slots []uint64
-	slots = append(slots, duty.GetAttesterSlot())
-	slots = append(slots, duty.GetProposerSlots()...)
-	return slots
 }

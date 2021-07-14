@@ -1,8 +1,7 @@
 package valcheck
 
 import (
-	"encoding/json"
-	"github.com/bloxapp/ssv/ibft/proto"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 )
 
@@ -13,12 +12,13 @@ type AttestationValueCheck struct {
 // Check returns error if value is invalid
 func (v *AttestationValueCheck) Check(value []byte) error {
 	// try and parse to attestation data
-	inputValue := &proto.InputValue_Attestation{}
-	if err := json.Unmarshal(value, &inputValue); err != nil {
+	inputValue := &spec.AttestationData{}
+	if err := inputValue.UnmarshalSSZ(value); err != nil {
 		return errors.Wrap(err, "could not parse input value storing attestation data")
 	}
 
-	if inputValue.Attestation.Data.Slot == 0 {
+
+	if inputValue.Slot == 0 {
 		return errors.New("this is an example test error")
 	}
 

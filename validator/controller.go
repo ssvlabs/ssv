@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -15,6 +16,8 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"time"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // ControllerOptions for controller struct creation
@@ -36,6 +39,7 @@ type IController interface {
 	ListenToEth1Events(cn pubsub.SubjectChannel)
 	StartValidators() map[string]*Validator
 	GetValidatorsPubKeys() [][]byte
+	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
 	NewValidatorSubject() pubsub.Subscriber
 }
@@ -148,6 +152,24 @@ func (c *controller) GetValidatorsPubKeys() [][]byte {
 	return pubKeys
 }
 
+// GetValidatorsPubKeys returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
+func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
+	var indices []spec.ValidatorIndex
+	var toFetch []phase0.BLSPubKey
+	for _, val := range c.validatorsMap {
+		if val.Share.Index == nil {
+			blsPubKey := phase0.BLSPubKey{}
+			copy(blsPubKey[:], val.Share.PublicKey.Serialize())
+			toFetch = append(toFetch, blsPubKey)
+		} else {
+			index := spec.ValidatorIndex(*val.Share.Index)
+			indices = append(indices, index)
+		}
+	}
+	go c.updateIndices(toFetch) // saving missing indices to be ready for next ticker (slot)
+	return indices
+}
+
 // GetValidator returns a validator
 func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	v, ok := c.validatorsMap[pubKey]
@@ -228,6 +250,32 @@ func (c *controller) onNewValidatorShare(validatorShare *validatorstorage.Share)
 			c.logger.Debug("validator started", zap.String("pubKeyHex", pubKeyHex))
 		}
 		c.newValidatorSubject.Notify(*v)
+	}
+}
+
+func (c *controller) updateIndices(pubkeys []spec.BLSPubKey) {
+	if len(pubkeys) == 0 {
+		return
+	}
+	c.logger.Debug("fetching indices...", zap.Int("total", len(pubkeys)))
+	validatorsMap, err := c.beacon.GetIndices(pubkeys)
+	if err != nil {
+		c.logger.Error("failed to fetch indices", zap.Error(err))
+		return
+	}
+	c.logger.Debug("returned indices from beacon", zap.Int("total", len(validatorsMap)))
+	for index, v := range validatorsMap {
+		if validator, ok := c.validatorsMap[hex.EncodeToString(v.Validator.PublicKey[:])]; ok {
+			uIndex := uint64(index)
+			validator.Share.Index = &uIndex
+			err := c.collection.SaveValidatorShare(validator.Share)
+			if err != nil {
+				c.logger.Error("failed to update share index", zap.String("pubkey", validator.Share.PublicKey.SerializeToHexStr()))
+				continue
+			}
+			c.beacon.ExtendIndexMap(index, v.Validator.PublicKey) // updating goClient map
+			c.logger.Debug("share index has been updated", zap.String("pubkey", hex.EncodeToString(v.Validator.PublicKey[:])), zap.Any("index", validator.Share.Index))
+		}
 	}
 }
 

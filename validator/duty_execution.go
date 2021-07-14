@@ -3,17 +3,15 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"github.com/bloxapp/ssv/beacon/valcheck"
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/utils/valcheck"
 	"github.com/pkg/errors"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
-	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"go.uber.org/zap"
 )
 
@@ -72,14 +70,14 @@ SigCollectionLoop:
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, seqNumber uint64, decidedValue []byte, signaturesCount int, role beacon.Role, duty *ethpb.DutiesResponse_Duty) error {
+func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, seqNumber uint64, decidedValue []byte, signaturesCount int, duty *beacon.Duty) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := v.signDuty(ctx, decidedValue, role, duty, v.Share.ShareKey)
+	sig, root, valueStruct, err := v.signDuty(decidedValue, duty, v.Share.ShareKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
 
-	identifier := v.ibfts[role].GetIdentifier()
+	identifier := v.ibfts[duty.Type].GetIdentifier()
 	// TODO - should we construct it better?
 	if err := v.network.BroadcastSignature(v.Share.PublicKey.Serialize(), &proto.SignedMessage{
 		Message: &proto.Message{
@@ -104,81 +102,76 @@ func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.
 	logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(signatures)))
 
 	// Reconstruct signatures
-	if err := v.reconstructAndBroadcastSignature(ctx, logger, signatures, root, valueStruct, role, duty); err != nil {
+	if err := v.reconstructAndBroadcastSignature(logger, signatures, root, valueStruct, duty); err != nil {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
 	logger.Info("Successfully submitted role!")
 	return nil
 }
 
-func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap.Logger, slot uint64, role beacon.Role, duty *ethpb.DutiesResponse_Duty) (int, []byte, uint64, error) {
+func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon.Duty) (int, []byte, uint64, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance ibftvalcheck.ValueCheck
 
-	l := logger.With(zap.String("role", role.String()))
-	if _, ok := v.ibfts[role]; !ok {
-		return 0, nil, 0, errors.Errorf("no ibft for this role [%s]", role.String())
+	if _, ok := v.ibfts[duty.Type]; !ok {
+		return 0, nil, 0, errors.Errorf("no ibft for this role [%s]", duty.Type.String())
 	}
 
-	switch role {
-	case beacon.RoleAttester:
-		attData, err := v.beacon.GetAttestationData(ctx, slot, duty.GetCommitteeIndex())
+	switch duty.Type {
+	case beacon.RoleTypeAttester:
+		attData, err := v.beacon.GetAttestationData(duty.Slot, duty.CommitteeIndex)
 		if err != nil {
 			return 0, nil, 0, errors.Wrap(err, "failed to get attestation data")
 		}
 
-		d := &proto.InputValue_Attestation{
-			Attestation: &ethpb.Attestation{
-				Data: attData,
-			},
-		}
-		inputByts, err = json.Marshal(d)
+		inputByts, err = attData.MarshalSSZ()
 		if err != nil {
-			return 0, nil, 0, errors.Errorf("failed to marshal on attestation role: %s", role.String())
+			return 0, nil, 0, errors.Errorf("failed to marshal on attestation role: %s", duty.Type.String())
 		}
 		valCheckInstance = &valcheck.AttestationValueCheck{}
-	case beacon.RoleAggregator:
-		aggData, err := v.beacon.GetAggregationData(ctx, duty, v.Share.PublicKey, v.Share.ShareKey)
-		if err != nil {
-			return 0, nil, 0, errors.Wrap(err, "failed to get aggregation data")
-		}
-
-		d := &proto.InputValue_AggregationData{
-			AggregationData: aggData,
-		}
-		inputByts, err = json.Marshal(d)
-		if err != nil {
-			return 0, nil, 0, errors.Errorf("failed to marshal on aggregation role: %s", role.String())
-		}
-		valCheckInstance = &valcheck.AggregatorValueCheck{}
-	case beacon.RoleProposer:
-		block, err := v.beacon.GetProposalData(ctx, slot, v.Share.ShareKey)
-		if err != nil {
-			return 0, nil, 0, errors.Wrap(err, "failed to get proposal block")
-		}
-
-		d := &proto.InputValue_BeaconBlock{
-			BeaconBlock: block,
-		}
-		inputByts, err = json.Marshal(d)
-		if err != nil {
-			return 0, nil, 0, errors.Errorf("failed to marshal on proposer role: %s", role.String())
-		}
-		valCheckInstance = &valcheck.ProposerValueCheck{}
+	//case beacon.RoleTypeAggregator:
+	//	aggData, err := v.beacon.GetAggregationData(ctx, duty, v.Share.PublicKey, v.Share.ShareKey)
+	//	if err != nil {
+	//		return 0, nil, 0, errors.Wrap(err, "failed to get aggregation data")
+	//	}
+	//
+	//	d := &proto.InputValue_AggregationData{
+	//		AggregationData: aggData,
+	//	}
+	//	inputByts, err = json.Marshal(d)
+	//	if err != nil {
+	//		return 0, nil, 0, errors.Errorf("failed to marshal on aggregation role: %s", role.String())
+	//	}
+	//	valCheckInstance = &valcheck.AggregatorValueCheck{}
+	//case beacon.RoleTypeProposer:
+	//	block, err := v.beacon.GetProposalData(ctx, slot, v.Share.ShareKey)
+	//	if err != nil {
+	//		return 0, nil, 0, errors.Wrap(err, "failed to get proposal block")
+	//	}
+	//
+	//	d := &proto.InputValue_BeaconBlock{
+	//		BeaconBlock: block,
+	//	}
+	//	inputByts, err = json.Marshal(d)
+	//	if err != nil {
+	//		return 0, nil, 0, errors.Errorf("failed to marshal on proposer role: %s", role.String())
+	//	}
+	//	valCheckInstance = &valcheck.ProposerValueCheck{}
 	default:
-		return 0, nil, 0, errors.Errorf("unknown role: %s", role.String())
+		return 0, nil, 0, errors.Errorf("unknown role: %s", duty.Type.String())
 	}
 
+	logger.Debug("duty data received")
 	// calculate next seq
-	seqNumber, err := v.ibfts[role].NextSeqNumber()
+	seqNumber, err := v.ibfts[duty.Type].NextSeqNumber()
 	if err != nil {
 		return 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	result, err := v.ibfts[role].StartInstance(ibft.StartOptions{
+	result, err := v.ibfts[duty.Type].StartInstance(ibft.StartOptions{
 		ValidatorShare: v.Share,
-		Logger:         l,
+		Logger:         logger,
 		ValueCheck:     valCheckInstance,
 		SeqNumber:      seqNumber,
 		Value:          inputByts,
@@ -197,45 +190,32 @@ func (v *Validator) comeToConsensusOnInputValue(ctx context.Context, logger *zap
 }
 
 // ExecuteDuty by slotQueue
-func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *ethpb.DutiesResponse_Duty) {
+func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.Duty) {
 	logger := v.logger.With(zap.Time("start_time", v.getSlotStartTime(slot)),
-		zap.Uint64("committee_index", duty.GetCommitteeIndex()),
-		zap.Uint64("slot", slot))
+		zap.Uint64("committee_index", uint64(duty.CommitteeIndex)),
+		zap.Uint64("slot", slot),
+		zap.String("duty_type", duty.Type.String()))
 
 	logger.Debug("executing duty...")
-	roles, err := v.beacon.RolesAt(ctx, slot, duty, v.Share.PublicKey, v.Share.ShareKey)
+	signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)
 	if err != nil {
-		logger.Error("failed to get roles for duty", zap.Error(err))
+		logger.Error("could not come to consensus", zap.Error(err))
 		return
 	}
 
-	for _, role := range roles {
-		go func(role beacon.Role) {
-			l := logger.With(zap.String("role", role.String()))
-			l.Debug("starting duty role")
+	// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
+	logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
 
-			signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(ctx, logger, slot, role, duty)
-			if err != nil {
-				logger.Error("could not come to consensus", zap.Error(err))
-				return
-			}
-
-			// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
-			logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
-
-			// Sign, aggregate and broadcast signature
-			if err := v.postConsensusDutyExecution(
-				ctx,
-				logger,
-				seqNumber,
-				decidedValue,
-				signaturesCount,
-				role,
-				duty,
-			); err != nil {
-				logger.Error("could not execute duty", zap.Error(err))
-				return
-			}
-		}(role)
+	// Sign, aggregate and broadcast signature
+	if err := v.postConsensusDutyExecution(
+		ctx,
+		logger,
+		seqNumber,
+		decidedValue,
+		signaturesCount,
+		duty,
+	); err != nil {
+		logger.Error("could not execute duty", zap.Error(err))
+		return
 	}
 }

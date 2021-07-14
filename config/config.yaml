@@ -5,6 +5,13 @@ db:
   Path: ./data/db
   Type: badger-db
 
+eth2:
+  Network:
+#  BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
+#  BeaconNodeAddr: prater-4000:stage:bloxinfra:com:80
+  BeaconNodeAddr: http://eth2-lh-prater-5052.stage.bloxinfra.com
+
+
 ssv:
   GenesisEpoch:
   DutyLimit: 32
@@ -12,11 +19,8 @@ ssv:
     SignatureCollectionTimeout: 5s
 
 OperatorPrivateKey:
-BeaconNodeAddr: prater-4000.stage.bloxinfra.com:80
-
 eth1:
   ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
-
 p2p:
   HostAddress: example.ip
   TcpPort:

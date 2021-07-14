@@ -3,7 +3,8 @@ package operator
 import (
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon/prysmgrpc"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
@@ -29,12 +30,10 @@ type config struct {
 	DBOptions                  basedb.Options   `yaml:"db"`
 	SSVOptions                 operator.Options `yaml:"ssv"`
 	ETH1Options                eth1.Options     `yaml:"eth1"`
+	ETH2Options                beacon.Options   `yaml:"eth2"`
 
-	MetricsAPIPort int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
+	MetricsAPIPort int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	OperatorKey    string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-
 	P2pNetworkConfig p2p.Config `yaml:"p2p"`
 }
 
@@ -67,10 +66,15 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
 
-		eth2Network := core.NetworkFromString(cfg.Network)
-		beaconClient, err := prysmgrpc.New(cmd.Context(), Logger, eth2Network, []byte("BloxStaking"), cfg.BeaconNodeAddr)
+		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
+
+		// TODO Not refactored yet Start:
+		cfg.ETH2Options.Context = cmd.Context()
+		cfg.ETH2Options.Logger = Logger
+		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
+		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
-			Logger.Fatal("failed to create beacon client", zap.Error(err))
+			Logger.Fatal("failed to create beacon go-client", zap.Error(err))
 		}
 
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
@@ -84,12 +88,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = &beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
+
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = network
-		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
+		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient   // TODO need to be pointer?
 
 		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {

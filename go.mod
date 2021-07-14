@@ -3,17 +3,13 @@ module github.com/bloxapp/ssv
 go 1.15
 
 require (
-	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
+	github.com/attestantio/go-eth2-client v0.6.30
 	github.com/bloxapp/eth2-key-manager v1.0.6
 	github.com/dgraph-io/badger/v3 v3.2011.1
-	github.com/docker/docker v1.4.2-0.20180625184442-8e610b2b55bf
-	github.com/docker/go-connections v0.4.0 // indirect
-	github.com/docker/go-metrics v0.0.1 // indirect
-	github.com/docker/go-units v0.4.0 // indirect
-	github.com/docker/libnetwork v0.5.6 // indirect
 	github.com/ethereum/go-ethereum v1.9.25
+	github.com/ferranbt/fastssz v0.0.0-20210316165225-412ceaa5950e
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/protobuf v1.4.3
+	github.com/golang/protobuf v1.5.2
 	github.com/gorilla/websocket v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
@@ -26,26 +22,26 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.4.0
 	github.com/libp2p/go-tcp-transport v0.2.1
 	github.com/multiformats/go-multiaddr v0.3.1
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
-	github.com/prysmaticlabs/go-bitfield v0.0.0-20210107162333-9e9cf77d4921
+	github.com/prysmaticlabs/go-bitfield v0.0.0-20210202205921-7fcea7c45dc8
+	github.com/prysmaticlabs/go-ssz v0.0.0-20200612203617-6d5c9aa213ae
 	github.com/prysmaticlabs/prysm v1.1.0
+	github.com/rs/zerolog v1.23.0
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/spf13/cobra v1.1.1
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/wealdtech/go-eth2-util v1.6.2
 	go.opencensus.io v0.22.5
 	go.uber.org/zap v1.16.0
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
-	google.golang.org/grpc v1.33.1
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/grpc v1.37.0
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 
 replace github.com/ethereum/go-ethereum => github.com/prysmaticlabs/bazel-go-ethereum v0.0.0-20201113091623-013fd65b3791
 
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
+
+replace github.com/attestantio/go-eth2-client v0.6.30 => github.com/bloxapp/go-eth2-client v0.6.31-0.20210706133239-eb1bd7a3cb25
