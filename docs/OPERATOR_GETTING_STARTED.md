@@ -31,7 +31,7 @@ This section details the steps to run a local network of operator nodes.
 
 #### Prerequisites
 
-In order to run a local environment, the following are required:
+In order to run a local environment, install the following:
 * git
 * go (1.15)
 * docker
@@ -40,7 +40,7 @@ In order to run a local environment, the following are required:
 #### 1. Clone Repository
 
 ```bash
-$ git clone https://github.com/ethereum/eth2-ssv.git
+$ git clone https://github.com/bloxapp/ssv.git
 ```
 
 #### 2. Build Binary
