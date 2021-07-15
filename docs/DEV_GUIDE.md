@@ -71,4 +71,4 @@ Please make sure your contributions adhere to our coding guidelines:
   guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
 * Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary)
   guidelines.
-* Pull requests need to be based on and opened against the `stage` branch.
+* Pull requests need to be based on and opened against the `stage` branch, and commits should be squashed on merge.
