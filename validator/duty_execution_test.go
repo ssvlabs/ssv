@@ -28,6 +28,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 		signaturesCount             int
 		role                        beacon.RoleType
 		expectedAttestationDataByts []byte
+		overrideAttestationData     *spec.AttestationData
 		expectedError               string
 	}{
 		{
@@ -36,6 +37,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleTypeAttester,
 			marshalInputValueStructForAttestation(t, refAttestationDataByts),
+			nil,
 			"",
 		},
 		{
@@ -44,6 +46,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleTypeAttester,
 			refAttestationDataByts,
+			nil,
 			"instance did not decide",
 		},
 		{
@@ -52,7 +55,28 @@ func TestConsensusOnInputValue(t *testing.T) {
 			3,
 			beacon.RoleTypeUnknown,
 			refAttestationDataByts,
+			nil,
 			"no ibft for this role [UNKNOWN]",
+		},
+		{
+			"non supported role",
+			false,
+			3,
+			beacon.RoleTypeUnknown,
+			refAttestationDataByts,
+			nil,
+			"no ibft for this role [UNKNOWN]",
+		},
+		{
+			"invalid value pre-check",
+			false,
+			3,
+			beacon.RoleTypeAttester,
+			refAttestationDataByts,
+			&spec.AttestationData{
+				Slot: 100,
+			},
+			"input value failed pre-consensus check: TEST - failed on slot 100",
 		},
 	}
 
@@ -60,6 +84,11 @@ func TestConsensusOnInputValue(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			identifier := _byteArray("6139636633363061613135666231643164333065653262353738646335383834383233633139363631383836616538623839323737356363623362643936623764373334353536396132616130623134653464303135633534613661306335345f4154544553544552")
 			node := testingValidator(t, test.decided, test.signaturesCount, identifier)
+
+			if test.overrideAttestationData != nil {
+				node.beacon.(*testBeacon).refAttestationData = test.overrideAttestationData
+			}
+
 			duty := &beacon.Duty{
 				Type:                    test.role,
 				PubKey:                  spec.BLSPubKey{},

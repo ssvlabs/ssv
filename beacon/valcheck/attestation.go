@@ -17,6 +17,10 @@ func (v *AttestationValueCheck) Check(value []byte) error {
 		return errors.Wrap(err, "could not parse input value storing attestation data")
 	}
 
+	if inputValue.Slot == 100 {
+		return errors.New("TEST - failed on slot 100")
+	}
+
 	// TODO - test for slashing protection
 	return nil
 }
