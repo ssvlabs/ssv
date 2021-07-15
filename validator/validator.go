@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"context"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -60,6 +61,12 @@ func New(opt Options, db basedb.IDb) *Validator {
 
 	for _, ib := range ibfts { // init all ibfts
 		go ib.Init()
+	}
+
+	if opt.Share.Index != nil { // in order ot update goclient map to prevent getting all network indices bug
+		blsPubkey := spec.BLSPubKey{}
+		copy(blsPubkey[:], opt.Share.PublicKey.Serialize())
+		opt.Beacon.ExtendIndexMap(spec.ValidatorIndex(*opt.Share.Index), blsPubkey)
 	}
 
 	return &Validator{
