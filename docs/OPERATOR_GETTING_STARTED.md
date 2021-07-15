@@ -5,15 +5,6 @@
 
 # SSV - Operator Getting Started Guide
 
-* [Running a Local Network of Operators](#running-a-local-network-of-operators)
-    - [Prerequisites](#prerequisites)
-    - [1. Clone Repository](#1-clone-repository)
-    - [2. Build Binary](#2-build-binary)
-    - [3. Split Validator Key](#4-split-validator-key)
-    - [4. Create Config Files](#5-create-config-files)
-      * [4.1. Node Config](#51-node-config)
-      * [4.2. Shares Config](#52-shares-config)
-    - [5. Run a local network with 4 nodes](#6-run-a-local-network-with-4-nodes)
 * [Setting AWS Server for Operator](#setting-aws-server-for-operator)
   + [1. Setup](#1-setup)
   + [2. Login with SSH](#2-login-with-ssh)
@@ -24,50 +15,6 @@
     - [5.2 Metrics Configuration](#52-metrics-configuration)
   + [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
   + [7. Update SSV Node Image](#7-update-ssv-node-image)
-
-## Running a Local Network of Operators
-
-This section details the steps to run a local network of operator nodes.
-
-#### Prerequisites
-
-In order to run a local environment, install the following:
-* git
-* go (1.15)
-* docker
-* make
-
-#### 1. Clone Repository
-
-```bash
-$ git clone https://github.com/bloxapp/ssv.git
-```
-
-#### 2. Build Binary
-
-```bash
-$ CGO_ENABLED=1 go build -o ./bin/ssvnode ./cmd/ssvnode/
-```
-
-#### 3. Split Validator Key
-
-See [Dev Guide > Splitting a Validator Key](./DEV_GUIDE.md#splitting-a-validator-key).
-
-#### 4. Create Config Files
-
-  ##### 4.1. Node Config
-
-  Fill the required fields in [config.yaml](../config/config.yaml) file. Note - there's no need to fill the OperatorPrivateKey field.
-
-  ##### 4.2. Shares Config
-
-  Create 4 .yaml files with the corresponding configuration, based on the [template file](../config/example_share.yaml). \
-  The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
-
-#### 5. Run a local network with 4 nodes
-```bash
-$ make docker-debug 
-```
 
 ## Setting AWS Server for Operator
 
@@ -101,8 +48,8 @@ $ ssh -i {key pair file name} ubuntu@{instance public IP}
 
 type yes when prompted
 ```
-Windows:
 
+Windows:
 ```
 cd\{path to the folder to which the key pair file was downloaded}
 
@@ -197,5 +144,5 @@ Kill running container and pull the latest image or a specific version (`bloxsta
 $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 ```
 
-Once the new image was pulled, run the container again as specified above in step 6.
+Now run the container again as specified above in step 6.
 
