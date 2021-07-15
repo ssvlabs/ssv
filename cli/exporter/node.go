@@ -29,10 +29,7 @@ type config struct {
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 	ETH1Options                eth1.Options   `yaml:"eth1"`
 
-	Network string `yaml:"Network" env:"NETWORK" env-default:"prater"`
-	// Exporter WS API
-	WsAPIPort int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000"`
-
+	WsAPIPort      int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
 	MetricsAPIPort int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 }
 
