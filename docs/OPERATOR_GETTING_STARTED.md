@@ -116,7 +116,7 @@ Download and run the installation script.
 ```
 $ sudo su
 
-$ wget https://raw.githubusercontent.com/bloxapp/ssv/stage/install.sh
+$ wget https://raw.githubusercontent.com/bloxapp/ssv/main/install.sh
 
 $ chmod +x install.sh
 
