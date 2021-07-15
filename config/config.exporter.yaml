@@ -3,13 +3,11 @@ global:
 
 db:
   Path: ./data/db/exporter
-  Type: badger-db
-
-eth2:
-  BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
 
 eth1:
+  # ETH1 node WebSocket address
   ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
 
 p2p:
+  # replace with your ip
   HostAddress:
