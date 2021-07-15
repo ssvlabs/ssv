@@ -38,7 +38,7 @@ In order to run a local environment, the following are required:
 #### 1. Clone Repository
 
 ```bash
-$ git clone https://github.com/ethereum/eth2-ssv.git
+$ git clone git@github.com:bloxapp/ssv.git
 ```
 
 #### 2. Build Binary
