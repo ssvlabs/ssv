@@ -147,7 +147,7 @@ $ yq n db.Path "<db folder>" | tee config.yaml \
   && yq w -i config.yaml eth2.BeaconNodeAddr "<ETH 2.0 node>" \
   && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>" \
   && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node>" \
-  && yq w -i config.yaml eth1.RegistryContractAddr "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b"
+  && yq w -i config.yaml eth1.RegistryContractAddr "0x687fb596F3892904F879118e2113e1EEe8746C2E"
 ```
 
 `config.yaml` example:
