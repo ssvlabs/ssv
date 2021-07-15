@@ -95,38 +95,6 @@ spec:
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
-        - name: NODE_ID
-          value: "4"
-        - name: SSV_PRIVATE_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: ssv_node_v2_4
-        - name: VALIDATOR_PUBLIC_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: validator_public_key_v2
-        - name: BEACON_NODE_ADDR
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: beacon_node_addr
-        - name: PUBKEY_NODE_1
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_1
-        - name: PUBKEY_NODE_2
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_2
-        - name: PUBKEY_NODE_3
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: pubkey_node_v2_3
         - name: ETH_1_ADDR
           valueFrom:
             secretKeyRef:
