@@ -3,10 +3,23 @@ global:
 
 db:
   Path: ./data/db
-  Type: badger-db
 
 eth2:
   BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
+  Network: prater
+
+eth1:
+  # ETH1 node WebSocket address
+  ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
+
+p2p:
+  # replace with your ip
+  HostAddress: example.ip
+  TcpPort:
+  UdpPort:
+  # mdns for local network setup
+  DiscoveryType: mdns
+
 ssv:
   GenesisEpoch:
   DutyLimit: 32
@@ -14,13 +27,6 @@ ssv:
     SignatureCollectionTimeout: 5s
 
 OperatorPrivateKey:
-eth1:
-  ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
-p2p:
-  HostAddress: example.ip
-  TcpPort:
-  UdpPort:
-  DiscoveryType: mdns
 
 bootnode:
   ExternalIP:

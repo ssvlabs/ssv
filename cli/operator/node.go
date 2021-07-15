@@ -31,10 +31,10 @@ type config struct {
 	SSVOptions                 operator.Options `yaml:"ssv"`
 	ETH1Options                eth1.Options     `yaml:"eth1"`
 	ETH2Options                beacon.Options   `yaml:"eth2"`
+	P2pNetworkConfig           p2p.Config       `yaml:"p2p"`
 
-	MetricsAPIPort int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	OperatorKey    string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	P2pNetworkConfig p2p.Config `yaml:"p2p"`
+	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	OperatorPrivateKey string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 }
 
 var cfg config
@@ -96,10 +96,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = network
-		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient   // TODO need to be pointer?
+		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
 
 		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
-		if err := operatorStorage.SetupPrivateKey(cfg.OperatorKey); err != nil {
+		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey

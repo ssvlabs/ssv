@@ -92,7 +92,7 @@ and run the command below to create a `config.yaml` file.
 $ yq n db.Path "<db folder>" | tee config.yaml \
   && yq w -i config.yaml eth2.Network "prater" \
   && yq w -i config.yaml eth2.BeaconNodeAddr "<ETH 2.0 node>" \
-  && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node>" \
+  && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node WebSocket address>" \
   && yq w -i config.yaml eth1.RegistryContractAddr "0x687fb596F3892904F879118e2113e1EEe8746C2E" \
   && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>"
 ```
