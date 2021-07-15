@@ -107,7 +107,7 @@ eth2:
   BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
 eth1:
   ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
-  RegistryContractAddr: 0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b
+  RegistryContractAddr: 0x687fb596F3892904F879118e2113e1EEe8746C2E
 OperatorPrivateKey: LS0tLS...
 ```
 
