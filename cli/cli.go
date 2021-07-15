@@ -26,8 +26,6 @@ func Execute(appName, version string) {
 	RootCmd.Short = appName
 	RootCmd.Version = version
 
-	log.Printf("starting %s:%s", appName, version)
-
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("failed to execute root command", zap.Error(err))
 	}
