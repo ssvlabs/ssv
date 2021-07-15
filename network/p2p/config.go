@@ -10,7 +10,7 @@ import (
 type Config struct {
 	// yaml/env arguments
 	Enr              string        `yaml:"Enr" env:"ENR_KEY" env-description:"enr used in discovery" env-default:""`
-	DiscoveryType    string        `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"mdns"`
+	DiscoveryType    string        `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"discv5"`
 	TCPPort          int           `yaml:"TcpPort" env:"TCP_PORT" env-default:"13000"`
 	UDPPort          int           `yaml:"UdpPort" env:"UDP_PORT" env-default:"12000"`
 	HostAddress      string        `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`

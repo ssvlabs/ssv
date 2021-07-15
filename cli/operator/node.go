@@ -46,6 +46,8 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		log.Printf("starting %s:%s", cmd.Parent().Short, cmd.Parent().Version)
+
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}

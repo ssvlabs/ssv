@@ -21,7 +21,9 @@
   + [4. Generate Operator Keys](#4-generate-operator-keys)
   + [5. Create a Configuration File](#5-create-a-configuration-file)
     - [5.1 Debug Configuration](#51-debug-configuration)
-  + [6. Start Node in Docker](#6-start-node-in-docker)
+    - [5.2 Metrics Configuration](#52-metrics-configuration)
+  + [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
+  + [7. Update SSV Node Image](#7-update-ssv-node-image)
 
 ## Running a Local Network of Operators
 
@@ -141,28 +143,25 @@ and run the command below to create a `config.yaml` file.
 
 ```
 $ yq n db.Path "<db folder>" | tee config.yaml \
-  && yq w -i config.yaml db.Type "badger-db" \
-  && yq w -i config.yaml p2p.DiscoveryType "discv5" \
   && yq w -i config.yaml eth2.Network "prater" \
   && yq w -i config.yaml eth2.BeaconNodeAddr "<ETH 2.0 node>" \
-  && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>" \
   && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node>" \
-  && yq w -i config.yaml eth1.RegistryContractAddr "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b"
+  && yq w -i config.yaml eth1.RegistryContractAddr "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b" \
+  && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>"
 ```
 
-`config.yaml` example:
+Example:
 
 ```yaml
 db:
   Path: ./data/db/node_1
-  Type: badger-db
-p2p:
-  DiscoveryType: discv5
-Network: prater
 eth2:
+  Network: prater
   BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
 eth1:
   ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
+  RegistryContractAddr: 0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b
+OperatorPrivateKey: LS0tLS...
 ```
 
   #### 5.1 Debug Configuration
@@ -170,7 +169,15 @@ eth1:
   In order to see `debug` level logs, add the corresponding section to the `config.yaml` by running:
 
   ```
-$ yq w -i config.yaml global.LogLevel "debug"
+  $ yq w -i config.yaml global.LogLevel "debug"
+  ```
+
+  #### 5.2 Metrics Configuration
+
+  In order to enable [metrics](../metrics/README.md), the corresponding config should be in place:
+
+  ```
+  $ yq w -i config.yaml MetricsAPIPort "15000"
   ```
 
 
