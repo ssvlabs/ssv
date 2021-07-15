@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/beacon/valcheck"
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
@@ -129,7 +128,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		if err != nil {
 			return 0, nil, 0, errors.Errorf("failed to marshal on attestation role: %s", duty.Type.String())
 		}
-		valCheckInstance = &valcheck.AttestationValueCheck{}
+		valCheckInstance = v.valueCheck.AttestationSlashingProtector()
 	//case beacon.RoleTypeAggregator:
 	//	aggData, err := v.beacon.GetAggregationData(ctx, duty, v.Share.PublicKey, v.Share.ShareKey)
 	//	if err != nil {
@@ -143,7 +142,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	//	if err != nil {
 	//		return 0, nil, 0, errors.Errorf("failed to marshal on aggregation role: %s", role.String())
 	//	}
-	//	valCheckInstance = &valcheck.AggregatorValueCheck{}
+	//	valueCheck = &valcheck.AggregatorValueCheck{}
 	//case beacon.RoleTypeProposer:
 	//	block, err := v.beacon.GetProposalData(ctx, slot, v.Share.ShareKey)
 	//	if err != nil {
@@ -157,12 +156,18 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	//	if err != nil {
 	//		return 0, nil, 0, errors.Errorf("failed to marshal on proposer role: %s", role.String())
 	//	}
-	//	valCheckInstance = &valcheck.ProposerValueCheck{}
+	//	valueCheck = &valcheck.ProposerValueCheck{}
 	default:
 		return 0, nil, 0, errors.Errorf("unknown role: %s", duty.Type.String())
 	}
 
-	logger.Debug("duty data received")
+	// do a value check before instance starts to prevent a dead lock if all SSV instances start
+	// an iBFT instance with values which are invalid which will result in them getting "stuck"
+	// in infinite round changes
+	if err := valCheckInstance.Check(inputByts); err != nil {
+		return 0, nil, 0, errors.Wrap(err, "input value failed pre-consensus check")
+	}
+
 	// calculate next seq
 	seqNumber, err := v.ibfts[duty.Type].NextSeqNumber()
 	if err != nil {
