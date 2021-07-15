@@ -4,6 +4,14 @@ global:
 db:
   Path: ./data/db
 
+eth2:
+  BeaconNodeAddr: example.url
+  Network: prater
+
+eth1:
+  # ETH1 node WebSocket address
+  ETH1Addr: example.url
+
 p2p:
   # replace with your ip
   HostAddress: example.ip
