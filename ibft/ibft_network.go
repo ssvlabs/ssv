@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
+// waitForMinPeerCount will wait until enough peers joined the topic
+// it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
+	intervalLimit := 65 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (bool, bool) {
 		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
 		if err != nil {
@@ -27,7 +30,7 @@ func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 			zap.Int("current peer count", len(peers)),
 			zap.Int64("last interval ms", lastTick.Milliseconds()))
 		return false, false
-	}, time.Second, time.Hour)
+	}, time.Second, intervalLimit)
 }
 
 func (i *ibftImpl) listenToNetworkMessages() {
