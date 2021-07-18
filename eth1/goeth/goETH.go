@@ -113,7 +113,7 @@ func (ec *eth1Client) reconnect() error {
 
 // tryReconnect tries to reconnect multiple times
 func (ec *eth1Client) tryReconnect() {
-	limit := 32 * time.Second
+	limit := 64 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		if err := ec.reconnect(); err != nil {
 			// once getting to limit, panic as the node should have an open eth1 connection to be aligned
@@ -123,7 +123,7 @@ func (ec *eth1Client) tryReconnect() {
 			return false, false
 		}
 		return true, false
-	}, 1*time.Second, limit+1*time.Second)
+	}, 1 * time.Second, limit + (1 * time.Second))
 	ec.logger.Debug("managed to reconnect to eth1 node")
 	if err := ec.streamSmartContractEvents(); err != nil {
 		// TODO: panic?
@@ -187,7 +187,7 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 	for {
 		select {
 		case err := <-sub.Err():
-			ec.logger.Error("Error from logs sub", zap.Error(err))
+			ec.logger.Warn("failed to read logs from subscription", zap.Error(err))
 			return err
 		case vLog := <-logs:
 			ec.logger.Debug("received contract event from stream")
