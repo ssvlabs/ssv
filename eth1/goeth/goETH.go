@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/pubsub"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math/big"
 	"strings"
+	"time"
 )
 
 // ClientOptions are the options for the client
@@ -35,6 +38,7 @@ type eth1Client struct {
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
+	nodeAddr             string
 	registryContractAddr string
 	contractABI          string
 
@@ -44,22 +48,20 @@ type eth1Client struct {
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	logger := opts.Logger
-	// Create an IPC based RPC connection to a remote node
-	logger.Info("dialing node", zap.String("addr", opts.NodeAddr))
-	conn, err := ethclient.Dial(opts.NodeAddr)
-	if err != nil {
-		logger.Error("Failed to connect to the Ethereum client", zap.Error(err))
-		return nil, err
-	}
 
 	ec := eth1Client{
 		ctx:                        opts.Ctx,
-		conn:                       conn,
 		logger:                     logger,
 		shareEncryptionKeyProvider: opts.ShareEncryptionKeyProvider,
+		nodeAddr:                   opts.NodeAddr,
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
 		outSubject:                 pubsub.NewSubject(logger),
+	}
+
+	if err := ec.connect(); err != nil {
+		logger.Error("failed to connect to the Ethereum client", zap.Error(err))
+		return nil, err
 	}
 
 	return &ec, nil
@@ -88,6 +90,40 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 	return err
 }
 
+// connect connects to eth1 client
+func (ec *eth1Client) connect() error {
+	// Create an IPC based RPC connection to a remote node
+	ec.logger.Info("dialing node", zap.String("addr", ec.nodeAddr))
+	conn, err := ethclient.Dial(ec.nodeAddr)
+	if err != nil {
+		ec.logger.Error("failed to reconnect to the Ethereum client", zap.Error(err))
+		return err
+	}
+	ec.conn = conn
+	return nil
+}
+
+// reconnect tries to reconnect multiple times
+func (ec *eth1Client) reconnect() {
+	limit := 64 * time.Second
+	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
+		ec.logger.Info("reconnecting to eth1 node")
+		if err := ec.connect(); err != nil {
+			// once getting to limit, panic as the node should have an open eth1 connection to be aligned
+			if lastTick >= limit {
+				ec.logger.Panic("failed to reconnect to eth1 node", zap.Error(err))
+			}
+			return false, false
+		}
+		return true, false
+	}, 1*time.Second, limit+(1*time.Second))
+	ec.logger.Debug("managed to reconnect to eth1 node")
+	if err := ec.streamSmartContractEvents(); err != nil {
+		// TODO: panic?
+		ec.logger.Error("failed to stream events after reconnection", zap.Error(err))
+	}
+}
+
 // fireEvent notifies observers about some contract event
 func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
 	e := eth1.Event{Log: log, Data: data}
@@ -103,6 +139,23 @@ func (ec *eth1Client) streamSmartContractEvents() error {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
 
+	sub, logs, err := ec.subscribeToLogs()
+	if err != nil {
+		return errors.Wrap(err, "Failed to subscribe to logs")
+	}
+
+	go func() {
+		err := ec.listenToSubscription(logs, sub, contractAbi)
+		// in case of disconnection try to reconnect
+		if isCloseError(err) {
+			ec.reconnect()
+		}
+	}()
+
+	return nil
+}
+
+func (ec *eth1Client) subscribeToLogs() (ethereum.Subscription, chan types.Log, error) {
 	contractAddress := common.HexToAddress(ec.registryContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -110,22 +163,25 @@ func (ec *eth1Client) streamSmartContractEvents() error {
 	logs := make(chan types.Log)
 	sub, err := ec.conn.SubscribeFilterLogs(ec.ctx, query, logs)
 	if err != nil {
-		return errors.Wrap(err, "Failed to subscribe to logs")
+		return nil, nil, errors.Wrap(err, "Failed to subscribe to logs")
 	}
 	ec.logger.Debug("subscribed to results of the streaming filter query")
 
-	go ec.listenToSubscription(logs, sub, contractAbi)
+	return sub, logs, nil
+}
 
-	return nil
+func isCloseError(err error) bool {
+	_, ok := err.(*websocket.CloseError)
+	return ok
 }
 
 // listenToSubscription listen to new event logs from the contract
-func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Subscription, contractAbi abi.ABI) {
+func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Subscription, contractAbi abi.ABI) error {
 	for {
 		select {
 		case err := <-sub.Err():
-			// TODO might fail consider reconnect
-			ec.logger.Error("Error from logs sub", zap.Error(err))
+			ec.logger.Warn("failed to read logs from subscription", zap.Error(err))
+			return err
 		case vLog := <-logs:
 			ec.logger.Debug("received contract event from stream")
 			err := ec.handleEvent(vLog, contractAbi)
