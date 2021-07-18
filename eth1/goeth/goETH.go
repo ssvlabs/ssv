@@ -115,9 +115,8 @@ func (ec *eth1Client) reconnect() error {
 func (ec *eth1Client) tryReconnect() {
 	limit := 32 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
-		ec.logger.Debug("trying to reconnect to eth1 node")
 		if err := ec.reconnect(); err != nil {
-			// panic once getting to limit
+			// once getting to limit, panic as the node should have an open eth1 connection to be aligned
 			if lastTick >= limit {
 				ec.logger.Panic("failed to reconnect to eth1 node", zap.Error(err))
 			}
@@ -199,7 +198,6 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 			}
 		}
 	}
-	return nil
 }
 
 // syncSmartContractsEvents sync events history of the given contract
