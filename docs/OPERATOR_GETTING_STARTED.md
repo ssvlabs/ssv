@@ -141,9 +141,9 @@ $ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config
 
 Kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
 ```shell
+$ sudo su
 $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 ```
-* Make sure you run with `sudo` or run `sudo su` beforehand
 
 Now run the container again as specified above in step 6.
 
