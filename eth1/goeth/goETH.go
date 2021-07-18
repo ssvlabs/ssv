@@ -59,12 +59,10 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		outSubject:                 pubsub.NewSubject(logger),
 	}
 
-	conn, err := ec.connect()
-	if err != nil {
+	if err := ec.connect(); err != nil {
 		logger.Error("failed to connect to the Ethereum client", zap.Error(err))
 		return nil, err
 	}
-	ec.conn = conn
 
 	return &ec, nil
 }
@@ -93,16 +91,10 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 }
 
 // connect connects to eth1 client
-func (ec *eth1Client) connect() (*ethclient.Client, error) {
+func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
 	ec.logger.Info("dialing node", zap.String("addr", ec.nodeAddr))
-	return ethclient.Dial(ec.nodeAddr)
-}
-
-// reconnect tries to dial the eth1 client again
-func (ec *eth1Client) reconnect() error {
-	ec.logger.Info("reconnecting to eth1 node")
-	conn, err := ec.connect()
+	conn, err := ethclient.Dial(ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error("failed to reconnect to the Ethereum client", zap.Error(err))
 		return err
@@ -111,11 +103,12 @@ func (ec *eth1Client) reconnect() error {
 	return nil
 }
 
-// tryReconnect tries to reconnect multiple times
-func (ec *eth1Client) tryReconnect() {
+// reconnect tries to reconnect multiple times
+func (ec *eth1Client) reconnect() {
 	limit := 64 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
-		if err := ec.reconnect(); err != nil {
+		ec.logger.Info("reconnecting to eth1 node")
+		if err := ec.connect(); err != nil {
 			// once getting to limit, panic as the node should have an open eth1 connection to be aligned
 			if lastTick >= limit {
 				ec.logger.Panic("failed to reconnect to eth1 node", zap.Error(err))
@@ -123,7 +116,7 @@ func (ec *eth1Client) tryReconnect() {
 			return false, false
 		}
 		return true, false
-	}, 1 * time.Second, limit + (1 * time.Second))
+	}, 1*time.Second, limit+(1*time.Second))
 	ec.logger.Debug("managed to reconnect to eth1 node")
 	if err := ec.streamSmartContractEvents(); err != nil {
 		// TODO: panic?
@@ -155,7 +148,7 @@ func (ec *eth1Client) streamSmartContractEvents() error {
 		err := ec.listenToSubscription(logs, sub, contractAbi)
 		// in case of disconnection try to reconnect
 		if isCloseError(err) {
-			ec.tryReconnect()
+			ec.reconnect()
 		}
 	}()
 
