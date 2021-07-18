@@ -143,6 +143,7 @@ Kill running container and pull the latest image or a specific version (`bloxsta
 ```shell
 $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 ```
+* Make sure you run with `sudo` or run `sudo su` beforehand
 
 Now run the container again as specified above in step 6.
 
