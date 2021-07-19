@@ -49,11 +49,11 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 		lambda := []byte("lambda_11")
 
 		aggSignedMsg := aggregateSign(t, sks, &proto.Message{
-			Type:        proto.RoundState_Commit,
-			Round:       3,
-			SeqNumber:   uint64(i),
-			Lambda:      lambda,
-			Value:       []byte("value"),
+			Type:      proto.RoundState_Commit,
+			Round:     3,
+			SeqNumber: uint64(i),
+			Lambda:    lambda,
+			Value:     []byte("value"),
 		})
 		require.NoError(t, storage.SaveDecided(aggSignedMsg))
 		if i == highestSeq {
@@ -63,15 +63,15 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 	return &storage
 }
 
-func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftStorage collections.Iibft, sks map[uint64]*bls.SecretKey, nodes map[uint64]*proto.Node, ) IBFT {
+func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftStorage collections.Iibft, sks map[uint64]*bls.SecretKey, nodes map[uint64]*proto.Node) IBFT {
 	queue := msgqueue.New()
 	share := &storage.Share{
-		NodeID:      nodeID,
+		NodeID:    nodeID,
 		PublicKey: validatorPK(sks),
-		ShareKey:    sks[nodeID],
-		Committee:   nodes,
+		ShareKey:  sks[nodeID],
+		Committee: nodes,
 	}
-	ret := New(beacon.RoleTypeAttester, identifier, logex.Build("", zap.DebugLevel), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, proto.DefaultConsensusParams(), share)
+	ret := New(beacon.RoleTypeAttester, identifier, logex.Build("", zap.DebugLevel, "console"), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, proto.DefaultConsensusParams(), share)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
 	ret.(*ibftImpl).listenToSyncMessages()
