@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math/big"
@@ -103,15 +102,17 @@ func (ec *eth1Client) connect() error {
 	return nil
 }
 
-// reconnect tries to reconnect multiple times
+// reconnect tries to reconnect multiple times with an exponent interval
 func (ec *eth1Client) reconnect() {
 	limit := 64 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		ec.logger.Info("reconnecting to eth1 node")
 		if err := ec.connect(); err != nil {
-			// once getting to limit, panic as the node should have an open eth1 connection to be aligned
+			// continue until reaching to limit, and then panic as eth1 connection is required
 			if lastTick >= limit {
 				ec.logger.Panic("failed to reconnect to eth1 node", zap.Error(err))
+			} else {
+				ec.logger.Warn("could not reconnect to eth1 node, still trying", zap.Error(err))
 			}
 			return false, false
 		}
@@ -145,9 +146,7 @@ func (ec *eth1Client) streamSmartContractEvents() error {
 	}
 
 	go func() {
-		err := ec.listenToSubscription(logs, sub, contractAbi)
-		// in case of disconnection try to reconnect
-		if isCloseError(err) {
+		if err := ec.listenToSubscription(logs, sub, contractAbi); err != nil {
 			ec.reconnect()
 		}
 	}()
@@ -168,11 +167,6 @@ func (ec *eth1Client) subscribeToLogs() (ethereum.Subscription, chan types.Log, 
 	ec.logger.Debug("subscribed to results of the streaming filter query")
 
 	return sub, logs, nil
-}
-
-func isCloseError(err error) bool {
-	_, ok := err.(*websocket.CloseError)
-	return ok
 }
 
 // listenToSubscription listen to new event logs from the contract
