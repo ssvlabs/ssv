@@ -30,7 +30,7 @@ var StartBootNodeCmd = &cobra.Command{
 		}
 
 		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(cmd.Parent().Short, loggerLevel)
+		Logger := logex.Build(cmd.Parent().Short, loggerLevel, cfg.GlobalConfig.LogEncoding)
 
 		if err != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))

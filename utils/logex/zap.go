@@ -19,9 +19,9 @@ func GetLogger(fields... zap.Field) *zap.Logger {
 }
 
 // Build builds the default zap logger, and sets the global zap logger to the configured logger instance.
-func Build(appName string, level zapcore.Level) *zap.Logger {
+func Build(appName string, level zapcore.Level, encoding string) *zap.Logger {
 	cfg := zap.Config{
-		Encoding:    "console",
+		Encoding:    encoding,
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
