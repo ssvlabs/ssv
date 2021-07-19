@@ -14,7 +14,7 @@ var once sync.Once
 var logger *zap.Logger
 
 // GetLogger returns an instance with some context, expressed as fields
-func GetLogger(fields... zap.Field) *zap.Logger {
+func GetLogger(fields ...zap.Field) *zap.Logger {
 	return logger.With(fields...)
 }
 

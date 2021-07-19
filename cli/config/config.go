@@ -13,7 +13,7 @@ type Args struct {
 
 // GlobalConfig expose available global config for cli command
 type GlobalConfig struct {
-	LogLevel string `yaml:"LogLevel" env:"LOG_LEVEL" env-default:"info" env-description:"Defines logger's log level'"`
+	LogLevel    string `yaml:"LogLevel" env:"LOG_LEVEL" env-default:"info" env-description:"Defines logger's log level'"`
 	LogEncoding string `yaml:"LogEncoding" env:"LOG_ENCODING" env-default:"console" env-description:"Defines logger's encoding'"`
 }
 
