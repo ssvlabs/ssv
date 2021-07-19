@@ -11,7 +11,7 @@
   + [3. Installation Script](#3-installation-script)
   + [4. Generate Operator Keys](#4-generate-operator-keys)
   + [5. Create a Configuration File](#5-create-a-configuration-file)
-    - [5.1 Debug Configuration](#51-debug-configuration)
+    - [5.1 Logger Configuration](#51-logger-configuration)
     - [5.2 Metrics Configuration](#52-metrics-configuration)
   + [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
   + [7. Update SSV Node Image](#7-update-ssv-node-image)
@@ -111,12 +111,18 @@ eth1:
 OperatorPrivateKey: LS0tLS...
 ```
 
-  #### 5.1 Debug Configuration
+  #### 5.1 Logger Configuration
 
   In order to see `debug` level logs, add the corresponding section to the `config.yaml` by running:
 
   ```
   $ yq w -i config.yaml global.LogLevel "debug"
+  ```
+
+  Logs can be formatted as `json` instead of the default `console` format:
+
+  ```
+  $ yq w -i config.yaml global.LogFormat "json"
   ```
 
   #### 5.2 Metrics Configuration

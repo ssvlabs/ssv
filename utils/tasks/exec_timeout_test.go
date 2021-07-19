@@ -12,7 +12,7 @@ import (
 )
 
 func TestExecWithTimeout(t *testing.T) {
-	logex.Build("test", zap.DebugLevel)
+	logex.Build("test", zap.DebugLevel, "console")
 	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 7*time.Millisecond)
 	defer cancel()
 	tests := []struct {
