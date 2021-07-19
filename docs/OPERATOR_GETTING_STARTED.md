@@ -119,10 +119,10 @@ OperatorPrivateKey: LS0tLS...
   $ yq w -i config.yaml global.LogLevel "debug"
   ```
 
-  Logs can be formatted as `json` instead of the default `console` encoding:
+  Logs can be formatted as `json` instead of the default `console` format:
 
   ```
-  $ yq w -i config.yaml global.LogEncoding "json"
+  $ yq w -i config.yaml global.LogFormat "json"
   ```
 
   #### 5.2 Metrics Configuration
