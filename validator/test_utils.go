@@ -113,7 +113,6 @@ type testBeacon struct {
 	LastSubmittedAttestation *spec.Attestation
 }
 
-
 func newTestBeacon(t *testing.T) *testBeacon {
 	ret := &testBeacon{}
 	ret.refAttestationData = &spec.AttestationData{}
@@ -154,6 +153,10 @@ func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 func (b *testBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 	b.LastSubmittedAttestation = attestation
 	return nil
+}
+
+func (b *testBeacon) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error {
+	panic("implement me")
 }
 
 func testingValidator(t *testing.T, decided bool, signaturesCount int, identifier []byte) *Validator {
