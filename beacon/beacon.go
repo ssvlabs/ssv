@@ -41,4 +41,7 @@ type Beacon interface {
 
 	// SubmitAttestation submit the attestation to the node
 	SubmitAttestation(attestation *spec.Attestation) error
+
+	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
+	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
 }
