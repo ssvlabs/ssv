@@ -3,12 +3,9 @@ package operator
 import (
 	"context"
 	"encoding/hex"
-	api "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -32,7 +29,6 @@ type Options struct {
 	Logger              *zap.Logger
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
-	SlotQueue           slotqueue.Queue
 	ValidatorController validator.IController
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
@@ -45,7 +41,6 @@ type Options struct {
 // operatorNode implements Node interface
 type operatorNode struct {
 	ethNetwork          core.Network
-	slotQueue           slotqueue.Queue
 	context             context.Context
 	validatorController validator.IController
 	logger              *zap.Logger
@@ -55,6 +50,7 @@ type operatorNode struct {
 	dutyLimit           uint64
 	eth1Client          eth1.Client
 	epochDutiesExist    bool // mark when received epoch duties in order to prevent fetching duties each slot tick
+	dutyManager         DutyManager
 }
 
 // New is the constructor of operatorNode
@@ -69,9 +65,9 @@ func New(opts Options) Node {
 		beacon:              *opts.Beacon,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 		// TODO do we really need to pass the whole object or just SlotDurationSec
-		slotQueue:        opts.SlotQueue,
 		eth1Client:       opts.Eth1Client,
 		epochDutiesExist: false,
+		dutyManager:      NewDutyManager(opts.Logger, *opts.Beacon, opts.ValidatorController.GetValidatorsIndices),
 	}
 
 	return ssv
@@ -112,6 +108,7 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	return nil
 }
 
+// onDuty handles a given duty
 func (n *operatorNode) onDuty(duty *beacon.Duty) {
 	if uint64(duty.Slot) < n.getEpochFirstSlot(n.genesisEpoch) {
 		// wait until genesis epoch starts
@@ -140,14 +137,12 @@ func (n *operatorNode) onDuty(duty *beacon.Duty) {
 			logger.Info("starting duty processing start for slot")
 			go v.ExecuteDuty(n.context, uint64(duty.Slot), duty)
 		} else {
-			logger.Info("could not find validator")
+			logger.Warn("could not find validator")
 		}
 	} else {
-		logger.Info("scheduling duty processing start for slot")
-		if err := n.slotQueue.Schedule(duty.PubKey[:], uint64(duty.Slot), duty); err != nil {
-			logger.Error("failed to schedule slot")
-		}
+		logger.Warn("slot is irrelevant, ignoring duty")
 	}
+
 }
 
 // startDutiesTicker start to stream duties from the beacon chain
@@ -156,69 +151,15 @@ func (n *operatorNode) startDutiesTicker() error {
 	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(n.ethNetwork.SlotDurationSec().Seconds()))
 	for currentSlot := range slotTicker.C() {
 		n.logger.Debug("slot ticker", zap.Uint64("slot", currentSlot))
-		if currentSlot%n.ethNetwork.SlotsPerEpoch() != 0 && n.epochDutiesExist {
-			//	Do nothing if not epoch start AND assignments already exist.
-			continue
+		duties, err := n.dutyManager.GetDuties(currentSlot)
+		if err != nil {
+			n.logger.Error("failed to get duties", zap.Error(err))
 		}
-		n.epochDutiesExist = false
-
-		indices := n.validatorController.GetValidatorsIndices() // fetching all validator with index (will return only active once too)
-		n.logger.Debug("got indices for get duties", zap.Int("indices count", len(indices)))
-		esEpoch := n.ethNetwork.EstimatedEpochAtSlot(currentSlot)
-		epoch := spec.Epoch(esEpoch)
-		go n.updatedAttesterDuties(epoch, indices) // when scale need to support batches
-		//	 TODO add getProposerDuties here
+		for i := range duties {
+			go n.onDuty(&duties[i])
+		}
 	}
 	return errors.New("ticker failed")
-}
-
-// updatedAttesterDuties with the following steps -
-// 1, request attest duties from beacon node for all active accounts
-// 2, schedule in slotQueue each duty to start time
-// 3, subscribe all duties committee to subnet
-func (n *operatorNode) updatedAttesterDuties(epoch spec.Epoch, indices []spec.ValidatorIndex) {
-	if indices == nil {
-		return
-	}
-	n.logger.Debug("fetching attest duties...", zap.Any("epoch", epoch), zap.Any("count", len(indices)))
-	resp, err := n.beacon.GetDuties(epoch, indices)
-	n.logger.Debug("duties received")
-	if err != nil {
-		n.logger.Error("failed to get attest duties", zap.Error(err))
-		return
-	}
-	if len(resp) == 0 {
-		n.logger.Debug("no duties...")
-		return
-	}
-
-	var subscriptions []*api.BeaconCommitteeSubscription
-	for _, duty := range resp {
-		go n.onDuty(&beacon.Duty{
-			Type:                    beacon.RoleTypeAttester,
-			PubKey:                  duty.PubKey,
-			Slot:                    duty.Slot,
-			ValidatorIndex:          duty.ValidatorIndex,
-			CommitteeIndex:          duty.CommitteeIndex,
-			CommitteeLength:         duty.CommitteeLength,
-			CommitteesAtSlot:        duty.CommitteesAtSlot,
-			ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
-		})
-
-		subscriptions = append(subscriptions, &api.BeaconCommitteeSubscription{
-			ValidatorIndex:   duty.ValidatorIndex,
-			Slot:             duty.Slot,
-			CommitteeIndex:   duty.CommitteeIndex,
-			CommitteesAtSlot: duty.CommitteesAtSlot,
-			IsAggregator:     false, // TODO need to handle agg case
-		})
-	}
-
-	if err := n.beacon.SubscribeToCommitteeSubnet(subscriptions); err != nil {
-		n.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
-	//	 TODO should add return? if so could end up inserting redundant duties
-	}
-	n.epochDutiesExist = true
 }
 
 // getSlotStartTime returns the start time for the given slot

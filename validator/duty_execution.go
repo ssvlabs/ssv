@@ -189,7 +189,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	return len(result.Msg.SignerIds), result.Msg.Message.Value, seqNumber, nil
 }
 
-// ExecuteDuty by slotQueue
+// ExecuteDuty executes the given duty
 func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.Duty) {
 	logger := v.logger.With(zap.Time("start_time", v.getSlotStartTime(slot)),
 		zap.Uint64("committee_index", uint64(duty.CommitteeIndex)),
