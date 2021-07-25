@@ -11,6 +11,8 @@ import (
 )
 
 func TestDutyManager_GetDuties(t *testing.T) {
+	vIndices = append(vIndices, 205238)
+
 	t.Run("handles error", func(t *testing.T) {
 		expectedErr := errors.New("test duties")
 		bcMock := beaconDutiesClientMock{
@@ -62,6 +64,24 @@ func TestDutyManager_GetDuties(t *testing.T) {
 		duties, err = dm.GetDuties(893110)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
+	})
+
+	t.Run("handles no indices", func(t *testing.T) {
+		attesterDuties := []*eth2apiv1.AttesterDuty{
+			{
+				Slot:   893108,
+				PubKey: spec.BLSPubKey{},
+			},
+		}
+		vIndicesOrig := vIndices[:]
+		vIndices = []spec.ValidatorIndex{}
+		bcMock := beaconDutiesClientMock{duties: attesterDuties}
+		dm := NewDutyManager(zap.L(), &bcMock, getValidatorsIndicesMock,
+			core.NetworkFromString(string(core.PraterNetwork)))
+		duties, err := dm.GetDuties(893108)
+		vIndices = vIndicesOrig[:]
+		require.NoError(t, err)
+		require.Len(t, duties, 0)
 	})
 }
 

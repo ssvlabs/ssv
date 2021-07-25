@@ -94,12 +94,15 @@ func (dm *dutyManager) updateDutiesFromBeacon(slot uint64) error {
 }
 
 func (dm *dutyManager) fetchAttesterDuties(slot uint64) ([]*eth2apiv1.AttesterDuty, error) {
-	indices := dm.getValidatorsIndices()
-	dm.logger.Debug("got indices for existing validators",
-		zap.Int("count", len(indices)), zap.Any("indices", indices))
-	esEpoch := dm.ethNetwork.EstimatedEpochAtSlot(slot)
-	epoch := spec.Epoch(esEpoch)
-	return dm.beaconClient.GetDuties(epoch, indices)
+	if indices := dm.getValidatorsIndices(); len(indices) > 0 {
+		dm.logger.Debug("got indices for existing validators",
+			zap.Int("count", len(indices)), zap.Any("indices", indices))
+		esEpoch := dm.ethNetwork.EstimatedEpochAtSlot(slot)
+		epoch := spec.Epoch(esEpoch)
+		return dm.beaconClient.GetDuties(epoch, indices)
+	}
+	dm.logger.Debug("got no indices, duties won't be fetched")
+	return []*eth2apiv1.AttesterDuty{}, nil
 }
 
 func (dm *dutyManager) processFetchedDuties(attesterDuties []*eth2apiv1.AttesterDuty) error {
