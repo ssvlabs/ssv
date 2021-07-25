@@ -147,7 +147,7 @@ func (c *controller) GetValidatorsPubKeys() [][]byte {
 	return pubKeys
 }
 
-// GetValidatorsPubKeys returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
+// GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var indices []spec.ValidatorIndex
 	var toFetch []phase0.BLSPubKey

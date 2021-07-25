@@ -51,20 +51,23 @@ func (dm *dutyManager) GetDuties(slot uint64) ([]beacon.Duty, error) {
 
 	logger := dm.logger.With(zap.Uint64("slot", slot))
 
-	if raw, exist := dm.cache.Get(getDutyCacheKey(slot)); exist {
+	cacheKey := getDutyCacheKey(slot)
+	if raw, exist := dm.cache.Get(cacheKey); exist {
 		logger.Debug("found duties in cache")
 		duties = raw.(dutyCacheEntry).Duties
 	} else { // does not exist in cache -> fetch
+		logger.Debug("no entry in cache, fetching duties from beacon node")
 		if err := dm.updateDutiesFromBeacon(slot); err != nil {
 			logger.Error("failed to get duties", zap.Error(err))
 			return nil, err
 		}
-		if raw, exist := dm.cache.Get(getDutyCacheKey(slot)); exist {
+		if raw, exist := dm.cache.Get(cacheKey); exist {
 			duties = raw.(dutyCacheEntry).Duties
 		}
 	}
 
-	dm.logger.Debug("get duties results", zap.Int("count", len(duties)))
+	logger.Debug("found duties for slot",
+		zap.Int("count", len(duties)), zap.Any("duties", duties))
 
 	return duties, nil
 }
@@ -74,7 +77,7 @@ func (dm *dutyManager) updateDutiesFromBeacon(slot uint64) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get attest duties")
 	}
-	dm.logger.Debug("got duties", zap.Int("count", len(attesterDuties)))
+	dm.logger.Debug("got duties", zap.Int("count", len(attesterDuties)), zap.Any("attesterDuties", attesterDuties))
 	if err := dm.processFetchedDuties(attesterDuties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")
 	}
@@ -83,7 +86,8 @@ func (dm *dutyManager) updateDutiesFromBeacon(slot uint64) error {
 
 func (dm *dutyManager) fetchAttesterDuties(slot uint64) ([]*eth2apiv1.AttesterDuty, error) {
 	indices := dm.getValidatorsIndices()
-	dm.logger.Debug("got indices for existing validators", zap.Int("count", len(indices)))
+	dm.logger.Debug("got indices for existing validators",
+		zap.Int("count", len(indices)), zap.Any("indices", indices))
 	esEpoch := dm.ethNetwork.EstimatedEpochAtSlot(slot)
 	epoch := spec.Epoch(esEpoch)
 	return dm.beaconClient.GetDuties(epoch, indices)
@@ -93,21 +97,15 @@ func (dm *dutyManager) processFetchedDuties(attesterDuties []*eth2apiv1.Attester
 	var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
 	entries := map[spec.Slot]dutyCacheEntry{}
 	for _, ad := range attesterDuties {
-		duty := normalAttesterDuty(ad)
+		duty := convertAttesterDuty(ad)
 		dm.createEntry(entries, duty)
-		subscriptions = append(subscriptions, &eth2apiv1.BeaconCommitteeSubscription{
-			ValidatorIndex:   duty.ValidatorIndex,
-			Slot:             duty.Slot,
-			CommitteeIndex:   duty.CommitteeIndex,
-			CommitteesAtSlot: duty.CommitteesAtSlot,
-			IsAggregator:     false, // TODO need to handle agg case
-		})
+		subscriptions = append(subscriptions, toSubscription(duty))
 	}
+	dm.populateCache(entries)
 	if err := dm.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 		dm.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
 		//	 TODO should add return? if so could end up inserting redundant duties
 	}
-	dm.populateCache(entries)
 	return nil
 }
 
@@ -135,7 +133,7 @@ func getDutyCacheKey(slot uint64) string {
 	return fmt.Sprintf("%d", slot)
 }
 
-func normalAttesterDuty(attesterDuty *eth2apiv1.AttesterDuty) *beacon.Duty {
+func convertAttesterDuty(attesterDuty *eth2apiv1.AttesterDuty) *beacon.Duty {
 	duty := beacon.Duty{
 		Type:                    beacon.RoleTypeAttester,
 		PubKey:                  attesterDuty.PubKey,
@@ -147,4 +145,14 @@ func normalAttesterDuty(attesterDuty *eth2apiv1.AttesterDuty) *beacon.Duty {
 		ValidatorCommitteeIndex: attesterDuty.ValidatorCommitteeIndex,
 	}
 	return &duty
+}
+
+func toSubscription(duty *beacon.Duty) *eth2apiv1.BeaconCommitteeSubscription {
+	return &eth2apiv1.BeaconCommitteeSubscription{
+		ValidatorIndex:   duty.ValidatorIndex,
+		Slot:             duty.Slot,
+		CommitteeIndex:   duty.CommitteeIndex,
+		CommitteesAtSlot: duty.CommitteesAtSlot,
+		IsAggregator:     false, // TODO need to handle agg case
+	}
 }

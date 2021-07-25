@@ -81,7 +81,7 @@ func (gc *goClient) StartReceivingBlocks() {
 			time.Sleep(time.Second * 1)
 		}
 	}
-	gc.logger.Error("client is not support SignedBeaconBlockProvider")
+	gc.logger.Error("client does not support SignedBeaconBlockProvider")
 }
 
 func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error) {
@@ -92,7 +92,7 @@ func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.Validato
 		}
 		return duties, nil
 	}
-	return nil, errors.New("client is not support AttesterDutiesProvider")
+	return nil, errors.New("client does not support AttesterDutiesProvider")
 }
 
 func (gc *goClient) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
@@ -103,7 +103,7 @@ func (gc *goClient) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.Vali
 		}
 		return validatorsMap, nil
 	}
-	return nil, errors.New("client is not support ValidatorsProvider")
+	return nil, errors.New("client does not support ValidatorsProvider")
 }
 
 // waitOneThirdOrValidBlock waits until (a) or (b) whichever comes first:

@@ -147,6 +147,10 @@ func (n *operatorNode) onDuty(duty *beacon.Duty) {
 
 // startDutiesTicker start to stream duties from the beacon chain
 func (n *operatorNode) startDutiesTicker() error {
+	// before starting -> update local map of indices and validators (part of go-client)
+	indices := n.validatorController.GetValidatorsIndices()
+	n.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("indices count", len(indices)))
+
 	genesisTime := time.Unix(int64(n.ethNetwork.MinGenesisTime()), 0)
 	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(n.ethNetwork.SlotDurationSec().Seconds()))
 	for currentSlot := range slotTicker.C() {
