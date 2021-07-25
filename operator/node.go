@@ -67,7 +67,7 @@ func New(opts Options) Node {
 		// TODO do we really need to pass the whole object or just SlotDurationSec
 		eth1Client:       opts.Eth1Client,
 		epochDutiesExist: false,
-		dutyManager:      NewDutyManager(opts.Logger, *opts.Beacon, opts.ValidatorController.GetValidatorsIndices),
+		dutyManager:      NewDutyManager(opts.Logger, *opts.Beacon, opts.ValidatorController.GetValidatorsIndices, *opts.ETHNetwork),
 	}
 
 	return ssv

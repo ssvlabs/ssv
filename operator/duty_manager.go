@@ -19,15 +19,24 @@ type dutyCacheEntry struct {
 // GetValidatorsIndices is a function interface for retrieving indices
 type GetValidatorsIndices func() []spec.ValidatorIndex
 
+// BeaconDutiesClient interface of the needed client for managing duties
+type BeaconDutiesClient interface {
+	// GetDuties returns duties for the passed validators indices
+	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
+	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
+	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
+}
+
 // DutyManager represents the component that manages duties
 type DutyManager interface {
 	GetDuties(slot uint64) ([]beacon.Duty, error)
 }
 
 // NewDutyManager creates a new instance
-func NewDutyManager(logger *zap.Logger, beaconClient beacon.Beacon, getValidatorsIndices GetValidatorsIndices) DutyManager {
+func NewDutyManager(logger *zap.Logger, beaconClient BeaconDutiesClient, getValidatorsIndices GetValidatorsIndices, network core.Network) DutyManager {
 	dm := dutyManager{
 		logger:               logger.With(zap.String("component", "operator/dutyManager")),
+		ethNetwork:           network,
 		beaconClient:         beaconClient,
 		getValidatorsIndices: getValidatorsIndices,
 		cache:                cache.New(time.Minute*30, time.Minute*31),
@@ -37,8 +46,8 @@ func NewDutyManager(logger *zap.Logger, beaconClient beacon.Beacon, getValidator
 
 type dutyManager struct {
 	logger               *zap.Logger
-	beaconClient         beacon.Beacon
 	ethNetwork           core.Network
+	beaconClient         BeaconDutiesClient
 	getValidatorsIndices GetValidatorsIndices
 
 	cache *cache.Cache
