@@ -1,6 +1,7 @@
 package duties
 
 import (
+	"context"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -14,9 +15,10 @@ import (
 func TestDutyDispatcher_listenToTicker(t *testing.T) {
 	f := fetcherMock{}
 	var wg sync.WaitGroup
-	d := NewDutyDispatcher(zap.L(), core.PraterNetwork, execWithWaitGroup(t, &wg), &f, 0, 32)
-
-	dispatcher := d.(*dutyDispatcher)
+	dispatcher := &dutyController{
+		logger: zap.L(), ctx: context.Background(), ethNetwork: core.PraterNetwork,
+		executor: execWithWaitGroup(t, &wg), fetcher: &f, genesisEpoch: 0, dutyLimit: 32,
+	}
 	cn := make(chan uint64)
 
 	secPerSlot = 2
@@ -44,40 +46,40 @@ func TestDutyDispatcher_listenToTicker(t *testing.T) {
 }
 
 func TestGetSlotStartTime(t *testing.T) {
-	d := dutyDispatcher{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
 	ts := d.getSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
 func TestGetCurrentSlot(t *testing.T) {
-	d := dutyDispatcher{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
 	slot := d.getCurrentSlot()
 	require.Greater(t, slot, int64(646855))
 }
 
 func TestGetEpochFirstSlot(t *testing.T) {
-	d := dutyDispatcher{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
 	slot := d.getEpochFirstSlot(20203)
 	require.Equal(t, uint64(646496), slot)
 }
 
-type executor struct {
+type executorMock struct {
 	t  *testing.T
 	wg *sync.WaitGroup
 }
 
-func (e *executor) ExecuteDuty(duty *beacon.Duty) error {
+func (e *executorMock) ExecuteDuty(duty *beacon.Duty) error {
 	require.NotNil(e.t, duty)
 	require.True(e.t, duty.Slot > 0)
 	e.wg.Done()
 	return nil
 }
 
-func execWithWaitGroup(t *testing.T, wg *sync.WaitGroup) DutyExecutor {
-	return &executor{t, wg}
+func execWithWaitGroup(t *testing.T, wg *sync.WaitGroup) dutyExecutor {
+	return &executorMock{t, wg}
 }
 
 type fetcherMock struct {

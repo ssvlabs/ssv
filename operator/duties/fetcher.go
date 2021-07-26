@@ -16,13 +16,13 @@ type dutyCacheEntry struct {
 	Duties []beacon.Duty
 }
 
-// ValidatorsIndicesFetcher represents the interface for retrieving indices
-type ValidatorsIndicesFetcher interface {
+// validatorsIndicesFetcher represents the interface for retrieving indices
+type validatorsIndicesFetcher interface {
 	GetValidatorsIndices() []spec.ValidatorIndex
 }
 
-// BeaconDutiesClient interface of the needed client for managing duties
-type BeaconDutiesClient interface {
+// beaconDutiesClient interface of the needed client for managing duties
+type beaconDutiesClient interface {
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error)
 	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
@@ -34,8 +34,8 @@ type DutyFetcher interface {
 	GetDuties(slot uint64) ([]beacon.Duty, error)
 }
 
-// NewDutyFetcher creates a new instance
-func NewDutyFetcher(logger *zap.Logger, beaconClient BeaconDutiesClient, indicesFetcher ValidatorsIndicesFetcher, network core.Network) DutyFetcher {
+// newDutyFetcher creates a new instance
+func newDutyFetcher(logger *zap.Logger, beaconClient beaconDutiesClient, indicesFetcher validatorsIndicesFetcher, network core.Network) DutyFetcher {
 	df := dutyFetcher{
 		logger:         logger.With(zap.String("component", "operator/dutyFetcher")),
 		ethNetwork:     network,
@@ -50,8 +50,8 @@ func NewDutyFetcher(logger *zap.Logger, beaconClient BeaconDutiesClient, indices
 type dutyFetcher struct {
 	logger         *zap.Logger
 	ethNetwork     core.Network
-	beaconClient   BeaconDutiesClient
-	indicesFetcher ValidatorsIndicesFetcher
+	beaconClient   beaconDutiesClient
+	indicesFetcher validatorsIndicesFetcher
 
 	cache *cache.Cache
 }

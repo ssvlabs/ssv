@@ -16,7 +16,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		bcMock := beaconDutiesClientMock{
 			getDutiesErr: expectedErr,
 		}
-		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}}, core.PraterNetwork)
+		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}}, core.PraterNetwork)
 		duties, err := dm.GetDuties(893108)
 		require.EqualError(t, err, "failed to get attest duties: test duties")
 		require.Len(t, duties, 0)
@@ -30,7 +30,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 			},
 		}
 		bcMock := beaconDutiesClientMock{duties: attesterDuties}
-		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
+		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
 			core.NetworkFromString(string(core.PraterNetwork)))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 			},
 		}
 		bcMock := beaconDutiesClientMock{duties: attesterDuties}
-		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
+		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
 			core.NetworkFromString(string(core.PraterNetwork)))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 			},
 		}
 		bcMock := beaconDutiesClientMock{duties: attesterDuties}
-		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{}},
+		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{}},
 			core.NetworkFromString(string(core.PraterNetwork)))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)

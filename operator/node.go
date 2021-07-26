@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -45,8 +44,7 @@ type operatorNode struct {
 	beacon              beacon.Beacon
 	storage             Storage
 	eth1Client          eth1.Client
-	//dutyFetcher         duties.DutyFetcher
-	dutyDispatcher duties.DutyDispatcher
+	dutyCtrl            duties.DutyController
 }
 
 // New is the constructor of operatorNode
@@ -58,12 +56,17 @@ func New(opts Options) Node {
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
-		// TODO do we really need to pass the whole object or just SlotDurationSec
+		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
+			Logger:              opts.Logger,
+			Ctx:                 opts.Context,
+			BeaconClient:        *opts.Beacon,
+			EthNetwork:          *opts.ETHNetwork,
+			ValidatorController: opts.ValidatorController,
+			GenesisEpoch:        opts.GenesisEpoch,
+			DutyLimit:           opts.DutyLimit,
+		}),
 		eth1Client: opts.Eth1Client,
 	}
-	df := duties.NewDutyFetcher(opts.Logger, *opts.Beacon, opts.ValidatorController, *opts.ETHNetwork)
-	ssv.dutyDispatcher = duties.NewDutyDispatcher(opts.Logger, *opts.ETHNetwork, ssv,
-		df, opts.GenesisEpoch, opts.DutyLimit)
 
 	return ssv
 }
@@ -73,7 +76,7 @@ func (n *operatorNode) Start() error {
 	n.logger.Info("starting node -> IBFT")
 	n.validatorController.StartValidators()
 	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
-	n.startDutyDispatcher()
+	n.dutyCtrl.Start()
 	return nil
 }
 
@@ -102,28 +105,4 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	}
 
 	return nil
-}
-
-// ExecuteDuty tries to execute the given duty
-func (n *operatorNode) ExecuteDuty(duty *beacon.Duty) error {
-	logger := n.dutyDispatcher.LoggerWithDutyContext(n.logger, duty)
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
-		return errors.Wrap(err, "failed to deserialize pubkey from duty")
-	}
-	if v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		logger.Info("starting duty processing start for slot")
-		go v.ExecuteDuty(n.context, uint64(duty.Slot), duty)
-	} else {
-		logger.Warn("could not find validator")
-	}
-	return nil
-}
-
-// startDutyDispatcher start to stream duties from the beacon chain
-func (n *operatorNode) startDutyDispatcher() {
-	indices := n.validatorController.GetValidatorsIndices()
-	n.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("indices count", len(indices)))
-
-	n.dutyDispatcher.ListenToTicker()
 }
