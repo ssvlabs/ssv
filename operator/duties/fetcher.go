@@ -78,8 +78,12 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 		}
 	}
 
-	logger.Debug("found duties for slot",
-		zap.Int("count", len(duties)), zap.Any("duties", duties))
+	if len(duties) > 0 {
+		logger.Debug("found duties for slot",
+			zap.Int("count", len(duties)), zap.Any("duties", duties))
+	} else {
+		logger.Debug("didn't found duties for slot")
+	}
 
 	return duties, nil
 }
@@ -122,7 +126,6 @@ func (df *dutyFetcher) processFetchedDuties(attesterDuties []*eth2apiv1.Attester
 	df.populateCache(entries)
 	if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 		df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
-		//	 TODO should add return? if so could end up inserting redundant duties
 	}
 	return nil
 }

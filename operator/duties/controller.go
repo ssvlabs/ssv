@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// TODO: wrap this pcakge with  single object
-
 // dutyExecutor represents the component that executes duties
 type dutyExecutor interface {
 	ExecuteDuty(duty *beacon.Duty) error
