@@ -61,9 +61,8 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		validatorController: opts.ValidatorController,
 		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
+		executor:            nil,
 	}
-	// the controller is the default executor, calling the corresponding validator to execute duty
-	dc.executor = &dc
 	return &dc
 }
 
@@ -80,6 +79,10 @@ func (dc *dutyController) Start() {
 
 // ExecuteDuty tries to execute the given duty
 func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
+	if dc.executor != nil {
+		// enables to work with a custom executor
+		return dc.executor.ExecuteDuty(duty)
+	}
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
 	pubKey := &bls.PublicKey{}
 	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
@@ -125,7 +128,7 @@ func (dc *dutyController) dispatch(duty *beacon.Duty) error {
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		logger.Debug("executing duty")
-		return dc.executor.ExecuteDuty(duty)
+		return dc.ExecuteDuty(duty)
 	}
 	logger.Warn("slot is irrelevant, ignoring duty")
 	return nil
