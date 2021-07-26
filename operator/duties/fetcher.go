@@ -77,12 +77,11 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 			duties = raw.(dutyCacheEntry).Duties
 		}
 	}
-
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), zap.Any("duties", duties))
 	} else {
-		logger.Debug("didn't found duties for slot")
+		logger.Debug("didn't find duties for slot")
 	}
 
 	return duties, nil
