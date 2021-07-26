@@ -2,17 +2,15 @@ package operator
 
 import (
 	"context"
-	"encoding/hex"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/shared/slotutil"
 	"go.uber.org/zap"
-	"time"
 )
 
 // Node represents the behavior of SSV node
@@ -46,11 +44,9 @@ type operatorNode struct {
 	logger              *zap.Logger
 	beacon              beacon.Beacon
 	storage             Storage
-	genesisEpoch        uint64
-	dutyLimit           uint64
 	eth1Client          eth1.Client
-	epochDutiesExist    bool // mark when received epoch duties in order to prevent fetching duties each slot tick
-	dutyManager         DutyManager
+	//dutyFetcher         duties.DutyFetcher
+	dutyDispatcher duties.DutyDispatcher
 }
 
 // New is the constructor of operatorNode
@@ -58,17 +54,16 @@ func New(opts Options) Node {
 	ssv := &operatorNode{
 		context:             opts.Context,
 		logger:              opts.Logger,
-		genesisEpoch:        opts.GenesisEpoch,
-		dutyLimit:           opts.DutyLimit,
 		validatorController: opts.ValidatorController,
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 		// TODO do we really need to pass the whole object or just SlotDurationSec
-		eth1Client:       opts.Eth1Client,
-		epochDutiesExist: false,
-		dutyManager:      NewDutyManager(opts.Logger, *opts.Beacon, opts.ValidatorController.GetValidatorsIndices, *opts.ETHNetwork),
+		eth1Client: opts.Eth1Client,
 	}
+	df := duties.NewDutyFetcher(opts.Logger, *opts.Beacon, opts.ValidatorController, *opts.ETHNetwork)
+	ssv.dutyDispatcher = duties.NewDutyDispatcher(opts.Logger, *opts.ETHNetwork, ssv,
+		df, opts.GenesisEpoch, opts.DutyLimit)
 
 	return ssv
 }
@@ -76,9 +71,10 @@ func New(opts Options) Node {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("starting node -> IBFT")
-	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
 	n.validatorController.StartValidators()
-	return n.startDutiesTicker()
+	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
+	n.startDutyDispatcher()
+	return nil
 }
 
 // StartEth1 starts the eth1 events sync and streaming
@@ -108,79 +104,26 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	return nil
 }
 
-// onDuty handles a given duty
-func (n *operatorNode) onDuty(duty *beacon.Duty) {
-	if uint64(duty.Slot) < n.getEpochFirstSlot(n.genesisEpoch) {
-		// wait until genesis epoch starts
-		n.logger.Debug("skipping slot, lower than genesis",
-			zap.Uint64("genesis_slot", n.getEpochFirstSlot(n.genesisEpoch)),
-			zap.Uint64("slot", uint64(duty.Slot)))
-		return
+// ExecuteDuty tries to execute the given duty
+func (n *operatorNode) ExecuteDuty(duty *beacon.Duty) error {
+	logger := n.dutyDispatcher.LoggerWithDutyContext(n.logger, duty)
+	pubKey := &bls.PublicKey{}
+	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
+		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
-
-	currentSlot := uint64(n.getCurrentSlot())
-	logger := n.logger.
-		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(zap.Uint64("current slot", currentSlot)).
-		With(zap.Uint64("slot", uint64(duty.Slot))).
-		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
-		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", n.getSlotStartTime(uint64(duty.Slot))))
-	// execute task if slot already began and not pass 1 epoch
-	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= n.dutyLimit {
-		pubKey := &bls.PublicKey{}
-		if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
-			logger.Error("failed to deserialize pubkey from duty")
-		}
-		v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr())
-		if ok {
-			logger.Info("starting duty processing start for slot")
-			go v.ExecuteDuty(n.context, uint64(duty.Slot), duty)
-		} else {
-			logger.Warn("could not find validator")
-		}
+	if v, ok := n.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
+		logger.Info("starting duty processing start for slot")
+		go v.ExecuteDuty(n.context, uint64(duty.Slot), duty)
 	} else {
-		logger.Warn("slot is irrelevant, ignoring duty")
+		logger.Warn("could not find validator")
 	}
-
+	return nil
 }
 
-// startDutiesTicker start to stream duties from the beacon chain
-func (n *operatorNode) startDutiesTicker() error {
-	// before starting -> update local map of indices and validators (part of go-client)
+// startDutyDispatcher start to stream duties from the beacon chain
+func (n *operatorNode) startDutyDispatcher() {
 	indices := n.validatorController.GetValidatorsIndices()
 	n.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("indices count", len(indices)))
 
-	genesisTime := time.Unix(int64(n.ethNetwork.MinGenesisTime()), 0)
-	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(n.ethNetwork.SlotDurationSec().Seconds()))
-	for currentSlot := range slotTicker.C() {
-		n.logger.Debug("slot ticker", zap.Uint64("slot", currentSlot))
-		duties, err := n.dutyManager.GetDuties(currentSlot)
-		if err != nil {
-			n.logger.Error("failed to get duties", zap.Error(err))
-		}
-		for i := range duties {
-			go n.onDuty(&duties[i])
-		}
-	}
-	return errors.New("ticker failed")
-}
-
-// getSlotStartTime returns the start time for the given slot
-func (n *operatorNode) getSlotStartTime(slot uint64) time.Time {
-	timeSinceGenesisStart := slot * uint64(n.ethNetwork.SlotDurationSec().Seconds())
-	start := time.Unix(int64(n.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
-	return start
-}
-
-// getCurrentSlot returns the current beacon node slot
-func (n *operatorNode) getCurrentSlot() int64 {
-	genesisTime := int64(n.ethNetwork.MinGenesisTime())
-	currentTime := time.Now().Unix()
-	return (currentTime - genesisTime) / 12
-}
-
-// getEpochFirstSlot returns the beacon node first slot in epoch
-func (n *operatorNode) getEpochFirstSlot(epoch uint64) uint64 {
-	return epoch * 32
+	n.dutyDispatcher.ListenToTicker()
 }

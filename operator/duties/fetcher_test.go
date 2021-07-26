@@ -1,4 +1,4 @@
-package operator
+package duties
 
 import (
 	"errors"
@@ -10,16 +10,13 @@ import (
 	"testing"
 )
 
-func TestDutyManager_GetDuties(t *testing.T) {
-	vIndices = append(vIndices, 205238)
-
+func TestDutyFetcher_GetDuties(t *testing.T) {
 	t.Run("handles error", func(t *testing.T) {
 		expectedErr := errors.New("test duties")
 		bcMock := beaconDutiesClientMock{
 			getDutiesErr: expectedErr,
 		}
-		dm := NewDutyManager(zap.L(), &bcMock, getValidatorsIndicesMock,
-			core.NetworkFromString(string(core.PraterNetwork)))
+		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}}, core.PraterNetwork)
 		duties, err := dm.GetDuties(893108)
 		require.EqualError(t, err, "failed to get attest duties: test duties")
 		require.Len(t, duties, 0)
@@ -33,7 +30,7 @@ func TestDutyManager_GetDuties(t *testing.T) {
 			},
 		}
 		bcMock := beaconDutiesClientMock{duties: attesterDuties}
-		dm := NewDutyManager(zap.L(), &bcMock, getValidatorsIndicesMock,
+		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
 			core.NetworkFromString(string(core.PraterNetwork)))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
@@ -52,14 +49,14 @@ func TestDutyManager_GetDuties(t *testing.T) {
 			},
 		}
 		bcMock := beaconDutiesClientMock{duties: attesterDuties}
-		dm := NewDutyManager(zap.L(), &bcMock, getValidatorsIndicesMock,
+		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
 			core.NetworkFromString(string(core.PraterNetwork)))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
 		// trying to get duty in another slot, same epoch -> cache should be used
 		// cleanup beacon client so it won't return duties
-		dm.(*dutyManager).beaconClient = &beaconDutiesClientMock{}
+		dm.(*dutyFetcher).beaconClient = &beaconDutiesClientMock{}
 		// get duties, assuming cache will be used
 		duties, err = dm.GetDuties(893110)
 		require.NoError(t, err)
@@ -73,22 +70,21 @@ func TestDutyManager_GetDuties(t *testing.T) {
 				PubKey: spec.BLSPubKey{},
 			},
 		}
-		vIndicesOrig := vIndices[:]
-		vIndices = []spec.ValidatorIndex{}
 		bcMock := beaconDutiesClientMock{duties: attesterDuties}
-		dm := NewDutyManager(zap.L(), &bcMock, getValidatorsIndicesMock,
+		dm := NewDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{}},
 			core.NetworkFromString(string(core.PraterNetwork)))
 		duties, err := dm.GetDuties(893108)
-		vIndices = vIndicesOrig[:]
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
 	})
 }
 
-var vIndices []spec.ValidatorIndex
+type indicesFetcher struct {
+	vIndices []spec.ValidatorIndex
+}
 
-func getValidatorsIndicesMock() []spec.ValidatorIndex {
-	return vIndices[:]
+func (f *indicesFetcher) GetValidatorsIndices() []spec.ValidatorIndex {
+	return f.vIndices[:]
 }
 
 type beaconDutiesClientMock struct {
