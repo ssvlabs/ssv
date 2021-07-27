@@ -123,8 +123,8 @@ func (dc *dutyController) dispatch(duty *beacon.Duty) error {
 
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
 	currentSlot := uint64(dc.getCurrentSlot())
-	// execute task if slot already began and not pass 1 epoch
-	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
+	// execute task if slot already began and not pass 1 epoch, assuming that getCurrentSlot might return previous slot
+	if (currentSlot+1 == uint64(duty.Slot)) || (currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit) {
 		logger.Debug("executing duty")
 		return dc.ExecuteDuty(duty)
 	}

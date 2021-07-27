@@ -61,17 +61,19 @@ type dutyFetcher struct {
 func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 	var duties []beacon.Duty
 
-	logger := df.logger.With(zap.Uint64("slot", slot))
-	start := time.Now()
-	cacheKey := getDutyCacheKey(slot)
 	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
 	epoch := spec.Epoch(esEpoch)
+	logger := df.logger.With(zap.Uint64("slot", slot), zap.Uint64("epoch", uint64(epoch)))
+	start := time.Now()
+	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
 		logger.Debug("found duties in cache")
 		duties = raw.(dutyCacheEntry).Duties
-	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); !ok {
+	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); ok {
+		logger.Debug("epoch's duties were already fetched for this epoch")
+	} else {
 		// does not exist in cache -> fetch
-		logger.Debug("no entry in cache, fetching duties from beacon node", zap.Uint64("epoch", uint64(epoch)))
+		logger.Debug("no entry in cache, fetching duties from beacon node")
 		if err := df.updateDutiesFromBeacon(slot); err != nil {
 			logger.Error("failed to get duties", zap.Error(err))
 			return nil, err
