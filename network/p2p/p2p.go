@@ -248,24 +248,24 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 		return
 	}
 	for _, ls := range n.listeners {
-		go func(ls listener, sm proto.SignedMessage, msgType network.NetworkMsg) {
+		go func(ls listener, sm *proto.SignedMessage, msgType network.NetworkMsg) {
 			switch msgType {
 			case network.NetworkMsg_IBFTType:
 				if ls.msgCh != nil {
-					ls.msgCh <- &sm
+					ls.msgCh <- sm
 				}
 			case network.NetworkMsg_SignatureType:
 				if ls.sigCh != nil {
-					ls.sigCh <- &sm
+					ls.sigCh <- sm
 				}
 			case network.NetworkMsg_DecidedType:
 				if ls.decidedCh != nil {
-					ls.decidedCh <- &sm
+					ls.decidedCh <- sm
 				}
 			default:
 				logger.Error("received unsupported message", zap.Int32("msg type", int32(msgType)))
 			}
-		}(ls, *cm.SignedMessage, cm.Type)
+		}(ls, cm.SignedMessage, cm.Type)
 	}
 }
 
