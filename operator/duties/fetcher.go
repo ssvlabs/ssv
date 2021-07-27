@@ -71,7 +71,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 		duties = raw.(dutyCacheEntry).Duties
 	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); !ok {
 		// does not exist in cache -> fetch
-		logger.Debug("no entry in cache, fetching duties from beacon node", zap.Uint64("epoch",uint64(epoch)))
+		logger.Debug("no entry in cache, fetching duties from beacon node", zap.Uint64("epoch", uint64(epoch)))
 		if err := df.updateDutiesFromBeacon(slot); err != nil {
 			logger.Error("failed to get duties", zap.Error(err))
 			return nil, err

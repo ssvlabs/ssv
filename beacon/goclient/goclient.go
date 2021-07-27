@@ -48,11 +48,11 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger.Info("successfully connected to client")
 
 	_client := &goClient{
-		ctx:      opt.Context,
-		logger:   logger,
-		network:  core.NetworkFromString(opt.Network),
-		client:   autoClient,
-		graffiti: []byte("BloxStaking"),
+		ctx:          opt.Context,
+		logger:       logger,
+		network:      core.NetworkFromString(opt.Network),
+		client:       autoClient,
+		graffiti:     []byte("BloxStaking"),
 		blockChannel: make(chan spec.SignedBeaconBlock),
 	}
 
