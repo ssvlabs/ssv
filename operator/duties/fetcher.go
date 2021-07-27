@@ -62,7 +62,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 	var duties []beacon.Duty
 
 	logger := df.logger.With(zap.Uint64("slot", slot))
-
+	start := time.Now()
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
 		logger.Debug("found duties in cache")
@@ -77,11 +77,13 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 			duties = raw.(dutyCacheEntry).Duties
 		}
 	}
+	duration := time.Since(start)
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
-			zap.Int("count", len(duties)), zap.Any("duties", duties))
+			zap.Int("count", len(duties)), zap.Any("duties", duties),
+			zap.Duration("duration", duration))
 	} else {
-		logger.Debug("didn't find duties for slot")
+		logger.Debug("didn't find duties for slot", zap.Duration("duration", duration))
 	}
 
 	return duties, nil
