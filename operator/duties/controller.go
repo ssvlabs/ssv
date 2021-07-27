@@ -153,9 +153,11 @@ func (dc *dutyController) getSlotStartTime(slot uint64) time.Time {
 
 // getCurrentSlot returns the current beacon node slot
 func (dc *dutyController) getCurrentSlot() int64 {
-	genesisTime := int64(dc.ethNetwork.MinGenesisTime())
-	currentTime := time.Now().Unix()
-	return (currentTime - genesisTime) / secPerSlot
+	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
+	if genesisTime.After(time.Now()) {
+		return 0
+	}
+	return int64(time.Since(genesisTime).Seconds()) / secPerSlot
 }
 
 // getEpochFirstSlot returns the beacon node first slot in epoch

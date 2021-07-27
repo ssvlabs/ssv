@@ -28,7 +28,7 @@ type Beacon interface {
 	StartReceivingBlocks()
 
 	// GetDuties returns duties for the passed validators indices
-	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error)
+	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error)
 
 	// GetIndices returns indices for each pubkey from the node
 	GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error)

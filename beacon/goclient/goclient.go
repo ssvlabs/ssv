@@ -53,6 +53,7 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 		network:  core.NetworkFromString(opt.Network),
 		client:   autoClient,
 		graffiti: []byte("BloxStaking"),
+		blockChannel: make(chan spec.SignedBeaconBlock),
 	}
 
 	return _client, nil
@@ -75,6 +76,14 @@ func (gc *goClient) StartReceivingBlocks() {
 				gc.logger.Error("failed to fetch head block", zap.Error(err))
 				time.Sleep(time.Second * 2)
 				continue
+			} else if signedBeaconBlock == nil {
+				gc.logger.Debug("received empty block")
+				time.Sleep(time.Second * 1)
+				continue
+			} else if signedBeaconBlock.Message == nil {
+				gc.logger.Debug("received empty message")
+				time.Sleep(time.Second * 1)
+				continue
 			}
 			gc.highestValidSlot = uint64(signedBeaconBlock.Message.Slot)
 			gc.blockChannel <- *signedBeaconBlock
@@ -84,11 +93,24 @@ func (gc *goClient) StartReceivingBlocks() {
 	gc.logger.Error("client does not support SignedBeaconBlockProvider")
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
-		duties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
+		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
+		}
+		var duties []*beacon.Duty
+		for _, attesterDuty := range attesterDuties {
+			duties = append(duties, &beacon.Duty{
+				Type:                    beacon.RoleTypeAttester,
+				PubKey:                  attesterDuty.PubKey,
+				Slot:                    attesterDuty.Slot,
+				ValidatorIndex:          attesterDuty.ValidatorIndex,
+				CommitteeIndex:          attesterDuty.CommitteeIndex,
+				CommitteeLength:         attesterDuty.CommitteeLength,
+				CommitteesAtSlot:        attesterDuty.CommitteesAtSlot,
+				ValidatorCommitteeIndex: attesterDuty.ValidatorCommitteeIndex,
+			})
 		}
 		return duties, nil
 	}
