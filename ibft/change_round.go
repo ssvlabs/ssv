@@ -60,6 +60,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		// change round if quorum reached
 		if !quorum {
+			i.Logger.Debug("change round - quorum not reached")
 			return nil
 		}
 

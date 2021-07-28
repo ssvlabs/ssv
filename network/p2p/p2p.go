@@ -65,6 +65,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	// init empty topics map
 	cfg.Topics = make(map[string]*pubsub.Topic)
 
+	logger = logger.With(zap.String("component", "p2p"))
+
 	n := &p2pNetwork{
 		ctx:           ctx,
 		cfg:           cfg,

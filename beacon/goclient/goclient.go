@@ -31,8 +31,8 @@ type goClient struct {
 
 // New init new client and go-client instance
 func New(opt beacon.Options) (beacon.Beacon, error) {
-	logger := opt.Logger.With(zap.String("component", "go-client"), zap.String("network", opt.Network))
-	logger.Info("connecting to client...")
+	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
+	logger.Info("connecting to beacon client...")
 	autoClient, err := auto.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
 		auto.WithAddress(opt.BeaconNodeAddr),
@@ -45,7 +45,7 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	}
 
 	logger = logger.With(zap.String("name", autoClient.Name()), zap.String("address", autoClient.Address()))
-	logger.Info("successfully connected to client")
+	logger.Info("successfully connected to beacon client")
 
 	_client := &goClient{
 		ctx:      opt.Context,
