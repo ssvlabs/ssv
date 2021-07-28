@@ -80,7 +80,6 @@ func New(opts Options) Node {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
-	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
 	n.validatorController.StartValidators()
 	return n.startDutiesTicker()
 }
