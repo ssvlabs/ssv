@@ -60,10 +60,9 @@ func (t *RoundTimer) Stopped() bool {
 // Stop will stop the timer and send false on the result chan
 func (t *RoundTimer) Stop() {
 	if t.timer != nil {
-		if !t.timer.Stop() {
-			<-t.timer.C // per timer documentation to drain chan
+		if t.timer.Stop() {
+			t.cancelC <- true
 		}
-		t.cancelC <- true
 	}
 }
 

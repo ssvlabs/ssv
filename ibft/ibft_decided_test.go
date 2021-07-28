@@ -1,11 +1,14 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -249,6 +252,55 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
 	}
+}
+
+func TestForceDecided(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	network := local.NewLocalNetwork()
+
+	identifier := []byte("lambda_11")
+	s1 := populatedStorage(t, sks, 3)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
+
+	// test before sync
+	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, highest.Message.SeqNumber)
+
+	time.Sleep(time.Second * 1) // wait for sync to complete
+
+	go func() {
+		time.Sleep(time.Millisecond * 500) // wait for instance to start
+		decidedMsg := aggregateSign(t, sks, &proto.Message{
+			Type:        proto.RoundState_Commit,
+			Round:       1,
+			SeqNumber:   4,
+			Lambda:      identifier,
+			Value:       []byte("value"),
+		})
+		i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
+	}()
+
+	share := &storage.Share{
+		NodeID:    1,
+		PublicKey: validatorPK(sks),
+		ShareKey:  sks[1],
+		Committee: nodes,
+	}
+	res, err := i1.StartInstance(StartOptions{
+		Logger:         logex.GetLogger(),
+		ValueCheck:     &valcheck.AttestationValueCheck{},
+		SeqNumber:      4,
+		Value:          []byte("value"),
+		ValidatorShare: share,
+	})
+	require.NoError(t, err)
+	require.True(t, res.Decided)
+
+
+	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.NoError(t, err)
+	require.EqualValues(t, 4, highest.Message.SeqNumber)
 }
 
 func TestSyncAfterDecided(t *testing.T) {

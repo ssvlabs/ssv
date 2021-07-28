@@ -54,7 +54,7 @@ type Instance struct {
 	ChangeRoundMessages msgcont.MessageContainer
 
 	// event loop
-	eventQueue *eventqueue.Queue
+	eventQueue eventqueue.EventQueue
 
 	// channels
 	stageChangedChan chan proto.RoundState
@@ -69,6 +69,7 @@ type Instance struct {
 	stopLock              sync.Mutex
 	stageChangedChansLock sync.Mutex
 	stageLock             sync.Mutex
+	stateLock             sync.Mutex
 }
 
 // NewInstance is the constructor of Instance
@@ -104,6 +105,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stopLock:              sync.Mutex{},
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
+		stateLock:             sync.Mutex{},
 	}
 }
 
@@ -138,8 +140,10 @@ func (i *Instance) Start(inputValue []byte) error {
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
+	i.stateLock.Lock()
 	i.State.Round = 1 // start from 1
 	i.State.InputValue = inputValue
+	i.stateLock.Unlock()
 
 	if i.IsLeader() {
 		go func() {
@@ -175,33 +179,44 @@ func (i *Instance) ForceDecide(msg *proto.SignedMessage) {
 func (i *Instance) Stop() {
 	// stop can be run just once
 	i.runStopOnce.Do(func() {
-		i.eventQueue.Add(func() {
-			i.Logger.Info("stopping iBFT instance...")
-			i.stopLock.Lock()
-			defer i.stopLock.Unlock()
-
-			i.stopped = true
-			i.roundTimer.Stop()
-			i.SetStage(proto.RoundState_Stopped)
-			i.eventQueue.ClearAndStop()
-
-			// stop stage chan
-			i.stageLock.Lock()
-			defer i.stageLock.Unlock()
-			if i.stageChangedChan != nil {
-				close(i.stageChangedChan)
-				i.stageChangedChan = nil
-			}
-
-			i.Logger.Info("stopped iBFT instance")
-		})
+		if added := i.eventQueue.Add(i.stop); !added {
+			i.Logger.Debug("could not add 'stop' to event queue")
+		}
 	})
 }
 
-// Stopped returns true if instance is stopped
+// stop stops the instance
+func (i *Instance) stop() {
+	i.Logger.Info("stopping iBFT instance...")
+	i.stopLock.Lock()
+	defer i.stopLock.Unlock()
+	i.Logger.Debug("STOPPING IBFT -> pass stopLock")
+	i.stopped = true
+	i.roundTimer.Stop()
+	i.Logger.Debug("STOPPING IBFT -> stopped round timer")
+	i.SetStage(proto.RoundState_Stopped)
+	i.Logger.Debug("STOPPING IBFT -> set stage to stop")
+	i.eventQueue.ClearAndStop()
+	i.Logger.Debug("STOPPING IBFT -> cleared event queue")
+
+	// stop stage chan
+	i.stageLock.Lock()
+	defer i.stageLock.Unlock()
+	i.Logger.Debug("STOPPING IBFT -> passed stageLock")
+	if i.stageChangedChan != nil {
+		close(i.stageChangedChan)
+		i.Logger.Debug("STOPPING IBFT -> closed stageChangedChan")
+		i.stageChangedChan = nil
+	}
+
+	i.Logger.Info("stopped iBFT instance")
+}
+
+// Stopped is stopping queue work
 func (i *Instance) Stopped() bool {
 	i.stopLock.Lock()
 	defer i.stopLock.Unlock()
+
 	return i.stopped
 }
 
@@ -214,6 +229,7 @@ func (i *Instance) BumpRound() {
 func (i *Instance) Stage() proto.RoundState {
 	i.stageLock.Lock()
 	defer i.stageLock.Unlock()
+
 	return i.State.Stage
 }
 
@@ -225,7 +241,7 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	i.State.Stage = stage
 
 	// Delete all queue messages when decided, we do not need them anymore.
-	if i.State.Stage == proto.RoundState_Decided || i.State.Stage == proto.RoundState_Stopped {
+	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.State.Round; j++ {
 			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
 		}

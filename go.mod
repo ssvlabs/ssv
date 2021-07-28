@@ -37,6 +37,7 @@ require (
 	go.opencensus.io v0.22.5
 	go.uber.org/zap v1.16.0
 	google.golang.org/grpc v1.37.0
+	google.golang.org/protobuf v1.26.0
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 

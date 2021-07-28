@@ -21,9 +21,9 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		},
 	}
 
-	// not prepared
+	// no decided msg
 	_, err := instance.CommittedAggregatedMsg()
-	require.EqualError(t, err, "state not prepared")
+	require.EqualError(t, err, "missing decided message")
 
 	// set prepared state
 	instance.State.PreparedRound = 1
@@ -31,7 +31,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 
 	// test prepared but no committed msgs
 	_, err = instance.CommittedAggregatedMsg()
-	require.EqualError(t, err, "no commit msgs")
+	require.EqualError(t, err, "missing decided message")
 
 	// test valid aggregation
 	instance.CommitMessages.AddMessage(SignMsg(t, 1, sks[1], &proto.Message{
@@ -52,6 +52,9 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
+
+
+	instance.State.DecidedMsg = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 
 	// test aggregation
 	msg, err := instance.CommittedAggregatedMsg()
