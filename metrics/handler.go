@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	http_pprof "net/http/pprof"
+	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
 	"strings"
@@ -31,6 +32,8 @@ type metricsHandler struct {
 
 func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	mh.logger.Info("setup metrics collection")
+
+	mh.configure()
 
 	mux.HandleFunc("/metrics", func(res http.ResponseWriter, req *http.Request) {
 		if err := mh.handleHTTP(res, req); err != nil {
@@ -64,6 +67,11 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	}()
 
 	return nil
+}
+
+func (mh *metricsHandler) configure() {
+	runtime.SetBlockProfileRate(1000)
+	runtime.SetMutexProfileFraction(1)
 }
 
 func (mh *metricsHandler) handleHTTP(res http.ResponseWriter, _ *http.Request) (err error) {
