@@ -4,11 +4,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/stretchr/testify/require"
-	"sync"
 	"testing"
 )
-
-var once sync.Once
 
 func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
 	msgQ := New()
