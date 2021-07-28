@@ -24,9 +24,6 @@ type Beacon interface {
 	// ExtendIndexMap extanding the pubkeys map of the client (in order to prevent redundant call to fetch pubkeys from node)
 	ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey)
 
-	// StartReceivingBlocks continuously fetching blocks and update latest block
-	StartReceivingBlocks()
-
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error)
 
@@ -41,4 +38,7 @@ type Beacon interface {
 
 	// SubmitAttestation submit the attestation to the node
 	SubmitAttestation(attestation *spec.Attestation) error
+
+	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
+	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
 }

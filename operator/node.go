@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/hex"
+	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -60,7 +61,7 @@ type operatorNode struct {
 func New(opts Options) Node {
 	ssv := &operatorNode{
 		context:             opts.Context,
-		logger:              opts.Logger,
+		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
 		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
 		validatorController: opts.ValidatorController,
@@ -78,15 +79,14 @@ func New(opts Options) Node {
 
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
-	n.logger.Info("starting node -> IBFT")
-	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
+	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 	n.validatorController.StartValidators()
 	return n.startDutiesTicker()
 }
 
 // StartEth1 starts the eth1 events sync and streaming
 func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
-	n.logger.Info("starting node -> eth1")
+	n.logger.Info("starting operator node syncing with eth1")
 
 	// setup validator controller to listen to ValidatorAdded events
 	// this will handle events from the sync as well
@@ -165,14 +165,17 @@ func (n *operatorNode) startDutiesTicker() error {
 		n.logger.Debug("got indices for get duties", zap.Int("indices count", len(indices)))
 		esEpoch := n.ethNetwork.EstimatedEpochAtSlot(currentSlot)
 		epoch := spec.Epoch(esEpoch)
-		go n.getAttesterDuties(epoch, indices) // when scale need to support batches
-	//	 TODO add getProposerDuties here
+		go n.updatedAttesterDuties(epoch, indices) // when scale need to support batches
+		//	 TODO add getProposerDuties here
 	}
 	return errors.New("ticker failed")
 }
 
-// getAttesterDuties request attest duties from beacon node for all active accounts
-func (n *operatorNode) getAttesterDuties(epoch spec.Epoch, indices []spec.ValidatorIndex) {
+// updatedAttesterDuties with the following steps -
+// 1, request attest duties from beacon node for all active accounts
+// 2, schedule in slotQueue each duty to start time
+// 3, subscribe all duties committee to subnet
+func (n *operatorNode) updatedAttesterDuties(epoch spec.Epoch, indices []spec.ValidatorIndex) {
 	if indices == nil {
 		return
 	}
@@ -187,6 +190,8 @@ func (n *operatorNode) getAttesterDuties(epoch spec.Epoch, indices []spec.Valida
 		n.logger.Debug("no duties...")
 		return
 	}
+
+	var subscriptions []*api.BeaconCommitteeSubscription
 	for _, duty := range resp {
 		go n.onDuty(&beacon.Duty{
 			Type:                    beacon.RoleTypeAttester,
@@ -198,6 +203,19 @@ func (n *operatorNode) getAttesterDuties(epoch spec.Epoch, indices []spec.Valida
 			CommitteesAtSlot:        duty.CommitteesAtSlot,
 			ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
 		})
+
+		subscriptions = append(subscriptions, &api.BeaconCommitteeSubscription{
+			ValidatorIndex:   duty.ValidatorIndex,
+			Slot:             duty.Slot,
+			CommitteeIndex:   duty.CommitteeIndex,
+			CommitteesAtSlot: duty.CommitteesAtSlot,
+			IsAggregator:     false, // TODO need to handle agg case
+		})
+	}
+
+	if err := n.beacon.SubscribeToCommitteeSubnet(subscriptions); err != nil {
+		n.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
+	//	 TODO should add return? if so could end up inserting redundant duties
 	}
 	n.epochDutiesExist = true
 }

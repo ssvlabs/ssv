@@ -25,7 +25,7 @@ FROM preparer AS builder
 COPY . .
 
 RUN go get -d -v ./...
-RUN CGO_ENABLED=1 GOOS=linux go install -tags blst_enabled -ldflags "-X main.Version=`git tag | tail -n 1` -linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
+RUN CGO_ENABLED=1 GOOS=linux go install -tags blst_enabled -ldflags "-X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)` -linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
 
 #
 # STEP 3: Prepare image to run the binary

@@ -49,6 +49,7 @@ instanceLoop:
 	}
 	// when main instance loop breaks, nil current instance
 	i.currentInstance = nil
+	i.logger.Debug("iBFT instance result loop stopped")
 	return retRes, err
 }
 

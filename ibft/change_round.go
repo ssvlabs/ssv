@@ -51,7 +51,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			i.Logger.Info("already received change round quorum, not processing change-round message")
 			return nil
 		}
-		quorum, _, _ := i.changeRoundQuorum(signedMessage.Message.Round)
+		quorum, msgsCount, committeeSize := i.changeRoundQuorum(signedMessage.Message.Round)
 		justifyRound, err := i.JustifyRoundChange(signedMessage.Message.Round)
 		if err != nil {
 			return err
@@ -60,6 +60,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		// change round if quorum reached
 		if !quorum {
+			i.Logger.Debug("change round - quorum not reached", zap.Int("msgsCount", msgsCount), zap.Int("committeeSize", committeeSize))
 			return nil
 		}
 

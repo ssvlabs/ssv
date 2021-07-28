@@ -22,7 +22,7 @@ func (n *p2pNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMessa
 		return errors.Wrap(err, "failed to get topic")
 	}
 
-	n.logger.Debug("Broadcasting to topic", zap.String("lambda", string(msg.Message.Lambda)), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
+	n.logger.Debug("Broadcasting signature message", zap.String("lambda", string(msg.Message.Lambda)), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
 	return topic.Publish(n.ctx, msgBytes)
 }
 

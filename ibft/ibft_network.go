@@ -62,7 +62,6 @@ func (i *ibftImpl) listenToNetworkDecidedMessages() {
 }
 
 func (i *ibftImpl) listenToSyncMessages() {
-	// sync messages
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan {

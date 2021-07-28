@@ -1,36 +1,50 @@
 package eventqueue
 
-import "sync"
+import (
+	"sync"
+)
 
-// Queue is a simple struct that manages a queue of functions. Thread safe
-type Queue struct {
+// Event represent some function
+type Event func()
+
+// EventQueue is the interface for managing a queue of functions
+type EventQueue interface {
+	Add(Event) bool
+	Pop() Event
+	ClearAndStop()
+}
+
+// queue thread safe implementation of EventQueue
+type queue struct {
 	stop  bool
-	queue []func()
+	queue []Event
 	lock  sync.Mutex
 }
 
-// New returns a new instance of Queue
-func New() *Queue {
-	return &Queue{
-		queue: make([]func(), 0),
+// New returns a new instance of queue
+func New() EventQueue {
+	q := queue{
+		queue: make([]Event, 0),
 		lock:  sync.Mutex{},
 	}
+	return &q
 }
 
 // Add will add an an item to the queue, thread safe.
-func (q *Queue) Add(f func()) {
+func (q *queue) Add(e Event) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	if q.stop {
-		return
+		return false
 	}
 
-	q.queue = append(q.queue, f)
+	q.queue = append(q.queue, e)
+	return true
 }
 
 // Pop will return and delete an an item from the queue, thread safe.
-func (q *Queue) Pop() func() {
+func (q *queue) Pop() Event {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -47,10 +61,10 @@ func (q *Queue) Pop() func() {
 }
 
 // ClearAndStop will clear the queue disable adding more items to it, thread safe.
-func (q *Queue) ClearAndStop() {
+func (q *queue) ClearAndStop() {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	q.stop = true
-	q.queue = make([]func(), 0)
+	q.queue = make([]Event, 0)
 }
