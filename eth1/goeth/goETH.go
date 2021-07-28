@@ -46,7 +46,8 @@ type eth1Client struct {
 
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
-	logger := opts.Logger
+	logger := opts.Logger.With(zap.String("component", "eth1GoETH"))
+	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr), zap.String("contract", opts.RegistryContractAddr))
 
 	ec := eth1Client{
 		ctx:                        opts.Ctx,
@@ -92,12 +93,13 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 // connect connects to eth1 client
 func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
-	ec.logger.Info("dialing node", zap.String("addr", ec.nodeAddr))
+	ec.logger.Info("dialing eth1 node...")
 	conn, err := ethclient.Dial(ec.nodeAddr)
 	if err != nil {
 		ec.logger.Error("failed to reconnect to the Ethereum client", zap.Error(err))
 		return err
 	}
+	ec.logger.Info("successfully connected to eth1 goETH")
 	ec.conn = conn
 	return nil
 }
