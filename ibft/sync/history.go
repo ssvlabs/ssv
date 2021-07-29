@@ -55,6 +55,18 @@ func (s *HistorySync) Start() error {
 		return errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 
+	// special case check
+	if err != nil && err.Error() == kv.EntryNotFoundError && remoteHighest.Message.SeqNumber == 0 {
+		if err := s.ibftStorage.SaveDecided(remoteHighest); err != nil {
+			return errors.Wrap(err, "could not save decided msg during sync")
+		}
+		if err := s.ibftStorage.SaveHighestDecidedInstance(remoteHighest); err != nil {
+			return errors.Wrap(err, "could not save highest decided msg during sync")
+		}
+		s.logger.Info("finished syncing", zap.Uint64("highest seq", remoteHighest.Message.SeqNumber))
+		return nil
+	}
+
 	syncStartSeqNumber := uint64(0)
 	if localHighest != nil {
 		syncStartSeqNumber = localHighest.Message.SeqNumber
@@ -209,8 +221,21 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			continue
 		}
 
-		// validate and save
+		// organize signed msgs into a map where the key is the sequence number
+		// This is for verifying all expected sequence numbers where returned from peer
+		foundSeqs := make(map[uint64]*proto.SignedMessage)
 		for _, msg := range res.SignedMessages {
+			foundSeqs[msg.Message.SeqNumber] = msg
+		}
+
+		// validate and save
+		for i := start; i <= endSeq; i++ {
+			msg, found := foundSeqs[i]
+			if !found {
+				failCount++
+				latestError = errors.Errorf("returned decided by range messages miss sequence number %d", i)
+				break
+			}
 			// if msg is invalid, break and try again with an updated start seq
 			if s.validateDecidedMsgF(msg) != nil {
 				start = msg.Message.SeqNumber
