@@ -455,7 +455,7 @@ func TestSync(t *testing.T) {
 			"",
 		},
 		{
-			"try syncing to seq 2, error on history fetch",
+			"try syncing to seq 2 with missing the last, error on history fetch",
 			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
 			[]string{"2"},
@@ -470,6 +470,57 @@ func TestSync(t *testing.T) {
 			nil,
 			2,
 			"could not fetch decided by range during sync: returned decided by range messages miss sequence number 2",
+		},
+		{
+			"try syncing to seq 2 with missing in middle, error on history fetch",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided2,
+				"3": decided2,
+			},
+			map[string][]*proto.SignedMessage{
+				"2": {decided0, decided2},
+				"3": {decided0, decided2},
+			},
+			nil,
+			2,
+			"could not fetch decided by range during sync: returned decided by range messages miss sequence number 1",
+		},
+		{
+			"try syncing to seq 2 with missing in start, error on history fetch",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided2,
+				"3": decided2,
+			},
+			map[string][]*proto.SignedMessage{
+				"2": {decided1, decided2},
+				"3": {decided1, decided2},
+			},
+			nil,
+			2,
+			"could not fetch decided by range during sync: returned decided by range messages miss sequence number 0",
+		},
+		{
+			"try syncing with differ decided peers",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided1,
+				"3": decided0,
+			},
+			map[string][]*proto.SignedMessage{
+				"2": {decided0, decided1},
+				"3": {decided0},
+			},
+			nil,
+			1,
+			"",
 		},
 	}
 

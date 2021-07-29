@@ -55,27 +55,18 @@ func (s *HistorySync) Start() error {
 		return errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 
-	// special case check
-	if err != nil && err.Error() == kv.EntryNotFoundError && remoteHighest.Message.SeqNumber == 0 {
-		if err := s.ibftStorage.SaveDecided(remoteHighest); err != nil {
-			return errors.Wrap(err, "could not save decided msg during sync")
-		}
-		if err := s.ibftStorage.SaveHighestDecidedInstance(remoteHighest); err != nil {
-			return errors.Wrap(err, "could not save highest decided msg during sync")
-		}
-		s.logger.Info("finished syncing", zap.Uint64("highest seq", remoteHighest.Message.SeqNumber))
-		return nil
-	}
-
 	syncStartSeqNumber := uint64(0)
 	if localHighest != nil {
 		syncStartSeqNumber = localHighest.Message.SeqNumber
 	}
 
-	// check we are behind and need to sync
-	if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
-		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber), zap.String("duration", time.Since(start).String()))
-		return nil
+	specialStartupCase := err != nil && err.Error() == kv.EntryNotFoundError && remoteHighest.Message.SeqNumber == 0 // in case when remote return seqNum of 0 and local is empty (notFound) we need to save and not assumed to be synced
+	if !specialStartupCase {
+		// check we are behind and need to sync
+		if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
+			s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber), zap.String("duration", time.Since(start).String()))
+			return nil
+		}
 	}
 
 	// fetch, validate and save missing data
