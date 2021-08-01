@@ -18,7 +18,7 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 		}
 		return attestationData, nil
 	}
-	return nil, errors.New("client is not support AttestationDataProvider")
+	return nil, errors.New("client does not support AttestationDataProvider")
 }
 
 func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {

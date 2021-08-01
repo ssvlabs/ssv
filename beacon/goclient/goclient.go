@@ -45,11 +45,11 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger.Info("successfully connected to beacon client")
 
 	_client := &goClient{
-		ctx:          opt.Context,
-		logger:       logger,
-		network:      core.NetworkFromString(opt.Network),
-		client:       autoClient,
-		graffiti:     []byte("BloxStaking"),
+		ctx:      opt.Context,
+		logger:   logger,
+		network:  core.NetworkFromString(opt.Network),
+		client:   autoClient,
+		graffiti: []byte("BloxStaking"),
 	}
 
 	return _client, nil
@@ -59,15 +59,28 @@ func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPub
 	gc.client.ExtendIndexMap(map[spec.ValidatorIndex]spec.BLSPubKey{index: pubKey})
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
-		duties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
+		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
 		}
+		var duties []*beacon.Duty
+		for _, attesterDuty := range attesterDuties {
+			duties = append(duties, &beacon.Duty{
+				Type:                    beacon.RoleTypeAttester,
+				PubKey:                  attesterDuty.PubKey,
+				Slot:                    attesterDuty.Slot,
+				ValidatorIndex:          attesterDuty.ValidatorIndex,
+				CommitteeIndex:          attesterDuty.CommitteeIndex,
+				CommitteeLength:         attesterDuty.CommitteeLength,
+				CommitteesAtSlot:        attesterDuty.CommitteesAtSlot,
+				ValidatorCommitteeIndex: attesterDuty.ValidatorCommitteeIndex,
+			})
+		}
 		return duties, nil
 	}
-	return nil, errors.New("client is not support AttesterDutiesProvider")
+	return nil, errors.New("client does not support AttesterDutiesProvider")
 }
 
 func (gc *goClient) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
@@ -78,7 +91,7 @@ func (gc *goClient) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.Vali
 		}
 		return validatorsMap, nil
 	}
-	return nil, errors.New("client is not support ValidatorsProvider")
+	return nil, errors.New("client does not support ValidatorsProvider")
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)

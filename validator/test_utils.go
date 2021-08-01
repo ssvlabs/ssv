@@ -128,7 +128,7 @@ func (b *testBeacon) StartReceivingBlocks() {
 
 }
 
-func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*api.AttesterDuty, error) {
+func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
 	return nil, nil
 }
 

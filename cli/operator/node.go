@@ -12,7 +12,6 @@ import (
 	metrics_ps "github.com/bloxapp/ssv/metrics/process"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -123,9 +122,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
-		slotQueue := slotqueue.New(*cfg.SSVOptions.ETHNetwork, Logger)
-		cfg.SSVOptions.SlotQueue = slotQueue
-		cfg.SSVOptions.ValidatorOptions.SlotQueue = slotQueue
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 

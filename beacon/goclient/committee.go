@@ -11,5 +11,5 @@ func (gc *goClient) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitt
 	if provider, isProvider := gc.client.(eth2client.BeaconCommitteeSubscriptionsSubmitter); isProvider {
 		return provider.SubmitBeaconCommitteeSubscriptions(gc.ctx, subscription)
 	}
-	return errors.New("client is not support BeaconCommitteeSubscriptionsSubmitter")
+	return errors.New("client does not support BeaconCommitteeSubscriptionsSubmitter")
 }
