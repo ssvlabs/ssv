@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestDutyController_listenToTicker(t *testing.T) {
+func TestDutyController_ListenToTicker(t *testing.T) {
 	f := fetcherMock{}
 	var wg sync.WaitGroup
 	ctrl := &dutyController{
@@ -45,7 +45,7 @@ func TestDutyController_listenToTicker(t *testing.T) {
 	wg.Wait()
 }
 
-func TestDutyController_shouldExecute(t *testing.T) {
+func TestDutyController_ShouldExecute(t *testing.T) {
 	ctrl := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 	currentSlot := uint64(ctrl.getCurrentSlot())
 
