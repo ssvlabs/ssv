@@ -15,6 +15,7 @@ type Args struct {
 type GlobalConfig struct {
 	LogLevel  string `yaml:"LogLevel" env:"LOG_LEVEL" env-default:"info" env-description:"Defines logger's log level'"`
 	LogFormat string `yaml:"LogFormat" env:"LOG_FORMAT" env-default:"console" env-description:"Defines logger's encoding, valid values are 'console' (default) and 'json''"`
+	LogLevelEncoding string `yaml:"LogLevelEncoding" env:"LOG_LEVEL_ENCODING" env-default:"capitalColor" env-description:"Defines logger's level encoding, valid values are 'capitalColor' (default), 'capital' or 'lowercase''"`
 }
 
 // ProcessArgs processes and handles CLI arguments

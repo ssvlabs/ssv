@@ -71,7 +71,9 @@ func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftS
 		ShareKey:  sks[nodeID],
 		Committee: nodes,
 	}
-	ret := New(beacon.RoleTypeAttester, identifier, logex.Build("", zap.DebugLevel, "console"), ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue, proto.DefaultConsensusParams(), share)
+	ret := New(beacon.RoleTypeAttester, identifier, logex.Build("", zap.DebugLevel, nil),
+		ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue,
+		proto.DefaultConsensusParams(), share)
 	ret.(*ibftImpl).initFinished = true // as if they are already synced
 	ret.(*ibftImpl).listenToNetworkMessages()
 	ret.(*ibftImpl).listenToSyncMessages()
