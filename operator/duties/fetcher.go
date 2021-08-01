@@ -12,11 +12,13 @@ import (
 	"time"
 )
 
-type dutyCacheEntry struct {
+// cacheEntry
+type cacheEntry struct {
 	Duties []beacon.Duty
 }
 
-// validatorsIndicesFetcher represents the interface for retrieving indices
+// validatorsIndicesFetcher represents the interface for retrieving indices.
+// It have a minimal interface instead of working with the complete validator.IController interface
 type validatorsIndicesFetcher interface {
 	GetValidatorsIndices() []spec.ValidatorIndex
 }
@@ -68,7 +70,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
 		logger.Debug("found duties in cache")
-		duties = raw.(dutyCacheEntry).Duties
+		duties = raw.(cacheEntry).Duties
 	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); ok {
 		logger.Debug("epoch's duties were already fetched for this epoch")
 	} else {
@@ -79,7 +81,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 			return nil, err
 		}
 		if raw, exist := df.cache.Get(cacheKey); exist {
-			duties = raw.(dutyCacheEntry).Duties
+			duties = raw.(cacheEntry).Duties
 		}
 	}
 	if len(duties) > 0 {
@@ -124,9 +126,10 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*beacon.Duty, error) {
 // processFetchedDuties loop over fetched duties and process them
 func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*beacon.Duty) error {
 	var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
-	entries := map[spec.Slot]dutyCacheEntry{}
+	// entries holds all the new duties to add
+	entries := map[spec.Slot]cacheEntry{}
 	for _, duty := range fetchedDuties {
-		df.createEntry(entries, duty)
+		df.fillEntry(entries, duty)
 		subscriptions = append(subscriptions, toSubscription(duty))
 	}
 	df.populateCache(entries)
@@ -136,35 +139,39 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*beacon.Duty) error 
 	return nil
 }
 
-func (df *dutyFetcher) createEntry(entries map[spec.Slot]dutyCacheEntry, duty *beacon.Duty) {
+// fillEntry adds the given duty on the relevant slot
+func (df *dutyFetcher) fillEntry(entries map[spec.Slot]cacheEntry, duty *beacon.Duty) {
 	entry, slotExist := entries[duty.Slot]
 	if !slotExist {
-		entry = dutyCacheEntry{[]beacon.Duty{}}
+		entry = cacheEntry{[]beacon.Duty{}}
 	}
 	entry.Duties = append(entry.Duties, *duty)
 	entries[duty.Slot] = entry
 }
 
 // populateCache takes a map of entries and updates the cache
-func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]dutyCacheEntry) {
+func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 	for s, e := range entriesToAdd {
 		slot := uint64(s)
 		if raw, exist := df.cache.Get(getDutyCacheKey(slot)); exist {
-			existingEntry := raw.(dutyCacheEntry)
+			existingEntry := raw.(cacheEntry)
 			e.Duties = append(existingEntry.Duties, e.Duties...)
 		}
 		df.cache.SetDefault(getDutyCacheKey(slot), e)
 	}
 }
 
+// getDutyCacheKey return the cache key for a slot
 func getDutyCacheKey(slot uint64) string {
 	return fmt.Sprintf("d-%d", slot)
 }
 
+// getEpochCacheKey return the cache key for an epoch
 func getEpochCacheKey(epoch uint64) string {
 	return fmt.Sprintf("e-%d", epoch)
 }
 
+// toSubscription creates a subscription from the given duty
 func toSubscription(duty *beacon.Duty) *eth2apiv1.BeaconCommitteeSubscription {
 	return &eth2apiv1.BeaconCommitteeSubscription{
 		ValidatorIndex:   duty.ValidatorIndex,
