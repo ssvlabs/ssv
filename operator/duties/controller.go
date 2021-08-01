@@ -96,6 +96,7 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 	return nil
 }
 
+// listenToTicker loop over the given slot channel
 func (dc *dutyController) listenToTicker(slots <-chan uint64) {
 	for currentSlot := range slots {
 		dc.logger.Debug("slot ticker", zap.Uint64("slot", currentSlot))
@@ -104,20 +105,23 @@ func (dc *dutyController) listenToTicker(slots <-chan uint64) {
 			dc.logger.Error("failed to get duties", zap.Error(err))
 		}
 		for i := range duties {
-			go func(duty *beacon.Duty) {
-				logger := dc.loggerWithDutyContext(dc.logger, duty)
-				if dc.shouldExecute(duty) {
-					if err := dc.ExecuteDuty(duty); err != nil {
-						logger.Error("could not dispatch duty", zap.Error(err))
-						return
-					}
-					logger.Debug("duty was sent to execution")
-					return
-				}
-				logger.Warn("slot is irrelevant, ignoring duty")
-			}(&duties[i])
+			go dc.onDuty(&duties[i])
 		}
 	}
+}
+
+// onDuty handles next duty
+func (dc *dutyController) onDuty(duty *beacon.Duty) {
+	logger := dc.loggerWithDutyContext(dc.logger, duty)
+	if dc.shouldExecute(duty) {
+		if err := dc.ExecuteDuty(duty); err != nil {
+			logger.Error("could not dispatch duty", zap.Error(err))
+			return
+		}
+		logger.Debug("duty was sent to execution")
+		return
+	}
+	logger.Warn("slot is irrelevant, ignoring duty")
 }
 
 func (dc *dutyController) shouldExecute(duty *beacon.Duty) bool {

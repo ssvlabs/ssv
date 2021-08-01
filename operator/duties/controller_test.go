@@ -12,10 +12,10 @@ import (
 	"time"
 )
 
-func TestDutyDispatcher_listenToTicker(t *testing.T) {
+func TestDutyController_listenToTicker(t *testing.T) {
 	f := fetcherMock{}
 	var wg sync.WaitGroup
-	dispatcher := &dutyController{
+	ctrl := &dutyController{
 		logger: zap.L(), ctx: context.Background(), ethNetwork: core.PraterNetwork,
 		executor: execWithWaitGroup(t, &wg), fetcher: &f, genesisEpoch: 0, dutyLimit: 32,
 	}
@@ -25,7 +25,7 @@ func TestDutyDispatcher_listenToTicker(t *testing.T) {
 	defer func() {
 		secPerSlot = 12
 	}()
-	currentSlot := uint64(dispatcher.getCurrentSlot())
+	currentSlot := uint64(ctrl.getCurrentSlot())
 	duties := map[uint64][]beacon.Duty{}
 	duties[currentSlot] = []beacon.Duty{
 		{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}},
@@ -34,7 +34,7 @@ func TestDutyDispatcher_listenToTicker(t *testing.T) {
 		{Slot: spec.Slot(currentSlot + 1), PubKey: spec.BLSPubKey{}},
 	}
 	f.results = duties
-	go dispatcher.listenToTicker(cn)
+	go ctrl.listenToTicker(cn)
 	wg.Add(2)
 	go func() {
 		cn <- currentSlot
@@ -45,21 +45,30 @@ func TestDutyDispatcher_listenToTicker(t *testing.T) {
 	wg.Wait()
 }
 
-func TestGetSlotStartTime(t *testing.T) {
+func TestDutyController_shouldExecute(t *testing.T) {
+	ctrl := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	currentSlot := uint64(ctrl.getCurrentSlot())
+
+	require.True(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
+	require.False(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot - 1000), PubKey: spec.BLSPubKey{}}))
+	require.False(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot + 1000), PubKey: spec.BLSPubKey{}}))
+}
+
+func TestDutyController_GetSlotStartTime(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
 	ts := d.getSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
-func TestGetCurrentSlot(t *testing.T) {
+func TestDutyController_GetCurrentSlot(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
 	slot := d.getCurrentSlot()
 	require.Greater(t, slot, int64(646855))
 }
 
-func TestGetEpochFirstSlot(t *testing.T) {
+func TestDutyController_GetEpochFirstSlot(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
 	slot := d.getEpochFirstSlot(20203)
