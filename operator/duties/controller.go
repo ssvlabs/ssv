@@ -138,6 +138,8 @@ func (dc *dutyController) shouldExecute(duty *beacon.Duty) bool {
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
 	} else if currentSlot+1 == uint64(duty.Slot) { // getCurrentSlot might return previous slot
+		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, " +
+			"assuming diff caused by a time drift - ignoring and executing duty")
 		return true
 	}
 	return false
