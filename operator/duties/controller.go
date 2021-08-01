@@ -114,11 +114,11 @@ func (dc *dutyController) listenToTicker(slots <-chan uint64) {
 func (dc *dutyController) onDuty(duty *beacon.Duty) {
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
 	if dc.shouldExecute(duty) {
+		logger.Debug("duty was sent to execution")
 		if err := dc.ExecuteDuty(duty); err != nil {
 			logger.Error("could not dispatch duty", zap.Error(err))
 			return
 		}
-		logger.Debug("duty was sent to execution")
 		return
 	}
 	logger.Warn("slot is irrelevant, ignoring duty")
@@ -133,13 +133,11 @@ func (dc *dutyController) shouldExecute(duty *beacon.Duty) bool {
 		return false
 	}
 
-	logger := dc.loggerWithDutyContext(dc.logger, duty)
 	currentSlot := uint64(dc.getCurrentSlot())
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
 	} else if currentSlot+1 == uint64(duty.Slot) { // getCurrentSlot might return previous slot
-		logger.Debug("previous slot")
 		return true
 	}
 	return false
