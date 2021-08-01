@@ -53,7 +53,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
-			Format: cfg.GlobalConfig.LogFormat,
+			Format:       cfg.GlobalConfig.LogFormat,
 			LevelEncoder: levelEncoder,
 		})
 		if errLogLevel != nil {
