@@ -60,10 +60,13 @@ func (s *HistorySync) Start() error {
 		syncStartSeqNumber = localHighest.Message.SeqNumber
 	}
 
-	// check we are behind and need to sync
-	if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
-		s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber), zap.String("duration", time.Since(start).String()))
-		return nil
+	specialStartupCase := err != nil && err.Error() == kv.EntryNotFoundError && remoteHighest.Message.SeqNumber == 0 // in case when remote return seqNum of 0 and local is empty (notFound) we need to save and not assumed to be synced
+	if !specialStartupCase {
+		// check we are behind and need to sync
+		if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {
+			s.logger.Info("node is synced", zap.Uint64("highest seq", syncStartSeqNumber), zap.String("duration", time.Since(start).String()))
+			return nil
+		}
 	}
 
 	// fetch, validate and save missing data
@@ -209,8 +212,21 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			continue
 		}
 
-		// validate and save
+		// organize signed msgs into a map where the key is the sequence number
+		// This is for verifying all expected sequence numbers where returned from peer
+		foundSeqs := make(map[uint64]*proto.SignedMessage)
 		for _, msg := range res.SignedMessages {
+			foundSeqs[msg.Message.SeqNumber] = msg
+		}
+
+		// validate and save
+		for i := start; i <= endSeq; i++ {
+			msg, found := foundSeqs[i]
+			if !found {
+				failCount++
+				latestError = errors.Errorf("returned decided by range messages miss sequence number %d", i)
+				break
+			}
 			// if msg is invalid, break and try again with an updated start seq
 			if s.validateDecidedMsgF(msg) != nil {
 				start = msg.Message.SeqNumber
