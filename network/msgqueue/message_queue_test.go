@@ -111,6 +111,8 @@ func TestMessageQueue_DeleteMessagesWithIds(t *testing.T) {
 
 func TestMessageQueue_Concurrent(t *testing.T) {
 	var wg sync.WaitGroup
+	ibftMsgAdded := make(chan bool)
+	sigMsgAdded := make(chan bool)
 	msgQ := New()
 
 	wg.Add(1)
@@ -119,6 +121,9 @@ func TestMessageQueue_Concurrent(t *testing.T) {
 		for seq := 0; seq < 10; seq++ {
 			for r := 0; r < 10; r++ {
 				msgQ.AddMessage(newNetMsg([]byte{1, 2, 3, 4}, uint64(r), uint64(seq), network.NetworkMsg_IBFTType))
+			}
+			if seq == 2 {
+				ibftMsgAdded <- true
 			}
 			time.Sleep(1 * time.Millisecond)
 		}
@@ -131,19 +136,27 @@ func TestMessageQueue_Concurrent(t *testing.T) {
 			for r := 0; r < 10; r++ {
 				msgQ.AddMessage(newNetMsg([]byte{1, 2, 3, 4}, uint64(r), uint64(seq), network.NetworkMsg_SignatureType))
 			}
+			if seq == 2 {
+				sigMsgAdded <- true
+			}
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
 
+	// waiting for 2 messages to be added nd then starts to count and pop messages
+	<- ibftMsgAdded
+	<- sigMsgAdded
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		time.Sleep(2 * time.Millisecond)
 		for seq := 0; seq < 10; seq++ {
 			for r := 0; r < 10; r++ {
-				require.Equal(t, 1, msgQ.MsgCount(fmt.Sprintf("lambda_01020304_seqNumber_%d_round_%d", seq, r)))
+				idx := fmt.Sprintf("lambda_01020304_seqNumber_%d_round_%d", seq, r)
+				require.Equal(t, 1, msgQ.MsgCount(idx), "failed to find msg for %s", idx)
 			}
-			require.Equal(t, 10, msgQ.MsgCount(fmt.Sprintf("sig_lambda_01020304_seqNumber_%d", seq)))
+			idx := fmt.Sprintf("sig_lambda_01020304_seqNumber_%d", seq)
+			require.Equal(t, 10, msgQ.MsgCount(idx), "failed to find sig msg for %s", idx)
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
@@ -151,7 +164,7 @@ func TestMessageQueue_Concurrent(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		time.Sleep(4 * time.Millisecond)
+		time.Sleep(6 * time.Millisecond)
 		for seq := 0; seq < 10; seq++ {
 			for r := 0; r < 10; r++ {
 				require.NotNil(t, msgQ.PopMessage(fmt.Sprintf("lambda_01020304_seqNumber_%d_round_%d", seq, r)))
