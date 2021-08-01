@@ -67,15 +67,12 @@ func NewController(options ControllerOptions) IController {
 		Logger: options.Logger,
 	})
 
-	err := collection.LoadMultipleFromConfig(options.Shares)
-	if err != nil {
-		options.Logger.Error("failed to load all validators from config", zap.Error(err))
-	}
+	collection.LoadMultipleFromConfig(options.Shares)
 
 	ctrl := controller{
 		collection:                 collection,
 		context:                    options.Context,
-		logger:                     options.Logger,
+		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		signatureCollectionTimeout: options.SignatureCollectionTimeout,
 		beacon:                     options.Beacon,
 		db:                         options.DB,
@@ -107,7 +104,11 @@ func (c *controller) setupValidators() map[string]*Validator {
 	if err != nil {
 		c.logger.Fatal("Failed to get validators shares", zap.Error(err))
 	}
-
+	if len(validatorsShare) == 0 {
+		c.logger.Info("operator have no validators no setup")
+	} else {
+		c.logger.Info("starting validators setup...")
+	}
 	res := make(map[string]*Validator)
 	for _, validatorShare := range validatorsShare {
 		printValidatorShare(c.logger, validatorShare)

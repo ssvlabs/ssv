@@ -50,11 +50,13 @@ type operatorNode struct {
 func New(opts Options) Node {
 	ssv := &operatorNode{
 		context:             opts.Context,
-		logger:              opts.Logger,
+		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
 		validatorController: opts.ValidatorController,
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              *opts.Beacon,
+		eth1Client:          opts.Eth1Client,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
+
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
 			Ctx:                 opts.Context,
@@ -64,7 +66,6 @@ func New(opts Options) Node {
 			GenesisEpoch:        opts.GenesisEpoch,
 			DutyLimit:           opts.DutyLimit,
 		}),
-		eth1Client: opts.Eth1Client,
 	}
 
 	return ssv
@@ -72,16 +73,15 @@ func New(opts Options) Node {
 
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
-	n.logger.Info("starting node -> IBFT")
+	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 	n.validatorController.StartValidators()
-	go n.beacon.StartReceivingBlocks() // in order to get the latest slot (for attestation purposes)
 	n.dutyCtrl.Start()
 	return nil
 }
 
 // StartEth1 starts the eth1 events sync and streaming
 func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
-	n.logger.Info("starting node -> eth1")
+	n.logger.Info("starting operator node syncing with eth1")
 
 	// setup validator controller to listen to ValidatorAdded events
 	// this will handle events from the sync as well

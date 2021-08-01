@@ -24,15 +24,12 @@ type goClient struct {
 	network  core.Network
 	client   client.Service
 	graffiti []byte
-
-	blockChannel     chan spec.SignedBeaconBlock
-	highestValidSlot uint64
 }
 
 // New init new client and go-client instance
 func New(opt beacon.Options) (beacon.Beacon, error) {
-	logger := opt.Logger.With(zap.String("component", "go-client"), zap.String("network", opt.Network))
-	logger.Info("connecting to client...")
+	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
+	logger.Info("connecting to beacon client...")
 	autoClient, err := auto.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
 		auto.WithAddress(opt.BeaconNodeAddr),
@@ -45,15 +42,14 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	}
 
 	logger = logger.With(zap.String("name", autoClient.Name()), zap.String("address", autoClient.Address()))
-	logger.Info("successfully connected to client")
+	logger.Info("successfully connected to beacon client")
 
 	_client := &goClient{
-		ctx:          opt.Context,
-		logger:       logger,
-		network:      core.NetworkFromString(opt.Network),
-		client:       autoClient,
-		graffiti:     []byte("BloxStaking"),
-		blockChannel: make(chan spec.SignedBeaconBlock),
+		ctx:      opt.Context,
+		logger:   logger,
+		network:  core.NetworkFromString(opt.Network),
+		client:   autoClient,
+		graffiti: []byte("BloxStaking"),
 	}
 
 	return _client, nil
@@ -61,36 +57,6 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 
 func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {
 	gc.client.ExtendIndexMap(map[spec.ValidatorIndex]spec.BLSPubKey{index: pubKey})
-}
-
-// StartReceivingBlocks receives blocks from the beacon node. Upon receiving a block, the service
-// broadcasts it to a observers.
-func (gc *goClient) StartReceivingBlocks() {
-	defer func() {
-		close(gc.blockChannel)
-	}()
-	if provider, isProvider := gc.client.(eth2client.SignedBeaconBlockProvider); isProvider {
-		for {
-			signedBeaconBlock, err := provider.SignedBeaconBlock(gc.ctx, "head")
-			if err != nil {
-				gc.logger.Error("failed to fetch head block", zap.Error(err))
-				time.Sleep(time.Second * 2)
-				continue
-			} else if signedBeaconBlock == nil {
-				gc.logger.Debug("received empty block")
-				time.Sleep(time.Second * 1)
-				continue
-			} else if signedBeaconBlock.Message == nil {
-				gc.logger.Debug("received empty message")
-				time.Sleep(time.Second * 1)
-				continue
-			}
-			gc.highestValidSlot = uint64(signedBeaconBlock.Message.Slot)
-			gc.blockChannel <- *signedBeaconBlock
-			time.Sleep(time.Second * 1)
-		}
-	}
-	gc.logger.Error("client does not support SignedBeaconBlockProvider")
 }
 
 func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
@@ -128,15 +94,8 @@ func (gc *goClient) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.Vali
 	return nil, errors.New("client does not support ValidatorsProvider")
 }
 
-// waitOneThirdOrValidBlock waits until (a) or (b) whichever comes first:
-//   (a) the validator has received a valid block that is the same slot as input slot
-//   (b) one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
-	// Don't need to wait if requested slot is the same as highest valid slot.
-	if slot <= gc.highestValidSlot {
-		return
-	}
-
 	delay := slotutil.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
@@ -147,16 +106,8 @@ func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
 
 	t := time.NewTimer(wait)
 	defer t.Stop()
-
-	for {
-		select {
-		case b := <-gc.blockChannel:
-			if slot <= uint64(b.Message.Slot) { // TODO need to make sure its not impacting attr.rate
-				return
-			}
-		case <-t.C:
-			return
-		}
+	for range t.C {
+		return
 	}
 }
 

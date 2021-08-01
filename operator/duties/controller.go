@@ -36,9 +36,10 @@ type ControllerOptions struct {
 
 // dutyController internal implementation of DutyController
 type dutyController struct {
-	logger              *zap.Logger
-	ctx                 context.Context
-	ethNetwork          core.Network
+	logger     *zap.Logger
+	ctx        context.Context
+	ethNetwork core.Network
+	// executor enables to work with a custom execution
 	executor            dutyExecutor
 	fetcher             DutyFetcher
 	validatorController validator.IController

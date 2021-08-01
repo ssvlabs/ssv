@@ -104,7 +104,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
 		// create new eth1 client
-		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {

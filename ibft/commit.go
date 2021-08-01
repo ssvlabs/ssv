@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
@@ -53,33 +52,10 @@ func (i *Instance) forceDecidedPipeline() pipeline.Pipeline {
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
-	if i.State.PreparedValue == nil {
-		return nil, errors.New("state not prepared")
+	if i.State.DecidedMsg != nil {
+		return i.State.DecidedMsg, nil
 	}
-
-	msgs := i.CommitMessages.ReadOnlyMessagesByRound(i.State.Round)
-	if len(msgs) == 0 {
-		return nil, errors.New("no commit msgs")
-	}
-
-	var ret *proto.SignedMessage
-	var err error
-	for _, msg := range msgs {
-		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue) {
-			continue
-		}
-		if ret == nil {
-			ret, err = msg.DeepCopy()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			if err := ret.Aggregate(msg); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return ret, nil
+	return nil, errors.New("missing decided message")
 }
 
 /**
@@ -100,12 +76,33 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
 				zap.Int("got_votes", len(sigs)))
 
-			// mark instance commit
-			i.SetStage(proto.RoundState_Decided)
-			i.Stop()
+			if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
+				i.State.DecidedMsg = aggMsg
+				// mark instance commit
+				i.SetStage(proto.RoundState_Decided)
+				i.Stop()
+			}
 		}
 		return nil
 	})
+}
+
+func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedMessage {
+	var decided *proto.SignedMessage
+	var err error
+	for _, msg := range sigs {
+		if decided == nil {
+			decided, err = msg.DeepCopy()
+			if err != nil {
+				i.Logger.Error("could not copy message")
+			}
+		} else {
+			if err := decided.Aggregate(msg); err != nil {
+				i.Logger.Error("could not aggregate message")
+			}
+		}
+	}
+	return decided
 }
 
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
