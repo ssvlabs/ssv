@@ -106,6 +106,10 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 	if err := df.processFetchedDuties(duties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")
 	}
+	// once done, updating epoch's flag to avoid fetching duties for this epoch
+	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
+	epoch := spec.Epoch(esEpoch)
+	df.cache.SetDefault(getEpochCacheKey(uint64(epoch)), true)
 	return nil
 }
 
@@ -117,12 +121,9 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*beacon.Duty, error) {
 		esEpoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
 		epoch := spec.Epoch(esEpoch)
 		results, err := df.beaconClient.GetDuties(epoch, indices)
-		if err == nil { // mark epoch
-			df.cache.SetDefault(getEpochCacheKey(uint64(epoch)), true)
-		}
 		return results, err
 	}
-	df.logger.Debug("got no indices, duties won't be fetched")
+	df.logger.Debug("no indices, duties won't be fetched")
 	return []*beacon.Duty{}, nil
 }
 
