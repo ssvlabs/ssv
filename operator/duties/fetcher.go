@@ -170,7 +170,7 @@ func (df *dutyFetcher) addMissingSlots(entries map[spec.Slot]cacheEntry) {
 	}
 	// takes some slot from current epoch
 	var slot uint64
-	for s, _ := range entries {
+	for s := range entries {
 		slot = uint64(s)
 		break
 	}
