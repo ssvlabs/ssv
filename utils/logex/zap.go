@@ -18,6 +18,7 @@ func GetLogger(fields ...zap.Field) *zap.Logger {
 	return logger.With(fields...)
 }
 
+// EncodingConfig represents the needed encoding configuration for logger
 type EncodingConfig struct {
 	// Format
 	Format string
@@ -27,6 +28,7 @@ type EncodingConfig struct {
 
 var levelEncoder zapcore.LevelEncoder
 
+// LevelEncoder takes a raw string (as []byte) and returnsthe corresponding zapcore.LevelEncoder
 func LevelEncoder(raw []byte) zapcore.LevelEncoder {
 	if err := levelEncoder.UnmarshalText(raw); err != nil {
 		return nil
