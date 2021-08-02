@@ -128,7 +128,7 @@ OperatorPrivateKey: LS0tLS...
   Log levels can be shown in lowercase and w/o colors, default is upper case with colors:
 
   ```
-  $ yq w -i config.yaml global.LogLevelEncoding "lowercase"
+  $ yq w -i config.yaml global.LogLevelFormat "lowercase"
   ```
 
   #### 5.2 Metrics Configuration
