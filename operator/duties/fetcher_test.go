@@ -73,11 +73,40 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		bcMock := beaconDutiesClientMock{duties: fetchedDuties}
 		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{}},
-			core.NetworkFromString(string(core.PraterNetwork)))
+			core.PraterNetwork)
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
 	})
+}
+
+func TestDutyFetcher_AddMissingSlots(t *testing.T) {
+	df := dutyFetcher{
+		logger:     zap.L(),
+		ethNetwork: core.PraterNetwork,
+	}
+	tests := []struct {
+		name string
+		slot spec.Slot
+	}{
+		{"slot from the middle", spec.Slot(950120)},
+		{"second slot in epoch", spec.Slot(950113)},
+		{"first slot in epoch", spec.Slot(950112)},
+		{"last slot in epoch", spec.Slot(950143)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			entries := map[spec.Slot]cacheEntry{}
+			entries[test.slot] = cacheEntry{[]beacon.Duty{}}
+			df.addMissingSlots(entries)
+			//require.Equal(t, len(entries), 32)
+			_, firstExist := entries[spec.Slot(950112)]
+			require.True(t, firstExist)
+			_, lastExist := entries[spec.Slot(950143)]
+			require.True(t, lastExist)
+		})
+	}
 }
 
 type indicesFetcher struct {

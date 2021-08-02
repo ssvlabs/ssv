@@ -71,7 +71,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
 		duties = raw.(cacheEntry).Duties
-	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); !ok {
+	} else {
 		// epoch's duties does not exist in cache -> fetch
 		if err := df.updateDutiesFromBeacon(slot); err != nil {
 			logger.Error("failed to get duties", zap.Error(err))
@@ -106,10 +106,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 	if err := df.processFetchedDuties(duties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")
 	}
-	// once done, updating epoch's flag to avoid fetching duties for this epoch
-	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
-	epoch := spec.Epoch(esEpoch)
-	df.cache.SetDefault(getEpochCacheKey(uint64(epoch)), true)
+
 	return nil
 }
 
@@ -155,6 +152,7 @@ func (df *dutyFetcher) fillEntry(entries map[spec.Slot]cacheEntry, duty *beacon.
 
 // populateCache takes a map of entries and updates the cache
 func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
+	df.addMissingSlots(entriesToAdd)
 	for s, e := range entriesToAdd {
 		slot := uint64(s)
 		if raw, exist := df.cache.Get(getDutyCacheKey(slot)); exist {
@@ -165,14 +163,35 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 	}
 }
 
+func (df *dutyFetcher) addMissingSlots(entries map[spec.Slot]cacheEntry) {
+	if len(entries) == int(df.ethNetwork.SlotsPerEpoch()) {
+		// in case all slots exist -> do nothing
+		return
+	}
+	// takes some slot from current epoch
+	var slot uint64
+	for s, _ := range entries {
+		slot = uint64(s)
+		break
+	}
+	epochFirstSlot := df.firstSlotOfEpoch(slot)
+	// add all missing slots
+	for i := 0; i < int(df.ethNetwork.SlotsPerEpoch()); i++ {
+		s := spec.Slot(epochFirstSlot + uint64(i))
+		if _, exist := entries[s]; !exist {
+			entries[s] = cacheEntry{[]beacon.Duty{}}
+		}
+	}
+}
+
+func (df *dutyFetcher) firstSlotOfEpoch(slot uint64) uint64 {
+	mod := slot % df.ethNetwork.SlotsPerEpoch()
+	return slot - mod
+}
+
 // getDutyCacheKey return the cache key for a slot
 func getDutyCacheKey(slot uint64) string {
 	return fmt.Sprintf("d-%d", slot)
-}
-
-// getEpochCacheKey return the cache key for an epoch
-func getEpochCacheKey(epoch uint64) string {
-	return fmt.Sprintf("e-%d", epoch)
 }
 
 // toSubscription creates a subscription from the given duty
