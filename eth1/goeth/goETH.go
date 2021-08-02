@@ -19,6 +19,8 @@ import (
 	"time"
 )
 
+var connectionTimeout = 10 * time.Second
+
 // ClientOptions are the options for the client
 type ClientOptions struct {
 	Ctx                        context.Context
@@ -94,9 +96,11 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
 	ec.logger.Info("dialing eth1 node...")
-	conn, err := ethclient.Dial(ec.nodeAddr)
+	ctx, cancel := context.WithTimeout(context.Background(), connectionTimeout)
+	defer cancel()
+	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		ec.logger.Error("failed to reconnect to the Ethereum client", zap.Error(err))
+		ec.logger.Error("could not connect to the eth1 client", zap.Error(err))
 		return err
 	}
 	ec.logger.Info("successfully connected to eth1 goETH")
