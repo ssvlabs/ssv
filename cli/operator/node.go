@@ -114,6 +114,7 @@ var StartNodeCmd = &cobra.Command{
 			Ctx:                        cmd.Context(),
 			Logger:                     Logger,
 			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
+			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
 			ContractABI:                eth1.ContractABI(),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
