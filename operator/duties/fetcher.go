@@ -1,6 +1,7 @@
 package duties
 
 import (
+	"encoding/hex"
 	"fmt"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -69,13 +70,9 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 	start := time.Now()
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
-		logger.Debug("found duties in cache")
 		duties = raw.(cacheEntry).Duties
-	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); ok {
-		logger.Debug("epoch's duties were already fetched for this epoch")
-	} else {
-		// does not exist in cache -> fetch
-		logger.Debug("no entry in cache, fetching duties from beacon node")
+	} else if _, ok := df.cache.Get(getEpochCacheKey(uint64(epoch))); !ok {
+		// epoch's duties does not exist in cache -> fetch
 		if err := df.updateDutiesFromBeacon(slot); err != nil {
 			logger.Error("failed to get duties", zap.Error(err))
 			return nil, err
@@ -99,7 +96,13 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get duties from beacon")
 	}
-	df.logger.Debug("got duties", zap.Int("count", len(duties)), zap.Any("duties", duties))
+	// print the newly fetched duties
+	var toPrint []serializedDuty
+	for _, d := range duties {
+		toPrint = append(toPrint, toSerialized(d))
+	}
+	df.logger.Debug("got duties", zap.Int("count", len(duties)), zap.Any("duties", toPrint))
+
 	if err := df.processFetchedDuties(duties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")
 	}
@@ -179,5 +182,29 @@ func toSubscription(duty *beacon.Duty) *eth2apiv1.BeaconCommitteeSubscription {
 		CommitteeIndex:   duty.CommitteeIndex,
 		CommitteesAtSlot: duty.CommitteesAtSlot,
 		IsAggregator:     false, // TODO need to handle agg case
+	}
+}
+
+type serializedDuty struct {
+	PubKey                  string
+	Type                    string
+	Slot                    uint64
+	ValidatorIndex          uint64
+	CommitteeIndex          uint64
+	CommitteeLength         uint64
+	CommitteesAtSlot        uint64
+	ValidatorCommitteeIndex uint64
+}
+
+func toSerialized(d *beacon.Duty) serializedDuty {
+	return serializedDuty{
+		PubKey:                  hex.EncodeToString(d.PubKey[:]),
+		Type:                    d.Type.String(),
+		Slot:                    uint64(d.Slot),
+		ValidatorIndex:          uint64(d.ValidatorIndex),
+		CommitteeIndex:          uint64(d.CommitteeIndex),
+		CommitteeLength:         d.CommitteeLength,
+		CommitteesAtSlot:        d.CommitteesAtSlot,
+		ValidatorCommitteeIndex: d.ValidatorCommitteeIndex,
 	}
 }
