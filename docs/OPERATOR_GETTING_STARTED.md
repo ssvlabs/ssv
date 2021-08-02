@@ -125,6 +125,12 @@ OperatorPrivateKey: LS0tLS...
   $ yq w -i config.yaml global.LogFormat "json"
   ```
 
+  Log levels can be shown in lowercase and w/o colors, default is upper case with colors:
+
+  ```
+  $ yq w -i config.yaml global.LogLevelEncoding "lowercase"
+  ```
+
   #### 5.2 Metrics Configuration
 
   In order to enable [metrics](../metrics/README.md), the corresponding config should be in place:
