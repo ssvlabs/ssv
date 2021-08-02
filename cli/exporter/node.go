@@ -49,7 +49,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
 			Format:       cfg.GlobalConfig.LogFormat,
-			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelEncoding)),
+			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
 		})
 		if errLogLevel != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
