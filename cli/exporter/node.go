@@ -19,7 +19,6 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"log"
 	"net/http"
 )
@@ -48,13 +47,9 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 		// configure logger and db
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-		var levelEncoder zapcore.LevelEncoder
-		if err := levelEncoder.UnmarshalText([]byte(cfg.LogLevelEncoding)); err != nil {
-			log.Fatal(err)
-		}
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
 			Format:       cfg.GlobalConfig.LogFormat,
-			LevelEncoder: levelEncoder,
+			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelEncoding)),
 		})
 		if errLogLevel != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))

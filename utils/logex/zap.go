@@ -25,6 +25,15 @@ type EncodingConfig struct {
 	LevelEncoder zapcore.LevelEncoder // lowercase
 }
 
+var levelEncoder zapcore.LevelEncoder
+
+func LevelEncoder(raw []byte) zapcore.LevelEncoder {
+	if err := levelEncoder.UnmarshalText(raw); err != nil {
+		return nil
+	}
+	return levelEncoder
+}
+
 func defaultEncodingConfig(ec *EncodingConfig) *EncodingConfig {
 	if ec == nil {
 		ec = &EncodingConfig{}
