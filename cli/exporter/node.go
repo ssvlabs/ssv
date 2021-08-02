@@ -74,6 +74,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger:               Logger,
 			NodeAddr:             cfg.ETH1Options.ETH1Addr,
 			ContractABI:          eth1.ContractABI(),
+			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
