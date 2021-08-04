@@ -89,12 +89,14 @@ $ go tool pprof -web heap.tar.gz
 
 #### Health Check
 
-Health check route is available on `GET /health`, which will return an empty response in case the node is healthy:
+Health check route is available on `GET /health`. \
+In case the node is healthy it returns an HTTP Code `200` with empty JSON:
 ```shell
 $ curl http://localhost:15000/health
 {}
 ```
-If the node is not healthy, the corresponding error will be returned:
+
+If the node is not healthy, the corresponding errors will be returned with HTTP Code `500`:
 ```shell
 $ curl http://localhost:15000/health
 {"errors": ["could not sync eth1 events"]}
