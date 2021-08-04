@@ -214,7 +214,7 @@ func TestFindHighest(t *testing.T) {
 			"all responses are empty",
 			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
-			[]string{"2"},
+			[]string{"1", "2"},
 			map[string]*proto.SignedMessage{
 				"1": nil,
 				"2": nil,
@@ -227,7 +227,7 @@ func TestFindHighest(t *testing.T) {
 			"all errors",
 			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
-			[]string{"2"},
+			[]string{"1", "2"},
 			map[string]*proto.SignedMessage{},
 			map[string]error{
 				"1": errors.New("error"),
@@ -237,10 +237,24 @@ func TestFindHighest(t *testing.T) {
 			"could not fetch highest decided from peers",
 		},
 		{
+			"some errors, some empty",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"1", "2"},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+			},
+			map[string]error{
+				"1": errors.New("error"),
+			},
+			-1,
+			"",
+		},
+		{
 			"some errors, some valid",
 			[]byte{1, 2, 3, 4},
 			[]byte("lambda"),
-			[]string{"2"},
+			[]string{"1", "2"},
 			map[string]*proto.SignedMessage{
 				"2": highest1,
 			},
