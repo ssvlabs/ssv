@@ -81,17 +81,26 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 // handleGetHighestReq will return the highest known decided msg.
 // In case there isn't one, it will return a 0 length array
 func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
+	res, err := s.getHighestDecided()
+	if err != nil {
+		s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))
+	}
+
+	if err := s.network.RespondToHighestDecidedInstance(msg.Stream, res); err != nil {
+		s.logger.Error("failed to send highest decided response", zap.Error(err))
+	}
+}
+
+func (s *ReqHandler) getHighestDecided() (*network.SyncMessage, error) {
 	res := &network.SyncMessage{
 		Lambda:         s.identifier,
 		Type:           network.Sync_GetHighestType,
 	}
 
 	highest, err := s.storage.GetHighestDecidedInstance(s.identifier)
-	if err != nil {
-		if err.Error() != kv.EntryNotFoundError {
-			s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))
-		}
+	if err != nil && err.Error() == kv.EntryNotFoundError {
 		res.Error = err.Error()
+		err = nil // marking not-found as non error
 	} else {
 		signedMsg := make([]*proto.SignedMessage, 0)
 		if highest != nil {
@@ -100,7 +109,5 @@ func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
 		res.SignedMessages = signedMsg
 	}
 
-	if err := s.network.RespondToHighestDecidedInstance(msg.Stream, res); err != nil {
-		s.logger.Error("failed to send highest decided response", zap.Error(err))
-	}
+	return res, err
 }
