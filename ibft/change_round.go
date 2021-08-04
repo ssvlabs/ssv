@@ -60,7 +60,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		// change round if quorum reached
 		if !quorum {
-			i.Logger.Debug("change round - quorum not reached", zap.Int("msgsCount", msgsCount), zap.Int("committeeSize", committeeSize))
+			i.Logger.Info("change round - quorum not reached", zap.Int("msgsCount", msgsCount), zap.Int("committeeSize", committeeSize))
 			return nil
 		}
 

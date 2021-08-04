@@ -35,7 +35,7 @@ func (rr *Deterministic) setSeed(seed []byte) error {
 		return err
 	}
 	rr.baseInt = binary.LittleEndian.Uint64(s)
-	fmt.Printf("%d\n", rr.baseInt)
+	fmt.Printf("seed - %d\n", rr.baseInt)
 	return nil
 }
 

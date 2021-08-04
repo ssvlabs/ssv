@@ -181,8 +181,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.handleStream()
 
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		for _, topic := range n.cfg.Topics {
-			n.logger.Debug("topic peers status", zap.Any("peers", topic.ListPeers()))
+		for name, topic := range n.cfg.Topics {
+			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", topic.ListPeers()))
 		}
 	})
 
