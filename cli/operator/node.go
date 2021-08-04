@@ -34,11 +34,14 @@ type config struct {
 
 	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	OperatorPrivateKey string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 }
 
 var cfg config
 
 var globalArgs global_config.Args
+
+var operatorNode operator.Node
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -129,13 +132,13 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode := operator.New(cfg.SSVOptions)
+		operatorNode = operator.New(cfg.SSVOptions)
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, cfg.MetricsAPIPort)
+			go startMetricsHandler(Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
@@ -147,15 +150,14 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func startMetricsHandler(logger *zap.Logger, port int) {
+func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 	// register process metrics
 	metrics_ps.SetupProcessMetrics()
 	p2p.SetupNetworkMetrics(logger, cfg.SSVOptions.ValidatorOptions.Network)
 	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger)
+	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
-	logger.Info("starting metrics handler", zap.String("addr", addr))
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))

@@ -86,3 +86,18 @@ $ curl http://18.237.221.242:15000/debug/pprof/heap\?minutes\=20 --output heap.t
 $ go tool pprof -web goroutines.tar.gz 
 $ go tool pprof -web heap.tar.gz
 ```
+
+#### Health Check
+
+Health check route is available on `GET /health`. \
+In case the node is healthy it returns an HTTP Code `200` with empty JSON:
+```shell
+$ curl http://localhost:15000/health
+{}
+```
+
+If the node is not healthy, the corresponding errors will be returned with HTTP Code `500`:
+```shell
+$ curl http://localhost:15000/health
+{"errors": ["could not sync eth1 events"]}
+```

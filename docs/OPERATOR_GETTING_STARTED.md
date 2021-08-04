@@ -13,6 +13,7 @@
   + [5. Create a Configuration File](#5-create-a-configuration-file)
     - [5.1 Logger Configuration](#51-logger-configuration)
     - [5.2 Metrics Configuration](#52-metrics-configuration)
+    - [5.3 Profiling Configuration](#53-profiling-configuration)
   + [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
   + [7. Update SSV Node Image](#7-update-ssv-node-image)
 
@@ -139,6 +140,13 @@ OperatorPrivateKey: LS0tLS...
   $ yq w -i config.yaml MetricsAPIPort "15000"
   ```
 
+  #### 5.3 Profiling Configuration
+
+  In order to enable go profiling tools, turn on the corresponding flga:
+
+  ```
+  $ yq w -i config.yaml EnableProfile "true"
+  ```
 
 ### 6. Start SSV Node in Docker
 
