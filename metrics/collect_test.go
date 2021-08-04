@@ -29,7 +29,7 @@ func TestCollect(t *testing.T) {
 	require.Equal(t, 20, len(results))
 }
 
-func TestCollect_FailedCollectors(t *testing.T) {
+func TestCollect_CollectorsError(t *testing.T) {
 	var records1 []string
 	for i := 0; i < 10; i++ {
 		records1 = append(records1, fmt.Sprintf("mc1{} %d", i))

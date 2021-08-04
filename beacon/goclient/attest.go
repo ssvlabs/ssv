@@ -18,7 +18,7 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 		}
 		return attestationData, nil
 	}
-	return nil, errors.New("client is not support AttestationDataProvider")
+	return nil, errors.New("client does not support AttestationDataProvider")
 }
 
 func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {
@@ -60,6 +60,8 @@ func (gc *goClient) signAtt(data *spec.AttestationData, shareKey *bls.SecretKey)
 	root, err := gc.getSigningRoot(data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get signing root")
+	} else if len(root[:]) == 0 {
+		return nil, nil, errors.New("got an empty signing root")
 	}
 
 	return shareKey.SignByte(root[:]).Serialize(), root[:], nil

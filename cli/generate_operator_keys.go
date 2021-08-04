@@ -14,7 +14,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := logex.Build(RootCmd.Short, zapcore.DebugLevel, "console")
+		logger := logex.Build(RootCmd.Short, zapcore.DebugLevel, nil)
 
 		pk, sk, err := rsaencryption.GenerateKeys()
 		if err != nil {

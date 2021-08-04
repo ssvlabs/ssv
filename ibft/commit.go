@@ -52,6 +52,9 @@ func (i *Instance) forceDecidedPipeline() pipeline.Pipeline {
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
+	if i.State == nil {
+		return nil, errors.New("missing instance state")
+	}
 	if i.State.DecidedMsg != nil {
 		return i.State.DecidedMsg, nil
 	}

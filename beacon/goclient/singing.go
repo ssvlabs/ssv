@@ -38,7 +38,7 @@ func (gc *goClient) getDomainType(roleType beacon.RoleType) (*spec.DomainType, e
 			}
 			return &domainType, nil
 		}
-		return nil, errors.New("client is not support BeaconAttesterDomainProvider")
+		return nil, errors.New("client does not support BeaconAttesterDomainProvider")
 	default:
 		return nil, errors.New("role type domain is not implemented")
 	}
@@ -53,7 +53,7 @@ func (gc *goClient) getDomainData(domainType *spec.DomainType, epoch spec.Epoch)
 		}
 		return &attestationData, nil
 	}
-	return nil, errors.New("client is not support DomainProvider")
+	return nil, errors.New("client does not support DomainProvider")
 }
 
 // computeSigningRoot computes the root of the object by calculating the hash tree root of the signing data with the given domain.
@@ -95,4 +95,3 @@ func (gc *goClient) signingData(rootFunc func() ([32]byte, error), domain []byte
 	}
 	return container.HashTreeRoot()
 }
-

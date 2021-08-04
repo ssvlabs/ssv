@@ -12,7 +12,6 @@ import (
 	metrics_ps "github.com/bloxapp/ssv/metrics/process"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -33,13 +32,16 @@ type config struct {
 	ETH2Options                beacon.Options   `yaml:"eth2"`
 	P2pNetworkConfig           p2p.Config       `yaml:"p2p"`
 
-	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	OperatorPrivateKey string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 }
 
 var cfg config
 
 var globalArgs global_config.Args
+
+var operatorNode operator.Node
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -56,12 +58,15 @@ var StartNodeCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 		}
-		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(cmd.Parent().Short, loggerLevel, cfg.GlobalConfig.LogFormat)
-
-		if err != nil {
-			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
+		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
+		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
+			Format:       cfg.GlobalConfig.LogFormat,
+			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
+		})
+		if errLogLevel != nil {
+			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
+
 		cfg.DBOptions.Logger = Logger
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
@@ -115,6 +120,7 @@ var StartNodeCmd = &cobra.Command{
 			Ctx:                        cmd.Context(),
 			Logger:                     Logger,
 			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
+			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
 			ContractABI:                eth1.ContractABI(),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
@@ -123,19 +129,16 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
-		slotQueue := slotqueue.New(*cfg.SSVOptions.ETHNetwork, Logger)
-		cfg.SSVOptions.SlotQueue = slotQueue
-		cfg.SSVOptions.ValidatorOptions.SlotQueue = slotQueue
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode := operator.New(cfg.SSVOptions)
+		operatorNode = operator.New(cfg.SSVOptions)
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, cfg.MetricsAPIPort)
+			go startMetricsHandler(Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
@@ -147,15 +150,14 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func startMetricsHandler(logger *zap.Logger, port int) {
+func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 	// register process metrics
 	metrics_ps.SetupProcessMetrics()
 	p2p.SetupNetworkMetrics(logger, cfg.SSVOptions.ValidatorOptions.Network)
 	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger)
+	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
-	logger.Info("starting metrics handler", zap.String("addr", addr))
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))

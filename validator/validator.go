@@ -18,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/slotqueue"
 )
 
 // Options to add in validator struct creation
@@ -27,7 +26,6 @@ type Options struct {
 	Logger                     *zap.Logger
 	Share                      *storage.Share
 	SignatureCollectionTimeout time.Duration
-	SlotQueue                  slotqueue.Queue
 	Network                    network.Network
 	Beacon                     beacon.Beacon
 	ETHNetwork                 *core.Network
@@ -44,7 +42,6 @@ type Validator struct {
 	ibfts                      map[beacon.RoleType]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.Network
-	slotQueue                  slotqueue.Queue
 	signatureCollectionTimeout time.Duration
 }
 
@@ -75,7 +72,6 @@ func New(opt Options, db basedb.IDb) *Validator {
 		msgQueue:                   msgQueue,
 		Share:                      opt.Share,
 		signatureCollectionTimeout: opt.SignatureCollectionTimeout,
-		slotQueue:                  opt.SlotQueue,
 		network:                    opt.Network,
 		ibfts:                      ibfts,
 		ethNetwork:                 opt.ETHNetwork,
@@ -93,33 +89,8 @@ func (v *Validator) Start() error {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
-	go v.startSlotQueueListener()
 	go v.listenToSignatureMessages()
 	return nil
-}
-
-// startSlotQueueListener starts slot queue listener
-func (v *Validator) startSlotQueueListener() {
-	v.logger.Info("start listening slot queue")
-
-	ch, err := v.slotQueue.RegisterToNext(v.Share.PublicKey.Serialize())
-	if err != nil {
-		v.logger.Error("failed to register validator to slot queue", zap.Error(err))
-		return
-	}
-
-	for e := range ch {
-		if event, ok := e.(slotqueue.SlotEvent); ok {
-			if !event.Ok {
-				v.logger.Debug("no duties for slot scheduled")
-				continue
-			}
-			go v.ExecuteDuty(v.ctx, event.Slot, event.Duty)
-		} else {
-			v.logger.Error("slot queue event is not ok")
-			continue
-		}
-	}
 }
 
 func (v *Validator) listenToSignatureMessages() {

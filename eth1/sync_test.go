@@ -31,7 +31,7 @@ func TestSyncEth1(t *testing.T) {
 	require.Equal(t, syncOffset.Uint64(), rawOffset)
 }
 
-func TestFailedSyncEth1(t *testing.T) {
+func TestSyncEth1Error(t *testing.T) {
 	logger, eth1Client, storage := setupStorageWithEth1ClientMock()
 	eth1Client.syncResponse = errors.New("eth1-sync-test")
 	go func() {

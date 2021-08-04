@@ -13,7 +13,7 @@ import (
 )
 
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {
-	logger := logex.Build("test", zap.DebugLevel, "console")
+	logger := logex.Build("test", zap.DebugLevel, nil)
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
@@ -51,7 +51,7 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 }
 
 func TestSyncMessageBroadcasting(t *testing.T) {
-	logger := logex.Build("test", zapcore.InfoLevel, "console")
+	logger := logex.Build("test", zapcore.InfoLevel, nil)
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
@@ -80,7 +80,6 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 	var receivedStream network.SyncStream
 	go func() {
 		msgFromPeer1 := <-peer2Chan
-		require.IsType(t, network.SyncMessage{}, *msgFromPeer1.Msg)
 		require.EqualValues(t, peer1.(*p2pNetwork).host.ID().String(), msgFromPeer1.Msg.FromPeerID)
 		require.EqualValues(t, network.Sync_GetHighestType, msgFromPeer1.Msg.Type)
 
@@ -107,7 +106,6 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 
 	// verify
 	require.NotNil(t, res)
-	require.IsType(t, network.SyncMessage{}, *res)
 	require.EqualValues(t, peer2.(*p2pNetwork).host.ID().String(), res.FromPeerID)
 	require.EqualValues(t, network.Sync_GetHighestType, res.Type)
 

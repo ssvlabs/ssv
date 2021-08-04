@@ -1,14 +1,13 @@
 package metrics
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
-	"runtime/debug"
-	"runtime/pprof"
 	"strings"
 )
 
@@ -19,21 +18,35 @@ type Handler interface {
 }
 
 // NewMetricsHandler creates a new instance
-func NewMetricsHandler(logger *zap.Logger) Handler {
+func NewMetricsHandler(logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
 	mh := metricsHandler{
-		logger: logger.With(zap.String("component", "metrics/handler")),
+		logger:        logger.With(zap.String("component", "metrics/handler")),
+		enableProf:    enableProf,
+		healthChecker: healthChecker,
 	}
 	return &mh
 }
 
 type metricsHandler struct {
-	logger *zap.Logger
+	logger        *zap.Logger
+	enableProf    bool
+	healthChecker HealthCheckAgent
 }
 
 func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
-	mh.logger.Info("setup metrics collection")
+	mh.logger.Info("setup metrics collection", zap.String("addr", addr),
+		zap.Bool("enableProf", mh.enableProf))
 
-	mh.configure()
+	if mh.enableProf {
+		mh.configureProfiling()
+		// adding pprof routes manually on an own HTTPMux to avoid lint issue:
+		// `G108: Profiling endpoint is automatically exposed on /debug/pprof (gosec)`
+		mux.HandleFunc("/debug/pprof/", http_pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", http_pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", http_pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", http_pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
+	}
 
 	mux.HandleFunc("/metrics", func(res http.ResponseWriter, req *http.Request) {
 		if err := mh.handleHTTP(res, req); err != nil {
@@ -42,21 +55,18 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		}
 	})
 
-	// adding pprof routes manually on an own HTTPMux to avoid lint issue:
-	// `G108: Profiling endpoint is automatically exposed on /debug/pprof (gosec)`
-	mux.HandleFunc("/debug/pprof/", http_pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", http_pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", http_pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", http_pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
-
-	mux.HandleFunc("/goroutines", func(res http.ResponseWriter, _ *http.Request) {
-		stack := debug.Stack()
-		if _, err := res.Write(stack); err != nil {
-			mh.logger.Error("failed to write goroutines stack", zap.Error(err))
-		}
-		if err := pprof.Lookup("goroutine").WriteTo(res, 2); err != nil {
-			mh.logger.Error("failed to write pprof goroutines", zap.Error(err))
+	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
+		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+			result := map[string][]string{
+				"errors": errs,
+			}
+			if raw, err := json.Marshal(result); err != nil {
+				http.Error(res, err.Error(), http.StatusInternalServerError)
+			} else {
+				http.Error(res, string(raw), http.StatusInternalServerError)
+			}
+		} else if _, err := fmt.Fprintln(res, "{}"); err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}
 	})
 
@@ -69,7 +79,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	return nil
 }
 
-func (mh *metricsHandler) configure() {
+func (mh *metricsHandler) configureProfiling() {
 	runtime.SetBlockProfileRate(1000)
 	runtime.SetMutexProfileFraction(1)
 }

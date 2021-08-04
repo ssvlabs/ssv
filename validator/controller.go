@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/slotqueue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
@@ -28,7 +27,6 @@ type ControllerOptions struct {
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	ETHNetwork                 *core.Network
 	Network                    network.Network
-	SlotQueue                  slotqueue.Queue
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
@@ -50,7 +48,6 @@ type controller struct {
 	collection                 validatorstorage.ICollection
 	logger                     *zap.Logger
 	signatureCollectionTimeout time.Duration
-	slotQueue                  slotqueue.Queue
 	beacon                     beacon.Beacon
 	// TODO remove after IBFT refactor
 	network    network.Network
@@ -77,7 +74,6 @@ func NewController(options ControllerOptions) IController {
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		signatureCollectionTimeout: options.SignatureCollectionTimeout,
-		slotQueue:                  options.SlotQueue,
 		beacon:                     options.Beacon,
 		db:                         options.DB,
 		network:                    options.Network,
@@ -119,7 +115,6 @@ func (c *controller) setupValidators() map[string]*Validator {
 		res[validatorShare.PublicKey.SerializeToHexStr()] = New(Options{
 			Context:                    c.context,
 			SignatureCollectionTimeout: c.signatureCollectionTimeout,
-			SlotQueue:                  c.slotQueue,
 			Logger:                     c.logger,
 			Share:                      validatorShare,
 			Network:                    c.network,
@@ -153,7 +148,7 @@ func (c *controller) GetValidatorsPubKeys() [][]byte {
 	return pubKeys
 }
 
-// GetValidatorsPubKeys returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
+// GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var indices []spec.ValidatorIndex
 	var toFetch []phase0.BLSPubKey
@@ -238,7 +233,6 @@ func (c *controller) onNewValidatorShare(validatorShare *validatorstorage.Share)
 		Network:                    c.network,
 		Beacon:                     c.beacon,
 		ETHNetwork:                 c.ethNetwork,
-		SlotQueue:                  c.slotQueue,
 		SignatureCollectionTimeout: c.signatureCollectionTimeout,
 	}
 	v := New(validatorOpts, c.db)

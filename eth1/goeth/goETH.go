@@ -19,6 +19,10 @@ import (
 	"time"
 )
 
+const (
+	healthCheckTimeout = 10 * time.Second
+)
+
 // ClientOptions are the options for the client
 type ClientOptions struct {
 	Ctx                        context.Context
@@ -26,6 +30,7 @@ type ClientOptions struct {
 	NodeAddr                   string
 	RegistryContractAddr       string
 	ContractABI                string
+	ConnectionTimeout          time.Duration
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
@@ -40,6 +45,7 @@ type eth1Client struct {
 	nodeAddr             string
 	registryContractAddr string
 	contractABI          string
+	connectionTimeout    time.Duration
 
 	outSubject pubsub.Subject
 }
@@ -56,6 +62,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		nodeAddr:                   opts.NodeAddr,
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
+		connectionTimeout:          opts.ConnectionTimeout,
 		outSubject:                 pubsub.NewSubject(logger),
 	}
 
@@ -90,13 +97,34 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 	return err
 }
 
+// HealthCheck provides health status of eth1 node
+func (ec *eth1Client) HealthCheck() error {
+	if ec.conn == nil {
+		return errors.New("not connected to eth1 node")
+	}
+	ctx, cancel := context.WithTimeout(ec.ctx, healthCheckTimeout)
+	defer cancel()
+	sp, err := ec.conn.SyncProgress(ctx)
+	if err != nil {
+		return errors.Wrap(err, "could not get eth1 node sync progress")
+	}
+	if sp != nil {
+		return errors.Errorf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
+			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)
+	}
+	// eth1 node is connected and synced
+	return nil
+}
+
 // connect connects to eth1 client
 func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
 	ec.logger.Info("dialing eth1 node...")
-	conn, err := ethclient.Dial(ec.nodeAddr)
+	ctx, cancel := context.WithTimeout(context.Background(), ec.connectionTimeout)
+	defer cancel()
+	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		ec.logger.Error("failed to reconnect to the Ethereum client", zap.Error(err))
+		ec.logger.Error("could not connect to the eth1 client", zap.Error(err))
 		return err
 	}
 	ec.logger.Info("successfully connected to eth1 goETH")
