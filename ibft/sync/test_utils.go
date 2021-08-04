@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
@@ -75,7 +76,7 @@ func (n *testNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Syn
 		if highest == nil {
 			// as if no highest.
 			return &network.SyncMessage{
-				SignedMessages: []*proto.SignedMessage{},
+				Error: kv.EntryNotFoundError,
 				FromPeerID:     peerStr,
 				Type:           network.Sync_GetInstanceRange,
 			}, nil

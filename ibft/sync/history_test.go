@@ -281,63 +281,6 @@ func TestFindHighest(t *testing.T) {
 			10,
 			"",
 		},
-		//
-		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
-		//
-		//{
-		//	"no quorum msg",
-		//	[]byte{1, 2, 3, 4},
-		//	[]peer.ID{"2", "3"},
-		//	map[peer.ID]*proto.SignedMessage{
-		//		"2": multiSignMsg(t, []uint64{1, 2}, sks, &proto.Message{
-		//			Type:        proto.RoundState_Decided,
-		//			Round:       1,
-		//			Lambda:      []byte("lambda"),
-		//			SeqNumber:   1,
-		//			ValidatorPk: []byte{1, 2, 3, 4},
-		//		}),
-		//	},
-		//	1,
-		//	"could not fetch highest decided from peers",
-		//},
-		//
-		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
-		//
-		//{
-		//	"wrong identifier",
-		//	[]byte{1, 2, 3, 4},
-		//	[]byte{1, 1, 1, 1},
-		//	[]string{"2", "3"},
-		//	map[string]*proto.SignedMessage{
-		//		"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-		//			Type:      proto.RoundState_Decided,
-		//			Round:     1,
-		//			Lambda:    []byte("lambda"),
-		//			SeqNumber: 1,
-		//		}),
-		//	},
-		//	1,
-		//	"could not fetch highest decided from peers",
-		//},
-		//
-		// Msg not decided test is out of scope for history sync as msg validation is provided as a param
-		//
-		//{
-		//	"return not decided",
-		//	[]byte{1, 2, 3, 4},
-		//	[]peer.ID{"2", "3"},
-		//	map[peer.ID]*proto.SignedMessage{
-		//		"2": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-		//			Type:        proto.RoundState_Prepare,
-		//			Round:       1,
-		//			Lambda:      []byte("lambda"),
-		//			SeqNumber:   1,
-		//			ValidatorPk: []byte{1, 2, 3, 4},
-		//		}),
-		//	},
-		//	1,
-		//	"could not fetch highest decided from peers",
-		//},
 	}
 
 	for _, test := range tests {

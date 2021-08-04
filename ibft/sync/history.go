@@ -114,22 +114,50 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 			if err != nil {
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
-			} else {
-				lock.Lock()
-				results = append(results, res)
-				lock.Unlock()
+				wg.Done()
+				return
 			}
+
+			if res.Error != "" {
+				if res.Error != kv.EntryNotFoundError {
+					s.logger.Error("received error when fetching highest decided", zap.Error(err),
+						zap.String("identifier", hex.EncodeToString(s.identifier)))
+				} else { // peer has no decided msg
+					lock.Lock()
+					results = append(results, res)
+					lock.Unlock()
+				}
+				wg.Done()
+				return
+			}
+
+			if len(res.SignedMessages) != 1 {
+				s.logger.Debug("received nil highest decided", zap.Error(err),
+					zap.String("identifier", hex.EncodeToString(s.identifier)))
+				wg.Done()
+				return
+			}
+			if err := s.validateDecidedMsgF(res.SignedMessages[0]); err != nil {
+				s.logger.Debug("received  highest decided", zap.Error(err),
+					zap.String("identifier", hex.EncodeToString(s.identifier)))
+				wg.Done()
+				return
+			}
+
+			lock.Lock()
+			results = append(results, res)
+			lock.Unlock()
 			wg.Done()
 		}(i, p, wg)
 	}
 
 	wg.Wait()
 
-	if len(results) == 0 {
-		return nil, "", errors.New("could not fetch highest decided from peers")
-	}
+	//if len(results) == 0 {
+	//	return nil, "", errors.New("could not fetch highest decided from peers")
+	//}
 
-	// validate response and find highest decided
+	// find highest
 	var ret *proto.SignedMessage
 	var fromPeer string
 	foundAtLeastOne := false
@@ -138,48 +166,52 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 			continue
 		}
 
-		// no highest decided
-		if len(res.SignedMessages) == 0 {
-			continue
-		}
 		foundAtLeastOne = true
-
-		// too many responses, invalid
-		if len(res.SignedMessages) > 1 {
-			s.logger.Debug("received invalid highest decided", zap.Error(err),
-				zap.String("identifier", hex.EncodeToString(s.identifier)))
+		// no highest decided
+		//if len(res.SignedMessages) == 0 {
+		//	continue
+		//}
+		if res.Error == kv.EntryNotFoundError {
 			continue
 		}
 
-		signedMsg := res.SignedMessages[0]
 
-		// validate
-		if err := s.validateDecidedMsgF(signedMsg); err != nil {
-			s.logger.Debug("received invalid highest decided", zap.Error(err),
-				zap.String("identifier", hex.EncodeToString(s.identifier)))
-			continue
-		}
+		//// too many responses, invalid
+		//if len(res.SignedMessages) > 1 {
+		//	s.logger.Debug("received invalid highest decided", zap.Error(err),
+		//		zap.String("identifier", hex.EncodeToString(s.identifier)))
+		//	continue
+		//}
+
+		//signedMsg := res.SignedMessages[0]
+		//
+		//// validate
+		//if err := s.validateDecidedMsgF(signedMsg); err != nil {
+		//	s.logger.Debug("received invalid highest decided", zap.Error(err),
+		//		zap.String("identifier", hex.EncodeToString(s.identifier)))
+		//	continue
+		//}
 
 		if ret == nil {
-			ret = signedMsg
+			ret = res.SignedMessages[0]
 			fromPeer = res.FromPeerID
 		}
-		if ret.Message.SeqNumber < signedMsg.Message.SeqNumber {
-			ret = signedMsg
+		if ret.Message.SeqNumber < res.SignedMessages[0].Message.SeqNumber {
+			ret = res.SignedMessages[0]
 			fromPeer = res.FromPeerID
 		}
 	}
 
-	// if all responses had no decided msgs and no errors than we don't have any highest decided.
+	// no decided msgs were received from peers, return error
 	if !foundAtLeastOne {
-		return nil, "", nil
-	}
-
-	// if we did find at least one response with a decided msg but all were invalid we return an error
-	if ret == nil {
 		s.logger.Debug("could not fetch highest decided from peers",
 			zap.String("identifier", hex.EncodeToString(s.identifier)))
 		return nil, "", errors.New("could not fetch highest decided from peers")
+	}
+
+	// highest decided is a nil msg, meaning no decided found from peers. This can happen if no previous decided instance exists.
+	if ret == nil {
+		return nil, "", nil
 	}
 
 	// found a valid highest decided
