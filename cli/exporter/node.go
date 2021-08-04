@@ -31,6 +31,7 @@ type config struct {
 
 	WsAPIPort      int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
 	MetricsAPIPort int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 }
 
 var cfg config
@@ -104,7 +105,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort)
+			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := exporterNode.Start(); err != nil {
 			Logger.Fatal("failed to start exporter", zap.Error(err))
@@ -116,12 +117,12 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
 
-func startMetricsHandler(logger *zap.Logger, net network.Network, port int) {
+func startMetricsHandler(logger *zap.Logger, net network.Network, port int, enableProf bool) {
 	// register process metrics
 	metrics_ps.SetupProcessMetrics()
 	p2p.SetupNetworkMetrics(logger, net)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger)
+	metricsHandler := metrics.NewMetricsHandler(logger, enableProf)
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info("starting metrics handler", zap.String("addr", addr))
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
