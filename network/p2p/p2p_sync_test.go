@@ -13,7 +13,7 @@ import (
 )
 
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {
-	logger := logex.Build("test", zap.DebugLevel, "console")
+	logger := logex.Build("test", zap.DebugLevel, nil)
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
@@ -51,7 +51,7 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 }
 
 func TestSyncMessageBroadcasting(t *testing.T) {
-	logger := logex.Build("test", zapcore.InfoLevel, "console")
+	logger := logex.Build("test", zapcore.InfoLevel, nil)
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{

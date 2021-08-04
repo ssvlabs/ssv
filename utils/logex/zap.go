@@ -18,16 +18,48 @@ func GetLogger(fields ...zap.Field) *zap.Logger {
 	return logger.With(fields...)
 }
 
+// EncodingConfig represents the needed encoding configuration for logger
+type EncodingConfig struct {
+	// Format
+	Format string
+	// LevelEncoder defines how level is encoded (colors, lowercase, etc.)
+	LevelEncoder zapcore.LevelEncoder // lowercase
+}
+
+var levelEncoder zapcore.LevelEncoder
+
+// LevelEncoder takes a raw string (as []byte) and returnsthe corresponding zapcore.LevelEncoder
+func LevelEncoder(raw []byte) zapcore.LevelEncoder {
+	if err := levelEncoder.UnmarshalText(raw); err != nil {
+		return nil
+	}
+	return levelEncoder
+}
+
+func defaultEncodingConfig(ec *EncodingConfig) *EncodingConfig {
+	if ec == nil {
+		ec = &EncodingConfig{}
+	}
+	if len(ec.Format) == 0 {
+		ec.Format = "console"
+	}
+	if ec.LevelEncoder == nil {
+		ec.LevelEncoder = zapcore.CapitalColorLevelEncoder
+	}
+	return ec
+}
+
 // Build builds the default zap logger, and sets the global zap logger to the configured logger instance.
-func Build(appName string, level zapcore.Level, encoding string) *zap.Logger {
+func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger {
+	ec = defaultEncodingConfig(ec)
 	cfg := zap.Config{
-		Encoding:    encoding,
+		Encoding:    ec.Format,
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
 			MessageKey:  "message",
 			LevelKey:    "level",
-			EncodeLevel: zapcore.CapitalColorLevelEncoder,
+			EncodeLevel: ec.LevelEncoder,
 			TimeKey:     "time",
 			EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 				enc.AppendString(iso3339CleanTime(t))

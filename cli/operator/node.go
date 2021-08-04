@@ -55,12 +55,15 @@ var StartNodeCmd = &cobra.Command{
 				log.Fatal(err)
 			}
 		}
-		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(cmd.Parent().Short, loggerLevel, cfg.GlobalConfig.LogFormat)
-
-		if err != nil {
-			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
+		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
+		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
+			Format:       cfg.GlobalConfig.LogFormat,
+			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
+		})
+		if errLogLevel != nil {
+			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
+
 		cfg.DBOptions.Logger = Logger
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
@@ -114,6 +117,7 @@ var StartNodeCmd = &cobra.Command{
 			Ctx:                        cmd.Context(),
 			Logger:                     Logger,
 			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
+			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
 			ContractABI:                eth1.ContractABI(),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,

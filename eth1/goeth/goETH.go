@@ -26,6 +26,7 @@ type ClientOptions struct {
 	NodeAddr                   string
 	RegistryContractAddr       string
 	ContractABI                string
+	ConnectionTimeout          time.Duration
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 }
 
@@ -40,6 +41,7 @@ type eth1Client struct {
 	nodeAddr             string
 	registryContractAddr string
 	contractABI          string
+	connectionTimeout    time.Duration
 
 	outSubject pubsub.Subject
 }
@@ -56,6 +58,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		nodeAddr:                   opts.NodeAddr,
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
+		connectionTimeout:          opts.ConnectionTimeout,
 		outSubject:                 pubsub.NewSubject(logger),
 	}
 
@@ -94,9 +97,11 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
 	ec.logger.Info("dialing eth1 node...")
-	conn, err := ethclient.Dial(ec.nodeAddr)
+	ctx, cancel := context.WithTimeout(context.Background(), ec.connectionTimeout)
+	defer cancel()
+	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		ec.logger.Error("failed to reconnect to the Ethereum client", zap.Error(err))
+		ec.logger.Error("could not connect to the eth1 client", zap.Error(err))
 		return err
 	}
 	ec.logger.Info("successfully connected to eth1 goETH")
