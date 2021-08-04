@@ -41,6 +41,8 @@ var cfg config
 
 var globalArgs global_config.Args
 
+var operatorNode operator.Node
+
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -130,7 +132,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode := operator.New(cfg.SSVOptions)
+		operatorNode = operator.New(cfg.SSVOptions)
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
@@ -154,7 +156,7 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 	p2p.SetupNetworkMetrics(logger, cfg.SSVOptions.ValidatorOptions.Network)
 	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger, enableProf)
+	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?

@@ -21,4 +21,3 @@ type mockAgent struct {
 func (ma *mockAgent) HealthCheck() []string {
 	return ma.errs[:]
 }
-

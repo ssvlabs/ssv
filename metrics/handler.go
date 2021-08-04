@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -17,17 +18,19 @@ type Handler interface {
 }
 
 // NewMetricsHandler creates a new instance
-func NewMetricsHandler(logger *zap.Logger, enableProf bool) Handler {
+func NewMetricsHandler(logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
 	mh := metricsHandler{
-		logger: logger.With(zap.String("component", "metrics/handler")),
-		enableProf: enableProf,
+		logger:        logger.With(zap.String("component", "metrics/handler")),
+		enableProf:    enableProf,
+		healthChecker: healthChecker,
 	}
 	return &mh
 }
 
 type metricsHandler struct {
-	logger *zap.Logger
+	logger        *zap.Logger
 	enableProf    bool
+	healthChecker HealthCheckAgent
 }
 
 func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
@@ -48,6 +51,21 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	mux.HandleFunc("/metrics", func(res http.ResponseWriter, req *http.Request) {
 		if err := mh.handleHTTP(res, req); err != nil {
 			// TODO: decide if we want to ignore errors
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
+		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+			result := map[string][]string{
+				"errors": errs,
+			}
+			if raw, err := json.Marshal(result); err != nil {
+				http.Error(res, err.Error(), http.StatusInternalServerError)
+			} else {
+				http.Error(res, string(raw), http.StatusInternalServerError)
+			}
+		} else if _, err := fmt.Fprintln(res, "{}"); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}
 	})

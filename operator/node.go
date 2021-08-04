@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
@@ -104,4 +105,20 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	}
 
 	return nil
+}
+
+// HealthCheck returns a list of issues regards the state of the operator node
+func (n *operatorNode) HealthCheck() []string {
+	return metrics.ProcessAgents(n.healthAgents())
+}
+
+func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
+	var agents []metrics.HealthCheckAgent
+	if agent, ok := n.eth1Client.(metrics.HealthCheckAgent); ok {
+		agents = append(agents, agent)
+	}
+	if agent, ok := n.beacon.(metrics.HealthCheckAgent); ok {
+		agents = append(agents, agent)
+	}
+	return agents
 }

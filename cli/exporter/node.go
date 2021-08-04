@@ -29,14 +29,16 @@ type config struct {
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 	ETH1Options                eth1.Options   `yaml:"eth1"`
 
-	WsAPIPort      int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
-	MetricsAPIPort int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	WsAPIPort      int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	MetricsAPIPort int  `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile  bool `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 }
 
 var cfg config
 
 var globalArgs global_config.Args
+
+var exporterNode exporter.Exporter
 
 // StartExporterNodeCmd is the command to start SSV boot node
 var StartExporterNodeCmd = &cobra.Command{
@@ -99,7 +101,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 
-		exporterNode := exporter.New(*exporterOptions)
+		exporterNode = exporter.New(*exporterOptions)
 
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
@@ -122,7 +124,7 @@ func startMetricsHandler(logger *zap.Logger, net network.Network, port int, enab
 	metrics_ps.SetupProcessMetrics()
 	p2p.SetupNetworkMetrics(logger, net)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger, enableProf)
+	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, exporterNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info("starting metrics handler", zap.String("addr", addr))
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
