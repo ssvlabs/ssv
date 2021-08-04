@@ -100,19 +100,19 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 		usedPeers = usedPeers[:4]
 	}
 
-	results := s.fetchHighestDecidedFromPeers(usedPeers)
+	results := s.getHighestDecidedFromPeers(usedPeers)
 
-	// find highest
+	// no decided msgs were received from peers, return error
+	if len(results) == 0 {
+		s.logger.Debug("could not fetch highest decided from peers",
+			zap.String("identifier", hex.EncodeToString(s.identifier)))
+		return nil, "", errors.New("could not fetch highest decided from peers")
+	}
+
+	// find the highest decided within the incoming messages
 	var ret *proto.SignedMessage
 	var fromPeer string
-	foundAtLeastOne := false
 	for _, res := range results {
-		if res == nil {
-			continue
-		}
-
-		foundAtLeastOne = true
-
 		if res.Error == kv.EntryNotFoundError {
 			continue
 		}
@@ -127,13 +127,6 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 		}
 	}
 
-	// no decided msgs were received from peers, return error
-	if !foundAtLeastOne {
-		s.logger.Debug("could not fetch highest decided from peers",
-			zap.String("identifier", hex.EncodeToString(s.identifier)))
-		return nil, "", errors.New("could not fetch highest decided from peers")
-	}
-
 	// highest decided is a nil msg, meaning no decided found from peers. This can happen if no previous decided instance exists.
 	if ret == nil {
 		return nil, "", nil
@@ -143,11 +136,15 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 	return ret, fromPeer, nil
 }
 
-func (s *HistorySync) fetchHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
+// getHighestDecidedFromPeers receives highest decided messages from peers
+func (s *HistorySync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
 	var results []*network.SyncMessage
 	var wg sync.WaitGroup
 	var lock sync.Mutex
 
+	// peer's highest decided message will be added to results if:
+	//  1. not-found-error (i.e. no history)
+	//  3. message is valid
 	for i, p := range peers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
