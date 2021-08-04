@@ -187,6 +187,13 @@ func TestFindHighest(t *testing.T) {
 		Lambda:    []byte("lambda"),
 		SeqNumber: 1,
 	})
+	highestInvalid := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		Type:      proto.RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte("lambda"),
+		SeqNumber: 1,
+	})
+	highestInvalid.Signature = []byte{1}
 
 	tests := []struct {
 		name               string
@@ -197,6 +204,7 @@ func TestFindHighest(t *testing.T) {
 		errorMap           map[string]error
 		expectedHighestSeq int64
 		expectedError      string
+		validateMsg        func(msg *proto.SignedMessage) error
 	}{
 		{
 			"valid",
@@ -209,6 +217,7 @@ func TestFindHighest(t *testing.T) {
 			nil,
 			1,
 			"",
+			nil,
 		},
 		{
 			"all responses are empty",
@@ -222,6 +231,7 @@ func TestFindHighest(t *testing.T) {
 			nil,
 			-1,
 			"",
+			nil,
 		},
 		{
 			"all errors",
@@ -235,6 +245,22 @@ func TestFindHighest(t *testing.T) {
 			},
 			-1,
 			"could not fetch highest decided from peers",
+			nil,
+		},
+		{
+			"all invalid",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"1"},
+			map[string]*proto.SignedMessage{
+				"1": highestInvalid,
+			},
+			map[string]error{},
+			-1,
+			"could not fetch highest decided from peers",
+			func(msg *proto.SignedMessage) error {
+				return errors.New("invalid")
+			},
 		},
 		{
 			"some errors, some empty",
@@ -249,6 +275,23 @@ func TestFindHighest(t *testing.T) {
 			},
 			-1,
 			"",
+			nil,
+		},
+		{
+			"some invalid, some empty",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"1", "2"},
+			map[string]*proto.SignedMessage{
+				"1": highestInvalid,
+				"2": nil,
+			},
+			map[string]error{},
+			-1,
+			"",
+			func(msg *proto.SignedMessage) error {
+				return errors.New("invalid")
+			},
 		},
 		{
 			"some errors, some valid",
@@ -263,6 +306,7 @@ func TestFindHighest(t *testing.T) {
 			},
 			1,
 			"",
+			nil,
 		},
 		{
 			"valid multi responses",
@@ -276,6 +320,7 @@ func TestFindHighest(t *testing.T) {
 			nil,
 			1,
 			"",
+			nil,
 		},
 		{
 			"valid multi responses different seq",
@@ -294,14 +339,19 @@ func TestFindHighest(t *testing.T) {
 			nil,
 			10,
 			"",
+			nil,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, nil, nil), nil, func(msg *proto.SignedMessage) error {
-				return nil
-			})
+			if test.validateMsg == nil {
+				test.validateMsg = func(msg *proto.SignedMessage) error {
+					return nil
+				}
+			}
+			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, newTestNetwork(t, test.peers, 100,
+				test.highestMap, test.errorMap, nil, nil), nil, test.validateMsg)
 			res, _, err := s.findHighestInstance()
 
 			if len(test.expectedError) > 0 {

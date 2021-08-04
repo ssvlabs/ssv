@@ -27,7 +27,7 @@ func TestReqHandler_getHighestDecided(t *testing.T) {
 
 	t.Run("valid", func(t *testing.T) {
 		err := ibftStorage.SaveHighestDecidedInstance(&proto.SignedMessage{
-			Message:   &proto.Message{
+			Message: &proto.Message{
 				Type:      proto.RoundState_Decided,
 				Round:     1,
 				Lambda:    []byte{1, 2, 3, 4},

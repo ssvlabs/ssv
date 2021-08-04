@@ -76,9 +76,9 @@ func (n *testNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Syn
 		if highest == nil {
 			// as if no highest.
 			return &network.SyncMessage{
-				Error: kv.EntryNotFoundError,
-				FromPeerID:     peerStr,
-				Type:           network.Sync_GetInstanceRange,
+				Error:      kv.EntryNotFoundError,
+				FromPeerID: peerStr,
+				Type:       network.Sync_GetInstanceRange,
 			}, nil
 		}
 

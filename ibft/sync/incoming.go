@@ -93,8 +93,8 @@ func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
 
 func (s *ReqHandler) getHighestDecided() (*network.SyncMessage, error) {
 	res := &network.SyncMessage{
-		Lambda:         s.identifier,
-		Type:           network.Sync_GetHighestType,
+		Lambda: s.identifier,
+		Type:   network.Sync_GetHighestType,
 	}
 
 	highest, err := s.storage.GetHighestDecidedInstance(s.identifier)
