@@ -100,13 +100,55 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 		usedPeers = usedPeers[:4]
 	}
 
-	// fetch response
-	wg := &sync.WaitGroup{}
-	results := make([]*network.SyncMessage, 0)
-	lock := sync.Mutex{}
-	for i, p := range usedPeers {
+	results := s.getHighestDecidedFromPeers(usedPeers)
+
+	// no decided msgs were received from peers, return error
+	if len(results) == 0 {
+		s.logger.Debug("could not fetch highest decided from peers",
+			zap.String("identifier", hex.EncodeToString(s.identifier)))
+		return nil, "", errors.New("could not fetch highest decided from peers")
+	}
+
+	// find the highest decided within the incoming messages
+	var ret *proto.SignedMessage
+	var fromPeer string
+	for _, res := range results {
+		if res.Error == kv.EntryNotFoundError {
+			continue
+		}
+
+		if ret == nil {
+			ret = res.SignedMessages[0]
+			fromPeer = res.FromPeerID
+		}
+		if ret.Message.SeqNumber < res.SignedMessages[0].Message.SeqNumber {
+			ret = res.SignedMessages[0]
+			fromPeer = res.FromPeerID
+		}
+	}
+
+	// highest decided is a nil msg, meaning no decided found from peers. This can happen if no previous decided instance exists.
+	if ret == nil {
+		return nil, "", nil
+	}
+
+	// found a valid highest decided
+	return ret, fromPeer, nil
+}
+
+// getHighestDecidedFromPeers receives highest decided messages from peers
+func (s *HistorySync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
+	var results []*network.SyncMessage
+	var wg sync.WaitGroup
+	var lock sync.Mutex
+
+	// peer's highest decided message will be added to results if:
+	//  1. not-found-error (i.e. no history)
+	//  3. message is valid
+	for i, p := range peers {
 		wg.Add(1)
 		go func(index int, peer string, wg *sync.WaitGroup) {
+			defer wg.Done()
 			res, err := s.network.GetHighestDecidedInstance(peer, &network.SyncMessage{
 				Type:   network.Sync_GetHighestType,
 				Lambda: s.identifier,
@@ -114,76 +156,40 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 			if err != nil {
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
-			} else {
-				lock.Lock()
-				results = append(results, res)
-				lock.Unlock()
+				return
 			}
-			wg.Done()
-		}(i, p, wg)
-	}
 
+			if len(res.Error) > 0 {
+				if res.Error != kv.EntryNotFoundError {
+					s.logger.Error("received error when fetching highest decided", zap.Error(err),
+						zap.String("identifier", hex.EncodeToString(s.identifier)))
+				} else { // peer has no decided msg
+					lock.Lock()
+					results = append(results, res)
+					lock.Unlock()
+				}
+				return
+			}
+
+			if len(res.SignedMessages) != 1 {
+				s.logger.Debug("received multiple signed messages", zap.Error(err),
+					zap.String("identifier", hex.EncodeToString(s.identifier)))
+				return
+			}
+			if err := s.validateDecidedMsgF(res.SignedMessages[0]); err != nil {
+				s.logger.Debug("received invalid highest decided", zap.Error(err),
+					zap.String("identifier", hex.EncodeToString(s.identifier)))
+				return
+			}
+
+			lock.Lock()
+			results = append(results, res)
+			lock.Unlock()
+		}(i, p, &wg)
+	}
 	wg.Wait()
 
-	if len(results) == 0 {
-		return nil, "", errors.New("could not fetch highest decided from peers")
-	}
-
-	// validate response and find highest decided
-	var ret *proto.SignedMessage
-	var fromPeer string
-	foundAtLeastOne := false
-	for _, res := range results {
-		if res == nil {
-			continue
-		}
-
-		// no highest decided
-		if len(res.SignedMessages) == 0 {
-			continue
-		}
-		foundAtLeastOne = true
-
-		// too many responses, invalid
-		if len(res.SignedMessages) > 1 {
-			s.logger.Debug("received invalid highest decided", zap.Error(err),
-				zap.String("identifier", hex.EncodeToString(s.identifier)))
-			continue
-		}
-
-		signedMsg := res.SignedMessages[0]
-
-		// validate
-		if err := s.validateDecidedMsgF(signedMsg); err != nil {
-			s.logger.Debug("received invalid highest decided", zap.Error(err),
-				zap.String("identifier", hex.EncodeToString(s.identifier)))
-			continue
-		}
-
-		if ret == nil {
-			ret = signedMsg
-			fromPeer = res.FromPeerID
-		}
-		if ret.Message.SeqNumber < signedMsg.Message.SeqNumber {
-			ret = signedMsg
-			fromPeer = res.FromPeerID
-		}
-	}
-
-	// if all responses had no decided msgs and no errors than we don't have any highest decided.
-	if !foundAtLeastOne {
-		return nil, "", nil
-	}
-
-	// if we did find at least one response with a decided msg but all were invalid we return an error
-	if ret == nil {
-		s.logger.Debug("could not fetch highest decided from peers",
-			zap.String("identifier", hex.EncodeToString(s.identifier)))
-		return nil, "", errors.New("could not fetch highest decided from peers")
-	}
-
-	// found a valid highest decided
-	return ret, fromPeer, nil
+	return results
 }
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.

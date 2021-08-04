@@ -69,11 +69,11 @@ func (t *RoundTimer) Stop() {
 func (t *RoundTimer) eventLoop() {
 	select {
 	case <-t.timer.C:
+		t.markStopped()
 		t.resC <- true
-		t.markStopped()
 	case <-t.cancelC:
-		t.resC <- false
 		t.markStopped()
+		t.resC <- false
 	}
 }
 

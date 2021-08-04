@@ -30,4 +30,5 @@ message SyncMessage {
   repeated uint64 params                      = 3;
   bytes Lambda                                = 4;
   Sync Type                                   = 5;
+  string error                                = 6;
 }
