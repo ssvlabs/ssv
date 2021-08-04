@@ -169,6 +169,8 @@ spec:
             value: ./data/db
           - name: METRICS_API_PORT
             value: "15000"
+          - name: ENABLE_PROFILE
+            value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter
