@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+const (
+	healthCheckTimeout = 10 * time.Second
+)
+
 // goClient implementing Beacon struct
 type goClient struct {
 	ctx      context.Context
@@ -53,6 +57,26 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	}
 
 	return _client, nil
+}
+
+// HealthCheck provides health status of beacon node
+func (gc *goClient) HealthCheck() error {
+	if gc.client == nil {
+		return errors.New("not connected to beacon node")
+	}
+	if provider, isProvider := gc.client.(eth2client.NodeSyncingProvider); isProvider {
+		ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
+		defer cancel()
+		syncState, err := provider.NodeSyncing(ctx)
+		if err != nil {
+			return errors.Wrap(err, "could not get beacon node sync state")
+		}
+		if syncState != nil && syncState.IsSyncing {
+			return errors.Errorf("eth1 node is currently syncing: head=%d, distance=%d",
+				syncState.HeadSlot, syncState.SyncDistance)
+		}
+	}
+	return nil
 }
 
 func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {

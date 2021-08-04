@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -118,6 +119,19 @@ func (exp *exporter) Start() error {
 	}()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
+}
+
+// HealthCheck returns a list of issues regards the state of the exporter node
+func (exp *exporter) HealthCheck() []string {
+	return metrics.ProcessAgents(exp.healthAgents())
+}
+
+func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
+	var agents []metrics.HealthCheckAgent
+	if agent, ok := exp.eth1Client.(metrics.HealthCheckAgent); ok {
+		agents = append(agents, agent)
+	}
+	return agents
 }
 
 // processIncomingExportRequests waits for incoming messages and

@@ -19,6 +19,10 @@ import (
 	"time"
 )
 
+const (
+	healthCheckTimeout = 10 * time.Second
+)
+
 // ClientOptions are the options for the client
 type ClientOptions struct {
 	Ctx                        context.Context
@@ -91,6 +95,25 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 		ec.logger.Error("Failed to sync contract events", zap.Error(err))
 	}
 	return err
+}
+
+// HealthCheck provides health status of eth1 node
+func (ec *eth1Client) HealthCheck() error {
+	if ec.conn == nil {
+		return errors.New("not connected to eth1 node")
+	}
+	ctx, cancel := context.WithTimeout(ec.ctx, healthCheckTimeout)
+	defer cancel()
+	sp, err := ec.conn.SyncProgress(ctx)
+	if err != nil {
+		return errors.Wrap(err, "could not get eth1 node sync progress")
+	}
+	if sp != nil {
+		return errors.Errorf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
+			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)
+	}
+	// eth1 node is connected and synced
+	return nil
 }
 
 // connect connects to eth1 client
