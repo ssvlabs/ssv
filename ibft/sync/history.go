@@ -174,8 +174,8 @@ func (s *HistorySync) getHighestDecidedFromPeers(peers []string) []*network.Sync
 				} else {
 					s.logger.Error("received error when fetching highest decided", zap.Error(err),
 						zap.String("identifier", hex.EncodeToString(s.identifier)))
-					return
 				}
+				return
 			}
 
 			if len(res.SignedMessages) != 1 {
