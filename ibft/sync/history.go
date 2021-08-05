@@ -158,15 +158,22 @@ func (s *HistorySync) getHighestDecidedFromPeers(peers []string) []*network.Sync
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
 				return
 			}
+			// backwards compatibility for version < v0.0.12, where EntryNotFoundError didn't exist
+			// TODO: can be removed once the release is deprecated
+			if len(res.SignedMessages) == 0 {
+				res.Error = kv.EntryNotFoundError
+			}
 
 			if len(res.Error) > 0 {
-				if res.Error != kv.EntryNotFoundError {
-					s.logger.Error("received error when fetching highest decided", zap.Error(err),
-						zap.String("identifier", hex.EncodeToString(s.identifier)))
-				} else { // peer has no decided msg
+				// assuming not found is a valid scenario (e.g. new validator)
+				// therefore we count the result now, and it will be identified afterwards in findHighestInstance()
+				if res.Error == kv.EntryNotFoundError {
 					lock.Lock()
 					results = append(results, res)
 					lock.Unlock()
+				} else {
+					s.logger.Error("received error when fetching highest decided", zap.Error(err),
+						zap.String("identifier", hex.EncodeToString(s.identifier)))
 				}
 				return
 			}
