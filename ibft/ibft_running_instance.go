@@ -24,10 +24,6 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 instanceLoop:
 	for {
 		stage := <-stageChan
-		if i.currentInstance == nil {
-			i.logger.Debug("new stage but instance is already empty", zap.Any("stage", stage))
-			break instanceLoop
-		}
 		exit, e := i.instanceStageChange(stage)
 		if e != nil {
 			err = e
@@ -65,6 +61,9 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case proto.RoundState_Decided:
+		if i.currentInstance == nil {
+			return true, errors.New("current instance was stopped")
+		}
 		agg, err := i.currentInstance.CommittedAggregatedMsg()
 		if err != nil {
 			return true, errors.Wrap(err, "could not get aggregated commit msg and save to storage")
@@ -81,7 +80,11 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 		return false, nil
 	case proto.RoundState_Stopped:
-		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
+		var fields []zap.Field
+		if i.currentInstance !=  nil {
+			fields = append(fields, zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
+		}
+		i.logger.Info("current iBFT instance stopped, nilling currentInstance", fields...)
 		return true, nil
 	}
 	return false, nil
