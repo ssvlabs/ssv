@@ -9,8 +9,19 @@ import (
 	"github.com/prysmaticlabs/go-ssz"
 )
 
+type SigningRoot [32]byte
+
+func (sr *SigningRoot) IsEmpty() bool {
+	for i := range sr {
+		if sr[i] != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
+func (gc *goClient) getSigningRoot(data *spec.AttestationData) (SigningRoot, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(uint64(data.Slot))
 	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
 	if err != nil {
