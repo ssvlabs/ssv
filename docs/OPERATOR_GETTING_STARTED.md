@@ -159,9 +159,13 @@ $ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config
 
 ### 7. Update SSV Node Image
 
-Kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
+The current version is available through logs or a cmd:
 ```shell
-$ sudo su
+$ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode version
+```
+
+In order to updtae, kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
+```shell
 $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 ```
 
