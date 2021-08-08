@@ -58,6 +58,10 @@ func (t *testIBFT) Init() {
 	_ = pk.Deserialize(refPk)
 }
 
+func (t *testIBFT) CurrentInstance() *ibft.Instance {
+	return nil
+}
+
 func (t *testIBFT) StartInstance(opts ibft.StartOptions) (*ibft.InstanceResult, error) {
 	return &ibft.InstanceResult{
 		Decided: t.decided,
