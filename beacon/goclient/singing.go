@@ -11,6 +11,7 @@ import (
 
 type SigningRoot [32]byte
 
+// IsEmpty returns checks if the array was set with some value
 func (sr *SigningRoot) IsEmpty() bool {
 	for i := range sr {
 		if sr[i] != 0 {
