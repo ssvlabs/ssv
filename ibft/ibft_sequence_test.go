@@ -9,12 +9,14 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync"
 	"testing"
 )
 
 func testIBFTInstance(t *testing.T) *ibftImpl {
 	return &ibftImpl{
 		Identifier: []byte("lambda_11"),
+		currentInstanceLock: &sync.RWMutex{},
 		//instances: make([]*Instance, 0),
 	}
 }

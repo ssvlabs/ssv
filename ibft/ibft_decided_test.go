@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync"
 	"testing"
 	"time"
 )
@@ -171,6 +172,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ibft := ibftImpl{
+				currentInstanceLock: &sync.RWMutex{},
 				currentInstance: test.currentInstance,
 				ibftStorage:     &testStorage{highestDecided: test.highestDecided},
 			}
@@ -248,7 +250,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := ibftImpl{currentInstance: test.currentInstance}
+			ibft := ibftImpl{currentInstance: test.currentInstance, currentInstanceLock: &sync.RWMutex{}}
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
 	}
