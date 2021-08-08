@@ -48,7 +48,8 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Printf("starting %s:%s", cmd.Parent().Short, cmd.Parent().Version)
+		appName := fmt.Sprintf("%s:%s", cmd.Parent().Short, cmd.Parent().Version)
+		log.Printf("starting %s", appName)
 
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
@@ -59,7 +60,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
+		Logger := logex.Build(appName, loggerLevel, &logex.EncodingConfig{
 			Format:       cfg.GlobalConfig.LogFormat,
 			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
 		})
