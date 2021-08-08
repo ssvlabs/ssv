@@ -9,6 +9,7 @@ import (
 	"github.com/prysmaticlabs/go-ssz"
 )
 
+// SigningRoot is a wrapping type for byte array
 type SigningRoot [32]byte
 
 // IsEmpty returns checks if the array was set with some value
