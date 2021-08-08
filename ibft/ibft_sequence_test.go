@@ -132,7 +132,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			i := testIBFTInstance(t)
 			i.initFinished = test.initFinished
 			if test.currentInstance != nil {
-				i.currentInstance = test.currentInstance
+				i.setCurrentInstance(test.currentInstance)
 			}
 			if test.storage != nil {
 				i.ibftStorage = test.storage

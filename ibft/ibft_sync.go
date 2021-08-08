@@ -33,8 +33,8 @@ func (i *ibftImpl) SyncIBFT() {
 	i.logger.Info("syncing iBFT..")
 
 	// stop current instance and return any waiting chan.
-	if i.currentInstance != nil {
-		i.currentInstance.Stop()
+	if i.CurrentInstance() != nil {
+		i.CurrentInstance().Stop()
 	}
 
 	// sync

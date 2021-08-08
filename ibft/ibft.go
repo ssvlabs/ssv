@@ -50,13 +50,16 @@ type IBFT interface {
 
 	// CurrentState returns the state of the running instance
 	CurrentState() (*proto.State, error)
+
+	// CurrentInstance returns the current running instance
+	CurrentInstance() *Instance
 }
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
 	role                beacon.RoleType
 	currentInstance     *Instance
-	currentInstanceLock sync.Locker
+	currentInstanceLock *sync.RWMutex
 	logger              *zap.Logger
 	ibftStorage         collections.Iibft
 	network             network.Network
@@ -75,7 +78,7 @@ func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage co
 	ret := &ibftImpl{
 		role:                role,
 		ibftStorage:         storage,
-		currentInstanceLock: &sync.Mutex{},
+		currentInstanceLock: &sync.RWMutex{},
 		logger:              logger,
 		network:             network,
 		msgQueue:            queue,
@@ -113,6 +116,22 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
 	}
 
 	return i.startInstanceWithOptions(*instanceOpts, opts.Value)
+}
+
+// CurrentInstance returns the current running instance
+func (i *ibftImpl) CurrentInstance() *Instance {
+	i.currentInstanceLock.RLock()
+	defer i.currentInstanceLock.RUnlock()
+
+	return i.currentInstance
+}
+
+// CurrentInstance returns the current running instance
+func (i *ibftImpl) setCurrentInstance(newInstance *Instance) {
+	i.currentInstanceLock.Lock()
+	defer i.currentInstanceLock.Unlock()
+
+	i.currentInstance = newInstance
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

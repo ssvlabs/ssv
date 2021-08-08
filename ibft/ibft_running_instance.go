@@ -9,12 +9,12 @@ import (
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
 func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value []byte) (*InstanceResult, error) {
-	i.currentInstance = NewInstance(instanceOpts)
-	i.currentInstance.Init()
-	stageChan := i.currentInstance.GetStageChan()
+	i.setCurrentInstance(NewInstance(instanceOpts))
+	i.CurrentInstance().Init()
+	stageChan := i.CurrentInstance().GetStageChan()
 
 	// reset leader seed for sequence
-	if err := i.currentInstance.Start(value); err != nil {
+	if err := i.CurrentInstance().Start(value); err != nil {
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
@@ -24,7 +24,7 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 instanceLoop:
 	for {
 		stage := <-stageChan
-		if i.currentInstance == nil {
+		if i.CurrentInstance() == nil {
 			i.logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
 			break instanceLoop
 		}
@@ -52,7 +52,7 @@ instanceLoop:
 		}
 	}
 	// when main instance loop breaks, nil current instance
-	i.currentInstance = nil
+	i.setCurrentInstance(nil)
 	i.logger.Debug("iBFT instance result loop stopped")
 	return retRes, err
 }
@@ -61,11 +61,11 @@ instanceLoop:
 func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 	switch stage {
 	case proto.RoundState_Prepare:
-		if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State); err != nil {
+		if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.CurrentInstance().State); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case proto.RoundState_Decided:
-		agg, err := i.currentInstance.CommittedAggregatedMsg()
+		agg, err := i.CurrentInstance().CommittedAggregatedMsg()
 		if err != nil {
 			return true, errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 		}
@@ -81,7 +81,7 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 		return false, nil
 	case proto.RoundState_Stopped:
-		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
+		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.CurrentInstance().State.SeqNumber))
 		return true, nil
 	}
 	return false, nil

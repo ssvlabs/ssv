@@ -84,8 +84,8 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 	if i.decidedForCurrentInstance(msg) {
 		// stop current instance
-		if i.currentInstance != nil {
-			i.currentInstance.ForceDecide(msg)
+		if currentInstance := i.CurrentInstance(); currentInstance != nil {
+			currentInstance.ForceDecide(msg)
 		}
 		return true
 	}
@@ -111,7 +111,8 @@ func (i *ibftImpl) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
 func (i *ibftImpl) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
-	return i.currentInstance != nil && i.currentInstance.State.SeqNumber == msg.Message.SeqNumber
+	currentInstance := i.CurrentInstance()
+	return currentInstance != nil && currentInstance.State.SeqNumber == msg.Message.SeqNumber
 }
 
 // decidedRequiresSync returns true if:
