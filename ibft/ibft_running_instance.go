@@ -25,7 +25,7 @@ instanceLoop:
 	for {
 		stage := <-stageChan
 		if i.currentInstance == nil {
-			i.logger.Debug("new stage but instance is already empty", zap.Any("stage", stage))
+			i.logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
 			break instanceLoop
 		}
 		exit, e := i.instanceStageChange(stage)
