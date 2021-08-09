@@ -111,8 +111,14 @@ func (c *controller) setupValidators() map[string]*Validator {
 	}
 	res := make(map[string]*Validator)
 	for _, validatorShare := range validatorsShare {
+		pubKey := validatorShare.PublicKey.SerializeToHexStr()
+		if _, ok := c.validatorsMap[pubKey]; ok {
+			c.logger.Debug("validator already exist in mp")
+			//res[pubKey] = existing
+			//continue
+		}
 		printValidatorShare(c.logger, validatorShare)
-		res[validatorShare.PublicKey.SerializeToHexStr()] = New(Options{
+		res[pubKey] = New(Options{
 			Context:                    c.context,
 			SignatureCollectionTimeout: c.signatureCollectionTimeout,
 			Logger:                     c.logger,
