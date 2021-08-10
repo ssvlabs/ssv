@@ -143,6 +143,21 @@ spec:
         - mountPath: /data/share.yaml
           subPath: share.yaml
           name: ssv-cm-validator-options-2
+      - name: ubuntu
+        image: REPLACE_HEALTH_IMAGE
+        imagePullPolicy: Always
+        args: [bash, -c, sleep infinity]
+        volumeMounts:
+        - name: ssv-nodes-health-check-cm
+          mountPath: /root/http-status.sh
+          subPath: http-status.sh
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - /root/http-status.sh
+          initialDelaySeconds: 120
+          periodSeconds: 60            
       volumes:
       - name: ssv-node-v2-2
         persistentVolumeClaim:
@@ -150,4 +165,7 @@ spec:
       - name: ssv-cm-validator-options-2
         configMap:
           name: ssv-cm-validator-options-2
+      - name: ssv-nodes-health-check-cm
+        configMap:
+          name: ssv-nodes-health-check-cm
       hostNetwork: true
