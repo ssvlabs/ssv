@@ -144,7 +144,7 @@ spec:
           subPath: share.yaml
           name: ssv-cm-validator-options-4
       - name: ubuntu
-        image: 121827225315.dkr.ecr.us-west-2.amazonaws.com/infra-stage-repo:ubuntu20
+        image: REPLACE_HEALTH_IMAGE
         imagePullPolicy: Always
         args: [bash, -c, sleep infinity]
         volumeMounts:

@@ -13,14 +13,15 @@ variables:
   DOCKER_REPO_INFRA_STAGE: $ACCOUNT_ID_INFRA_STAGE.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
   APP_REPLICAS_INFRA_STAGE: "1"
   ECRLOGIN_INFRA_STAGE: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_STAGE --region $AWS_REGION_INFRA_STAGE --no-include-email"
-
+  STAGE_HEALTH_CHECK_IMAGE: 121827225315.dkr.ecr.us-west-2.amazonaws.com/infra-stage-repo:ubuntu20
+ 
   #PRODUCTION
   ACCOUNT_ID_INFRA_PROD: 764289642555
   AWS_REGION_INFRA_PROD: "us-west-2"
   DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
   APP_REPLICAS_INFRA_PROD: "1"
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
-
+  PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
 
 Build stage Docker image:
   stage: build
@@ -34,7 +35,7 @@ Build stage Docker image:
   only:
     - stage
 
-Deploy to blox-infra-stage cluster:
+Deploy ssv exporter to blox-infra-stage cluster:
   stage: deploy
   tags:
     - blox-infra-stage
@@ -47,6 +48,21 @@ Deploy to blox-infra-stage cluster:
     - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION
   only:
     - stage
+
+Deploy ssv nodes to blox-infra-stage cluster:
+  stage: deploy
+  tags:
+    - blox-infra-stage
+  script:
+    - apk add bash
+    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
+    - chmod 755 kubectl
+    - mv kubectl /usr/bin/
+    - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE
+  only:
+    - stage
+
 
 #blox-infra-prod
 Build prod Docker image:
@@ -72,6 +88,6 @@ Deploy to blox-infra-prod cluster:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
-    - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION
+    - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE
   only:
     - main
