@@ -61,7 +61,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 	for i := startSeq; i <= endSeq; i++ {
 		decidedMsg, err := s.storage.GetDecided(s.identifier, i)
 		if err != nil {
-			s.logger.Error("failed to get decided", zap.Error(err))
+			s.logger.Error("failed to get decided", zap.Error(err), zap.ByteString("identifier", s.identifier), zap.Uint64("sequence", i))
 			continue
 		}
 

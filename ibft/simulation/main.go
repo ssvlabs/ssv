@@ -33,7 +33,7 @@ var (
 	identifier = []byte("ibft identifier")
 	logger     = logex.Build("simulator", zapcore.InfoLevel, nil)
 	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
-	scenario   = scenarios.NewF1Speedup(logger, &alwaysTrueValueCheck{})
+	scenario   = scenarios.FarFutureSync(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct {
@@ -117,6 +117,7 @@ func publicKey() *bls.PublicKey {
 func main() {
 	shares := generateShares(uint64(nodeCount))
 	pk := publicKey()
+	dbs := make([]collections.Iibft, 0)
 	logger.Info("pubkey", zap.String("pk", pkHex))
 
 	// generate iBFT nodes
@@ -126,12 +127,13 @@ func main() {
 		if err := net.SubscribeToValidatorNetwork(pk); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
+		dbs = append(dbs, db())
 
 		node := ibft.New(
 			beacon.RoleTypeAttester,
 			identifier,
 			logger,
-			db(),
+			dbs[i-1],
 			net,
 			msgqueue.New(),
 			&proto.InstanceConfig{
@@ -143,7 +145,7 @@ func main() {
 		nodes = append(nodes, node)
 	}
 
-	scenario.Start(nodes, shares)
+	scenario.Start(nodes, shares, dbs)
 
 	logger.Info("finished")
 }

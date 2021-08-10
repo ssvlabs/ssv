@@ -31,6 +31,19 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 	return sks, nodes
 }
 
+func decidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey) []*proto.SignedMessage {
+	ret := make([]*proto.SignedMessage, 0)
+	for i := uint64(0); i <= maxSeq; i++ {
+		ret = append(ret, multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+			Type:      proto.RoundState_Decided,
+			Round:     1,
+			Lambda:    []byte("lambda"),
+			SeqNumber: i,
+		}))
+	}
+	return ret
+}
+
 func multiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
 	bls.Init(bls.BLS12_381)
 
@@ -398,6 +411,7 @@ func TestSync(t *testing.T) {
 		Lambda:    []byte("lambda"),
 		SeqNumber: 2,
 	})
+	decided250Seq := decidedArr(t, 250, sks)
 
 	tests := []struct {
 		name               string
@@ -425,6 +439,23 @@ func TestSync(t *testing.T) {
 			},
 			nil,
 			0,
+			"",
+		},
+		{
+			"sync to seq 250",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided250Seq[len(decided250Seq)-1],
+				"3": decided250Seq[len(decided250Seq)-1],
+			},
+			map[string][]*proto.SignedMessage{
+				"2": decided250Seq,
+				"3": decided250Seq,
+			},
+			nil,
+			250,
 			"",
 		},
 		{
