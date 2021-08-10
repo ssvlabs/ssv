@@ -112,7 +112,7 @@ func (c *controller) setupValidators() map[string]*Validator {
 	for _, validatorShare := range validatorsShare {
 		pubKey := validatorShare.PublicKey.SerializeToHexStr()
 		if _, ok := c.validatorsMap[pubKey]; ok {
-			c.logger.Debug("validator was initialized already",
+			c.logger.Debug("validator was initialized already..",
 				zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
 			continue
 		}
