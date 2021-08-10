@@ -232,14 +232,19 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			foundSeqs[msg.Message.SeqNumber] = msg
 		}
 
+		msgCount := len(res.SignedMessages)
 		// validate and save
 		for i := start; i <= endSeq; i++ {
 			msg, found := foundSeqs[i]
 			if !found {
 				failCount++
 				latestError = errors.Errorf("returned decided by range messages miss sequence number %d", i)
+				s.logger.Debug("decided by range messages miss sequence number",
+					zap.Uint64("seq", i), zap.Int("msgCount", msgCount))
 				break
 			}
+			// counting all the messages that were visited
+			msgCount--
 			// if msg is invalid, break and try again with an updated start seq
 			if s.validateDecidedMsgF(msg) != nil {
 				start = msg.Message.SeqNumber
@@ -252,10 +257,7 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			}
 
 			// set highest
-			if highestSaved == nil {
-				highestSaved = msg
-			}
-			if highestSaved.Message.SeqNumber < msg.Message.SeqNumber {
+			if highestSaved == nil || highestSaved.Message.SeqNumber < msg.Message.SeqNumber {
 				highestSaved = msg
 			}
 
@@ -264,7 +266,11 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			if msg.Message.SeqNumber == endSeq {
 				done = true
 			}
+			// if the current messages batch was processed -> break loop and start the next batch
+			if msgCount == 0 {
+				break
+			}
 		}
-		s.logger.Info(fmt.Sprintf("fetched and saved instances up to sequence number %d", endSeq))
+		s.logger.Info(fmt.Sprintf("fetched and saved instances up to sequence number %d", start - 1))
 	}
 }
