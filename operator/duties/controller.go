@@ -69,7 +69,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 func (dc *dutyController) Start() {
 	// warmup
 	indices := dc.validatorController.GetValidatorsIndices()
-	dc.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("indices count", len(indices)))
+	dc.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("count", len(indices)))
 
 	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
 	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
