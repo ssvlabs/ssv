@@ -187,3 +187,8 @@ func (n *Local) AllPeers(validatorPk []byte) ([]string, error) {
 	}
 	return ret, nil
 }
+
+// MaxBatch returns max batch size
+func (n *Local) MaxBatch() uint64 {
+	return 25
+}

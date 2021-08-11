@@ -139,7 +139,7 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 			}
 
 			// stream
-			s := NewTestStream("")
+			s := newTestStream("")
 
 			handler.handleGetDecidedReq(&network.SyncChanObj{
 				Msg: &network.SyncMessage{

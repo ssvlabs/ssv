@@ -174,7 +174,8 @@ type testStream struct {
 	peer string
 }
 
-func NewTestStream(remotePeer string) *testStream {
+// newTestStream returns a new instance of test stream
+func newTestStream(remotePeer string) *testStream {
 	return &testStream{
 		peer: remotePeer,
 		C:    make(chan []byte),
