@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"
@@ -49,6 +50,9 @@ type eth1Client struct {
 
 	outSubject pubsub.Subject
 }
+
+// verifies that the client implements HealthCheckAgent
+var _ metrics.HealthCheckAgent = &eth1Client{}
 
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {

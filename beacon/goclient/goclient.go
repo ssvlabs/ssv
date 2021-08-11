@@ -10,6 +10,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
 	"github.com/prysmaticlabs/prysm/shared/timeutils"
@@ -30,6 +31,9 @@ type goClient struct {
 	client   client.Service
 	graffiti []byte
 }
+
+// verifies that the client implements HealthCheckAgent
+var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(opt beacon.Options) (beacon.Beacon, error) {
