@@ -2,7 +2,7 @@ package ibft
 
 import (
 	historySync "github.com/bloxapp/ssv/ibft/sync/history"
-	"github.com/bloxapp/ssv/ibft/sync/incoming"
+	syncReqHandler "github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"go.uber.org/zap"
@@ -25,7 +25,7 @@ func (i *ibftImpl) processSyncQueueMessages() {
 }
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
-	s := incoming.NewReqHandler(i.logger, i.Identifier, i.network, i.ibftStorage)
+	s := syncReqHandler.New(i.logger, i.Identifier, i.network, i.ibftStorage)
 	go s.Process(msg)
 }
 
