@@ -24,6 +24,7 @@ func ProcessAgents(agents []HealthCheckAgent) []string {
 	return errs
 }
 
+// WaitUntilHealthy takes some component (that implements HealthCheckAgent) and wait until it is healthy
 func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 	agent, ok := component.(HealthCheckAgent)
 	if !ok {
