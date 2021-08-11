@@ -1,4 +1,4 @@
-package sync
+package history
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"

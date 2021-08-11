@@ -1,28 +1,29 @@
-package sync
+package history
 
 import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
 )
 
 func TestFindHighest(t *testing.T) {
-	sks, _ := generateNodes(4)
-	highest1 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+	sks, _ := sync.GenerateNodes(4)
+	highest1 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:      proto.RoundState_Decided,
 		Round:     1,
 		Lambda:    []byte("lambda"),
 		SeqNumber: 1,
 	})
-	highest2 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+	highest2 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:      proto.RoundState_Decided,
 		Round:     1,
 		Lambda:    []byte("lambda"),
 		SeqNumber: 1,
 	})
-	highestInvalid := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+	highestInvalid := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:      proto.RoundState_Decided,
 		Round:     1,
 		Lambda:    []byte("lambda"),
@@ -164,7 +165,7 @@ func TestFindHighest(t *testing.T) {
 			[]string{"2", "3"},
 			map[string]*proto.SignedMessage{
 				"2": highest1,
-				"3": multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+				"3": sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 					Type:      proto.RoundState_Decided,
 					Round:     1,
 					Lambda:    []byte("lambda"),
@@ -185,7 +186,7 @@ func TestFindHighest(t *testing.T) {
 					return nil
 				}
 			}
-			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, newTestNetwork(t, test.peers, 100,
+			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, sync.NewTestNetwork(t, test.peers, 100,
 				test.highestMap, test.errorMap, nil, nil), nil, test.validateMsg)
 			res, _, err := s.findHighestInstance()
 

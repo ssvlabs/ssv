@@ -1,8 +1,9 @@
-package sync
+package incoming
 
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestReqHandler_getHighestDecided(t *testing.T) {
-	ibftStorage := ibftStorage(t)
+	ibftStorage := sync.TestingIbftStorage(t)
 	handler := ReqHandler{
 		paginationMaxSize: 0,
 		identifier:        []byte{1, 2, 3, 4},
@@ -49,9 +50,9 @@ func TestReqHandler_getHighestDecided(t *testing.T) {
 }
 
 func TestTestNetwork_GetDecidedByRange(t *testing.T) {
-	sks, _ := generateNodes(4)
+	sks, _ := sync.GenerateNodes(4)
 
-	decided250Seq := decidedArr(t, 250, sks)
+	decided250Seq := sync.DecidedArr(t, 250, sks)
 
 	tests := []struct {
 		name           string
@@ -123,7 +124,7 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibftStorage := ibftStorage(t)
+			ibftStorage := sync.TestingIbftStorage(t)
 
 			// save decided
 			for _, d := range test.decidedStorage {
@@ -133,13 +134,13 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 			handler := ReqHandler{
 				paginationMaxSize: uint64(test.maxBatch),
 				identifier:        test.identifier,
-				network:           newTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil),
+				network:           sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil),
 				storage:           &ibftStorage,
 				logger:            zap.L(),
 			}
 
 			// stream
-			s := newTestStream("")
+			s := sync.NewTestStream("")
 
 			handler.handleGetDecidedReq(&network.SyncChanObj{
 				Msg: &network.SyncMessage{

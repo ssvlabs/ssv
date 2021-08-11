@@ -1,8 +1,9 @@
-package sync
+package history
 
 import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestFetchDecided(t *testing.T) {
-	sks, _ := generateNodes(4)
+	sks, _ := sync.GenerateNodes(4)
 	tests := []struct {
 		name           string
 		validatorPk    []byte
@@ -34,19 +35,19 @@ func TestFetchDecided(t *testing.T) {
 			[]uint64{1, 3, 3},
 			map[string][]*proto.SignedMessage{
 				"2": {
-					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:      proto.RoundState_Decided,
 						Round:     1,
 						Lambda:    []byte("lambda"),
 						SeqNumber: 1,
 					}),
-					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:      proto.RoundState_Decided,
 						Round:     1,
 						Lambda:    []byte("lambda"),
 						SeqNumber: 2,
 					}),
-					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:      proto.RoundState_Decided,
 						Round:     1,
 						Lambda:    []byte("lambda"),
@@ -67,19 +68,19 @@ func TestFetchDecided(t *testing.T) {
 			[]uint64{1, 3, 2},
 			map[string][]*proto.SignedMessage{
 				"2": {
-					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:      proto.RoundState_Decided,
 						Round:     1,
 						Lambda:    []byte("lambda"),
 						SeqNumber: 1,
 					}),
-					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:      proto.RoundState_Decided,
 						Round:     1,
 						Lambda:    []byte("lambda"),
 						SeqNumber: 2,
 					}),
-					multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+					sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 						Type:      proto.RoundState_Decided,
 						Round:     1,
 						Lambda:    []byte("lambda"),
@@ -115,7 +116,7 @@ func TestFetchDecided(t *testing.T) {
 			})
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
-			network := newTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, nil, test.decidedArr, nil)
+			network := sync.NewTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, nil, test.decidedArr, nil)
 			s := NewHistorySync(logger, test.validatorPk, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})

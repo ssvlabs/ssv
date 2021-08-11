@@ -5,12 +5,79 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 )
+
+// GenerateNodes generates randomly nodes
+func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
+	_ = bls.Init(bls.BLS12_381)
+	nodes := make(map[uint64]*proto.Node)
+	sks := make(map[uint64]*bls.SecretKey)
+	for i := 1; i <= cnt; i++ {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		nodes[uint64(i)] = &proto.Node{
+			IbftId: uint64(i),
+			Pk:     sk.GetPublicKey().Serialize(),
+		}
+		sks[uint64(i)] = sk
+	}
+	return sks, nodes
+}
+
+func DecidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey) []*proto.SignedMessage {
+	ret := make([]*proto.SignedMessage, 0)
+	for i := uint64(0); i <= maxSeq; i++ {
+		ret = append(ret, MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+			Type:      proto.RoundState_Decided,
+			Round:     1,
+			Lambda:    []byte("lambda"),
+			SeqNumber: i,
+		}))
+	}
+	return ret
+}
+
+func MultiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
+	bls.Init(bls.BLS12_381)
+
+	var agg *bls.Sign
+	for _, id := range ids {
+		signature, err := msg.Sign(sks[id])
+		require.NoError(t, err)
+		if agg == nil {
+			agg = signature
+		} else {
+			agg.Add(signature)
+		}
+	}
+
+	return &proto.SignedMessage{
+		Message:   msg,
+		Signature: agg.Serialize(),
+		SignerIds: ids,
+	}
+}
+
+func TestingIbftStorage(t *testing.T) collections.IbftStorage {
+	db, err := ssvstorage.GetStorageFactory(basedb.Options{
+		Type:   "badger-memory",
+		Logger: zap.L(),
+		Path:   "",
+	})
+	require.NoError(t, err)
+	return collections.NewIbft(db, zap.L(), "attestation")
+}
 
 type testNetwork struct {
 	t                      *testing.T
@@ -22,8 +89,8 @@ type testNetwork struct {
 	retError               error
 }
 
-// newTestNetwork returns a new test network instance
-func newTestNetwork(
+// NewTestNetwork returns a new test network instance
+func NewTestNetwork(
 	t *testing.T, peers []string,
 	maxBatch int,
 	highestDecidedReceived map[string]*proto.SignedMessage,
@@ -174,8 +241,8 @@ type testStream struct {
 	peer string
 }
 
-// newTestStream returns a new instance of test stream
-func newTestStream(remotePeer string) *testStream {
+// NewTestStream returns a new instance of test stream
+func NewTestStream(remotePeer string) *testStream {
 	return &testStream{
 		peer: remotePeer,
 		C:    make(chan []byte),

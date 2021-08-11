@@ -1,99 +1,34 @@
-package sync
+package history
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/bloxapp/ssv/ibft/sync"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
 )
 
-// generateNodes generates randomly nodes
-func generateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
-	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*proto.Node)
-	sks := make(map[uint64]*bls.SecretKey)
-	for i := 1; i <= cnt; i++ {
-		sk := &bls.SecretKey{}
-		sk.SetByCSPRNG()
-
-		nodes[uint64(i)] = &proto.Node{
-			IbftId: uint64(i),
-			Pk:     sk.GetPublicKey().Serialize(),
-		}
-		sks[uint64(i)] = sk
-	}
-	return sks, nodes
-}
-
-func decidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey) []*proto.SignedMessage {
-	ret := make([]*proto.SignedMessage, 0)
-	for i := uint64(0); i <= maxSeq; i++ {
-		ret = append(ret, multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
-			Type:      proto.RoundState_Decided,
-			Round:     1,
-			Lambda:    []byte("lambda"),
-			SeqNumber: i,
-		}))
-	}
-	return ret
-}
-
-func multiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
-	bls.Init(bls.BLS12_381)
-
-	var agg *bls.Sign
-	for _, id := range ids {
-		signature, err := msg.Sign(sks[id])
-		require.NoError(t, err)
-		if agg == nil {
-			agg = signature
-		} else {
-			agg.Add(signature)
-		}
-	}
-
-	return &proto.SignedMessage{
-		Message:   msg,
-		Signature: agg.Serialize(),
-		SignerIds: ids,
-	}
-}
-
-func ibftStorage(t *testing.T) collections.IbftStorage {
-	db, err := ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: zap.L(),
-		Path:   "",
-	})
-	require.NoError(t, err)
-	return collections.NewIbft(db, zap.L(), "attestation")
-}
-
 func TestSync(t *testing.T) {
-	sks, _ := generateNodes(4)
-	decided0 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+	sks, _ := sync.GenerateNodes(4)
+	decided0 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:      proto.RoundState_Decided,
 		Round:     1,
 		Lambda:    []byte("lambda"),
 		SeqNumber: 0,
 	})
-	decided1 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+	decided1 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:      proto.RoundState_Decided,
 		Round:     1,
 		Lambda:    []byte("lambda"),
 		SeqNumber: 1,
 	})
-	decided2 := multiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+	decided2 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 		Type:      proto.RoundState_Decided,
 		Round:     1,
 		Lambda:    []byte("lambda"),
 		SeqNumber: 2,
 	})
-	decided250Seq := decidedArr(t, 250, sks)
+	decided250Seq := sync.DecidedArr(t, 250, sks)
 
 	tests := []struct {
 		name               string
@@ -246,8 +181,8 @@ func TestSync(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			storage := ibftStorage(t)
-			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, newTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil), &storage, func(msg *proto.SignedMessage) error {
+			storage := sync.TestingIbftStorage(t)
+			s := NewHistorySync(zap.L(), test.valdiatorPK, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil), &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			err := s.Start()
