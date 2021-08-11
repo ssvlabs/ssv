@@ -30,6 +30,7 @@ const (
 
 var (
 	ibftSyncEnabled = false
+	syncWhitelist   []string
 )
 
 // Exporter represents the main interface of this package
@@ -88,7 +89,7 @@ func New(opts Options) Exporter {
 		eth1Client:       opts.Eth1Client,
 		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
 			Ctx:      opts.Ctx,
-			Logger:   opts.Logger.With(zap.String("component", "tasks/dispatcher")),
+			Logger:   opts.Logger.With(zap.String("component", "ibftDispatcher")),
 			Interval: ibftSyncDispatcherTick,
 		}),
 		ws:        opts.WS,
@@ -302,17 +303,30 @@ func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*stor
 	return &vi, nil
 }
 
+func (exp *exporter) shouldSyncIbft(pubkey string) bool {
+	for _, pk := range syncWhitelist {
+		if pubkey == pk {
+			return true
+		}
+	}
+	return ibftSyncEnabled
+}
+
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
-	if !ibftSyncEnabled {
+	if validatorPubKey == nil {
+		return errors.New("empty validator pubkey")
+	}
+	pubkey := validatorPubKey.SerializeToHexStr()
+	if !exp.shouldSyncIbft(pubkey) {
 		return nil
 	}
 	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
-	exp.logger.Debug("syncing ibft data for validator",
-		zap.String("pubKey", validatorPubKey.SerializeToHexStr()))
-	ibftInstance := ibft.NewIbftReadOnly(ibft.ReaderOptions{
+	exp.logger.Debug("ibft sync was triggered",
+		zap.String("pubKey", pubkey))
+	ibftReader := ibft.NewIbftReadOnly(ibft.ReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
 		Network:        exp.network,
@@ -320,13 +334,12 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		ValidatorShare: validatorShare,
 	})
 
-	t := newIbftSyncTask(ibftInstance, validatorPubKey.SerializeToHexStr())
+	t := newIbftSyncTask(ibftReader, pubkey)
 	exp.ibftDisptcher.Queue(t)
 
 	return nil
 }
 
 func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
-	tid := fmt.Sprintf("ibft:sync/%s", pubKeyHex)
-	return *tasks.NewTask(ibftReader.Sync, tid)
+	return *tasks.NewTask(ibftReader.Sync, fmt.Sprintf("ibft:sync/%s", pubKeyHex))
 }

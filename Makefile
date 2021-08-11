@@ -100,5 +100,5 @@ start-boot-node:
 
 .PHONY: start-exporter
 start-exporter:
-	@echo "Running start-exporter"
+	@echo "Running exporter on address: ${HOST_ADDRESS}"
 	${BUILD_PATH} start-exporter ${NODE_COMMAND}
