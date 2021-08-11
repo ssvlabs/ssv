@@ -45,7 +45,7 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 			}(nodes[i-1])
 		} else {
 			go func(node ibft.IBFT, index uint64) {
-				time.Sleep(time.Second * 10)
+				time.Sleep(time.Second * 13)
 				node.Init()
 				r.startNode(node, index)
 			}(nodes[i-1], i)

@@ -13,20 +13,6 @@ func (i *Instance) changeRoundPartialQuorum(msgs []*proto.SignedMessage) (quorum
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
 
-//func (i *Instance) groupPartialChangeRoundMsgs(msgs []*network.Message) map[uint64][]*proto.SignedMessage {
-//	groupedMsgs := make(map[uint64][]*proto.SignedMessage)
-//	// validate and group change round messages
-//	for _, msg := range msgs {
-//		if err := i.changeRoundMsgValidationPipeline().Run(msg.SignedMessage); err == nil {
-//			if _, found := groupedMsgs[msg.SignedMessage.Message.Round]; !found {
-//				groupedMsgs[msg.SignedMessage.Message.Round] = make([]*proto.SignedMessage, 0)
-//			}
-//			groupedMsgs[msg.SignedMessage.Message.Round] = append(groupedMsgs[msg.SignedMessage.Message.Round], msg.SignedMessage)
-//		}
-//	}
-//	return groupedMsgs
-//}
-
 func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowestChangeRound uint64) {
 	lowestChangeRound = uint64(100000) // just a random really large round number
 	relevantMsgs := make([]*proto.SignedMessage, 0)

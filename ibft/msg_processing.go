@@ -48,10 +48,10 @@ func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
 		if err != nil {
 			return false, err
 		}
-		if found {
-			// We delete all change round messages as we already acted upon them so they have no use.
-			i.MsgQueue.DeleteMessagesWithIds(msgsIds)
-		}
+		//if found {
+		//	// We delete all change round messages as we already acted upon them so they have no use.
+		//	i.MsgQueue.DeleteMessagesWithIds(msgsIds)
+		//}
 		return found, err
 	}
 	return false, nil

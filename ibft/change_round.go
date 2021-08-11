@@ -60,7 +60,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		// change round if quorum reached
 		if !quorum {
-			i.Logger.Info("change round - quorum not reached", zap.Int("msgsCount", msgsCount), zap.Int("committeeSize", committeeSize))
+			i.Logger.Info("change round - quorum not reached", zap.Uint64("round", signedMessage.Message.Round), zap.Int("msgsCount", msgsCount), zap.Int("committeeSize", committeeSize))
 			return nil
 		}
 
@@ -196,6 +196,7 @@ func (i *Instance) broadcastChangeRound() error {
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 		return err
 	}
+	i.Logger.Info("broadcasted change round", zap.Uint64("round", broadcastMsg.Round))
 	return nil
 }
 
