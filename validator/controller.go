@@ -106,7 +106,7 @@ func (c *controller) setupValidators() map[string]*Validator {
 	}
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
-		return nil
+		return c.validatorsMap
 	}
 	c.logger.Info("starting validators setup...")
 	for _, validatorShare := range shares {
