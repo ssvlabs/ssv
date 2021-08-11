@@ -96,6 +96,9 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get duties from beacon")
 	}
+	if len(duties) == 0 {
+		return nil
+	}
 	// print the newly fetched duties
 	var toPrint []serializedDuty
 	for _, d := range duties {
