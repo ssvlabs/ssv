@@ -19,6 +19,7 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 	if i.currentInstance != nil {
 		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State.SeqNumber)
 	}
+
 	highestKnown, err := i.highestKnownDecided()
 	if err != nil {
 		return err
@@ -34,6 +35,10 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 	}
 	if opts.SeqNumber != highestSeqKnown+1 {
 		return errors.New("instance seq invalid")
+	}
+
+	if opts.RequireMinPeers {
+		i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	}
 
 	return nil

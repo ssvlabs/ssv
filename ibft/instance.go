@@ -26,13 +26,14 @@ type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *storage.Share
 	//Me             *proto.Node
-	Network        network.Network
-	Queue          *msgqueue.MessageQueue
-	ValueCheck     valcheck.ValueCheck
-	LeaderSelector leader.Selector
-	Config         *proto.InstanceConfig
-	Lambda         []byte
-	SeqNumber      uint64
+	Network         network.Network
+	Queue           *msgqueue.MessageQueue
+	ValueCheck      valcheck.ValueCheck
+	LeaderSelector  leader.Selector
+	Config          *proto.InstanceConfig
+	Lambda          []byte
+	SeqNumber       uint64
+	RequireMinPeers bool
 }
 
 // Instance defines the instance attributes

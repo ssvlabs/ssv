@@ -17,11 +17,12 @@ import (
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
-	Logger         *zap.Logger
-	ValueCheck     valcheck.ValueCheck
-	SeqNumber      uint64
-	Value          []byte
-	ValidatorShare *storage.Share
+	Logger          *zap.Logger
+	ValueCheck      valcheck.ValueCheck
+	SeqNumber       uint64
+	Value           []byte
+	ValidatorShare  *storage.Share
+	RequireMinPeers bool
 }
 
 // InstanceResult is a struct holding the result of a single iBFT instance
