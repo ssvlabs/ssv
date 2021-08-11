@@ -48,7 +48,7 @@ func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.
 	return [][]*proto.SignedMessage{
 		{ // f+1 points to 2
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
-			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 2, 2),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 3, 2),
 		},
 		{ // f+1 points to 3
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 0, 1),
@@ -60,11 +60,11 @@ func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 0, 1),
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 0, 2),
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 4, 2),
-			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 10, 1),
-			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 10, 2),
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 5, 1),
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 6, 2),
-			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 4, 1),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 7, 1),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 8, 2),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 9, 1),
 		},
 		{ // f+1 points not pointing anywhere
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 0, 1),
