@@ -11,20 +11,40 @@ import (
 	"go.uber.org/zap"
 )
 
-// Iibft is an interface for persisting chain data
-type Iibft interface {
+type currentInstanceStorage interface {
 	// SaveCurrentInstance saves the state for the current running (not yet decided) instance
 	SaveCurrentInstance(identifier []byte, state *proto.State) error
 	// GetCurrentInstance returns the state for the current running (not yet decided) instance
 	GetCurrentInstance(identifier []byte) (*proto.State, error)
+}
+
+type decidedStorage interface {
 	// SaveDecided saves a signed message for an ibft instance with decided justification
 	SaveDecided(signedMsg *proto.SignedMessage) error
 	// GetDecided returns a signed message for an ibft instance which decided by identifier
 	GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error)
+}
+
+type highestDecidedStorage interface {
 	// SaveHighestDecidedInstance saves a signed message for an ibft instance which is currently highest
 	SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error
 	// GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
 	GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error)
+}
+
+type lastKnownStorage interface {
+	// SaveLastKnowPeerMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
+	SaveLastKnowPeerMsgs(identifier []byte, msgs []*proto.SignedMessage) error
+	// GetLastKnownPeerMsgs returns whatever was stored by SaveLastKnowPeerMsgs
+	GetLastKnownPeerMsgs(identifier []byte) ([]*proto.SignedMessage, error)
+}
+
+// Iibft is an interface for persisting chain data
+type Iibft interface {
+	currentInstanceStorage
+	decidedStorage
+	highestDecidedStorage
+	lastKnownStorage
 }
 
 // IbftStorage struct
@@ -106,6 +126,28 @@ func (i *IbftStorage) GetHighestDecidedInstance(identifier []byte) (*proto.Signe
 	}
 	ret := &proto.SignedMessage{}
 	if err := json.Unmarshal(val, ret); err != nil {
+		return nil, errors.Wrap(err, "un-marshaling error")
+	}
+	return ret, nil
+}
+
+// SaveLastKnowPeerMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
+func (i *IbftStorage) SaveLastKnowPeerMsgs(identifier []byte, msgs []*proto.SignedMessage) error {
+	value, err := json.Marshal(msgs)
+	if err != nil {
+		return errors.Wrap(err, "marshaling error")
+	}
+	return i.save(value, "lastKnownMsgs", identifier)
+}
+
+// GetLastKnownPeerMsgs returns whatever was stored by SaveLastKnowPeerMsgs
+func (i *IbftStorage) GetLastKnownPeerMsgs(identifier []byte) ([]*proto.SignedMessage, error) {
+	val, err := i.get("lastKnownMsgs", identifier)
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]*proto.SignedMessage, 0)
+	if err := json.Unmarshal(val, &ret); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling error")
 	}
 	return ret, nil

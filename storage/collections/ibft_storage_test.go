@@ -13,10 +13,10 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
 	err := storage.SaveDecided(&proto.SignedMessage{
 		Message: &proto.Message{
-			Type:        proto.RoundState_Decided,
-			Round:       2,
-			Lambda:      []byte{1, 2, 3, 4},
-			SeqNumber:   1,
+			Type:      proto.RoundState_Decided,
+			Round:     2,
+			Lambda:    []byte{1, 2, 3, 4},
+			SeqNumber: 1,
 		},
 		Signature: []byte{1, 2, 3, 4},
 		SignerIds: []uint64{1, 2, 3},
@@ -56,10 +56,10 @@ func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
 	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
 	err := storage.SaveHighestDecidedInstance(&proto.SignedMessage{
 		Message: &proto.Message{
-			Type:        proto.RoundState_Decided,
-			Round:       2,
-			Lambda:      []byte{1, 2, 3, 4},
-			SeqNumber:   1,
+			Type:      proto.RoundState_Decided,
+			Round:     2,
+			Lambda:    []byte{1, 2, 3, 4},
+			SeqNumber: 1,
 		},
 		Signature: []byte{1, 2, 3, 4},
 		SignerIds: []uint64{1, 2, 3},
@@ -75,6 +75,44 @@ func TestIbftStorage_GetHighestDecidedInstance(t *testing.T) {
 	// not found
 	_, err = storage.GetHighestDecidedInstance([]byte{1, 2, 3, 3})
 	require.EqualError(t, err, kv.EntryNotFoundError)
+}
+
+func TestIbftStorage_SaveLastKnownPeerMsgs(t *testing.T) {
+	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
+	msg1 := &proto.SignedMessage{
+		Message: &proto.Message{
+			Type: proto.RoundState_Decided,
+		},
+	}
+	msg2 := &proto.SignedMessage{
+		Message: &proto.Message{
+			Type: proto.RoundState_Decided,
+		},
+	}
+	msg3 := &proto.SignedMessage{
+		Message: &proto.Message{
+			Type: proto.RoundState_Decided,
+		},
+	}
+
+	t.Run("save 3 msgs", func(t *testing.T) {
+		err := storage.SaveLastKnowPeerMsgs([]byte{1, 2, 3, 4}, []*proto.SignedMessage{msg1, msg2, msg3})
+		require.NoError(t, err)
+		res, err := storage.GetLastKnownPeerMsgs([]byte{1, 2, 3, 4})
+		require.NoError(t, err)
+		require.Len(t, res, 3)
+		require.EqualValues(t, res[0].Message.Type, msg1.Message.Type)
+		require.EqualValues(t, res[1].Message.Type, msg2.Message.Type)
+		require.EqualValues(t, res[2].Message.Type, msg3.Message.Type)
+	})
+
+	t.Run("save nil", func(t *testing.T) {
+		err := storage.SaveLastKnowPeerMsgs([]byte{1, 2, 3, 4}, nil)
+		require.NoError(t, err)
+		res, err := storage.GetLastKnownPeerMsgs([]byte{1, 2, 3, 4})
+		require.NoError(t, err)
+		require.Len(t, res, 0)
+	})
 }
 
 func newInMemDb() basedb.IDb {

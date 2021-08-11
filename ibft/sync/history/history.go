@@ -82,6 +82,14 @@ func (s *Sync) Start() error {
 		}
 	}
 
+	lastMsgs, err := s.getPeersLastMsgs()
+	if err != nil {
+		return errors.Wrap(err, "could not fetch peers last msg during sync")
+	}
+	if err := s.ibftStorage.SaveLastKnowPeerMsgs(s.identifier, lastMsgs); err != nil {
+		return errors.Wrap(err, "could not save last msgs during sync")
+	}
+
 	s.logger.Info("finished syncing", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
 	return nil
 }
