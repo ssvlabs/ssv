@@ -117,7 +117,7 @@ func TestFetchDecided(t *testing.T) {
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
 			network := sync.NewTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, nil, test.decidedArr, nil)
-			s := NewHistorySync(logger, test.validatorPk, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
+			s := New(logger, test.validatorPk, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			res, err := s.fetchValidateAndSaveInstances(test.fromPeer, test.rangeParams[0], test.rangeParams[1])

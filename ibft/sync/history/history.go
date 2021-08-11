@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// HistorySync is responsible for syncing and iBFT instance when needed by
+// Sync is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
-type HistorySync struct {
+type Sync struct {
 	logger              *zap.Logger
 	publicKey           []byte
 	network             network.Network
@@ -23,9 +23,9 @@ type HistorySync struct {
 	paginationMaxSize uint64
 }
 
-// NewHistorySync returns a new instance of HistorySync
-func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *HistorySync {
-	return &HistorySync{
+// New returns a new instance of Sync
+func New(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
+	return &Sync{
 		logger:              logger,
 		publicKey:           publicKey,
 		identifier:          identifier,
@@ -37,7 +37,7 @@ func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, net
 }
 
 // Start the sync
-func (s *HistorySync) Start() error {
+func (s *Sync) Start() error {
 	start := time.Now()
 	// fetch remote highest
 	remoteHighest, fromPeer, err := s.findHighestInstance()

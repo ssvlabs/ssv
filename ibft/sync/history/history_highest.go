@@ -11,7 +11,7 @@ import (
 )
 
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
-func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error) {
+func (s *Sync) findHighestInstance() (*proto.SignedMessage, string, error) {
 	// pick up to 4 peers
 	// TODO - why 4? should be set as param?
 	// TODO select peers by quality/ score?
@@ -61,7 +61,7 @@ func (s *HistorySync) findHighestInstance() (*proto.SignedMessage, string, error
 }
 
 // getHighestDecidedFromPeers receives highest decided messages from peers
-func (s *HistorySync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
+func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
 	var results []*network.SyncMessage
 	var wg sync.WaitGroup
 	var lock sync.Mutex

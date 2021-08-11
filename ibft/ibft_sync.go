@@ -1,7 +1,7 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/sync/history"
+	historySync "github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// processSyncQueueMessages is listen for all the ibft sync msg's and process them
+// processSyncQueueMessages is listen for all the ibft historySync msg's and process them
 func (i *ibftImpl) processSyncQueueMessages() {
 	go func() {
 		for {
@@ -29,7 +29,7 @@ func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 	go s.Process(msg)
 }
 
-// SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
+// SyncIBFT will fetch best known decided message (highest sequence) from the network and historySync to it.
 func (i *ibftImpl) SyncIBFT() {
 	i.logger.Info("syncing iBFT..")
 
@@ -38,10 +38,10 @@ func (i *ibftImpl) SyncIBFT() {
 		i.currentInstance.Stop()
 	}
 
-	// sync
-	s := history.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
+	// historySync
+	s := historySync.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	err := s.Start()
 	if err != nil {
-		i.logger.Fatal("history sync failed", zap.Error(err))
+		i.logger.Fatal("history historySync failed", zap.Error(err))
 	}
 }

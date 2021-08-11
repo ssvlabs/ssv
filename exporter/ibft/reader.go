@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/sync/history"
+	historySync "github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -68,7 +68,7 @@ func (r *reader) Sync() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
-	hs := history.NewHistorySync(r.logger, r.validatorShare.PublicKey.Serialize(), nil, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
+	hs := historySync.New(r.logger, r.validatorShare.PublicKey.Serialize(), nil, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
 	return hs.Start()
 }
 
