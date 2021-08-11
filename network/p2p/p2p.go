@@ -303,6 +303,10 @@ func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return ret, nil
 }
 
+func (n *p2pNetwork) MaxBatch() uint64 {
+	return n.cfg.MaxBatchResponse
+}
+
 // getTopicName return formatted topic name
 func getTopicName(topicName string) string {
 	return fmt.Sprintf(topicFmt, topicName)

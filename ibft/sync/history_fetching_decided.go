@@ -22,9 +22,15 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 			return highestSaved, nil
 		}
 
+		// conform to max batch
+		batchMaxSeq := start + s.paginationMaxSize
+		if batchMaxSeq > endSeq {
+			batchMaxSeq = endSeq
+		}
+
 		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
 			Lambda: s.identifier,
-			Params: []uint64{start, endSeq},
+			Params: []uint64{start, batchMaxSeq},
 			Type:   network.Sync_GetInstanceRange,
 		})
 		if err != nil {
@@ -41,7 +47,7 @@ func (s *HistorySync) fetchValidateAndSaveInstances(fromPeer string, startSeq ui
 		}
 
 		// validate and save
-		for i := start; i <= endSeq; i++ {
+		for i := start; i <= batchMaxSeq; i++ {
 			msg, found := foundSeqs[i]
 			if !found {
 				failCount++

@@ -2,11 +2,12 @@ package sync
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"testing"
 	"time"
 )
@@ -133,7 +134,15 @@ func (n *testNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
 func (n *testNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	panic("implement")
+	msgBytes, err := json.Marshal(network.Message{
+		SyncMessage: msg,
+		Type:        network.NetworkMsg_SyncType,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal message")
+	}
+	_, err = stream.Write(msgBytes)
+	return err
 }
 
 func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
@@ -155,34 +164,44 @@ func (n *testNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.peers, nil
 }
 
-//type testStorage struct {
-//	highestDecided *proto.SignedMessage
-//}
-//
-//func NewTestStorage(highestDecided *proto.SignedMessage) *testStorage {
-//	return &testStorage{highestDecided: highestDecided}
-//}
-//
-//func (s *testStorage) SaveCurrentInstance(state *proto.State) error {
-//	return nil
-//}
-//
-//func (s *testStorage) GetCurrentInstance(pk []byte) (*proto.State, error) {
-//	return nil, nil
-//}
-//
-//func (s *testStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
-//	return nil
-//}
-//
-//func (s *testStorage) GetDecided(pk []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-//	return nil, nil
-//}
-//
-//func (s *testStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error {
-//	return nil
-//}
-//
-//func (s *testStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
-//	return s.highestDecided, nil
-//}
+// MaxBatch returns max batch size
+func (n *testNetwork) MaxBatch() uint64 {
+	return uint64(n.maxBatch)
+}
+
+type testStream struct {
+	C    chan []byte
+	peer string
+}
+
+func NewTestStream(remotePeer string) *testStream {
+	return &testStream{
+		peer: remotePeer,
+		C:    make(chan []byte),
+	}
+}
+
+func (s *testStream) Read(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+func (s *testStream) Write(p []byte) (n int, err error) {
+	go func() {
+		time.After(time.Millisecond * 100)
+		s.C <- p
+	}()
+
+	return 0, nil
+}
+
+func (s *testStream) Close() error {
+	return nil
+}
+
+func (s *testStream) CloseWrite() error {
+	return nil
+}
+
+func (s *testStream) RemotePeer() string {
+	return s.peer
+}

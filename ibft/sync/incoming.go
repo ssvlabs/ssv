@@ -22,7 +22,7 @@ type ReqHandler struct {
 // NewReqHandler returns a new instance of ReqHandler
 func NewReqHandler(logger *zap.Logger, identifier []byte, network network.Network, storage collections.Iibft) *ReqHandler {
 	return &ReqHandler{
-		paginationMaxSize: 25, // TODO - change to be a param
+		paginationMaxSize: network.MaxBatch(),
 		logger:            logger,
 		identifier:        identifier,
 		network:           network,
@@ -50,9 +50,25 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 		panic("implement")
 	}
 
-	// enforce max page size
+	// get decided msgs
 	startSeq := msg.Msg.Params[0]
 	endSeq := msg.Msg.Params[1]
+	ret := s.getDecidedMsgs(startSeq, endSeq)
+
+	retMsg := &network.SyncMessage{
+		SignedMessages: ret,
+		Lambda:         s.identifier,
+		Type:           network.Sync_GetInstanceRange,
+	}
+	if err := s.network.RespondToGetDecidedByRange(msg.Stream, retMsg); err != nil {
+		s.logger.Error("failed to send get decided by range response", zap.Error(err))
+	}
+}
+
+// getDecidedMsgs will return an array of decided msgs, could return 0 if none were found.
+// Non found sequence numbers will not be returned
+func (s *ReqHandler) getDecidedMsgs(startSeq, endSeq uint64) []*proto.SignedMessage {
+	// enforce max page
 	if endSeq-startSeq > s.paginationMaxSize {
 		endSeq = startSeq + s.paginationMaxSize
 	}
@@ -68,14 +84,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 		ret = append(ret, decidedMsg)
 	}
 
-	retMsg := &network.SyncMessage{
-		SignedMessages: ret,
-		Lambda:         s.identifier,
-		Type:           network.Sync_GetInstanceRange,
-	}
-	if err := s.network.RespondToGetDecidedByRange(msg.Stream, retMsg); err != nil {
-		s.logger.Error("failed to send get decided by range response", zap.Error(err))
-	}
+	return ret
 }
 
 // handleGetHighestReq will return the highest known decided msg.

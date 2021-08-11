@@ -19,6 +19,8 @@ type HistorySync struct {
 	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
 	identifier          []byte
+	// paginationMaxSize is the max number of returned elements in a single response
+	paginationMaxSize uint64
 }
 
 // NewHistorySync returns a new instance of HistorySync
@@ -30,6 +32,7 @@ func NewHistorySync(logger *zap.Logger, publicKey []byte, identifier []byte, net
 		network:             network,
 		validateDecidedMsgF: validateDecidedMsgF,
 		ibftStorage:         ibftStorage,
+		paginationMaxSize:   network.MaxBatch(),
 	}
 }
 
