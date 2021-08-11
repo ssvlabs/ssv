@@ -1,5 +1,10 @@
 package metrics
 
+import (
+	"go.uber.org/zap"
+	"time"
+)
+
 // HealthCheckAgent represent an health-check agent
 type HealthCheckAgent interface {
 	HealthCheck() []string
@@ -17,4 +22,21 @@ func ProcessAgents(agents []HealthCheckAgent) []string {
 	}
 
 	return errs
+}
+
+func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
+	agent, ok := component.(HealthCheckAgent)
+	if !ok {
+		logger.Warn("component does not implement HealthCheckAgent interface")
+		return
+	}
+	for {
+		errs := agent.HealthCheck()
+		if len(errs) == 0 {
+			break
+		}
+		logger.Warn(name + " is not healthy, trying again in 1sec")
+		time.Sleep(1 * time.Second)
+	}
+	logger.Debug(name + " is healthy")
 }
