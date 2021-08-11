@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"fmt"
 	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api/v1"
@@ -9,6 +10,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
 	"github.com/prysmaticlabs/prysm/shared/timeutils"
@@ -29,6 +31,9 @@ type goClient struct {
 	client   client.Service
 	graffiti []byte
 }
+
+// verifies that the client implements HealthCheckAgent
+var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(opt beacon.Options) (beacon.Beacon, error) {
@@ -60,23 +65,23 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 }
 
 // HealthCheck provides health status of beacon node
-func (gc *goClient) HealthCheck() error {
+func (gc *goClient) HealthCheck() []string {
 	if gc.client == nil {
-		return errors.New("not connected to beacon node")
+		return []string{"not connected to beacon node"}
 	}
 	if provider, isProvider := gc.client.(eth2client.NodeSyncingProvider); isProvider {
 		ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
 		defer cancel()
 		syncState, err := provider.NodeSyncing(ctx)
 		if err != nil {
-			return errors.Wrap(err, "could not get beacon node sync state")
+			return []string{"could not get beacon node sync state"}
 		}
 		if syncState != nil && syncState.IsSyncing {
-			return errors.Errorf("eth1 node is currently syncing: head=%d, distance=%d",
-				syncState.HeadSlot, syncState.SyncDistance)
+			return []string{fmt.Sprintf("eth1 node is currently syncing: head=%d, distance=%d",
+				syncState.HeadSlot, syncState.SyncDistance)}
 		}
 	}
-	return nil
+	return []string{}
 }
 
 func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {

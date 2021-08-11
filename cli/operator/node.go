@@ -135,6 +135,9 @@ var StartNodeCmd = &cobra.Command{
 
 		operatorNode = operator.New(cfg.SSVOptions)
 
+		metrics.WaitUntilHealthy(Logger, cfg.SSVOptions.Eth1Client, "eth1 node")
+		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
+
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}

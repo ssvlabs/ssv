@@ -103,6 +103,8 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode = exporter.New(*exporterOptions)
 
+		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
+
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
