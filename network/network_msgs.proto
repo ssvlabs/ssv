@@ -22,6 +22,8 @@ enum Sync {
   GetHighestType = 0;
   // GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
   GetInstanceRange = 1;
+  // GetCurrentInstance is a request from peers to return their current running instance details
+  GetCurrentInstance = 2;
 }
 
 message SyncMessage {

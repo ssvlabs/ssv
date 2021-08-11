@@ -144,3 +144,24 @@ func (n *p2pNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 
 	return ls.syncCh
 }
+
+// GetCurrentInstance returns the latest msg sent from a running instance
+func (n *p2pNetwork) GetCurrentInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	peerID, err := peerFromString(peerStr)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := n.sendAndReadSyncResponse(peerID, msg)
+	if err != nil || res == nil {
+		return nil, err
+	}
+	return res.SyncMessage, nil
+}
+
+// RespondToGetCurrentInstance responds to a GetCurrentInstance
+func (n *p2pNetwork) RespondToGetCurrentInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+	msg.FromPeerID = n.host.ID().Pretty() // critical
+	_, err := n.sendSyncMessage(stream, "", msg)
+	return err
+}

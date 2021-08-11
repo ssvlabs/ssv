@@ -169,6 +169,30 @@ func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *netwo
 	return nil
 }
 
+// GetCurrentInstance returns the latest msg sent from a running instance
+func (n *Local) GetCurrentInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if toChan, found := n.syncPeers[peerStr]; found {
+		stream := NewLocalStream(msg.FromPeerID, peerStr)
+		go func() {
+			toChan <- &network.SyncChanObj{
+				Msg:    msg,
+				Stream: stream,
+			}
+		}()
+
+		ret := <-stream.ReceiveChan
+		return ret, nil
+	}
+	return nil, errors.New("could not find peer")
+}
+
+// RespondToGetCurrentInstance responds to a GetCurrentInstance
+func (n *Local) RespondToGetCurrentInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+	msg.FromPeerID = string(n.localPeerID)
+	_, _ = stream.(*Stream).WriteSynMsg(msg)
+	return nil
+}
+
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
 func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	return nil

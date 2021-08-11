@@ -85,3 +85,16 @@ func (s *Sync) Start() error {
 	s.logger.Info("finished syncing", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
 	return nil
 }
+
+func (s *Sync) getPeers(maxPeerCount int) ([]string, error) {
+	// TODO select peers by quality/ score?
+	// TODO - should be changed to support multi duty
+	usedPeers, err := s.network.AllPeers(s.publicKey)
+	if err != nil {
+		return nil, err
+	}
+	if len(usedPeers) > maxPeerCount {
+		usedPeers = usedPeers[:maxPeerCount]
+	}
+	return usedPeers, nil
+}

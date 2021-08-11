@@ -70,6 +70,12 @@ type Network interface {
 	// RespondToGetDecidedByRange responds to a GetDecidedByRange
 	RespondToGetDecidedByRange(stream SyncStream, msg *SyncMessage) error
 
+	// GetCurrentInstance returns the latest msg sent from a running instance
+	GetCurrentInstance(peerStr string, msg *SyncMessage) (*SyncMessage, error)
+
+	// RespondToGetCurrentInstance responds to a GetCurrentInstance
+	RespondToGetCurrentInstance(stream SyncStream, msg *SyncMessage) error
+
 	// ReceivedSyncMsgChan returns the channel for sync messages
 	ReceivedSyncMsgChan() <-chan *SyncChanObj
 

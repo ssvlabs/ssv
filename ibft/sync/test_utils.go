@@ -212,6 +212,16 @@ func (n *testNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg 
 	return err
 }
 
+// GetCurrentInstance returns the latest msg sent from a running instance
+func (n *testNetwork) GetCurrentInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	return nil, nil
+}
+
+// RespondToGetCurrentInstance responds to a GetCurrentInstance
+func (n *testNetwork) RespondToGetCurrentInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+	return nil
+}
+
 func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	return nil
 }

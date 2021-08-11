@@ -52,6 +52,7 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
+	lastBroadcastedMsg  *proto.SignedMessage
 
 	// event loop
 	eventQueue eventqueue.EventQueue
@@ -70,6 +71,7 @@ type Instance struct {
 	stageChangedChansLock sync.Mutex
 	stageLock             sync.Mutex
 	stateLock             sync.Mutex
+	lastMsgLock           sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -106,6 +108,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stageLock:             sync.Mutex{},
 		stageChangedChansLock: sync.Mutex{},
 		stateLock:             sync.Mutex{},
+		lastMsgLock:           sync.RWMutex{},
 	}
 }
 
@@ -288,5 +291,20 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		i.ChangeRoundMessages.AddMessage(signedMessage)
 	}
 
+	i.setLastBroadcastedMsg(signedMessage)
+
 	return nil
+}
+
+func (i *Instance) setLastBroadcastedMsg(msg *proto.SignedMessage) {
+	i.lastMsgLock.Lock()
+	defer i.lastMsgLock.Unlock()
+	i.lastBroadcastedMsg = msg
+}
+
+// LastBroadcastedMsg returns the latest broadcasted msg from the instance
+func (i *Instance) LastBroadcastedMsg() *proto.SignedMessage {
+	i.lastMsgLock.RLock()
+	defer i.lastMsgLock.RUnlock()
+	return i.lastBroadcastedMsg
 }
