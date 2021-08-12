@@ -2,35 +2,54 @@ package ibft
 
 import (
 	"bytes"
+	"errors"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"go.uber.org/zap"
 	"time"
 )
 
-// waitForMinPeerCount will wait until enough peers joined the topic
+// waitForMinPeers will wait until enough peers joined the topic
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
-func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
-	intervalLimit := 65 * time.Second
-	tasks.ExecWithInterval(func(lastTick time.Duration) (bool, bool) {
-		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
-		if err != nil {
-			i.logger.Error("failed fetching peers", zap.Error(err))
-			// continue without increasing interval
-			return false, true
-		}
-
-		if len(peers) >= minPeerCount {
-			// stopped interval if we found enough peers
+func (i *ibftImpl) waitForMinPeerCount(minPeerCount int, stopAtLimit bool) error {
+	start := 1 * time.Second
+	limit := 64 * time.Second
+	interval := start
+	for {
+		ok, n := i.haveMinPeers(minPeerCount)
+		if ok {
 			i.logger.Info("found enough peers",
-				zap.Int("current peer count", len(peers)))
-			return true, false
+				zap.Int("current peer count", n))
+			break
 		}
-		i.logger.Info("waiting for min peer count",
-			zap.Int("current peer count", len(peers)),
-			zap.Int64("last interval ms", lastTick.Milliseconds()))
-		return false, false
-	}, time.Second, intervalLimit)
+		i.logger.Info("waiting for min peers",
+			zap.Int("current peer count", n))
+
+		time.Sleep(interval)
+
+		interval *= 2
+		if stopAtLimit && interval == limit {
+			return errors.New("could not find peers")
+		}
+		interval %= limit
+		if interval == 0 {
+			interval = start
+		}
+	}
+	return nil
+}
+
+// haveMinPeers checks that there are at least <count> connected peers
+func (i *ibftImpl) haveMinPeers(count int) (bool, int) {
+	peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
+	if err != nil {
+		i.logger.Error("failed fetching peers", zap.Error(err))
+		return false, 0
+	}
+	n := len(peers)
+	if len(peers) >= count {
+		return true, n
+	}
+	return false, n
 }
 
 func (i *ibftImpl) listenToNetworkMessages() {
