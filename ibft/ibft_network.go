@@ -8,9 +8,18 @@ import (
 	"time"
 )
 
+func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
+	// warmup to avoid network errors
+	time.Sleep(500 * time.Millisecond)
+
+	if err := i.waitForMinPeers(minPeerCount, false); err != nil {
+		i.logger.Warn("could not find min peers")
+	}
+}
+
 // waitForMinPeers will wait until enough peers joined the topic
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
-func (i *ibftImpl) waitForMinPeerCount(minPeerCount int, stopAtLimit bool) error {
+func (i *ibftImpl) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 	start := 1 * time.Second
 	limit := 64 * time.Second
 	interval := start

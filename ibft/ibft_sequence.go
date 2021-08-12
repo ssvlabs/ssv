@@ -38,7 +38,7 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 	}
 
 	if opts.RequireMinPeers {
-		if err := i.waitForMinPeerCount(2, true); err != nil {
+		if err := i.waitForMinPeers(2, true); err != nil {
 			return err
 		}
 	}

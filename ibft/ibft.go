@@ -2,9 +2,8 @@ package ibft
 
 import (
 	"github.com/pkg/errors"
-	"sync"
-
 	"go.uber.org/zap"
+	"sync"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -95,7 +94,7 @@ func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
-	i.waitForMinPeerCount(2, false) // minimum of 3 validators (the current + 2)
+	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
