@@ -77,6 +77,7 @@ type Instance struct {
 	stageChangedChansLock        sync.Mutex
 	stageLock                    sync.Mutex
 	stateLock                    sync.Mutex
+	lastMsgLock                  sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -116,6 +117,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		stageLock:                    sync.Mutex{},
 		stageChangedChansLock:        sync.Mutex{},
 		stateLock:                    sync.Mutex{},
+		lastMsgLock:                  sync.RWMutex{},
 	}
 }
 

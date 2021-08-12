@@ -21,8 +21,8 @@ func (s *Sync) getPeersLastMsgs() ([]*proto.SignedMessage, error) {
 	res := make([]*proto.SignedMessage, 0)
 	for _, p := range usedPeers {
 		wg.Add(1)
-		go func() {
-			msg, err := s.network.GetCurrentInstance(p, &network.SyncMessage{
+		go func(peer string) {
+			msg, err := s.network.GetCurrentInstance(peer, &network.SyncMessage{
 				Type:   network.Sync_GetCurrentInstance,
 				Lambda: s.identifier,
 			})
@@ -34,9 +34,9 @@ func (s *Sync) getPeersLastMsgs() ([]*proto.SignedMessage, error) {
 				res = append(res, msg.SignedMessages[0])
 			}
 			wg.Done()
-		}()
+		}(p)
 	}
-	wg.Done()
+	wg.Wait()
 	return res, nil
 }
 
