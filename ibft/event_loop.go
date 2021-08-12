@@ -96,12 +96,11 @@ loop:
 				if err != nil {
 					i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
 				}
-				if found {
-					i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
-				} else {
+				if !found {
 					// if not found, wait 1 second and then finish to try again
 					time.Sleep(time.Millisecond * 100)
 				}
+
 				//i.Logger.Debug("done with round change message")
 				wg.Done()
 			}); !added {
