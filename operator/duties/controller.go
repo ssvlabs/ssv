@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"encoding/hex"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/validator"
@@ -67,9 +68,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 
 // Start listens to slot ticker and dispatches duties execution
 func (dc *dutyController) Start() {
-	// warmup
-	indices := dc.validatorController.GetValidatorsIndices()
-	dc.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("count", len(indices)))
+	dc.warmup()
 
 	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
 	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
@@ -94,6 +93,31 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 		logger.Warn("could not find validator")
 	}
 	return nil
+}
+
+// warmup initiates some prerequisites
+func (dc *dutyController) warmup() {
+	indices := dc.validatorController.GetValidatorsIndices()
+	dc.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("count", len(indices)))
+
+	go dc.triggerPreviousSlotsInEpoch(uint64(dc.getCurrentSlot()))
+}
+
+// invokePreviousSlotsInEpoch triggers all previous slots in current epoch
+func (dc *dutyController) triggerPreviousSlotsInEpoch(currentSlot uint64) {
+	esEpoch := dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)
+	epoch := spec.Epoch(esEpoch)
+	slot := dc.getEpochFirstSlot(uint64(epoch))
+	for slot < currentSlot {
+		duties, err := dc.fetcher.GetDuties(slot)
+		if err != nil {
+			dc.logger.Error("failed to get duties", zap.Error(err))
+		}
+		for i := range duties {
+			go dc.onDuty(&duties[i])
+		}
+		slot++
+	}
 }
 
 // listenToTicker loop over the given slot channel
