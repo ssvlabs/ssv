@@ -13,35 +13,28 @@ func (i *Instance) changeRoundPartialQuorum(msgs []*proto.SignedMessage) (quorum
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
 
-func (i *Instance) groupPartialChangeRoundMsgs(msgs []*network.Message) map[uint64][]*proto.SignedMessage {
-	groupedMsgs := make(map[uint64][]*proto.SignedMessage)
-	// validate and group change round messages
-	for _, msg := range msgs {
-		if err := i.changeRoundMsgValidationPipeline().Run(msg.SignedMessage); err == nil {
-			if _, found := groupedMsgs[msg.SignedMessage.Message.Round]; !found {
-				groupedMsgs[msg.SignedMessage.Message.Round] = make([]*proto.SignedMessage, 0)
-			}
-			groupedMsgs[msg.SignedMessage.Message.Round] = append(groupedMsgs[msg.SignedMessage.Message.Round], msg.SignedMessage)
-		}
-	}
-	return groupedMsgs
-}
-
-func (i *Instance) findPartialQuorum(groupedMsgs map[uint64][]*proto.SignedMessage) (foundPartialQuorum bool, lowestChangeRound uint64) {
+func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowestChangeRound uint64) {
 	lowestChangeRound = uint64(100000) // just a random really large round number
-	foundPartialQuorum = false
-	for round, msgs := range groupedMsgs {
-		if round <= i.State.Round {
+	relevantMsgs := make([]*proto.SignedMessage, 0)
+	for _, msg := range msgs {
+		if err := i.changeRoundMsgValidationPipeline().Run(msg.SignedMessage); err != nil {
+			i.Logger.Warn("received invalid change round", zap.Error(err))
+			// TODO - how to delete this msg
 			continue
 		}
-		if found, _, _ := i.changeRoundPartialQuorum(msgs); found {
-			foundPartialQuorum = true
-			if round < lowestChangeRound {
-				lowestChangeRound = round
-			}
+
+		if msg.SignedMessage.Message.Round <= i.State.Round {
+			continue
+		}
+		relevantMsgs = append(relevantMsgs, msg.SignedMessage)
+		if msg.SignedMessage.Message.Round < lowestChangeRound {
+			lowestChangeRound = msg.SignedMessage.Message.Round
 		}
 	}
-	return foundPartialQuorum, lowestChangeRound
+
+	found, _, _ = i.changeRoundPartialQuorum(relevantMsgs)
+
+	return found, lowestChangeRound
 }
 
 // upon receiving a set Frc of f + 1 valid ⟨ROUND-CHANGE, λi, rj, −, −⟩ messages such that:
@@ -52,13 +45,15 @@ func (i *Instance) findPartialQuorum(groupedMsgs map[uint64][]*proto.SignedMessa
 // 		set timer i to running and expire after t(ri)
 //		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
 func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, error) {
-	groupedMsgs := i.groupPartialChangeRoundMsgs(msgs)
-	foundPartialQuorum, lowestChangeRound := i.findPartialQuorum(groupedMsgs)
+	//groupedMsgs := i.groupPartialChangeRoundMsgs(msgs)
+	foundPartialQuorum, lowestChangeRound := i.findPartialQuorum(msgs)
 
 	// TODO - could have a race condition where msgs are processed in a different thread and then we trigger round change here
 	if foundPartialQuorum {
-		i.State.Round = lowestChangeRound
+		i.setRound(lowestChangeRound)
+		i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
 		i.resetRoundTimer()
+		i.SetStage(proto.RoundState_ChangeRound)
 
 		if err := i.broadcastChangeRound(); err != nil {
 			i.Logger.Error("could not broadcast round change message", zap.Error(err))

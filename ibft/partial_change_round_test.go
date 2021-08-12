@@ -3,121 +3,66 @@ package ibft
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 )
 
-func TestGrouping(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
-	msgs := []*network.Message{
-		{
-			SignedMessage: SignMsg(t, 1, sks[1], &proto.Message{
-				Type:      proto.RoundState_ChangeRound,
-				Round:     1,
-				SeqNumber: 1,
-				Lambda:    []byte("lambda"),
-				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
-					PreparedValue: nil,
-				}),
-			}),
-		},
-		{
-			SignedMessage: SignMsg(t, 1, sks[1], &proto.Message{
-				Type:      proto.RoundState_ChangeRound,
-				Round:     1,
-				SeqNumber: 1,
-				Lambda:    []byte("lambda"),
-				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
-					PreparedValue: nil,
-				}),
-			}),
-		},
-		{
-			SignedMessage: SignMsg(t, 1, sks[1], &proto.Message{
-				Type:      proto.RoundState_ChangeRound,
-				Round:     2,
-				SeqNumber: 1,
-				Lambda:    []byte("lambda"),
-				Value: changeRoundDataToBytes(&proto.ChangeRoundData{
-					PreparedValue: nil,
-				}),
-			}),
-		},
-	}
-
-	instance := &Instance{
-		State: &proto.State{
-			Lambda:    []byte("lambda"),
+func signedMsgToNetworkMsg(t *testing.T, id uint64, sk *bls.SecretKey, round uint64) *network.Message {
+	return &network.Message{
+		SignedMessage: SignMsg(t, id, sk, &proto.Message{
+			Type:      proto.RoundState_ChangeRound,
+			Round:     round,
+			Lambda:    []byte{1, 2, 3, 4},
 			SeqNumber: 1,
-		},
-		Config: proto.DefaultConsensusParams(),
-		ValidatorShare: &storage.Share{
-			Committee: nodes,
-			PublicKey: sks[1].GetPublicKey(),
-		},
+			Value:     changeRoundDataToBytes(&proto.ChangeRoundData{}),
+		}),
 	}
-
-	res := instance.groupPartialChangeRoundMsgs(msgs)
-	require.Len(t, res[0], 0)
-	require.Len(t, res[1], 2)
-	require.Len(t, res[2], 1)
 }
 
 func TestFindPartialChangeRound(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+
 	tests := []struct {
 		name           string
-		msgs           map[uint64][]*proto.SignedMessage
+		msgs           []*network.Message
 		expectedFound  bool
 		expectedLowest uint64
 	}{
 		{
 			"lowest 4",
-			map[uint64][]*proto.SignedMessage{
-				4: {
-					&proto.SignedMessage{},
-					&proto.SignedMessage{},
-				},
+			[]*network.Message{
+				signedMsgToNetworkMsg(t, 1, sks[1], 4),
+				signedMsgToNetworkMsg(t, 2, sks[2], 7),
 			},
 			true,
 			4,
 		},
 		{
 			"lowest is lower than state round",
-			map[uint64][]*proto.SignedMessage{
-				0: {
-					&proto.SignedMessage{},
-					&proto.SignedMessage{},
-				},
+			[]*network.Message{
+				signedMsgToNetworkMsg(t, 1, sks[1], 1),
+				signedMsgToNetworkMsg(t, 2, sks[2], 0),
 			},
 			false,
 			100000,
 		},
 		{
-			"lowest 4",
-			map[uint64][]*proto.SignedMessage{
-				4: {
-					&proto.SignedMessage{},
-					&proto.SignedMessage{},
-				},
-				10: {
-					&proto.SignedMessage{},
-					&proto.SignedMessage{},
-				},
+			"lowest 7",
+			[]*network.Message{
+				signedMsgToNetworkMsg(t, 1, sks[1], 7),
+				signedMsgToNetworkMsg(t, 2, sks[2], 9),
+				signedMsgToNetworkMsg(t, 3, sks[3], 10),
 			},
 			true,
-			4,
+			7,
 		},
 		{
 			"not found",
-			map[uint64][]*proto.SignedMessage{
-				4: {
-					&proto.SignedMessage{},
-				},
-				5: {
-					&proto.SignedMessage{},
-				},
-			},
+			[]*network.Message{},
 			false,
 			100000,
 		},
@@ -126,14 +71,11 @@ func TestFindPartialChangeRound(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			instance := &Instance{
-				State:  &proto.State{Round: 1},
-				Config: proto.DefaultConsensusParams(),
-				ValidatorShare: &storage.Share{Committee: map[uint64]*proto.Node{
-					0: {IbftId: 0},
-					1: {IbftId: 1},
-					2: {IbftId: 2},
-					3: {IbftId: 3},
-				}},
+				State:          &proto.State{Round: 1, Lambda: []byte{1, 2, 3, 4}, SeqNumber: 1},
+				Config:         proto.DefaultConsensusParams(),
+				ValidatorShare: &storage.Share{Committee: nodes},
+				Logger:         zap.L(),
+				ValueCheck:     bytesval.New([]byte{1, 2, 3, 4}),
 			}
 
 			found, lowest := instance.findPartialQuorum(test.msgs)

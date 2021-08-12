@@ -35,7 +35,7 @@ type ControllerOptions struct {
 // IController interface
 type IController interface {
 	ListenToEth1Events(cn pubsub.SubjectChannel)
-	StartValidators() map[string]*Validator
+	StartValidators()
 	GetValidatorsPubKeys() [][]byte
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
@@ -100,19 +100,24 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 
 // setupValidators for each validatorShare with proper ibft wrappers
 func (c *controller) setupValidators() map[string]*Validator {
-	validatorsShare, err := c.collection.GetAllValidatorsShare()
+	shares, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
-		c.logger.Fatal("Failed to get validators shares", zap.Error(err))
+		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
-	if len(validatorsShare) == 0 {
-		c.logger.Info("operator have no validators no setup")
-	} else {
-		c.logger.Info("starting validators setup...")
+	if len(shares) == 0 {
+		c.logger.Info("could not find validators")
+		return c.validatorsMap
 	}
-	res := make(map[string]*Validator)
-	for _, validatorShare := range validatorsShare {
+	c.logger.Info("starting validators setup...")
+	for _, validatorShare := range shares {
+		pubKey := validatorShare.PublicKey.SerializeToHexStr()
+		if _, ok := c.validatorsMap[pubKey]; ok {
+			c.logger.Debug("validator was initialized already..",
+				zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
+			continue
+		}
 		printValidatorShare(c.logger, validatorShare)
-		res[validatorShare.PublicKey.SerializeToHexStr()] = New(Options{
+		c.validatorsMap[pubKey] = New(Options{
 			Context:                    c.context,
 			SignatureCollectionTimeout: c.signatureCollectionTimeout,
 			Logger:                     c.logger,
@@ -122,13 +127,12 @@ func (c *controller) setupValidators() map[string]*Validator {
 			Beacon:                     c.beacon,
 		}, c.db)
 	}
-	c.validatorsMap = res
-	c.logger.Info("setup validators done successfully", zap.Int("count", len(res)))
-	return res
+	c.logger.Info("setup validators done successfully", zap.Int("count", len(c.validatorsMap)))
+	return c.validatorsMap
 }
 
 // StartValidators functions (queue streaming, msgQueue listen, etc)
-func (c *controller) StartValidators() map[string]*Validator {
+func (c *controller) StartValidators() {
 	validators := c.setupValidators()
 	for _, v := range validators {
 		if err := v.Start(); err != nil {
@@ -136,7 +140,6 @@ func (c *controller) StartValidators() map[string]*Validator {
 			continue
 		}
 	}
-	return validators
 }
 
 // GetValidatorsPubKeys returns a list of all the validators public keys

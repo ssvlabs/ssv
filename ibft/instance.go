@@ -33,6 +33,9 @@ type InstanceOptions struct {
 	Config         *proto.InstanceConfig
 	Lambda         []byte
 	SeqNumber      uint64
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
 }
 
 // Instance defines the instance attributes
@@ -65,13 +68,15 @@ type Instance struct {
 	initialized bool
 
 	// locks
-	runInitOnce           sync.Once
-	runStopOnce           sync.Once
-	stopLock              sync.Mutex
-	stageChangedChansLock sync.Mutex
-	stageLock             sync.Mutex
-	stateLock             sync.Mutex
-	lastMsgLock           sync.RWMutex
+	runInitOnce                  sync.Once
+	runStopOnce                  sync.Once
+	processChangeRoundQuorumOnce sync.Once
+	processPrepareQuorumOnce     sync.Once
+	processCommitQuorumOnce      sync.Once
+	stopLock                     sync.Mutex
+	stageChangedChansLock        sync.Mutex
+	stageLock                    sync.Mutex
+	stateLock                    sync.Mutex
 }
 
 // NewInstance is the constructor of Instance
@@ -102,13 +107,15 @@ func NewInstance(opts InstanceOptions) *Instance {
 		eventQueue: eventqueue.New(),
 
 		// locks
-		runInitOnce:           sync.Once{},
-		runStopOnce:           sync.Once{},
-		stopLock:              sync.Mutex{},
-		stageLock:             sync.Mutex{},
-		stageChangedChansLock: sync.Mutex{},
-		stateLock:             sync.Mutex{},
-		lastMsgLock:           sync.RWMutex{},
+		runInitOnce:                  sync.Once{},
+		runStopOnce:                  sync.Once{},
+		processChangeRoundQuorumOnce: sync.Once{},
+		processPrepareQuorumOnce:     sync.Once{},
+		processCommitQuorumOnce:      sync.Once{},
+		stopLock:                     sync.Mutex{},
+		stageLock:                    sync.Mutex{},
+		stageChangedChansLock:        sync.Mutex{},
+		stateLock:                    sync.Mutex{},
 	}
 }
 
@@ -225,7 +232,14 @@ func (i *Instance) Stopped() bool {
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.State.Round++
+	i.setRound(i.State.Round + 1)
+}
+
+func (i *Instance) setRound(newRound uint64) {
+	i.processChangeRoundQuorumOnce = sync.Once{}
+	i.processPrepareQuorumOnce = sync.Once{}
+	i.processCommitQuorumOnce = sync.Once{}
+	i.State.Round = newRound
 }
 
 // Stage returns the instance message state

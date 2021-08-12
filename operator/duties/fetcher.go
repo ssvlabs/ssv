@@ -96,6 +96,9 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get duties from beacon")
 	}
+	if len(duties) == 0 {
+		return nil
+	}
 	// print the newly fetched duties
 	var toPrint []serializedDuty
 	for _, d := range duties {
@@ -126,16 +129,18 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*beacon.Duty, error) {
 
 // processFetchedDuties loop over fetched duties and process them
 func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*beacon.Duty) error {
-	var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
-	// entries holds all the new duties to add
-	entries := map[spec.Slot]cacheEntry{}
-	for _, duty := range fetchedDuties {
-		df.fillEntry(entries, duty)
-		subscriptions = append(subscriptions, toSubscription(duty))
-	}
-	df.populateCache(entries)
-	if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
-		df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
+	if len(fetchedDuties) > 0 {
+		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
+		// entries holds all the new duties to add
+		entries := map[spec.Slot]cacheEntry{}
+		for _, duty := range fetchedDuties {
+			df.fillEntry(entries, duty)
+			subscriptions = append(subscriptions, toSubscription(duty))
+		}
+		df.populateCache(entries)
+		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
+			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
+		}
 	}
 	return nil
 }

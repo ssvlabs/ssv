@@ -68,23 +68,22 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon commit msg", func(signedMessage *proto.SignedMessage) error {
-		// check if quorum achieved, act upon it.
-		if i.Stage() == proto.RoundState_Decided {
-			i.Logger.Info("already commit, not processing commit message")
-			return nil // no reason to commit again
-		}
 		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value)
 		if quorum {
-			i.Logger.Info("commit iBFT instance",
-				zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
-				zap.Int("got_votes", len(sigs)))
+			i.processCommitQuorumOnce.Do(func() {
+				i.stopRoundTimer()
 
-			if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
-				i.State.DecidedMsg = aggMsg
-				// mark instance commit
-				i.SetStage(proto.RoundState_Decided)
-				i.Stop()
-			}
+				i.Logger.Info("commit iBFT instance",
+					zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
+					zap.Int("got_votes", len(sigs)))
+
+				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
+					i.State.DecidedMsg = aggMsg
+					// mark instance commit
+					i.SetStage(proto.RoundState_Decided)
+					i.Stop()
+				}
+			})
 		}
 		return nil
 	})

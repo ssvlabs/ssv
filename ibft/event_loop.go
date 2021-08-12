@@ -96,12 +96,11 @@ loop:
 				if err != nil {
 					i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
 				}
-				if found {
-					i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
-				} else {
+				if !found {
 					// if not found, wait 1 second and then finish to try again
-					time.Sleep(time.Second * 1)
+					time.Sleep(time.Millisecond * 100)
 				}
+
 				//i.Logger.Debug("done with round change message")
 				wg.Done()
 			}); !added {
@@ -151,4 +150,8 @@ func (i *Instance) resetRoundTimer() {
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)
 	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round))
+}
+
+func (i *Instance) stopRoundTimer() {
+	i.roundTimer.Stop()
 }
