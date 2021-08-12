@@ -38,20 +38,14 @@ func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
 	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)); msgsMap != nil {
 		// get values and keys slices
 		msgs := make([]*network.Message, 0)
-		msgsIds := make([]string, 0)
-		for id, msg := range msgsMap {
+		for _, msg := range msgsMap {
 			msgs = append(msgs, msg)
-			msgsIds = append(msgsIds, id)
 		}
 
 		found, err := i.uponChangeRoundPartialQuorum(msgs)
 		if err != nil {
 			return false, err
 		}
-		//if found {
-		//	// We delete all change round messages as we already acted upon them so they have no use.
-		//	i.MsgQueue.DeleteMessagesWithIds(msgsIds)
-		//}
 		return found, err
 	}
 	return false, nil
