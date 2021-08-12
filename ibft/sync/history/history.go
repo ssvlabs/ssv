@@ -13,26 +13,36 @@ import (
 // Sync is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
 type Sync struct {
-	logger              *zap.Logger
-	publicKey           []byte
-	network             network.Network
-	ibftStorage         collections.Iibft
-	validateDecidedMsgF func(msg *proto.SignedMessage) error
-	identifier          []byte
+	logger                      *zap.Logger
+	publicKey                   []byte
+	network                     network.Network
+	ibftStorage                 collections.Iibft
+	validateDecidedMsgF         func(msg *proto.SignedMessage) error
+	validateLastChangeRoundMsgF func(msg *proto.SignedMessage) error
+	identifier                  []byte
 	// paginationMaxSize is the max number of returned elements in a single response
 	paginationMaxSize uint64
 }
 
 // New returns a new instance of Sync
-func New(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
+func New(
+	logger *zap.Logger,
+	publicKey []byte,
+	identifier []byte,
+	network network.Network,
+	ibftStorage collections.Iibft,
+	validateDecidedMsgF func(msg *proto.SignedMessage) error,
+	validateLastChangeRoundMsgF func(msg *proto.SignedMessage) error,
+) *Sync {
 	return &Sync{
-		logger:              logger,
-		publicKey:           publicKey,
-		identifier:          identifier,
-		network:             network,
-		validateDecidedMsgF: validateDecidedMsgF,
-		ibftStorage:         ibftStorage,
-		paginationMaxSize:   network.MaxBatch(),
+		logger:                      logger,
+		publicKey:                   publicKey,
+		identifier:                  identifier,
+		network:                     network,
+		validateDecidedMsgF:         validateDecidedMsgF,
+		validateLastChangeRoundMsgF: validateLastChangeRoundMsgF,
+		ibftStorage:                 ibftStorage,
+		paginationMaxSize:           network.MaxBatch(),
 	}
 }
 
@@ -82,11 +92,11 @@ func (s *Sync) Start() error {
 		}
 	}
 
-	lastMsgs, err := s.getPeersLastMsgs()
+	lastMsgs, err := s.getPeersLastChangeRoundMsgs()
 	if err != nil {
 		return errors.Wrap(err, "could not fetch peers last msg during sync")
 	}
-	if err := s.ibftStorage.SaveLastKnowPeerMsgs(s.identifier, lastMsgs); err != nil {
+	if err := s.ibftStorage.SavePeersCurrentInstanceChangeRoundMsgs(s.identifier, lastMsgs); err != nil {
 		return errors.Wrap(err, "could not save last msgs during sync")
 	}
 

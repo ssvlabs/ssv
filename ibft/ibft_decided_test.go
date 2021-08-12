@@ -25,7 +25,7 @@ func (s *testStorage) SaveCurrentInstance(identifier []byte, state *proto.State)
 	return nil
 }
 
-// GetCurrentInstance implementation
+// GetCurrentInstanceLastChangeRoundMsg implementation
 func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
 	return nil, nil
 }
@@ -50,13 +50,13 @@ func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.Signe
 	return s.highestDecided, nil
 }
 
-// SaveLastKnowPeerMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
-func (s *testStorage) SaveLastKnowPeerMsgs(identifier []byte, msgs []*proto.SignedMessage) error {
+// SavePeersCurrentInstanceChangeRoundMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
+func (s *testStorage) SavePeersCurrentInstanceChangeRoundMsgs(identifier []byte, msgs []*proto.SignedMessage) error {
 	return nil
 }
 
-// GetLastKnownPeerMsgs returns whatever was stored by SaveLastKnowPeerMsgs
-func (s *testStorage) GetLastKnownPeerMsgs(identifier []byte) ([]*proto.SignedMessage, error) {
+// GetPeersCurrentInstanceChangeRoundMsgs returns whatever was stored by SavePeersCurrentInstanceChangeRoundMsgs
+func (s *testStorage) GetPeersCurrentInstanceChangeRoundMsgs(identifier []byte) ([]*proto.SignedMessage, error) {
 	return nil, nil
 }
 

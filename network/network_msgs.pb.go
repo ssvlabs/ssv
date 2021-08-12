@@ -63,20 +63,20 @@ const (
 	Sync_GetHighestType Sync = 0
 	// GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
 	Sync_GetInstanceRange Sync = 1
-	// GetCurrentInstance is a request from peers to return their current running instance details
+	// GetCurrentInstanceLastChangeRoundMsg is a request from peers to return their current running instance details
 	Sync_GetCurrentInstance Sync = 2
 )
 
 var Sync_name = map[int32]string{
 	0: "GetHighestType",
 	1: "GetInstanceRange",
-	2: "GetCurrentInstance",
+	2: "GetCurrentInstanceLastChangeRoundMsg",
 }
 
 var Sync_value = map[string]int32{
-	"GetHighestType":     0,
-	"GetInstanceRange":   1,
-	"GetCurrentInstance": 2,
+	"GetHighestType":                       0,
+	"GetInstanceRange":                     1,
+	"GetCurrentInstanceLastChangeRoundMsg": 2,
 }
 
 func (x Sync) String() string {

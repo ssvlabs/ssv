@@ -265,5 +265,5 @@ func TestPrePreparePipeline(t *testing.T) {
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
 	pipeline := instance.prePrepareMsgPipeline()
-	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate pre-prepare, upon pre-prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate pre-prepare, , upon pre-prepare msg, ", pipeline.Name())
 }

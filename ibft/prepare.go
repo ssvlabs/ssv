@@ -12,7 +12,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
+func (i *Instance) prepareMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
@@ -20,6 +20,12 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateRound(i.State.Round),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
+	)
+}
+
+func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		i.prepareMsgValidationPipeline(),
 		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.String("sender_ibft_id", signedMessage.SignersIDString()),

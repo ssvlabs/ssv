@@ -14,7 +14,7 @@ import (
 type currentInstanceStorage interface {
 	// SaveCurrentInstance saves the state for the current running (not yet decided) instance
 	SaveCurrentInstance(identifier []byte, state *proto.State) error
-	// GetCurrentInstance returns the state for the current running (not yet decided) instance
+	// GetCurrentInstanceLastChangeRoundMsg returns the state for the current running (not yet decided) instance
 	GetCurrentInstance(identifier []byte) (*proto.State, error)
 }
 
@@ -32,11 +32,11 @@ type highestDecidedStorage interface {
 	GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error)
 }
 
-type lastKnownStorage interface {
-	// SaveLastKnowPeerMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
-	SaveLastKnowPeerMsgs(identifier []byte, msgs []*proto.SignedMessage) error
-	// GetLastKnownPeerMsgs returns whatever was stored by SaveLastKnowPeerMsgs
-	GetLastKnownPeerMsgs(identifier []byte) ([]*proto.SignedMessage, error)
+type currentInstanceLastChangeRoundMsgStorage interface {
+	// SavePeersCurrentInstanceChangeRoundMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
+	SavePeersCurrentInstanceChangeRoundMsgs(identifier []byte, msgs []*proto.SignedMessage) error
+	// GetPeersCurrentInstanceChangeRoundMsgs returns whatever was stored by SavePeersCurrentInstanceChangeRoundMsgs
+	GetPeersCurrentInstanceChangeRoundMsgs(identifier []byte) ([]*proto.SignedMessage, error)
 }
 
 // Iibft is an interface for persisting chain data
@@ -44,7 +44,7 @@ type Iibft interface {
 	currentInstanceStorage
 	decidedStorage
 	highestDecidedStorage
-	lastKnownStorage
+	currentInstanceLastChangeRoundMsgStorage
 }
 
 // IbftStorage struct
@@ -74,7 +74,7 @@ func (i *IbftStorage) SaveCurrentInstance(identifier []byte, state *proto.State)
 	return i.save(value, "current", identifier)
 }
 
-// GetCurrentInstance func implementation
+// GetCurrentInstanceLastChangeRoundMsg func implementation
 func (i *IbftStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
 	val, err := i.get("current", identifier)
 	if err != nil {
@@ -131,8 +131,8 @@ func (i *IbftStorage) GetHighestDecidedInstance(identifier []byte) (*proto.Signe
 	return ret, nil
 }
 
-// SaveLastKnowPeerMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
-func (i *IbftStorage) SaveLastKnowPeerMsgs(identifier []byte, msgs []*proto.SignedMessage) error {
+// SavePeersCurrentInstanceChangeRoundMsgs saves last known msgs from peers for a known instance (which wasn't run locally)
+func (i *IbftStorage) SavePeersCurrentInstanceChangeRoundMsgs(identifier []byte, msgs []*proto.SignedMessage) error {
 	value, err := json.Marshal(msgs)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
@@ -140,8 +140,8 @@ func (i *IbftStorage) SaveLastKnowPeerMsgs(identifier []byte, msgs []*proto.Sign
 	return i.save(value, "lastKnownMsgs", identifier)
 }
 
-// GetLastKnownPeerMsgs returns whatever was stored by SaveLastKnowPeerMsgs
-func (i *IbftStorage) GetLastKnownPeerMsgs(identifier []byte) ([]*proto.SignedMessage, error) {
+// GetPeersCurrentInstanceChangeRoundMsgs returns whatever was stored by SavePeersCurrentInstanceChangeRoundMsgs
+func (i *IbftStorage) GetPeersCurrentInstanceChangeRoundMsgs(identifier []byte) ([]*proto.SignedMessage, error) {
 	val, err := i.get("lastKnownMsgs", identifier)
 	if err != nil {
 		return nil, err

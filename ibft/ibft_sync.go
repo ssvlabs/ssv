@@ -1,6 +1,8 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	historySync "github.com/bloxapp/ssv/ibft/sync/history"
 	syncReqHandler "github.com/bloxapp/ssv/ibft/sync/incoming"
@@ -45,9 +47,26 @@ func (i *ibftImpl) SyncIBFT() {
 	}
 
 	// historySync
-	s := historySync.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
+	s := historySync.New(
+		i.logger,
+		i.ValidatorShare.PublicKey.Serialize(),
+		i.GetIdentifier(),
+		i.network,
+		i.ibftStorage,
+		i.validateDecidedMsg,
+		i.validateLastChangeRoundMsg,
+	)
 	err := s.Start()
 	if err != nil {
 		i.logger.Fatal("history historySync failed", zap.Error(err))
 	}
+}
+
+func (i *ibftImpl) validateLastChangeRoundMsg(msg *proto.SignedMessage) error {
+	return pipeline.Combine(
+		auth.BasicMsgValidation(),
+		auth.ValidateLambdas(i.Identifier),
+		auth.AuthorizeMsg(i.ValidatorShare),
+		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
+	).Run(msg)
 }

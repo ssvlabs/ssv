@@ -186,8 +186,9 @@ func TestFindHighest(t *testing.T) {
 					return nil
 				}
 			}
-			s := New(zap.L(), test.valdiatorPK, test.identifier, sync.NewTestNetwork(t, test.peers, 100,
-				test.highestMap, test.errorMap, nil, nil), nil, test.validateMsg)
+			net := sync.NewTestNetwork(t, test.peers, 100,
+				test.highestMap, test.errorMap, nil, nil, nil)
+			s := New(zap.L(), test.valdiatorPK, test.identifier, net, nil, test.validateMsg, nil)
 			res, _, err := s.findHighestInstance()
 
 			if len(test.expectedError) > 0 {

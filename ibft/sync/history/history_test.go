@@ -31,15 +31,17 @@ func TestSync(t *testing.T) {
 	decided250Seq := sync.DecidedArr(t, 250, sks)
 
 	tests := []struct {
-		name               string
-		valdiatorPK        []byte
-		identifier         []byte
-		peers              []string
-		highestMap         map[string]*proto.SignedMessage
-		decidedArrMap      map[string][]*proto.SignedMessage
-		errorMap           map[string]error
-		expectedHighestSeq int64
-		expectedError      string
+		name                 string
+		valdiatorPK          []byte
+		identifier           []byte
+		peers                []string
+		highestMap           map[string]*proto.SignedMessage
+		decidedArrMap        map[string][]*proto.SignedMessage
+		lastMsgMap           map[string]*proto.SignedMessage
+		expectedLastMsgCount int
+		errorMap             map[string]error
+		expectedHighestSeq   int64
+		expectedError        string
 	}{
 		{
 			"sync to seq 0",
@@ -54,6 +56,11 @@ func TestSync(t *testing.T) {
 				"2": {decided0},
 				"3": {decided0},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			0,
 			"",
@@ -71,6 +78,11 @@ func TestSync(t *testing.T) {
 				"2": decided250Seq,
 				"3": decided250Seq,
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			250,
 			"",
@@ -88,6 +100,11 @@ func TestSync(t *testing.T) {
 				"2": {decided0, decided1},
 				"3": {decided0, decided1},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			1,
 			"",
@@ -105,6 +122,11 @@ func TestSync(t *testing.T) {
 				"2": {decided0, decided1, decided2},
 				"3": {decided0, decided1, decided2},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			2,
 			"",
@@ -122,6 +144,11 @@ func TestSync(t *testing.T) {
 				"2": {decided0, decided1},
 				"3": {decided0, decided1},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			2,
 			"could not fetch decided by range during sync: returned decided by range messages miss sequence number 2",
@@ -139,6 +166,11 @@ func TestSync(t *testing.T) {
 				"2": {decided0, decided2},
 				"3": {decided0, decided2},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			2,
 			"could not fetch decided by range during sync: returned decided by range messages miss sequence number 1",
@@ -156,6 +188,11 @@ func TestSync(t *testing.T) {
 				"2": {decided1, decided2},
 				"3": {decided1, decided2},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			2,
 			"could not fetch decided by range during sync: returned decided by range messages miss sequence number 0",
@@ -173,18 +210,57 @@ func TestSync(t *testing.T) {
 				"2": {decided0, decided1},
 				"3": {decided0},
 			},
+			map[string]*proto.SignedMessage{
+				"2": nil,
+				"3": nil,
+			},
+			0,
 			nil,
 			1,
 			"",
 		},
+		{
+			"peer 2 last msg vali",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided0,
+				"3": decided0,
+			},
+			map[string][]*proto.SignedMessage{
+				"2": {decided0},
+				"3": {decided0},
+			},
+			map[string]*proto.SignedMessage{
+				"2": decided0,
+				"3": nil,
+			},
+			1,
+			nil,
+			0,
+			"",
+		},
+	}
+
+	noErrorValidationF := func(msg *proto.SignedMessage) error {
+		return nil
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			storage := sync.TestingIbftStorage(t)
-			s := New(zap.L(), test.valdiatorPK, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil), &storage, func(msg *proto.SignedMessage) error {
-				return nil
-			})
+			net := sync.NewTestNetwork(
+				t,
+				test.peers,
+				100,
+				test.highestMap,
+				test.errorMap,
+				test.decidedArrMap,
+				test.lastMsgMap,
+				nil)
+
+			s := New(zap.L(), test.valdiatorPK, test.identifier, net, &storage, noErrorValidationF, noErrorValidationF)
 			err := s.Start()
 
 			if len(test.expectedError) > 0 {
@@ -205,6 +281,11 @@ func TestSync(t *testing.T) {
 					require.NoError(t, err)
 					require.EqualValues(t, test.expectedHighestSeq, highest.Message.SeqNumber)
 				}
+
+				// last msg
+				msgs, err := storage.GetPeersCurrentInstanceChangeRoundMsgs(test.identifier)
+				require.NoError(t, err)
+				require.Len(t, msgs, test.expectedLastMsgCount)
 			}
 		})
 	}

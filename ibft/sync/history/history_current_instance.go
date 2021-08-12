@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-// getPeersLastMsgs will request the last msgs sent by peers, if any exist for a running instance
-func (s *Sync) getPeersLastMsgs() ([]*proto.SignedMessage, error) {
+// getPeersLastChangeRoundMsgs will request the last msgs sent by peers, if any exist for a running instance
+func (s *Sync) getPeersLastChangeRoundMsgs() ([]*proto.SignedMessage, error) {
 	// pick up to 4 peers
 	// TODO - why 4? should be set as param?
 	usedPeers, err := s.getPeers(4)
@@ -22,16 +22,21 @@ func (s *Sync) getPeersLastMsgs() ([]*proto.SignedMessage, error) {
 	for _, p := range usedPeers {
 		wg.Add(1)
 		go func(peer string) {
-			msg, err := s.network.GetCurrentInstance(peer, &network.SyncMessage{
+			msg, err := s.network.GetCurrentInstanceLastChangeRoundMsg(peer, &network.SyncMessage{
 				Type:   network.Sync_GetCurrentInstance,
 				Lambda: s.identifier,
 			})
 			if err != nil {
 				s.logger.Error("error fetching current instance", zap.Error(err))
-			} else if err := s.currentInstanceResError(msg); err != nil {
+			} else if err := s.lastMsgError(msg); err != nil {
 				s.logger.Error("error fetching current instance", zap.Error(err))
 			} else {
-				res = append(res, msg.SignedMessages[0])
+				signedMsg := msg.SignedMessages[0]
+				if err := s.validateLastChangeRoundMsgF(signedMsg); err != nil {
+					s.logger.Error("invalid current instance change round msg", zap.Error(err))
+				} else {
+					res = append(res, signedMsg)
+				}
 			}
 			wg.Done()
 		}(p)
@@ -40,7 +45,7 @@ func (s *Sync) getPeersLastMsgs() ([]*proto.SignedMessage, error) {
 	return res, nil
 }
 
-func (s *Sync) currentInstanceResError(msg *network.SyncMessage) error {
+func (s *Sync) lastMsgError(msg *network.SyncMessage) error {
 	if msg == nil {
 		return errors.New("msg is nil")
 	} else if len(msg.Error) > 0 {

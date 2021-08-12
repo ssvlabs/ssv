@@ -95,7 +95,7 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 			handler := ReqHandler{
 				paginationMaxSize: uint64(test.maxBatch),
 				identifier:        test.identifier,
-				network:           sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil),
+				network:           sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil, nil),
 				storage:           &ibftStorage,
 				logger:            zap.L(),
 			}

@@ -169,8 +169,8 @@ func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *netwo
 	return nil
 }
 
-// GetCurrentInstance returns the latest msg sent from a running instance
-func (n *Local) GetCurrentInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+// GetCurrentInstanceLastChangeRoundMsg returns the latest msg sent from a running instance
+func (n *Local) GetCurrentInstanceLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	if toChan, found := n.syncPeers[peerStr]; found {
 		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
@@ -186,8 +186,8 @@ func (n *Local) GetCurrentInstance(peerStr string, msg *network.SyncMessage) (*n
 	return nil, errors.New("could not find peer")
 }
 
-// RespondToGetCurrentInstance responds to a GetCurrentInstance
-func (n *Local) RespondToGetCurrentInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+// RespondToCurrentInstanceLastChangeRoundMsg responds to a GetCurrentInstanceLastChangeRoundMsg
+func (n *Local) RespondToCurrentInstanceLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = string(n.localPeerID)
 	_, _ = stream.(*Stream).WriteSynMsg(msg)
 	return nil

@@ -19,7 +19,7 @@ func (s *ReqHandler) handleGetCurrentInstanceReq(msg *network.SyncChanObj) {
 		retMsg.Error = kv.EntryNotFoundError
 	}
 
-	if err := s.network.RespondToGetCurrentInstance(msg.Stream, retMsg); err != nil {
+	if err := s.network.RespondToCurrentInstanceLastChangeRoundMsg(msg.Stream, retMsg); err != nil {
 		s.logger.Error("failed to send current instance req", zap.Error(err))
 	}
 }

@@ -68,7 +68,16 @@ func (r *reader) Sync() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
-	hs := historySync.New(r.logger, r.validatorShare.PublicKey.Serialize(), nil, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
+	hs := historySync.New(
+		r.logger,
+		r.validatorShare.PublicKey.Serialize(),
+		nil,
+		r.network,
+		r.storage,
+		r.validateDecidedMsg,
+		r.validateLastChangeRoundMsg,
+	)
+
 	return hs.Start()
 }
 
@@ -103,6 +112,14 @@ func (r *reader) validateDecidedMsg(msg *proto.SignedMessage) error {
 		auth.ValidateQuorum(r.validatorShare.ThresholdSize()),
 	)
 	return p.Run(msg)
+}
+
+func (i *reader) validateLastChangeRoundMsg(msg *proto.SignedMessage) error {
+	return pipeline.Combine(
+		auth.BasicMsgValidation(),
+		auth.AuthorizeMsg(i.validatorShare),
+		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
+	).Run(msg)
 }
 
 // processDecidedMessage is responsible for processing an incoming decided message.

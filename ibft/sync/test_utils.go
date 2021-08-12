@@ -84,6 +84,7 @@ type testNetwork struct {
 	highestDecidedReceived map[string]*proto.SignedMessage
 	errorsMap              map[string]error
 	decidedArr             map[string][]*proto.SignedMessage
+	lastMsgs               map[string]*proto.SignedMessage
 	maxBatch               int
 	peers                  []string
 	retError               error
@@ -96,6 +97,7 @@ func NewTestNetwork(
 	highestDecidedReceived map[string]*proto.SignedMessage,
 	errorsMap map[string]error,
 	decidedArr map[string][]*proto.SignedMessage,
+	lastMsgArr map[string]*proto.SignedMessage,
 	retError error,
 ) *testNetwork {
 	return &testNetwork{
@@ -105,6 +107,7 @@ func NewTestNetwork(
 		highestDecidedReceived: highestDecidedReceived,
 		errorsMap:              errorsMap,
 		decidedArr:             decidedArr,
+		lastMsgs:               lastMsgArr,
 		retError:               retError,
 	}
 }
@@ -212,14 +215,42 @@ func (n *testNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg 
 	return err
 }
 
-// GetCurrentInstance returns the latest msg sent from a running instance
-func (n *testNetwork) GetCurrentInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	return nil, nil
+// GetCurrentInstanceLastChangeRoundMsg returns the latest msg sent from a running instance
+func (n *testNetwork) GetCurrentInstanceLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if last, found := n.lastMsgs[peerStr]; found {
+		if last == nil {
+			// as if no highest.
+			return &network.SyncMessage{
+				Error:      kv.EntryNotFoundError,
+				FromPeerID: peerStr,
+				Type:       network.Sync_GetCurrentInstance,
+			}, nil
+		}
+
+		if !bytes.Equal(msg.Lambda, last.Message.Lambda) {
+			return nil, errors.New("could not find highest")
+		}
+
+		return &network.SyncMessage{
+			SignedMessages: []*proto.SignedMessage{last},
+			FromPeerID:     peerStr,
+			Type:           network.Sync_GetInstanceRange,
+		}, nil
+	}
+	return nil, errors.New("could not find highest")
 }
 
-// RespondToGetCurrentInstance responds to a GetCurrentInstance
-func (n *testNetwork) RespondToGetCurrentInstance(stream network.SyncStream, msg *network.SyncMessage) error {
-	return nil
+// RespondToCurrentInstanceLastChangeRoundMsg responds to a GetCurrentInstanceLastChangeRoundMsg
+func (n *testNetwork) RespondToCurrentInstanceLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
+	msgBytes, err := json.Marshal(network.Message{
+		SyncMessage: msg,
+		Type:        network.NetworkMsg_SyncType,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal message")
+	}
+	_, err = stream.Write(msgBytes)
+	return err
 }
 
 func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {

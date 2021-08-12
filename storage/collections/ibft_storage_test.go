@@ -96,9 +96,9 @@ func TestIbftStorage_SaveLastKnownPeerMsgs(t *testing.T) {
 	}
 
 	t.Run("save 3 msgs", func(t *testing.T) {
-		err := storage.SaveLastKnowPeerMsgs([]byte{1, 2, 3, 4}, []*proto.SignedMessage{msg1, msg2, msg3})
+		err := storage.SavePeersCurrentInstanceChangeRoundMsgs([]byte{1, 2, 3, 4}, []*proto.SignedMessage{msg1, msg2, msg3})
 		require.NoError(t, err)
-		res, err := storage.GetLastKnownPeerMsgs([]byte{1, 2, 3, 4})
+		res, err := storage.GetPeersCurrentInstanceChangeRoundMsgs([]byte{1, 2, 3, 4})
 		require.NoError(t, err)
 		require.Len(t, res, 3)
 		require.EqualValues(t, res[0].Message.Type, msg1.Message.Type)
@@ -107,9 +107,9 @@ func TestIbftStorage_SaveLastKnownPeerMsgs(t *testing.T) {
 	})
 
 	t.Run("save nil", func(t *testing.T) {
-		err := storage.SaveLastKnowPeerMsgs([]byte{1, 2, 3, 4}, nil)
+		err := storage.SavePeersCurrentInstanceChangeRoundMsgs([]byte{1, 2, 3, 4}, nil)
 		require.NoError(t, err)
-		res, err := storage.GetLastKnownPeerMsgs([]byte{1, 2, 3, 4})
+		res, err := storage.GetPeersCurrentInstanceChangeRoundMsgs([]byte{1, 2, 3, 4})
 		require.NoError(t, err)
 		require.Len(t, res, 0)
 	})

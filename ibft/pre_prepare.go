@@ -10,7 +10,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
+func (i *Instance) prePrepareMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
@@ -19,6 +19,12 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ThisRoundLeader()),
+	)
+}
+
+func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		i.prePrepareMsgValidationPipeline(),
 		i.UponPrePrepareMsg(),
 	)
 }
