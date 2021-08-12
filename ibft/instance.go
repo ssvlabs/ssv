@@ -26,13 +26,16 @@ type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *storage.Share
 	//Me             *proto.Node
-	Network        network.Network
-	Queue          *msgqueue.MessageQueue
-	ValueCheck     valcheck.ValueCheck
-	LeaderSelector leader.Selector
-	Config         *proto.InstanceConfig
-	Lambda         []byte
-	SeqNumber      uint64
+	Network         network.Network
+	Queue           *msgqueue.MessageQueue
+	ValueCheck      valcheck.ValueCheck
+	LeaderSelector  leader.Selector
+	Config          *proto.InstanceConfig
+	Lambda          []byte
+	SeqNumber       uint64
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
 }
 
 // Instance defines the instance attributes

@@ -2,9 +2,8 @@ package ibft
 
 import (
 	"github.com/pkg/errors"
-	"sync"
-
 	"go.uber.org/zap"
+	"sync"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -17,11 +16,14 @@ import (
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
-	Logger         *zap.Logger
-	ValueCheck     valcheck.ValueCheck
-	SeqNumber      uint64
-	Value          []byte
-	ValidatorShare *storage.Share
+	Logger          *zap.Logger
+	ValueCheck      valcheck.ValueCheck
+	SeqNumber       uint64
+	Value           []byte
+	ValidatorShare  *storage.Share
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
 }
 
 // InstanceResult is a struct holding the result of a single iBFT instance
