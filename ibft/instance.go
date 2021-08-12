@@ -33,6 +33,8 @@ type InstanceOptions struct {
 	Config          *proto.InstanceConfig
 	Lambda          []byte
 	SeqNumber       uint64
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
 }
 

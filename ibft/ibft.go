@@ -21,6 +21,8 @@ type StartOptions struct {
 	SeqNumber       uint64
 	Value           []byte
 	ValidatorShare  *storage.Share
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
 }
 
