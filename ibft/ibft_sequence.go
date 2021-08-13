@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
+	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"strconv"
 )
@@ -66,7 +67,7 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) (*Instance
 		return nil, err
 	}
 
-	return &InstanceOptions{
+	ret := &InstanceOptions{
 		Logger:         opts.Logger,
 		ValidatorShare: i.ValidatorShare,
 		Network:        i.network,
@@ -76,5 +77,34 @@ func (i *ibftImpl) instanceOptionsFromStartOptions(opts StartOptions) (*Instance
 		Config:         i.instanceConfig,
 		Lambda:         i.Identifier,
 		SeqNumber:      opts.SeqNumber,
-	}, nil
+	}
+
+	if err := i.preloadPeersCurrentInstanceMsgs(ret); err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+func (i *ibftImpl) preloadPeersCurrentInstanceMsgs(opts *InstanceOptions) error {
+	msgs, err := i.ibftStorage.GetPeersCurrentInstanceChangeRoundMsgs(i.Identifier)
+	if err != nil {
+		return err
+	}
+
+	// add to queue if relevant
+	for _, msg := range msgs {
+		if msg.Message.SeqNumber == opts.SeqNumber {
+			opts.Queue.AddMessage(&network.Message{
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_IBFTType,
+			})
+		}
+	}
+
+	// clear out already used msgs
+	if err := i.ibftStorage.SavePeersCurrentInstanceChangeRoundMsgs(i.Identifier, nil); err != nil {
+		return err
+	}
+	return nil
 }

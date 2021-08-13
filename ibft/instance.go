@@ -25,7 +25,6 @@ import (
 type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *storage.Share
-	//Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
@@ -304,10 +303,9 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	case proto.RoundState_Commit:
 		i.CommitMessages.AddMessage(signedMessage)
 	case proto.RoundState_ChangeRound:
+		i.setLastBroadcastedMsg(signedMessage) // save only change round
 		i.ChangeRoundMessages.AddMessage(signedMessage)
 	}
-
-	i.setLastBroadcastedMsg(signedMessage)
 
 	return nil
 }
