@@ -1,78 +1,12 @@
 package history
 
 import (
-	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
 )
-
-// getHighestDecidedFromPeers receives highest decided messages from peers
-func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
-	var results []*network.SyncMessage
-	var wg sync.WaitGroup
-	var lock sync.Mutex
-
-	// peer's highest decided message will be added to results if:
-	//  1. not-found-error (i.e. no history)
-	//  3. message is valid
-	for i, p := range peers {
-		wg.Add(1)
-		go func(index int, peer string, wg *sync.WaitGroup) {
-			defer wg.Done()
-			res, err := s.network.GetHighestDecidedInstance(peer, &network.SyncMessage{
-				Type:   network.Sync_GetHighestType,
-				Lambda: s.identifier,
-			})
-			if err != nil {
-				s.logger.Error("received error when fetching highest decided", zap.Error(err),
-					zap.String("identifier", hex.EncodeToString(s.identifier)))
-				return
-			}
-			// backwards compatibility for version < v0.0.12, where EntryNotFoundError didn't exist
-			// TODO: can be removed once the release is deprecated
-			if len(res.SignedMessages) == 0 {
-				res.Error = kv.EntryNotFoundError
-			}
-
-			if len(res.Error) > 0 {
-				// assuming not found is a valid scenario (e.g. new validator)
-				// therefore we count the result now, and it will be identified afterwards in findHighestInstance()
-				if res.Error == kv.EntryNotFoundError {
-					lock.Lock()
-					results = append(results, res)
-					lock.Unlock()
-				} else {
-					s.logger.Error("received error when fetching highest decided", zap.Error(err),
-						zap.String("identifier", hex.EncodeToString(s.identifier)))
-				}
-				return
-			}
-
-			if len(res.SignedMessages) != 1 {
-				s.logger.Debug("received multiple signed messages", zap.Error(err),
-					zap.String("identifier", hex.EncodeToString(s.identifier)))
-				return
-			}
-			if err := s.validateDecidedMsgF(res.SignedMessages[0]); err != nil {
-				s.logger.Debug("received invalid highest decided", zap.Error(err),
-					zap.String("identifier", hex.EncodeToString(s.identifier)))
-				return
-			}
-
-			lock.Lock()
-			results = append(results, res)
-			lock.Unlock()
-		}(i, p, &wg)
-	}
-	wg.Wait()
-
-	return results
-}
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
 // Range is start to end seq including
@@ -89,9 +23,15 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 			return highestSaved, nil
 		}
 
+		// conform to max batch
+		batchMaxSeq := start + s.paginationMaxSize
+		if batchMaxSeq > endSeq {
+			batchMaxSeq = endSeq
+		}
+
 		res, err := s.network.GetDecidedByRange(fromPeer, &network.SyncMessage{
 			Lambda: s.identifier,
-			Params: []uint64{start, endSeq},
+			Params: []uint64{start, batchMaxSeq},
 			Type:   network.Sync_GetInstanceRange,
 		})
 		if err != nil {
@@ -109,7 +49,7 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 
 		msgCount := len(res.SignedMessages)
 		// validate and save
-		for i := start; i <= endSeq; i++ {
+		for i := start; i <= batchMaxSeq; i++ {
 			msg, found := foundSeqs[i]
 			if !found {
 				failCount++

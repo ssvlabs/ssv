@@ -19,6 +19,8 @@ type Sync struct {
 	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
 	identifier          []byte
+	// paginationMaxSize is the max number of returned elements in a single response
+	paginationMaxSize uint64
 }
 
 // New returns a new instance of Sync
@@ -30,6 +32,7 @@ func New(logger *zap.Logger, publicKey []byte, identifier []byte, network networ
 		network:             network,
 		validateDecidedMsgF: validateDecidedMsgF,
 		ibftStorage:         ibftStorage,
+		paginationMaxSize:   network.MaxBatch(),
 	}
 }
 

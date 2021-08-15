@@ -181,7 +181,7 @@ func TestSync(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			storage := sync.IbftStorage(t)
+			storage := sync.TestingIbftStorage(t)
 			s := New(zap.L(), test.valdiatorPK, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil), &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})

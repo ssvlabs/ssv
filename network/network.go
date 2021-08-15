@@ -81,4 +81,7 @@ type Network interface {
 
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)
+
+	// MaxBatch returns the maximum batch size for network responses
+	MaxBatch() uint64
 }

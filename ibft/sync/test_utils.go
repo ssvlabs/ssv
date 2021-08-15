@@ -2,7 +2,7 @@ package sync
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -10,13 +10,15 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
 	"time"
 )
 
-func IbftStorage(t *testing.T) collections.IbftStorage {
+// TestingIbftStorage returns a testing storage
+func TestingIbftStorage(t *testing.T) collections.IbftStorage {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Logger: zap.L(),
@@ -44,6 +46,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 	return sks, nodes
 }
 
+// DecidedArr returns an array of signed decided msgs
 func DecidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey) []*proto.SignedMessage {
 	ret := make([]*proto.SignedMessage, 0)
 	for i := uint64(0); i <= maxSeq; i++ {
@@ -57,8 +60,9 @@ func DecidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey) []*p
 	return ret
 }
 
+// MultiSignMsg signs a msg with multiple signers
 func MultiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
-	bls.Init(bls.BLS12_381)
+	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	var agg *bls.Sign
 	for _, id := range ids {
@@ -78,7 +82,8 @@ func MultiSignMsg(t *testing.T, ids []uint64, sks map[uint64]*bls.SecretKey, msg
 	}
 }
 
-type testNetwork struct {
+// TestNetwork struct
+type TestNetwork struct {
 	t                      *testing.T
 	highestDecidedReceived map[string]*proto.SignedMessage
 	errorsMap              map[string]error
@@ -96,8 +101,8 @@ func NewTestNetwork(
 	errorsMap map[string]error,
 	decidedArr map[string][]*proto.SignedMessage,
 	retError error,
-) *testNetwork {
-	return &testNetwork{
+) *TestNetwork {
+	return &TestNetwork{
 		t:                      t,
 		peers:                  peers,
 		maxBatch:               maxBatch,
@@ -108,31 +113,38 @@ func NewTestNetwork(
 	}
 }
 
-func (n *testNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
+// Broadcast impl
+func (n *TestNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
 	return nil
 }
 
-func (n *testNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
+// ReceivedMsgChan impl
+func (n *TestNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
 	return nil
 }
 
-func (n *testNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMessage) error {
+// BroadcastSignature impl
+func (n *TestNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMessage) error {
 	return nil
 }
 
-func (n *testNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
+// ReceivedSignatureChan impl
+func (n *TestNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
 	return nil
 }
 
-func (n *testNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error {
+// BroadcastDecided impl
+func (n *TestNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error {
 	return nil
 }
 
-func (n *testNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
+// ReceivedDecidedChan impl
+func (n *TestNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
 	return nil
 }
 
-func (n *testNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+// GetHighestDecidedInstance impl
+func (n *TestNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
 	if err, found := n.errorsMap[peerStr]; found {
@@ -162,11 +174,13 @@ func (n *testNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Syn
 	return nil, errors.New("could not find highest")
 }
 
-func (n *testNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+// RespondToHighestDecidedInstance implementation
+func (n *TestNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	return nil
 }
 
-func (n *testNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+// GetDecidedByRange implementation
+func (n *TestNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	time.Sleep(time.Millisecond * 100)
 
 	if n.retError != nil {
@@ -199,57 +213,83 @@ func (n *testNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage
 }
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
-func (n *testNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	panic("implement")
+func (n *TestNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	msgBytes, err := json.Marshal(network.Message{
+		SyncMessage: msg,
+		Type:        network.NetworkMsg_SyncType,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal message")
+	}
+	_, err = stream.Write(msgBytes)
+	return err
 }
 
-func (n *testNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
+// ReceivedSyncMsgChan implementation
+func (n *TestNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	return nil
 }
 
 // SubscribeToValidatorNetwork subscribing and listen to validator network
-func (n *testNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+func (n *TestNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	return nil
 }
 
 // IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
-func (n *testNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
+func (n *TestNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
 	return false
 }
 
 // AllPeers returns all connected peers for a validator PK
-func (n *testNetwork) AllPeers(validatorPk []byte) ([]string, error) {
+func (n *TestNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.peers, nil
 }
 
-//type testStorage struct {
-//	highestDecided *proto.SignedMessage
-//}
-//
-//func NewTestStorage(highestDecided *proto.SignedMessage) *testStorage {
-//	return &testStorage{highestDecided: highestDecided}
-//}
-//
-//func (s *testStorage) SaveCurrentInstance(state *proto.State) error {
-//	return nil
-//}
-//
-//func (s *testStorage) GetCurrentInstance(pk []byte) (*proto.State, error) {
-//	return nil, nil
-//}
-//
-//func (s *testStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
-//	return nil
-//}
-//
-//func (s *testStorage) GetDecided(pk []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-//	return nil, nil
-//}
-//
-//func (s *testStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error {
-//	return nil
-//}
-//
-//func (s *testStorage) GetHighestDecidedInstance(pk []byte) (*proto.SignedMessage, error) {
-//	return s.highestDecided, nil
-//}
+// MaxBatch implementation
+func (n *TestNetwork) MaxBatch() uint64 {
+	return uint64(n.maxBatch)
+}
+
+// TestStream struct
+type TestStream struct {
+	C    chan []byte
+	peer string
+}
+
+// NewTestStream returns a new instance of test stream
+func NewTestStream(remotePeer string) *TestStream {
+	return &TestStream{
+		peer: remotePeer,
+		C:    make(chan []byte),
+	}
+}
+
+// Read implementation
+func (s *TestStream) Read(p []byte) (n int, err error) {
+	return 0, nil
+}
+
+// Write implementation
+func (s *TestStream) Write(p []byte) (n int, err error) {
+	go func() {
+		time.After(time.Millisecond * 100)
+		s.C <- p
+	}()
+
+	return 0, nil
+}
+
+// Close implementation
+func (s *TestStream) Close() error {
+	return nil
+}
+
+// CloseWrite implementation
+func (s *TestStream) CloseWrite() error {
+	return nil
+}
+
+// RemotePeer implementation
+func (s *TestStream) RemotePeer() string {
+	return s.peer
+}

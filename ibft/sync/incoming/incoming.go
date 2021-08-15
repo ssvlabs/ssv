@@ -20,7 +20,7 @@ type ReqHandler struct {
 // NewReqHandler returns a new instance of ReqHandler
 func NewReqHandler(logger *zap.Logger, identifier []byte, network network.Network, storage collections.Iibft) *ReqHandler {
 	return &ReqHandler{
-		paginationMaxSize: 25, // TODO - change to be a param
+		paginationMaxSize: network.MaxBatch(),
 		logger:            logger,
 		identifier:        identifier,
 		network:           network,

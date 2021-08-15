@@ -10,7 +10,7 @@ import (
 )
 
 func TestReqHandler_getHighestDecided(t *testing.T) {
-	ibftStorage := sync.IbftStorage(t)
+	ibftStorage := sync.TestingIbftStorage(t)
 	handler := ReqHandler{
 		paginationMaxSize: 0,
 		identifier:        []byte{1, 2, 3, 4},
