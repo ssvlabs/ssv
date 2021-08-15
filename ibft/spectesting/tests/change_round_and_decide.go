@@ -78,9 +78,8 @@ func (test *ChangeRoundAndDecide) Run(t *testing.T) {
 	require.True(t, justified)
 
 	// check pre-prepare justification
-	justified, err = test.instance.JustifyPrePrepare(2)
+	err = test.instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
-	require.True(t, justified)
 
 	// process all messages
 	for {

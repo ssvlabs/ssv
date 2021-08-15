@@ -97,9 +97,8 @@ func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	require.True(t, justified)
 
 	// justify pre-prepare
-	justified, err = test.instance.JustifyPrePrepare(2)
+	err = test.instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
-	require.True(t, justified)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
 	// process all messages

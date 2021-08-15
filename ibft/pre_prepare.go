@@ -31,15 +31,22 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 // 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
-func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
+func (i *Instance) JustifyPrePrepare(round uint64) error {
 	if round == 1 {
-		return true, nil
+		return nil
 	}
 
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
-		return i.JustifyRoundChange(round)
+		res, err := i.JustifyRoundChange(round)
+		if err != nil {
+			return err
+		}
+		if !res {
+			return errors.New("unjustified change round for pre-prepare")
+		}
+		return nil
 	}
-	return false, nil
+	return errors.New("no change round quorum")
 }
 
 /*
@@ -58,12 +65,9 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// Pre-prepare justification
-		justified, err := i.JustifyPrePrepare(signedMessage.Message.Round)
+		err := i.JustifyPrePrepare(signedMessage.Message.Round)
 		if err != nil {
-			return err
-		}
-		if !justified {
-			return errors.New("received un-justified pre-prepare message")
+			return errors.Wrap(err, "Unjustified pre-prepare")
 		}
 
 		// mark State
