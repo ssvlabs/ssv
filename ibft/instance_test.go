@@ -169,21 +169,21 @@ func TestSetStage(t *testing.T) {
 		}
 	}()
 
-	instance.SetStage(proto.RoundState_Prepare)
+	instance.ProcessStageChange(proto.RoundState_Prepare)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, prepare)
 	lock.Unlock()
 	require.EqualValues(t, proto.RoundState_Prepare, instance.State.Stage)
 
-	instance.SetStage(proto.RoundState_Decided)
+	instance.ProcessStageChange(proto.RoundState_Decided)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, decided)
 	lock.Unlock()
 	require.EqualValues(t, proto.RoundState_Decided, instance.State.Stage)
 
-	instance.SetStage(proto.RoundState_Stopped)
+	instance.ProcessStageChange(proto.RoundState_Stopped)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, stopped)

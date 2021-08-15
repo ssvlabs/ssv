@@ -10,6 +10,7 @@ func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowes
 	lowestChangeRound = uint64(100000) // just a random really large round number
 	foundMsgs := make(map[uint64]*proto.SignedMessage)
 	quorumCount := 0
+
 	for _, msg := range msgs {
 		if err := i.changeRoundMsgValidationPipeline().Run(msg.SignedMessage); err != nil {
 			i.Logger.Warn("received invalid change round", zap.Error(err))
@@ -17,7 +18,7 @@ func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowes
 			continue
 		}
 
-		if msg.SignedMessage.Message.Round <= i.State.Round {
+		if msg.SignedMessage.Message.Round <= i.Round() {
 			continue
 		}
 
@@ -56,9 +57,9 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 	// TODO - could have a race condition where msgs are processed in a different thread and then we trigger round change here
 	if foundPartialQuorum {
 		i.setRound(lowestChangeRound)
-		i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
+		i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.Round()))
 		i.resetRoundTimer()
-		i.SetStage(proto.RoundState_ChangeRound)
+		i.ProcessStageChange(proto.RoundState_ChangeRound)
 
 		if err := i.broadcastChangeRound(); err != nil {
 			i.Logger.Error("could not broadcast round change message", zap.Error(err))

@@ -48,11 +48,11 @@ loop:
 func (i *Instance) StartMessagePipeline() {
 loop:
 	for {
-		i.stateLock.Lock()
+		i.stateLock.RLock()
 		lambda := i.State.Lambda
 		seq := i.State.SeqNumber
 		round := i.State.Round
-		i.stateLock.Unlock()
+		i.stateLock.RUnlock()
 
 		if i.Stopped() {
 			break loop
@@ -86,12 +86,17 @@ loop:
 func (i *Instance) StartPartialChangeRoundPipeline() {
 loop:
 	for {
+		i.stateLock.RLock()
+		lambda := i.State.Lambda
+		seq := i.State.SeqNumber
+		i.stateLock.RUnlock()
+
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)) > 0 {
+		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(lambda, seq)) > 0 {
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				found, err := i.ProcessChangeRoundPartialQuorum()
@@ -131,7 +136,7 @@ loop:
 				i.uponChangeRoundTrigger()
 			})
 		} else { // stopped
-			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State.Round))
+			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.Round()))
 		}
 	}
 	i.Logger.Info("instance round timer loop stopped")
@@ -150,9 +155,10 @@ func (i *Instance) resetRoundTimer() {
 	// stat new timer
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)
-	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round))
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.Round()))
 }
 
 func (i *Instance) stopRoundTimer() {
+	i.Logger.Info("stopping timeout clock")
 	i.roundTimer.Stop()
 }
