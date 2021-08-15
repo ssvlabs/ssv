@@ -8,7 +8,7 @@ import (
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value []byte) (*InstanceResult, error) {
+func (i *ibftImpl) startInstanceWithOptions(instanceOpts *InstanceOptions, value []byte) (*InstanceResult, error) {
 	i.currentInstance = NewInstance(instanceOpts)
 	i.currentInstance.Init()
 	stageChan := i.currentInstance.GetStageChan()
@@ -17,6 +17,9 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 	if err := i.currentInstance.Start(value); err != nil {
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
+
+	// catch up if we can
+	i.fastChangeRoundCatchup(instanceOpts)
 
 	// main instance callback loop
 	var retRes *InstanceResult
@@ -85,4 +88,10 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+// fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
+// This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
+func (i *ibftImpl) fastChangeRoundCatchup(instanceOpts *InstanceOptions) {
+
 }

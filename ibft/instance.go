@@ -79,7 +79,7 @@ type Instance struct {
 }
 
 // NewInstance is the constructor of Instance
-func NewInstance(opts InstanceOptions) *Instance {
+func NewInstance(opts *InstanceOptions) *Instance {
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
