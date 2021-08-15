@@ -26,7 +26,7 @@ type Sync struct {
 // New returns a new instance of Sync
 func New(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
 	return &Sync{
-		logger:              logger,
+		logger:              logger.With(zap.String("sync", "history")),
 		publicKey:           publicKey,
 		identifier:          identifier,
 		network:             network,

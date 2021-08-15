@@ -33,7 +33,7 @@ var (
 	identifier = []byte("ibft identifier")
 	logger     = logex.Build("simulator", zapcore.InfoLevel, nil)
 	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
-	scenario   = scenarios.NewF1Speedup(logger, &alwaysTrueValueCheck{})
+	scenario   = scenarios.FarFutureSync(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct {

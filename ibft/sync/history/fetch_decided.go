@@ -47,6 +47,8 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 			foundSeqs[msg.Message.SeqNumber] = msg
 		}
 
+		s.logger.Info(fmt.Sprintf("fetching sequences %d - %d from peer", start, batchMaxSeq), zap.String("peer", fromPeer))
+
 		msgCount := len(res.SignedMessages)
 		// validate and save
 		for i := start; i <= batchMaxSeq; i++ {
@@ -86,6 +88,5 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 				break
 			}
 		}
-		s.logger.Info(fmt.Sprintf("fetched and saved instances up to sequence number %d", start-1))
 	}
 }
