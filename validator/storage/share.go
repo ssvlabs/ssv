@@ -44,9 +44,14 @@ func (s *Share) CommitteeSize() int {
 	return len(s.Committee)
 }
 
-// ThresholdSize returns the minimum IBFT committee members that needs to sign for a quorum
+// ThresholdSize returns the minimum IBFT committee members that needs to sign for a quorum (2F+1)
 func (s *Share) ThresholdSize() int {
 	return int(math.Ceil(float64(s.CommitteeSize()) * 2 / 3))
+}
+
+// ThresholdSize returns the minimum IBFT committee members that needs to sign for a partial quorum (F+1)
+func (s *Share) PartialThresholdSize() int {
+	return int(math.Ceil(float64(s.CommitteeSize()) * 1 / 3))
 }
 
 // PubKeysByID returns the public keys with the associated ids

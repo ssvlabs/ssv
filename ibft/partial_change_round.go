@@ -6,16 +6,10 @@ import (
 	"go.uber.org/zap"
 )
 
-func (i *Instance) changeRoundPartialQuorum(msgs []*proto.SignedMessage) (quorum bool, t int, n int) {
-	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	// TODO - refactor a way to calculate partial quorum
-	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*1
-	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
-}
-
 func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowestChangeRound uint64) {
 	lowestChangeRound = uint64(100000) // just a random really large round number
-	relevantMsgs := make([]*proto.SignedMessage, 0)
+	foundMsgs := make(map[uint64]*proto.SignedMessage)
+	quorumCount := 0
 	for _, msg := range msgs {
 		if err := i.changeRoundMsgValidationPipeline().Run(msg.SignedMessage); err != nil {
 			i.Logger.Warn("received invalid change round", zap.Error(err))
@@ -26,15 +20,26 @@ func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowes
 		if msg.SignedMessage.Message.Round <= i.State.Round {
 			continue
 		}
-		relevantMsgs = append(relevantMsgs, msg.SignedMessage)
-		if msg.SignedMessage.Message.Round < lowestChangeRound {
-			lowestChangeRound = msg.SignedMessage.Message.Round
+
+		for _, signer := range msg.SignedMessage.SignerIds {
+			if existingMsg, found := foundMsgs[signer]; found {
+				if existingMsg.Message.Round > msg.SignedMessage.Message.Round {
+					foundMsgs[signer] = msg.SignedMessage
+				}
+			} else {
+				foundMsgs[signer] = msg.SignedMessage
+				quorumCount++
+			}
+
+			// recalculate lowest
+			if foundMsgs[signer].Message.Round < lowestChangeRound {
+				lowestChangeRound = msg.SignedMessage.Message.Round
+			}
 		}
 	}
 
-	found, _, _ = i.changeRoundPartialQuorum(relevantMsgs)
-
-	return found, lowestChangeRound
+	minThreshold := i.ValidatorShare.PartialThresholdSize()
+	return quorumCount >= minThreshold, lowestChangeRound
 }
 
 // upon receiving a set Frc of f + 1 valid ⟨ROUND-CHANGE, λi, rj, −, −⟩ messages such that:

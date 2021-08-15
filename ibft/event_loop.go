@@ -88,7 +88,6 @@ loop:
 
 		var wg sync.WaitGroup
 		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)) > 0 {
-			i.Logger.Debug("adding round change message to event queue")
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				found, err := i.ProcessChangeRoundPartialQuorum()
@@ -97,9 +96,8 @@ loop:
 				}
 				if !found {
 					// if not found, wait 1 second and then finish to try again
-					time.Sleep(time.Millisecond * 100)
+					time.Sleep(time.Second * 1)
 				}
-
 				//i.Logger.Debug("done with round change message")
 				wg.Done()
 			}); !added {
