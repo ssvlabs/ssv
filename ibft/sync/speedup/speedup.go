@@ -15,6 +15,7 @@ type Speedup struct {
 	logger                *zap.Logger
 	identifier            []byte
 	publicKey             []byte
+	seqNumber             uint64
 	network               network.Network
 	msgValidationPipeline pipeline.Pipeline
 }
@@ -23,6 +24,7 @@ func New(
 	logger *zap.Logger,
 	identifier []byte,
 	publicKey []byte,
+	seqNumber uint64,
 	network network.Network,
 	msgValidationPipeline pipeline.Pipeline,
 ) *Speedup {
@@ -30,6 +32,7 @@ func New(
 		logger:                logger.With(zap.String("sync", "fast_catchup")),
 		identifier:            identifier,
 		publicKey:             publicKey,
+		seqNumber:             seqNumber,
 		network:               network,
 		msgValidationPipeline: msgValidationPipeline,
 	}
@@ -48,6 +51,7 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 		go func(peer string) {
 			msg, err := s.network.GetLastChangeRoundMsg(peer, &network.SyncMessage{
 				Type:   network.Sync_GetLatestChangeRound,
+				Params: []uint64{s.seqNumber},
 				Lambda: s.identifier,
 			})
 			if err != nil {

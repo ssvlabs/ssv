@@ -27,10 +27,12 @@ func (i *ibftImpl) processSyncQueueMessages() {
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
+	currentInstaceSeqNumber := int64(-1)
 	if i.currentInstance != nil {
 		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
+		currentInstaceSeqNumber = int64(i.currentInstance.State.SeqNumber)
 	}
-	s := incoming.New(i.logger, i.Identifier, i.network, i.ibftStorage, lastChangeRoundMsg)
+	s := incoming.New(i.logger, i.Identifier, currentInstaceSeqNumber, i.network, i.ibftStorage, lastChangeRoundMsg)
 	go s.Process(msg)
 }
 

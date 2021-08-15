@@ -102,6 +102,8 @@ func (i *ibftImpl) fastChangeRoundCatchup(instance *Instance) {
 	sync := speedup.New(
 		i.logger,
 		i.Identifier,
+		i.ValidatorShare.PublicKey.Serialize(),
+		instance.State.SeqNumber,
 		i.network,
 		instance.changeRoundMsgValidationPipeline(),
 	)
@@ -115,5 +117,6 @@ func (i *ibftImpl) fastChangeRoundCatchup(instance *Instance) {
 				Type:          network.NetworkMsg_IBFTType,
 			})
 		}
+		i.logger.Info("fast change round catchup finished", zap.Int("found_msgs", len(msgs)))
 	}
 }

@@ -13,6 +13,7 @@ type ReqHandler struct {
 	// paginationMaxSize is the max number of returned elements in a single response
 	paginationMaxSize  uint64
 	identifier         []byte
+	seqNumber          int64 // equals to -1 if not set
 	network            network.Network
 	storage            collections.Iibft
 	logger             *zap.Logger
@@ -23,6 +24,7 @@ type ReqHandler struct {
 func New(
 	logger *zap.Logger,
 	identifier []byte,
+	seqNumber int64,
 	network network.Network,
 	storage collections.Iibft,
 	lastChangeRoundMsg *proto.SignedMessage,
@@ -31,6 +33,7 @@ func New(
 		paginationMaxSize:  network.MaxBatch(),
 		logger:             logger,
 		identifier:         identifier,
+		seqNumber:          seqNumber,
 		network:            network,
 		storage:            storage,
 		lastChangeRoundMsg: lastChangeRoundMsg,
