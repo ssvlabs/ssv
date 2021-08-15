@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type f1Speedup struct {
+type changeRoundSpeedup struct {
 	logger     *zap.Logger
 	nodes      []ibft.IBFT
 	shares     map[uint64]*validatorstorage.Share
@@ -18,14 +18,14 @@ type f1Speedup struct {
 }
 
 // NewF1Speedup returns initialized changeRoundSpeedup scenario
-func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
-	return &f1Speedup{
+func NewChangeRoundSpeedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
+	return &changeRoundSpeedup{
 		logger:     logger,
 		valueCheck: valueCheck,
 	}
 }
 
-func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	nodeCount := len(nodes)
@@ -36,27 +36,28 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 
 	// init ibfts
 	var wg sync.WaitGroup
-	for i := uint64(1); i <= uint64(3); i++ {
-		if i <= 2 {
-			wg.Add(1)
-			go func(node ibft.IBFT) {
-				node.Init()
-				wg.Done()
-			}(nodes[i-1])
-		} else {
-			go func(node ibft.IBFT, index uint64) {
-				time.Sleep(time.Second * 13)
-				node.Init()
-				r.startNode(node, index)
-			}(nodes[i-1], i)
-		}
+	for i := uint64(1); i <= uint64(2); i++ {
+		wg.Add(1)
+		go func(node ibft.IBFT) {
+			node.Init()
+			wg.Done()
+		}(nodes[i-1])
 	}
 
 	r.logger.Info("waiting for nodes to init")
 	wg.Wait()
-
 	r.logger.Info("start instances")
-	for i := uint64(1); i <= uint64(nodeCount); i++ {
+
+	// start node 3 in delay
+	go func(node ibft.IBFT, index uint64) {
+		time.Sleep(time.Second * 60)
+		r.logger.Info("starting node 3")
+		node.Init()
+		r.startNode(node, index)
+	}(nodes[2], 3)
+
+	// start instances
+	for i := uint64(1); i <= uint64(2); i++ {
 		wg.Add(1)
 		go func(node ibft.IBFT, index uint64) {
 			defer wg.Done()
@@ -67,7 +68,7 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 	wg.Wait()
 }
 
-func (r *f1Speedup) startNode(node ibft.IBFT, index uint64) {
+func (r *changeRoundSpeedup) startNode(node ibft.IBFT, index uint64) {
 	res, err := node.StartInstance(ibft.StartOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,

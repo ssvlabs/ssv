@@ -55,9 +55,9 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 				Lambda: s.identifier,
 			})
 			if err != nil {
-				s.logger.Error("error fetching current instance", zap.Error(err))
+				s.logger.Error("error fetching latest change round", zap.Error(err))
 			} else if err := s.lastMsgError(msg); err != nil {
-				s.logger.Error("error fetching current instance", zap.Error(err))
+				s.logger.Error("error fetching latest change round", zap.Error(err))
 			} else {
 				signedMsg := msg.SignedMessages[0]
 				if err := s.msgValidationPipeline.Run(signedMsg); err != nil {
@@ -79,9 +79,9 @@ func (s *Speedup) lastMsgError(msg *network.SyncMessage) error {
 	if msg == nil {
 		return errors.New("msg is nil")
 	} else if len(msg.Error) > 0 {
-		return errors.New("error fetching current instance: " + msg.Error)
+		return errors.New(msg.Error)
 	} else if len(msg.SignedMessages) != 1 {
-		return errors.New("error fetching current instance, invalid result count")
+		return errors.New("invalid result count")
 	}
 	return nil
 }

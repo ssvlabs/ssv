@@ -1,13 +1,9 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
-	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -25,7 +21,7 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts *InstanceOptions, value
 	}
 
 	// catch up if we can
-	i.fastChangeRoundCatchup(instanceOpts)
+	i.fastChangeRoundCatchup(i.currentInstance)
 
 	// main instance callback loop
 	var retRes *InstanceResult

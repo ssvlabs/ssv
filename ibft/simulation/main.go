@@ -33,7 +33,7 @@ var (
 	identifier = []byte("ibft identifier")
 	logger     = logex.Build("simulator", zapcore.InfoLevel, nil)
 	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
-	scenario   = scenarios.FarFutureSync(logger, &alwaysTrueValueCheck{})
+	scenario   = scenarios.NewChangeRoundSpeedup(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct {
@@ -48,7 +48,7 @@ func networking() network.Network {
 	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
 		DiscoveryType:    "mdns",
 		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
+		RequestTimeout:   time.Second * 5,
 	})
 	if err != nil {
 		logger.Fatal("failed to create db", zap.Error(err))
@@ -132,12 +132,12 @@ func main() {
 		node := ibft.New(
 			beacon.RoleTypeAttester,
 			identifier,
-			logger,
+			logger.With(zap.Uint64("simulation_node_id", i)),
 			dbs[i-1],
 			net,
 			msgqueue.New(),
 			&proto.InstanceConfig{
-				RoundChangeDurationSeconds:   2.1,
+				RoundChangeDurationSeconds:   3,
 				LeaderPreprepareDelaySeconds: 1,
 			},
 			shares[i],

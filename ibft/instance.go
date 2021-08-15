@@ -292,23 +292,16 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		Signature: sig.Serialize(),
 		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
+
+	// used for instance fast change round catchup
+	if msg.Type == proto.RoundState_ChangeRound {
+		i.setLastChangeRoundMsg(signedMessage)
+	}
+
 	if i.network != nil {
 		return i.network.Broadcast(i.ValidatorShare.PublicKey.Serialize(), signedMessage)
 	}
-
-	switch msg.Type {
-	case proto.RoundState_PrePrepare:
-		i.PrePrepareMessages.AddMessage(signedMessage)
-	case proto.RoundState_Prepare:
-		i.PrepareMessages.AddMessage(signedMessage)
-	case proto.RoundState_Commit:
-		i.CommitMessages.AddMessage(signedMessage)
-	case proto.RoundState_ChangeRound:
-		i.ChangeRoundMessages.AddMessage(signedMessage)
-		i.setLastChangeRoundMsg(signedMessage) // used for instance fast change round catchup
-	}
-
-	return nil
+	return errors.New("no networking, could not broadcast msg")
 }
 
 func (i *Instance) setLastChangeRoundMsg(msg *proto.SignedMessage) {
