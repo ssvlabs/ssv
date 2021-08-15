@@ -1,7 +1,8 @@
-package sync
+package incoming
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestReqHandler_getHighestDecided(t *testing.T) {
-	ibftStorage := ibftStorage(t)
+	ibftStorage := sync.TestingIbftStorage(t)
 	handler := ReqHandler{
 		paginationMaxSize: 0,
 		identifier:        []byte{1, 2, 3, 4},
