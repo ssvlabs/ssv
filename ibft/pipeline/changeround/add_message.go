@@ -26,13 +26,6 @@ func AddChangeRoundMessage(logger *zap.Logger, changeRoundMessages msgcont.Messa
 
 // Run implements pipeline.Pipeline interface
 func (p *addChangeRoundMessage) Run(signedMessage *proto.SignedMessage) error {
-	// TODO - if instance decidedChan should we process round change?
-	if p.state.Stage == proto.RoundState_Decided {
-		// TODO - can't get here, fails on round verification in pipeline
-		p.logger.Info("received change round after decision, sending decidedChan message")
-		return nil
-	}
-
 	// add to prepare messages
 	p.changeRoundMessages.AddMessage(signedMessage)
 	p.logger.Info("received valid change round message for round",
