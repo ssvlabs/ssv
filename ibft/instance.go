@@ -240,6 +240,7 @@ func (i *Instance) setRound(newRound uint64) {
 	i.State.Round = newRound
 }
 
+// Round returns the state's round (thread safe)
 func (i *Instance) Round() uint64 {
 	i.stateLock.RLock()
 	defer i.stateLock.RUnlock()

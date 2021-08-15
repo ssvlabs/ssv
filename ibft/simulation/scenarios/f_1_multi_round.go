@@ -17,7 +17,7 @@ type f1MultiRound struct {
 	valueCheck valcheck.ValueCheck
 }
 
-// NewF1Speedup returns initialized f1Speedup scenario
+// NewF1MultiRound returns initialized f1Speedup scenario
 func NewF1MultiRound(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
 	return &f1MultiRound{
 		logger:     logger,
