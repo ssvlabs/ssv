@@ -35,9 +35,6 @@ func (s *ReqHandler) validateGetLatestChangeRoundReq(msg *network.SyncChanObj) e
 	if len(msg.Msg.Params) != 1 {
 		return errors.New("sync msg invalid: should be 2 elements")
 	}
-	if msg.Msg.Params[0] < 0 {
-		return errors.New("sync msg invalid: param[0] should be >= 0")
-	}
 	if int64(msg.Msg.Params[0]) != s.seqNumber {
 		return errors.New(kv.EntryNotFoundError)
 	}

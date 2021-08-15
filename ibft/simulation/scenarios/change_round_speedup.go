@@ -17,7 +17,7 @@ type changeRoundSpeedup struct {
 	valueCheck valcheck.ValueCheck
 }
 
-// NewF1Speedup returns initialized changeRoundSpeedup scenario
+// NewChangeRoundSpeedup returns initialized changeRoundSpeedup scenario
 func NewChangeRoundSpeedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
 	return &changeRoundSpeedup{
 		logger:     logger,

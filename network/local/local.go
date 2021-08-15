@@ -192,3 +192,13 @@ func (n *Local) AllPeers(validatorPk []byte) ([]string, error) {
 func (n *Local) MaxBatch() uint64 {
 	return 25
 }
+
+// GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
+func (n *Local) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	return nil, nil
+}
+
+// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
+func (n *Local) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
+	return nil
+}

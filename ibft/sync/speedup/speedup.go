@@ -20,6 +20,7 @@ type Speedup struct {
 	msgValidationPipeline pipeline.Pipeline
 }
 
+// New returns a new Speedup instance
 func New(
 	logger *zap.Logger,
 	identifier []byte,
@@ -38,6 +39,7 @@ func New(
 	}
 }
 
+// Start starts the speedup sync
 func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 	usedPeers, err := sync2.GetPeers(s.network, s.publicKey, 4)
 	if err != nil {
@@ -71,8 +73,6 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 	}
 	wg.Wait()
 	return res, nil
-
-	return nil, nil
 }
 
 func (s *Speedup) lastMsgError(msg *network.SyncMessage) error {

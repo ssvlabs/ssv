@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
+	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
@@ -163,6 +164,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		},
 		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
 		Logger:     zaptest.NewLogger(t),
+		network:    local.NewLocalNetwork(),
 	}
 
 	// test happy flow
@@ -198,6 +200,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
+		network: local.NewLocalNetwork(),
 	}
 
 	err := instance.JustifyPrePrepare(1)
