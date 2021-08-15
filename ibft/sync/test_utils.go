@@ -88,6 +88,7 @@ type TestNetwork struct {
 	highestDecidedReceived map[string]*proto.SignedMessage
 	errorsMap              map[string]error
 	decidedArr             map[string][]*proto.SignedMessage
+	lastMsgs               map[string]*proto.SignedMessage
 	maxBatch               int
 	peers                  []string
 	retError               error
@@ -100,6 +101,7 @@ func NewTestNetwork(
 	highestDecidedReceived map[string]*proto.SignedMessage,
 	errorsMap map[string]error,
 	decidedArr map[string][]*proto.SignedMessage,
+	lastMsgs map[string]*proto.SignedMessage,
 	retError error,
 ) *TestNetwork {
 	return &TestNetwork{
@@ -109,6 +111,7 @@ func NewTestNetwork(
 		highestDecidedReceived: highestDecidedReceived,
 		errorsMap:              errorsMap,
 		decidedArr:             decidedArr,
+		lastMsgs:               lastMsgs,
 		retError:               retError,
 	}
 }
@@ -214,6 +217,44 @@ func (n *TestNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
 func (n *TestNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	msgBytes, err := json.Marshal(network.Message{
+		SyncMessage: msg,
+		Type:        network.NetworkMsg_SyncType,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal message")
+	}
+	_, err = stream.Write(msgBytes)
+	return err
+}
+
+// GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
+func (n *TestNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	if last, found := n.lastMsgs[peerStr]; found {
+		if last == nil {
+			// as if no highest.
+			return &network.SyncMessage{
+				Error:      kv.EntryNotFoundError,
+				FromPeerID: peerStr,
+				Type:       network.Sync_GetLatestChangeRound,
+			}, nil
+		}
+
+		if !bytes.Equal(msg.Lambda, last.Message.Lambda) {
+			return nil, errors.New("could not find highest")
+		}
+
+		return &network.SyncMessage{
+			SignedMessages: []*proto.SignedMessage{last},
+			FromPeerID:     peerStr,
+			Type:           network.Sync_GetInstanceRange,
+		}, nil
+	}
+	return nil, errors.New("could not find highest")
+}
+
+// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
+func (n *TestNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,

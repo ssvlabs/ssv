@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/network"
@@ -25,7 +26,11 @@ func (i *ibftImpl) processSyncQueueMessages() {
 }
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
-	s := incoming.NewReqHandler(i.logger, i.Identifier, i.network, i.ibftStorage)
+	var lastChangeRoundMsg *proto.SignedMessage
+	if i.currentInstance != nil {
+		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
+	}
+	s := incoming.New(i.logger, i.Identifier, i.network, i.ibftStorage, lastChangeRoundMsg)
 	go s.Process(msg)
 }
 

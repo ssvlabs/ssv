@@ -55,6 +55,7 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
+	lastChangeRoundMsg  *proto.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
 
 	// event loop
 	eventQueue eventqueue.EventQueue
@@ -76,6 +77,7 @@ type Instance struct {
 	stageChangedChansLock        sync.Mutex
 	stageLock                    sync.Mutex
 	stateLock                    sync.Mutex
+	lastChangeRoundMsgLock       sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -115,6 +117,7 @@ func NewInstance(opts *InstanceOptions) *Instance {
 		stageLock:                    sync.Mutex{},
 		stageChangedChansLock:        sync.Mutex{},
 		stateLock:                    sync.Mutex{},
+		lastChangeRoundMsgLock:       sync.RWMutex{},
 	}
 }
 
@@ -302,7 +305,21 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		i.CommitMessages.AddMessage(signedMessage)
 	case proto.RoundState_ChangeRound:
 		i.ChangeRoundMessages.AddMessage(signedMessage)
+		i.setLastChangeRoundMsg(signedMessage) // used for instance fast change round catchup
 	}
 
 	return nil
+}
+
+func (i *Instance) setLastChangeRoundMsg(msg *proto.SignedMessage) {
+	i.lastChangeRoundMsgLock.Lock()
+	defer i.lastChangeRoundMsgLock.Unlock()
+	i.lastChangeRoundMsg = msg
+}
+
+// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
+func (i *Instance) GetLastChangeRoundMsg() *proto.SignedMessage {
+	i.lastChangeRoundMsgLock.RLock()
+	defer i.lastChangeRoundMsgLock.RUnlock()
+	return i.lastChangeRoundMsg
 }

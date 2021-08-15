@@ -3,6 +3,7 @@ package history
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
+	sync2 "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
@@ -14,14 +15,9 @@ import (
 func (s *Sync) findHighestInstance() (*proto.SignedMessage, string, error) {
 	// pick up to 4 peers
 	// TODO - why 4? should be set as param?
-	// TODO select peers by quality/ score?
-	// TODO - should be changed to support multi duty
-	usedPeers, err := s.network.AllPeers(s.publicKey)
+	usedPeers, err := sync2.GetPeers(s.network, s.publicKey, 4)
 	if err != nil {
 		return nil, "", err
-	}
-	if len(usedPeers) > 4 {
-		usedPeers = usedPeers[:4]
 	}
 
 	results := s.getHighestDecidedFromPeers(usedPeers)

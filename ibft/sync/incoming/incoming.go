@@ -1,6 +1,7 @@
 package incoming
 
 import (
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
@@ -10,21 +11,29 @@ import (
 // fetching decided messages from the network
 type ReqHandler struct {
 	// paginationMaxSize is the max number of returned elements in a single response
-	paginationMaxSize uint64
-	identifier        []byte
-	network           network.Network
-	storage           collections.Iibft
-	logger            *zap.Logger
+	paginationMaxSize  uint64
+	identifier         []byte
+	network            network.Network
+	storage            collections.Iibft
+	logger             *zap.Logger
+	lastChangeRoundMsg *proto.SignedMessage
 }
 
-// NewReqHandler returns a new instance of ReqHandler
-func NewReqHandler(logger *zap.Logger, identifier []byte, network network.Network, storage collections.Iibft) *ReqHandler {
+// New returns a new instance of ReqHandler
+func New(
+	logger *zap.Logger,
+	identifier []byte,
+	network network.Network,
+	storage collections.Iibft,
+	lastChangeRoundMsg *proto.SignedMessage,
+) *ReqHandler {
 	return &ReqHandler{
-		paginationMaxSize: network.MaxBatch(),
-		logger:            logger,
-		identifier:        identifier,
-		network:           network,
-		storage:           storage,
+		paginationMaxSize:  network.MaxBatch(),
+		logger:             logger,
+		identifier:         identifier,
+		network:            network,
+		storage:            storage,
+		lastChangeRoundMsg: lastChangeRoundMsg,
 	}
 }
 
