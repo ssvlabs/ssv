@@ -35,6 +35,8 @@ func (s *ReqHandler) Process(msg *network.SyncChanObj) {
 		s.handleGetHighestReq(msg)
 	case network.Sync_GetInstanceRange:
 		s.handleGetDecidedReq(msg)
+	case network.Sync_GetLatestChangeRound:
+		s.handleGetLatestChangeRoundReq(msg)
 	default:
 		s.logger.Error("sync req handler received un-supported type", zap.Uint64("received type", uint64(msg.Msg.Type)))
 	}

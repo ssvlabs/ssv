@@ -1,7 +1,13 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync/speedup"
+	"github.com/bloxapp/ssv/network"
+	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -92,6 +98,22 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
-func (i *ibftImpl) fastChangeRoundCatchup(instanceOpts *InstanceOptions) {
-
+func (i *ibftImpl) fastChangeRoundCatchup(instance *Instance) {
+	sync := speedup.New(
+		i.logger,
+		i.Identifier,
+		i.network,
+		instance.changeRoundMsgValidationPipeline(),
+	)
+	msgs, err := sync.Start()
+	if err != nil {
+		i.logger.Error("failed fast change round catchup", zap.Error(err))
+	} else {
+		for _, msg := range msgs {
+			instance.MsgQueue.AddMessage(&network.Message{
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_IBFTType,
+			})
+		}
+	}
 }
