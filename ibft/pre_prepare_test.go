@@ -156,6 +156,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 			SeqNumber:     threadsafe.Uint64(0),
+			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -178,7 +179,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.Stage() == proto.RoundState_PrePrepare)
+	require.True(t, instance.State.Stage.Get() == int32(proto.RoundState_PrePrepare))
 
 	// return nil if another pre-prepare received.
 	err = instance.UponPrePrepareMsg().Run(msg)

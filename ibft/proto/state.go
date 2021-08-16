@@ -6,7 +6,7 @@ import (
 )
 
 type State struct {
-	Stage RoundState
+	Stage *threadsafe.SafeInt32
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
 	Lambda *threadsafe.SafeBytes
 	// sequence number is an incremental number for each instance, much like a block number would be in a blockchain
@@ -18,7 +18,7 @@ type State struct {
 }
 
 type unsafeState struct {
-	Stage         RoundState
+	Stage         int32
 	Lambda        []byte
 	SeqNumber     uint64
 	InputValue    []byte
@@ -29,7 +29,7 @@ type unsafeState struct {
 
 func (s *State) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&unsafeState{
-		Stage:         s.Stage,
+		Stage:         s.Stage.Get(),
 		Lambda:        s.Lambda.Get(),
 		SeqNumber:     s.SeqNumber.Get(),
 		InputValue:    s.InputValue.Get(),
@@ -45,7 +45,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	s.Stage = d.Stage
+	s.Stage = threadsafe.Int32(d.Stage)
 	s.Lambda = threadsafe.Bytes(d.Lambda)
 	s.SeqNumber = threadsafe.Uint64(d.SeqNumber)
 	s.InputValue = threadsafe.Bytes(d.InputValue)

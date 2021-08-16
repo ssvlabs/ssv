@@ -83,5 +83,5 @@ func (test *DecideDifferentValue) Run(t *testing.T) {
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, []byte("wrong value"))
 	require.True(t, quorum)
 
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
 }

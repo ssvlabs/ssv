@@ -29,7 +29,7 @@ func TestInstanceStop(t *testing.T) {
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:     threadsafe.Uint64(1),
-			Stage:     proto.RoundState_PrePrepare,
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
 			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: threadsafe.Uint64(1),
 		},
@@ -103,7 +103,7 @@ func TestInstanceStop(t *testing.T) {
 
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
-	require.EqualValues(t, proto.RoundState_Stopped, instance.Stage())
+	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
 	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get())))
 	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get()))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
@@ -116,7 +116,7 @@ func TestInit(t *testing.T) {
 		Config:     proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:     threadsafe.Uint64(1),
-			Stage:     proto.RoundState_PrePrepare,
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
 			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: threadsafe.Uint64(1),
 		},
@@ -138,7 +138,7 @@ func TestSetStage(t *testing.T) {
 		Config:     proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:     threadsafe.Uint64(1),
-			Stage:     proto.RoundState_PrePrepare,
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
 			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: threadsafe.Uint64(1),
 		},
@@ -175,20 +175,20 @@ func TestSetStage(t *testing.T) {
 	lock.Lock()
 	require.True(t, prepare)
 	lock.Unlock()
-	require.EqualValues(t, proto.RoundState_Prepare, instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Prepare, instance.State.Stage.Get())
 
 	instance.ProcessStageChange(proto.RoundState_Decided)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, decided)
 	lock.Unlock()
-	require.EqualValues(t, proto.RoundState_Decided, instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Decided, instance.State.Stage.Get())
 
 	instance.ProcessStageChange(proto.RoundState_Stopped)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, stopped)
 	lock.Unlock()
-	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
 	require.NotNil(t, instance.stageChangedChan)
 }

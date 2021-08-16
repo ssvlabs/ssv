@@ -28,7 +28,7 @@ func TestChangeRoundTimer(t *testing.T) {
 		},
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
-			Stage:         proto.RoundState_PrePrepare,
+			Stage:         threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			SeqNumber:     threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),

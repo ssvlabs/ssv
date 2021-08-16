@@ -9,7 +9,7 @@ import (
 
 func TestMarshaling(t *testing.T) {
 	state := &State{
-		Stage:         RoundState_Decided,
+		Stage:         threadsafe.Int32(int32(RoundState_Decided)),
 		Lambda:        threadsafe.BytesS("lambda"),
 		SeqNumber:     threadsafe.Uint64(1),
 		InputValue:    threadsafe.BytesS("input"),
@@ -24,7 +24,7 @@ func TestMarshaling(t *testing.T) {
 	unmarshaledState := &State{}
 	require.NoError(t, json.Unmarshal(byts, unmarshaledState))
 
-	require.EqualValues(t, RoundState_Decided, unmarshaledState.Stage)
+	require.EqualValues(t, RoundState_Decided, unmarshaledState.Stage.Get())
 	require.EqualValues(t, []byte("lambda"), unmarshaledState.Lambda.Get())
 	require.EqualValues(t, 1, unmarshaledState.SeqNumber.Get())
 	require.EqualValues(t, []byte("input"), unmarshaledState.InputValue.Get())

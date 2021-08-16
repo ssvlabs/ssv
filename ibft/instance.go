@@ -84,7 +84,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
-			Stage:         proto.RoundState_NotStarted,
+			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
 			Lambda:        threadsafe.Bytes(opts.Lambda),
 			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
 			InputValue:    threadsafe.Bytes(nil),
@@ -242,17 +242,9 @@ func (i *Instance) BumpRound() {
 	i.State.Round.Set(i.State.Round.Get() + 1)
 }
 
-// Stage returns the instance message state
-func (i *Instance) Stage() proto.RoundState {
-	i.stateLock.RLock()
-	defer i.stateLock.RUnlock()
-
-	return i.State.Stage
-}
-
 // ProcessStageChange set the State's round State and pushed the new State into the State channel
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
-	i.setStage(stage)
+	i.State.Stage.Set(int32(stage))
 
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
@@ -265,12 +257,6 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	if i.stageChangedChan != nil {
 		i.stageChangedChan <- stage
 	}
-}
-
-func (i *Instance) setStage(stage proto.RoundState) {
-	i.stateLock.Lock()
-	defer i.stateLock.Unlock()
-	i.State.Stage = stage
 }
 
 // GetStageChan returns a RoundState channel added to the stateChangesChans array

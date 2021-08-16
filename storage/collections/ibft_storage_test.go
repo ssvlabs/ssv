@@ -38,7 +38,7 @@ func TestIbftStorage_SaveDecided(t *testing.T) {
 func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
 	storage := NewIbft(newInMemDb(), zap.L(), "attestation")
 	err := storage.SaveCurrentInstance([]byte{1, 2, 3, 4}, &proto.State{
-		Stage:         proto.RoundState_Decided,
+		Stage:         threadsafe.Int32(int32(proto.RoundState_Decided)),
 		Lambda:        threadsafe.Bytes(nil),
 		SeqNumber:     threadsafe.Uint64(2),
 		InputValue:    threadsafe.Bytes(nil),

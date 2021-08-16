@@ -87,5 +87,5 @@ func (test *ChangeRoundAndDecide) Run(t *testing.T) {
 			break
 		}
 	}
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
 }
