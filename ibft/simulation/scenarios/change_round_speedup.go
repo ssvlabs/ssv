@@ -35,35 +35,23 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validat
 	}
 
 	// init ibfts
-	var wg sync.WaitGroup
-	for i := uint64(1); i <= uint64(2); i++ {
-		wg.Add(1)
-		go func(node ibft.IBFT) {
-			node.Init()
-			wg.Done()
-		}(nodes[i-1])
-	}
-
-	r.logger.Info("waiting for nodes to init")
-	wg.Wait()
-	r.logger.Info("start instances")
-
-	// start node 3 in delay
 	go func(node ibft.IBFT, index uint64) {
-		time.Sleep(time.Second * 60)
-		r.logger.Info("starting node 3")
 		node.Init()
 		r.startNode(node, index)
+	}(nodes[0], 1)
+	go func(node ibft.IBFT, index uint64) {
+		time.Sleep(time.Second * 13)
+		node.Init()
+		r.startNode(node, index)
+	}(nodes[1], 2)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func(node ibft.IBFT, index uint64) {
+		time.Sleep(time.Second * 60)
+		node.Init()
+		r.startNode(node, index)
+		wg.Done()
 	}(nodes[2], 3)
-
-	// start instances
-	for i := uint64(1); i <= uint64(2); i++ {
-		wg.Add(1)
-		go func(node ibft.IBFT, index uint64) {
-			defer wg.Done()
-			r.startNode(node, index)
-		}(nodes[i-1], i)
-	}
 
 	wg.Wait()
 }
