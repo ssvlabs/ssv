@@ -45,7 +45,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 	var ret *proto.SignedMessage
 	var err error
 	for _, msg := range msgs {
-		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue) {
+		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue.Get()) {
 			continue
 		}
 		if ret == nil {

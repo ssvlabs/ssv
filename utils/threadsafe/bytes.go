@@ -3,7 +3,9 @@ package threadsafe
 import "sync"
 
 var (
+	// Bytes is a shorthand for NewSafeBytes
 	Bytes  = NewSafeBytes
+	// BytesS is a shorthand for NewSafeBytesFromString
 	BytesS = NewSafeBytesFromString
 )
 
@@ -26,12 +28,14 @@ func NewSafeBytes(value []byte) *SafeBytes {
 	}
 }
 
+// Get returns the underlying value
 func (s *SafeBytes) Get() []byte {
 	s.l.RLock()
 	defer s.l.RUnlock()
 	return s.value
 }
 
+// Set enables to change value
 func (s *SafeBytes) Set(value []byte) {
 	s.l.Lock()
 	defer s.l.Unlock()
