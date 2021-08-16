@@ -75,8 +75,6 @@ type Instance struct {
 	processPrepareQuorumOnce     sync.Once
 	processCommitQuorumOnce      sync.Once
 	stopLock                     sync.Mutex
-	stageChangedChansLock        sync.Mutex
-	stateLock                    sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -117,8 +115,6 @@ func NewInstance(opts InstanceOptions) *Instance {
 		processPrepareQuorumOnce:     sync.Once{},
 		processCommitQuorumOnce:      sync.Once{},
 		stopLock:                     sync.Mutex{},
-		stageChangedChansLock:        sync.Mutex{},
-		stateLock:                    sync.RWMutex{},
 	}
 }
 
@@ -157,9 +153,7 @@ func (i *Instance) Start(inputValue []byte) error {
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
 	i.State.InputValue.Set(inputValue)
-	i.stateLock.Lock()
 	i.State.Round.Set(1) // start from 1
-	i.stateLock.Unlock()
 
 	if i.IsLeader() {
 		go func() {
