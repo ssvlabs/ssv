@@ -12,7 +12,7 @@ type State struct {
 	// sequence number is an incremental number for each instance, much like a block number would be in a blockchain
 	SeqNumber     *threadsafe.SafeUint64
 	InputValue    *threadsafe.SafeBytes
-	Round         uint64
+	Round         *threadsafe.SafeUint64
 	PreparedRound uint64
 	PreparedValue *threadsafe.SafeBytes
 }
@@ -33,7 +33,7 @@ func (s *State) MarshalJSON() ([]byte, error) {
 		Lambda:        s.Lambda.Get(),
 		SeqNumber:     s.SeqNumber.Get(),
 		InputValue:    s.InputValue.Get(),
-		Round:         s.Round,
+		Round:         s.Round.Get(),
 		PreparedRound: s.PreparedRound,
 		PreparedValue: s.PreparedValue.Get(),
 	})
@@ -49,7 +49,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	s.Lambda = threadsafe.Bytes(d.Lambda)
 	s.SeqNumber = threadsafe.Uint64(d.SeqNumber)
 	s.InputValue = threadsafe.Bytes(d.InputValue)
-	s.Round = d.Round
+	s.Round = threadsafe.Uint64(d.Round)
 	s.PreparedRound = d.PreparedRound
 	s.PreparedValue = threadsafe.Bytes(d.PreparedValue)
 	return nil

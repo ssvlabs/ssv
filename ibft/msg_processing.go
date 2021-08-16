@@ -10,11 +10,7 @@ import (
 
 // ProcessMessage pulls messages from the queue to be processed sequentially
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
-	i.stateLock.RLock()
-	round := i.State.Round
-	i.stateLock.RUnlock()
-
-	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), round)); netMsg != nil {
+	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), i.State.Round.Get())); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:

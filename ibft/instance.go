@@ -89,6 +89,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
 			InputValue:    threadsafe.Bytes(nil),
 			PreparedValue: threadsafe.Bytes(nil),
+			Round:         threadsafe.Uint64(1),
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
@@ -156,7 +157,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
 	i.State.InputValue.Set(inputValue)
 	i.stateLock.Lock()
-	i.State.Round = 1 // start from 1
+	i.State.Round.Set(1) // start from 1
 	i.stateLock.Unlock()
 
 	if i.IsLeader() {
@@ -244,14 +245,14 @@ func (i *Instance) setRound(newRound uint64) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	i.processCommitQuorumOnce = sync.Once{}
-	i.State.Round = newRound
+	i.State.Round.Set(newRound)
 }
 
 // Round returns the state's round (thread safe)
 func (i *Instance) Round() uint64 {
 	i.stateLock.RLock()
 	defer i.stateLock.RUnlock()
-	return i.State.Round
+	return i.State.Round.Get()
 }
 
 // Stage returns the instance message state

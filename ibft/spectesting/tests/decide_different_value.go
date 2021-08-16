@@ -30,7 +30,7 @@ func (test *DecideDifferentValue) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round = 1
+	test.instance.State.Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {

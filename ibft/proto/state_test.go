@@ -13,7 +13,7 @@ func TestMarshaling(t *testing.T) {
 		Lambda:        threadsafe.BytesS("lambda"),
 		SeqNumber:     threadsafe.Uint64(1),
 		InputValue:    threadsafe.BytesS("input"),
-		Round:         3,
+		Round:         threadsafe.Uint64(3),
 		PreparedRound: 2,
 		PreparedValue: threadsafe.BytesS("prepared value"),
 	}
@@ -28,7 +28,7 @@ func TestMarshaling(t *testing.T) {
 	require.EqualValues(t, []byte("lambda"), unmarshaledState.Lambda.Get())
 	require.EqualValues(t, 1, unmarshaledState.SeqNumber.Get())
 	require.EqualValues(t, []byte("input"), unmarshaledState.InputValue.Get())
-	require.EqualValues(t, 3, unmarshaledState.Round)
+	require.EqualValues(t, 3, unmarshaledState.Round.Get())
 	require.EqualValues(t, 2, unmarshaledState.PreparedRound)
 	require.EqualValues(t, []byte("prepared value"), unmarshaledState.PreparedValue.Get())
 }

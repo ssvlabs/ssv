@@ -23,7 +23,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
@@ -95,7 +95,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
@@ -151,7 +151,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		PrepareMessages:    msgcontinmem.New(3),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
@@ -196,7 +196,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 			ShareKey:  secretKeys[1],
 		},
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
 		},
@@ -206,7 +206,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 
 	// try to justify round 2 without round change
-	instance.State.Round = 2
+	instance.State.Round.Set(2)
 	err = instance.JustifyPrePrepare(2)
 	require.EqualError(t, err, "no change round quorum")
 
@@ -254,7 +254,7 @@ func TestPrePreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round:     1,
+			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},

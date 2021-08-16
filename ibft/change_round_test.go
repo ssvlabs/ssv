@@ -63,7 +63,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
 		},
@@ -132,7 +132,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
 		},
@@ -441,7 +441,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			3: {IbftId: 3},
 		}},
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
 		},
@@ -684,7 +684,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
-			Round:     1,
+			Round:     threadsafe.Uint64(1),
 			SeqNumber: threadsafe.Uint64(1),
 			Lambda:    threadsafe.BytesS("lambda"),
 		},
@@ -712,7 +712,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
-			Round:     1,
+			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},

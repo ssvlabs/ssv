@@ -18,7 +18,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round:         3,
+			Round:         threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
@@ -84,7 +84,7 @@ func TestCommitPipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		State: &proto.State{
-			Round:     1,
+			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},

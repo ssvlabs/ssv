@@ -21,7 +21,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 			ShareKey:  sks[1],
 		},
 		State: &proto.State{
-			Round:         1,
+			Round:         threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
@@ -86,7 +86,7 @@ func TestPreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round:     1,
+			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},

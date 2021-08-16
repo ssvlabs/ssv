@@ -48,16 +48,12 @@ loop:
 func (i *Instance) StartMessagePipeline() {
 loop:
 	for {
-		i.stateLock.RLock()
-		round := i.State.Round
-		i.stateLock.RUnlock()
-
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), round)); queueCnt > 0 {
+		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), i.State.Round.Get())); queueCnt > 0 {
 			i.Logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {

@@ -92,7 +92,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			instance := &Instance{
-				State:          &proto.State{Round: 1, Lambda: threadsafe.Bytes([]byte{1, 2, 3, 4}), SeqNumber: threadsafe.Uint64(1)},
+				State:          &proto.State{Round: threadsafe.Uint64(1), Lambda: threadsafe.Bytes([]byte{1, 2, 3, 4}), SeqNumber: threadsafe.Uint64(1)},
 				Config:         proto.DefaultConsensusParams(),
 				ValidatorShare: &storage.Share{Committee: nodes},
 				Logger:         zap.L(),
