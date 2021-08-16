@@ -155,6 +155,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: threadsafe.Bytes(nil),
+			SeqNumber:     threadsafe.Uint64(0),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -253,8 +254,9 @@ func TestPrePreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round:  1,
-			Lambda: threadsafe.Bytes(nil),
+			Round:     1,
+			Lambda:    threadsafe.Bytes(nil),
+			SeqNumber: threadsafe.Uint64(0),
 		},
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}

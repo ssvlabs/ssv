@@ -31,7 +31,7 @@ func (i *Instance) commitMsgValidationPipeline() pipeline.Pipeline {
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateSequenceNumber(i.State.SeqNumber),
+		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 	)
 }
@@ -112,7 +112,7 @@ func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 		Type:      proto.RoundState_Commit,
 		Round:     i.Round(),
 		Lambda:    i.State.Lambda.Get(),
-		SeqNumber: i.State.SeqNumber,
+		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
 }

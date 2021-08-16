@@ -11,11 +11,10 @@ import (
 // ProcessMessage pulls messages from the queue to be processed sequentially
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 	i.stateLock.RLock()
-	seq := i.State.SeqNumber
 	round := i.State.Round
 	i.stateLock.RUnlock()
 
-	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), seq, round)); netMsg != nil {
+	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), round)); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:
@@ -40,11 +39,7 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 
 // ProcessChangeRoundPartialQuorum will look for f+1 change round msgs to bump to a higher round if this instance is behind.
 func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
-	i.stateLock.RLock()
-	seq := i.State.SeqNumber
-	i.stateLock.RUnlock()
-
-	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), seq)); msgsMap != nil {
+	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())); msgsMap != nil {
 		// get values and keys slices
 		msgs := make([]*network.Message, 0)
 		for _, msg := range msgsMap {

@@ -30,7 +30,7 @@ func TestChangeRoundTimer(t *testing.T) {
 			Round:         1,
 			Stage:         proto.RoundState_PrePrepare,
 			Lambda:        threadsafe.BytesS("Lambda"),
-			SeqNumber:     1,
+			SeqNumber:     threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 		ValidatorShare: &storage.Share{

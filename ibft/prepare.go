@@ -18,7 +18,7 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
 		auth.ValidateRound(i.Round()),
-		auth.ValidateSequenceNumber(i.State.SeqNumber),
+		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
@@ -101,7 +101,7 @@ func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 		Type:      proto.RoundState_Prepare,
 		Round:     i.Round(),
 		Lambda:    i.State.Lambda.Get(),
-		SeqNumber: i.State.SeqNumber,
+		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
 }

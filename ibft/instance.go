@@ -86,7 +86,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		State: &proto.State{
 			Stage:         proto.RoundState_NotStarted,
 			Lambda:        threadsafe.Bytes(opts.Lambda),
-			SeqNumber:     opts.SeqNumber,
+			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
 			InputValue:    threadsafe.Bytes(nil),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
@@ -269,7 +269,7 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.Round(); j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber, j))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), j))
 		}
 	}
 

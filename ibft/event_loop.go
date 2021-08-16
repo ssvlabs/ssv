@@ -49,7 +49,6 @@ func (i *Instance) StartMessagePipeline() {
 loop:
 	for {
 		i.stateLock.RLock()
-		seq := i.State.SeqNumber
 		round := i.State.Round
 		i.stateLock.RUnlock()
 
@@ -58,7 +57,7 @@ loop:
 		}
 
 		var wg sync.WaitGroup
-		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), seq, round)); queueCnt > 0 {
+		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), round)); queueCnt > 0 {
 			i.Logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
@@ -85,16 +84,12 @@ loop:
 func (i *Instance) StartPartialChangeRoundPipeline() {
 loop:
 	for {
-		i.stateLock.RLock()
-		seq := i.State.SeqNumber
-		i.stateLock.RUnlock()
-
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), seq)) > 0 {
+		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())) > 0 {
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				found, err := i.ProcessChangeRoundPartialQuorum()

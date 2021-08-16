@@ -86,8 +86,9 @@ func TestPreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round:  1,
-			Lambda: threadsafe.Bytes(nil),
+			Round:     1,
+			Lambda:    threadsafe.Bytes(nil),
+			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
 	pipeline := instance.prepareMsgPipeline()

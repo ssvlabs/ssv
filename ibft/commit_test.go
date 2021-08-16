@@ -84,8 +84,9 @@ func TestCommitPipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		State: &proto.State{
-			Round:  1,
-			Lambda: threadsafe.Bytes(nil),
+			Round:     1,
+			Lambda:    threadsafe.Bytes(nil),
+			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
 	pipeline := instance.commitMsgPipeline()

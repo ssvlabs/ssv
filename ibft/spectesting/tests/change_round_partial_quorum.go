@@ -86,38 +86,38 @@ func (test *ChangeRoundPartialQuorum) Run(t *testing.T) {
 	require.EqualValues(t, 2, test.instances[0].State.Round)
 	require.Len(t, test.instances[0].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[0].State.Lambda.Get(),
-		test.instances[0].State.SeqNumber)), 2)
+		test.instances[0].State.SeqNumber.Get())), 2)
 	test.instances[0].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[0].State.Lambda.Get(),
-		test.instances[0].State.SeqNumber))
+		test.instances[0].State.SeqNumber.Get()))
 
 	spectesting.RequireReturnedTrueNoError(t, test.instances[1].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 3, test.instances[1].State.Round)
 	require.Len(t, test.instances[1].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[1].State.Lambda.Get(),
-		test.instances[1].State.SeqNumber)), 4)
+		test.instances[1].State.SeqNumber.Get())), 4)
 	test.instances[1].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[1].State.Lambda.Get(),
-		test.instances[1].State.SeqNumber))
+		test.instances[1].State.SeqNumber.Get()))
 
 	spectesting.RequireReturnedTrueNoError(t, test.instances[2].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 4, test.instances[2].State.Round)
 	require.Len(t, test.instances[2].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[2].State.Lambda.Get(),
-		test.instances[2].State.SeqNumber)), 8)
+		test.instances[2].State.SeqNumber.Get())), 8)
 	test.instances[2].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[2].State.Lambda.Get(),
-		test.instances[2].State.SeqNumber))
+		test.instances[2].State.SeqNumber.Get()))
 
 	spectesting.RequireReturnedFalseNoError(t, test.instances[3].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 3, test.instances[3].State.Round)
 	require.Len(t, test.instances[3].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[3].State.Lambda.Get(),
-		test.instances[3].State.SeqNumber)), 4)
+		test.instances[3].State.SeqNumber.Get())), 4)
 
 	spectesting.RequireReturnedFalseNoError(t, test.instances[4].ProcessChangeRoundPartialQuorum)
 	require.EqualValues(t, 4, test.instances[4].State.Round)
 	require.Len(t, test.instances[4].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
 		test.instances[4].State.Lambda.Get(),
-		test.instances[4].State.SeqNumber)), 1)
+		test.instances[4].State.SeqNumber.Get())), 1)
 }

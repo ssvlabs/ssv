@@ -685,7 +685,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 		},
 		State: &proto.State{
 			Round:     1,
-			SeqNumber: 1,
+			SeqNumber: threadsafe.Uint64(1),
 			Lambda:    threadsafe.BytesS("lambda"),
 		},
 	}
@@ -712,8 +712,9 @@ func TestChangeRoundPipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
-			Round:  1,
-			Lambda: threadsafe.Bytes(nil),
+			Round:     1,
+			Lambda:    threadsafe.Bytes(nil),
+			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()

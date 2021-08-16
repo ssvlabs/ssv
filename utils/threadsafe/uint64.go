@@ -2,6 +2,10 @@ package threadsafe
 
 import "sync"
 
+var (
+	Uint64 = NewSafeUint64
+)
+
 type SafeUint64 struct {
 	value uint64
 	l     sync.RWMutex
