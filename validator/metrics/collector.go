@@ -106,7 +106,7 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 }
 
 func ibftStateRecord(istate *proto.State, identifier string) string {
-	lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.GetSeqNumber())
+	lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.SeqNumber)
 	return fmt.Sprintf("%s{identifier=\"%s\",stage=\"%s\",round=\"%d\",lambda=\"%s\"} %d",
-		lbl, identifier, istate.GetStage().String(), istate.GetRound(), string(istate.GetLambda()), istate.GetSeqNumber())
+		lbl, identifier, istate.Stage.String(), istate.Round, string(istate.Lambda.Get()), istate.SeqNumber)
 }

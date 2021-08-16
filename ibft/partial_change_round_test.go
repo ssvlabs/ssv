@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -91,7 +92,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(tt *testing.T) {
 			instance := &Instance{
-				State:          &proto.State{Round: 1, Lambda: []byte{1, 2, 3, 4}, SeqNumber: 1},
+				State:          &proto.State{Round: 1, Lambda: threadsafe.Bytes([]byte{1, 2, 3, 4}), SeqNumber: 1},
 				Config:         proto.DefaultConsensusParams(),
 				ValidatorShare: &storage.Share{Committee: nodes},
 				Logger:         zap.L(),

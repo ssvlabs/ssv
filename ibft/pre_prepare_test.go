@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("Lambda"),
+			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
@@ -95,7 +96,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("Lambda"),
+			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
@@ -151,7 +152,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         1,
-			Lambda:        []byte("Lambda"),
+			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
 			PreparedValue: nil,
 		},
@@ -252,7 +253,8 @@ func TestPrePreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round: 1,
+			Round:  1,
+			Lambda: threadsafe.Bytes(nil),
 		},
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}

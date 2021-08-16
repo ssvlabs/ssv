@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
@@ -685,7 +686,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 		State: &proto.State{
 			Round:     1,
 			SeqNumber: 1,
-			Lambda:    []byte("lambda"),
+			Lambda:    threadsafe.BytesS("lambda"),
 		},
 	}
 
@@ -711,7 +712,8 @@ func TestChangeRoundPipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
-			Round: 1,
+			Round:  1,
+			Lambda: threadsafe.Bytes(nil),
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()

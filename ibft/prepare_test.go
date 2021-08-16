@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -84,7 +85,8 @@ func TestPreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round: 1,
+			Round:  1,
+			Lambda: threadsafe.Bytes(nil),
 		},
 	}
 	pipeline := instance.prepareMsgPipeline()

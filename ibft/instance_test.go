@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -29,7 +30,7 @@ func TestInstanceStop(t *testing.T) {
 		State: &proto.State{
 			Round:     1,
 			Stage:     proto.RoundState_PrePrepare,
-			Lambda:    []byte("Lambda"),
+			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: 1,
 		},
 		ValidatorShare: &storage.Share{
@@ -103,8 +104,8 @@ func TestInstanceStop(t *testing.T) {
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
 	require.EqualValues(t, proto.RoundState_Stopped, instance.Stage())
-	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round)))
-	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round))
+	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round)))
+	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
 }
 
@@ -116,7 +117,7 @@ func TestInit(t *testing.T) {
 		State: &proto.State{
 			Round:     1,
 			Stage:     proto.RoundState_PrePrepare,
-			Lambda:    []byte("Lambda"),
+			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: 1,
 		},
 		Logger:     zaptest.NewLogger(t),
@@ -138,7 +139,7 @@ func TestSetStage(t *testing.T) {
 		State: &proto.State{
 			Round:     1,
 			Stage:     proto.RoundState_PrePrepare,
-			Lambda:    []byte("Lambda"),
+			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: 1,
 		},
 		Logger:     zaptest.NewLogger(t),

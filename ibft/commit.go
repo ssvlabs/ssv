@@ -30,7 +30,7 @@ func (i *Instance) commitMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State.Lambda),
+		auth.ValidateLambdas(i.State.Lambda.Get()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 	)
@@ -74,7 +74,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 				i.stopRoundTimer()
 
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.Round()),
+					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.Round()),
 					zap.Int("got_votes", len(sigs)))
 
 				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
@@ -111,7 +111,7 @@ func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_Commit,
 		Round:     i.Round(),
-		Lambda:    i.State.Lambda,
+		Lambda:    i.State.Lambda.Get(),
 		SeqNumber: i.State.SeqNumber,
 		Value:     value,
 	}

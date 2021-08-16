@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
 	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
@@ -84,7 +85,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
 			Stage:     proto.RoundState_NotStarted,
-			Lambda:    opts.Lambda,
+			Lambda:    threadsafe.Bytes(opts.Lambda),
 			SeqNumber: opts.SeqNumber,
 		},
 		network:        opts.Network,
@@ -143,11 +144,11 @@ func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
 		return errors.New("can't start a non initialized instance")
 	}
-	if i.State.Lambda == nil {
+	if i.State.Lambda.Get() == nil {
 		return errors.New("can't start instance with invalid Lambda")
 	}
 
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
 	i.stateLock.Lock()
 	i.State.Round = 1 // start from 1
 	i.State.InputValue = inputValue
@@ -263,7 +264,7 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.Round(); j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber, j))
 		}
 	}
 

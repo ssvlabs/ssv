@@ -20,7 +20,7 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
-		auth.ValidateLambdas(i.State.Lambda),
+		auth.ValidateLambdas(i.State.Lambda.Get()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		changeround.Validate(i.ValidatorShare),
@@ -244,7 +244,7 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 	return &proto.Message{
 		Type:      proto.RoundState_ChangeRound,
 		Round:     i.Round(),
-		Lambda:    i.State.Lambda,
+		Lambda:    i.State.Lambda.Get(),
 		SeqNumber: i.State.SeqNumber,
 		Value:     data,
 	}, nil

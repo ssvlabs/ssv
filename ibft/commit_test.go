@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 
@@ -53,8 +54,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Value:  []byte("value"),
 	}))
 
-
-	instance.State.DecidedMsg = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
+	instance.decidedMsg = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 
 	// test aggregation
 	msg, err := instance.CommittedAggregatedMsg()
@@ -83,7 +83,8 @@ func TestCommitPipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		State: &proto.State{
-			Round: 1,
+			Round:  1,
+			Lambda: threadsafe.Bytes(nil),
 		},
 	}
 	pipeline := instance.commitMsgPipeline()
