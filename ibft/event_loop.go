@@ -39,7 +39,7 @@ loop:
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
-	i.Logger.Info("instance main event loop stopped")
+	i.Logger.Debug("instance main event loop stopped")
 }
 
 // StartMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
@@ -79,7 +79,7 @@ loop:
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
-	i.Logger.Info("instance msg pipeline loop stopped")
+	i.Logger.Debug("instance msg pipeline loop stopped")
 }
 
 // StartPartialChangeRoundPipeline continuously tries to find partial change round quorum
@@ -120,7 +120,7 @@ loop:
 			time.Sleep(time.Second * 1)
 		}
 	}
-	i.Logger.Info("instance partial change round pipeline loop stopped")
+	i.Logger.Debug("instance partial change round pipeline loop stopped")
 }
 
 func (i *Instance) startRoundTimerLoop() {
@@ -139,7 +139,7 @@ loop:
 			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.Round()))
 		}
 	}
-	i.Logger.Info("instance round timer loop stopped")
+	i.Logger.Debug("instance round timer loop stopped")
 }
 
 /**

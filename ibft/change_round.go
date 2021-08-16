@@ -63,10 +63,11 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		i.processChangeRoundQuorumOnce.Do(func() {
 			i.ProcessStageChange(proto.RoundState_PrePrepare)
-			i.Logger.Info("change round quorum received.",
-				zap.Uint64("round", signedMessage.Message.Round),
+			logger := i.Logger.With(zap.Uint64("round", signedMessage.Message.Round),
 				zap.Bool("is_leader", isLeader),
 				zap.Bool("round_justified", justifyRound))
+
+			logger.Info("change round quorum received")
 
 			if !isLeader {
 				return
@@ -86,17 +87,16 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			var value []byte
 			if highest != nil {
 				value = highest.PreparedValue
-				i.Logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.Uint64("round", signedMessage.Message.Round))
-
+				logger.Debug("broadcasting pre-prepare as leader after round change with justified prepare value")
 			} else {
 				value = i.State.InputValue
-				i.Logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.Uint64("round", signedMessage.Message.Round))
+				logger.Debug("broadcasting pre-prepare as leader after round change with input value")
 			}
 
 			// send pre-prepare msg
 			broadcastMsg := i.generatePrePrepareMessage(value)
 			if e := i.SignAndBroadcast(broadcastMsg); e != nil {
-				i.Logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
+				logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
 				err = e
 			}
 		})
