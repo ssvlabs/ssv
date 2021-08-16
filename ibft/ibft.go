@@ -2,9 +2,8 @@ package ibft
 
 import (
 	"github.com/pkg/errors"
-	"sync"
-
 	"go.uber.org/zap"
+	"sync"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -22,6 +21,9 @@ type StartOptions struct {
 	SeqNumber      uint64
 	Value          []byte
 	ValidatorShare *storage.Share
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
 }
 
 // InstanceResult is a struct holding the result of a single iBFT instance
@@ -94,7 +96,7 @@ func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
-	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
+	i.waitForMinPeerCount(2) // minimum of 3 validators (me + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
@@ -112,7 +114,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
 		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
-	return i.startInstanceWithOptions(*instanceOpts, opts.Value)
+	return i.startInstanceWithOptions(instanceOpts, opts.Value)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

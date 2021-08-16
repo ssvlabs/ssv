@@ -117,4 +117,4 @@ fi
 #fi
 
 #deploy
-kubectl --context=$K8S_CONTEXT apply -f .k8/yamls/ || exit 1
+kubectl --context=$K8S_CONTEXT apply -f .k8/yamls/ssv-exporter.yml || exit 1

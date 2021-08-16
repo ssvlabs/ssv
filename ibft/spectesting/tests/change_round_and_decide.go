@@ -27,7 +27,7 @@ func (test *ChangeRoundAndDecide) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round = 1
+	test.instance.State.Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -78,9 +78,8 @@ func (test *ChangeRoundAndDecide) Run(t *testing.T) {
 	require.True(t, justified)
 
 	// check pre-prepare justification
-	justified, err = test.instance.JustifyPrePrepare(2)
+	err = test.instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
-	require.True(t, justified)
 
 	// process all messages
 	for {
@@ -88,5 +87,5 @@ func (test *ChangeRoundAndDecide) Run(t *testing.T) {
 			break
 		}
 	}
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
 }

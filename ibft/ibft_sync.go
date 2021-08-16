@@ -1,7 +1,9 @@
 package ibft
 
 import (
-	ibft_sync "github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync/history"
+	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"go.uber.org/zap"
@@ -24,7 +26,13 @@ func (i *ibftImpl) processSyncQueueMessages() {
 }
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
-	s := ibft_sync.NewReqHandler(i.logger, i.Identifier, i.network, i.ibftStorage)
+	var lastChangeRoundMsg *proto.SignedMessage
+	currentInstaceSeqNumber := int64(-1)
+	if i.currentInstance != nil {
+		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
+		currentInstaceSeqNumber = int64(i.currentInstance.State.SeqNumber.Get())
+	}
+	s := incoming.New(i.logger, i.Identifier, currentInstaceSeqNumber, i.network, i.ibftStorage, lastChangeRoundMsg)
 	go s.Process(msg)
 }
 
@@ -38,7 +46,7 @@ func (i *ibftImpl) SyncIBFT() {
 	}
 
 	// sync
-	s := ibft_sync.NewHistorySync(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
+	s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	err := s.Start()
 	if err != nil {
 		i.logger.Fatal("history sync failed", zap.Error(err))

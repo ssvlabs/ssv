@@ -111,7 +111,7 @@ func (i *ibftImpl) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
 func (i *ibftImpl) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
-	return i.currentInstance != nil && i.currentInstance.State.SeqNumber == msg.Message.SeqNumber
+	return i.currentInstance != nil && i.currentInstance.State.SeqNumber.Get() == msg.Message.SeqNumber
 }
 
 // decidedRequiresSync returns true if:

@@ -170,11 +170,12 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	}
 
 	result, err := v.ibfts[duty.Type].StartInstance(ibft.StartOptions{
-		ValidatorShare: v.Share,
-		Logger:         logger,
-		ValueCheck:     valCheckInstance,
-		SeqNumber:      seqNumber,
-		Value:          inputByts,
+		ValidatorShare:  v.Share,
+		Logger:          logger,
+		ValueCheck:      valCheckInstance,
+		SeqNumber:       seqNumber,
+		Value:           inputByts,
+		RequireMinPeers: true,
 	})
 	if err != nil {
 		return 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
