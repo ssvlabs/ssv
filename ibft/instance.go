@@ -57,6 +57,7 @@ type Instance struct {
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
 	lastChangeRoundMsg  *proto.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
+	decidedMsg          *proto.SignedMessage
 
 	// event loop
 	eventQueue eventqueue.EventQueue
@@ -75,6 +76,7 @@ type Instance struct {
 	processPrepareQuorumOnce     sync.Once
 	processCommitQuorumOnce      sync.Once
 	stopLock                     sync.Mutex
+	lastChangeRoundMsgLock       sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -115,6 +117,7 @@ func NewInstance(opts *InstanceOptions) *Instance {
 		processPrepareQuorumOnce:     sync.Once{},
 		processCommitQuorumOnce:      sync.Once{},
 		stopLock:                     sync.Mutex{},
+		lastChangeRoundMsgLock:       sync.RWMutex{},
 	}
 }
 

@@ -3,6 +3,7 @@ package ibft
 import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/network/local"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"

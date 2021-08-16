@@ -99,7 +99,7 @@ func (i *ibftImpl) fastChangeRoundCatchup(instance *Instance) {
 		i.logger,
 		i.Identifier,
 		i.ValidatorShare.PublicKey.Serialize(),
-		instance.State.SeqNumber,
+		instance.State.SeqNumber.Get(),
 		i.network,
 		instance.changeRoundMsgValidationPipeline(),
 	)

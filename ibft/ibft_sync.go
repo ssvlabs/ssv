@@ -30,7 +30,7 @@ func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 	currentInstaceSeqNumber := int64(-1)
 	if i.currentInstance != nil {
 		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
-		currentInstaceSeqNumber = int64(i.currentInstance.State.SeqNumber)
+		currentInstaceSeqNumber = int64(i.currentInstance.State.SeqNumber.Get())
 	}
 	s := incoming.New(i.logger, i.Identifier, currentInstaceSeqNumber, i.network, i.ibftStorage, lastChangeRoundMsg)
 	go s.Process(msg)
