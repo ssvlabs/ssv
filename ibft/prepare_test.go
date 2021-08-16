@@ -21,7 +21,8 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 			ShareKey:  sks[1],
 		},
 		State: &proto.State{
-			Round: 1,
+			Round:         1,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
@@ -31,7 +32,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 
 	// set prepared state
 	instance.State.PreparedRound = 1
-	instance.State.PreparedValue = []byte("value")
+	instance.State.PreparedValue.Set([]byte("value"))
 
 	// test prepared but no msgs
 	_, err = instance.PreparedAggregatedMsg()

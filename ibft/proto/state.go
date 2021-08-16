@@ -8,8 +8,8 @@ type State struct {
 	Lambda *threadsafe.SafeBytes
 	// sequence number is an incremental number for each instance, much like a block number would be in a blockchain
 	SeqNumber     uint64
-	InputValue    []byte
+	InputValue    *threadsafe.SafeBytes
 	Round         uint64
 	PreparedRound uint64
-	PreparedValue []byte
+	PreparedValue *threadsafe.SafeBytes
 }

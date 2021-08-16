@@ -65,7 +65,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
@@ -115,7 +115,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Value:  []byte("value"),
 	}))
 	instance.State.PreparedRound = 1
-	instance.State.PreparedValue = []byte("value")
+	instance.State.PreparedValue.Set([]byte("value"))
 
 	// with a prepared round
 	byts, err = instance.roundChangeInputValue()
@@ -134,7 +134,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
@@ -443,7 +443,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
@@ -520,7 +520,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.NoError(t, err)
 
 	instance.State.PreparedRound = 1
-	instance.State.PreparedValue = []byte("hello")
+	instance.State.PreparedValue.Set([]byte("hello"))
 }
 
 func TestHighestPrepared(t *testing.T) {

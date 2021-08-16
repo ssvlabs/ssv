@@ -89,7 +89,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 				i.Logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.Uint64("round", signedMessage.Message.Round))
 
 			} else {
-				value = i.State.InputValue
+				value = i.State.InputValue.Get()
 				i.Logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.Uint64("round", signedMessage.Message.Round))
 			}
 
@@ -135,7 +135,7 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
-	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue)
+	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue.Get())
 
 	// prepare justificationMsg and sig
 	var justificationMsg *proto.Message
@@ -164,7 +164,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 
 	data := &proto.ChangeRoundData{
 		PreparedRound:    i.State.PreparedRound,
-		PreparedValue:    i.State.PreparedValue,
+		PreparedValue:    i.State.PreparedValue.Get(),
 		JustificationMsg: justificationMsg,
 		JustificationSig: aggSig,
 		SignerIds:        ids,

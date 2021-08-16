@@ -84,9 +84,11 @@ func NewInstance(opts InstanceOptions) *Instance {
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
-			Stage:     proto.RoundState_NotStarted,
-			Lambda:    threadsafe.Bytes(opts.Lambda),
-			SeqNumber: opts.SeqNumber,
+			Stage:         proto.RoundState_NotStarted,
+			Lambda:        threadsafe.Bytes(opts.Lambda),
+			SeqNumber:     opts.SeqNumber,
+			InputValue:    threadsafe.Bytes(nil),
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
@@ -142,16 +144,19 @@ func (i *Instance) Init() {
 // 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
-		return errors.New("can't start a non initialized instance")
+		return errors.New("instance not initialized")
 	}
 	if i.State.Lambda.Get() == nil {
-		return errors.New("can't start instance with invalid Lambda")
+		return errors.New("invalid Lambda")
+	}
+	if inputValue == nil {
+		return errors.New("input value is nil")
 	}
 
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
+	i.State.InputValue.Set(inputValue)
 	i.stateLock.Lock()
 	i.State.Round = 1 // start from 1
-	i.State.InputValue = inputValue
 	i.stateLock.Unlock()
 
 	if i.IsLeader() {
@@ -163,7 +168,7 @@ func (i *Instance) Start(inputValue []byte) error {
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
-			msg := i.generatePrePrepareMessage(i.State.InputValue)
+			msg := i.generatePrePrepareMessage(i.State.InputValue.Get())
 			//
 			if err := i.SignAndBroadcast(msg); err != nil {
 				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))

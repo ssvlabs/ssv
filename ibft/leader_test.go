@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"strconv"
@@ -24,7 +25,7 @@ func TestLeaderCalculation(t *testing.T) {
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		LeaderSelector: l,
 	}

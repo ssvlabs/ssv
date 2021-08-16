@@ -33,7 +33,7 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
 func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
-	if i.State.PreparedValue == nil {
+	if i.State.PreparedValue.Get() == nil {
 		return nil, errors.New("state not prepared")
 	}
 
@@ -45,7 +45,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 	var ret *proto.SignedMessage
 	var err error
 	for _, msg := range msgs {
-		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue) {
+		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue.Get()) {
 			continue
 		}
 		if ret == nil {
@@ -80,11 +80,11 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 
 				// set prepared State
 				i.State.PreparedRound = signedMessage.Message.Round
-				i.State.PreparedValue = signedMessage.Message.Value
+				i.State.PreparedValue.Set(signedMessage.Message.Value)
 				i.ProcessStageChange(proto.RoundState_Prepare)
 
 				// send commit msg
-				broadcastMsg := i.generateCommitMessage(i.State.PreparedValue)
+				broadcastMsg := i.generateCommitMessage(i.State.PreparedValue.Get())
 				if e := i.SignAndBroadcast(broadcastMsg); e != nil {
 					i.Logger.Info("could not broadcast commit message", zap.Error(err))
 					err = e

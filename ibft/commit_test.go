@@ -18,7 +18,8 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round: 3,
+			Round:         3,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
@@ -28,7 +29,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 
 	// set prepared state
 	instance.State.PreparedRound = 1
-	instance.State.PreparedValue = []byte("value")
+	instance.State.PreparedValue.Set([]byte("value"))
 
 	// test prepared but no committed msgs
 	_, err = instance.CommittedAggregatedMsg()

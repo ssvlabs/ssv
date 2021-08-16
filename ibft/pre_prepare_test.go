@@ -26,7 +26,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Round:         1,
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -98,7 +98,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			Round:         1,
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -154,7 +154,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			Round:         1,
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -197,7 +197,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		State: &proto.State{
 			Round:         1,
 			PreparedRound: 0,
-			PreparedValue: nil,
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
