@@ -57,7 +57,7 @@ loop:
 			}(nodes[i-1], i)
 		}
 		wg.Wait()
-		if seqNumber == 250 {
+		if seqNumber == 50 {
 			break loop
 		}
 

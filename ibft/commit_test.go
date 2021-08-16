@@ -53,7 +53,6 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Value:  []byte("value"),
 	}))
 
-
 	instance.State.DecidedMsg = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 
 	// test aggregation

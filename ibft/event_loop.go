@@ -39,7 +39,7 @@ loop:
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
-	i.Logger.Info("instance main event loop stopped")
+	i.Logger.Debug("instance main event loop stopped")
 }
 
 // StartMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
@@ -48,21 +48,25 @@ loop:
 func (i *Instance) StartMessagePipeline() {
 loop:
 	for {
-		i.stateLock.Lock()
+		i.stateLock.RLock()
+		lambda := i.State.Lambda
+		seq := i.State.SeqNumber
+		round := i.State.Round
+		i.stateLock.RUnlock()
+
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, i.State.Round)) > 0 {
-			i.Logger.Debug("adding ibft message to event queue - waiting for done")
+		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(lambda, seq, round)); queueCnt > 0 {
+			i.Logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				_, err := i.ProcessMessage()
 				if err != nil {
 					i.Logger.Error("msg pipeline error", zap.Error(err))
 				}
-				//i.Logger.Debug("done with ibft message")
 				wg.Done()
 			}); !added {
 				i.Logger.Debug("could not add ibft message to event queue")
@@ -74,31 +78,32 @@ loop:
 		} else {
 			time.Sleep(time.Millisecond * 100)
 		}
-		i.stateLock.Unlock()
 	}
-	i.Logger.Info("instance msg pipeline loop stopped")
+	i.Logger.Debug("instance msg pipeline loop stopped")
 }
 
 // StartPartialChangeRoundPipeline continuously tries to find partial change round quorum
 func (i *Instance) StartPartialChangeRoundPipeline() {
 loop:
 	for {
+		i.stateLock.RLock()
+		lambda := i.State.Lambda
+		seq := i.State.SeqNumber
+		i.stateLock.RUnlock()
+
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)) > 0 {
-			i.Logger.Debug("adding round change message to event queue")
+		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(lambda, seq)) > 0 {
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				found, err := i.ProcessChangeRoundPartialQuorum()
 				if err != nil {
 					i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
 				}
-				if found {
-					i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round))
-				} else {
+				if !found {
 					// if not found, wait 1 second and then finish to try again
 					time.Sleep(time.Second * 1)
 				}
@@ -115,7 +120,7 @@ loop:
 			time.Sleep(time.Second * 1)
 		}
 	}
-	i.Logger.Info("instance partial change round pipeline loop stopped")
+	i.Logger.Debug("instance partial change round pipeline loop stopped")
 }
 
 func (i *Instance) startRoundTimerLoop() {
@@ -131,10 +136,10 @@ loop:
 				i.uponChangeRoundTrigger()
 			})
 		} else { // stopped
-			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State.Round))
+			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.Round()))
 		}
 	}
-	i.Logger.Info("instance round timer loop stopped")
+	i.Logger.Debug("instance round timer loop stopped")
 }
 
 /**
@@ -150,5 +155,10 @@ func (i *Instance) resetRoundTimer() {
 	// stat new timer
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)
-	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round))
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.Round()))
+}
+
+func (i *Instance) stopRoundTimer() {
+	i.Logger.Info("stopping timeout clock")
+	i.roundTimer.Stop()
 }

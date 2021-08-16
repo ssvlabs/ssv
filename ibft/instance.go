@@ -26,13 +26,13 @@ type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *storage.Share
 	//Me             *proto.Node
-	Network         network.Network
-	Queue           *msgqueue.MessageQueue
-	ValueCheck      valcheck.ValueCheck
-	LeaderSelector  leader.Selector
-	Config          *proto.InstanceConfig
-	Lambda          []byte
-	SeqNumber       uint64
+	Network        network.Network
+	Queue          *msgqueue.MessageQueue
+	ValueCheck     valcheck.ValueCheck
+	LeaderSelector leader.Selector
+	Config         *proto.InstanceConfig
+	Lambda         []byte
+	SeqNumber      uint64
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
@@ -67,12 +67,14 @@ type Instance struct {
 	initialized bool
 
 	// locks
-	runInitOnce           sync.Once
-	runStopOnce           sync.Once
-	stopLock              sync.Mutex
-	stageChangedChansLock sync.Mutex
-	stageLock             sync.Mutex
-	stateLock             sync.Mutex
+	runInitOnce                  sync.Once
+	runStopOnce                  sync.Once
+	processChangeRoundQuorumOnce sync.Once
+	processPrepareQuorumOnce     sync.Once
+	processCommitQuorumOnce      sync.Once
+	stopLock                     sync.Mutex
+	stageChangedChansLock        sync.Mutex
+	stateLock                    sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -103,12 +105,14 @@ func NewInstance(opts InstanceOptions) *Instance {
 		eventQueue: eventqueue.New(),
 
 		// locks
-		runInitOnce:           sync.Once{},
-		runStopOnce:           sync.Once{},
-		stopLock:              sync.Mutex{},
-		stageLock:             sync.Mutex{},
-		stageChangedChansLock: sync.Mutex{},
-		stateLock:             sync.Mutex{},
+		runInitOnce:                  sync.Once{},
+		runStopOnce:                  sync.Once{},
+		processChangeRoundQuorumOnce: sync.Once{},
+		processPrepareQuorumOnce:     sync.Once{},
+		processCommitQuorumOnce:      sync.Once{},
+		stopLock:                     sync.Mutex{},
+		stageChangedChansLock:        sync.Mutex{},
+		stateLock:                    sync.RWMutex{},
 	}
 }
 
@@ -151,7 +155,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
-			i.SetStage(proto.RoundState_PrePrepare)
+			i.ProcessStageChange(proto.RoundState_PrePrepare)
 
 			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
@@ -197,14 +201,12 @@ func (i *Instance) stop() {
 	i.stopped = true
 	i.roundTimer.Stop()
 	i.Logger.Debug("STOPPING IBFT -> stopped round timer")
-	i.SetStage(proto.RoundState_Stopped)
+	i.ProcessStageChange(proto.RoundState_Stopped)
 	i.Logger.Debug("STOPPING IBFT -> set stage to stop")
 	i.eventQueue.ClearAndStop()
 	i.Logger.Debug("STOPPING IBFT -> cleared event queue")
 
 	// stop stage chan
-	i.stageLock.Lock()
-	defer i.stageLock.Unlock()
 	i.Logger.Debug("STOPPING IBFT -> passed stageLock")
 	if i.stageChangedChan != nil {
 		close(i.stageChangedChan)
@@ -225,27 +227,41 @@ func (i *Instance) Stopped() bool {
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.State.Round++
+	i.setRound(i.Round() + 1)
+}
+
+func (i *Instance) setRound(newRound uint64) {
+	i.stateLock.Lock()
+	defer i.stateLock.Unlock()
+
+	i.processChangeRoundQuorumOnce = sync.Once{}
+	i.processPrepareQuorumOnce = sync.Once{}
+	i.processCommitQuorumOnce = sync.Once{}
+	i.State.Round = newRound
+}
+
+// Round returns the state's round (thread safe)
+func (i *Instance) Round() uint64 {
+	i.stateLock.RLock()
+	defer i.stateLock.RUnlock()
+	return i.State.Round
 }
 
 // Stage returns the instance message state
 func (i *Instance) Stage() proto.RoundState {
-	i.stageLock.Lock()
-	defer i.stageLock.Unlock()
+	i.stateLock.RLock()
+	defer i.stateLock.RUnlock()
 
 	return i.State.Stage
 }
 
-// SetStage set the State's round State and pushed the new State into the State channel
-func (i *Instance) SetStage(stage proto.RoundState) {
-	i.stageLock.Lock()
-	defer i.stageLock.Unlock()
-
-	i.State.Stage = stage
+// ProcessStageChange set the State's round State and pushed the new State into the State channel
+func (i *Instance) ProcessStageChange(stage proto.RoundState) {
+	i.setStage(stage)
 
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
-		for j := uint64(1); j <= i.State.Round; j++ {
+		for j := uint64(1); j <= i.Round(); j++ {
 			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
 		}
 	}
@@ -254,6 +270,12 @@ func (i *Instance) SetStage(stage proto.RoundState) {
 	if i.stageChangedChan != nil {
 		i.stageChangedChan <- stage
 	}
+}
+
+func (i *Instance) setStage(stage proto.RoundState) {
+	i.stateLock.Lock()
+	defer i.stateLock.Unlock()
+	i.State.Stage = stage
 }
 
 // GetStageChan returns a RoundState channel added to the stateChangesChans array

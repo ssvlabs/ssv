@@ -31,9 +31,9 @@ The scenario interface can be overriden with any writen scenario to manually tes
 var (
 	nodeCount  = 4
 	identifier = []byte("ibft identifier")
-	logger     = logex.Build("simulator", zapcore.InfoLevel, nil)
+	logger     = logex.Build("simulator", zapcore.DebugLevel, nil)
 	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
-	scenario   = scenarios.FarFutureSync(logger, &alwaysTrueValueCheck{})
+	scenario   = scenarios.NewF1MultiRound(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct {
@@ -137,7 +137,7 @@ func main() {
 			net,
 			msgqueue.New(),
 			&proto.InstanceConfig{
-				RoundChangeDurationSeconds:   2,
+				RoundChangeDurationSeconds:   3,
 				LeaderPreprepareDelaySeconds: 1,
 			},
 			shares[i],

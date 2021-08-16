@@ -56,9 +56,8 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Value:  value,
 	})
 	instance.PrePrepareMessages.AddMessage(msg)
-	res, err := instance.JustifyPrePrepare(2)
-	require.False(t, res)
-	require.NoError(t, err)
+	err := instance.JustifyPrePrepare(2)
+	require.EqualError(t, err, "no change round quorum")
 
 	// test justified change round
 	msg = SignMsg(t, 2, secretKeys[2], &proto.Message{
@@ -82,8 +81,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	})
 	instance.ChangeRoundMessages.AddMessage(msg)
 
-	res, err = instance.JustifyPrePrepare(2)
-	require.True(t, res)
+	err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 }
 
@@ -128,9 +126,8 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	instance.ChangeRoundMessages.AddMessage(msg)
 
 	// no quorum achieved, can't justify
-	res, err := instance.JustifyPrePrepare(2)
-	require.False(t, res)
-	require.NoError(t, err)
+	err := instance.JustifyPrePrepare(2)
+	require.EqualError(t, err, "no change round quorum")
 
 	// test justified change round
 	msg = SignMsg(t, 3, secretKeys[3], &proto.Message{
@@ -142,8 +139,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	instance.ChangeRoundMessages.AddMessage(msg)
 
 	// quorum achieved, can justify
-	res, err = instance.JustifyPrePrepare(2)
-	require.True(t, res)
+	err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
 }
 
@@ -204,15 +200,13 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		},
 	}
 
-	res, err := instance.JustifyPrePrepare(1)
+	err := instance.JustifyPrePrepare(1)
 	require.NoError(t, err)
-	require.True(t, res)
 
 	// try to justify round 2 without round change
 	instance.State.Round = 2
-	res, err = instance.JustifyPrePrepare(2)
-	require.NoError(t, err)
-	require.False(t, res)
+	err = instance.JustifyPrePrepare(2)
+	require.EqualError(t, err, "no change round quorum")
 
 	// test no change round quorum
 	msg := &proto.Message{
@@ -231,9 +225,8 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 2, secretKeys[2], msg))
 
-	res, err = instance.JustifyPrePrepare(2)
-	require.NoError(t, err)
-	require.False(t, res)
+	err = instance.JustifyPrePrepare(2)
+	require.EqualError(t, err, "no change round quorum")
 
 	// test with quorum of change round
 	msg = &proto.Message{
@@ -244,9 +237,8 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 3, secretKeys[3], msg))
 
-	res, err = instance.JustifyPrePrepare(2)
+	err = instance.JustifyPrePrepare(2)
 	require.NoError(t, err)
-	require.True(t, res)
 }
 
 func TestPrePreparePipeline(t *testing.T) {
