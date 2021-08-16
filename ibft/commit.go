@@ -55,8 +55,8 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 	if i.State == nil {
 		return nil, errors.New("missing instance state")
 	}
-	if i.State.DecidedMsg != nil {
-		return i.State.DecidedMsg, nil
+	if i.decidedMsg != nil {
+		return i.decidedMsg, nil
 	}
 	return nil, errors.New("missing decided message")
 }
@@ -78,7 +78,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 					zap.Int("got_votes", len(sigs)))
 
 				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
-					i.State.DecidedMsg = aggMsg
+					i.decidedMsg = aggMsg
 					// mark instance commit
 					i.ProcessStageChange(proto.RoundState_Decided)
 					i.Stop()

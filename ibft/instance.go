@@ -55,6 +55,7 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
+	decidedMsg          *proto.SignedMessage
 
 	// event loop
 	eventQueue eventqueue.EventQueue
