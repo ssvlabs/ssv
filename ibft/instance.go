@@ -89,6 +89,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
 			InputValue:    threadsafe.Bytes(nil),
 			PreparedValue: threadsafe.Bytes(nil),
+			PreparedRound: threadsafe.Uint64(0),
 			Round:         threadsafe.Uint64(1),
 		},
 		network:        opts.Network,

@@ -13,7 +13,7 @@ type State struct {
 	SeqNumber     *threadsafe.SafeUint64
 	InputValue    *threadsafe.SafeBytes
 	Round         *threadsafe.SafeUint64
-	PreparedRound uint64
+	PreparedRound *threadsafe.SafeUint64
 	PreparedValue *threadsafe.SafeBytes
 }
 
@@ -34,7 +34,7 @@ func (s *State) MarshalJSON() ([]byte, error) {
 		SeqNumber:     s.SeqNumber.Get(),
 		InputValue:    s.InputValue.Get(),
 		Round:         s.Round.Get(),
-		PreparedRound: s.PreparedRound,
+		PreparedRound: s.PreparedRound.Get(),
 		PreparedValue: s.PreparedValue.Get(),
 	})
 }
@@ -50,7 +50,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	s.SeqNumber = threadsafe.Uint64(d.SeqNumber)
 	s.InputValue = threadsafe.Bytes(d.InputValue)
 	s.Round = threadsafe.Uint64(d.Round)
-	s.PreparedRound = d.PreparedRound
+	s.PreparedRound = threadsafe.Uint64(d.PreparedRound)
 	s.PreparedValue = threadsafe.Bytes(d.PreparedValue)
 	return nil
 }

@@ -64,7 +64,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		ValidatorShare:  &storage.Share{Committee: nodes},
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
-			PreparedRound: 0,
+			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
@@ -114,7 +114,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.State.PreparedRound = 1
+	instance.State.PreparedRound.Set(1)
 	instance.State.PreparedValue.Set([]byte("value"))
 
 	// with a prepared round
@@ -133,7 +133,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
-			PreparedRound: 0,
+			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
@@ -442,7 +442,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		}},
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
-			PreparedRound: 0,
+			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
@@ -519,7 +519,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.False(t, res)
 	require.NoError(t, err)
 
-	instance.State.PreparedRound = 1
+	instance.State.PreparedRound.Set(1)
 	instance.State.PreparedValue.Set([]byte("hello"))
 }
 

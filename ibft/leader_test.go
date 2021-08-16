@@ -24,7 +24,7 @@ func TestLeaderCalculation(t *testing.T) {
 		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1},
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
-			PreparedRound: 0,
+			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
 		LeaderSelector: l,

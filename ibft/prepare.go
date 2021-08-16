@@ -37,7 +37,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound)
+	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound.Get())
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
@@ -79,7 +79,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.Round()))
 
 				// set prepared State
-				i.State.PreparedRound = signedMessage.Message.Round
+				i.State.PreparedRound.Set(signedMessage.Message.Round)
 				i.State.PreparedValue.Set(signedMessage.Message.Value)
 				i.ProcessStageChange(proto.RoundState_Prepare)
 

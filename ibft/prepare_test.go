@@ -23,6 +23,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
+			PreparedRound: threadsafe.Uint64(0),
 		},
 	}
 
@@ -31,7 +32,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "state not prepared")
 
 	// set prepared state
-	instance.State.PreparedRound = 1
+	instance.State.PreparedRound.Set(1)
 	instance.State.PreparedValue.Set([]byte("value"))
 
 	// test prepared but no msgs

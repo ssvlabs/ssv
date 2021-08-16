@@ -43,7 +43,7 @@ func TestIbftStorage_SaveCurrentInstance(t *testing.T) {
 		SeqNumber:     threadsafe.Uint64(2),
 		InputValue:    threadsafe.Bytes(nil),
 		Round:         threadsafe.Uint64(0),
-		PreparedRound: 0,
+		PreparedRound: threadsafe.Uint64(0),
 		PreparedValue: threadsafe.Bytes(nil),
 	})
 	require.NoError(t, err)

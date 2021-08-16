@@ -135,7 +135,7 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
-	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue.Get())
+	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound.Get(), i.State.PreparedValue.Get())
 
 	// prepare justificationMsg and sig
 	var justificationMsg *proto.Message
@@ -163,7 +163,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	}
 
 	data := &proto.ChangeRoundData{
-		PreparedRound:    i.State.PreparedRound,
+		PreparedRound:    i.State.PreparedRound.Get(),
 		PreparedValue:    i.State.PreparedValue.Get(),
 		JustificationMsg: justificationMsg,
 		JustificationSig: aggSig,
