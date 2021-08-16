@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/utils/threadsafe"
 )
 
+// State holds an iBFT state, thread safe
 type State struct {
 	Stage *threadsafe.SafeInt32
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
@@ -27,6 +28,7 @@ type unsafeState struct {
 	PreparedValue []byte
 }
 
+// MarshalJSON implements marshaling interface
 func (s *State) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&unsafeState{
 		Stage:         s.Stage.Get(),
@@ -39,6 +41,7 @@ func (s *State) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// UnmarshalJSON implements marshaling interface
 func (s *State) UnmarshalJSON(data []byte) error {
 	d := &unsafeState{}
 	if err := json.Unmarshal(data, d); err != nil {
