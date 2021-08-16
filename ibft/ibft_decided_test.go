@@ -272,11 +272,11 @@ func TestForceDecided(t *testing.T) {
 	go func() {
 		time.Sleep(time.Millisecond * 500) // wait for instance to start
 		decidedMsg := aggregateSign(t, sks, &proto.Message{
-			Type:        proto.RoundState_Commit,
-			Round:       1,
-			SeqNumber:   4,
-			Lambda:      identifier,
-			Value:       []byte("value"),
+			Type:      proto.RoundState_Commit,
+			Round:     1,
+			SeqNumber: 4,
+			Lambda:    identifier,
+			Value:     []byte("value"),
 		})
 		i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 	}()
@@ -296,7 +296,6 @@ func TestForceDecided(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)
-
 
 	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.NoError(t, err)
@@ -319,11 +318,11 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Commit,
-		Round:       3,
-		SeqNumber:   10,
-		Lambda:      identifier,
-		Value:       []byte("value"),
+		Type:      proto.RoundState_Commit,
+		Round:     3,
+		SeqNumber: 10,
+		Lambda:    identifier,
+		Value:     []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
@@ -350,11 +349,11 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Commit,
-		Round:       3,
-		SeqNumber:   10,
-		Lambda:      identifier,
-		Value:       []byte("value"),
+		Type:      proto.RoundState_Commit,
+		Round:     3,
+		SeqNumber: 10,
+		Lambda:    identifier,
+		Value:     []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
@@ -379,44 +378,44 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"valid",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				SeqNumber: 11,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			nil,
 		},
 		{
 			"invalid msg stage",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Prepare,
-				Round:       3,
-				SeqNumber:   11,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Prepare,
+				Round:     3,
+				SeqNumber: 11,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			errors.New("message type is wrong"),
 		},
 		{
 			"invalid msg sig",
 			aggregateInvalidSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				SeqNumber: 11,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			errors.New("could not verify message signature"),
 		},
 		{
 			"valid first decided",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   0,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				SeqNumber: 0,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			nil,
 		},
