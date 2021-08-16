@@ -16,9 +16,9 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
-		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateRound(i.Round()),
-		auth.ValidateSequenceNumber(i.State.SeqNumber),
+		auth.ValidateLambdas(i.State.Lambda.Get()),
+		auth.ValidateRound((i.State.Round.Get())),
+		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
@@ -33,11 +33,11 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
 func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
-	if i.State.PreparedValue == nil {
+	if i.State.PreparedValue.Get() == nil {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound)
+	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State.PreparedRound.Get())
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
@@ -45,7 +45,7 @@ func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
 	var ret *proto.SignedMessage
 	var err error
 	for _, msg := range msgs {
-		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue) {
+		if !bytes.Equal(msg.Message.Value, i.State.PreparedValue.Get()) {
 			continue
 		}
 		if ret == nil {
@@ -76,15 +76,15 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			var err error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.Round()))
+					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()))
 
 				// set prepared State
-				i.State.PreparedRound = signedMessage.Message.Round
-				i.State.PreparedValue = signedMessage.Message.Value
+				i.State.PreparedRound.Set(signedMessage.Message.Round)
+				i.State.PreparedValue.Set(signedMessage.Message.Value)
 				i.ProcessStageChange(proto.RoundState_Prepare)
 
 				// send commit msg
-				broadcastMsg := i.generateCommitMessage(i.State.PreparedValue)
+				broadcastMsg := i.generateCommitMessage(i.State.PreparedValue.Get())
 				if e := i.SignAndBroadcast(broadcastMsg); e != nil {
 					i.Logger.Info("could not broadcast commit message", zap.Error(err))
 					err = e
@@ -99,9 +99,9 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_Prepare,
-		Round:     i.Round(),
-		Lambda:    i.State.Lambda,
-		SeqNumber: i.State.SeqNumber,
+		Round:     i.State.Round.Get(),
+		Lambda:    i.State.Lambda.Get(),
+		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
 }

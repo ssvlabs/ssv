@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -98,7 +99,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -117,7 +118,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -136,7 +137,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -155,7 +156,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 0,
+					SeqNumber: threadsafe.Uint64(0),
 				},
 			},
 			nil,
@@ -198,7 +199,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 1,
+					SeqNumber: threadsafe.Uint64(1),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -221,7 +222,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 1,
+					SeqNumber: threadsafe.Uint64(1),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -235,7 +236,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 4,
+					SeqNumber: threadsafe.Uint64(4),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{

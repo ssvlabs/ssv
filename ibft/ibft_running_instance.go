@@ -81,7 +81,7 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 		return false, nil
 	case proto.RoundState_Stopped:
-		i.logger.Info("current iBFT instance stopped", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
+		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber.Get()))
 		return true, nil
 	}
 	return false, nil

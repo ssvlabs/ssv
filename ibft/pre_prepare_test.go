@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 	"time"
@@ -22,10 +23,10 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:         1,
-			Lambda:        []byte("Lambda"),
-			PreparedRound: 0,
-			PreparedValue: nil,
+			Round:         threadsafe.Uint64(1),
+			Lambda:        threadsafe.BytesS("Lambda"),
+			PreparedRound: threadsafe.Uint64(0),
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -94,10 +95,10 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		ChangeRoundMessages: msgcontinmem.New(3),
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:         1,
-			Lambda:        []byte("Lambda"),
-			PreparedRound: 0,
-			PreparedValue: nil,
+			Round:         threadsafe.Uint64(1),
+			Lambda:        threadsafe.BytesS("Lambda"),
+			PreparedRound: threadsafe.Uint64(0),
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -150,10 +151,12 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		PrepareMessages:    msgcontinmem.New(3),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:         1,
-			Lambda:        []byte("Lambda"),
-			PreparedRound: 0,
-			PreparedValue: nil,
+			Round:         threadsafe.Uint64(1),
+			Lambda:        threadsafe.BytesS("Lambda"),
+			PreparedRound: threadsafe.Uint64(0),
+			PreparedValue: threadsafe.Bytes(nil),
+			SeqNumber:     threadsafe.Uint64(0),
+			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -176,7 +179,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.Stage() == proto.RoundState_PrePrepare)
+	require.True(t, instance.State.Stage.Get() == int32(proto.RoundState_PrePrepare))
 
 	// return nil if another pre-prepare received.
 	err = instance.UponPrePrepareMsg().Run(msg)
@@ -194,9 +197,9 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 			ShareKey:  secretKeys[1],
 		},
 		State: &proto.State{
-			Round:         1,
-			PreparedRound: 0,
-			PreparedValue: nil,
+			Round:         threadsafe.Uint64(1),
+			PreparedRound: threadsafe.Uint64(0),
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 	}
 
@@ -204,7 +207,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 
 	// try to justify round 2 without round change
-	instance.State.Round = 2
+	instance.State.Round.Set(2)
 	err = instance.JustifyPrePrepare(2)
 	require.EqualError(t, err, "no change round quorum")
 
@@ -252,7 +255,9 @@ func TestPrePreparePipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(),
 		},
 		State: &proto.State{
-			Round: 1,
+			Round:     threadsafe.Uint64(1),
+			Lambda:    threadsafe.Bytes(nil),
+			SeqNumber: threadsafe.Uint64(0),
 		},
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}

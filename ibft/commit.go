@@ -13,7 +13,7 @@ import (
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		auth.ValidateRound(i.Round()),
+		auth.ValidateRound(i.State.Round.Get()),
 		i.commitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
@@ -30,8 +30,8 @@ func (i *Instance) commitMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateSequenceNumber(i.State.SeqNumber),
+		auth.ValidateLambdas(i.State.Lambda.Get()),
+		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 	)
 }
@@ -55,8 +55,8 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 	if i.State == nil {
 		return nil, errors.New("missing instance state")
 	}
-	if i.State.DecidedMsg != nil {
-		return i.State.DecidedMsg, nil
+	if i.decidedMsg != nil {
+		return i.decidedMsg, nil
 	}
 	return nil, errors.New("missing decided message")
 }
@@ -74,11 +74,11 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 				i.stopRoundTimer()
 
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.Round()),
+					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()),
 					zap.Int("got_votes", len(sigs)))
 
 				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
-					i.State.DecidedMsg = aggMsg
+					i.decidedMsg = aggMsg
 					// mark instance commit
 					i.ProcessStageChange(proto.RoundState_Decided)
 					i.Stop()
@@ -110,9 +110,9 @@ func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedM
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_Commit,
-		Round:     i.Round(),
-		Lambda:    i.State.Lambda,
-		SeqNumber: i.State.SeqNumber,
+		Round:     i.State.Round.Get(),
+		Lambda:    i.State.Lambda.Get(),
+		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
 }
