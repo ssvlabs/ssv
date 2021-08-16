@@ -236,24 +236,10 @@ func (i *Instance) Stopped() bool {
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.setRound(i.Round() + 1)
-}
-
-func (i *Instance) setRound(newRound uint64) {
-	i.stateLock.Lock()
-	defer i.stateLock.Unlock()
-
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	i.processCommitQuorumOnce = sync.Once{}
-	i.State.Round.Set(newRound)
-}
-
-// Round returns the state's round (thread safe)
-func (i *Instance) Round() uint64 {
-	i.stateLock.RLock()
-	defer i.stateLock.RUnlock()
-	return i.State.Round.Get()
+	i.State.Round.Set(i.State.Round.Get() + 1)
 }
 
 // Stage returns the instance message state
@@ -270,7 +256,7 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
-		for j := uint64(1); j <= i.Round(); j++ {
+		for j := uint64(1); j <= i.State.Round.Get(); j++ {
 			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), j))
 		}
 	}

@@ -125,7 +125,7 @@ loop:
 				i.uponChangeRoundTrigger()
 			})
 		} else { // stopped
-			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.Round()))
+			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State.Round.Get()))
 		}
 	}
 	i.Logger.Info("instance round timer loop stopped")
@@ -144,7 +144,7 @@ func (i *Instance) resetRoundTimer() {
 	// stat new timer
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)
-	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.Round()))
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round.Get()))
 }
 
 func (i *Instance) stopRoundTimer() {

@@ -15,7 +15,7 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateRound(i.Round()),
+		auth.ValidateRound(i.State.Round.Get()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ThisRoundLeader()),
@@ -86,7 +86,7 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_PrePrepare,
-		Round:     i.Round(),
+		Round:     i.State.Round.Get(),
 		Lambda:    i.State.Lambda.Get(),
 		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,

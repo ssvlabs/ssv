@@ -30,7 +30,7 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.changeRoundMsgValidationPipeline(),
-		auth.ValidateRound(i.Round()),
+		auth.ValidateRound(i.State.Round.Get()),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
 		i.uponChangeRoundFullQuorum(),
 	)
@@ -174,7 +174,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *Instance) uponChangeRoundTrigger() {
-	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.Round()))
+	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round.Get()))
 	// bump round
 	i.BumpRound()
 	// mark stage
@@ -243,7 +243,7 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 
 	return &proto.Message{
 		Type:      proto.RoundState_ChangeRound,
-		Round:     i.Round(),
+		Round:     i.State.Round.Get(),
 		Lambda:    i.State.Lambda.Get(),
 		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     data,
@@ -251,6 +251,6 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.Round()))
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round.Get()))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }

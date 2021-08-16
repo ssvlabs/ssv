@@ -17,7 +17,7 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateRound(i.Round()),
+		auth.ValidateRound((i.State.Round.Get())),
 		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {
@@ -76,7 +76,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 			var err error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.Round()))
+					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()))
 
 				// set prepared State
 				i.State.PreparedRound.Set(signedMessage.Message.Round)
@@ -99,7 +99,7 @@ func (i *Instance) uponPrepareMsg() pipeline.Pipeline {
 func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_Prepare,
-		Round:     i.Round(),
+		Round:     i.State.Round.Get(),
 		Lambda:    i.State.Lambda.Get(),
 		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
