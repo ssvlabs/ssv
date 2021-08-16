@@ -31,9 +31,9 @@ The scenario interface can be overriden with any writen scenario to manually tes
 var (
 	nodeCount  = 4
 	identifier = []byte("ibft identifier")
-	logger     = logex.Build("simulator", zapcore.InfoLevel, nil)
+	logger     = logex.Build("simulator", zapcore.DebugLevel, nil)
 	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
-	scenario   = scenarios.NewF1Speedup(logger, &alwaysTrueValueCheck{})
+	scenario   = scenarios.NewChangeRoundSpeedup(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct {
@@ -48,7 +48,7 @@ func networking() network.Network {
 	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
 		DiscoveryType:    "mdns",
 		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
+		RequestTimeout:   time.Second * 5,
 	})
 	if err != nil {
 		logger.Fatal("failed to create db", zap.Error(err))
@@ -117,6 +117,7 @@ func publicKey() *bls.PublicKey {
 func main() {
 	shares := generateShares(uint64(nodeCount))
 	pk := publicKey()
+	dbs := make([]collections.Iibft, 0)
 	logger.Info("pubkey", zap.String("pk", pkHex))
 
 	// generate iBFT nodes
@@ -126,16 +127,17 @@ func main() {
 		if err := net.SubscribeToValidatorNetwork(pk); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
+		dbs = append(dbs, db())
 
 		node := ibft.New(
 			beacon.RoleTypeAttester,
 			identifier,
-			logger,
-			db(),
+			logger.With(zap.Uint64("simulation_node_id", i)),
+			dbs[i-1],
 			net,
 			msgqueue.New(),
 			&proto.InstanceConfig{
-				RoundChangeDurationSeconds:   2,
+				RoundChangeDurationSeconds:   3,
 				LeaderPreprepareDelaySeconds: 1,
 			},
 			shares[i],
@@ -143,7 +145,7 @@ func main() {
 		nodes = append(nodes, node)
 	}
 
-	scenario.Start(nodes, shares)
+	scenario.Start(nodes, shares, dbs)
 
 	logger.Info("finished")
 }

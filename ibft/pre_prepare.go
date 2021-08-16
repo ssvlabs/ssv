@@ -14,9 +14,9 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
-		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateRound(i.State.Round),
-		auth.ValidateSequenceNumber(i.State.SeqNumber),
+		auth.ValidateLambdas(i.State.Lambda.Get()),
+		auth.ValidateRound(i.State.Round.Get()),
+		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ThisRoundLeader()),
 		i.UponPrePrepareMsg(),
@@ -31,15 +31,22 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 // 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
-func (i *Instance) JustifyPrePrepare(round uint64) (bool, error) {
+func (i *Instance) JustifyPrePrepare(round uint64) error {
 	if round == 1 {
-		return true, nil
+		return nil
 	}
 
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
-		return i.JustifyRoundChange(round)
+		res, err := i.JustifyRoundChange(round)
+		if err != nil {
+			return err
+		}
+		if !res {
+			return errors.New("unjustified change round for pre-prepare")
+		}
+		return nil
 	}
-	return false, nil
+	return errors.New("no change round quorum")
 }
 
 /*
@@ -58,16 +65,13 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 			zap.Uint64("round", signedMessage.Message.Round))
 
 		// Pre-prepare justification
-		justified, err := i.JustifyPrePrepare(signedMessage.Message.Round)
+		err := i.JustifyPrePrepare(signedMessage.Message.Round)
 		if err != nil {
-			return err
-		}
-		if !justified {
-			return errors.New("received un-justified pre-prepare message")
+			return errors.Wrap(err, "Unjustified pre-prepare")
 		}
 
 		// mark State
-		i.SetStage(proto.RoundState_PrePrepare)
+		i.ProcessStageChange(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
 		broadcastMsg := i.generatePrepareMessage(signedMessage.Message.Value)
@@ -82,9 +86,9 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_PrePrepare,
-		Round:     i.State.Round,
-		Lambda:    i.State.Lambda,
-		SeqNumber: i.State.SeqNumber,
+		Round:     i.State.Round.Get(),
+		Lambda:    i.State.Lambda.Get(),
+		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
 }

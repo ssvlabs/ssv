@@ -10,7 +10,7 @@ import (
 
 // ProcessMessage pulls messages from the queue to be processed sequentially
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
-	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, i.State.Round)); netMsg != nil {
+	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), i.State.Round.Get())); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:
@@ -35,22 +35,16 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 
 // ProcessChangeRoundPartialQuorum will look for f+1 change round msgs to bump to a higher round if this instance is behind.
 func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
-	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda, i.State.SeqNumber)); msgsMap != nil {
+	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())); msgsMap != nil {
 		// get values and keys slices
 		msgs := make([]*network.Message, 0)
-		msgsIds := make([]string, 0)
-		for id, msg := range msgsMap {
+		for _, msg := range msgsMap {
 			msgs = append(msgs, msg)
-			msgsIds = append(msgsIds, id)
 		}
 
 		found, err := i.uponChangeRoundPartialQuorum(msgs)
 		if err != nil {
 			return false, err
-		}
-		if found {
-			// We delete all change round messages as we already acted upon them so they have no use.
-			i.MsgQueue.DeleteMessagesWithIds(msgsIds)
 		}
 		return found, err
 	}

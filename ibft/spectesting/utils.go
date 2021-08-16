@@ -100,7 +100,7 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk *bls.SecretKey, lambda, prepare
 
 // TestIBFTInstance returns a test iBFT instance
 func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
-	opts := ibft.InstanceOptions{
+	opts := &ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
 		ValidatorShare: TestShares()[1],
 		Network:        local.NewLocalNetwork(),
@@ -218,7 +218,7 @@ func TestInputValue() []byte {
 // SimulateTimeout simulates instance timeout
 func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 	instance.BumpRound()
-	instance.SetStage(proto.RoundState_ChangeRound)
+	instance.ProcessStageChange(proto.RoundState_ChangeRound)
 }
 
 // RequireReturnedTrueNoError will call ProcessMessage and verifies it returns true and nil for execution

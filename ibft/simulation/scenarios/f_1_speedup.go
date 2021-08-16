@@ -3,6 +3,7 @@ package scenarios
 import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/storage/collections"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"sync"
@@ -16,7 +17,7 @@ type f1Speedup struct {
 	valueCheck valcheck.ValueCheck
 }
 
-// NewF1Speedup returns initialized f1Speedup scenario
+// NewF1Speedup returns initialized changeRoundSpeedup scenario
 func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
 	return &f1Speedup{
 		logger:     logger,
@@ -24,7 +25,7 @@ func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share) {
+func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	nodeCount := len(nodes)
@@ -44,7 +45,7 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 			}(nodes[i-1])
 		} else {
 			go func(node ibft.IBFT, index uint64) {
-				time.Sleep(time.Second * 10)
+				time.Sleep(time.Second * 13)
 				node.Init()
 				r.startNode(node, index)
 			}(nodes[i-1], i)
