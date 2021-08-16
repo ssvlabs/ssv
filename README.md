@@ -76,7 +76,7 @@ included in our repository in the `LICENSE` file.
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Golang\
 [ ] Externalize remote signer\
-[\\] Multi BN implementation support
+[X] Multi BN implementation support
 [X] Networking and discovery\
 [X] db, persistence and recovery (Sync)\
 [X] Between instance persistence (prevent starting a new instance if previous not decided)\
@@ -85,9 +85,9 @@ included in our repository in the `LICENSE` file.
 [\\] Proposal support\
 [X] Key sharing\
 [X] Deployment\
-[\\] Documentation\
+[X] Documentation\
 [X] Phase 1 testing\
-[\\] Full iBFT spec\
+[X] Full iBFT spec\
 [ ] Audit
 
 ** X=done, \\=WIP
