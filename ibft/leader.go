@@ -7,7 +7,7 @@ func (i *Instance) IsLeader() bool {
 
 // ThisRoundLeader returns the round leader
 func (i *Instance) ThisRoundLeader() uint64 {
-	return i.RoundLeader(i.State.Round.Get()) + 1 // node ids start from 1
+	return i.RoundLeader(i.Round()) + 1 // node ids start from 1
 }
 
 // RoundLeader checks the round leader

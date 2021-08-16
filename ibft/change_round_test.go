@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
@@ -63,9 +62,9 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round:         threadsafe.Uint64(1),
-			PreparedRound: threadsafe.Uint64(0),
-			PreparedValue: threadsafe.Bytes(nil),
+			Round:         1,
+			PreparedRound: 0,
+			PreparedValue: nil,
 		},
 	}
 
@@ -114,8 +113,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("value"))
+	instance.State.PreparedRound = 1
+	instance.State.PreparedValue = []byte("value")
 
 	// with a prepared round
 	byts, err = instance.roundChangeInputValue()
@@ -132,9 +131,9 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round:         threadsafe.Uint64(1),
-			PreparedRound: threadsafe.Uint64(0),
-			PreparedValue: threadsafe.Bytes(nil),
+			Round:         1,
+			PreparedRound: 0,
+			PreparedValue: nil,
 		},
 	}
 
@@ -441,9 +440,9 @@ func TestRoundChangeJustification(t *testing.T) {
 			3: {IbftId: 3},
 		}},
 		State: &proto.State{
-			Round:         threadsafe.Uint64(1),
-			PreparedRound: threadsafe.Uint64(0),
-			PreparedValue: threadsafe.Bytes(nil),
+			Round:         1,
+			PreparedRound: 0,
+			PreparedValue: nil,
 		},
 	}
 
@@ -519,8 +518,8 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.False(t, res)
 	require.NoError(t, err)
 
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("hello"))
+	instance.State.PreparedRound = 1
+	instance.State.PreparedValue = []byte("hello")
 }
 
 func TestHighestPrepared(t *testing.T) {
@@ -684,9 +683,9 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
-			Round:     threadsafe.Uint64(1),
-			SeqNumber: threadsafe.Uint64(1),
-			Lambda:    threadsafe.BytesS("lambda"),
+			Round:     1,
+			SeqNumber: 1,
+			Lambda:    []byte("lambda"),
 		},
 	}
 
@@ -712,9 +711,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
 		State: &proto.State{
-			Round:     threadsafe.Uint64(1),
-			Lambda:    threadsafe.Bytes(nil),
-			SeqNumber: threadsafe.Uint64(0),
+			Round: 1,
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()

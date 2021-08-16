@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"testing"
 
@@ -18,9 +17,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
 		State: &proto.State{
-			Round:         threadsafe.Uint64(1),
-			PreparedValue: threadsafe.Bytes(nil),
-			PreparedRound: threadsafe.Uint64(0),
+			Round: 3,
 		},
 	}
 
@@ -29,8 +26,8 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "missing decided message")
 
 	// set prepared state
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("value"))
+	instance.State.PreparedRound = 1
+	instance.State.PreparedValue = []byte("value")
 
 	// test prepared but no committed msgs
 	_, err = instance.CommittedAggregatedMsg()
@@ -56,7 +53,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Value:  []byte("value"),
 	}))
 
-	instance.decidedMsg = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
+	instance.State.DecidedMsg = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 
 	// test aggregation
 	msg, err := instance.CommittedAggregatedMsg()
@@ -85,9 +82,7 @@ func TestCommitPipeline(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3),
 		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		State: &proto.State{
-			Round:     threadsafe.Uint64(1),
-			Lambda:    threadsafe.Bytes(nil),
-			SeqNumber: threadsafe.Uint64(0),
+			Round: 1,
 		},
 	}
 	pipeline := instance.commitMsgPipeline()

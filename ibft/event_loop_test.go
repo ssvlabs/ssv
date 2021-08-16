@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
-	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -27,12 +26,10 @@ func TestChangeRoundTimer(t *testing.T) {
 			LeaderPreprepareDelaySeconds: 0.1,
 		},
 		State: &proto.State{
-			Round:         threadsafe.Uint64(1),
-			Stage:         threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
-			Lambda:        threadsafe.BytesS("Lambda"),
-			SeqNumber:     threadsafe.Uint64(1),
-			PreparedValue: threadsafe.Bytes(nil),
-			PreparedRound: threadsafe.Uint64(0),
+			Round:     1,
+			Stage:     proto.RoundState_PrePrepare,
+			Lambda:    []byte("Lambda"),
+			SeqNumber: 1,
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -51,5 +48,5 @@ func TestChangeRoundTimer(t *testing.T) {
 	instance.resetRoundTimer()
 	time.Sleep(time.Millisecond * 500)
 	instance.eventQueue.Pop()()
-	require.EqualValues(t, 2, instance.State.Round.Get())
+	require.EqualValues(t, 2, instance.State.Round)
 }

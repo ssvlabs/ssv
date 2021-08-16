@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
 	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
@@ -56,7 +55,6 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
-	decidedMsg          *proto.SignedMessage
 
 	// event loop
 	eventQueue eventqueue.EventQueue
@@ -75,6 +73,8 @@ type Instance struct {
 	processPrepareQuorumOnce     sync.Once
 	processCommitQuorumOnce      sync.Once
 	stopLock                     sync.Mutex
+	stageChangedChansLock        sync.Mutex
+	stateLock                    sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
@@ -82,13 +82,9 @@ func NewInstance(opts InstanceOptions) *Instance {
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
-			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
-			Lambda:        threadsafe.Bytes(opts.Lambda),
-			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
-			InputValue:    threadsafe.Bytes(nil),
-			PreparedValue: threadsafe.Bytes(nil),
-			PreparedRound: threadsafe.Uint64(0),
-			Round:         threadsafe.Uint64(1),
+			Stage:     proto.RoundState_NotStarted,
+			Lambda:    opts.Lambda,
+			SeqNumber: opts.SeqNumber,
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
@@ -115,6 +111,8 @@ func NewInstance(opts InstanceOptions) *Instance {
 		processPrepareQuorumOnce:     sync.Once{},
 		processCommitQuorumOnce:      sync.Once{},
 		stopLock:                     sync.Mutex{},
+		stageChangedChansLock:        sync.Mutex{},
+		stateLock:                    sync.RWMutex{},
 	}
 }
 
@@ -142,18 +140,17 @@ func (i *Instance) Init() {
 // 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
-		return errors.New("instance not initialized")
+		return errors.New("can't start a non initialized instance")
 	}
-	if i.State.Lambda.Get() == nil {
-		return errors.New("invalid Lambda")
-	}
-	if inputValue == nil {
-		return errors.New("input value is nil")
+	if i.State.Lambda == nil {
+		return errors.New("can't start instance with invalid Lambda")
 	}
 
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
-	i.State.InputValue.Set(inputValue)
-	i.State.Round.Set(1) // start from 1
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
+	i.stateLock.Lock()
+	i.State.Round = 1 // start from 1
+	i.State.InputValue = inputValue
+	i.stateLock.Unlock()
 
 	if i.IsLeader() {
 		go func() {
@@ -164,7 +161,7 @@ func (i *Instance) Start(inputValue []byte) error {
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
-			msg := i.generatePrePrepareMessage(i.State.InputValue.Get())
+			msg := i.generatePrePrepareMessage(i.State.InputValue)
 			//
 			if err := i.SignAndBroadcast(msg); err != nil {
 				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
@@ -230,20 +227,42 @@ func (i *Instance) Stopped() bool {
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
+	i.setRound(i.Round() + 1)
+}
+
+func (i *Instance) setRound(newRound uint64) {
+	i.stateLock.Lock()
+	defer i.stateLock.Unlock()
+
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	i.processCommitQuorumOnce = sync.Once{}
-	i.State.Round.Set(i.State.Round.Get() + 1)
+	i.State.Round = newRound
+}
+
+// Round returns the state's round (thread safe)
+func (i *Instance) Round() uint64 {
+	i.stateLock.RLock()
+	defer i.stateLock.RUnlock()
+	return i.State.Round
+}
+
+// Stage returns the instance message state
+func (i *Instance) Stage() proto.RoundState {
+	i.stateLock.RLock()
+	defer i.stateLock.RUnlock()
+
+	return i.State.Stage
 }
 
 // ProcessStageChange set the State's round State and pushed the new State into the State channel
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
-	i.State.Stage.Set(int32(stage))
+	i.setStage(stage)
 
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
-		for j := uint64(1); j <= i.State.Round.Get(); j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), j))
+		for j := uint64(1); j <= i.Round(); j++ {
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
 		}
 	}
 
@@ -251,6 +270,12 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	if i.stageChangedChan != nil {
 		i.stageChangedChan <- stage
 	}
+}
+
+func (i *Instance) setStage(stage proto.RoundState) {
+	i.stateLock.Lock()
+	defer i.stateLock.Unlock()
+	i.State.Stage = stage
 }
 
 // GetStageChan returns a RoundState channel added to the stateChangesChans array

@@ -27,7 +27,7 @@ func (test *DuplicateMessages) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State.Round = 1
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -103,5 +103,5 @@ func (test *DuplicateMessages) Run(t *testing.T) {
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage)
 }
