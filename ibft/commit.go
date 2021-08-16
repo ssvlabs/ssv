@@ -13,7 +13,7 @@ import (
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		auth.ValidateRound(i.State.Round),
+		auth.ValidateRound(i.Round()),
 		i.commitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
@@ -74,13 +74,13 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 				i.stopRoundTimer()
 
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.State.Round),
+					zap.String("Lambda", hex.EncodeToString(i.State.Lambda)), zap.Uint64("round", i.Round()),
 					zap.Int("got_votes", len(sigs)))
 
 				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
 					i.State.DecidedMsg = aggMsg
 					// mark instance commit
-					i.SetStage(proto.RoundState_Decided)
+					i.ProcessStageChange(proto.RoundState_Decided)
 					i.Stop()
 				}
 			})
@@ -110,7 +110,7 @@ func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedM
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_Commit,
-		Round:     i.State.Round,
+		Round:     i.Round(),
 		Lambda:    i.State.Lambda,
 		SeqNumber: i.State.SeqNumber,
 		Value:     value,

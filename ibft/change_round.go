@@ -30,7 +30,7 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.changeRoundMsgValidationPipeline(),
-		auth.ValidateRound(i.State.Round),
+		auth.ValidateRound(i.Round()),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
 		i.uponChangeRoundFullQuorum(),
 	)
@@ -62,7 +62,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 		}
 
 		i.processChangeRoundQuorumOnce.Do(func() {
-			i.SetStage(proto.RoundState_PrePrepare)
+			i.ProcessStageChange(proto.RoundState_PrePrepare)
 			i.Logger.Info("change round quorum received.",
 				zap.Uint64("round", signedMessage.Message.Round),
 				zap.Bool("is_leader", isLeader),
@@ -174,11 +174,11 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *Instance) uponChangeRoundTrigger() {
+	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.Round()))
 	// bump round
 	i.BumpRound()
 	// mark stage
-	i.SetStage(proto.RoundState_ChangeRound)
-	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round))
+	i.ProcessStageChange(proto.RoundState_ChangeRound)
 
 	// set time for next round change
 	i.resetRoundTimer()
@@ -237,13 +237,13 @@ func highestPrepared(round uint64, container msgcont.MessageContainer) (allNonPr
 func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		//i.Logger.Error("failed to create round change data for round", zap.Uint64("round", i.State.Round), zap.Error(err))
+		//i.Logger.Error("failed to create round change data for round", zap.Uint64("round", i.Round()), zap.Error(err))
 		return nil, errors.New("failed to create round change data for round")
 	}
 
 	return &proto.Message{
 		Type:      proto.RoundState_ChangeRound,
-		Round:     i.State.Round,
+		Round:     i.Round(),
 		Lambda:    i.State.Lambda,
 		SeqNumber: i.State.SeqNumber,
 		Value:     data,
@@ -251,6 +251,6 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round))
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.Round()))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }

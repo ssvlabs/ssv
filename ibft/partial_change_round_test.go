@@ -66,6 +66,26 @@ func TestFindPartialChangeRound(t *testing.T) {
 			false,
 			100000,
 		},
+		{
+			"duplicate msgs from same peer, no quorum",
+			[]*network.Message{
+				signedMsgToNetworkMsg(t, 1, sks[1], 4),
+				signedMsgToNetworkMsg(t, 1, sks[1], 5),
+			},
+			false,
+			4,
+		},
+		{
+			"duplicate msgs from same peer, lowest 8",
+			[]*network.Message{
+				signedMsgToNetworkMsg(t, 1, sks[1], 13),
+				signedMsgToNetworkMsg(t, 1, sks[1], 12),
+				signedMsgToNetworkMsg(t, 2, sks[2], 10),
+				signedMsgToNetworkMsg(t, 2, sks[2], 8),
+			},
+			true,
+			8,
+		},
 	}
 
 	for _, test := range tests {
@@ -81,127 +101,6 @@ func TestFindPartialChangeRound(t *testing.T) {
 			found, lowest := instance.findPartialQuorum(test.msgs)
 			require.EqualValues(tt, test.expectedFound, found)
 			require.EqualValues(tt, test.expectedLowest, lowest)
-		})
-	}
-}
-
-func TestChangeRoundPartialQuorum(t *testing.T) {
-	tests := []struct {
-		name                 string
-		msgs                 []*proto.SignedMessage
-		expectedQuorum       bool
-		expectedT, expectedN uint64
-	}{
-		{
-			"valid f+1 quorum",
-			[]*proto.SignedMessage{
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-			},
-			true,
-			2,
-			4,
-		},
-		{
-			"valid 2f+1 quorum",
-			[]*proto.SignedMessage{
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-			},
-			true,
-			3,
-			4,
-		},
-		{
-			"valid 3f+1 quorum",
-			[]*proto.SignedMessage{
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-			},
-			true,
-			4,
-			4,
-		},
-		{
-			"invalid f quorum",
-			[]*proto.SignedMessage{
-				{
-					Message: &proto.Message{
-						Type:  proto.RoundState_ChangeRound,
-						Round: 4,
-					},
-				},
-			},
-			false,
-			1,
-			4,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(tt *testing.T) {
-			instance := &Instance{
-				Config: proto.DefaultConsensusParams(),
-				ValidatorShare: &storage.Share{Committee: map[uint64]*proto.Node{
-					0: {IbftId: 0},
-					1: {IbftId: 1},
-					2: {IbftId: 2},
-					3: {IbftId: 3},
-				}},
-			}
-
-			q, t, n := instance.changeRoundPartialQuorum(test.msgs)
-			require.EqualValues(tt, test.expectedQuorum, q)
-			require.EqualValues(tt, test.expectedN, n)
-			require.EqualValues(tt, test.expectedT, t)
 		})
 	}
 }

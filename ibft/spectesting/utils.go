@@ -218,7 +218,7 @@ func TestInputValue() []byte {
 // SimulateTimeout simulates instance timeout
 func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 	instance.BumpRound()
-	instance.SetStage(proto.RoundState_ChangeRound)
+	instance.ProcessStageChange(proto.RoundState_ChangeRound)
 }
 
 // RequireReturnedTrueNoError will call ProcessMessage and verifies it returns true and nil for execution
