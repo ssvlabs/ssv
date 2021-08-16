@@ -10,22 +10,22 @@ import (
 	"time"
 )
 
-type f1Speedup struct {
+type changeRoundSpeedup struct {
 	logger     *zap.Logger
 	nodes      []ibft.IBFT
 	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
 
-// NewF1Speedup returns initialized changeRoundSpeedup scenario
-func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
-	return &f1Speedup{
+// NewChangeRoundSpeedup returns initialized changeRoundSpeedup scenario
+func NewChangeRoundSpeedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario {
+	return &changeRoundSpeedup{
 		logger:     logger,
 		valueCheck: valueCheck,
 	}
 }
 
-func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	nodeCount := len(nodes)
@@ -35,39 +35,28 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 	}
 
 	// init ibfts
-	var wg sync.WaitGroup
-	for i := uint64(1); i <= uint64(3); i++ {
-		if i <= 2 {
-			wg.Add(1)
-			go func(node ibft.IBFT) {
-				node.Init()
-				wg.Done()
-			}(nodes[i-1])
-		} else {
-			go func(node ibft.IBFT, index uint64) {
-				time.Sleep(time.Second * 13)
-				node.Init()
-				r.startNode(node, index)
-			}(nodes[i-1], i)
-		}
-	}
-
-	r.logger.Info("waiting for nodes to init")
-	wg.Wait()
-
-	r.logger.Info("start instances")
-	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		wg.Add(1)
-		go func(node ibft.IBFT, index uint64) {
-			defer wg.Done()
-			r.startNode(node, index)
-		}(nodes[i-1], i)
-	}
+	go func(node ibft.IBFT, index uint64) {
+		node.Init()
+		r.startNode(node, index)
+	}(nodes[0], 1)
+	go func(node ibft.IBFT, index uint64) {
+		time.Sleep(time.Second * 13)
+		node.Init()
+		r.startNode(node, index)
+	}(nodes[1], 2)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func(node ibft.IBFT, index uint64) {
+		time.Sleep(time.Second * 60)
+		node.Init()
+		r.startNode(node, index)
+		wg.Done()
+	}(nodes[2], 3)
 
 	wg.Wait()
 }
 
-func (r *f1Speedup) startNode(node ibft.IBFT, index uint64) {
+func (r *changeRoundSpeedup) startNode(node ibft.IBFT, index uint64) {
 	res, err := node.StartInstance(ibft.StartOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,

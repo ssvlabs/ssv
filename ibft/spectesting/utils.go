@@ -100,7 +100,7 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk *bls.SecretKey, lambda, prepare
 
 // TestIBFTInstance returns a test iBFT instance
 func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
-	opts := ibft.InstanceOptions{
+	opts := &ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
 		ValidatorShare: TestShares()[1],
 		Network:        local.NewLocalNetwork(),

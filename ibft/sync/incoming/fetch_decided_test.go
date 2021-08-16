@@ -81,6 +81,50 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 			nil,
 			"",
 		},
+		{
+			"params value just 1 - invalid",
+			[]byte("lambda"),
+			[]uint64{1000},
+			[]uint64{0, 0},
+			0,
+			100,
+			decided250Seq,
+			nil,
+			"invalid get decided request: sync msg invalid: params should contain 2 elements",
+		},
+		{
+			"params value just 0 - invalid",
+			[]byte("lambda"),
+			[]uint64{1000},
+			[]uint64{0, 0},
+			0,
+			100,
+			decided250Seq,
+			nil,
+			"invalid get decided request: sync msg invalid: params should contain 2 elements",
+		},
+		{
+			"params value 3 - invalid",
+			[]byte("lambda"),
+			[]uint64{1000, 1001, 1002},
+			[]uint64{0, 0},
+			0,
+			100,
+			decided250Seq,
+			nil,
+			"invalid get decided request: sync msg invalid: params should contain 2 elements",
+		},
+		{
+			"params value start higher then end - invalid",
+			[]byte("lambda"),
+			[]uint64{1000, 900},
+			[]uint64{0, 0},
+			0,
+			100,
+			decided250Seq,
+			nil,
+			"invalid get decided request: sync msg invalid: param[0] should be <= param[1]",
+		},
 	}
 
 	for _, test := range tests {
@@ -95,7 +139,7 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 			handler := ReqHandler{
 				paginationMaxSize: uint64(test.maxBatch),
 				identifier:        test.identifier,
-				network:           sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil),
+				network:           sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil, nil),
 				storage:           &ibftStorage,
 				logger:            zap.L(),
 			}
@@ -122,6 +166,11 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 			if test.expectedResL > 0 {
 				require.EqualValues(t, test.expectedSeq[0], res.SyncMessage.SignedMessages[0].Message.SeqNumber)
 				require.EqualValues(t, test.expectedSeq[1], res.SyncMessage.SignedMessages[test.expectedResL-1].Message.SeqNumber)
+			}
+			if len(test.expectedError) > 0 {
+				require.EqualValues(t, test.expectedError, res.SyncMessage.Error)
+			} else {
+				require.Len(t, res.SyncMessage.Error, 0)
 			}
 		})
 	}

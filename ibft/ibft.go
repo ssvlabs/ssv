@@ -96,7 +96,7 @@ func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
-	i.waitForMinPeerCount(2) // minimum of 3 validators (the current + 2)
+	i.waitForMinPeerCount(2) // minimum of 3 validators (me + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
@@ -114,7 +114,7 @@ func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
 		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
-	return i.startInstanceWithOptions(*instanceOpts, opts.Value)
+	return i.startInstanceWithOptions(instanceOpts, opts.Value)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

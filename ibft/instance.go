@@ -56,6 +56,7 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
+	lastChangeRoundMsg  *proto.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
 	decidedMsg          *proto.SignedMessage
 
 	// event loop
@@ -75,10 +76,11 @@ type Instance struct {
 	processPrepareQuorumOnce     sync.Once
 	processCommitQuorumOnce      sync.Once
 	stopLock                     sync.Mutex
+	lastChangeRoundMsgLock       sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
-func NewInstance(opts InstanceOptions) *Instance {
+func NewInstance(opts *InstanceOptions) *Instance {
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
@@ -115,6 +117,7 @@ func NewInstance(opts InstanceOptions) *Instance {
 		processPrepareQuorumOnce:     sync.Once{},
 		processCommitQuorumOnce:      sync.Once{},
 		stopLock:                     sync.Mutex{},
+		lastChangeRoundMsgLock:       sync.RWMutex{},
 	}
 }
 
@@ -273,20 +276,27 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		Signature: sig.Serialize(),
 		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
+
+	// used for instance fast change round catchup
+	if msg.Type == proto.RoundState_ChangeRound {
+		i.setLastChangeRoundMsg(signedMessage)
+	}
+
 	if i.network != nil {
 		return i.network.Broadcast(i.ValidatorShare.PublicKey.Serialize(), signedMessage)
 	}
+	return errors.New("no networking, could not broadcast msg")
+}
 
-	switch msg.Type {
-	case proto.RoundState_PrePrepare:
-		i.PrePrepareMessages.AddMessage(signedMessage)
-	case proto.RoundState_Prepare:
-		i.PrepareMessages.AddMessage(signedMessage)
-	case proto.RoundState_Commit:
-		i.CommitMessages.AddMessage(signedMessage)
-	case proto.RoundState_ChangeRound:
-		i.ChangeRoundMessages.AddMessage(signedMessage)
-	}
+func (i *Instance) setLastChangeRoundMsg(msg *proto.SignedMessage) {
+	i.lastChangeRoundMsgLock.Lock()
+	defer i.lastChangeRoundMsgLock.Unlock()
+	i.lastChangeRoundMsg = msg
+}
 
-	return nil
+// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
+func (i *Instance) GetLastChangeRoundMsg() *proto.SignedMessage {
+	i.lastChangeRoundMsgLock.RLock()
+	defer i.lastChangeRoundMsgLock.RUnlock()
+	return i.lastChangeRoundMsg
 }
