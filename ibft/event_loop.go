@@ -39,7 +39,7 @@ loop:
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
-	i.Logger.Info("instance main event loop stopped")
+	i.Logger.Debug("instance main event loop stopped")
 }
 
 // StartMessagePipeline - the iBFT instance is message driven with an 'upon' logic.
@@ -48,18 +48,12 @@ loop:
 func (i *Instance) StartMessagePipeline() {
 loop:
 	for {
-		i.stateLock.RLock()
-		lambda := i.State.Lambda
-		seq := i.State.SeqNumber
-		round := i.State.Round
-		i.stateLock.RUnlock()
-
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(lambda, seq, round)); queueCnt > 0 {
+		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), i.State.Round.Get())); queueCnt > 0 {
 			i.Logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
@@ -79,24 +73,19 @@ loop:
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
-	i.Logger.Info("instance msg pipeline loop stopped")
+	i.Logger.Debug("instance msg pipeline loop stopped")
 }
 
 // StartPartialChangeRoundPipeline continuously tries to find partial change round quorum
 func (i *Instance) StartPartialChangeRoundPipeline() {
 loop:
 	for {
-		i.stateLock.RLock()
-		lambda := i.State.Lambda
-		seq := i.State.SeqNumber
-		i.stateLock.RUnlock()
-
 		if i.Stopped() {
 			break loop
 		}
 
 		var wg sync.WaitGroup
-		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(lambda, seq)) > 0 {
+		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())) > 0 {
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				found, err := i.ProcessChangeRoundPartialQuorum()
@@ -120,7 +109,7 @@ loop:
 			time.Sleep(time.Second * 1)
 		}
 	}
-	i.Logger.Info("instance partial change round pipeline loop stopped")
+	i.Logger.Debug("instance partial change round pipeline loop stopped")
 }
 
 func (i *Instance) startRoundTimerLoop() {
@@ -136,10 +125,10 @@ loop:
 				i.uponChangeRoundTrigger()
 			})
 		} else { // stopped
-			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.Round()))
+			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State.Round.Get()))
 		}
 	}
-	i.Logger.Info("instance round timer loop stopped")
+	i.Logger.Debug("instance round timer loop stopped")
 }
 
 /**
@@ -155,7 +144,7 @@ func (i *Instance) resetRoundTimer() {
 	// stat new timer
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)
-	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.Round()))
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round.Get()))
 }
 
 func (i *Instance) stopRoundTimer() {

@@ -108,7 +108,7 @@ func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatu
 	// Submit validation to beacon node
 	switch duty.Type {
 	case beacon.RoleTypeAttester:
-		logger.Info("submitting attestation")
+		logger.Debug("submitting attestation")
 		blsSig := spec.BLSSignature{}
 		copy(blsSig[:], signature.Serialize()[:])
 		inputValue.GetAttestation().Signature = blsSig

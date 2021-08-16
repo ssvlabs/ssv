@@ -17,7 +17,7 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 		return errors.New("iBFT hasn't initialized yet")
 	}
 	if i.currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State.SeqNumber)
+		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State.SeqNumber.Get())
 	}
 
 	highestKnown, err := i.highestKnownDecided()

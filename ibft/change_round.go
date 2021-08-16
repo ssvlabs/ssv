@@ -20,8 +20,8 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
-		auth.ValidateLambdas(i.State.Lambda),
-		auth.ValidateSequenceNumber(i.State.SeqNumber),
+		auth.ValidateLambdas(i.State.Lambda.Get()),
+		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		changeround.Validate(i.ValidatorShare),
 	)
@@ -30,7 +30,7 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.changeRoundMsgValidationPipeline(),
-		auth.ValidateRound(i.Round()),
+		auth.ValidateRound(i.State.Round.Get()),
 		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
 		i.uponChangeRoundFullQuorum(),
 	)
@@ -63,11 +63,11 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		i.processChangeRoundQuorumOnce.Do(func() {
 			i.ProcessStageChange(proto.RoundState_PrePrepare)
-			i.Logger.Info("change round quorum received.",
-				zap.Uint64("round", signedMessage.Message.Round),
+			logger := i.Logger.With(zap.Uint64("round", signedMessage.Message.Round),
 				zap.Bool("is_leader", isLeader),
 				zap.Bool("round_justified", justifyRound))
 
+			logger.Info("change round quorum received")
 			if !isLeader {
 				return
 			}
@@ -86,17 +86,16 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			var value []byte
 			if highest != nil {
 				value = highest.PreparedValue
-				i.Logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.Uint64("round", signedMessage.Message.Round))
-
+				logger.Debug("broadcasting pre-prepare as leader after round change with justified prepare value")
 			} else {
-				value = i.State.InputValue
-				i.Logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.Uint64("round", signedMessage.Message.Round))
+				value = i.State.InputValue.Get()
+				logger.Debug("broadcasting pre-prepare as leader after round change with input value")
 			}
 
 			// send pre-prepare msg
 			broadcastMsg := i.generatePrePrepareMessage(value)
 			if e := i.SignAndBroadcast(broadcastMsg); e != nil {
-				i.Logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
+				logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
 				err = e
 			}
 		})
@@ -135,7 +134,7 @@ func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
-	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound, i.State.PreparedValue)
+	quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound.Get(), i.State.PreparedValue.Get())
 
 	// prepare justificationMsg and sig
 	var justificationMsg *proto.Message
@@ -163,8 +162,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	}
 
 	data := &proto.ChangeRoundData{
-		PreparedRound:    i.State.PreparedRound,
-		PreparedValue:    i.State.PreparedValue,
+		PreparedRound:    i.State.PreparedRound.Get(),
+		PreparedValue:    i.State.PreparedValue.Get(),
 		JustificationMsg: justificationMsg,
 		JustificationSig: aggSig,
 		SignerIds:        ids,
@@ -174,7 +173,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *Instance) uponChangeRoundTrigger() {
-	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.Round()))
+	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round.Get()))
 	// bump round
 	i.BumpRound()
 	// mark stage
@@ -237,20 +236,19 @@ func highestPrepared(round uint64, container msgcont.MessageContainer) (allNonPr
 func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		//i.Logger.Error("failed to create round change data for round", zap.Uint64("round", i.Round()), zap.Error(err))
 		return nil, errors.New("failed to create round change data for round")
 	}
 
 	return &proto.Message{
 		Type:      proto.RoundState_ChangeRound,
-		Round:     i.Round(),
-		Lambda:    i.State.Lambda,
-		SeqNumber: i.State.SeqNumber,
+		Round:     i.State.Round.Get(),
+		Lambda:    i.State.Lambda.Get(),
+		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     data,
 	}, nil
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.Round()))
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round.Get()))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }

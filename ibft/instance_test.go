@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -27,10 +28,10 @@ func TestInstanceStop(t *testing.T) {
 		CommitMessages:     msgcontinmem.New(3),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:     1,
-			Stage:     proto.RoundState_PrePrepare,
-			Lambda:    []byte("Lambda"),
-			SeqNumber: 1,
+			Round:     threadsafe.Uint64(1),
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
+			Lambda:    threadsafe.BytesS("Lambda"),
+			SeqNumber: threadsafe.Uint64(1),
 		},
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -102,9 +103,9 @@ func TestInstanceStop(t *testing.T) {
 
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
-	require.EqualValues(t, proto.RoundState_Stopped, instance.Stage())
-	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round)))
-	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda, msg.Message.SeqNumber, instance.State.Round))
+	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
+	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get())))
+	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get()))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
 }
 
@@ -114,10 +115,10 @@ func TestInit(t *testing.T) {
 		eventQueue: eventqueue.New(),
 		Config:     proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:     1,
-			Stage:     proto.RoundState_PrePrepare,
-			Lambda:    []byte("Lambda"),
-			SeqNumber: 1,
+			Round:     threadsafe.Uint64(1),
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
+			Lambda:    threadsafe.BytesS("Lambda"),
+			SeqNumber: threadsafe.Uint64(1),
 		},
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(),
@@ -136,10 +137,10 @@ func TestSetStage(t *testing.T) {
 		eventQueue: eventqueue.New(),
 		Config:     proto.DefaultConsensusParams(),
 		State: &proto.State{
-			Round:     1,
-			Stage:     proto.RoundState_PrePrepare,
-			Lambda:    []byte("Lambda"),
-			SeqNumber: 1,
+			Round:     threadsafe.Uint64(1),
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
+			Lambda:    threadsafe.BytesS("Lambda"),
+			SeqNumber: threadsafe.Uint64(1),
 		},
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(),
@@ -174,20 +175,20 @@ func TestSetStage(t *testing.T) {
 	lock.Lock()
 	require.True(t, prepare)
 	lock.Unlock()
-	require.EqualValues(t, proto.RoundState_Prepare, instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Prepare, instance.State.Stage.Get())
 
 	instance.ProcessStageChange(proto.RoundState_Decided)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, decided)
 	lock.Unlock()
-	require.EqualValues(t, proto.RoundState_Decided, instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Decided, instance.State.Stage.Get())
 
 	instance.ProcessStageChange(proto.RoundState_Stopped)
 	time.Sleep(time.Millisecond * 20)
 	lock.Lock()
 	require.True(t, stopped)
 	lock.Unlock()
-	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage)
+	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
 	require.NotNil(t, instance.stageChangedChan)
 }

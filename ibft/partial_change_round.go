@@ -18,7 +18,7 @@ func (i *Instance) findPartialQuorum(msgs []*network.Message) (found bool, lowes
 			continue
 		}
 
-		if msg.SignedMessage.Message.Round <= i.Round() {
+		if msg.SignedMessage.Message.Round <= i.State.Round.Get() {
 			continue
 		}
 
@@ -56,8 +56,8 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 
 	// TODO - could have a race condition where msgs are processed in a different thread and then we trigger round change here
 	if foundPartialQuorum {
-		i.setRound(lowestChangeRound)
-		i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.Round()))
+		i.State.Round.Set(lowestChangeRound)
+		i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round.Get()))
 		i.resetRoundTimer()
 		i.ProcessStageChange(proto.RoundState_ChangeRound)
 
