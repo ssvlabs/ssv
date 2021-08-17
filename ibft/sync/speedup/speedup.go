@@ -59,7 +59,7 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 			if err != nil {
 				s.logger.Error("error fetching latest change round", zap.Error(err))
 			} else if err := s.lastMsgError(msg); err != nil {
-				s.logger.Error("error fetching latest change round", zap.Error(err))
+				s.logger.Debug("could not fetch latest change round", zap.Error(err))
 			} else {
 				signedMsg := msg.SignedMessages[0]
 				if err := s.msgValidationPipeline.Run(signedMsg); err != nil {

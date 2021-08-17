@@ -21,7 +21,7 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts *InstanceOptions, value
 	}
 
 	// catch up if we can
-	i.fastChangeRoundCatchup(i.currentInstance)
+	go i.fastChangeRoundCatchup(i.currentInstance)
 
 	// main instance callback loop
 	var retRes *InstanceResult
