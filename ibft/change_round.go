@@ -86,10 +86,10 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			var value []byte
 			if highest != nil {
 				value = highest.PreparedValue
-				logger.Debug("broadcasting pre-prepare as leader after round change with justified prepare value")
+				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value")
 			} else {
 				value = i.State.InputValue.Get()
-				logger.Debug("broadcasting pre-prepare as leader after round change with input value")
+				logger.Info("broadcasting pre-prepare as leader after round change with input value")
 			}
 
 			// send pre-prepare msg
