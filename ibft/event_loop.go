@@ -54,16 +54,17 @@ loop:
 
 		var wg sync.WaitGroup
 		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), i.State.Round.Get())); queueCnt > 0 {
-			i.Logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
+			logger := i.Logger.With(zap.Uint64("round", i.State.Round.Get()))
+			logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
 				_, err := i.ProcessMessage()
 				if err != nil {
-					i.Logger.Error("msg pipeline error", zap.Error(err))
+					logger.Error("msg pipeline error", zap.Error(err))
 				}
 				wg.Done()
 			}); !added {
-				i.Logger.Debug("could not add ibft message to event queue")
+				logger.Debug("could not add ibft message to event queue")
 				time.Sleep(time.Millisecond * 100)
 				wg.Done()
 			}
