@@ -127,7 +127,33 @@ services:
       DEBUG_PORT: 40009
       CONFIG_PATH: ./config/config.exporter.yaml
 
+  prometheus:
+    image: prom/prometheus:v2.24.0
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - data_prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - 9090:9090
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - data_grafana:/var/lib/grafana
+
 #networks:
 #  bloxapp-docker:
 #    driver: bridge
 #    name: bloxapp-docker
+
+volumes:
+  data_prometheus:
+  data_grafana:
