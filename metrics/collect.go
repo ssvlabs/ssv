@@ -12,7 +12,7 @@ type Collector interface {
 }
 
 var (
-	prefix        = "ssv-collect"
+	prefix        = "ssv_operator"
 	collectors    = map[string]Collector{}
 	collectorsMut = sync.Mutex{}
 )
@@ -59,7 +59,7 @@ func Collect() ([]string, []error) {
 			resultsMut.Lock()
 			for _, m := range metrics {
 				// ssv-collect.<collectorID>.<metric{labels} value>
-				results = append(results, fmt.Sprintf("%s.%s.%s", prefix, c.ID(), m))
+				results = append(results, fmt.Sprintf("%s:%s:%s", prefix, c.ID(), m))
 			}
 			resultsMut.Unlock()
 		}(cr)
