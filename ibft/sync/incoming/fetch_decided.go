@@ -25,9 +25,14 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 
 		ret := make([]*proto.SignedMessage, 0)
 		for i := startSeq; i <= endSeq; i++ {
-			decidedMsg, err := s.storage.GetDecided(s.identifier, i)
+			decidedMsg, found, err := s.storage.GetDecided(s.identifier, i)
+			logger := s.logger.With(zap.ByteString("identifier", s.identifier), zap.Uint64("sequence", i))
+			if !found{
+				logger.Error("decided was not found")
+				continue
+			}
 			if err != nil {
-				s.logger.Error("failed to get decided", zap.Error(err), zap.ByteString("identifier", s.identifier), zap.Uint64("sequence", i))
+				logger.Error("failed to get decided", zap.Error(err))
 				continue
 			}
 

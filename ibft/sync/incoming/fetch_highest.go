@@ -26,9 +26,9 @@ func (s *ReqHandler) getHighestDecided() (*network.SyncMessage, error) {
 		Type:   network.Sync_GetHighestType,
 	}
 
-	highest, err := s.storage.GetHighestDecidedInstance(s.identifier)
-	if err != nil && err.Error() == kv.EntryNotFoundError {
-		res.Error = err.Error()
+	highest, found, err := s.storage.GetHighestDecidedInstance(s.identifier)
+	if !found {
+		res.Error = kv.EntryNotFoundError // TODO: need to change once v0.0.12 is deprecated @see ibft/sync/history.go:163
 		err = nil // marking not-found as non error
 	} else {
 		signedMsg := make([]*proto.SignedMessage, 0)

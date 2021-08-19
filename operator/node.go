@@ -68,7 +68,6 @@ func New(opts Options) Node {
 			DutyLimit:           opts.DutyLimit,
 		}),
 	}
-
 	return ssv
 }
 

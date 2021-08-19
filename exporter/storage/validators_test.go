@@ -2,7 +2,6 @@ package storage
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -36,15 +35,15 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 	}
 
 	t.Run("get non-existing validator", func(t *testing.T) {
-		nonExistingOperator, err := storage.GetValidatorInformation("dummyPK")
+		nonExistingOperator, found, _ := storage.GetValidatorInformation("dummyPK")
 		require.Nil(t, nonExistingOperator)
-		require.EqualError(t, err, kv.EntryNotFoundError)
+		require.False(t, found)
 	})
 
 	t.Run("create and get validator", func(t *testing.T) {
 		err := storage.SaveValidatorInformation(&validatorInfo)
 		require.NoError(t, err)
-		validatorInfoFromDB, err := storage.GetValidatorInformation(validatorInfo.PublicKey)
+		validatorInfoFromDB, _, err := storage.GetValidatorInformation(validatorInfo.PublicKey)
 		require.NoError(t, err)
 		require.Equal(t, "kds6E6tCimycIOcQRIjLaWGr6rYOVs9LoZnu07X2587WcOywZslwTcL6kxM3kjgc",
 			validatorInfoFromDB.PublicKey)
@@ -90,7 +89,7 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 		}
 
 		for _, vi := range vis {
-			validatorInfoFromDB, err := storage.GetValidatorInformation(vi.PublicKey)
+			validatorInfoFromDB, _, err := storage.GetValidatorInformation(vi.PublicKey)
 			require.NoError(t, err)
 			require.Equal(t, i, validatorInfoFromDB.Index)
 			require.Equal(t, validatorInfoFromDB.PublicKey, vi.PublicKey)

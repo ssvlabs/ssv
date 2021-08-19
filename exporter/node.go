@@ -307,7 +307,10 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if !ibftSyncEnabled {
 		return nil
 	}
-	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	if !found{
+		return errors.New("could not find validator share")
+	}
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}

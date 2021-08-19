@@ -43,7 +43,8 @@ func TestBadgerEndToEnd(t *testing.T) {
 		require.NoError(t, db.Set(save.prefix, save.key, save.value))
 	}
 
-	obj, err := db.Get(toSave[0].prefix, toSave[0].key)
+	obj, found, err := db.Get(toSave[0].prefix, toSave[0].key)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, toSave[0].key, obj.Key)
 	require.EqualValues(t, toSave[0].value, obj.Value)
@@ -52,7 +53,8 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(objs))
 
-	obj, err = db.Get(toSave[2].prefix, toSave[2].key)
+	obj, found, err = db.Get(toSave[2].prefix, toSave[2].key)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, toSave[2].key, obj.Key)
 	require.EqualValues(t, toSave[2].value, obj.Value)
