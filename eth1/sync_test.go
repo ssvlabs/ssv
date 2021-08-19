@@ -6,7 +6,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"math/big"
 	"testing"
 	"time"
 )
@@ -18,9 +17,9 @@ func TestSyncEth1(t *testing.T) {
 	rawOffset += 10
 	go func() {
 		logs := []types.Log{{BlockNumber: rawOffset - 1}, {BlockNumber: rawOffset}}
-		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
-		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
+		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
+		eth1Client.Sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, "Eth1SyncTest", nil)
 	require.NoError(t, err)
@@ -32,12 +31,12 @@ func TestSyncEth1(t *testing.T) {
 
 func TestSyncEth1Error(t *testing.T) {
 	logger, eth1Client, storage := setupStorageWithEth1ClientMock()
-	eth1Client.syncResponse = errors.New("eth1-sync-test")
+	eth1Client.SyncResponse = errors.New("eth1-sync-test")
 	go func() {
 		logs := []types.Log{{}, {BlockNumber: DefaultSyncOffset().Uint64()}}
-		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
-		eth1Client.sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
+		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
+		eth1Client.Sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, "FailedEth1SyncTest", nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
@@ -78,31 +77,11 @@ func TestDetermineSyncOffset(t *testing.T) {
 	})
 }
 
-func setupStorageWithEth1ClientMock() (*zap.Logger, *eth1ClientMock, *syncStorageMock) {
+func setupStorageWithEth1ClientMock() (*zap.Logger, *ClientMock, *syncStorageMock) {
 	logger := zap.L()
-	eth1Client := eth1ClientMock{pubsub.NewSubject(logger), 50 * time.Millisecond, nil}
+	eth1Client := ClientMock{Sub: pubsub.NewSubject(logger), SyncTimeout: 50 * time.Millisecond}
 	storage := syncStorageMock{[]byte{}}
 	return logger, &eth1Client, &storage
-}
-
-type eth1ClientMock struct {
-	sub pubsub.Subject
-
-	syncTimeout  time.Duration
-	syncResponse error
-}
-
-func (ec *eth1ClientMock) EventsSubject() pubsub.Subscriber {
-	return ec.sub
-}
-
-func (ec *eth1ClientMock) Start() error {
-	return nil
-}
-
-func (ec *eth1ClientMock) Sync(fromBlock *big.Int) error {
-	<-time.After(ec.syncTimeout)
-	return ec.syncResponse
 }
 
 type syncStorageMock struct {
