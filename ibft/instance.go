@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/eventqueue"
 	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
@@ -33,6 +34,9 @@ type InstanceOptions struct {
 	Config         *proto.InstanceConfig
 	Lambda         []byte
 	SeqNumber      uint64
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
 }
 
 // Instance defines the instance attributes
@@ -52,6 +56,8 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
+	lastChangeRoundMsg  *proto.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
+	decidedMsg          *proto.SignedMessage
 
 	// event loop
 	eventQueue eventqueue.EventQueue
@@ -64,22 +70,27 @@ type Instance struct {
 	initialized bool
 
 	// locks
-	runInitOnce           sync.Once
-	runStopOnce           sync.Once
-	stopLock              sync.Mutex
-	stageChangedChansLock sync.Mutex
-	stageLock             sync.Mutex
-	stateLock             sync.Mutex
+	runInitOnce                  sync.Once
+	runStopOnce                  sync.Once
+	processChangeRoundQuorumOnce sync.Once
+	processPrepareQuorumOnce     sync.Once
+	processCommitQuorumOnce      sync.Once
+	stopLock                     sync.Mutex
+	lastChangeRoundMsgLock       sync.RWMutex
 }
 
 // NewInstance is the constructor of Instance
-func NewInstance(opts InstanceOptions) *Instance {
+func NewInstance(opts *InstanceOptions) *Instance {
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
-			Stage:     proto.RoundState_NotStarted,
-			Lambda:    opts.Lambda,
-			SeqNumber: opts.SeqNumber,
+			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
+			Lambda:        threadsafe.Bytes(opts.Lambda),
+			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
+			InputValue:    threadsafe.Bytes(nil),
+			PreparedValue: threadsafe.Bytes(nil),
+			PreparedRound: threadsafe.Uint64(0),
+			Round:         threadsafe.Uint64(1),
 		},
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
@@ -100,12 +111,13 @@ func NewInstance(opts InstanceOptions) *Instance {
 		eventQueue: eventqueue.New(),
 
 		// locks
-		runInitOnce:           sync.Once{},
-		runStopOnce:           sync.Once{},
-		stopLock:              sync.Mutex{},
-		stageLock:             sync.Mutex{},
-		stageChangedChansLock: sync.Mutex{},
-		stateLock:             sync.Mutex{},
+		runInitOnce:                  sync.Once{},
+		runStopOnce:                  sync.Once{},
+		processChangeRoundQuorumOnce: sync.Once{},
+		processPrepareQuorumOnce:     sync.Once{},
+		processCommitQuorumOnce:      sync.Once{},
+		stopLock:                     sync.Mutex{},
+		lastChangeRoundMsgLock:       sync.RWMutex{},
 	}
 }
 
@@ -133,28 +145,29 @@ func (i *Instance) Init() {
 // 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
-		return errors.New("can't start a non initialized instance")
+		return errors.New("instance not initialized")
 	}
-	if i.State.Lambda == nil {
-		return errors.New("can't start instance with invalid Lambda")
+	if i.State.Lambda.Get() == nil {
+		return errors.New("invalid Lambda")
+	}
+	if inputValue == nil {
+		return errors.New("input value is nil")
 	}
 
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda)))
-	i.stateLock.Lock()
-	i.State.Round = 1 // start from 1
-	i.State.InputValue = inputValue
-	i.stateLock.Unlock()
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
+	i.State.InputValue.Set(inputValue)
+	i.State.Round.Set(1) // start from 1
 
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
-			i.SetStage(proto.RoundState_PrePrepare)
+			i.ProcessStageChange(proto.RoundState_PrePrepare)
 
 			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
-			msg := i.generatePrePrepareMessage(i.State.InputValue)
+			msg := i.generatePrePrepareMessage(i.State.InputValue.Get())
 			//
 			if err := i.SignAndBroadcast(msg); err != nil {
 				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
@@ -194,14 +207,12 @@ func (i *Instance) stop() {
 	i.stopped = true
 	i.roundTimer.Stop()
 	i.Logger.Debug("STOPPING IBFT -> stopped round timer")
-	i.SetStage(proto.RoundState_Stopped)
+	i.ProcessStageChange(proto.RoundState_Stopped)
 	i.Logger.Debug("STOPPING IBFT -> set stage to stop")
 	i.eventQueue.ClearAndStop()
 	i.Logger.Debug("STOPPING IBFT -> cleared event queue")
 
 	// stop stage chan
-	i.stageLock.Lock()
-	defer i.stageLock.Unlock()
 	i.Logger.Debug("STOPPING IBFT -> passed stageLock")
 	if i.stageChangedChan != nil {
 		close(i.stageChangedChan)
@@ -222,28 +233,20 @@ func (i *Instance) Stopped() bool {
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.State.Round++
+	i.processChangeRoundQuorumOnce = sync.Once{}
+	i.processPrepareQuorumOnce = sync.Once{}
+	i.processCommitQuorumOnce = sync.Once{}
+	i.State.Round.Set(i.State.Round.Get() + 1)
 }
 
-// Stage returns the instance message state
-func (i *Instance) Stage() proto.RoundState {
-	i.stageLock.Lock()
-	defer i.stageLock.Unlock()
-
-	return i.State.Stage
-}
-
-// SetStage set the State's round State and pushed the new State into the State channel
-func (i *Instance) SetStage(stage proto.RoundState) {
-	i.stageLock.Lock()
-	defer i.stageLock.Unlock()
-
-	i.State.Stage = stage
+// ProcessStageChange set the State's round State and pushed the new State into the State channel
+func (i *Instance) ProcessStageChange(stage proto.RoundState) {
+	i.State.Stage.Set(int32(stage))
 
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
-		for j := uint64(1); j <= i.State.Round; j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda, i.State.SeqNumber, j))
+		for j := uint64(1); j <= i.State.Round.Get(); j++ {
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), j))
 		}
 	}
 
@@ -273,20 +276,27 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		Signature: sig.Serialize(),
 		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
+
+	// used for instance fast change round catchup
+	if msg.Type == proto.RoundState_ChangeRound {
+		i.setLastChangeRoundMsg(signedMessage)
+	}
+
 	if i.network != nil {
 		return i.network.Broadcast(i.ValidatorShare.PublicKey.Serialize(), signedMessage)
 	}
+	return errors.New("no networking, could not broadcast msg")
+}
 
-	switch msg.Type {
-	case proto.RoundState_PrePrepare:
-		i.PrePrepareMessages.AddMessage(signedMessage)
-	case proto.RoundState_Prepare:
-		i.PrepareMessages.AddMessage(signedMessage)
-	case proto.RoundState_Commit:
-		i.CommitMessages.AddMessage(signedMessage)
-	case proto.RoundState_ChangeRound:
-		i.ChangeRoundMessages.AddMessage(signedMessage)
-	}
+func (i *Instance) setLastChangeRoundMsg(msg *proto.SignedMessage) {
+	i.lastChangeRoundMsgLock.Lock()
+	defer i.lastChangeRoundMsgLock.Unlock()
+	i.lastChangeRoundMsg = msg
+}
 
-	return nil
+// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
+func (i *Instance) GetLastChangeRoundMsg() *proto.SignedMessage {
+	i.lastChangeRoundMsgLock.RLock()
+	defer i.lastChangeRoundMsgLock.RUnlock()
+	return i.lastChangeRoundMsg
 }

@@ -69,8 +69,8 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 			runningIbftsValidator := 0
 			for _, r := range roles {
 				if i, exist := v.GetIBFT(r); exist {
-					istate, err := i.CurrentState()
-					if err != nil || istate == nil {
+					istate, found, err := i.CurrentState()
+					if err != nil || istate == nil || !found{
 						c.logger.Warn("failed to get current instance state",
 							zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
 						// TODO: decide if the error should stop the function or continue
@@ -106,7 +106,7 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 }
 
 func ibftStateRecord(istate *proto.State, identifier string) string {
-	lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.GetSeqNumber())
+	lbl := fmt.Sprintf("%s_%d", ibftInstanceState, istate.SeqNumber.Get())
 	return fmt.Sprintf("%s{identifier=\"%s\",stage=\"%s\",round=\"%d\",lambda=\"%s\"} %d",
-		lbl, identifier, istate.GetStage().String(), istate.GetRound(), string(istate.GetLambda()), istate.GetSeqNumber())
+		lbl, identifier, proto.RoundState(istate.Stage.Get()).String(), istate.Round.Get(), string(istate.Lambda.Get()), istate.SeqNumber)
 }

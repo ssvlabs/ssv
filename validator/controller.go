@@ -100,16 +100,16 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 
 // setupValidators for each validatorShare with proper ibft wrappers
 func (c *controller) setupValidators() map[string]*Validator {
-	validatorsShare, err := c.collection.GetAllValidatorsShare()
+	shares, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
-		c.logger.Fatal("Failed to get validators shares", zap.Error(err))
+		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
-	if len(validatorsShare) == 0 {
-		c.logger.Info("operator have no validators no setup")
-	} else {
-		c.logger.Info("starting validators setup...")
+	if len(shares) == 0 {
+		c.logger.Info("could not find validators")
+		return c.validatorsMap
 	}
-	for _, validatorShare := range validatorsShare {
+	c.logger.Info("starting validators setup...")
+	for _, validatorShare := range shares {
 		pubKey := validatorShare.PublicKey.SerializeToHexStr()
 		if _, ok := c.validatorsMap[pubKey]; ok {
 			c.logger.Debug("validator was initialized already..",
@@ -193,7 +193,11 @@ func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
 	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
 	l.Debug("handles validator added event")
-	operatorPrivKey, err := c.shareEncryptionKeyProvider()
+	operatorPrivKey, found, err := c.shareEncryptionKeyProvider()
+	if !found{
+		l.Error("failed to find operator private key")
+		return
+	}
 	if err != nil {
 		l.Error("failed to get operator private key")
 		return

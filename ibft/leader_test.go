@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"strconv"
@@ -22,9 +23,9 @@ func TestLeaderCalculation(t *testing.T) {
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1},
 		State: &proto.State{
-			Round:         1,
-			PreparedRound: 0,
-			PreparedValue: nil,
+			Round:         threadsafe.Uint64(1),
+			PreparedRound: threadsafe.Uint64(0),
+			PreparedValue: threadsafe.Bytes(nil),
 		},
 		LeaderSelector: l,
 	}
@@ -33,7 +34,7 @@ func TestLeaderCalculation(t *testing.T) {
 		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
 			instance.BumpRound()
 			require.EqualValues(t, uint64(i%4+1), instance.ThisRoundLeader())
-			require.EqualValues(t, uint64(i+1), instance.State.Round)
+			require.EqualValues(t, uint64(i+1), instance.State.Round.Get())
 
 			if instance.ThisRoundLeader() == 1 {
 				require.True(t, instance.IsLeader())

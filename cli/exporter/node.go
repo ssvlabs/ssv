@@ -84,8 +84,8 @@ var StartExporterNodeCmd = &cobra.Command{
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
-			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, error) {
-				return nil, nil
+			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
+				return nil, false, nil
 			},
 		})
 		if err != nil {
@@ -102,6 +102,8 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 
 		exporterNode = exporter.New(*exporterOptions)
+
+		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
 
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))

@@ -101,8 +101,8 @@ func (t *testIBFT) NextSeqNumber() (uint64, error) {
 }
 
 // CurrentState returns the state of the running instance
-func (t *testIBFT) CurrentState() (*proto.State, error) {
-	return &proto.State{}, nil
+func (t *testIBFT) CurrentState() (*proto.State, bool, error) {
+	return &proto.State{}, true, nil
 }
 
 /**

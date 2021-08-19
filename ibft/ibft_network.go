@@ -2,35 +2,37 @@ package ibft
 
 import (
 	"bytes"
+	"context"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/utils/tasks"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/network/commons"
 	"time"
 )
 
-// waitForMinPeerCount will wait until enough peers joined the topic
-// it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
-func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
-	intervalLimit := 65 * time.Second
-	tasks.ExecWithInterval(func(lastTick time.Duration) (bool, bool) {
-		peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
-		if err != nil {
-			i.logger.Error("failed fetching peers", zap.Error(err))
-			// continue without increasing interval
-			return false, true
-		}
+var (
+	waitMinPeersIntervalStart = 1 * time.Second
+	waitMinPeersIntervalEnd = 64 * time.Second
+)
 
-		if len(peers) >= minPeerCount {
-			// stopped interval if we found enough peers
-			i.logger.Info("found enough peers",
-				zap.Int("current peer count", len(peers)))
-			return true, false
-		}
-		i.logger.Info("waiting for min peer count",
-			zap.Int("current peer count", len(peers)),
-			zap.Int64("last interval ms", lastTick.Milliseconds()))
-		return false, false
-	}, time.Second, intervalLimit)
+// waitForMinPeerOnInit is called once during IBFT init
+func (i *ibftImpl) waitForMinPeerOnInit(minPeerCount int) {
+	// warmup to avoid network errors
+	time.Sleep(500 * time.Millisecond)
+
+	if err := i.waitForMinPeers(minPeerCount, false); err != nil {
+		i.logger.Warn("could not find min peers")
+	}
+}
+
+// waitForMinPeers will wait until enough peers joined the topic
+// it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
+func (i *ibftImpl) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
+	ctx := commons.WaitMinPeersCtx{
+		Ctx: context.Background(),
+		Logger: i.logger,
+		Net: i.network,
+	}
+	return commons.WaitForMinPeers(ctx, i.ValidatorShare.PublicKey.Serialize(), minPeerCount,
+		waitMinPeersIntervalStart, waitMinPeersIntervalEnd, stopAtLimit)
 }
 
 func (i *ibftImpl) listenToNetworkMessages() {

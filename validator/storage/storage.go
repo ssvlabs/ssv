@@ -11,7 +11,7 @@ type ICollection interface {
 	LoadMultipleFromConfig(items []ShareOptions)
 	LoadFromConfig(options ShareOptions) (string, error)
 	SaveValidatorShare(share *Share) error
-	GetValidatorsShare(key []byte) (*Share, error)
+	GetValidatorsShare(key []byte) (*Share, bool, error)
 	GetAllValidatorsShare() ([]*Share, error)
 }
 
@@ -85,12 +85,16 @@ func (s *Collection) SaveValidatorShare(validator *Share) error {
 }
 
 // GetValidatorsShare by key
-func (s *Collection) GetValidatorsShare(key []byte) (*Share, error) {
-	obj, err := s.db.Get(s.prefix, key)
-	if err != nil {
-		return nil, err
+func (s *Collection) GetValidatorsShare(key []byte) (*Share, bool, error) {
+	obj, found, err := s.db.Get(s.prefix, key)
+	if !found{
+		return nil, false, nil
 	}
-	return (&Share{}).Deserialize(obj)
+	if err != nil {
+		return nil, found, err
+	}
+	share, err := (&Share{}).Deserialize(obj)
+	return share, found, err
 }
 
 // GetAllValidatorsShare returns ALL validators shares from db

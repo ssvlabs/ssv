@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/fixtures"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
@@ -23,15 +22,15 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	}
 
 	t.Run("get non-existing operator", func(t *testing.T) {
-		nonExistingOperator, err := storage.GetOperatorInformation("dummyPK")
+		nonExistingOperator, found, _ := storage.GetOperatorInformation("dummyPK")
 		require.Nil(t, nonExistingOperator)
-		require.EqualError(t, err, kv.EntryNotFoundError)
+		require.False(t, found)
 	})
 
 	t.Run("create and get operator", func(t *testing.T) {
 		err := storage.SaveOperatorInformation(&operatorInfo)
 		require.NoError(t, err)
-		operatorInfoFromDB, err := storage.GetOperatorInformation(operatorInfo.PublicKey)
+		operatorInfoFromDB, _, err := storage.GetOperatorInformation(operatorInfo.PublicKey)
 		require.NoError(t, err)
 		require.Equal(t, "my_operator", operatorInfoFromDB.Name)
 		require.Equal(t, int64(0), operatorInfoFromDB.Index)
@@ -81,7 +80,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		}
 
 		for _, oi := range ois {
-			operatorInfoFromDB, err := storage.GetOperatorInformation(oi.PublicKey)
+			operatorInfoFromDB, _, err := storage.GetOperatorInformation(oi.PublicKey)
 			require.NoError(t, err)
 			require.Equal(t, oi.Name, operatorInfoFromDB.Name)
 			require.Equal(t, i, operatorInfoFromDB.Index)

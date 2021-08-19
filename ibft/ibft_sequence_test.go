@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -122,7 +123,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
-			&Instance{State: &proto.State{SeqNumber: 10}},
+			&Instance{State: &proto.State{SeqNumber: threadsafe.Uint64(10)}},
 			fmt.Sprintf("current instance (%d) is still running", 10),
 		},
 	}

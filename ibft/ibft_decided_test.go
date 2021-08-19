@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -26,8 +27,8 @@ func (s *testStorage) SaveCurrentInstance(identifier []byte, state *proto.State)
 }
 
 // GetCurrentInstance implementation
-func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
-	return nil, nil
+func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, bool, error) {
+	return nil, false, nil
 }
 
 // SaveDecided implementation
@@ -36,8 +37,8 @@ func (s *testStorage) SaveDecided(_ *proto.SignedMessage) error {
 }
 
 // GetDecided implementation
-func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-	return nil, nil
+func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, bool, error) {
+	return nil, false, nil
 }
 
 // SaveHighestDecidedInstance implementation
@@ -46,8 +47,8 @@ func (s *testStorage) SaveHighestDecidedInstance(_ *proto.SignedMessage) error {
 }
 
 // GetHighestDecidedInstance implementation
-func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error) {
-	return s.highestDecided, nil
+func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, bool, error) {
+	return s.highestDecided, true, nil
 }
 
 func TestDecidedRequiresSync(t *testing.T) {
@@ -65,7 +66,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -98,7 +99,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -117,7 +118,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -136,7 +137,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 3,
+					SeqNumber: threadsafe.Uint64(3),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -155,7 +156,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 0,
+					SeqNumber: threadsafe.Uint64(0),
 				},
 			},
 			nil,
@@ -198,7 +199,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 1,
+					SeqNumber: threadsafe.Uint64(1),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -221,7 +222,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 1,
+					SeqNumber: threadsafe.Uint64(1),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -235,7 +236,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			&Instance{
 				State: &proto.State{
 					Lambda:    nil,
-					SeqNumber: 4,
+					SeqNumber: threadsafe.Uint64(4),
 				},
 			},
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
@@ -263,7 +264,8 @@ func TestForceDecided(t *testing.T) {
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
 
 	// test before sync
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.SeqNumber)
 
@@ -272,11 +274,11 @@ func TestForceDecided(t *testing.T) {
 	go func() {
 		time.Sleep(time.Millisecond * 500) // wait for instance to start
 		decidedMsg := aggregateSign(t, sks, &proto.Message{
-			Type:        proto.RoundState_Commit,
-			Round:       1,
-			SeqNumber:   4,
-			Lambda:      identifier,
-			Value:       []byte("value"),
+			Type:      proto.RoundState_Commit,
+			Round:     1,
+			SeqNumber: 4,
+			Lambda:    identifier,
+			Value:     []byte("value"),
 		})
 		i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 	}()
@@ -297,8 +299,8 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-
-	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 }
@@ -314,22 +316,24 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Commit,
-		Round:       3,
-		SeqNumber:   10,
-		Lambda:      identifier,
-		Value:       []byte("value"),
+		Type:      proto.RoundState_Commit,
+		Round:     3,
+		SeqNumber: 10,
+		Lambda:    identifier,
+		Value:     []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -350,17 +354,18 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
-		Type:        proto.RoundState_Commit,
-		Round:       3,
-		SeqNumber:   10,
-		Lambda:      identifier,
-		Value:       []byte("value"),
+		Type:      proto.RoundState_Commit,
+		Round:     3,
+		SeqNumber: 10,
+		Lambda:    identifier,
+		Value:     []byte("value"),
 	})
 
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -379,44 +384,44 @@ func TestValidateDecidedMsg(t *testing.T) {
 		{
 			"valid",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				SeqNumber: 11,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			nil,
 		},
 		{
 			"invalid msg stage",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Prepare,
-				Round:       3,
-				SeqNumber:   11,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Prepare,
+				Round:     3,
+				SeqNumber: 11,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			errors.New("message type is wrong"),
 		},
 		{
 			"invalid msg sig",
 			aggregateInvalidSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   11,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				SeqNumber: 11,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			errors.New("could not verify message signature"),
 		},
 		{
 			"valid first decided",
 			aggregateSign(t, sks, &proto.Message{
-				Type:        proto.RoundState_Commit,
-				Round:       3,
-				SeqNumber:   0,
-				Lambda:      identifier,
-				Value:       []byte("value"),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				SeqNumber: 0,
+				Lambda:    identifier,
+				Value:     []byte("value"),
 			}),
 			nil,
 		},

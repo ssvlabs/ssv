@@ -12,7 +12,7 @@ type Options struct {
 // IDb interface for all db kind
 type IDb interface {
 	Set(prefix []byte, key []byte, value []byte) error
-	Get(prefix []byte, key []byte) (Obj, error)
+	Get(prefix []byte, key []byte) (Obj, bool, error)
 	GetAllByCollection(prefix []byte) ([]Obj, error)
 	CountByCollection(prefix []byte) (int64, error)
 	Close()

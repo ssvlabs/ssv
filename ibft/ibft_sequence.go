@@ -17,8 +17,9 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 		return errors.New("iBFT hasn't initialized yet")
 	}
 	if i.currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State.SeqNumber)
+		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State.SeqNumber.Get())
 	}
+
 	highestKnown, err := i.highestKnownDecided()
 	if err != nil {
 		return err
@@ -34,6 +35,12 @@ func (i *ibftImpl) canStartNewInstance(opts InstanceOptions) error {
 	}
 	if opts.SeqNumber != highestSeqKnown+1 {
 		return errors.New("instance seq invalid")
+	}
+
+	if opts.RequireMinPeers {
+		if err := i.waitForMinPeers(2, true); err != nil {
+			return err
+		}
 	}
 
 	return nil

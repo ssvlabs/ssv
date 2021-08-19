@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -21,7 +20,7 @@ var (
 type Storage interface {
 	eth1.SyncOffsetStorage
 
-	GetPrivateKey() (*rsa.PrivateKey, error)
+	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(operatorKey string) error
 }
 
@@ -42,27 +41,33 @@ func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 }
 
 // GetSyncOffset returns the offset
-func (s *storage) GetSyncOffset() (*eth1.SyncOffset, error) {
-	obj, err := s.db.Get(prefix, syncOffsetKey)
+func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
+	obj, found, err := s.db.Get(prefix, syncOffsetKey)
+	if !found{
+		return nil, found, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, found, err
 	}
 	offset := new(big.Int)
 	offset.SetBytes(obj.Value)
-	return offset, nil
+	return offset, found, nil
 }
 
 // GetPrivateKey return rsa private key
-func (s *storage) GetPrivateKey() (*rsa.PrivateKey, error) {
-	obj, err := s.db.Get(prefix, []byte("private-key"))
+func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
+	obj, found, err := s.db.Get(prefix, []byte("private-key"))
+	if !found {
+		return nil, found, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, found, err
 	}
 	sk, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
 	if err != nil {
-		return nil, err
+		return nil, found, err
 	}
-	return sk, nil
+	return sk, found, nil
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
@@ -93,7 +98,10 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 		}
 	}
 
-	sk, err := s.GetPrivateKey()
+	sk, found, err := s.GetPrivateKey()
+	if !found {
+		return errors.New("failed to find operator private key")
+	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
@@ -116,20 +124,20 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 // verifyPrivateKeyExist return true if key exist and no new key passed else return new generated key
 func (s *storage) verifyPrivateKeyExist(operatorKey string) (string, bool, error) {
 	// check if sk is exist or passedKey is passed. if not, generate new operator key
-	_, err := s.GetPrivateKey()
-	if err != nil { // need to generate new operator key
-		if err.Error() == kv.EntryNotFoundError && operatorKey == "" {
+	_, found, err := s.GetPrivateKey()
+	if !found {
+		if operatorKey == "" {
 			_, skByte, err := rsaencryption.GenerateKeys()
 			if err != nil {
 				return "", false, errors.Wrap(err, "failed to generate new keys")
 			}
 			s.logger.Info("using new generated operator key")
 			return string(skByte), false, nil // new key generated
-		} else if err.Error() != kv.EntryNotFoundError {
-			return "", false, errors.Wrap(err, "failed to get private key")
 		}
 	}
-	exist := err == nil || err.Error() != kv.EntryNotFoundError
+	if err != nil { // need to generate new operator key
+		return "", false, errors.Wrap(err, "failed to get private key")
+	}
 	s.logger.Info("using operator key from storage")
-	return "", exist, nil // key already exist, no need to return sk
+	return "", found, nil // key already exist, no need to return sk
 }

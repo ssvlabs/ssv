@@ -132,6 +132,27 @@ func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *
 	return err
 }
 
+// GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
+func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+	peerID, err := peerFromString(peerStr)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := n.sendAndReadSyncResponse(peerID, msg)
+	if err != nil || res == nil {
+		return nil, err
+	}
+	return res.SyncMessage, nil
+}
+
+// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
+func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
+	msg.FromPeerID = n.host.ID().Pretty() // critical
+	_, err := n.sendSyncMessage(stream, "", msg)
+	return err
+}
+
 // ReceivedSyncMsgChan returns the channel for sync messages
 func (n *p2pNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
 	ls := listener{

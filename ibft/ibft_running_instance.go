@@ -2,13 +2,15 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync/speedup"
+	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value []byte) (*InstanceResult, error) {
+func (i *ibftImpl) startInstanceWithOptions(instanceOpts *InstanceOptions, value []byte) (*InstanceResult, error) {
 	i.currentInstance = NewInstance(instanceOpts)
 	i.currentInstance.Init()
 	stageChan := i.currentInstance.GetStageChan()
@@ -17,6 +19,9 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts InstanceOptions, value 
 	if err := i.currentInstance.Start(value); err != nil {
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
+
+	// catch up if we can
+	go i.fastChangeRoundCatchup(i.currentInstance)
 
 	// main instance callback loop
 	var retRes *InstanceResult
@@ -35,7 +40,11 @@ instanceLoop:
 		}
 		if exit { // exited with no error means instance decided
 			// fetch decided msg and return
-			retMsg, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
+			retMsg, found, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
+			if !found{
+				err = errors.New("could not find decided msg after instance finished")
+				break instanceLoop
+			}
 			if e != nil {
 				err = e
 				break instanceLoop
@@ -81,8 +90,33 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
 		return false, nil
 	case proto.RoundState_Stopped:
-		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber))
+		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber.Get()))
 		return true, nil
 	}
 	return false, nil
+}
+
+// fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
+// This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
+func (i *ibftImpl) fastChangeRoundCatchup(instance *Instance) {
+	sync := speedup.New(
+		i.logger,
+		i.Identifier,
+		i.ValidatorShare.PublicKey.Serialize(),
+		instance.State.SeqNumber.Get(),
+		i.network,
+		instance.changeRoundMsgValidationPipeline(),
+	)
+	msgs, err := sync.Start()
+	if err != nil {
+		i.logger.Error("failed fast change round catchup", zap.Error(err))
+	} else {
+		for _, msg := range msgs {
+			instance.MsgQueue.AddMessage(&network.Message{
+				SignedMessage: msg,
+				Type:          network.NetworkMsg_IBFTType,
+			})
+		}
+		i.logger.Info("fast change round catchup finished", zap.Int("found_msgs", len(msgs)))
+	}
 }

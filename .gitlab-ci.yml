@@ -78,7 +78,7 @@ Build prod Docker image:
     - main
 
 
-Deploy to blox-infra-prod cluster:
+Deploy ssv exporter to blox-infra-prod cluster:
   stage: deploy
   tags:
     - blox-infra-prod
@@ -89,5 +89,19 @@ Deploy to blox-infra-prod cluster:
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
     - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE
+  only:
+    - main
+
+Deploy ssv-nodes to blox-infra-prod cluster:
+  stage: deploy
+  tags:
+    - blox-infra-prod
+  script:
+    - apk add bash
+    - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
+    - chmod +x ./kubectl
+    - mv ./kubectl /usr/bin/kubectl
+    - .k8/scripts/deploy-ssv-nodes-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE
   only:
     - main

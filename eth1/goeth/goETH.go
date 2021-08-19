@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/metrics"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"
@@ -49,6 +50,9 @@ type eth1Client struct {
 
 	outSubject pubsub.Subject
 }
+
+// verifies that the client implements HealthCheckAgent
+var _ metrics.HealthCheckAgent = &eth1Client{}
 
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
@@ -98,22 +102,22 @@ func (ec *eth1Client) Sync(fromBlock *big.Int) error {
 }
 
 // HealthCheck provides health status of eth1 node
-func (ec *eth1Client) HealthCheck() error {
+func (ec *eth1Client) HealthCheck() []string {
 	if ec.conn == nil {
-		return errors.New("not connected to eth1 node")
+		return []string{"not connected to eth1 node"}
 	}
 	ctx, cancel := context.WithTimeout(ec.ctx, healthCheckTimeout)
 	defer cancel()
 	sp, err := ec.conn.SyncProgress(ctx)
 	if err != nil {
-		return errors.Wrap(err, "could not get eth1 node sync progress")
+		return []string{"could not get eth1 node sync progress"}
 	}
 	if sp != nil {
-		return errors.Errorf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
-			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)
+		return []string{fmt.Sprintf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
+			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)}
 	}
 	// eth1 node is connected and synced
-	return nil
+	return []string{}
 }
 
 // connect connects to eth1 client
@@ -261,7 +265,10 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
 		return nil
 	}
-	shareEncryptionKey, err := ec.shareEncryptionKeyProvider()
+	shareEncryptionKey, found, err := ec.shareEncryptionKeyProvider()
+	if !found {
+		return errors.New("failed to find operator private key")
+	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
