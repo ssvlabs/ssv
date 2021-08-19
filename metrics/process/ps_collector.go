@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/metrics"
 	"runtime"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -36,7 +35,7 @@ func (c *processCollector) ID() string {
 func (c *processCollector) Collect() ([]string, error) {
 	var results []string
 
-	results = append(results, fmt.Sprintf("%s{} %s", goVersion, strings.ReplaceAll(runtime.Version(), "go", "")))
+	//results = append(results, fmt.Sprintf("%s{version=\"%s\"} 1", goVersion, runtime.Version()))
 	results = append(results, fmt.Sprintf("%s{} %d", cpusCount, runtime.NumCPU()))
 	results = append(results, fmt.Sprintf("%s{} %d", goroutinesCount, runtime.NumGoroutine()))
 	var ms runtime.MemStats
