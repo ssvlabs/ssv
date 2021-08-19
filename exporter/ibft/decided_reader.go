@@ -16,14 +16,14 @@ import (
 	"time"
 )
 
-// Reader is a minimal interface for ibft in the context of an exporter
-type Reader interface {
+// DecidedReader is a minimal interface for ibft in the context of an exporter
+type DecidedReader interface {
 	Start()
 	Sync() error
 }
 
-// ReaderOptions defines the required parameters to create an instance
-type ReaderOptions struct {
+// DecidedReaderOptions defines the required parameters to create an instance
+type DecidedReaderOptions struct {
 	Logger         *zap.Logger
 	Storage        collections.Iibft
 	Network        network.Network
@@ -31,7 +31,7 @@ type ReaderOptions struct {
 	ValidatorShare *storage.Share
 }
 
-type reader struct {
+type decidedReader struct {
 	logger  *zap.Logger
 	storage collections.Iibft
 	network network.Network
@@ -40,10 +40,10 @@ type reader struct {
 	validatorShare *storage.Share
 }
 
-// NewIbftReadOnly creates  new instance of Reader
-func NewIbftReadOnly(opts ReaderOptions) Reader {
-	r := reader{
-		logger:         opts.Logger,
+// NewIbftDecidedReadOnly creates  new instance of DecidedReader
+func NewIbftDecidedReadOnly(opts DecidedReaderOptions) DecidedReader {
+	r := decidedReader{
+		logger:         opts.Logger.With(zap.String("ibft", "decided_reader")),
 		storage:        opts.Storage,
 		network:        opts.Network,
 		config:         opts.Config,
@@ -53,7 +53,7 @@ func NewIbftReadOnly(opts ReaderOptions) Reader {
 }
 
 // Sync will fetch best known decided message (highest sequence) from the network and sync to it.
-func (r *reader) Sync() error {
+func (r *decidedReader) Sync() error {
 	// subscribe to topic so we could find relevant nodes
 	err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey)
 	if err != nil {
@@ -73,12 +73,12 @@ func (r *reader) Sync() error {
 }
 
 // Start starts the network listeners
-func (r *reader) Start() {
+func (r *decidedReader) Start() {
 	r.listenToNetworkDecidedMessages()
 }
 
 // listenToNetworkDecidedMessages listens for decided messages
-func (r *reader) listenToNetworkDecidedMessages() {
+func (r *decidedReader) listenToNetworkDecidedMessages() {
 	decidedChan := r.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
@@ -95,7 +95,7 @@ func (r *reader) listenToNetworkDecidedMessages() {
 }
 
 // validateDecidedMsg validates the message
-func (r *reader) validateDecidedMsg(msg *proto.SignedMessage) error {
+func (r *decidedReader) validateDecidedMsg(msg *proto.SignedMessage) error {
 	r.logger.Debug("validating a new decided message", zap.String("msg", msg.String()))
 	p := pipeline.Combine(
 		auth.MsgTypeCheck(proto.RoundState_Commit),
@@ -108,7 +108,7 @@ func (r *reader) validateDecidedMsg(msg *proto.SignedMessage) error {
 // processDecidedMessage is responsible for processing an incoming decided message.
 // If the decided message is known or belong to the current executing instance, do nothing.
 // Else perform a sync operation
-func (r *reader) processDecidedMessage(msg *proto.SignedMessage) error {
+func (r *decidedReader) processDecidedMessage(msg *proto.SignedMessage) error {
 	r.logger.Debug("processing a valid decided message", zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("signer ids", msg.SignerIds))
 
 	// if we already have this in storage, pass
@@ -131,7 +131,7 @@ func (r *reader) processDecidedMessage(msg *proto.SignedMessage) error {
 	return nil
 }
 
-func (r *reader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
+func (r *decidedReader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 	found, err := r.storage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
@@ -142,7 +142,7 @@ func (r *reader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 // decidedRequiresSync returns true if:
 // 		- highest known seq lower than msg seq
 // 		- AND msg is not for current instance
-func (r *reader) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
+func (r *decidedReader) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	if msg.Message.SeqNumber == 0 {
 		return false, nil
 	}

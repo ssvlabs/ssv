@@ -78,12 +78,13 @@ func New(opts Options) Exporter {
 		},
 	)
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
+	logger := opts.Logger.With(zap.String("component", "exporter/node"))
 	e := exporter{
 		ctx:              opts.Ctx,
 		storage:          storage.NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
-		logger:           opts.Logger.With(zap.String("component", "exporter/node")),
+		logger:           logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
 		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
@@ -312,21 +313,33 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	}
 	exp.logger.Debug("syncing ibft data for validator",
 		zap.String("pubKey", validatorPubKey.SerializeToHexStr()))
-	ibftInstance := ibft.NewIbftReadOnly(ibft.ReaderOptions{
+	ibftInstance := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-
+	ibftMsgReader := ibft.NewIbftIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
+		Logger:  exp.logger,
+		Network: exp.network,
+		Config:  proto.DefaultConsensusParams(),
+		PK:      validatorPubKey,
+	})
 	t := newIbftSyncTask(ibftInstance, validatorPubKey.SerializeToHexStr())
 	exp.ibftDisptcher.Queue(t)
+	t2 := newIbftMsgReaderTask(ibftMsgReader, validatorPubKey.SerializeToHexStr())
+	exp.ibftDisptcher.Queue(t2)
 
 	return nil
 }
 
-func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
+func newIbftSyncTask(ibftReader ibft.DecidedReader, pubKeyHex string) tasks.Task {
 	tid := fmt.Sprintf("ibft:sync/%s", pubKeyHex)
 	return *tasks.NewTask(ibftReader.Sync, tid)
+}
+
+func newIbftMsgReaderTask(ibftReader ibft.IncomingMsgsReader, pubKeyHex string) tasks.Task {
+	tid := fmt.Sprintf("ibft:msg_reader/%s", pubKeyHex)
+	return *tasks.NewTask(ibftReader.Start, tid)
 }
