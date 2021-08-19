@@ -96,7 +96,7 @@ func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
-	i.waitForMinPeerCount(2) // minimum of 3 validators (me + 2)
+	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
 	i.SyncIBFT()
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
