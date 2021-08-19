@@ -26,8 +26,8 @@ type incomingMsgsReader struct {
 	publicKey *bls.PublicKey
 }
 
-// NewIbftIncomingMsgsReader creates new instance
-func NewIbftIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
+// NewIncomingMsgsReader creates new instance
+func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
 		logger:    opts.Logger.With(zap.String("ibft", "msg_reader")),
 		network:   opts.Network,

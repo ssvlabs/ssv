@@ -340,7 +340,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
 	exp.ibftDisptcher.Queue(t)
 
-	ibftMsgReader := ibft.NewIbftIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
+	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
 		Network: exp.network,
 		Config:  proto.DefaultConsensusParams(),
