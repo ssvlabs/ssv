@@ -337,7 +337,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-	t := newIbftSyncTask(ibftDecidedReader, pubkey)
+	t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
 	exp.ibftDisptcher.Queue(t)
 
 	ibftMsgReader := ibft.NewIbftIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
@@ -346,16 +346,12 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-	t2 := newIbftMsgReaderTask(ibftMsgReader, validatorPubKey.SerializeToHexStr())
+	t2 := newIbftReaderTask(ibftMsgReader, "msgReader", validatorPubKey.SerializeToHexStr())
 	exp.ibftDisptcher.Queue(t2)
 
 	return nil
 }
 
-func newIbftSyncTask(ibftReader ibft.DecidedReader, pubKeyHex string) tasks.Task {
-	return *tasks.NewTask(ibftReader.Sync, fmt.Sprintf("ibft:sync/%s", pubKeyHex))
-}
-
-func newIbftMsgReaderTask(ibftReader ibft.IncomingMsgsReader, pubKeyHex string) tasks.Task {
-	return *tasks.NewTask(ibftReader.Start, fmt.Sprintf("ibft:msg_reader/%s", pubKeyHex))
+func newIbftReaderTask(ibftReader ibft.Reader, prefix, pubKeyHex string) tasks.Task {
+	return *tasks.NewTask(ibftReader.Start, fmt.Sprintf("ibft:%s/%s", prefix, pubKeyHex))
 }

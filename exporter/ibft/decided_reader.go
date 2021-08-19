@@ -15,11 +15,6 @@ import (
 	"time"
 )
 
-// DecidedReader is a minimal interface for ibft in the context of an exporter
-type DecidedReader interface {
-	Start() error
-}
-
 // DecidedReaderOptions defines the required parameters to create an instance
 type DecidedReaderOptions struct {
 	Logger         *zap.Logger
@@ -39,7 +34,7 @@ type decidedReader struct {
 }
 
 // NewIbftDecidedReadOnly creates  new instance of DecidedReader
-func NewIbftDecidedReadOnly(opts DecidedReaderOptions) DecidedReader {
+func NewIbftDecidedReadOnly(opts DecidedReaderOptions) Reader {
 	r := decidedReader{
 		logger:         opts.Logger.With(
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
