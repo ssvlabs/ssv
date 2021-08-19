@@ -40,7 +40,11 @@ instanceLoop:
 		}
 		if exit { // exited with no error means instance decided
 			// fetch decided msg and return
-			retMsg, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
+			retMsg, found, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
+			if !found{
+				err = errors.New("could not find decided msg after instance finished")
+				break instanceLoop
+			}
 			if e != nil {
 				err = e
 				break instanceLoop

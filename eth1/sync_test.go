@@ -2,7 +2,6 @@ package eth1
 
 import (
 	"github.com/bloxapp/ssv/pubsub"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -25,7 +24,7 @@ func TestSyncEth1(t *testing.T) {
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, "Eth1SyncTest", nil)
 	require.NoError(t, err)
-	syncOffset, err := storage.GetSyncOffset()
+	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
 	require.NotNil(t, syncOffset)
 	require.Equal(t, syncOffset.Uint64(), rawOffset)
@@ -43,8 +42,9 @@ func TestSyncEth1Error(t *testing.T) {
 	err := SyncEth1Events(logger, eth1Client, storage, "FailedEth1SyncTest", nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
-	_, err = storage.GetSyncOffset()
-	require.NotNil(t, err)
+	_, found, err := storage.GetSyncOffset()
+	require.NoError(t, err)
+	require.False(t, found)
 }
 
 func TestDetermineSyncOffset(t *testing.T) {
@@ -116,11 +116,11 @@ func (ssm *syncStorageMock) SaveSyncOffset(offset *SyncOffset) error {
 }
 
 // GetSyncOffset returns the offset
-func (ssm *syncStorageMock) GetSyncOffset() (*SyncOffset, error) {
+func (ssm *syncStorageMock) GetSyncOffset() (*SyncOffset, bool, error) {
 	if len(ssm.syncOffset) == 0 {
-		return nil, errors.New(kv.EntryNotFoundError)
+		return nil, false, nil
 	}
 	offset := new(SyncOffset)
 	offset.SetBytes(ssm.syncOffset)
-	return offset, nil
+	return offset, true, nil
 }

@@ -27,8 +27,8 @@ func (s *testStorage) SaveCurrentInstance(identifier []byte, state *proto.State)
 }
 
 // GetCurrentInstance implementation
-func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, error) {
-	return nil, nil
+func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, bool, error) {
+	return nil, false, nil
 }
 
 // SaveDecided implementation
@@ -37,8 +37,8 @@ func (s *testStorage) SaveDecided(_ *proto.SignedMessage) error {
 }
 
 // GetDecided implementation
-func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, error) {
-	return nil, nil
+func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, bool, error) {
+	return nil, false, nil
 }
 
 // SaveHighestDecidedInstance implementation
@@ -47,8 +47,8 @@ func (s *testStorage) SaveHighestDecidedInstance(_ *proto.SignedMessage) error {
 }
 
 // GetHighestDecidedInstance implementation
-func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, error) {
-	return s.highestDecided, nil
+func (s *testStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, bool, error) {
+	return s.highestDecided, true, nil
 }
 
 func TestDecidedRequiresSync(t *testing.T) {
@@ -264,7 +264,8 @@ func TestForceDecided(t *testing.T) {
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
 
 	// test before sync
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.SeqNumber)
 
@@ -298,7 +299,8 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 }
@@ -314,7 +316,8 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
@@ -329,7 +332,8 @@ func TestSyncAfterDecided(t *testing.T) {
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }
@@ -360,7 +364,8 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
 }

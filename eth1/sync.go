@@ -19,7 +19,7 @@ type SyncOffsetStorage interface {
 	// SaveSyncOffset saves the offset (block number)
 	SaveSyncOffset(offset *SyncOffset) error
 	// GetSyncOffset returns the sync offset
-	GetSyncOffset() (*SyncOffset, error)
+	GetSyncOffset() (*SyncOffset, bool, error)
 }
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
@@ -97,8 +97,9 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset) *SyncOffset {
 	if syncOffset == nil {
 		var err error
-		syncOffset, err = storage.GetSyncOffset()
-		if err != nil {
+		var found bool
+		syncOffset, found, err = storage.GetSyncOffset()
+		if err != nil || !found{
 			logger.Debug("could not get sync offset for eth1 sync, using default offset",
 				zap.String("defaultSyncOffset", defaultSyncOffset))
 			syncOffset = DefaultSyncOffset()

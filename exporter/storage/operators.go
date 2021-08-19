@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,7 +22,7 @@ type OperatorInformation struct {
 
 // OperatorsCollection is the interface for managing operators information
 type OperatorsCollection interface {
-	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, error)
+	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error)
 	SaveOperatorInformation(operatorInformation *OperatorInformation) error
 	ListOperators(from int64, to int64) ([]OperatorInformation, error)
 }
@@ -48,26 +47,29 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 }
 
 // GetOperatorInformation returns information of the given operator by public key
-func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, error) {
-	obj, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
+func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
+	obj, found, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
+	if !found{
+		return nil, found, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, found, err
 	}
 	var operatorInformation OperatorInformation
 	err = json.Unmarshal(obj.Value, &operatorInformation)
-	return &operatorInformation, err
+	return &operatorInformation, found, err
 }
 
 // SaveOperatorInformation saves operator information by its public key
 func (es *exporterStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
-	existing, err := es.GetOperatorInformation(operatorInformation.PublicKey)
-	if err != nil && err.Error() != kv.EntryNotFoundError {
+	info, found, err := es.GetOperatorInformation(operatorInformation.PublicKey)
+	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
-	if existing != nil {
+	if found {
 		es.logger.Debug("operator already exist",
 			zap.String("pubKey", operatorInformation.PublicKey))
-		operatorInformation.Index = existing.Index
+		operatorInformation.Index = info.Index
 		// TODO: update operator information (i.e. change name)
 		return nil
 	}

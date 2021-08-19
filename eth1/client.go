@@ -32,7 +32,7 @@ type SyncEndedEvent struct {
 }
 
 // ShareEncryptionKeyProvider is a function that returns the operator private key
-type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, error)
+type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // Client represents the required interface for eth1 client
 type Client interface {
