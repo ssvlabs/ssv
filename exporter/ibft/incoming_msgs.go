@@ -1,14 +1,17 @@
 package ibft
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 )
 
+// IncomingMsgsReader represent an interface of an IBFT reader
 type IncomingMsgsReader interface {
 	Start() error
 }
@@ -28,8 +31,8 @@ type incomingMsgsReader struct {
 	publicKey *bls.PublicKey
 }
 
-// NewIbftIncomingMsgsReader creates  new instance of incomingMsgsReader
-func NewIbftIncomingMsgsReader(opts IncomingMsgsReaderOptions) *incomingMsgsReader {
+// NewIbftIncomingMsgsReader creates new instance
+func NewIbftIncomingMsgsReader(opts IncomingMsgsReaderOptions) IncomingMsgsReader {
 	r := &incomingMsgsReader{
 		logger:    opts.Logger.With(zap.String("ibft", "msg_reader")),
 		network:   opts.Network,
@@ -43,7 +46,7 @@ func (i *incomingMsgsReader) Start() error {
 	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
 		return errors.Wrap(err, "could not subscribe to subnet")
 	}
-	if err := i.waitForMinPeers(i.publicKey, 2, false); err != nil {
+	if err := i.waitForMinPeers(i.publicKey, 2); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
 	i.listenToNetwork()
@@ -84,44 +87,12 @@ func (i *incomingMsgsReader) listenToNetwork() {
 
 // waitForMinPeers will wait until enough peers joined the topic
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
-func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int, stopAtLimit bool) error {
-	start := 1 * time.Second
-	limit := 64 * time.Second
-	interval := start
-	for {
-		ok, n := i.haveMinPeers(pk, minPeerCount)
-		if ok {
-			i.logger.Info("found enough peers",
-				zap.Int("current peer count", n))
-			break
-		}
-		i.logger.Info("waiting for min peers",
-			zap.Int("current peer count", n))
-
-		time.Sleep(interval)
-
-		interval *= 2
-		if stopAtLimit && interval == limit {
-			return errors.New("could not find peers")
-		}
-		interval %= limit
-		if interval == 0 {
-			interval = start
-		}
+func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
+	ctx := commons.WaitMinPeersCtx{
+		Ctx: context.Background(),
+		Logger: i.logger,
+		Net: i.network,
 	}
-	return nil
-}
-
-// haveMinPeers checks that there are at least <count> connected peers
-func (i *incomingMsgsReader) haveMinPeers(pk *bls.PublicKey, count int) (bool, int) {
-	peers, err := i.network.AllPeers(pk.Serialize())
-	if err != nil {
-		i.logger.Error("failed fetching peers", zap.Error(err))
-		return false, 0
-	}
-	n := len(peers)
-	if len(peers) >= count {
-		return true, n
-	}
-	return false, n
+	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
+		1 * time.Second, 64 * time.Second, false)
 }

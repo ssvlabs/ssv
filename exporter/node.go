@@ -313,6 +313,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	}
 	exp.logger.Debug("syncing ibft data for validator",
 		zap.String("pubKey", validatorPubKey.SerializeToHexStr()))
+
 	ibftInstance := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
@@ -320,14 +321,15 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
+	t := newIbftSyncTask(ibftInstance, validatorPubKey.SerializeToHexStr())
+	exp.ibftDisptcher.Queue(t)
+
 	ibftMsgReader := ibft.NewIbftIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
 		Network: exp.network,
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-	t := newIbftSyncTask(ibftInstance, validatorPubKey.SerializeToHexStr())
-	exp.ibftDisptcher.Queue(t)
 	t2 := newIbftMsgReaderTask(ibftMsgReader, validatorPubKey.SerializeToHexStr())
 	exp.ibftDisptcher.Queue(t2)
 
