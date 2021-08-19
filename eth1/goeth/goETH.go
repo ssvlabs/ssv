@@ -265,7 +265,10 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
 		return nil
 	}
-	shareEncryptionKey, err := ec.shareEncryptionKeyProvider()
+	shareEncryptionKey, found, err := ec.shareEncryptionKeyProvider()
+	if !found {
+		return errors.New("failed to find operator private key")
+	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator private key")
 	}

@@ -55,12 +55,12 @@ func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 }
 
 // Get return value for specified key
-func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, error) {
+func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	var resValue []byte
 	err := b.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(append(prefix, key...))
 		if err != nil {
-			if err.Error() == "not found" || err.Error() == "Key not found" {
+			if err.Error() == "not found" || err.Error() == "Key not found" { // in order to couple the not found errors together
 				return errors.New(EntryNotFoundError)
 			}
 			return err
@@ -68,10 +68,14 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, error) {
 		resValue, err = item.ValueCopy(nil)
 		return err
 	})
+	found := err == nil || err.Error() != EntryNotFoundError
+	if !found{
+		return basedb.Obj{}, found, nil
+	}
 	return basedb.Obj{
 		Key:   key,
 		Value: resValue,
-	}, err
+	}, found, err
 }
 
 // GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)

@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -132,11 +131,11 @@ func (r *reader) processDecidedMessage(msg *proto.SignedMessage) error {
 }
 
 func (r *reader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
-	found, err := r.storage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
-	if err != nil && err.Error() != kv.EntryNotFoundError {
+	_, found, err := r.storage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+	if err != nil{
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
-	return found != nil, nil
+	return found, nil
 }
 
 // decidedRequiresSync returns true if:
@@ -146,11 +145,11 @@ func (r *reader) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	if msg.Message.SeqNumber == 0 {
 		return false, nil
 	}
-	highest, err := r.storage.GetHighestDecidedInstance(msg.Message.Lambda)
+	highest, found, err := r.storage.GetHighestDecidedInstance(msg.Message.Lambda)
+	if !found{
+		return msg.Message.SeqNumber > 0, nil
+	}
 	if err != nil {
-		if err.Error() == kv.EntryNotFoundError {
-			return msg.Message.SeqNumber > 0, nil
-		}
 		return false, errors.Wrap(err, "could not get highest decided instance from storage")
 	}
 	return highest.Message.SeqNumber < msg.Message.SeqNumber, nil
