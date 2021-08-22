@@ -6,6 +6,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -33,16 +34,16 @@ type Options struct {
 
 // Validator struct that manages all ibft wrappers
 type Validator struct {
-	ctx    context.Context
-	logger *zap.Logger
-	Share  *storage.Share
-	//db                collections.Iibft
+	ctx                        context.Context
+	logger                     *zap.Logger
+	Share                      *storage.Share
 	ethNetwork                 *core.Network
 	beacon                     beacon.Beacon
 	ibfts                      map[beacon.RoleType]ibft.IBFT
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.Network
 	signatureCollectionTimeout time.Duration
+	valueCheck                 *valcheck.SlashingProtection
 }
 
 // New Validator creation
@@ -76,6 +77,7 @@ func New(opt Options, db basedb.IDb) *Validator {
 		ibfts:                      ibfts,
 		ethNetwork:                 opt.ETHNetwork,
 		beacon:                     opt.Beacon,
+		valueCheck:                 valcheck.New(),
 	}
 }
 
