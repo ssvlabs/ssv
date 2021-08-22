@@ -86,7 +86,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
 			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
-				return nil, false, nil
+				return nil, true, nil
 			},
 		})
 		if err != nil {
