@@ -11,11 +11,6 @@ import (
 	"time"
 )
 
-// IncomingMsgsReader represent an interface of an IBFT reader
-type IncomingMsgsReader interface {
-	Start() error
-}
-
 // IncomingMsgsReaderOptions defines the required parameters to create an instance
 type IncomingMsgsReaderOptions struct {
 	Logger  *zap.Logger
@@ -31,8 +26,8 @@ type incomingMsgsReader struct {
 	publicKey *bls.PublicKey
 }
 
-// NewIbftIncomingMsgsReader creates new instance
-func NewIbftIncomingMsgsReader(opts IncomingMsgsReaderOptions) IncomingMsgsReader {
+// NewIncomingMsgsReader creates new instance
+func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
 		logger:    opts.Logger.With(zap.String("ibft", "msg_reader")),
 		network:   opts.Network,

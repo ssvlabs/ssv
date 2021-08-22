@@ -1,25 +1,19 @@
 package ibft
 
 import (
-	"encoding/hex"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
 	"time"
 )
-
-// DecidedReader is a minimal interface for ibft in the context of an exporter
-type DecidedReader interface {
-	Start()
-	Sync() error
-}
 
 // DecidedReaderOptions defines the required parameters to create an instance
 type DecidedReaderOptions struct {
@@ -30,6 +24,7 @@ type DecidedReaderOptions struct {
 	ValidatorShare *storage.Share
 }
 
+// decidedReader reads decided messages history
 type decidedReader struct {
 	logger  *zap.Logger
 	storage collections.Iibft
@@ -40,9 +35,11 @@ type decidedReader struct {
 }
 
 // NewIbftDecidedReadOnly creates  new instance of DecidedReader
-func NewIbftDecidedReadOnly(opts DecidedReaderOptions) DecidedReader {
+func NewIbftDecidedReadOnly(opts DecidedReaderOptions) Reader {
 	r := decidedReader{
-		logger:         opts.Logger.With(zap.String("ibft", "decided_reader")),
+		logger:         opts.Logger.With(
+			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
+			zap.String("ibft", "decided_reader")),
 		storage:        opts.Storage,
 		network:        opts.Network,
 		config:         opts.Config,
@@ -51,13 +48,13 @@ func NewIbftDecidedReadOnly(opts DecidedReaderOptions) DecidedReader {
 	return &r
 }
 
-// Sync will fetch best known decided message (highest sequence) from the network and sync to it.
-func (r *decidedReader) Sync() error {
+// Start starts to fetch best known decided message (highest sequence) from the network and sync to it.
+func (r *decidedReader) Start() error {
+	r.logger.Debug("syncing ibft data")
 	// subscribe to topic so we could find relevant nodes
 	err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey)
 	if err != nil {
-		r.logger.Error("could not subscribe to validator channel", zap.Error(err),
-			zap.String("validatorPubkey", r.validatorShare.PublicKey.SerializeToHexStr()))
+		r.logger.Error("could not subscribe to validator channel", zap.Error(err))
 	}
 	// wait for network setup (subscribe to topic)
 	var netWaitGroup sync.WaitGroup
@@ -67,30 +64,14 @@ func (r *decidedReader) Sync() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
-	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), nil, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
-	return hs.Start()
-}
-
-// Start starts the network listeners
-func (r *decidedReader) Start() {
-	r.listenToNetworkDecidedMessages()
-}
-
-// listenToNetworkDecidedMessages listens for decided messages
-func (r *decidedReader) listenToNetworkDecidedMessages() {
-	decidedChan := r.network.ReceivedDecidedChan()
-	go func() {
-		for msg := range decidedChan {
-			r.logger.Debug("received a new decided message")
-			if err := r.validateDecidedMsg(msg); err != nil {
-				r.logger.Error("received invalid decided message", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
-			}
-			err := r.processDecidedMessage(msg)
-			if err != nil {
-				r.logger.Debug("failed to process decided message")
-			}
-		}
-	}()
+	// creating HistorySync and starts it
+	identifier := []byte(validator.IdentifierFormat(r.validatorShare.PublicKey.Serialize(), beacon.RoleTypeAttester))
+	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), identifier, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
+	err = hs.Start()
+	if err != nil {
+		r.logger.Error("could not sync validator's data", zap.Error(err))
+	}
+	return err
 }
 
 // validateDecidedMsg validates the message
@@ -102,55 +83,4 @@ func (r *decidedReader) validateDecidedMsg(msg *proto.SignedMessage) error {
 		auth.ValidateQuorum(r.validatorShare.ThresholdSize()),
 	)
 	return p.Run(msg)
-}
-
-// processDecidedMessage is responsible for processing an incoming decided message.
-// If the decided message is known or belong to the current executing instance, do nothing.
-// Else perform a sync operation
-func (r *decidedReader) processDecidedMessage(msg *proto.SignedMessage) error {
-	r.logger.Debug("processing a valid decided message", zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("signer ids", msg.SignerIds))
-
-	// if we already have this in storage, pass
-	known, err := r.decidedMsgKnown(msg)
-	if err != nil {
-		return errors.Wrap(err, "failed to check if decided msg is known")
-	}
-	if known {
-		return nil
-	}
-
-	shouldSync, err := r.decidedRequiresSync(msg)
-	if err != nil {
-		return errors.Wrap(err, "failed to check if decided sync is required")
-	}
-	if shouldSync {
-		r.logger.Warn("[not implemented yet] should sync validator data",
-			zap.String("lambda", hex.EncodeToString(msg.Message.Lambda)))
-	}
-	return nil
-}
-
-func (r *decidedReader) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
-	_, found, err := r.storage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
-	if err != nil{
-		return false, errors.Wrap(err, "could not get decided instance from storage")
-	}
-	return found, nil
-}
-
-// decidedRequiresSync returns true if:
-// 		- highest known seq lower than msg seq
-// 		- AND msg is not for current instance
-func (r *decidedReader) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
-	if msg.Message.SeqNumber == 0 {
-		return false, nil
-	}
-	highest, found, err := r.storage.GetHighestDecidedInstance(msg.Message.Lambda)
-	if !found{
-		return msg.Message.SeqNumber > 0, nil
-	}
-	if err != nil {
-		return false, errors.Wrap(err, "could not get highest decided instance from storage")
-	}
-	return highest.Message.SeqNumber < msg.Message.SeqNumber, nil
 }
