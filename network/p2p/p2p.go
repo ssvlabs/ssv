@@ -300,7 +300,14 @@ func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 		return nil, err
 	}
 
+	invisiblePeers := InvisiblePeers()
+
 	for _, p := range topic.ListPeers() {
+		s := peerToString(p)
+		if invisiblePeers[s] {
+			// ignoring invisible peer
+			continue
+		}
 		ret = append(ret, peerToString(p))
 	}
 
@@ -314,4 +321,11 @@ func getTopicName(topicName string) string {
 
 func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
+}
+
+func InvisiblePeers() map[string]bool {
+	return map[string]bool{
+		// exporter (stage)
+		"16Uiu2HAm2jmbVSPkqgKwBcXihD6BfjvXZWt1gBaF55cjHENvjDqv": true,
+	}
 }
