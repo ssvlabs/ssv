@@ -29,9 +29,10 @@ type config struct {
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 	ETH1Options                eth1.Options   `yaml:"eth1"`
 
-	WsAPIPort      int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
-	MetricsAPIPort int  `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile  bool `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	WsAPIPort       int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	MetricsAPIPort  int  `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile   bool `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	IbftSyncEnabled bool `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
 }
 
 var cfg config
@@ -100,6 +101,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Ctx = cmd.Context()
 		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
+		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 
 		exporterNode = exporter.New(*exporterOptions)
 

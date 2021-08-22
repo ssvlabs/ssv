@@ -29,8 +29,7 @@ const (
 )
 
 var (
-	ibftSyncEnabled = false
-	syncWhitelist   []string
+	syncWhitelist []string
 )
 
 // Exporter represents the main interface of this package
@@ -52,8 +51,9 @@ type Options struct {
 
 	DB basedb.IDb
 
-	WS        api.WebSocketServer
-	WsAPIPort int
+	WS              api.WebSocketServer
+	WsAPIPort       int
+	IbftSyncEnabled bool
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -68,6 +68,7 @@ type exporter struct {
 	ibftDisptcher    tasks.Dispatcher
 	ws               api.WebSocketServer
 	wsAPIPort        int
+	ibftSyncEnabled  bool
 }
 
 // New creates a new Exporter instance
@@ -93,8 +94,9 @@ func New(opts Options) Exporter {
 			Logger:   opts.Logger.With(zap.String("component", "ibftDispatcher")),
 			Interval: ibftSyncDispatcherTick,
 		}),
-		ws:        opts.WS,
-		wsAPIPort: opts.WsAPIPort,
+		ws:              opts.WS,
+		wsAPIPort:       opts.WsAPIPort,
+		ibftSyncEnabled: opts.IbftSyncEnabled,
 	}
 
 	return &e
@@ -310,7 +312,7 @@ func (exp *exporter) shouldSyncIbft(pubkey string) bool {
 			return true
 		}
 	}
-	return ibftSyncEnabled
+	return exp.ibftSyncEnabled
 }
 
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
@@ -322,7 +324,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		return nil
 	}
 	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
-	if !found{
+	if !found {
 		return errors.New("could not find validator share")
 	}
 	if err != nil {
