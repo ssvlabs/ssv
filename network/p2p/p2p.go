@@ -323,6 +323,7 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
+// InvisiblePeers provides a map of invisible peers (exporters) to ignore
 func InvisiblePeers() map[string]bool {
 	return map[string]bool{
 		// exporter (stage)
