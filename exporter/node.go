@@ -122,6 +122,8 @@ func (exp *exporter) Start() error {
 		exp.processIncomingExportRequests(cn, exp.ws.OutboundSubject())
 	}()
 
+	go exp.triggerAllValidators()
+
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
 
@@ -306,6 +308,20 @@ func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*stor
 	return &vi, nil
 }
 
+func (exp *exporter) triggerAllValidators() {
+	shares, err := exp.validatorStorage.GetAllValidatorsShare()
+	if err != nil {
+		exp.logger.Error("could not get validators shares", zap.Error(err))
+		return
+	}
+	for _, share := range shares {
+		if err = exp.triggerIBFTSync(share.PublicKey); err != nil {
+			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),
+				zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+		}
+	}
+}
+
 func (exp *exporter) shouldSyncIbft(pubkey string) bool {
 	for _, pk := range syncWhitelist {
 		if pubkey == pk {
@@ -332,6 +348,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	}
 	exp.logger.Debug("ibft sync was triggered",
 		zap.String("pubKey", pubkey))
+
 	ibftDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
