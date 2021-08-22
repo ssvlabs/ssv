@@ -92,12 +92,16 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		//_ipAddr = net.ParseIP("127.0.0.1")
 		logger.Info("Ip Address", zap.Any("ip", _ipAddr))
 
-		privKey, err := privKey()
-		if err != nil {
-			return nil, errors.Wrap(err, "Failed to generate p2p private key")
+		if cfg.NetworkPrivateKey != nil {
+			n.privKey = cfg.NetworkPrivateKey
+		} else {
+			privKey, err := privKey()
+			if err != nil {
+				return nil, errors.Wrap(err, "Failed to generate p2p private key")
+			}
+			n.privKey = privKey
 		}
-		n.privKey = privKey
-		opts := n.buildOptions(_ipAddr, privKey)
+		opts := n.buildOptions(_ipAddr, n.privKey)
 		host, err := libp2p.New(ctx, opts...)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to create p2p host")
