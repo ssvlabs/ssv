@@ -39,7 +39,10 @@ func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 
 func (i *incomingMsgsReader) Start() error {
 	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
-		return errors.Wrap(err, "could not subscribe to subnet")
+		if netErr := errors.Unwrap(err); netErr == nil || netErr.Error() != "topic already exists" {
+			return errors.Wrap(err, "could not subscribe to subnet")
+		}
+		i.logger.Debug("no need to subscribe, topic already exist")
 	}
 	if err := i.waitForMinPeers(i.publicKey, 2); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
