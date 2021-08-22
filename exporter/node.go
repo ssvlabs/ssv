@@ -353,18 +353,18 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
-	exp.logger.Debug("ibft sync was triggered",
-		zap.String("pubKey", pubkey))
+	logger := exp.logger.With(zap.String("pubKey", pubkey))
+	logger.Debug("ibft sync was triggered")
 
-	ibftDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
+	syncDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-	t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
-	exp.ibftSyncDispatcher.Queue(t)
+	syncTask := newIbftReaderTask(syncDecidedReader, "sync", pubkey)
+	exp.ibftSyncDispatcher.Queue(syncTask)
 
 	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
@@ -372,8 +372,14 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-	t2 := newIbftReaderTask(ibftMsgReader, "msgReader", validatorPubKey.SerializeToHexStr())
-	exp.networkReadDispatcher.Queue(t2)
+	readerTask := newIbftReaderTask(ibftMsgReader, "msgReader", validatorPubKey.SerializeToHexStr())
+
+	// trigger reader task once the sync task is done
+	go func() {
+		<- syncTask.End()
+		logger.Debug("sync is done, queuing reader task")
+		exp.networkReadDispatcher.Queue(readerTask)
+	}()
 
 	return nil
 }
