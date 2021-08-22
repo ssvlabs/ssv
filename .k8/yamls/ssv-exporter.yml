@@ -171,6 +171,8 @@ spec:
             value: "15000"
           - name: ENABLE_PROFILE
             value: "true"
+          - name: IBFT_SYNC_ENABLED
+            value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter
