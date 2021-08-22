@@ -8,6 +8,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strings"
 	"time"
 )
 
@@ -39,7 +40,7 @@ func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 
 func (i *incomingMsgsReader) Start() error {
 	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
-		if netErr := errors.Unwrap(err); netErr == nil || netErr.Error() != "topic already exists" {
+		if !strings.Contains(err.Error(), "topic already exists") {
 			return errors.Wrap(err, "could not subscribe to subnet")
 		}
 		i.logger.Debug("no need to subscribe, topic already exist")

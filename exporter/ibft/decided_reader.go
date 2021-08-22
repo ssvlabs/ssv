@@ -10,8 +10,8 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,7 +54,7 @@ func (r *decidedReader) Start() error {
 	r.logger.Debug("syncing ibft data")
 	// subscribe to topic so we could find relevant nodes
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-		if netErr := errors.Unwrap(err); netErr == nil || netErr.Error() != "topic already exists" {
+		if !strings.Contains(err.Error(), "topic already exists") {
 			r.logger.Warn("could not subscribe to validator channel", zap.Error(err))
 			return err
 		}
