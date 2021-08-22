@@ -339,7 +339,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	if !exp.shouldSyncIbft(pubkey) {
 		return nil
 	}
-	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	_, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
 	if !found {
 		return errors.New("could not find validator share")
 	}
@@ -349,15 +349,15 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	exp.logger.Debug("ibft sync was triggered",
 		zap.String("pubKey", pubkey))
 
-	ibftDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
-		Logger:         exp.logger,
-		Storage:        exp.ibftStorage,
-		Network:        exp.network,
-		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: validatorShare,
-	})
-	t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
-	exp.ibftDisptcher.Queue(t)
+	//ibftDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
+	//	Logger:         exp.logger,
+	//	Storage:        exp.ibftStorage,
+	//	Network:        exp.network,
+	//	Config:         proto.DefaultConsensusParams(),
+	//	ValidatorShare: validatorShare,
+	//})
+	//t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
+	//exp.ibftDisptcher.Queue(t)
 
 	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
