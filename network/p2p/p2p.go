@@ -5,6 +5,8 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"net"
 	"sync"
 	"time"
@@ -38,6 +40,17 @@ const (
 
 	syncStreamProtocol = "/sync/0.0.1"
 )
+
+var (
+	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:connected_peers",
+		Help: "Count connected peers for a validator",
+	}, []string{"pubKey"})
+)
+
+func init() {
+	prometheus.Register(metricsConnectedPeers)
+}
 
 type listener struct {
 	msgCh     chan *proto.SignedMessage
@@ -180,13 +193,19 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.handleStream()
 
-	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		for name, topic := range n.cfg.Topics {
-			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", topic.ListPeers()))
-		}
-	})
+	n.watchTopicPeers()
 
 	return n, nil
+}
+
+func (n *p2pNetwork) watchTopicPeers() {
+	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		for name, topic := range n.cfg.Topics {
+			count := len(topic.ListPeers())
+			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", topic.ListPeers()))
+			metricsConnectedPeers.WithLabelValues(name).Set(float64(count))
+		}
+	})
 }
 
 func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {

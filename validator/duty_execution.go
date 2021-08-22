@@ -6,6 +6,8 @@ import (
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -13,6 +15,22 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"go.uber.org/zap"
 )
+
+var (
+	metricsRunningIBFTsCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:validator:running_ibfts_count_all",
+		Help: "Count all running IBFTs",
+	})
+	metricsRunningIBFTs = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:running_ibfts_count",
+		Help: "Count all running IBFTs",
+	}, []string{"pubKey"})
+)
+
+func init() {
+	prometheus.Register(metricsRunningIBFTsCount)
+	prometheus.Register(metricsRunningIBFTs)
+}
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
 func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, seqNumber uint64, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
@@ -201,6 +219,14 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.D
 		zap.Uint64("committee_index", uint64(duty.CommitteeIndex)),
 		zap.Uint64("slot", slot),
 		zap.String("duty_type", duty.Type.String()))
+
+	// writing metrics
+	metricsRunningIBFTsCount.Inc()
+	defer metricsRunningIBFTsCount.Dec()
+
+	pubKey := v.Share.PublicKey.SerializeToHexStr()
+	metricsRunningIBFTs.WithLabelValues(pubKey).Inc()
+	defer metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
 
 	logger.Debug("executing duty...")
 	signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)

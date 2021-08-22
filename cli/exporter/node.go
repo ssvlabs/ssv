@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
 	"github.com/bloxapp/ssv/metrics"
-	metrics_ps "github.com/bloxapp/ssv/metrics/process"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
@@ -122,9 +121,6 @@ func init() {
 }
 
 func startMetricsHandler(logger *zap.Logger, net network.Network, port int, enableProf bool) {
-	// register process metrics
-	metrics_ps.SetupProcessMetrics()
-	p2p.SetupNetworkMetrics(logger, net)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, exporterNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)

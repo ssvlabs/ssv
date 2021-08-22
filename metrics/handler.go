@@ -3,12 +3,12 @@ package metrics
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
-	"strings"
 )
 
 // Handler handles incoming metrics requests
@@ -48,12 +48,13 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
 	}
 
-	mux.HandleFunc("/metrics", func(res http.ResponseWriter, req *http.Request) {
-		if err := mh.handleHTTP(res, req); err != nil {
-			// TODO: decide if we want to ignore errors
-			http.Error(res, err.Error(), http.StatusInternalServerError)
-		}
-	})
+	mux.Handle("/metrics", promhttp.HandlerFor(
+		prometheus.DefaultGatherer,
+		promhttp.HandlerOpts{
+			// Opt into OpenMetrics to support exemplars.
+			EnableOpenMetrics: true,
+		},
+	))
 
 	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
 		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
@@ -84,15 +85,3 @@ func (mh *metricsHandler) configureProfiling() {
 	runtime.SetMutexProfileFraction(1)
 }
 
-func (mh *metricsHandler) handleHTTP(res http.ResponseWriter, _ *http.Request) (err error) {
-	var metrics []string
-	var errs []error
-	if metrics, errs = Collect(); len(errs) > 0 {
-		mh.logger.Error("failed to collect metrics", zap.Errors("metricsCollectErrs", errs))
-		return errors.New("failed to collect metrics")
-	}
-	if _, err = fmt.Fprintln(res, strings.Join(metrics, "\n")); err != nil {
-		mh.logger.Error("failed to send metrics", zap.Error(err))
-	}
-	return err
-}
