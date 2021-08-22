@@ -58,17 +58,18 @@ type Options struct {
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx              context.Context
-	storage          storage.Storage
-	validatorStorage validatorstorage.ICollection
-	ibftStorage      collections.Iibft
-	logger           *zap.Logger
-	network          network.Network
-	eth1Client       eth1.Client
-	ibftDisptcher    tasks.Dispatcher
-	ws               api.WebSocketServer
-	wsAPIPort        int
-	ibftSyncEnabled  bool
+	ctx                   context.Context
+	storage               storage.Storage
+	validatorStorage      validatorstorage.ICollection
+	ibftStorage           collections.Iibft
+	logger                *zap.Logger
+	network               network.Network
+	eth1Client            eth1.Client
+	ibftSyncDispatcher    tasks.Dispatcher
+	networkReadDispatcher tasks.Dispatcher
+	ws                    api.WebSocketServer
+	wsAPIPort             int
+	ibftSyncEnabled       bool
 }
 
 // New creates a new Exporter instance
@@ -89,10 +90,16 @@ func New(opts Options) Exporter {
 		logger:           logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
-		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
+		ibftSyncDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
 			Ctx:      opts.Ctx,
-			Logger:   opts.Logger.With(zap.String("component", "ibftDispatcher")),
+			Logger:   opts.Logger.With(zap.String("component", "ibftSyncDispatcher")),
 			Interval: ibftSyncDispatcherTick,
+		}),
+		networkReadDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
+			Ctx:        opts.Ctx,
+			Logger:     opts.Logger.With(zap.String("component", "networkReadDispatcher")),
+			Interval:   ibftSyncDispatcherTick,
+			Concurrent: 1000, // using a large limit of concurrency as listening to network messages remains open
 		}),
 		ws:              opts.WS,
 		wsAPIPort:       opts.WsAPIPort,
@@ -106,7 +113,7 @@ func New(opts Options) Exporter {
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
-	go exp.ibftDisptcher.Start()
+	go exp.ibftSyncDispatcher.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -357,7 +364,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		ValidatorShare: validatorShare,
 	})
 	t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
-	exp.ibftDisptcher.Queue(t)
+	exp.ibftSyncDispatcher.Queue(t)
 
 	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
@@ -366,7 +373,7 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		PK:      validatorPubKey,
 	})
 	t2 := newIbftReaderTask(ibftMsgReader, "msgReader", validatorPubKey.SerializeToHexStr())
-	exp.ibftDisptcher.Queue(t2)
+	exp.networkReadDispatcher.Queue(t2)
 
 	return nil
 }

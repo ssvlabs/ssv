@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	defaultConcurrentLimit = 10
+	defaultConcurrentLimit = 25
 )
 
 // Task represents a some function to execute
