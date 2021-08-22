@@ -24,6 +24,7 @@ type DecidedReaderOptions struct {
 	ValidatorShare *storage.Share
 }
 
+// decidedReader reads decided messages history
 type decidedReader struct {
 	logger  *zap.Logger
 	storage collections.Iibft
