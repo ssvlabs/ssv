@@ -90,7 +90,7 @@ included in our repository in the `LICENSE` file.
 [X] Documentation\
 [X] Phase 1 testing\
 [X] Full iBFT spec\
-[ ] Audit
+[ ] Audit\
 [ ] Grafana node dashboard
 
 ** X=done, \\=WIP
