@@ -33,7 +33,7 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) *ecdsa.PrivateKey {
 		if err != nil {
 			panic(err)
 		}
-		logger.Debug("Private Key generated", zap.ByteString("private-key", b), zap.String("privKey", hex.EncodeToString(b)))
+		logger.Debug("Private Key generated", zap.ByteString("private-key", b))
 	}
 	privKey.Curve = gcrypto.S256()
 
