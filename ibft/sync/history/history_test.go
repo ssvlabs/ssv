@@ -196,12 +196,14 @@ func TestSync(t *testing.T) {
 				} else {
 					// verify saved instances
 					for i := int64(0); i <= test.expectedHighestSeq; i++ {
-						decided, err := storage.GetDecided(test.identifier, uint64(i))
+						decided, found, err := storage.GetDecided(test.identifier, uint64(i))
+						require.True(t, found)
 						require.NoError(t, err)
 						require.EqualValues(t, uint64(i), decided.Message.SeqNumber)
 					}
 					// verify saved highest
-					highest, err := storage.GetHighestDecidedInstance(test.identifier)
+					highest, found, err := storage.GetHighestDecidedInstance(test.identifier)
+					require.True(t, found)
 					require.NoError(t, err)
 					require.EqualValues(t, test.expectedHighestSeq, highest.Message.SeqNumber)
 				}

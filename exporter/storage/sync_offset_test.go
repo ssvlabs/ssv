@@ -19,7 +19,8 @@ func TestExporterStorage_SaveAndGetSyncOffset(t *testing.T) {
 	err := s.SaveSyncOffset(offset)
 	require.NoError(t, err)
 
-	o, err := s.GetSyncOffset()
+	o, found, err := s.GetSyncOffset()
+	require.True(t, found)
 	require.NoError(t, err)
 	require.Zero(t, offset.Cmp(o))
 }

@@ -30,6 +30,7 @@ const (
 
 var (
 	ibftSyncEnabled = false
+	syncWhitelist   []string
 )
 
 // Exporter represents the main interface of this package
@@ -78,17 +79,18 @@ func New(opts Options) Exporter {
 		},
 	)
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
+	logger := opts.Logger.With(zap.String("component", "exporter/node"))
 	e := exporter{
 		ctx:              opts.Ctx,
 		storage:          storage.NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage:      &ibftStorage,
 		validatorStorage: validatorStorage,
-		logger:           opts.Logger.With(zap.String("component", "exporter/node")),
+		logger:           logger,
 		network:          opts.Network,
 		eth1Client:       opts.Eth1Client,
 		ibftDisptcher: tasks.NewDispatcher(tasks.DispatcherOptions{
 			Ctx:      opts.Ctx,
-			Logger:   opts.Logger.With(zap.String("component", "tasks/dispatcher")),
+			Logger:   opts.Logger.With(zap.String("component", "ibftDispatcher")),
 			Interval: ibftSyncDispatcherTick,
 		}),
 		ws:        opts.WS,
@@ -302,31 +304,54 @@ func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*stor
 	return &vi, nil
 }
 
+func (exp *exporter) shouldSyncIbft(pubkey string) bool {
+	for _, pk := range syncWhitelist {
+		if pubkey == pk {
+			return true
+		}
+	}
+	return ibftSyncEnabled
+}
+
 func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
-	if !ibftSyncEnabled {
+	if validatorPubKey == nil {
+		return errors.New("empty validator pubkey")
+	}
+	pubkey := validatorPubKey.SerializeToHexStr()
+	if !exp.shouldSyncIbft(pubkey) {
 		return nil
 	}
-	validatorShare, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	if !found{
+		return errors.New("could not find validator share")
+	}
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
-	exp.logger.Debug("syncing ibft data for validator",
-		zap.String("pubKey", validatorPubKey.SerializeToHexStr()))
-	ibftInstance := ibft.NewIbftReadOnly(ibft.ReaderOptions{
+	exp.logger.Debug("ibft sync was triggered",
+		zap.String("pubKey", pubkey))
+	ibftDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-
-	t := newIbftSyncTask(ibftInstance, validatorPubKey.SerializeToHexStr())
+	t := newIbftReaderTask(ibftDecidedReader, "sync", pubkey)
 	exp.ibftDisptcher.Queue(t)
+
+	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
+		Logger:  exp.logger,
+		Network: exp.network,
+		Config:  proto.DefaultConsensusParams(),
+		PK:      validatorPubKey,
+	})
+	t2 := newIbftReaderTask(ibftMsgReader, "msgReader", validatorPubKey.SerializeToHexStr())
+	exp.ibftDisptcher.Queue(t2)
 
 	return nil
 }
 
-func newIbftSyncTask(ibftReader ibft.Reader, pubKeyHex string) tasks.Task {
-	tid := fmt.Sprintf("ibft:sync/%s", pubKeyHex)
-	return *tasks.NewTask(ibftReader.Sync, tid)
+func newIbftReaderTask(ibftReader ibft.Reader, prefix, pubKeyHex string) tasks.Task {
+	return *tasks.NewTask(ibftReader.Start, fmt.Sprintf("ibft:%s/%s", prefix, pubKeyHex))
 }

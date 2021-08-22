@@ -69,8 +69,8 @@ func (c *validatorsCollector) Collect() ([]string, error) {
 			runningIbftsValidator := 0
 			for _, r := range roles {
 				if i, exist := v.GetIBFT(r); exist {
-					istate, err := i.CurrentState()
-					if err != nil || istate == nil {
+					istate, found, err := i.CurrentState()
+					if err != nil || istate == nil || !found{
 						c.logger.Warn("failed to get current instance state",
 							zap.Error(err), zap.String("identifier", string(i.GetIdentifier())))
 						// TODO: decide if the error should stop the function or continue

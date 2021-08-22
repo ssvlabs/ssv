@@ -12,12 +12,15 @@ func (es *exporterStorage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 }
 
 // GetSyncOffset returns the offset
-func (es *exporterStorage) GetSyncOffset() (*eth1.SyncOffset, error) {
-	obj, err := es.db.Get(storagePrefix, syncOffsetKey)
+func (es *exporterStorage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
+	obj, found, err := es.db.Get(storagePrefix, syncOffsetKey)
+	if !found{
+		return nil, found, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, found, err
 	}
 	offset := new(eth1.SyncOffset)
 	offset.SetBytes(obj.Value)
-	return offset, nil
+	return offset, found, nil
 }

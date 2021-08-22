@@ -133,7 +133,7 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 
 			// save decided
 			for _, d := range test.decidedStorage {
-				ibftStorage.SaveDecided(d)
+				require.NoError(t, ibftStorage.SaveDecided(d))
 			}
 
 			handler := ReqHandler{
