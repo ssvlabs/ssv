@@ -125,7 +125,11 @@ func (d *dispatcher) Dispatch() {
 			d.running--
 			d.mut.Unlock()
 		}()
-		d.logger.Debug("task was dispatched", zap.String("task-id", task.ID))
+		stats := d.Stats()
+		d.logger.Debug("task was dispatched", zap.String("task-id", task.ID),
+			zap.Time("time", stats.Time),
+			zap.Int("running", stats.Running),
+			zap.Int("waiting", stats.Waiting))
 		err := task.Fn()
 		if err != nil {
 			d.logger.Error("task failed", zap.Error(err),
