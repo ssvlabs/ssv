@@ -82,14 +82,16 @@ included in our repository in the `LICENSE` file.
 [X] db, persistence and recovery (Sync)\
 [X] Between instance persistence (prevent starting a new instance if previous not decided)\
 [X] Multi network support (being part of multiple SSV groups)\
-[ ] Aggregation support\
+[\\] Aggregation support\
 [\\] Proposal support\
+[ ] Sync committee support\
 [X] Key sharing\
 [X] Deployment\
 [X] Documentation\
 [X] Phase 1 testing\
 [X] Full iBFT spec\
 [ ] Audit
+[ ] Grafana node dashboard
 
 ** X=done, \\=WIP
 
