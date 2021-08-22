@@ -51,7 +51,6 @@ func NewIbftDecidedReadOnly(opts DecidedReaderOptions) Reader {
 
 // Start starts to fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *decidedReader) Start() error {
-	r.logger.Debug("syncing ibft data")
 	// subscribe to topic so we could find relevant nodes
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		if !strings.Contains(err.Error(), "topic already exists") {
@@ -68,6 +67,8 @@ func (r *decidedReader) Start() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
+
+	r.logger.Debug("syncing ibft data")
 	// creating HistorySync and starts it
 	identifier := []byte(validator.IdentifierFormat(r.validatorShare.PublicKey.Serialize(), beacon.RoleTypeAttester))
 	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), identifier, r.network,

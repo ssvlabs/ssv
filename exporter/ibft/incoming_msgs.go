@@ -30,7 +30,8 @@ type incomingMsgsReader struct {
 // NewIncomingMsgsReader creates new instance
 func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
-		logger:    opts.Logger.With(zap.String("ibft", "msg_reader")),
+		logger:    opts.Logger.With(zap.String("ibft", "msg_reader"),
+			zap.String("pubKey", opts.PK.SerializeToHexStr())),
 		network:   opts.Network,
 		config:    opts.Config,
 		publicKey: opts.PK,
@@ -54,6 +55,7 @@ func (i *incomingMsgsReader) Start() error {
 
 func (i *incomingMsgsReader) listenToNetwork() {
 	msgChan := i.network.ReceivedMsgChan()
+	i.logger.Debug("listening to network messages")
 	for msg := range msgChan {
 		if msg == nil || msg.Message == nil {
 			i.logger.Info("received invalid msg")
