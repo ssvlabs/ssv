@@ -8,6 +8,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strings"
 	"time"
 )
 
@@ -29,7 +30,8 @@ type incomingMsgsReader struct {
 // NewIncomingMsgsReader creates new instance
 func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
-		logger:    opts.Logger.With(zap.String("ibft", "msg_reader")),
+		logger: opts.Logger.With(zap.String("ibft", "msg_reader"),
+			zap.String("pubKey", opts.PK.SerializeToHexStr())),
 		network:   opts.Network,
 		config:    opts.Config,
 		publicKey: opts.PK,
@@ -39,7 +41,10 @@ func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 
 func (i *incomingMsgsReader) Start() error {
 	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
-		return errors.Wrap(err, "could not subscribe to subnet")
+		if !strings.Contains(err.Error(), "topic already exists") {
+			return errors.Wrap(err, "could not subscribe to subnet")
+		}
+		i.logger.Debug("no need to subscribe, topic already exist")
 	}
 	if err := i.waitForMinPeers(i.publicKey, 2); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
@@ -50,6 +55,7 @@ func (i *incomingMsgsReader) Start() error {
 
 func (i *incomingMsgsReader) listenToNetwork() {
 	msgChan := i.network.ReceivedMsgChan()
+	i.logger.Debug("listening to network messages")
 	for msg := range msgChan {
 		if msg == nil || msg.Message == nil {
 			i.logger.Info("received invalid msg")
@@ -84,10 +90,10 @@ func (i *incomingMsgsReader) listenToNetwork() {
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
 	ctx := commons.WaitMinPeersCtx{
-		Ctx: context.Background(),
+		Ctx:    context.Background(),
 		Logger: i.logger,
-		Net: i.network,
+		Net:    i.network,
 	}
 	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
-		1 * time.Second, 64 * time.Second, false)
+		1*time.Second, 64*time.Second, false)
 }

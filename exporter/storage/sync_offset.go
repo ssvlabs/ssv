@@ -14,7 +14,7 @@ func (es *exporterStorage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 // GetSyncOffset returns the offset
 func (es *exporterStorage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 	obj, found, err := es.db.Get(storagePrefix, syncOffsetKey)
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {

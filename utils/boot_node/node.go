@@ -3,9 +3,8 @@ package bootnode
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/utils"
 	"io"
 	"log"
 	"net"
@@ -17,11 +16,9 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/iputils"
 	"github.com/prysmaticlabs/prysm/shared/params"
 
-	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	pb "github.com/prysmaticlabs/prysm/proto/beacon/p2p/v1"
 	"go.uber.org/zap"
 )
@@ -85,7 +82,7 @@ func (h *handler) httpHandler(w http.ResponseWriter, _ *http.Request) {
 
 // Start implements Node interface
 func (n *bootNode) Start(ctx context.Context) error {
-	privKey := n.extractPrivateKey()
+	privKey := utils.ECDSAPrivateKey(n.logger, n.privateKey)
 	cfg := discover.Config{
 		PrivateKey: privKey,
 	}
@@ -111,37 +108,6 @@ func (n *bootNode) Start(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (n *bootNode) extractPrivateKey() *ecdsa.PrivateKey {
-	var privKey *ecdsa.PrivateKey
-	if n.privateKey != "" {
-		dst, err := hex.DecodeString(n.privateKey)
-		if err != nil {
-			panic(err)
-		}
-		unmarshalledKey, err := crypto.UnmarshalSecp256k1PrivateKey(dst)
-		if err != nil {
-			panic(err)
-		}
-		privKey = (*ecdsa.PrivateKey)(unmarshalledKey.(*crypto.Secp256k1PrivateKey))
-
-	} else {
-		privInterfaceKey, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-		if err != nil {
-			panic(err)
-		}
-		privKey = (*ecdsa.PrivateKey)(privInterfaceKey.(*crypto.Secp256k1PrivateKey))
-		n.logger.Warn("No private key was provided. Using default/random private key")
-		b, err := privInterfaceKey.Raw()
-		if err != nil {
-			panic(err)
-		}
-		n.logger.Debug("Private Key generated", zap.ByteString("private-key", b))
-	}
-	privKey.Curve = gcrypto.S256()
-
-	return privKey
 }
 
 func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) *discover.UDPv5 {

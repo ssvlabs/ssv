@@ -8,18 +8,19 @@ import (
 )
 
 var (
-	defaultConcurrentLimit = 10
+	defaultConcurrentLimit = 25
 )
 
 // Task represents a some function to execute
 type Task struct {
 	Fn func() error
 	ID string
+	end func()
 }
 
 // NewTask creates a new task
-func NewTask(fn func() error, id string) *Task {
-	t := Task{fn, id}
+func NewTask(fn func() error, id string, end func()) *Task {
+	t := Task{fn, id, end}
 	return &t
 }
 
@@ -97,7 +98,7 @@ func (d *dispatcher) Queue(task Task) {
 	d.waiting = append(d.waiting, task)
 	d.logger.Debug("task was queued",
 		zap.String("task-id", task.ID),
-		zap.Int("waitingTasks", len(d.waiting)))
+		zap.Int("waiting", len(d.waiting)))
 }
 
 func (d *dispatcher) nextTaskToRun() *Task {
@@ -120,16 +121,22 @@ func (d *dispatcher) Dispatch() {
 		return
 	}
 	go func() {
+		logger := d.logger.With(zap.String("task-id", task.ID))
 		defer func() {
 			d.mut.Lock()
 			d.running--
 			d.mut.Unlock()
 		}()
-		d.logger.Debug("task was dispatched", zap.String("task-id", task.ID))
+		stats := d.Stats()
+		logger.Debug("task was dispatched", zap.Time("time", stats.Time),
+			zap.Int("running", stats.Running),
+			zap.Int("waiting", stats.Waiting))
 		err := task.Fn()
 		if err != nil {
-			d.logger.Error("task failed", zap.Error(err),
-				zap.String("task-id", task.ID))
+			d.logger.Error("task failed", zap.Error(err))
+		}
+		if task.end != nil {
+			go task.end()
 		}
 	}()
 }
