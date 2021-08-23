@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"crypto/ecdsa"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"time"
@@ -22,6 +23,9 @@ type Config struct {
 	HostID              peer.ID
 	Topics              map[string]*pubsub.Topic
 	Discv5BootStrapAddr []string
+
+	// Network private key is used for network identity
+	NetworkPrivateKey *ecdsa.PrivateKey
 }
 
 // TransformEnr converts defaults enr value and convert it to slice

@@ -23,7 +23,7 @@ func TestReqHandler_getHighestDecided(t *testing.T) {
 		h, err := handler.getHighestDecided()
 		require.NoError(t, err)
 		require.NotNil(t, h)
-		require.Equal(t, h.Error, kv.EntryNotFoundError)
+		require.Equal(t, h.Error, kv.EntryNotFoundError) // TODO: need to change once v0.0.12 is deprecated @see ibft/sync/history.go:163
 	})
 
 	t.Run("valid", func(t *testing.T) {

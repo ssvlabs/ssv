@@ -36,7 +36,8 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 	KeyByte, err := base64.StdEncoding.DecodeString(skPem) // passing keys format should be in base64
 	require.NoError(t, err)
 	require.NoError(t, operatorStorage.savePrivateKey(string(KeyByte)))
-	sk, err := operatorStorage.GetPrivateKey()
+	sk, found, err := operatorStorage.GetPrivateKey()
+	require.True(t, true, found)
 	require.NoError(t, err)
 	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
 	require.NoError(t, err)
@@ -94,7 +95,8 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.NoError(t, operatorStorage.savePrivateKey(string(existKeyByte)))
 			}
 			require.NoError(t, operatorStorage.SetupPrivateKey(test.passedKey))
-			sk, err := operatorStorage.GetPrivateKey()
+			sk, found, err := operatorStorage.GetPrivateKey()
+			require.True(t, true, found)
 			require.NoError(t, err)
 			require.NotNil(t, sk)
 			if test.existKey == "" && test.passedKey == "" { // new key generated
@@ -126,7 +128,8 @@ func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
 	err = s.SaveSyncOffset(offset)
 	require.NoError(t, err)
 
-	o, err := s.GetSyncOffset()
+	o, found, err := s.GetSyncOffset()
+	require.True(t, found)
 	require.NoError(t, err)
 	require.Zero(t, offset.Cmp(o))
 }

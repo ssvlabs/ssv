@@ -4,7 +4,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
@@ -50,8 +49,8 @@ func (s *Sync) Start() error {
 	}
 
 	// fetch local highest
-	localHighest, err := s.ibftStorage.GetHighestDecidedInstance(s.identifier)
-	if err != nil && err.Error() != kv.EntryNotFoundError { // if not found, don't continue with sync
+	localHighest, found, err := s.ibftStorage.GetHighestDecidedInstance(s.identifier)
+	if err != nil { // if not found, don't continue with sync
 		return errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 
@@ -60,7 +59,7 @@ func (s *Sync) Start() error {
 		syncStartSeqNumber = localHighest.Message.SeqNumber
 	}
 
-	specialStartupCase := err != nil && err.Error() == kv.EntryNotFoundError && remoteHighest.Message.SeqNumber == 0 // in case when remote return seqNum of 0 and local is empty (notFound) we need to save and not assumed to be synced
+	specialStartupCase := !found && remoteHighest.Message.SeqNumber == 0 // in case when remote return seqNum of 0 and local is empty (notFound) we need to save and not assumed to be synced
 	if !specialStartupCase {
 		// check we are behind and need to sync
 		if syncStartSeqNumber >= remoteHighest.Message.SeqNumber {

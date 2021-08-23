@@ -2,13 +2,19 @@ package ibft
 
 import (
 	"bytes"
-	"errors"
+	"context"
 	"github.com/bloxapp/ssv/network"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/network/commons"
 	"time"
 )
 
-func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
+var (
+	waitMinPeersIntervalStart = 1 * time.Second
+	waitMinPeersIntervalEnd = 64 * time.Second
+)
+
+// waitForMinPeerOnInit is called once during IBFT init
+func (i *ibftImpl) waitForMinPeerOnInit(minPeerCount int) {
 	// warmup to avoid network errors
 	time.Sleep(500 * time.Millisecond)
 
@@ -20,45 +26,13 @@ func (i *ibftImpl) waitForMinPeerCount(minPeerCount int) {
 // waitForMinPeers will wait until enough peers joined the topic
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *ibftImpl) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
-	start := 1 * time.Second
-	limit := 64 * time.Second
-	interval := start
-	for {
-		ok, n := i.haveMinPeers(minPeerCount)
-		if ok {
-			i.logger.Info("found enough peers",
-				zap.Int("current peer count", n))
-			break
-		}
-		i.logger.Info("waiting for min peers",
-			zap.Int("current peer count", n))
-
-		time.Sleep(interval)
-
-		interval *= 2
-		if stopAtLimit && interval == limit {
-			return errors.New("could not find peers")
-		}
-		interval %= limit
-		if interval == 0 {
-			interval = start
-		}
+	ctx := commons.WaitMinPeersCtx{
+		Ctx: context.Background(),
+		Logger: i.logger,
+		Net: i.network,
 	}
-	return nil
-}
-
-// haveMinPeers checks that there are at least <count> connected peers
-func (i *ibftImpl) haveMinPeers(count int) (bool, int) {
-	peers, err := i.network.AllPeers(i.ValidatorShare.PublicKey.Serialize())
-	if err != nil {
-		i.logger.Error("failed fetching peers", zap.Error(err))
-		return false, 0
-	}
-	n := len(peers)
-	if len(peers) >= count {
-		return true, n
-	}
-	return false, n
+	return commons.WaitForMinPeers(ctx, i.ValidatorShare.PublicKey.Serialize(), minPeerCount,
+		waitMinPeersIntervalStart, waitMinPeersIntervalEnd, stopAtLimit)
 }
 
 func (i *ibftImpl) listenToNetworkMessages() {

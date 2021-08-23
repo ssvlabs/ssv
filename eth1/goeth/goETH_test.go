@@ -65,8 +65,8 @@ func newEth1Client() *eth1Client {
 		ctx:    context.TODO(),
 		conn:   nil,
 		logger: zap.L(),
-		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, error) {
-			return nil, nil
+		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
+			return nil, true, nil
 		},
 		outSubject: pubsub.NewSubject(zap.L()),
 	}

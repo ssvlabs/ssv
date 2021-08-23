@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/pkg/errors"
@@ -18,7 +19,10 @@ func (a operatorIndexSorter) Less(i, j int) bool { return a[i].Index < a[j].Inde
 func getOperators(s storage.OperatorsCollection, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
 	var operators []storage.OperatorInformation
 	if len(filter.PublicKey) > 0 {
-		operator, err := s.GetOperatorInformation(filter.PublicKey)
+		operator, found, err := s.GetOperatorInformation(filter.PublicKey)
+		if !found {
+			return nil, errors.Wrap(err, fmt.Sprintf("could not find operator for %s", filter.PublicKey))
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read operator")
 		}
@@ -45,7 +49,10 @@ func (a validatorIndexSorter) Less(i, j int) bool { return a[i].Index < a[j].Ind
 func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
 	var validators []storage.ValidatorInformation
 	if len(filter.PublicKey) > 0 {
-		validator, err := s.GetValidatorInformation(filter.PublicKey)
+		validator, found, err := s.GetValidatorInformation(filter.PublicKey)
+		if !found {
+			return nil, errors.New("could not find validator")
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read validator")
 		}

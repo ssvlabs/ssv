@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -25,7 +26,7 @@ func TestNewDispatcher(t *testing.T) {
 		tasks = append(tasks, *NewTask(func() error {
 			tmap.Store(tid, true)
 			return nil
-		}, tid))
+		}, tid, nil))
 	}
 	go d.Start()
 	for _, t := range tasks {
@@ -38,4 +39,28 @@ func TestNewDispatcher(t *testing.T) {
 		return true
 	})
 	require.Equal(t, count, n)
+}
+
+func TestTask_End(t *testing.T) {
+	var i int64
+	inc := func() error {
+		atomic.AddInt64(&i, 1)
+		return nil
+	}
+	t1 := NewTask(inc, "1", func() {
+		atomic.AddInt64(&i, -1)
+	})
+	t2 := NewTask(inc, "2", func() {
+		require.Equal(t, i, 1)
+	})
+
+	d := NewDispatcher(DispatcherOptions{
+		Ctx:        context.TODO(),
+		Logger:     zap.L(),
+		Interval:   2 * time.Millisecond,
+		Concurrent: 10,
+	})
+
+	d.Queue(*t1)
+	d.Queue(*t2)
 }
