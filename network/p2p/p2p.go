@@ -326,7 +326,6 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 // ignorePeers provides a map of invisible peers (e.g. exporters) to ignore
 func ignorePeers() map[string]bool {
 	return map[string]bool{
-		// exporter (stage)
 		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
 	}
 }
