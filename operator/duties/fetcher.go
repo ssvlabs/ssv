@@ -40,7 +40,7 @@ type DutyFetcher interface {
 // newDutyFetcher creates a new instance
 func newDutyFetcher(logger *zap.Logger, beaconClient beaconDutiesClient, indicesFetcher validatorsIndicesFetcher, network core.Network) DutyFetcher {
 	df := dutyFetcher{
-		logger:         logger.With(zap.String("component", "operator/dutyFetcher")),
+		logger:         logger.With(zap.String("component", "Aoperator/dutyFetcher")),
 		ethNetwork:     network,
 		beaconClient:   beaconClient,
 		indicesFetcher: indicesFetcher,
@@ -161,8 +161,21 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 	for s, e := range entriesToAdd {
 		slot := uint64(s)
 		if raw, exist := df.cache.Get(getDutyCacheKey(slot)); exist {
+			var dutiesToAdd []beacon.Duty
 			existingEntry := raw.(cacheEntry)
-			e.Duties = append(existingEntry.Duties, e.Duties...)
+			for _, newDuty := range e.Duties {
+				exist := false
+				for _, existDuty := range existingEntry.Duties {
+					if newDuty.ValidatorIndex == existDuty.ValidatorIndex {
+						exist = true
+						break // already exist, pass
+					}
+				}
+				if !exist{
+					dutiesToAdd = append(dutiesToAdd, newDuty)
+				}
+			}
+			e.Duties = append(existingEntry.Duties, dutiesToAdd...)
 		}
 		df.cache.SetDefault(getDutyCacheKey(slot), e)
 	}
