@@ -114,6 +114,7 @@ func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
 	go exp.ibftSyncDispatcher.Start()
+	go exp.networkReadDispatcher.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -362,7 +363,6 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-	readerTask := tasks.NewTask(ibftMsgReader.Start, fmt.Sprintf("ibft:msgReader/%s", pubkey), nil)
 
 	syncDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
@@ -371,8 +371,9 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-	syncTask := tasks.NewTask(syncDecidedReader.Start, fmt.Sprintf("ibft:msgReader/%s", pubkey), func() {
+	syncTask := tasks.NewTask(syncDecidedReader.Start, fmt.Sprintf("ibft:sync/%s", pubkey), func() {
 		logger.Debug("sync is done, queuing reader task")
+		readerTask := tasks.NewTask(ibftMsgReader.Start, fmt.Sprintf("ibft:msgReader/%s", pubkey), nil)
 		exp.networkReadDispatcher.Queue(*readerTask)
 	})
 	exp.ibftSyncDispatcher.Queue(*syncTask)
