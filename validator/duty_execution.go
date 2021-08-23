@@ -23,7 +23,7 @@ var (
 	})
 	metricsRunningIBFTs = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:running_ibfts_count",
-		Help: "Count all running IBFTs",
+		Help: "Count running IBFTs by validator pub key",
 	}, []string{"pubKey"})
 )
 

@@ -2,6 +2,8 @@ package ibft
 
 import (
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"sync"
 
@@ -12,6 +14,13 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
+)
+
+var (
+	metricsIBFTsOnInit = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:ibfts_on_init",
+		Help: "Count IBFTs in 'init' phase",
+	}, []string{"pubKey"})
 )
 
 // StartOptions defines type for IBFT instance options
@@ -93,6 +102,10 @@ func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage co
 
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *ibftImpl) Init() {
+	pubkey := i.ValidatorShare.PublicKey.SerializeToHexStr()
+	metricsIBFTsOnInit.WithLabelValues(pubkey).Inc()
+	defer metricsIBFTsOnInit.WithLabelValues(pubkey).Dec()
+
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
