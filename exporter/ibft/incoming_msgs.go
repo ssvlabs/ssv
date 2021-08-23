@@ -2,9 +2,11 @@ package ibft
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -55,10 +57,17 @@ func (i *incomingMsgsReader) Start() error {
 
 func (i *incomingMsgsReader) listenToNetwork() {
 	msgChan := i.network.ReceivedMsgChan()
+	identifier := validator.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester)
 	i.logger.Debug("listening to network messages")
 	for msg := range msgChan {
 		if msg == nil || msg.Message == nil {
 			i.logger.Info("received invalid msg")
+			continue
+		}
+		// filtering irrelevant messages
+		// TODO: handle other types of roles
+		if identifier != string(msg.Message.Lambda) {
+			i.logger.Debug("ignoring message with wrong identifier")
 			continue
 		}
 
