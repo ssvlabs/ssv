@@ -300,7 +300,7 @@ func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 		return nil, err
 	}
 
-	invisiblePeers := invisiblePeers()
+	invisiblePeers := ignorePeers()
 
 	for _, p := range topic.ListPeers() {
 		s := peerToString(p)
@@ -323,10 +323,10 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
-// invisiblePeers provides a map of invisible peers (exporters) to ignore
-func invisiblePeers() map[string]bool {
+// ignorePeers provides a map of invisible peers (e.g. exporters) to ignore
+func ignorePeers() map[string]bool {
 	return map[string]bool{
 		// exporter (stage)
-		"16Uiu2HAm2jmbVSPkqgKwBcXihD6BfjvXZWt1gBaF55cjHENvjDqv": true,
+		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
 	}
 }
