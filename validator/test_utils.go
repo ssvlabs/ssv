@@ -5,6 +5,7 @@ import (
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -101,8 +102,8 @@ func (t *testIBFT) NextSeqNumber() (uint64, error) {
 }
 
 // CurrentState returns the state of the running instance
-func (t *testIBFT) CurrentState() (*proto.State, error) {
-	return &proto.State{}, nil
+func (t *testIBFT) CurrentState() (*proto.State, bool, error) {
+	return &proto.State{}, true, nil
 }
 
 /**
@@ -169,6 +170,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret.ibfts[beacon.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
 	ret.ibfts[beacon.RoleTypeAttester].Init()
+	ret.valueCheck = valcheck.New()
 
 	// nodes
 	ret.network = local.NewLocalNetwork()

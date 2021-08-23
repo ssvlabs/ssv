@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -21,7 +20,7 @@ type ValidatorInformation struct {
 
 // ValidatorsCollection is the interface for managing validators information
 type ValidatorsCollection interface {
-	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, error)
+	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error)
 	SaveValidatorInformation(validatorInformation *ValidatorInformation) error
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
@@ -52,26 +51,29 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 }
 
 // GetValidatorInformation returns information of the given validator by public key
-func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, error) {
-	obj, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
+func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error) {
+	obj, found, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
+	if !found {
+		return nil, found, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, found, err
 	}
 	var vi ValidatorInformation
 	err = json.Unmarshal(obj.Value, &vi)
-	return &vi, err
+	return &vi, found, err
 }
 
 // SaveValidatorInformation saves validator information by its public key
 func (es *exporterStorage) SaveValidatorInformation(validatorInformation *ValidatorInformation) error {
-	existing, err := es.GetValidatorInformation(validatorInformation.PublicKey)
-	if err != nil && err.Error() != kv.EntryNotFoundError {
+	info, found, err := es.GetValidatorInformation(validatorInformation.PublicKey)
+	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
-	if existing != nil {
+	if found {
 		es.logger.Debug("validator already exist",
 			zap.String("pubKey", validatorInformation.PublicKey))
-		validatorInformation.Index = existing.Index
+		validatorInformation.Index = info.Index
 		// TODO: update validator information (i.e. change operator)
 		return nil
 	}

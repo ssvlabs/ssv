@@ -193,7 +193,11 @@ func (c *controller) NewValidatorSubject() pubsub.Subscriber {
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
 	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
 	l.Debug("handles validator added event")
-	operatorPrivKey, err := c.shareEncryptionKeyProvider()
+	operatorPrivKey, found, err := c.shareEncryptionKeyProvider()
+	if !found{
+		l.Error("failed to find operator private key")
+		return
+	}
 	if err != nil {
 		l.Error("failed to get operator private key")
 		return

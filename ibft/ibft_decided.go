@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
@@ -94,19 +93,19 @@ func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 
 // highestKnownDecided returns the highest known decided instance
 func (i *ibftImpl) highestKnownDecided() (*proto.SignedMessage, error) {
-	highestKnown, err := i.ibftStorage.GetHighestDecidedInstance(i.GetIdentifier())
-	if err != nil && err.Error() != kv.EntryNotFoundError {
+	highestKnown, _, err := i.ibftStorage.GetHighestDecidedInstance(i.GetIdentifier())
+	if err != nil {
 		return nil, err
 	}
 	return highestKnown, nil
 }
 
 func (i *ibftImpl) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
-	found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
-	if err != nil && err.Error() != kv.EntryNotFoundError {
+	_, found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+	if err != nil {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
-	return found != nil, nil
+	return found, nil
 }
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
@@ -126,11 +125,11 @@ func (i *ibftImpl) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 		return false, nil
 	}
 
-	highest, err := i.ibftStorage.GetHighestDecidedInstance(msg.Message.Lambda)
+	highest, found, err := i.ibftStorage.GetHighestDecidedInstance(msg.Message.Lambda)
+	if !found{
+		return msg.Message.SeqNumber > 0, nil
+	}
 	if err != nil {
-		if err.Error() == kv.EntryNotFoundError {
-			return msg.Message.SeqNumber > 0, nil
-		}
 		return false, errors.Wrap(err, "could not get highest decided instance from storage")
 	}
 	return highest.Message.SeqNumber < msg.Message.SeqNumber, nil
