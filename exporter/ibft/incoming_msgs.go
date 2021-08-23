@@ -30,7 +30,7 @@ type incomingMsgsReader struct {
 // NewIncomingMsgsReader creates new instance
 func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
-		logger:    opts.Logger.With(zap.String("ibft", "msg_reader"),
+		logger: opts.Logger.With(zap.String("ibft", "msg_reader"),
 			zap.String("pubKey", opts.PK.SerializeToHexStr())),
 		network:   opts.Network,
 		config:    opts.Config,
@@ -90,10 +90,10 @@ func (i *incomingMsgsReader) listenToNetwork() {
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
 	ctx := commons.WaitMinPeersCtx{
-		Ctx: context.Background(),
+		Ctx:    context.Background(),
 		Logger: i.logger,
-		Net: i.network,
+		Net:    i.network,
 	}
 	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
-		1 * time.Second, 64 * time.Second, false)
+		1*time.Second, 64*time.Second, false)
 }

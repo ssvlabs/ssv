@@ -2,7 +2,6 @@ package exporter
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/eth1"
@@ -16,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -208,114 +206,6 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	return nil
 }
 
-// ListenToEth1Events register for eth1 events
-func (exp *exporter) listenToEth1Events(cn pubsub.SubjectChannel) chan error {
-	cnErr := make(chan error)
-	go func() {
-		for e := range cn {
-			if event, ok := e.(eth1.Event); ok {
-				var err error = nil
-				if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
-					err = exp.handleValidatorAddedEvent(validatorAddedEvent)
-				} else if opertaorAddedEvent, ok := event.Data.(eth1.OperatorAddedEvent); ok {
-					err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
-				}
-				if err != nil {
-					cnErr <- err
-				}
-			}
-		}
-	}()
-	return cnErr
-}
-
-// handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator
-func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) error {
-	pubKeyHex := hex.EncodeToString(event.PublicKey)
-	logger := exp.logger.With(zap.String("pubKey", pubKeyHex))
-	logger.Info("validator added event")
-	// save the share to be able to reuse IBFT functionality
-	validatorShare, err := validator.ShareFromValidatorAddedEvent(event, "")
-	if err != nil {
-		return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
-	}
-	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
-		return errors.Wrap(err, "failed to save validator share")
-	}
-	logger.Debug("validator share was saved")
-	// save information for exporting validators
-	vi, err := toValidatorInformation(event)
-	if err != nil {
-		return errors.Wrap(err, "could not create ValidatorInformation")
-	}
-	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
-		return errors.Wrap(err, "failed to save validator information")
-	}
-	logger.Debug("validator information was saved")
-
-	// TODO: aggregate validators in sync scenario
-	// otherwise the network will be overloaded with multiple messages
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
-		Type:   api.TypeValidator,
-		Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
-		Data:   []storage.ValidatorInformation{*vi},
-	}, Conn: nil})
-
-	// triggers a sync for the given validator
-	if err = exp.triggerIBFTSync(validatorShare.PublicKey); err != nil {
-		return errors.Wrap(err, "failed to trigger ibft sync")
-	}
-
-	return nil
-}
-
-func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) error {
-	l := exp.logger.With(zap.String("pubKey", string(event.PublicKey)))
-	l.Info("operator added event")
-	oi := storage.OperatorInformation{
-		PublicKey:    string(event.PublicKey),
-		Name:         event.Name,
-		OwnerAddress: event.OwnerAddress,
-	}
-	err := exp.storage.SaveOperatorInformation(&oi)
-	if err != nil {
-		return err
-	}
-	l.Debug("managed to save operator information")
-
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
-		Type:   api.TypeOperator,
-		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
-		Data:   []storage.OperatorInformation{oi},
-	}, Conn: nil})
-
-	return nil
-}
-
-// toValidatorInformation converts raw event to ValidatorInformation
-func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*storage.ValidatorInformation, error) {
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize validator public key")
-	}
-
-	var operators []storage.OperatorNodeLink
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
-		operators = append(operators, storage.OperatorNodeLink{
-			ID: nodeID, PublicKey: string(oess.OperatorPublicKey),
-		})
-	}
-
-	vi := storage.ValidatorInformation{
-		PublicKey: pubKey.SerializeToHexStr(),
-		Operators: operators,
-	}
-
-	return &vi, nil
-}
-
 func (exp *exporter) triggerAllValidators() {
 	shares, err := exp.validatorStorage.GetAllValidatorsShare()
 	if err != nil {
@@ -323,14 +213,14 @@ func (exp *exporter) triggerAllValidators() {
 		return
 	}
 	for _, share := range shares {
-		if err = exp.triggerIBFTSync(share.PublicKey); err != nil {
+		if err = exp.triggerValidator(share.PublicKey); err != nil {
 			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),
 				zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
 		}
 	}
 }
 
-func (exp *exporter) shouldSyncIbft(pubkey string) bool {
+func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	for _, pk := range syncWhitelist {
 		if pubkey == pk {
 			return true
@@ -339,12 +229,12 @@ func (exp *exporter) shouldSyncIbft(pubkey string) bool {
 	return exp.ibftSyncEnabled
 }
 
-func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
+func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if validatorPubKey == nil {
 		return errors.New("empty validator pubkey")
 	}
 	pubkey := validatorPubKey.SerializeToHexStr()
-	if !exp.shouldSyncIbft(pubkey) {
+	if !exp.shouldProcessValidator(pubkey) {
 		return nil
 	}
 	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
@@ -357,13 +247,6 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 	logger := exp.logger.With(zap.String("pubKey", pubkey))
 	logger.Debug("ibft sync was triggered")
 
-	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
-		Logger:  exp.logger,
-		Network: exp.network,
-		Config:  proto.DefaultConsensusParams(),
-		PK:      validatorPubKey,
-	})
-
 	syncDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
@@ -371,13 +254,24 @@ func (exp *exporter) triggerIBFTSync(validatorPubKey *bls.PublicKey) error {
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
+
 	syncTask := tasks.NewTask(syncDecidedReader.Start, fmt.Sprintf("ibft:sync/%s", pubkey), func() {
-		logger.Debug("sync is done, queuing reader task")
-		readerTask := tasks.NewTask(ibftMsgReader.Start, fmt.Sprintf("ibft:msgReader/%s", pubkey), nil)
-		exp.networkReadDispatcher.Queue(*readerTask)
+		logger.Debug("sync is done, starting to read network messages")
+		exp.readNetworkMessages(validatorPubKey)
 	})
 	exp.ibftSyncDispatcher.Queue(*syncTask)
 
 	return nil
 }
 
+func (exp *exporter) readNetworkMessages(validatorPubKey *bls.PublicKey) {
+	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
+		Logger:  exp.logger,
+		Network: exp.network,
+		Config:  proto.DefaultConsensusParams(),
+		PK:      validatorPubKey,
+	})
+	readerTask := tasks.NewTask(ibftMsgReader.Start,
+		fmt.Sprintf("ibft:msgReader/%s", validatorPubKey.SerializeToHexStr()), nil)
+	exp.networkReadDispatcher.Queue(*readerTask)
+}

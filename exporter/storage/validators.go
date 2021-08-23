@@ -53,7 +53,7 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 // GetValidatorInformation returns information of the given validator by public key
 func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error) {
 	obj, found, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {

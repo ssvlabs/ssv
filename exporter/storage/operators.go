@@ -49,7 +49,7 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 // GetOperatorInformation returns information of the given operator by public key
 func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
 	obj, found, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {

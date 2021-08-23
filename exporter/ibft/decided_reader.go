@@ -38,7 +38,7 @@ type decidedReader struct {
 // NewIbftDecidedReadOnly creates  new instance of DecidedReader
 func NewIbftDecidedReadOnly(opts DecidedReaderOptions) Reader {
 	r := decidedReader{
-		logger:         opts.Logger.With(
+		logger: opts.Logger.With(
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
 			zap.String("ibft", "decided_reader")),
 		storage:        opts.Storage,
