@@ -15,18 +15,13 @@ var (
 type Task struct {
 	Fn func() error
 	ID string
-	end chan bool
+	end func()
 }
 
 // NewTask creates a new task
-func NewTask(fn func() error, id string) *Task {
-	t := Task{fn, id, make(chan bool, 1)}
+func NewTask(fn func() error, id string, end func()) *Task {
+	t := Task{fn, id, end}
 	return &t
-}
-
-// End returns the end channel
-func (t *Task) End() <-chan bool {
-	return t.end
 }
 
 // Dispatcher maintains a queue of tasks to dispatch
@@ -126,21 +121,22 @@ func (d *dispatcher) Dispatch() {
 		return
 	}
 	go func() {
+		logger := d.logger.With(zap.String("task-id", task.ID))
 		defer func() {
 			d.mut.Lock()
 			d.running--
 			d.mut.Unlock()
-			task.end <- true
 		}()
 		stats := d.Stats()
-		d.logger.Debug("task was dispatched", zap.String("task-id", task.ID),
-			zap.Time("time", stats.Time),
+		logger.Debug("task was dispatched", zap.Time("time", stats.Time),
 			zap.Int("running", stats.Running),
 			zap.Int("waiting", stats.Waiting))
 		err := task.Fn()
 		if err != nil {
-			d.logger.Error("task failed", zap.Error(err),
-				zap.String("task-id", task.ID))
+			d.logger.Error("task failed", zap.Error(err))
+		}
+		if task.end != nil {
+			go task.end()
 		}
 	}()
 }
