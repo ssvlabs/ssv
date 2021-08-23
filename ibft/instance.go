@@ -8,6 +8,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"sync"
 	"time"
 
@@ -21,6 +23,17 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 )
+
+var (
+	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:ibft_stage",
+		Help: "Count IBFTs by stages",
+	}, []string{"lambda"})
+)
+
+func init() {
+	prometheus.Register(metricsIBFTStage)
+}
 
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
@@ -241,6 +254,8 @@ func (i *Instance) BumpRound() {
 
 // ProcessStageChange set the State's round State and pushed the new State into the State channel
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
+	metricsIBFTStage.WithLabelValues(string(i.State.Lambda.Get())).Set(float64(stage))
+
 	i.State.Stage.Set(int32(stage))
 
 	// Delete all queue messages when decided, we do not need them anymore.

@@ -23,6 +23,10 @@ var (
 	}, []string{"pubKey"})
 )
 
+func init() {
+	prometheus.Register(metricsIBFTsOnInit)
+}
+
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
 	Logger         *zap.Logger
