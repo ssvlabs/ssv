@@ -96,12 +96,9 @@ func (d *dispatcher) Queue(task Task) {
 	defer d.mut.Unlock()
 
 	d.waiting = append(d.waiting, task)
-	stats := d.Stats()
 	d.logger.Debug("task was queued",
 		zap.String("task-id", task.ID),
-		zap.Time("time", stats.Time),
-		zap.Int("running", stats.Running),
-		zap.Int("waiting", stats.Waiting))
+		zap.Int("waiting", len(d.waiting)))
 }
 
 func (d *dispatcher) nextTaskToRun() *Task {
