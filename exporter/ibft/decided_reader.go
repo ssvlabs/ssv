@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
+	"strings"
 	"sync"
 	"time"
 )
@@ -37,7 +38,7 @@ type decidedReader struct {
 // NewIbftDecidedReadOnly creates  new instance of DecidedReader
 func NewIbftDecidedReadOnly(opts DecidedReaderOptions) Reader {
 	r := decidedReader{
-		logger:         opts.Logger.With(
+		logger: opts.Logger.With(
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
 			zap.String("ibft", "decided_reader")),
 		storage:        opts.Storage,
@@ -50,11 +51,13 @@ func NewIbftDecidedReadOnly(opts DecidedReaderOptions) Reader {
 
 // Start starts to fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *decidedReader) Start() error {
-	r.logger.Debug("syncing ibft data")
 	// subscribe to topic so we could find relevant nodes
-	err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey)
-	if err != nil {
-		r.logger.Error("could not subscribe to validator channel", zap.Error(err))
+	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
+		if !strings.Contains(err.Error(), "topic already exists") {
+			r.logger.Warn("could not subscribe to validator channel", zap.Error(err))
+			return err
+		}
+		r.logger.Debug("no need to subscribe, topic already exist")
 	}
 	// wait for network setup (subscribe to topic)
 	var netWaitGroup sync.WaitGroup
@@ -64,10 +67,13 @@ func (r *decidedReader) Start() error {
 		time.Sleep(1 * time.Second)
 	}()
 	netWaitGroup.Wait()
+
+	r.logger.Debug("syncing ibft data")
 	// creating HistorySync and starts it
 	identifier := []byte(validator.IdentifierFormat(r.validatorShare.PublicKey.Serialize(), beacon.RoleTypeAttester))
-	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), identifier, r.network, r.storage, r.validateDecidedMsg) // TODO need to pass identifier
-	err = hs.Start()
+	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), identifier, r.network,
+		r.storage, r.validateDecidedMsg)
+	err := hs.Start()
 	if err != nil {
 		r.logger.Error("could not sync validator's data", zap.Error(err))
 	}

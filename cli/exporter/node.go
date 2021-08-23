@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -28,9 +29,11 @@ type config struct {
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 	ETH1Options                eth1.Options   `yaml:"eth1"`
 
-	WsAPIPort      int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
-	MetricsAPIPort int  `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile  bool `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	WsAPIPort         int    `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	MetricsAPIPort    int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile     bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	IbftSyncEnabled   bool   `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
+	NetworkPrivateKey string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 }
 
 var cfg config
@@ -62,6 +65,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
 
+		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
@@ -84,7 +88,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			// using an empty private key provider
 			// because the exporter doesn't run in the context of an operator
 			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
-				return nil, false, nil
+				return nil, true, nil
 			},
 		})
 		if err != nil {
@@ -99,6 +103,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Ctx = cmd.Context()
 		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
+		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 
 		exporterNode = exporter.New(*exporterOptions)
 
