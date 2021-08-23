@@ -33,6 +33,7 @@ to run validators in a decentralized and trustless way.
 
 ### Technical iBFT and SSV read
 * [iBFT Paper](https://arxiv.org/pdf/2002.03613.pdf)
+    * [Fast sync for current instance](./ibft/sync/speedup/README.md)
 * [iBFT annotated paper (By Blox)](./ibft/IBFT.md)
 * [EIP650](https://github.com/ethereum/EIPs/issues/650)
 * [Security proof for n-t honest parties](https://notes.ethereum.org/DYU-NrRBTxS3X0fu_MidnA)
@@ -76,19 +77,22 @@ included in our repository in the `LICENSE` file.
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Golang\
 [ ] Externalize remote signer\
-[\\] Multi BN implementation support
+[X] Multi BN implementation support
 [X] Networking and discovery\
 [X] db, persistence and recovery (Sync)\
 [X] Between instance persistence (prevent starting a new instance if previous not decided)\
 [X] Multi network support (being part of multiple SSV groups)\
-[ ] Aggregation support\
+[\\] Aggregation support\
 [\\] Proposal support\
+[ ] Sync committee support\
 [X] Key sharing\
 [X] Deployment\
-[\\] Documentation\
+[X] Documentation\
 [X] Phase 1 testing\
-[\\] Full iBFT spec\
-[ ] Audit
+[X] Full iBFT spec\
+[ ] Audit\
+[ ] Grafana node dashboard
 
 ** X=done, \\=WIP
+
 
