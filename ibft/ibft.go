@@ -5,6 +5,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"log"
 	"sync"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -24,7 +25,9 @@ var (
 )
 
 func init() {
-	prometheus.Register(metricsIBFTsOnInit)
+	if err := prometheus.Register(metricsIBFTsOnInit); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
 }
 
 // StartOptions defines type for IBFT instance options

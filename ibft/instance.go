@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"log"
 	"sync"
 	"time"
 
@@ -36,8 +37,12 @@ var (
 )
 
 func init() {
-	prometheus.Register(metricsIBFTStage)
-	prometheus.Register(metricsIBFTRound)
+	if err := prometheus.Register(metricsIBFTStage); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
+	if err := prometheus.Register(metricsIBFTRound); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
 }
 
 // InstanceOptions defines option attributes for the Instance

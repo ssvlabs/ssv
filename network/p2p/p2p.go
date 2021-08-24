@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -53,8 +54,12 @@ var (
 )
 
 func init() {
-	prometheus.Register(metricsConnectedPeers)
-	prometheus.Register(metricsNetMsgsInbound)
+	if err := prometheus.Register(metricsConnectedPeers); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
+	if err := prometheus.Register(metricsNetMsgsInbound); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
 }
 
 type listener struct {

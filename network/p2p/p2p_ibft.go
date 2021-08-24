@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"log"
 )
 
 
@@ -19,7 +20,9 @@ var (
 )
 
 func init() {
-	prometheus.Register(metricsIBFTMsgsOutbound)
+	if err := prometheus.Register(metricsIBFTMsgsOutbound); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
 }
 
 // Broadcast propagates a signed message to all peers

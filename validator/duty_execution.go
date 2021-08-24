@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"log"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -28,8 +29,12 @@ var (
 )
 
 func init() {
-	prometheus.Register(metricsRunningIBFTsCount)
-	prometheus.Register(metricsRunningIBFTs)
+	if err := prometheus.Register(metricsRunningIBFTsCount); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
+	if err := prometheus.Register(metricsRunningIBFTs); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
 }
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.

@@ -8,6 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"log"
 )
 
 var (
@@ -18,7 +19,9 @@ var (
 )
 
 func init() {
-	prometheus.Register(metricsIBFTDecidedMsgsOutbound)
+	if err := prometheus.Register(metricsIBFTDecidedMsgsOutbound); err != nil {
+		log.Println("failed to register prometheus collector")
+	}
 }
 
 // BroadcastDecided broadcasts a decided instance with collected signatures
