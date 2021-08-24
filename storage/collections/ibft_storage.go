@@ -8,10 +8,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 	"log"
 	"strings"
-
-	"go.uber.org/zap"
 )
 
 // Iibft is an interface for persisting chain data
@@ -118,16 +117,18 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 		return errors.Wrap(err, "marshaling error")
 	}
 
-	err = i.save(value, "highest", signedMsg.Message.Lambda)
-	if err == nil {
-		// update metric if no error
-		l := string(signedMsg.Message.Lambda)
-		// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
-		pubkey := l[:strings.Index(l, "_")]
-		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda), pubkey).
-			Set(float64(signedMsg.Message.SeqNumber))
+
+	if err = i.save(value, "highest", signedMsg.Message.Lambda); err != nil {
+		return err
 	}
-	return err
+	// update metric once saved
+	l := string(signedMsg.Message.Lambda)
+	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
+	pubkey := l[:strings.Index(l, "_")]
+	metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda), pubkey).
+		Set(float64(signedMsg.Message.SeqNumber))
+
+	return nil
 }
 
 // GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
