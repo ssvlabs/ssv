@@ -26,6 +26,7 @@ func TestLeaderCalculation(t *testing.T) {
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
+			Lambda:        threadsafe.Bytes(nil),
 		},
 		LeaderSelector: l,
 	}

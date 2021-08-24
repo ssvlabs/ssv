@@ -30,10 +30,10 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsRunningIBFTsCount); err != nil {
-		log.Println("failed to register prometheus collector")
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsRunningIBFTs); err != nil {
-		log.Println("failed to register prometheus collector")
+		log.Println("could not register prometheus collector")
 	}
 }
 

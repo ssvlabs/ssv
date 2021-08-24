@@ -20,7 +20,7 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsIBFTDecidedMsgsOutbound); err != nil {
-		log.Println("failed to register prometheus collector")
+		log.Println("could not register prometheus collector")
 	}
 }
 

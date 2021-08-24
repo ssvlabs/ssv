@@ -26,7 +26,7 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsIBFTsOnInit); err != nil {
-		log.Println("failed to register prometheus collector")
+		log.Println("could not register prometheus collector")
 	}
 }
 
