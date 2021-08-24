@@ -13,7 +13,7 @@ import (
 var (
 	metricsIBFTDecidedMsgsOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:ibft_decided_messages_outbound",
-		Help: "Count IBFT messages broadcast",
+		Help: "Count IBFT decided messages outbound",
 	}, []string{"topic"})
 )
 

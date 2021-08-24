@@ -8,34 +8,36 @@
 
 `GET /metrics` end-point is exposing metrics from ssv node to prometheus.
 
-### Design
-
-`MetricsAPIPort` is used to enable metrics collection and expose the API: 
-
-Example:
-```yaml
-MetricsAPIPort: 15001
-```
-
-Or as env variable:
-```shell
-METRICS_API_PORT=15001
-```
-
 ### Collected Metrics
 
 The following is a list of all collected metrics in SSV:
 
-* `go_*` metrics from `prometheus` 
-* `process_*` metrics from `prometheus` 
-* `ssv:validator:connected_peers{pubKey} COUNT`
-* `ssv:validator:running_ibfts_count{pubKey} COUNT`
-* `ssv:validator:running_ibfts_count_all{} COUNT`
-* `ssv:validator:validators_count{} COUNT`
+* `go_*` metrics by `prometheus`
+* `ssv:network:connected_peers{pubKey}` Count connected peers for a validator
+* `ssv:network:ibft_decided_messages_outbound{topic}` Count IBFT decided messages outbound
+* `ssv:network:ibft_messages_outbound{topic}` Count IBFT messages outbound
+* `ssv:network:net_messages_inbound{topic}` Count incoming network messages
+* `ssv:validator:ibft_round{lambda}` IBFTs round
+* `ssv:validator:ibft_stage{lambda}` IBFTs stage
+* `ssv:validator:ibfts_on_init{pubKey}` Count IBFTs in 'init' phase
+* `ssv:validator:running_ibfts_count{pubKey}` Count running IBFTs by validator pub key
+* `ssv:validator:running_ibfts_count_all` Count all running IBFTs
 
 ### Usage
 
 #### Metrics
+
+`MetricsAPIPort` is used to enable metrics collection and expose the API:
+
+Example:
+```yaml
+MetricsAPIPort: 15000
+```
+
+Or as env variable:
+```shell
+METRICS_API_PORT=15000
+```
 
 ```shell
 $ curl http://localhost:15000/metrics
