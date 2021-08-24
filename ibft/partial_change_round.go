@@ -56,7 +56,8 @@ func (i *Instance) uponChangeRoundPartialQuorum(msgs []*network.Message) (bool, 
 	// TODO - could have a race condition where msgs are processed in a different thread and then we trigger round change here
 	if foundPartialQuorum {
 		i.State.Round.Set(lowestChangeRound)
-		metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get())).Set(float64(lowestChangeRound))
+		metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
+			i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(lowestChangeRound))
 
 		i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round.Get()))
 		i.resetRoundTimer()

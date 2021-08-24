@@ -29,11 +29,11 @@ var (
 	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_stage",
 		Help: "IBFTs stage",
-	}, []string{"lambda"})
+	}, []string{"lambda","pubKey"})
 	metricsIBFTRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_round",
 		Help: "IBFTs round",
-	}, []string{"lambda"})
+	}, []string{"lambda","pubKey"})
 )
 
 func init() {
@@ -180,7 +180,8 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
 	i.State.InputValue.Set(inputValue)
 	i.State.Round.Set(1) // start from 1
-	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get())).Set(1)
+	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
+		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(1)
 
 	if i.IsLeader() {
 		go func() {
@@ -262,12 +263,14 @@ func (i *Instance) BumpRound() {
 	i.processCommitQuorumOnce = sync.Once{}
 	newRound := i.State.Round.Get() + 1
 	i.State.Round.Set(newRound)
-	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get())).Set(float64(newRound))
+	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
+		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(newRound))
 }
 
 // ProcessStageChange set the State's round State and pushed the new State into the State channel
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
-	metricsIBFTStage.WithLabelValues(string(i.State.Lambda.Get())).Set(float64(stage))
+	metricsIBFTStage.WithLabelValues(string(i.State.Lambda.Get()),
+		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(stage))
 
 	i.State.Stage.Set(int32(stage))
 
