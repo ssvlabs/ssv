@@ -6,6 +6,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"log"
 
 	"go.uber.org/zap"
 )
@@ -94,12 +97,28 @@ func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.Si
 	return ret, found, nil
 }
 
+
+var (
+	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:ibft_highest_decided",
+		Help: "The highest decided sequence number",
+	}, []string{"lambda"})
+)
+
+func init() {
+	if err := prometheus.Register(metricsHighestDecided); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+}
+
 // SaveHighestDecidedInstance saves a signed message for an ibft instance which is currently highest
 func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error {
 	value, err := json.Marshal(signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
+	metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda)).
+		Set(float64(signedMsg.Message.SeqNumber))
 	return i.save(value, "highest", signedMsg.Message.Lambda)
 }
 

@@ -17,6 +17,7 @@ The following is a list of all collected metrics in SSV:
 * `ssv:network:ibft_decided_messages_outbound{topic}` Count IBFT decided messages outbound
 * `ssv:network:ibft_messages_outbound{topic}` Count IBFT messages outbound
 * `ssv:network:net_messages_inbound{topic}` Count incoming network messages
+* `ssv:validator:ibft_highest_decided{lambda}` The highest decided sequence number
 * `ssv:validator:ibft_round{lambda}` IBFTs round
 * `ssv:validator:ibft_stage{lambda}` IBFTs stage
 * `ssv:validator:ibfts_on_init{pubKey}` Count IBFTs in 'init' phase
