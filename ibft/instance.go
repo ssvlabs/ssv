@@ -27,12 +27,17 @@ import (
 var (
 	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_stage",
-		Help: "Count IBFTs by stages",
+		Help: "IBFTs stage",
+	}, []string{"lambda"})
+	metricsIBFTRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:ibft_round",
+		Help: "IBFTs round",
 	}, []string{"lambda"})
 )
 
 func init() {
 	prometheus.Register(metricsIBFTStage)
+	prometheus.Register(metricsIBFTRound)
 }
 
 // InstanceOptions defines option attributes for the Instance
@@ -170,6 +175,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
 	i.State.InputValue.Set(inputValue)
 	i.State.Round.Set(1) // start from 1
+	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get())).Set(1)
 
 	if i.IsLeader() {
 		go func() {
@@ -249,7 +255,9 @@ func (i *Instance) BumpRound() {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	i.processCommitQuorumOnce = sync.Once{}
-	i.State.Round.Set(i.State.Round.Get() + 1)
+	newRound := i.State.Round.Get() + 1
+	i.State.Round.Set(newRound)
+	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get())).Set(float64(newRound))
 }
 
 // ProcessStageChange set the State's round State and pushed the new State into the State channel
