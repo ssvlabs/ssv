@@ -43,7 +43,7 @@ func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 // GetSyncOffset returns the offset
 func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 	obj, found, err := s.db.Get(prefix, syncOffsetKey)
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {
@@ -78,23 +78,28 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	}
 	var operatorKey = string(operatorKeyByte)
 
-	newSk, exist, err := s.verifyPrivateKeyExist(operatorKey)
+	newSk, exist, err := s.verifyPrivateKeyExistAndGenerateIfNeed(operatorKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to verify operator private key")
 	}
-	if operatorKey != "" || newSk != "" {
-		if newSk != "" { // newly sk generated, need to set the operator key
-			operatorKey = newSk
-		}
-
-		if err := s.savePrivateKey(operatorKey); err != nil {
-			return errors.Wrap(err, "failed to save operator private key")
-		}
-	} else if operatorKey != "" {
-		if !exist {
-			s.logger.Info("using operator key from config")
+	if newSk != "" {
+		s.logger.Info("using newly generated operator key")
+	} else {
+		if exist {
+			if operatorKey != "" {
+				newSk = operatorKey
+				s.logger.Info("using key from config, overriding existing key")
+			} else {
+				s.logger.Info("using exist operator key from storage")
+			}
 		} else {
-			s.logger.Info("overriding operator key with config")
+			newSk = operatorKey
+			s.logger.Info("using operator key from config")
+		}
+	}
+	if newSk != "" {
+		if err := s.savePrivateKey(newSk); err != nil {
+			return errors.Wrap(err, "failed to save operator private key")
 		}
 	}
 
@@ -121,23 +126,18 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 	return nil
 }
 
-// verifyPrivateKeyExist return true if key exist and no new key passed else return new generated key
-func (s *storage) verifyPrivateKeyExist(operatorKey string) (string, bool, error) {
-	// check if sk is exist or passedKey is passed. if not, generate new operator key
+// verifyPrivateKeyExistAndGenerateIfNeed return true if key exist and no new key passed else return new generated key
+func (s *storage) verifyPrivateKeyExistAndGenerateIfNeed(operatorKey string) (string, bool, error) {
 	_, found, err := s.GetPrivateKey()
-	if !found {
-		if operatorKey == "" {
-			_, skByte, err := rsaencryption.GenerateKeys()
-			if err != nil {
-				return "", false, errors.Wrap(err, "failed to generate new keys")
-			}
-			s.logger.Info("using new generated operator key")
-			return string(skByte), false, nil // new key generated
+	if !found && operatorKey == "" { // no sk in storage and no key passed from config
+		_, skByte, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			return "", false, errors.Wrap(err, "failed to generate new keys")
 		}
+		return string(skByte), false, nil // new key generated
 	}
 	if err != nil { // need to generate new operator key
 		return "", false, errors.Wrap(err, "failed to get private key")
 	}
-	s.logger.Info("using operator key from storage")
-	return "", found, nil // key already exist, no need to return sk
+	return "", found, nil // key already exist or key passed from config, no need to return newly generated sk
 }
