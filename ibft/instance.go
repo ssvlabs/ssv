@@ -104,6 +104,8 @@ type Instance struct {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *InstanceOptions) *Instance {
+	metricsIBFTStage.WithLabelValues(string(opts.Lambda),
+		opts.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(proto.RoundState_NotStarted))
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
