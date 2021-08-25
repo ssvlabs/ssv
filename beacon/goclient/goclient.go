@@ -30,7 +30,7 @@ type beaconNodeStatus int32
 
 var (
 	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:validator:beacon_node_status",
+		Name: "ssv:beacon:node_status",
 		Help: "Status of the connected beacon node",
 	})
 	statusUnknown beaconNodeStatus = 0

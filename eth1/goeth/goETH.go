@@ -31,7 +31,7 @@ type eth1NodeStatus int32
 
 var (
 	metricsEth1NodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:validator:eth1_node_status",
+		Name: "ssv:eth1:node_status",
 		Help: "Status of the connected eth1 node",
 	})
 	statusUnknown eth1NodeStatus = 0
