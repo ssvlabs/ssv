@@ -132,6 +132,7 @@ func TestInit(t *testing.T) {
 }
 
 func TestSetStage(t *testing.T) {
+	secretKeys, _ := GenerateNodes(1)
 	instance := &Instance{
 		MsgQueue:   msgqueue.New(),
 		eventQueue: eventqueue.New(),
@@ -144,6 +145,9 @@ func TestSetStage(t *testing.T) {
 		},
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(),
+		ValidatorShare: &storage.Share{
+			PublicKey: secretKeys[1].GetPublicKey(),
+		},
 	}
 
 	c := instance.GetStageChan()
