@@ -124,9 +124,11 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 	// update metric once saved
 	l := string(signedMsg.Message.Lambda)
 	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
-	pubkey := l[:strings.Index(l, "_")]
-	metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda), pubkey).
-		Set(float64(signedMsg.Message.SeqNumber))
+	if idx := strings.Index(l, "_"); idx > 0 {
+		pubKey := l[:idx]
+		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda), pubKey).
+			Set(float64(signedMsg.Message.SeqNumber))
+	}
 
 	return nil
 }
