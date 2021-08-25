@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
@@ -15,6 +17,23 @@ import (
 type Handler interface {
 	// Start starts an http server, listening to /metrics requests
 	Start(mux *http.ServeMux, addr string) error
+}
+
+type nodeStatus int32
+
+var (
+	metricsNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:node_status",
+		Help: "Status of the operator node",
+	})
+	statusNotHealthy nodeStatus = 0
+	statusHealthy    nodeStatus = 1
+)
+
+func init() {
+	if err := prometheus.Register(metricsNodeStatus); err != nil {
+		log.Println("could not register prometheus collector")
+	}
 }
 
 // NewMetricsHandler creates a new instance
@@ -58,6 +77,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 
 	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
 		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+			metricsNodeStatus.Set(float64(statusNotHealthy))
 			result := map[string][]string{
 				"errors": errs,
 			}
@@ -66,8 +86,11 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			} else {
 				http.Error(res, string(raw), http.StatusInternalServerError)
 			}
-		} else if _, err := fmt.Fprintln(res, "{}"); err != nil {
-			http.Error(res, err.Error(), http.StatusInternalServerError)
+		} else {
+			metricsNodeStatus.Set(float64(statusHealthy))
+			if _, err := fmt.Fprintln(res, "{}"); err != nil {
+				http.Error(res, err.Error(), http.StatusInternalServerError)
+			}
 		}
 	})
 

@@ -10,10 +10,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 )
 
 // Node represents the behavior of SSV node
@@ -36,23 +33,6 @@ type Options struct {
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
-}
-
-type operatorNodeStatus int32
-
-var (
-	metricsOperatorNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:operator:node_status",
-		Help: "Status of the operator node",
-	})
-	statusNotHealthy operatorNodeStatus = 0
-	statusHealthy    operatorNodeStatus = 1
-)
-
-func init() {
-	if err := prometheus.Register(metricsOperatorNodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
-	}
 }
 
 // operatorNode implements Node interface
@@ -128,13 +108,7 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 
 // HealthCheck returns a list of issues regards the state of the operator node
 func (n *operatorNode) HealthCheck() []string {
-	errs := metrics.ProcessAgents(n.healthAgents())
-	if len(errs) > 0 {
-		metricsOperatorNodeStatus.Set(float64(statusNotHealthy))
-	} else {
-		metricsOperatorNodeStatus.Set(float64(statusHealthy))
-	}
-	return errs
+	return metrics.ProcessAgents(n.healthAgents())
 }
 
 func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
