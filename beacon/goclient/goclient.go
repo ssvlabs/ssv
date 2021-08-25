@@ -12,16 +12,37 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/metrics"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
 	"github.com/prysmaticlabs/prysm/shared/timeutils"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
+	"log"
 	"time"
 )
 
 const (
 	healthCheckTimeout = 10 * time.Second
 )
+
+type beaconNodeStatus int32
+
+var (
+	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:validator:beacon_node_status",
+		Help: "Status of the connected beacon node",
+	})
+	statusUnknown beaconNodeStatus = 0
+	statusSyncing beaconNodeStatus = 1
+	statusOK      beaconNodeStatus = 2
+)
+
+func init() {
+	if err := prometheus.Register(metricsBeaconNodeStatus); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+}
 
 // goClient implementing Beacon struct
 type goClient struct {
@@ -74,13 +95,16 @@ func (gc *goClient) HealthCheck() []string {
 		defer cancel()
 		syncState, err := provider.NodeSyncing(ctx)
 		if err != nil {
+			metricsBeaconNodeStatus.Set(float64(statusUnknown))
 			return []string{"could not get beacon node sync state"}
 		}
 		if syncState != nil && syncState.IsSyncing {
+			metricsBeaconNodeStatus.Set(float64(statusSyncing))
 			return []string{fmt.Sprintf("eth1 node is currently syncing: head=%d, distance=%d",
 				syncState.HeadSlot, syncState.SyncDistance)}
 		}
 	}
+	metricsBeaconNodeStatus.Set(float64(statusOK))
 	return []string{}
 }
 

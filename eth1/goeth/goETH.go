@@ -14,7 +14,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"log"
 	"math/big"
 	"strings"
 	"time"
@@ -23,6 +26,24 @@ import (
 const (
 	healthCheckTimeout = 10 * time.Second
 )
+
+type eth1NodeStatus int32
+
+var (
+	metricsEth1NodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:validator:eth1_node_status",
+		Help: "Status of the connected eth1 node",
+	})
+	statusUnknown eth1NodeStatus = 0
+	statusSyncing eth1NodeStatus = 1
+	statusOK      eth1NodeStatus = 2
+)
+
+func init() {
+	if err := prometheus.Register(metricsEth1NodeStatus); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+}
 
 // ClientOptions are the options for the client
 type ClientOptions struct {
@@ -110,13 +131,16 @@ func (ec *eth1Client) HealthCheck() []string {
 	defer cancel()
 	sp, err := ec.conn.SyncProgress(ctx)
 	if err != nil {
+		metricsEth1NodeStatus.Set(float64(statusUnknown))
 		return []string{"could not get eth1 node sync progress"}
 	}
 	if sp != nil {
+		metricsEth1NodeStatus.Set(float64(statusSyncing))
 		return []string{fmt.Sprintf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
 			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)}
 	}
 	// eth1 node is connected and synced
+	metricsEth1NodeStatus.Set(float64(statusOK))
 	return []string{}
 }
 
