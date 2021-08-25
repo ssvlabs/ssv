@@ -273,7 +273,7 @@ func (i *Instance) BumpRound() {
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	metricsIBFTStage.WithLabelValues(string(i.State.Lambda.Get()),
 		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(stage))
-	i.Logger.Debug("xxx stage change", zap.Int32("stage", int32(stage)))
+
 	i.State.Stage.Set(int32(stage))
 
 	// Delete all queue messages when decided, we do not need them anymore.
