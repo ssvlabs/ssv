@@ -6,9 +6,6 @@ import (
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"log"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -16,26 +13,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"go.uber.org/zap"
 )
-
-var (
-	metricsRunningIBFTsCount = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:validator:running_ibfts_count_all",
-		Help: "Count all running IBFTs",
-	})
-	metricsRunningIBFTs = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:running_ibfts_count",
-		Help: "Count running IBFTs by validator pub key",
-	}, []string{"pubKey"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsRunningIBFTsCount); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRunningIBFTs); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
 func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, seqNumber uint64, sigRoot []byte, signaturesCount int, committiee map[uint64]*proto.Node) (map[uint64][]byte, error) {
