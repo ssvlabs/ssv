@@ -5,24 +5,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 )
-
-var (
-	metricsIBFTDecidedMsgsOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:ibft_decided_messages_outbound",
-		Help: "Count IBFT decided messages outbound",
-	}, []string{"topic"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsIBFTDecidedMsgsOutbound); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // BroadcastDecided broadcasts a decided instance with collected signatures
 func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error {

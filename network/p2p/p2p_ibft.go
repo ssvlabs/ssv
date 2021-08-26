@@ -5,25 +5,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 )
-
-
-var (
-	metricsIBFTMsgsOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:ibft_messages_outbound",
-		Help: "Count IBFT messages outbound",
-	}, []string{"topic"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsIBFTMsgsOutbound); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // Broadcast propagates a signed message to all peers
 func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
