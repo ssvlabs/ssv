@@ -13,6 +13,9 @@
 The following is a list of all collected metrics in SSV:
 
 * `go_*` metrics by `prometheus`
+* `ssv:node_status` Health check status of operator node
+* `ssv:eth1:node_status` Health check status of eth1 node
+* `ssv:beacon:node_status` Health check status of beacon node
 * `ssv:network:connected_peers{pubKey}` Count connected peers for a validator
 * `ssv:network:ibft_decided_messages_outbound{topic}` Count IBFT decided messages outbound
 * `ssv:network:ibft_messages_outbound{topic}` Count IBFT messages outbound
@@ -20,7 +23,7 @@ The following is a list of all collected metrics in SSV:
 * `ssv:validator:ibft_highest_decided{lambda}` The highest decided sequence number
 * `ssv:validator:ibft_round{lambda}` IBFTs round
 * `ssv:validator:ibft_stage{lambda}` IBFTs stage
-* `ssv:validator:ibfts_on_init{pubKey}` Count IBFTs in 'init' phase
+* `ssv:validator:ibft_current_slot{pubKey}` Current running slot
 * `ssv:validator:running_ibfts_count{pubKey}` Count running IBFTs by validator pub key
 * `ssv:validator:running_ibfts_count_all` Count all running IBFTs
 

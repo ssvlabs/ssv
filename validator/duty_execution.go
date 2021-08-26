@@ -202,13 +202,9 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.D
 		zap.Uint64("slot", slot),
 		zap.String("duty_type", duty.Type.String()))
 
-	// writing metrics
-	metricsRunningIBFTsCount.Inc()
-	defer metricsRunningIBFTsCount.Dec()
-
-	pubKey := v.Share.PublicKey.SerializeToHexStr()
-	metricsRunningIBFTs.WithLabelValues(pubKey).Inc()
-	defer metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
+	// reporting metrics
+	done := v.reportDutyExecutionMetrics(duty)
+	defer done()
 
 	logger.Debug("executing duty...")
 	signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)
