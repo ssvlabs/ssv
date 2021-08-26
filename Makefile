@@ -91,7 +91,7 @@ docker-debug:
 
 .PHONY: stop
 stop:
-	@docker-compose  down
+	@docker-compose down
 
 .PHONY: start-boot-node
 start-boot-node:
@@ -102,3 +102,9 @@ start-boot-node:
 start-exporter:
 	@echo "Running exporter on address: ${HOST_ADDRESS}"
 	${BUILD_PATH} start-exporter ${NODE_COMMAND}
+
+MONITOR_NODES=prometheus grafana
+.PHONY: docker-monitor
+docker-monitor:
+	@echo $(MONITOR_NODES)
+	@docker-compose up --build $(MONITOR_NODES)
