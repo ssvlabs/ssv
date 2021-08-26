@@ -121,7 +121,12 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 	if err = i.save(value, "highest", signedMsg.Message.Lambda); err != nil {
 		return err
 	}
-	// update metric once saved
+	reportHighestDecided(signedMsg)
+
+	return nil
+}
+
+func reportHighestDecided(signedMsg *proto.SignedMessage) {
 	l := string(signedMsg.Message.Lambda)
 	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
 	if idx := strings.Index(l, "_"); idx > 0 {
@@ -129,8 +134,6 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda), pubKey).
 			Set(float64(signedMsg.Message.SeqNumber))
 	}
-
-	return nil
 }
 
 // GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
