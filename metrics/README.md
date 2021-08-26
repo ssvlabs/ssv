@@ -8,8 +8,9 @@
 
 `/metrics` end-point is exposing metrics from ssv node to prometheus.
 
-Prometheus should also hit `/health` end-point. \
-But if not configured, the end-point can be invoked as it is simpler and doesn't contain metrics.
+Prometheus should also hit `/health` end-point in order to collect the health check metrics. \
+Even if prometheus is not configured, the end-point can simply be polled by a simple HTTP client 
+(it doesn't contain metrics)
 
 See the configuration of a [local prometheus service](../prometheus/prometheus.yaml) 
 
@@ -62,4 +63,31 @@ If the node is not healthy, the corresponding errors will be returned with HTTP 
 ```shell
 $ curl http://localhost:15000/health
 {"errors": ["could not sync eth1 events"]}
+```
+
+#### Profiling
+
+Profiling can be enabled via config:
+```yaml
+EnableProfile: true
+```
+
+All the default `pprof` routes are available via HTTP:
+```shell
+$ curl http://localhost:15000/debug/pprof/goroutine?minutes\=20 --output goroutines.tar.gz
+```
+
+Open with Go CLI:
+```shell
+$ go tool pprof goroutines.tar.gz
+```
+
+Or with Web UI:
+```shell
+$ go tool pprof -web goroutines.tar.gz
+```
+
+Another option is to visualize results in web UI directly:
+```shell
+$ go tool pprof -web http://localhost:15001/debug/pprof/heap?minutes=5
 ```
