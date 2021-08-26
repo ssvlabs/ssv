@@ -77,6 +77,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 
 	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
 		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+			mh.logger.Debug("xxx health check ERROR", zap.Strings("errs", errs))
 			metricsNodeStatus.Set(float64(statusNotHealthy))
 			result := map[string][]string{
 				"errors": errs,
@@ -87,6 +88,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 				http.Error(res, string(raw), http.StatusInternalServerError)
 			}
 		} else {
+			mh.logger.Debug("xxx health check OK")
 			metricsNodeStatus.Set(float64(statusHealthy))
 			if _, err := fmt.Fprintln(res, "{}"); err != nil {
 				http.Error(res, err.Error(), http.StatusInternalServerError)
