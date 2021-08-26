@@ -35,8 +35,6 @@ vendor/
 .idea/**/gradle.xml
 .idea/**/libraries
 
-# Jet brains
-.idea
 
 .DS_Store
 

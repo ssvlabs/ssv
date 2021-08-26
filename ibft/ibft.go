@@ -2,10 +2,7 @@ package ibft
 
 import (
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 	"sync"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -16,19 +13,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
 )
-
-var (
-	metricsIBFTsOnInit = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibfts_on_init",
-		Help: "Count IBFTs in 'init' phase",
-	}, []string{"pubKey"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsIBFTsOnInit); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // StartOptions defines type for IBFT instance options
 type StartOptions struct {
@@ -65,9 +49,6 @@ type IBFT interface {
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte
-
-	// CurrentState returns the state of the running instance
-	CurrentState() (*proto.State, bool, error)
 }
 
 // ibftImpl implements IBFT interface
@@ -109,10 +90,6 @@ func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage co
 
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *ibftImpl) Init() {
-	pubkey := i.ValidatorShare.PublicKey.SerializeToHexStr()
-	metricsIBFTsOnInit.WithLabelValues(pubkey).Inc()
-	defer metricsIBFTsOnInit.WithLabelValues(pubkey).Dec()
-
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
@@ -147,7 +124,3 @@ func (i *ibftImpl) GetIdentifier() []byte {
 	return i.Identifier //TODO should use mutex to lock var?
 }
 
-// CurrentState returns the state of the running instance
-func (i *ibftImpl) CurrentState() (*proto.State, bool, error) {
-	return i.ibftStorage.GetCurrentInstance(i.Identifier)
-}

@@ -5,24 +5,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 )
-
-var (
-	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_current_sequence",
-		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsCurrentSequence); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!

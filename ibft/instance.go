@@ -8,9 +8,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"log"
 	"sync"
 	"time"
 
@@ -24,26 +21,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 )
-
-var (
-	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_stage",
-		Help: "IBFTs stage",
-	}, []string{"lambda","pubKey"})
-	metricsIBFTRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_round",
-		Help: "IBFTs round",
-	}, []string{"lambda","pubKey"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsIBFTStage); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsIBFTRound); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
