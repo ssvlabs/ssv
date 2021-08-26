@@ -4,9 +4,14 @@
 <br>
 
 
-# SSV - Metrics
+# SSV - Monitoring
 
-`GET /metrics` end-point is exposing metrics from ssv node to prometheus.
+`/metrics` end-point is exposing metrics from ssv node to prometheus.
+
+Prometheus should also hit `/health` end-point. \
+But if not configured, the end-point can be invoked as it is simpler and doesn't contain metrics.
+
+See the configuration of a [local prometheus service](../prometheus/prometheus.yaml) 
 
 ### Collected Metrics
 
@@ -31,7 +36,7 @@ The following is a list of all collected metrics in SSV:
 
 #### Metrics
 
-`MetricsAPIPort` is used to enable metrics collection and expose the API:
+`MetricsAPIPort` is used to enable prometheus metrics collection:
 
 Example:
 ```yaml
@@ -43,53 +48,14 @@ Or as env variable:
 METRICS_API_PORT=15000
 ```
 
-```shell
-$ curl http://localhost:15000/metrics
-```
-
-#### Profiling
-
-Profiling needs to be enabled via config:
-```yaml
-EnableProfile: true
-```
-
-Then all `pprof` routes will be available:
-```shell
-$ curl http://localhost:15000/debug/pprof/goroutine?seconds=40 --output goroutines.tar.gz
-$ go tool pprof goroutines.tar.gz
-```
-Or in web view:
-```shell
-$ go tool pprof -web goroutines.tar.gz
-```
-
-##### Web UI
-
-To visualize results in web UI directly:
-```shell
-$ go tool pprof -web http://localhost:15001/debug/pprof/heap?minutes=5
-```
-
-##### Pull from stage
-
-```shell
-$ curl http://18.237.221.242:15000/metrics --output metrics.out
-$ curl http://18.237.221.242:15000/debug/pprof/goroutine\?minutes\=20 --output goroutines.tar.gz
-$ curl http://18.237.221.242:15000/debug/pprof/heap\?minutes\=20 --output heap.tar.gz
-```
-```shell
-$ go tool pprof -web goroutines.tar.gz 
-$ go tool pprof -web heap.tar.gz
-```
+`<node>:15000/metrics` should be the target for prometheus.
 
 #### Health Check
 
 Health check route is available on `GET /health`. \
-In case the node is healthy it returns an HTTP Code `200` with empty JSON:
+In case the node is healthy it returns an HTTP Code `200` with empty response:
 ```shell
 $ curl http://localhost:15000/health
-{}
 ```
 
 If the node is not healthy, the corresponding errors will be returned with HTTP Code `500`:
