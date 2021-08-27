@@ -130,14 +130,16 @@ services:
       DEBUG_PORT: 40009
       CONFIG_PATH: ./config/config.exporter.yaml
 
+# monitoring services
+
   prometheus:
     container_name: prometheus
     image: prom/prometheus:v2.24.0
     volumes:
-      - ./prometheus/:/etc/prometheus/
+      - ./monitoring/:/etc/prometheus/
       - data_prometheus:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--config.file=/etc/prometheus/prometheus.yaml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
