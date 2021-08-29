@@ -9,7 +9,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/metrics"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"

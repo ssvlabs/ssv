@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/metrics"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator"
