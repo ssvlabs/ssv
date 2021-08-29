@@ -7,13 +7,6 @@
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
-    },
-    {
-      "name": "VAR_VALIDATOR_DASHBOARD_ID",
-      "type": "constant",
-      "label": "validator_dashboard_id",
-      "value": "XIbEQ37nk",
-      "description": "SSV validator dashboard id"
     }
   ],
   "__requires": [
@@ -419,49 +412,6 @@
               {
                 "id": "custom.width",
                 "value": 125
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Dashboard"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "ssv": {
-                        "index": 0,
-                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "",
-                    "url": "/d/${validator_dashboard_id}/ssv-validator?orgId=1&refresh=10s&var-instance=${instance}&var-pubkey=${__data.fields[\"Public Key\"]}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.width",
-                "value": 90
-              },
-              {
-                "id": "custom.filterable"
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "image"
               }
             ]
           }
@@ -1645,28 +1595,6 @@
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
-      },
-      {
-        "description": null,
-        "error": null,
-        "hide": 2,
-        "label": null,
-        "name": "validator_dashboard_id",
-        "query": "${VAR_VALIDATOR_DASHBOARD_ID}",
-        "skipUrlSync": false,
-        "type": "constant",
-        "current": {
-          "value": "${VAR_VALIDATOR_DASHBOARD_ID}",
-          "text": "${VAR_VALIDATOR_DASHBOARD_ID}",
-          "selected": false
-        },
-        "options": [
-          {
-            "value": "${VAR_VALIDATOR_DASHBOARD_ID}",
-            "text": "${VAR_VALIDATOR_DASHBOARD_ID}",
-            "selected": false
-          }
-        ]
       }
     ]
   },

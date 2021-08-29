@@ -100,4 +100,8 @@ In order to setup a grafana dashboard do the following:
 3. Spin up Grafana
 4. Import [SSV Operator dashboard](./grafana/dashboard_ssv_operator.json)
 5. Align dashboard variables:
-  - `instance` - container name, used in 'instance' field for metrics coming from prometheus
+  * `instance` - container name, used in 'instance' field for metrics coming from prometheus
+
+#### Notes
+
+* Prometheus Job name assumed to be '`ssv`' 
