@@ -514,7 +514,7 @@
           "expr": "ssv:validator:ibft_current_sequence{instance=~\"$instance.*\"}",
           "format": "table",
           "hide": false,
-          "instant": true,
+          "instant": false,
           "interval": "",
           "legendFormat": "",
           "refId": "C"
