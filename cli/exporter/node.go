@@ -9,7 +9,7 @@ import (
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
-	"github.com/bloxapp/ssv/metrics"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"

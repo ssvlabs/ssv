@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/metrics"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"

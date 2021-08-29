@@ -134,7 +134,7 @@ OperatorPrivateKey: LS0tLS...
 
   #### 5.2 Metrics Configuration
 
-  In order to enable [metrics](../metrics/README.md), the corresponding config should be in place:
+  In order to enable [metrics](../monitoring/README.md), the corresponding config should be in place:
 
   ```
   $ yq w -i config.yaml MetricsAPIPort "15000"

@@ -12,7 +12,7 @@ Prometheus should also hit `/health` end-point in order to collect the health ch
 Even if prometheus is not configured, the end-point can simply be polled by a simple HTTP client 
 (it doesn't contain metrics)
 
-See the configuration of a [local prometheus service](../prometheus/prometheus.yaml) 
+See the configuration of a [local prometheus service](prometheus/prometheus.yaml) 
 
 ### Collected Metrics
 

@@ -8,7 +8,7 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/metrics"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/storage"
