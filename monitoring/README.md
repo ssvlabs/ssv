@@ -91,3 +91,13 @@ Another option is to visualize results in web UI directly:
 ```shell
 $ go tool pprof -web http://localhost:15001/debug/pprof/heap?minutes=5
 ```
+
+### Grafana
+
+In order to setup a grafana dashboard do the following:
+1. Enable metrics (`MetricsAPIPort`)
+2. Spin up Prometheus as mentioned in the beginning of this document
+3. Spin up Grafana
+4. Import [SSV Operator dashboard](./grafana/dashboard_ssv_operator.json)
+5. Align dashboard variables:
+  - `instance` - container name, used in 'instance' field for metrics coming from prometheus
