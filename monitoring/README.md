@@ -104,4 +104,8 @@ In order to setup a grafana dashboard do the following:
 
 #### Notes
 
-* Prometheus Job name assumed to be '`ssv`' 
+* Prometheus Job name assumed to be '`ssv`'
+* Required (K8S) metrics for showing `Process Health` panels:
+  * `kubelet_volume_stats_used_bytes`
+  * `container_cpu_usage_seconds_total`
+  * `container_memory_working_set_bytes`
