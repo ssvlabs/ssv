@@ -583,7 +583,7 @@
               "instance 6": true,
               "instance 7": true,
               "job 1": false,
-              "job 2": false,
+              "job 2": true,
               "job 3": true,
               "job 4": true,
               "job 5": true,
