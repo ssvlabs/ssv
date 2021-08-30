@@ -29,6 +29,7 @@
   + [Run](#run)
     - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
     - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
+    - [Prometheus and Grafana for local network](#prometheus-and-grafana-for-local-network)
 * [Coding Standards](#coding-standards)
 
 ## Usage
@@ -150,6 +151,15 @@ $ make docker-all
 ```shell
 $ make docker-debug 
 ```
+
+#### Prometheus and Grafana for local network
+
+In order to spin up local prometheus and grafana use:
+```shell
+$ make docker-monitor
+```
+
+For a grafana dashboard, use the [SSV Operator dashboard](../monitoring/grafana/dashboard_ssv_operator.json) as explained in [monitoring/README.md#grafana](../monitoring/README.md#grafana) 
 
 ## Coding Standards
 

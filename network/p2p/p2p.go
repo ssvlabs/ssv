@@ -192,9 +192,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 func (n *p2pNetwork) watchTopicPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		for name, topic := range n.cfg.Topics {
-			count := len(topic.ListPeers())
-			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", topic.ListPeers()))
-			metricsConnectedPeers.WithLabelValues(name).Set(float64(count))
+			peers := n.allPeersOfTopic(topic)
+			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
+			metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 		}
 	})
 }
@@ -301,25 +301,30 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 
 // AllPeers returns all connected peers for a validator PK (except for the validator itself)
 func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
-	ret := make([]string, 0)
-
 	topic, err := n.getTopic(validatorPk)
 	if err != nil {
 		return nil, err
 	}
 
+	return n.allPeersOfTopic(topic), nil
+}
+
+// AllPeers returns all connected peers for a validator PK (except for the validator itself)
+func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
+	ret := make([]string, 0)
+
 	invisiblePeers := ignorePeers()
 
 	for _, p := range topic.ListPeers() {
-		s := peerToString(p)
-		if invisiblePeers[s] {
+		if s := peerToString(p); invisiblePeers[s] {
 			// ignoring invisible peer
 			continue
+		} else {
+			ret = append(ret, peerToString(p))
 		}
-		ret = append(ret, peerToString(p))
 	}
 
-	return ret, nil
+	return ret
 }
 
 // getTopicName return formatted topic name
