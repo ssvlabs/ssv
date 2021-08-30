@@ -24,6 +24,9 @@ func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage
 	}
 
 	n.logger.Debug("Broadcasting decided message", zap.String("lambda", string(msg.Message.Lambda)), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
+
+	metricsIBFTDecidedMsgsOutbound.WithLabelValues(topic.String()).Inc()
+
 	return topic.Publish(n.ctx, msgBytes)
 }
 

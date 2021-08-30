@@ -8,15 +8,13 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/metrics"
-	metrics_ps "github.com/bloxapp/ssv/metrics/process"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator"
-	metrics_validator "github.com/bloxapp/ssv/validator/metrics"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -155,10 +153,6 @@ func init() {
 }
 
 func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
-	// register process metrics
-	metrics_ps.SetupProcessMetrics()
-	p2p.SetupNetworkMetrics(logger, cfg.SSVOptions.ValidatorOptions.Network)
-	metrics_validator.SetupMetricsCollector(logger, cfg.SSVOptions.ValidatorController, cfg.SSVOptions.ValidatorOptions.Network)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)

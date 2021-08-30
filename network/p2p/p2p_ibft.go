@@ -24,6 +24,8 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 	}
 
 	n.logger.Debug("broadcasting ibft msg", zap.String("lambda", string(msg.Message.Lambda)), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
+	metricsIBFTMsgsOutbound.WithLabelValues(topic.String()).Inc()
+
 	return topic.Publish(n.ctx, msgBytes)
 }
 

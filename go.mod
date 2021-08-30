@@ -25,6 +25,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.11.0
 	github.com/prysmaticlabs/ethereumapis v0.0.0-20210118163152-3569d231d255
 	github.com/prysmaticlabs/go-bitfield v0.0.0-20210202205921-7fcea7c45dc8
 	github.com/prysmaticlabs/go-ssz v0.0.0-20200612203617-6d5c9aa213ae

@@ -6,8 +6,11 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
-
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+	"log"
+	"strings"
 )
 
 // Iibft is an interface for persisting chain data
@@ -24,6 +27,19 @@ type Iibft interface {
 	SaveHighestDecidedInstance(signedMsg *proto.SignedMessage) error
 	// GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
 	GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, bool, error)
+}
+
+var (
+	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:ibft_highest_decided",
+		Help: "The highest decided sequence number",
+	}, []string{"lambda", "pubKey"})
+)
+
+func init() {
+	if err := prometheus.Register(metricsHighestDecided); err != nil {
+		log.Println("could not register prometheus collector")
+	}
 }
 
 // IbftStorage struct
@@ -100,7 +116,24 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, "highest", signedMsg.Message.Lambda)
+
+
+	if err = i.save(value, "highest", signedMsg.Message.Lambda); err != nil {
+		return err
+	}
+	reportHighestDecided(signedMsg)
+
+	return nil
+}
+
+func reportHighestDecided(signedMsg *proto.SignedMessage) {
+	l := string(signedMsg.Message.Lambda)
+	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
+	if idx := strings.Index(l, "_"); idx > 0 {
+		pubKey := l[:idx]
+		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Lambda), pubKey).
+			Set(float64(signedMsg.Message.SeqNumber))
+	}
 }
 
 // GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
