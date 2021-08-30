@@ -16,6 +16,8 @@ func TestSyncEth1(t *testing.T) {
 	rawOffset := DefaultSyncOffset().Uint64()
 	rawOffset += 10
 	go func() {
+		// wait 5 ms and start to push events
+		time.Sleep(5 * time.Millisecond)
 		logs := []types.Log{{BlockNumber: rawOffset - 1}, {BlockNumber: rawOffset}}
 		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
 		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
