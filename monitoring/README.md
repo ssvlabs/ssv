@@ -12,11 +12,23 @@ Prometheus should also hit `/health` end-point in order to collect the health ch
 Even if prometheus is not configured, the end-point can simply be polled by a simple HTTP client 
 (it doesn't contain metrics)
 
-See the configuration of a [local prometheus service](prometheus/prometheus.yaml) 
+See the configuration of a [local prometheus service](prometheus/prometheus.yaml).
 
-### Collected Metrics
+### Metrics
 
-The following is a list of all collected metrics in SSV:
+`MetricsAPIPort` is used to enable prometheus metrics collection:
+
+Example:
+```yaml
+MetricsAPIPort: 15000
+```
+
+Or as env variable:
+```shell
+METRICS_API_PORT=15000
+```
+
+##### Collected Metrics:
 
 * `go_*` metrics by `prometheus`
 * `ssv:node_status` Health check status of operator node
@@ -33,25 +45,25 @@ The following is a list of all collected metrics in SSV:
 * `ssv:validator:running_ibfts_count{pubKey}` Count running IBFTs by validator pub key
 * `ssv:validator:running_ibfts_count_all` Count all running IBFTs
 
-### Usage
 
-#### Metrics
+### Grafana
 
-`MetricsAPIPort` is used to enable prometheus metrics collection:
+In order to setup a grafana dashboard do the following:
+1. Enable metrics (`MetricsAPIPort`)
+2. Setup Prometheus as mentioned in the beginning of this document and add as data source
+    * Job name assumed to be '`ssv`'
+3. Import [SSV Operator dashboard](./grafana/dashboard_ssv_operator.json) to Grafana
+4. Align dashboard variables:
+    * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
+      In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
 
-Example:
-```yaml
-MetricsAPIPort: 15000
-```
+**Note:** In order to show `Process Health` panels, the following K8S metrics should be exposed:
+* `kubelet_volume_stats_used_bytes`
+* `container_cpu_usage_seconds_total`
+* `container_memory_working_set_bytes`
 
-Or as env variable:
-```shell
-METRICS_API_PORT=15000
-```
 
-`<node>:15000/metrics` should be the target for prometheus.
-
-#### Health Check
+### Health Check
 
 Health check route is available on `GET /health`. \
 In case the node is healthy it returns an HTTP Code `200` with empty response:
@@ -65,7 +77,8 @@ $ curl http://localhost:15000/health
 {"errors": ["could not sync eth1 events"]}
 ```
 
-#### Profiling
+
+### Profiling
 
 Profiling can be enabled via config:
 ```yaml
@@ -91,19 +104,3 @@ Another option is to visualize results in web UI directly:
 ```shell
 $ go tool pprof -web http://localhost:15001/debug/pprof/heap?minutes=5
 ```
-
-### Grafana
-
-In order to setup a grafana dashboard do the following:
-1. Enable metrics (`MetricsAPIPort`)
-2. Setup Prometheus as mentioned in the beginning of this document and add as data source
-    * Job name assumed to be '`ssv`'
-3. Import [SSV Operator dashboard](./grafana/dashboard_ssv_operator.json) to Grafana
-4. Align dashboard variables:
-    * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
-    In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
-
-**Note:** In order to show `Process Health` panels, the following K8S metrics should be exposed:
-  * `kubelet_volume_stats_used_bytes`
-  * `container_cpu_usage_seconds_total`
-  * `container_memory_working_set_bytes`

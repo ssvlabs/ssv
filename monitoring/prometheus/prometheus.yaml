@@ -7,7 +7,8 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-        # change the targets according to your container names
+        # change the targets according to your setup
+        # - <container_name>:15000
         - ssv-node-1:15000
         - ssv-node-2:15000
         - ssv-node-3:15000
