@@ -16,6 +16,7 @@
     - [5.3 Profiling Configuration](#53-profiling-configuration)
   + [6. Start SSV Node in Docker](#6-start-ssv-node-in-docker)
   + [7. Update SSV Node Image](#7-update-ssv-node-image)
+  + [8. Setup Monitoring](#8-setup-monitoring)
 
 ## Setting AWS Server for Operator
 
@@ -134,11 +135,13 @@ OperatorPrivateKey: LS0tLS...
 
   #### 5.2 Metrics Configuration
 
-  In order to enable [metrics](../monitoring/README.md), the corresponding config should be in place:
+  In order to enable metrics, the corresponding config should be in place:
 
   ```
   $ yq w -i config.yaml MetricsAPIPort "15000"
   ```
+
+  See [setup monitoring](#8-setup-monitoring) for more details.
 
   #### 5.3 Profiling Configuration
 
@@ -171,3 +174,34 @@ $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 
 Now run the container again as specified above in step 6.
 
+### 8. Setup Monitoring
+
+Follow the next steps to setup a local monitoring environment (prometheus and grafana containers):
+
+1. Prometheus:
+```shell
+# download prometheus config
+$ mkdir prometheus && wget -O ./prometheus/prometheus.yaml https://raw.githubusercontent.com/bloxapp/ssv/stage/monitoring/prometheus/prometheus.yaml
+# start a container
+$ docker run --user root -p 9390:9090 -dit --name=prometheus -v $(pwd)/prometheus/:/data/prometheus -v $(pwd)/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml 'prom/prometheus:v2.24.0' --config.file="/etc/prometheus/prometheus.yml" --storage.tsdb.path="/data/prometheus"
+```
+
+2. Grafana:
+```shell
+# create a data dir
+$ mkdir grafana
+# start a container
+$ docker run -p 3000:3000 -dti -v $(pwd)/grafana/:/var/lib/grafana --name=grafana 'grafana/grafana:8.0.0'
+```
+
+3. Create a local network for connectivity of all containers:
+```shell
+$ docker network create --driver bridge ssv-net
+$ docker network connect --alias ssv-node-1 ssv-net ssv_node
+$ docker network connect --alias prometheus ssv-net prometheus
+$ docker network connect --alias grafana ssv-net grafana
+```
+
+4. Expose grafana externally by adding inbound rule to open port 3000 or by some proxy such as Nginx.
+
+5. Follow grafana instructions in [monitoring > grafana](../monitoring/README.md#grafana)
