@@ -182,9 +182,9 @@
                 "value": [
                   {
                     "options": {
-                      "3": {
-                        "color": "super-light-green",
-                        "index": 2
+                      "2": {
+                        "color": "yellow",
+                        "index": 1
                       }
                     },
                     "type": "value"
@@ -196,16 +196,16 @@
                         "color": "red",
                         "index": 0
                       },
-                      "to": 2
+                      "to": 1
                     },
                     "type": "range"
                   },
                   {
                     "options": {
-                      "from": 4,
+                      "from": 3,
                       "result": {
                         "color": "green",
-                        "index": 1
+                        "index": 2
                       },
                       "to": 10
                     },
@@ -1604,7 +1604,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "SSV Node Stage",
+  "title": "SSV Operator Node",
   "uid": "FIbEQ37nk",
   "version": 36
 }
