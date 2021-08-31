@@ -205,3 +205,7 @@ $ docker network connect --alias grafana ssv-net grafana
 4. Expose grafana externally by adding inbound rule to open port 3000 or by some proxy such as Nginx.
 
 5. Follow grafana instructions in [monitoring > grafana](../monitoring/README.md#grafana)
+
+**Notes:**
+* change the values of `instance` variable in Grafana (`Settings > Variables`) to `ssv-node-1`
+* `Process Health` panels are showing K8S metrics which is not used in this setup, and therefore won't be available
