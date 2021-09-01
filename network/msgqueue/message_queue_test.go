@@ -1,13 +1,10 @@
 package msgqueue
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/stretchr/testify/require"
-	"sync"
 	"testing"
-	"time"
 )
 
 func TestMessageQueue_PurgeAllIndexedMessages(t *testing.T) {
@@ -107,70 +104,6 @@ func TestMessageQueue_DeleteMessagesWithIds(t *testing.T) {
 	msg, exist := msgQ.allMessages.Get(msgID.id)
 	require.False(t, exist)
 	require.Nil(t, msg)
-}
-
-func TestMessageQueue_Concurrent(t *testing.T) {
-	var wg sync.WaitGroup
-	ibftMsgAdded := make(chan bool)
-	sigMsgAdded := make(chan bool)
-	msgQ := New()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for seq := 0; seq < 10; seq++ {
-			for r := 0; r < 10; r++ {
-				msgQ.AddMessage(newNetMsg([]byte{1, 2, 3, 4}, uint64(r), uint64(seq), network.NetworkMsg_IBFTType))
-			}
-			if seq == 2 {
-				ibftMsgAdded <- true
-			}
-			time.Sleep(1 * time.Millisecond)
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for seq := 0; seq < 10; seq++ {
-			for r := 0; r < 10; r++ {
-				msgQ.AddMessage(newNetMsg([]byte{1, 2, 3, 4}, uint64(r), uint64(seq), network.NetworkMsg_SignatureType))
-			}
-			if seq == 2 {
-				sigMsgAdded <- true
-			}
-			time.Sleep(1 * time.Millisecond)
-		}
-	}()
-
-	// waiting for 2 messages to be added and then starts to count and pop messages
-	<-ibftMsgAdded
-	<-sigMsgAdded
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for seq := 0; seq < 10; seq++ {
-			idx := fmt.Sprintf("sig_lambda_01020304_seqNumber_%d", seq)
-			require.Equal(t, 10, msgQ.MsgCount(idx), "failed to find sig msg for %s", idx)
-			time.Sleep(1 * time.Millisecond)
-		}
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(6 * time.Millisecond)
-		for seq := 0; seq < 10; seq++ {
-			for r := 0; r < 10; r++ {
-				require.NotNil(t, msgQ.PopMessage(fmt.Sprintf("lambda_01020304_seqNumber_%d", seq)))
-				require.NotNil(t, msgQ.PopMessage(fmt.Sprintf("sig_lambda_01020304_seqNumber_%d", seq)))
-			}
-			time.Sleep(1 * time.Millisecond)
-		}
-	}()
-
-	wg.Wait()
 }
 
 func newNetMsg(lambda []byte, round, seq uint64, t network.NetworkMsg) *network.Message {
