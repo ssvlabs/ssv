@@ -70,8 +70,6 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value)
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
-				i.stopRoundTimer()
-
 				i.Logger.Info("commit iBFT instance",
 					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()),
 					zap.Int("got_votes", len(sigs)))
