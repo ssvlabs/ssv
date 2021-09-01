@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"go.uber.org/zap"
+	"github.com/pkg/errors"
 	"time"
 )
 
@@ -23,6 +23,7 @@ func (i *ibftImpl) processSyncQueueMessages() {
 			time.Sleep(time.Millisecond * 100)
 		}
 	}()
+	i.logger.Info("sync messages queue started")
 }
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
@@ -37,7 +38,12 @@ func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
 }
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
-func (i *ibftImpl) SyncIBFT() {
+func (i *ibftImpl) SyncIBFT() error {
+	if !i.syncingLock.TryAcquire(1) {
+		return errors.New("failed to start iBFT sync, already running")
+	}
+	defer i.syncingLock.Release(1)
+
 	i.logger.Info("syncing iBFT..")
 
 	// stop current instance and return any waiting chan.
@@ -49,6 +55,7 @@ func (i *ibftImpl) SyncIBFT() {
 	s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
 	err := s.Start()
 	if err != nil {
-		i.logger.Fatal("history sync failed", zap.Error(err))
+		return errors.Wrap(err, "history sync failed")
 	}
+	return nil
 }
