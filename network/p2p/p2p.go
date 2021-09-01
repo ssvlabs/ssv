@@ -184,13 +184,19 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.handleStream()
 
-	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		for name, topic := range n.cfg.Topics {
-			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", topic.ListPeers()))
-		}
-	})
+	n.watchTopicPeers()
 
 	return n, nil
+}
+
+func (n *p2pNetwork) watchTopicPeers() {
+	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		for name, topic := range n.cfg.Topics {
+			peers := n.allPeersOfTopic(topic)
+			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
+			metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+		}
+	})
 }
 
 func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
@@ -218,11 +224,11 @@ func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) b
 
 // listen listens to some validator's topic
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
-	n.logger.Info("start listen to topic", zap.String("topic", sub.Topic()))
+	t := sub.Topic()
+	n.logger.Info("start listen to topic", zap.String("topic", t))
 	for {
 		select {
 		case <-n.ctx.Done():
-			t := sub.Topic()
 			if err := n.cfg.Topics[t].Close(); err != nil {
 				n.logger.Error("failed to close Topics", zap.Error(err))
 			}
@@ -238,6 +244,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
+			metricsNetMsgsInbound.WithLabelValues(t).Inc()
 			n.propagateSignedMsg(&cm)
 		}
 	}
@@ -246,32 +253,33 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 // propagateSignedMsg takes an incoming message (from validator's topic)
 // and propagates it to the corresponding internal listeners
 func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
-	logger := n.logger.With(zap.String("func", "propagateSignedMsg"))
 	// TODO: find a better way to deal with nil message
 	// 	i.e. avoid sending nil messages in the network
 	if cm == nil || cm.SignedMessage == nil {
-		logger.Debug("could not propagate nil message")
+		n.logger.Debug("could not propagate nil message")
 		return
 	}
-	for _, ls := range n.listeners {
-		go func(ls listener, sm *proto.SignedMessage, msgType network.NetworkMsg) {
-			switch msgType {
-			case network.NetworkMsg_IBFTType:
-				if ls.msgCh != nil {
-					ls.msgCh <- sm
-				}
-			case network.NetworkMsg_SignatureType:
-				if ls.sigCh != nil {
-					ls.sigCh <- sm
-				}
-			case network.NetworkMsg_DecidedType:
-				if ls.decidedCh != nil {
-					ls.decidedCh <- sm
-				}
-			default:
-				logger.Error("received unsupported message", zap.Int32("msg type", int32(msgType)))
+	switch cm.Type {
+	case network.NetworkMsg_IBFTType:
+		for _, ls := range n.listeners {
+			if ls.msgCh != nil {
+				ls.msgCh <- cm.SignedMessage
 			}
-		}(ls, cm.SignedMessage, cm.Type)
+		}
+	case network.NetworkMsg_SignatureType:
+		for _, ls := range n.listeners {
+			if ls.sigCh != nil {
+				ls.sigCh <- cm.SignedMessage
+			}
+		}
+	case network.NetworkMsg_DecidedType:
+		for _, ls := range n.listeners {
+			if ls.decidedCh != nil {
+				ls.decidedCh <- cm.SignedMessage
+			}
+		}
+	default:
+		n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
 	}
 }
 
@@ -293,25 +301,30 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 
 // AllPeers returns all connected peers for a validator PK (except for the validator itself)
 func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
-	ret := make([]string, 0)
-
 	topic, err := n.getTopic(validatorPk)
 	if err != nil {
 		return nil, err
 	}
 
+	return n.allPeersOfTopic(topic), nil
+}
+
+// AllPeers returns all connected peers for a validator PK (except for the validator itself)
+func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
+	ret := make([]string, 0)
+
 	invisiblePeers := ignorePeers()
 
 	for _, p := range topic.ListPeers() {
-		s := peerToString(p)
-		if invisiblePeers[s] {
+		if s := peerToString(p); invisiblePeers[s] {
 			// ignoring invisible peer
 			continue
+		} else {
+			ret = append(ret, peerToString(p))
 		}
-		ret = append(ret, peerToString(p))
 	}
 
-	return ret, nil
+	return ret
 }
 
 // getTopicName return formatted topic name

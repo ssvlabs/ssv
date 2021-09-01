@@ -20,6 +20,9 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts *InstanceOptions, value
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
+	metricsCurrentSequence.WithLabelValues(string(i.Identifier),
+		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(i.currentInstance.State.SeqNumber.Get()))
+
 	// catch up if we can
 	go i.fastChangeRoundCatchup(i.currentInstance)
 

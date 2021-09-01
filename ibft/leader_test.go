@@ -17,15 +17,16 @@ func TestLeaderCalculation(t *testing.T) {
 	l, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)
 	require.NoError(t, err)
 
-	_, nodes := GenerateNodes(4)
+	sk, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1},
+		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
+			Lambda:        threadsafe.Bytes(nil),
 		},
 		LeaderSelector: l,
 	}
