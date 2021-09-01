@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ChangeRoundPartialQuorumMsgPipeline returns the pipeline which handles partial change ronud quorum
 func (i *Instance) ChangeRoundPartialQuorumMsgPipeline() pipeline.Pipeline {
 	return i.uponChangeRoundPartialQuorum()
 }
