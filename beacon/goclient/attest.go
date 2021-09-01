@@ -60,8 +60,6 @@ func (gc *goClient) signAtt(data *spec.AttestationData, shareKey *bls.SecretKey)
 	root, err := gc.getSigningRoot(data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get signing root")
-	} else if root.IsEmpty() {
-		return nil, nil, errors.New("got an empty signing root")
 	}
 
 	return shareKey.SignByte(root[:]).Serialize(), root[:], nil
