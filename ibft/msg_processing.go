@@ -37,21 +37,3 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 	}
 	return false, nil
 }
-
-//// ProcessChangeRoundPartialQuorum will look for f+1 change round msgs to bump to a higher round if this instance is behind.
-//func (i *Instance) ProcessChangeRoundPartialQuorum() (found bool, err error) {
-//	if msgsMap := i.MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())); msgsMap != nil {
-//		// get values and keys slices
-//		msgs := make([]*network.Message, 0)
-//		for _, msg := range msgsMap {
-//			msgs = append(msgs, msg)
-//		}
-//
-//		found, err := i.uponChangeRoundPartialQuorum(msgs)
-//		if err != nil {
-//			return false, err
-//		}
-//		return found, err
-//	}
-//	return false, nil
-//}
