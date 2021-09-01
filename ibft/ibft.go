@@ -104,6 +104,7 @@ func (i *ibftImpl) Init() {
 	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
 	if err := i.SyncIBFT(); err != nil {
 		i.logger.Error("crashing.. ", zap.Error(err))
+		return // returning means initFinished is false, can't start new instances
 	}
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
@@ -133,4 +134,3 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 func (i *ibftImpl) GetIdentifier() []byte {
 	return i.Identifier //TODO should use mutex to lock var?
 }
-
