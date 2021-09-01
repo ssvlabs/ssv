@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-// PrepareAtDifferentRound tests receiving a quorum of prepare msgs in a different round than state round.
-type PrepareAtDifferentRound struct {
+// PrepareAtFutureRound tests receiving a quorum of prepare msgs in a different round than state round.
+type PrepareAtFutureRound struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *PrepareAtDifferentRound) Name() string {
+func (test *PrepareAtFutureRound) Name() string {
 	return "pre-prepare -> prepare for round 5 -> change round until round 5 -> commit"
 }
 
 // Prepare prepares the test
-func (test *PrepareAtDifferentRound) Prepare(t *testing.T) {
+func (test *PrepareAtFutureRound) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,7 +39,7 @@ func (test *PrepareAtDifferentRound) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *PrepareAtFutureRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
@@ -56,25 +56,17 @@ func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.Sig
 }
 
 // Run runs the test
-func (test *PrepareAtDifferentRound) Run(t *testing.T) {
+func (test *PrepareAtFutureRound) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
 	// simulate a later round prepare and how the node gets there in terms of change round timeouts
 	for i := 2; i <= 5; i++ {
-		spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage)
+		spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 		spectesting.SimulateTimeout(test.instance, uint64(i))
 	}
 
-	// non qualified prepare quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(5, test.inputValue)
-	require.False(t, quorum)
-	// qualified prepare quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(5, test.inputValue)
 	require.True(t, quorum)
 	// non qualified commit quorum
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)

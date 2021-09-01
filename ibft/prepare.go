@@ -17,7 +17,7 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateRound((i.State.Round.Get())),
+
 		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {
@@ -27,7 +27,10 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 			i.PrepareMessages.AddMessage(signedMessage)
 			return nil
 		}),
-		i.uponPrepareMsg(),
+		pipeline.IfFirstTrueContinueToSecond(
+			auth.ValidateRound((i.State.Round.Get())),
+			i.uponPrepareMsg(),
+		),
 	)
 }
 

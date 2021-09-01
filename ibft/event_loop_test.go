@@ -20,8 +20,8 @@ func TestChangeRoundTimer(t *testing.T) {
 	instance := &Instance{
 		MsgQueue:            msgqueue.New(),
 		eventQueue:          eventqueue.New(),
-		ChangeRoundMessages: msgcontinmem.New(3),
-		PrepareMessages:     msgcontinmem.New(3),
+		ChangeRoundMessages: msgcontinmem.New(3, 2),
+		PrepareMessages:     msgcontinmem.New(3, 2),
 		Config: &proto.InstanceConfig{
 			RoundChangeDurationSeconds:   0.2,
 			LeaderPreprepareDelaySeconds: 0.1,

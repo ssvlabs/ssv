@@ -20,8 +20,8 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	value := []byte(time.Now().Weekday().String())
 	instance := &Instance{
-		PrePrepareMessages:  msgcontinmem.New(3),
-		ChangeRoundMessages: msgcontinmem.New(3),
+		PrePrepareMessages:  msgcontinmem.New(3, 2),
+		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
@@ -91,9 +91,9 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	value := []byte(time.Now().Weekday().String())
 	instance := &Instance{
-		PrePrepareMessages:  msgcontinmem.New(3),
-		PrepareMessages:     msgcontinmem.New(3),
-		ChangeRoundMessages: msgcontinmem.New(3),
+		PrePrepareMessages:  msgcontinmem.New(3, 2),
+		PrepareMessages:     msgcontinmem.New(3, 2),
+		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
@@ -148,8 +148,8 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrePrepareMessages: msgcontinmem.New(3),
-		PrepareMessages:    msgcontinmem.New(3),
+		PrePrepareMessages: msgcontinmem.New(3, 2),
+		PrepareMessages:    msgcontinmem.New(3, 2),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:         threadsafe.Uint64(1),
@@ -191,7 +191,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 func TestInstance_JustifyPrePrepare(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{
-		ChangeRoundMessages: msgcontinmem.New(3),
+		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -250,7 +250,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 func TestPrePreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3),
+		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
 			Committee: nodes,

@@ -2,8 +2,8 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
 
@@ -13,7 +13,6 @@ import (
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		auth.ValidateRound(i.State.Round.Get()),
 		i.commitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
@@ -77,34 +76,41 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()),
 					zap.Int("got_votes", len(sigs)))
 
-				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
-					i.decidedMsg = aggMsg
-					// mark instance commit
-					i.ProcessStageChange(proto.RoundState_Decided)
-					i.Stop()
+				aggMsg, err := i.aggregateMessages(sigs)
+				if err != nil {
+					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err))
 				}
+				i.decidedMsg = aggMsg
+				// mark instance commit
+				i.ProcessStageChange(proto.RoundState_Decided)
+				i.Stop()
 			})
 		}
 		return nil
 	})
 }
 
-func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedMessage {
+func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) (*proto.SignedMessage, error) {
 	var decided *proto.SignedMessage
 	var err error
 	for _, msg := range sigs {
 		if decided == nil {
 			decided, err = msg.DeepCopy()
 			if err != nil {
-				i.Logger.Error("could not copy message")
+				return nil, errors.Wrap(err, "could not copy message")
 			}
 		} else {
 			if err := decided.Aggregate(msg); err != nil {
-				i.Logger.Error("could not aggregate message")
+				return nil, errors.Wrap(err, "could not aggregate message")
 			}
 		}
 	}
-	return decided
+
+	if decided == nil {
+		return nil, errors.New("could not aggregate decided messages, no msgs")
+	}
+
+	return decided, nil
 }
 
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {

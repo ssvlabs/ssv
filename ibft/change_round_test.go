@@ -59,7 +59,7 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *pr
 func TestRoundChangeInputValue(t *testing.T) {
 	secretKey, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3),
+		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes},
 		State: &proto.State{
@@ -432,7 +432,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	instance := &Instance{
-		ChangeRoundMessages: msgcontinmem.New(3),
+		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
@@ -485,7 +485,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res)
 
-	instance.ChangeRoundMessages = msgcontinmem.New(3)
+	instance.ChangeRoundMessages = msgcontinmem.New(3, 2)
 	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Type:   proto.RoundState_ChangeRound,
@@ -527,7 +527,7 @@ func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
 	instance := &Instance{
-		ChangeRoundMessages: msgcontinmem.New(3),
+		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
@@ -705,7 +705,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 func TestChangeRoundPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3),
+		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -718,5 +718,5 @@ func TestChangeRoundPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate msg, , round, add change round msg, upon change round full quorum, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate msg, , if first pipeline non error, continue to second, ", pipeline.Name())
 }

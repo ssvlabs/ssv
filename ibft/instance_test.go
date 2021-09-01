@@ -23,9 +23,9 @@ func TestInstanceStop(t *testing.T) {
 	instance := &Instance{
 		MsgQueue:           msgqueue.New(),
 		eventQueue:         eventqueue.New(),
-		PrepareMessages:    msgcontinmem.New(3),
-		PrePrepareMessages: msgcontinmem.New(3),
-		CommitMessages:     msgcontinmem.New(3),
+		PrepareMessages:    msgcontinmem.New(3, 2),
+		PrePrepareMessages: msgcontinmem.New(3, 2),
+		CommitMessages:     msgcontinmem.New(3, 2),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:     threadsafe.Uint64(1),
@@ -104,8 +104,8 @@ func TestInstanceStop(t *testing.T) {
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
 	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
-	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get())))
-	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get()))
+	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber)))
+	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
 }
 

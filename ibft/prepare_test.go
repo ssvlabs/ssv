@@ -13,7 +13,7 @@ import (
 func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3),
+		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -79,7 +79,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 func TestPreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3),
+		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
@@ -93,5 +93,5 @@ func TestPreparePipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.prepareMsgPipeline()
-	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, add prepare msg, upon prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, sequence, authorize, add prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }
