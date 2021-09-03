@@ -74,7 +74,9 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	}
 	if shouldSync {
 		i.logger.Info("stopping current instance and syncing..")
-		i.SyncIBFT()
+		if err := i.SyncIBFT(); err != nil {
+			i.logger.Error("failed sync after decided received", zap.Error(err))
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package ibft
 import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 	"sync"
 
 	"github.com/bloxapp/ssv/beacon"
@@ -66,6 +67,8 @@ type ibftImpl struct {
 
 	// flags
 	initFinished bool
+
+	syncingLock         *semaphore.Weighted
 }
 
 // New is the constructor of IBFT
@@ -84,6 +87,8 @@ func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage co
 
 		// flags
 		initFinished: false,
+
+		syncingLock:         semaphore.NewWeighted(1),
 	}
 	return ret
 }
@@ -94,7 +99,10 @@ func (i *ibftImpl) Init() {
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
 	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
-	i.SyncIBFT()
+	if err := i.SyncIBFT(); err != nil {
+		i.logger.Error("crashing.. ", zap.Error(err))
+		return // returning means initFinished is false, can't start new instances
+	}
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
 	i.initFinished = true
