@@ -2,9 +2,11 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
+	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"strconv"
 	"testing"
 	"time"
 
@@ -147,6 +149,8 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
+	leader, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)
+	require.NoError(t, err)
 	instance := &Instance{
 		PrePrepareMessages: msgcontinmem.New(3, 2),
 		PrepareMessages:    msgcontinmem.New(3, 2),
@@ -165,21 +169,23 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
-		Logger:     zaptest.NewLogger(t),
-		network:    local.NewLocalNetwork(),
+		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
+		Logger:         zaptest.NewLogger(t),
+		network:        local.NewLocalNetwork(),
+		LeaderSelector: leader,
 	}
 
 	// test happy flow
-	msg := SignMsg(t, 2, secretKeys[2], &proto.Message{
+	msg := SignMsg(t, 1, secretKeys[1], &proto.Message{
 		Type:   proto.RoundState_PrePrepare,
 		Round:  1,
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err := instance.UponPrePrepareMsg().Run(msg)
+	err = instance.prePrepareMsgPipeline().Run(msg)
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
+	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0])
 	require.True(t, instance.State.Stage.Get() == int32(proto.RoundState_PrePrepare))
 
@@ -265,5 +271,5 @@ func TestPrePreparePipeline(t *testing.T) {
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
 	pipeline := instance.prePrepareMsgPipeline()
-	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, round, sequence, authorize, validate pre-prepare, upon pre-prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }

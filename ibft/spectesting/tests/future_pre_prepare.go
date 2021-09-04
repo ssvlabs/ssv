@@ -18,7 +18,7 @@ type FuturePrePrepare struct {
 
 // Name returns test name
 func (test *FuturePrePrepare) Name() string {
-	return "future pre-prepare -> change rounds until future pre-prepare -> broadcast prepare -> commit"
+	return "future pre-prepare -> change rounds until future pre-prepare -> broadcast prepare"
 }
 
 // Prepare prepares the test
