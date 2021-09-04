@@ -5,23 +5,24 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-// NonJustifiedPrePrepapre tests coming to consensus after a non prepared change round
-type NonJustifiedPrePrepapre struct {
+// WrongLeaderPrePrepare tests wrong pre-prepare leader
+type WrongLeaderPrePrepare struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *NonJustifiedPrePrepapre) Name() string {
-	return "pre-prepare -> simulate round timeout -> unjustified pre-prepare"
+func (test *WrongLeaderPrePrepare) Name() string {
+	return "pre-prepare (wrong leader) -> change round -> wrong leader(pre-prepare)"
 }
 
 // Prepare prepares the test
-func (test *NonJustifiedPrePrepapre) Prepare(t *testing.T) {
+func (test *WrongLeaderPrePrepare) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -37,19 +38,32 @@ func (test *NonJustifiedPrePrepapre) Prepare(t *testing.T) {
 	}
 }
 
-// MessagesSequence includes all test messages
-func (test *NonJustifiedPrePrepapre) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+// MessagesSequence includes all messages
+func (test *WrongLeaderPrePrepare) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
+
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 2, 2),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 2, 3),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 2, 4),
+
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 2, 2),
 	}
 }
 
 // Run runs the test
-func (test *NonJustifiedPrePrepapre) Run(t *testing.T) {
+func (test *WrongLeaderPrePrepare) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+
+	// change round
 	spectesting.SimulateTimeout(test.instance, 2)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	require.EqualValues(t, 2, test.instance.State.Round.Get())
 
 	// try to broadcast unjustified pre-prepare
 	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "pre-prepare message sender (id 2) is not the round's leader (expected 1)")

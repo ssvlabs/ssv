@@ -1,25 +1,40 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/pipeline/preprepare"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
-	"github.com/bloxapp/ssv/ibft/pipeline/preprepare"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
+		i.prePrepareMsgValidationPipeline(),
+		pipeline.WrapFunc("add pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
+			i.Logger.Info("received valid pre-prepare message for round",
+				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
+				zap.Uint64("round", signedMessage.Message.Round))
+			i.PrePrepareMessages.AddMessage(signedMessage)
+			return nil
+		}),
+		pipeline.IfFirstTrueContinueToSecond(
+			auth.ValidateRound(i.State.Round.Get()),
+			i.UponPrePrepareMsg(),
+		),
+	)
+}
+
+func (i *Instance) prePrepareMsgValidationPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateRound(i.State.Round.Get()),
 		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
-		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ThisRoundLeader()),
-		i.UponPrePrepareMsg(),
+		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.RoundLeader),
 	)
 }
 
@@ -58,12 +73,6 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
-		// add to pre-prepare messages
-		i.PrePrepareMessages.AddMessage(signedMessage)
-		i.Logger.Info("received valid pre-prepare message for round",
-			zap.String("sender_ibft_id", signedMessage.SignersIDString()),
-			zap.Uint64("round", signedMessage.Message.Round))
-
 		// Pre-prepare justification
 		err := i.JustifyPrePrepare(signedMessage.Message.Round)
 		if err != nil {
