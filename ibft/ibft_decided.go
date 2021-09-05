@@ -74,7 +74,9 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	}
 	if shouldSync {
 		i.logger.Info("stopping current instance and syncing..")
-		i.SyncIBFT()
+		if err := i.SyncIBFT(); err != nil {
+			i.logger.Error("failed sync after decided received", zap.Error(err))
+		}
 	}
 }
 
@@ -126,7 +128,7 @@ func (i *ibftImpl) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	}
 
 	highest, found, err := i.ibftStorage.GetHighestDecidedInstance(msg.Message.Lambda)
-	if !found{
+	if !found {
 		return msg.Message.SeqNumber > 0, nil
 	}
 	if err != nil {
