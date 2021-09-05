@@ -13,7 +13,8 @@ const (
 )
 
 var (
-	TaskExistErr = errors.New("task exist")
+	// ErrTaskExist thrown when the task to dispatch already exist
+	ErrTaskExist = errors.New("task exist")
 )
 
 // Task represents a some function to execute
@@ -76,8 +77,6 @@ type dispatcher struct {
 	waiting []string
 	mut     sync.RWMutex
 
-	isDispatcherRunning bool
-
 	interval        time.Duration
 	concurrentLimit int
 }
@@ -105,7 +104,7 @@ func (d *dispatcher) Queue(task Task) error {
 	defer d.mut.Unlock()
 
 	if _, exist := d.tasks[task.ID]; exist {
-		return TaskExistErr
+		return ErrTaskExist
 	}
 	d.tasks[task.ID] = task
 	d.waiting = append(d.waiting, task.ID)
@@ -160,31 +159,11 @@ func (d *dispatcher) Dispatch() {
 	}()
 }
 
-func (d *dispatcher) isRunning() bool {
-	d.mut.Lock()
-	defer d.mut.Lock()
-
-	return d.isDispatcherRunning
-}
-
-func (d *dispatcher) setIsRunning(isRunning bool) {
-	d.mut.Lock()
-	defer d.mut.Lock()
-
-	d.isDispatcherRunning = isRunning
-}
-
 func (d *dispatcher) Start() {
 	if d.interval.Milliseconds() == 0 {
 		d.logger.Warn("dispatcher interval was set to zero, ticker won't start")
 		return
 	}
-	if d.isRunning() {
-		d.logger.Warn("dispatcher started already")
-		return
-	}
-	d.setIsRunning(true)
-	defer d.setIsRunning(false)
 	ticker := time.NewTicker(d.interval)
 	defer ticker.Stop()
 	for {
