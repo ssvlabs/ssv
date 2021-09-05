@@ -10,20 +10,21 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-// validate implements pipeline.Pipeline interface
-type validate struct {
+// validateJustification validates change round justifications
+type validateJustification struct {
 	share *storage.Share
 }
 
-// Validate is the constructor of validate
+// Validate is the constructor of validateJustification
 func Validate(share *storage.Share) pipeline.Pipeline {
-	return &validate{
+	return &validateJustification{
 		share: share,
 	}
 }
 
 // Run implements pipeline.Pipeline interface
-func (p *validate) Run(signedMessage *proto.SignedMessage) error {
+func (p *validateJustification) Run(signedMessage *proto.SignedMessage) error {
+	// TODO - change to normal prepare pipeline
 	if signedMessage.Message.Value == nil {
 		return errors.New("change round justification msg is nil")
 	}
@@ -39,6 +40,9 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 	}
 	if data.JustificationMsg.Type != proto.RoundState_Prepare {
 		return errors.New("change round justification msg type not Prepare")
+	}
+	if signedMessage.Message.SeqNumber != data.JustificationMsg.SeqNumber {
+		return errors.New("change round justification sequence is wrong")
 	}
 	if signedMessage.Message.Round <= data.JustificationMsg.Round {
 		return errors.New("change round justification round lower or equal to message round")
@@ -56,7 +60,7 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 		return errors.New("change round justification does not constitute a quorum")
 	}
 
-	// validate justification signature
+	// validateJustification justification signature
 	pks, err := p.share.PubKeysByID(data.SignerIds)
 	if err != nil {
 		return errors.Wrap(err, "change round could not get pubkey")
@@ -75,6 +79,6 @@ func (p *validate) Run(signedMessage *proto.SignedMessage) error {
 }
 
 // Name implements pipeline.Pipeline interface
-func (p *validate) Name() string {
-	return "validate msg"
+func (p *validateJustification) Name() string {
+	return "validateJustification msg"
 }

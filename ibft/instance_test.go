@@ -39,7 +39,7 @@ func TestInstanceStop(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
+		ValueCheck:     bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:         zaptest.NewLogger(t),
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 		roundTimer:     roundtimer.New(),

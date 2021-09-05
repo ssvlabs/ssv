@@ -12,8 +12,8 @@ type bytesValidation struct {
 	val []byte
 }
 
-// New is the constructor of bytesValidation
-func New(val []byte) valcheck.ValueCheck {
+// NewEqualBytes is the constructor of bytesValidation
+func NewEqualBytes(val []byte) valcheck.ValueCheck {
 	return &bytesValidation{
 		val: val,
 	}

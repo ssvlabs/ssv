@@ -1,4 +1,4 @@
-package tests
+package changeround
 
 import (
 	"github.com/bloxapp/ssv/ibft"

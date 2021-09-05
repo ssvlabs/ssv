@@ -1,4 +1,4 @@
-package tests
+package preprepare
 
 import (
 	"github.com/bloxapp/ssv/ibft"
@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-// NonJustifiedPrePrepapre2 tests coming to consensus after a non prepared change round
-type NonJustifiedPrePrepapre2 struct {
+// WrongLeaderPrePrepare tests wrong pre-prepare leader
+type WrongLeaderPrePrepare struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *NonJustifiedPrePrepapre2) Name() string {
-	return "pre-prepare -> prepare -> simulate round timeout -> change round quorum -> unjustified pre-prepare (wrong input value)"
+func (test *WrongLeaderPrePrepare) Name() string {
+	return "pre-prepare (wrong leader) -> change round -> wrong leader(pre-prepare)"
 }
 
 // Prepare prepares the test
-func (test *NonJustifiedPrePrepapre2) Prepare(t *testing.T) {
+func (test *WrongLeaderPrePrepare) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -38,37 +38,24 @@ func (test *NonJustifiedPrePrepapre2) Prepare(t *testing.T) {
 	}
 }
 
-// MessagesSequence includes all test messages
-func (test *NonJustifiedPrePrepapre2) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+// MessagesSequence includes all messages
+func (test *WrongLeaderPrePrepare) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
-
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 1, 2),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.inputValue, 1, 3),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.inputValue, 1, 4),
 
 		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
 		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 2, 2),
 		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 2, 3),
 		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 2, 4),
 
-		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, []byte("wrong value"), 2, 1),
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 2, 2),
 	}
 }
 
 // Run runs the test
-func (test *NonJustifiedPrePrepapre2) Run(t *testing.T) {
+func (test *WrongLeaderPrePrepare) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-
-	// prepared
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, test.inputValue, test.instance.State.PreparedValue.Get())
-	require.EqualValues(t, 1, test.instance.State.PreparedRound.Get())
 
 	// change round
 	spectesting.SimulateTimeout(test.instance, 2)
@@ -79,5 +66,5 @@ func (test *NonJustifiedPrePrepapre2) Run(t *testing.T) {
 	require.EqualValues(t, 2, test.instance.State.Round.Get())
 
 	// try to broadcast unjustified pre-prepare
-	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "failed while validating pre-prepare: msg value is wrong")
+	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "pre-prepare message sender (id 2) is not the round's leader (expected 1)")
 }

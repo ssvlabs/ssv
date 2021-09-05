@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"bytes"
 	"github.com/bloxapp/ssv/ibft/pipeline/preprepare"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -39,25 +40,29 @@ func (i *Instance) prePrepareMsgValidationPipeline() pipeline.Pipeline {
 }
 
 // JustifyPrePrepare implements:
-// predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, valuei)
+// predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, value)
 // 	return
 // 		round = 1
 // 		∨ received a quorum Qrc of valid <ROUND-CHANGE, λi, round, prj , pvj> messages such that:
 // 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
-func (i *Instance) JustifyPrePrepare(round uint64) error {
+func (i *Instance) JustifyPrePrepare(round uint64, value []byte) error {
 	if round == 1 {
 		return nil
 	}
 
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
-		res, err := i.JustifyRoundChange(round)
+		notPrepared, highest, err := i.highestPrepared(round)
 		if err != nil {
 			return err
 		}
-		if !res {
-			return errors.New("unjustified change round for pre-prepare")
+		if notPrepared && value == nil {
+			return nil
+		} else if notPrepared && value != nil {
+			return errors.New("unjustified change round for pre-prepare, value should be nil")
+		} else if !bytes.Equal(value, highest.PreparedValue) {
+			return errors.New("unjustified change round for pre-prepare, value different than highest prepared")
 		}
 		return nil
 	}
@@ -73,8 +78,10 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
+		prepareValueToBroadcast := signedMessage.Message.Value
+
 		// Pre-prepare justification
-		err := i.JustifyPrePrepare(signedMessage.Message.Round)
+		err := i.JustifyPrePrepare(signedMessage.Message.Round, prepareValueToBroadcast)
 		if err != nil {
 			return errors.Wrap(err, "Unjustified pre-prepare")
 		}
@@ -83,7 +90,7 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 		i.ProcessStageChange(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
-		broadcastMsg := i.generatePrepareMessage(signedMessage.Message.Value)
+		broadcastMsg := i.generatePrepareMessage(prepareValueToBroadcast)
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err

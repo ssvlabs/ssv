@@ -1,6 +1,11 @@
 package tests
 
 import (
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/changeround"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/commit"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/common"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/prepare"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/preprepare"
 	"testing"
 )
 
@@ -13,16 +18,34 @@ type SpecTest interface {
 }
 
 var tests = []SpecTest{
-	&PrepareAtFutureRound{},
-	&ChangeRoundAndDecide{},
-	&PrepareChangeRoundAndDecide{},
-	&DecideDifferentValue{},
-	&PrepareAtFutureRound{},
-	&NonJustifiedPrePrepapre{},
-	&DuplicateMessages{},
+	// pre-prepare
+	&preprepare.NonJustifiedPrePrepapre1{},
+	&preprepare.NonJustifiedPrePrepapre2{},
+	&preprepare.NonJustifiedPrePrepapre3{},
+	&preprepare.Round1PrePrepare{},
+	&preprepare.WrongLeaderPrePrepare{},
+	&preprepare.FuturePrePrepare{},
+
+	// prepare
+	&prepare.PrepareAtFutureRound{},
+	&prepare.PrepareChangeRoundAndDecide{},
+
+	// commit
+	&commit.DecideDifferentValue{},
+	&commit.PrevRoundDecided{},
+	&commit.FutureRoundDecided{},
+
+	// change round
+	&changeround.ChangeRoundAndDecide{},
+	&changeround.ChangeRoundPartialQuorum{},
+	&changeround.ChangeRoundNotPreparedError{},
+
+	// common
+	&common.DuplicateMessages{},
 	&ValidSimpleRun{},
-	&ChangeRoundPartialQuorum{},
-	&PrevRoundDecided{},
+
+	// TODO
+	// invalid pre-prepare value, justify pre-prepare and change round are wrong they need to use highest prepared
 }
 
 func TestAllSpecTests(t *testing.T) {

@@ -1,31 +1,29 @@
-package tests
+package preprepare
 
 import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-// DecideDifferentValue tests that a different commit value can be accepted than the prepared value.
-// This is a byzantine behaviour by 2/3 of the nodes as the iBFT protocol dictates broadcasting a commit
-// message with the prepared value
-// TODO - should we allow this?
-type DecideDifferentValue struct {
+// NonJustifiedPrePrepapre2 tests coming to consensus after a non prepared change round
+type NonJustifiedPrePrepapre2 struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *DecideDifferentValue) Name() string {
-	return "pre-prepare -> prepare -> try to commit with different value"
+func (test *NonJustifiedPrePrepapre2) Name() string {
+	return "pre-prepare -> prepare -> simulate round timeout -> change round quorum -> unjustified pre-prepare (wrong input value)"
 }
 
-// Prepare prepares test
-func (test *DecideDifferentValue) Prepare(t *testing.T) {
+// Prepare prepares the test
+func (test *NonJustifiedPrePrepapre2) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -42,7 +40,14 @@ func (test *DecideDifferentValue) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *DecideDifferentValue) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *NonJustifiedPrePrepapre2) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+	signersMap := map[uint64]*bls.SecretKey{
+		1: spectesting.TestSKs()[0],
+		2: spectesting.TestSKs()[1],
+		3: spectesting.TestSKs()[2],
+		4: spectesting.TestSKs()[3],
+	}
+
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
@@ -51,37 +56,36 @@ func (test *DecideDifferentValue) MessagesSequence(t *testing.T) []*proto.Signed
 		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.inputValue, 1, 3),
 		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.inputValue, 1, 4),
 
-		spectesting.CommitMsg(t, spectesting.TestSKs()[0], test.lambda, []byte("wrong value"), 1, 1),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[1], test.lambda, []byte("wrong value"), 1, 2),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[2], test.lambda, []byte("wrong value"), 1, 3),
-		spectesting.CommitMsg(t, spectesting.TestSKs()[3], test.lambda, []byte("wrong value"), 1, 4),
+		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, signersMap, 2, 1, 1),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 2, 2),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 2, 3),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 2, 4),
+
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, []byte("wrong value"), 2, 1),
 	}
 }
 
 // Run runs the test
-func (test *DecideDifferentValue) Run(t *testing.T) {
+func (test *NonJustifiedPrePrepapre2) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	// non qualified prepare quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
-	require.False(t, quorum)
-	// qualified prepare quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(1, test.inputValue)
-	require.True(t, quorum)
-	// non qualified commit quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
-	require.False(t, quorum)
-	// qualified commit quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
-	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, []byte("wrong value"))
-	require.True(t, quorum)
 
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
+	// prepared
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	require.EqualValues(t, test.inputValue, test.instance.State.PreparedValue.Get())
+	require.EqualValues(t, 1, test.instance.State.PreparedRound.Get())
+
+	// change round
+	spectesting.SimulateTimeout(test.instance, 2)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	require.EqualValues(t, 2, test.instance.State.Round.Get())
+
+	// try to broadcast unjustified pre-prepare
+	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "Unjustified pre-prepare: unjustified change round for pre-prepare, value different than highest prepared")
 }

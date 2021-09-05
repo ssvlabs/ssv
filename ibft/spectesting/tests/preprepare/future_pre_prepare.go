@@ -1,4 +1,4 @@
-package tests
+package preprepare
 
 import (
 	"github.com/bloxapp/ssv/ibft"

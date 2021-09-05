@@ -447,80 +447,91 @@ func TestRoundChangeJustification(t *testing.T) {
 		},
 	}
 
-	// test no previous prepared round and no round change quorum
-	res, err := instance.JustifyRoundChange(2)
-	require.NoError(t, err)
-	require.False(t, res)
-
-	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_ChangeRound,
-			Round:  2,
-			Lambda: []byte("Lambda"),
-			Value:  changeRoundDataToBytes(&proto.ChangeRoundData{}),
-		},
-		SignerIds: []uint64{1},
-	})
-	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_ChangeRound,
-			Round:  2,
-			Lambda: []byte("Lambda"),
-			Value:  changeRoundDataToBytes(&proto.ChangeRoundData{}),
-		},
-		SignerIds: []uint64{2},
-	})
-	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_ChangeRound,
-			Round:  2,
-			Lambda: []byte("Lambda"),
-			Value:  changeRoundDataToBytes(&proto.ChangeRoundData{}),
-		},
-		SignerIds: []uint64{3},
+	t.Run("no previous prepared", func(t *testing.T) {
+		// test no previous prepared round and no round change quorum
+		res, err := instance.JustifyRoundChange(2)
+		require.NoError(t, err)
+		require.True(t, res)
 	})
 
-	// test no previous prepared round with round change quorum (no justification)
-	res, err = instance.JustifyRoundChange(2)
-	require.NoError(t, err)
-	require.True(t, res)
+	t.Run("change round quorum no previous prepare", func(t *testing.T) {
+		instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
+				Round:  2,
+				Lambda: []byte("Lambda"),
+				Value:  changeRoundDataToBytes(&proto.ChangeRoundData{}),
+			},
+			SignerIds: []uint64{1},
+		})
+		instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
+				Round:  2,
+				Lambda: []byte("Lambda"),
+				Value:  changeRoundDataToBytes(&proto.ChangeRoundData{}),
+			},
+			SignerIds: []uint64{2},
+		})
+		instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
+				Round:  2,
+				Lambda: []byte("Lambda"),
+				Value:  changeRoundDataToBytes(&proto.ChangeRoundData{}),
+			},
+			SignerIds: []uint64{3},
+		})
 
-	instance.ChangeRoundMessages = msgcontinmem.New(3, 2)
-	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_ChangeRound,
-			Round:  1,
-			Lambda: []byte("Lambda"),
-			Value:  inputValue,
-		},
-		SignerIds: []uint64{1},
-	})
-	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_ChangeRound,
-			Round:  2,
-			Lambda: []byte("Lambda"),
-			Value:  inputValue,
-		},
-		SignerIds: []uint64{2},
-	})
-	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
-		Message: &proto.Message{
-			Type:   proto.RoundState_ChangeRound,
-			Round:  2,
-			Lambda: []byte("Lambda"),
-			Value:  inputValue,
-		},
-		SignerIds: []uint64{3},
+		// test no previous prepared round with round change quorum (no justification)
+		res, err := instance.JustifyRoundChange(2)
+		require.NoError(t, err)
+		require.True(t, res)
 	})
 
-	// test no previous prepared round with round change quorum (with justification)
-	res, err = instance.JustifyRoundChange(2)
-	require.False(t, res)
-	require.NoError(t, err)
+	t.Run("change round quorum not prepared, instance prepared previously", func(t *testing.T) {
+		instance.State.PreparedRound.Set(1)
+		instance.State.PreparedValue.Set([]byte("hello"))
+		res, err := instance.JustifyRoundChange(2)
+		require.EqualError(t, err, "highest prepared doesn't match prepared state")
+		require.False(t, res)
+	})
 
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("hello"))
+	t.Run("change round quorum prepared, instance prepared", func(t *testing.T) {
+		instance.ChangeRoundMessages = msgcontinmem.New(3, 2)
+		instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
+				Round:  1,
+				Lambda: []byte("Lambda"),
+				Value:  inputValue,
+			},
+			SignerIds: []uint64{1},
+		})
+		instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
+				Round:  2,
+				Lambda: []byte("Lambda"),
+				Value:  inputValue,
+			},
+			SignerIds: []uint64{2},
+		})
+		instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
+			Message: &proto.Message{
+				Type:   proto.RoundState_ChangeRound,
+				Round:  2,
+				Lambda: []byte("Lambda"),
+				Value:  inputValue,
+			},
+			SignerIds: []uint64{3},
+		})
+
+		// test no previous prepared round with round change quorum (with justification)
+		res, err := instance.JustifyRoundChange(2)
+		require.True(t, res)
+		require.NoError(t, err)
+	})
 }
 
 func TestHighestPrepared(t *testing.T) {
@@ -562,11 +573,11 @@ func TestHighestPrepared(t *testing.T) {
 	})
 
 	// test one higher than other
-	allNonPrepared, res, err := highestPrepared(3, instance.ChangeRoundMessages)
+	notPrepared, highest, err := instance.highestPrepared(3)
 	require.NoError(t, err)
-	require.False(t, allNonPrepared)
-	require.EqualValues(t, 2, res.PreparedRound)
-	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
+	require.False(t, notPrepared)
+	require.EqualValues(t, 2, highest.PreparedRound)
+	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 
 	// test 2 equals
 	instance.ChangeRoundMessages.AddMessage(&proto.SignedMessage{
@@ -581,11 +592,11 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		SignerIds: []uint64{2},
 	})
-	allNonPrepared, res, err = highestPrepared(3, instance.ChangeRoundMessages)
+	notPrepared, highest, err = instance.highestPrepared(3)
 	require.NoError(t, err)
-	require.False(t, allNonPrepared)
-	require.EqualValues(t, 2, res.PreparedRound)
-	require.EqualValues(t, append(inputValue, []byte("highest")...), res.PreparedValue)
+	require.False(t, notPrepared)
+	require.EqualValues(t, 2, highest.PreparedRound)
+	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 }
 
 func TestChangeRoundMsgValidationPipeline(t *testing.T) {
@@ -718,5 +729,5 @@ func TestChangeRoundPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate msg, , if first pipeline non error, continue to second, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , if first pipeline non error, continue to second, ", pipeline.Name())
 }

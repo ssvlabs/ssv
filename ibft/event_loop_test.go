@@ -40,7 +40,7 @@ func TestChangeRoundTimer(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck: bytesval.New([]byte(time.Now().Weekday().String())),
+		ValueCheck: bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(),
 	}

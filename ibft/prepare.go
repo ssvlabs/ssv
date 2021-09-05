@@ -36,7 +36,7 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
 func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
-	if i.State.PreparedValue.Get() == nil {
+	if !i.isPrepared() {
 		return nil, errors.New("state not prepared")
 	}
 
@@ -107,4 +107,9 @@ func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
 		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
+}
+
+// isPrepared returns true if instance prepared
+func (i *Instance) isPrepared() bool {
+	return i.State.PreparedValue.Get() != nil
 }

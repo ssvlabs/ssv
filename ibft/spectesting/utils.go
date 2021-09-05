@@ -105,7 +105,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 		ValidatorShare: TestShares()[1],
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
-		ValueCheck:     bytesval.New(TestInputValue()),
+		ValueCheck:     bytesval.NewNotEqualBytes(InvalidTestInputValue()),
 		Config:         proto.DefaultConsensusParams(),
 		Lambda:         lambda,
 		LeaderSelector: &constant.Constant{LeaderIndex: 0},
@@ -213,6 +213,11 @@ func TestSKs() []*bls.SecretKey {
 // TestInputValue a const input test value
 func TestInputValue() []byte {
 	return []byte("testing value")
+}
+
+// TestInputValue a const input test value
+func InvalidTestInputValue() []byte {
+	return []byte("invalid testing value")
 }
 
 // SimulateTimeout simulates instance timeout

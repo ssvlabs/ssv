@@ -44,7 +44,7 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *pr
 
 func TestValidatePrePrepareValue(t *testing.T) {
 	sks, _ := GenerateNodes(4)
-	consensus := bytesval.New([]byte(time.Now().Weekday().String()))
+	consensus := bytesval.NewEqualBytes([]byte(time.Now().Weekday().String()))
 
 	tests := []struct {
 		name string

@@ -1,29 +1,28 @@
-package tests
+package changeround
 
 import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
-// PrepareChangeRoundAndDecide tests coming to consensus after preparing and then changing round.
-type PrepareChangeRoundAndDecide struct {
+// ChangeRoundAndDecide tests coming to consensus after a non prepared change round
+type ChangeRoundAndDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *PrepareChangeRoundAndDecide) Name() string {
-	return "pre-prepare -> prepare -> change round -> prepare -> decide"
+func (test *ChangeRoundAndDecide) Name() string {
+	return "pre-prepare -> change round -> pre-prepare -> prepare -> decide"
 }
 
 // Prepare prepares the test
-func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
+func (test *ChangeRoundAndDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,27 +38,15 @@ func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
 	}
 }
 
-// MessagesSequence includes test messages
-func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
-	signersMap := map[uint64]*bls.SecretKey{
-		1: spectesting.TestSKs()[0],
-		2: spectesting.TestSKs()[1],
-		3: spectesting.TestSKs()[2],
-		4: spectesting.TestSKs()[3],
-	}
-
+// MessagesSequence includes all test messages
+func (test *ChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 1, 2),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[2], test.lambda, test.inputValue, 1, 3),
-		spectesting.PrepareMsg(t, spectesting.TestSKs()[3], test.lambda, test.inputValue, 1, 4),
-
-		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, signersMap, 2, 1, 1),
-		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, signersMap, 2, 1, 2),
-		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[2], test.lambda, test.inputValue, signersMap, 2, 1, 3),
-		spectesting.ChangeRoundMsgWithPrepared(t, spectesting.TestSKs()[3], test.lambda, test.inputValue, signersMap, 2, 1, 4),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 2, 2),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 2, 3),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 2, 4),
 
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 2, 1),
 
@@ -76,14 +63,8 @@ func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto
 }
 
 // Run runs the test
-func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
+func (test *ChangeRoundAndDecide) Run(t *testing.T) {
 	// pre-prepare
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-
-	// prepare
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.SimulateTimeout(test.instance, 2)
 
@@ -96,10 +77,9 @@ func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, justified)
 
-	// justify pre-prepare
-	err = test.instance.JustifyPrePrepare(2)
+	// check pre-prepare justification
+	err = test.instance.JustifyPrePrepare(2, nil)
 	require.NoError(t, err)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
 	// process all messages
 	for {
