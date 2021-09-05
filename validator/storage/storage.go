@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 )
 
 // ICollection interface for validator storage
@@ -25,6 +26,7 @@ type CollectionOptions struct {
 type Collection struct {
 	db     basedb.IDb
 	logger *zap.Logger
+	lock   sync.RWMutex
 	prefix []byte
 }
 
@@ -34,6 +36,7 @@ func NewCollection(options CollectionOptions) ICollection {
 		db:     options.DB,
 		logger: options.Logger,
 		prefix: []byte(getCollectionPrefix()),
+		lock:   sync.RWMutex{},
 	}
 	return &collection
 }
@@ -48,7 +51,7 @@ func (s *Collection) LoadMultipleFromConfig(items []ShareOptions) {
 		s.logger.Info("loading validators share from config", zap.Int("count", len(items)))
 		for _, opts := range items {
 			pubkey, err := s.LoadFromConfig(opts)
-			if err != nil{
+			if err != nil {
 				s.logger.Error("failed to load validator share data from config", zap.Error(err))
 				continue
 			}
@@ -76,6 +79,9 @@ func (s *Collection) LoadFromConfig(options ShareOptions) (string, error) {
 
 // SaveValidatorShare save validator share to db
 func (s *Collection) SaveValidatorShare(validator *Share) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	value, err := validator.Serialize()
 	if err != nil {
 		s.logger.Error("failed serialized validator", zap.Error(err))
@@ -86,8 +92,11 @@ func (s *Collection) SaveValidatorShare(validator *Share) error {
 
 // GetValidatorsShare by key
 func (s *Collection) GetValidatorsShare(key []byte) (*Share, bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
 	obj, found, err := s.db.Get(s.prefix, key)
-	if !found{
+	if !found {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -99,6 +108,9 @@ func (s *Collection) GetValidatorsShare(key []byte) (*Share, bool, error) {
 
 // GetAllValidatorsShare returns ALL validators shares from db
 func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
 	objs, err := s.db.GetAllByCollection(s.prefix)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to get val share")
