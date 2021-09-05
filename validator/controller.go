@@ -12,11 +12,18 @@ import (
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+)
+
+const (
+	maxRunningValidators = 1000
 )
 
 // ControllerOptions for controller struct creation
@@ -39,7 +46,6 @@ type IController interface {
 	GetValidatorsPubKeys() [][]byte
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
-	NewValidatorSubject() pubsub.Subscriber
 }
 
 // Controller struct that manages all validator shares
@@ -49,15 +55,18 @@ type controller struct {
 	logger                     *zap.Logger
 	signatureCollectionTimeout time.Duration
 	beacon                     beacon.Beacon
+	dispatcher                 tasks.Dispatcher
 	// TODO remove after IBFT refactor
 	network    network.Network
 	db         basedb.IDb
 	ethNetwork *core.Network
 
-	validatorsMap       map[string]*Validator
-	newValidatorSubject pubsub.Subject
+	validatorsMap map[string]*Validator
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+
+	// locks
+	validatorL sync.RWMutex
 }
 
 // NewController creates new validator controller
@@ -78,10 +87,18 @@ func NewController(options ControllerOptions) IController {
 		db:                         options.DB,
 		network:                    options.Network,
 		ethNetwork:                 options.ETHNetwork,
-		newValidatorSubject: pubsub.NewSubject(options.Logger.With(
-			zap.String("which", "validator/controller/validator-subject"))),
 		validatorsMap:              make(map[string]*Validator),
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
+
+		dispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
+			Ctx:        options.Context,
+			Logger:     options.Logger.With(zap.String("component", "validatorsDispatcher")),
+			Interval:   10 * time.Millisecond,
+			Concurrent: maxRunningValidators,
+		}),
+
+		// locks
+		validatorL: sync.RWMutex{},
 	}
 
 	return &ctrl
@@ -100,7 +117,7 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 
 // setupValidators for each validatorShare with proper ibft wrappers
 func (c *controller) setupValidators() map[string]*Validator {
-	shares, err := c.collection.GetAllValidatorsShare()
+	shares, err := c.getAllValidatorShares()
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -108,151 +125,123 @@ func (c *controller) setupValidators() map[string]*Validator {
 		c.logger.Info("could not find validators")
 		return c.validatorsMap
 	}
-	c.logger.Info("starting validators setup...")
+	successCount := 0
+	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	for _, validatorShare := range shares {
-		pubKey := validatorShare.PublicKey.SerializeToHexStr()
-		if _, ok := c.validatorsMap[pubKey]; ok {
-			c.logger.Debug("validator was initialized already..",
-				zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
-			continue
+		if c.setupValidator(validatorShare) {
+			successCount++
 		}
-		printValidatorShare(c.logger, validatorShare)
-		c.validatorsMap[pubKey] = New(Options{
-			Context:                    c.context,
-			SignatureCollectionTimeout: c.signatureCollectionTimeout,
-			Logger:                     c.logger,
-			Share:                      validatorShare,
-			Network:                    c.network,
-			ETHNetwork:                 c.ethNetwork,
-			Beacon:                     c.beacon,
-		}, c.db)
 	}
-	c.logger.Info("setup validators done successfully", zap.Int("count", len(c.validatorsMap)))
+	c.logger.Info("setup validators done successfully", zap.Int("map size", len(c.validatorsMap)),
+		zap.Int("successCount", successCount))
 	return c.validatorsMap
+}
+
+func (c *controller) setupValidator(validatorShare *validatorstorage.Share) bool {
+	pubKey := validatorShare.PublicKey.SerializeToHexStr()
+	logger := c.logger.With(zap.String("pubkey", pubKey))
+	if _, ok := c.GetValidator(pubKey); ok {
+		logger.Debug("validator was initialized already")
+		return false
+	}
+	printValidatorShare(c.logger, validatorShare)
+	v := New(Options{
+		Context:                    c.context,
+		SignatureCollectionTimeout: c.signatureCollectionTimeout,
+		Logger:                     c.logger,
+		Share:                      validatorShare,
+		Network:                    c.network,
+		ETHNetwork:                 c.ethNetwork,
+		Beacon:                     c.beacon,
+	}, c.db)
+	if added := c.AddValidator(pubKey, v); !added {
+		logger.Debug("validator already exist in map")
+		return false
+	}
+	logger.Debug("validator's setup done")
+	return true
 }
 
 // StartValidators functions (queue streaming, msgQueue listen, etc)
 func (c *controller) StartValidators() {
+	go c.dispatcher.Start()
 	validators := c.setupValidators()
 	for _, v := range validators {
+		if err := c.startValidator(v); err != nil {
+			c.logger.Error("could not start validator", zap.Error(err),
+				zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
+		}
+	}
+}
+
+func (c *controller) startValidator(v *Validator) error {
+	pk := v.Share.PublicKey.SerializeToHexStr()
+	logger := c.logger.With(zap.String("pubkey", pk))
+	start := func() error {
+		logger.Debug("starting validator")
 		if err := v.Start(); err != nil {
-			c.logger.Error("failed to start validator", zap.Error(err))
-			continue
+			logger.Error("could not start validator", zap.Error(err))
+			return err
 		}
+		return nil
 	}
-}
-
-// GetValidatorsPubKeys returns a list of all the validators public keys
-func (c *controller) GetValidatorsPubKeys() [][]byte {
-	var pubKeys [][]byte
-	for _, val := range c.validatorsMap {
-		pubKeys = append(pubKeys, val.Share.PublicKey.Serialize())
+	if err := c.dispatcher.Queue(*tasks.NewTask(start, fmt.Sprintf("start:%s", pk), nil)); err == tasks.TaskExistErr {
+		logger.Debug("validator is already running or queued, skipping")
+		return nil
+	} else if err != nil {
+		return err
 	}
-	return pubKeys
-}
-
-// GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
-func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
-	var indices []spec.ValidatorIndex
-	var toFetch []phase0.BLSPubKey
-	for _, val := range c.validatorsMap {
-		if val.Share.Index == nil {
-			blsPubKey := phase0.BLSPubKey{}
-			copy(blsPubKey[:], val.Share.PublicKey.Serialize())
-			toFetch = append(toFetch, blsPubKey)
-		} else {
-			index := spec.ValidatorIndex(*val.Share.Index)
-			indices = append(indices, index)
-		}
-	}
-	go c.updateIndices(toFetch) // saving missing indices to be ready for next ticker (slot)
-	return indices
-}
-
-// GetValidator returns a validator
-func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
-	v, ok := c.validatorsMap[pubKey]
-	return v, ok
-}
-
-// AddValidator adds a new validator
-func (c *controller) AddValidator(pubKey string, v *Validator) bool {
-	if _, ok := c.validatorsMap[pubKey]; !ok {
-		c.validatorsMap[pubKey] = v
-		return true
-	}
-	c.logger.Info("validator already exist")
-	return false
-}
-
-// NewValidatorSubject returns the validators subject
-func (c *controller) NewValidatorSubject() pubsub.Subscriber {
-	return c.newValidatorSubject
+	return nil
 }
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
-	l := c.logger.With(zap.String("validatorPubKey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
-	l.Debug("handles validator added event")
-	operatorPrivKey, found, err := c.shareEncryptionKeyProvider()
-	if !found{
-		l.Error("failed to find operator private key")
-		return
-	}
+	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
+	logger := c.logger.With(zap.String("validatorPubKey", pubKey))
+	logger.Debug("handles validator added event")
+	validatorShare, err := c.createShare(validatorAddedEvent)
 	if err != nil {
-		l.Error("failed to get operator private key")
+		logger.Error("failed to create share", zap.Error(err))
 		return
 	}
-	var operatorPubKey string
-	if operatorPrivKey != nil {
-		operatorPubKey, err = rsaencryption.ExtractPublicKey(operatorPrivKey)
-		if err != nil {
-			l.Error("failed to extract operator public key")
+	_, found, err := c.getValidatorShare(validatorShare.PublicKey.Serialize())
+	if err != nil {
+		logger.Error("could not check if validator share exits", zap.Error(err))
+		return
+	}
+	if !found { // save share
+		if err := c.saveValidatorShare(validatorShare); err != nil {
+			logger.Error("failed to save validator share", zap.Error(err))
 			return
 		}
+		logger.Debug("validator share was saved")
 	}
-	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
-	if err != nil {
-		l.Error("failed to create share", zap.Error(err))
-		return
-	}
-	if len(validatorShare.Committee) > 0 {
-		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-			l.Error("failed to save validator share", zap.Error(err))
-			return
+	if added := c.setupValidator(validatorShare); added {
+		if v, ok := c.GetValidator(pubKey); ok {
+			// start validator
+			if err := c.startValidator(v); err != nil {
+				logger.Error("failed to start validator", zap.Error(err))
+			}
 		}
-		l.Debug("validator share was saved")
-		c.onNewValidatorShare(validatorShare)
 	}
 }
 
-func (c *controller) onNewValidatorShare(validatorShare *validatorstorage.Share) {
-	pubKeyHex := validatorShare.PublicKey.SerializeToHexStr()
-	if _, exist := c.GetValidator(pubKeyHex); exist {
-		c.logger.Debug("skip setup for known validator",
-			zap.String("pubKeyHex", pubKeyHex))
-		return
+func (c *controller) createShare(validatorAddedEvent eth1.ValidatorAddedEvent) (*validatorstorage.Share, error) {
+	operatorPrivKey, found, err := c.shareEncryptionKeyProvider()
+	if !found {
+		return nil, errors.New("could not find operator private key")
 	}
-	// setup validator
-	validatorOpts := Options{
-		Context:                    c.context,
-		Logger:                     c.logger,
-		Share:                      validatorShare,
-		Network:                    c.network,
-		Beacon:                     c.beacon,
-		ETHNetwork:                 c.ethNetwork,
-		SignatureCollectionTimeout: c.signatureCollectionTimeout,
+	if err != nil {
+		return nil, errors.Wrap(err, "get operator private key")
 	}
-	v := New(validatorOpts, c.db)
-	if added := c.AddValidator(pubKeyHex, v); added {
-		// start validator
-		if err := v.Start(); err != nil {
-			c.logger.Error("failed to start validator",
-				zap.Error(err), zap.String("pubKeyHex", pubKeyHex))
-		} else {
-			c.logger.Debug("validator started", zap.String("pubKeyHex", pubKeyHex))
-		}
-		c.newValidatorSubject.Notify(*v)
+	operatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not extract operator public key")
 	}
+	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create share from event")
+	}
+	return validatorShare, nil
 }
 
 func (c *controller) updateIndices(pubkeys []spec.BLSPubKey) {
@@ -267,10 +256,10 @@ func (c *controller) updateIndices(pubkeys []spec.BLSPubKey) {
 	}
 	c.logger.Debug("returned indices from beacon", zap.Int("total", len(validatorsMap)))
 	for index, v := range validatorsMap {
-		if validator, ok := c.validatorsMap[hex.EncodeToString(v.Validator.PublicKey[:])]; ok {
+		if validator, ok := c.GetValidator(hex.EncodeToString(v.Validator.PublicKey[:])); ok {
 			uIndex := uint64(index)
 			validator.Share.Index = &uIndex
-			err := c.collection.SaveValidatorShare(validator.Share)
+			err := c.saveValidatorShare(validator.Share)
 			if err != nil {
 				c.logger.Error("failed to update share index", zap.String("pubkey", validator.Share.PublicKey.SerializeToHexStr()))
 				continue
@@ -290,4 +279,74 @@ func printValidatorShare(logger *zap.Logger, validatorShare *validatorstorage.Sh
 		zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()),
 		zap.Uint64("nodeID", validatorShare.NodeID),
 		zap.Strings("committee", committee))
+}
+
+func (c *controller) getAllValidatorShares() ([]*validatorstorage.Share, error) {
+	c.validatorL.RLock()
+	defer c.validatorL.RUnlock()
+	return c.collection.GetAllValidatorsShare()
+}
+
+func (c *controller) getValidatorShare(pk []byte) (*validatorstorage.Share, bool, error) {
+	c.validatorL.RLock()
+	defer c.validatorL.RUnlock()
+	return c.collection.GetValidatorsShare(pk)
+}
+
+func (c *controller) saveValidatorShare(share *validatorstorage.Share) error {
+	c.validatorL.Lock()
+	defer c.validatorL.Unlock()
+	return c.collection.SaveValidatorShare(share)
+}
+
+// GetValidator returns a validator
+func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
+	c.validatorL.RLock()
+	defer c.validatorL.RUnlock()
+	v, ok := c.validatorsMap[pubKey]
+	return v, ok
+}
+
+// AddValidator adds a new validator
+func (c *controller) AddValidator(pubKey string, v *Validator) bool {
+	c.validatorL.Lock()
+	defer c.validatorL.Unlock()
+	if _, ok := c.validatorsMap[pubKey]; !ok {
+		c.validatorsMap[pubKey] = v
+		return true
+	}
+	return false
+}
+
+// GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
+func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
+	c.validatorL.RLock()
+	defer c.validatorL.RUnlock()
+
+	var indices []spec.ValidatorIndex
+	var toFetch []phase0.BLSPubKey
+	for _, val := range c.validatorsMap {
+		if val.Share.Index == nil {
+			blsPubKey := phase0.BLSPubKey{}
+			copy(blsPubKey[:], val.Share.PublicKey.Serialize())
+			toFetch = append(toFetch, blsPubKey)
+		} else {
+			index := spec.ValidatorIndex(*val.Share.Index)
+			indices = append(indices, index)
+		}
+	}
+	go c.updateIndices(toFetch) // saving missing indices to be ready for next ticker (slot)
+	return indices
+}
+
+// GetValidatorsPubKeys returns a list of all the validators public keys
+func (c *controller) GetValidatorsPubKeys() [][]byte {
+	c.validatorL.RLock()
+	defer c.validatorL.RUnlock()
+
+	var pubKeys [][]byte
+	for _, val := range c.validatorsMap {
+		pubKeys = append(pubKeys, val.Share.PublicKey.Serialize())
+	}
+	return pubKeys
 }
