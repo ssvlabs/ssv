@@ -68,7 +68,7 @@ type ibftImpl struct {
 	// flags
 	initFinished bool
 
-	syncingLock         *semaphore.Weighted
+	syncingLock *semaphore.Weighted
 }
 
 // New is the constructor of IBFT
@@ -88,7 +88,7 @@ func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage co
 		// flags
 		initFinished: false,
 
-		syncingLock:         semaphore.NewWeighted(1),
+		syncingLock: semaphore.NewWeighted(1),
 	}
 	return ret
 }
@@ -131,4 +131,3 @@ func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
 func (i *ibftImpl) GetIdentifier() []byte {
 	return i.Identifier //TODO should use mutex to lock var?
 }
-

@@ -128,7 +128,7 @@ func (i *ibftImpl) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	}
 
 	highest, found, err := i.ibftStorage.GetHighestDecidedInstance(msg.Message.Lambda)
-	if !found{
+	if !found {
 		return msg.Message.SeqNumber > 0, nil
 	}
 	if err != nil {
