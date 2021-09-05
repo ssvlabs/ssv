@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-// ChangeRoundAndDecide tests coming to consensus after a non prepared change round
-type ChangeRoundAndDecide struct {
+// ChangeToRound2AndDecide tests coming to consensus after a non prepared change round
+type ChangeToRound2AndDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *ChangeRoundAndDecide) Name() string {
+func (test *ChangeToRound2AndDecide) Name() string {
 	return "pre-prepare -> change round -> pre-prepare -> prepare -> decide"
 }
 
 // Prepare prepares the test
-func (test *ChangeRoundAndDecide) Prepare(t *testing.T) {
+func (test *ChangeToRound2AndDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,7 +39,7 @@ func (test *ChangeRoundAndDecide) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *ChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *ChangeToRound2AndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
@@ -63,7 +63,7 @@ func (test *ChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.Signed
 }
 
 // Run runs the test
-func (test *ChangeRoundAndDecide) Run(t *testing.T) {
+func (test *ChangeToRound2AndDecide) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.SimulateTimeout(test.instance, 2)

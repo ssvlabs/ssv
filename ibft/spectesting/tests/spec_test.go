@@ -28,8 +28,8 @@ var tests = []SpecTest{
 	&preprepare.InvalidPrePrepareValue{},
 
 	// prepare
-	&prepare.PrepareAtFutureRound{},
-	&prepare.PrepareChangeRoundAndDecide{},
+	&prepare.PreparedAtFutureRound{},
+	&prepare.PreparedAndDecideAfterChangeRound{},
 
 	// commit
 	&commit.DecideDifferentValue{},
@@ -37,9 +37,9 @@ var tests = []SpecTest{
 	&commit.FutureRoundDecided{},
 
 	// change round
-	&changeround.ChangeRoundAndDecide{},
-	&changeround.ChangeRoundPartialQuorum{},
-	&changeround.ChangeRoundNotPreparedError{},
+	&changeround.ChangeToRound2AndDecide{},
+	&changeround.PartialQuorum{},
+	&changeround.NotPreparedError{},
 
 	// common
 	&common.DuplicateMessages{},

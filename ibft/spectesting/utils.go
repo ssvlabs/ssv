@@ -215,7 +215,7 @@ func TestInputValue() []byte {
 	return []byte("testing value")
 }
 
-// TestInputValue a const input test value
+// InvalidTestInputValue a const input invalid test value
 func InvalidTestInputValue() []byte {
 	return []byte("invalid testing value")
 }

@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-// PrepareAtFutureRound tests receiving a quorum of prepare msgs in a different round than state round.
-type PrepareAtFutureRound struct {
+// PreparedAtFutureRound tests receiving a quorum of prepare msgs in a different round than state round.
+type PreparedAtFutureRound struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *PrepareAtFutureRound) Name() string {
+func (test *PreparedAtFutureRound) Name() string {
 	return "pre-prepare -> prepare for round 5 -> change round until round 5 -> commit"
 }
 
 // Prepare prepares the test
-func (test *PrepareAtFutureRound) Prepare(t *testing.T) {
+func (test *PreparedAtFutureRound) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,7 +39,7 @@ func (test *PrepareAtFutureRound) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *PrepareAtFutureRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *PreparedAtFutureRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
@@ -56,7 +56,7 @@ func (test *PrepareAtFutureRound) MessagesSequence(t *testing.T) []*proto.Signed
 }
 
 // Run runs the test
-func (test *PrepareAtFutureRound) Run(t *testing.T) {
+func (test *PreparedAtFutureRound) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 

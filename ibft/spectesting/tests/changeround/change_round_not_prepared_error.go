@@ -8,20 +8,20 @@ import (
 	"testing"
 )
 
-// ChangeRoundNotPreparedError tests coming to consensus after a non prepared change round
-type ChangeRoundNotPreparedError struct {
+// NotPreparedError tests coming to consensus after a non prepared change round
+type NotPreparedError struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *ChangeRoundNotPreparedError) Name() string {
+func (test *NotPreparedError) Name() string {
 	return "pre-prepare -> prepare -> change round (not prepared)"
 }
 
 // Prepare prepares the test
-func (test *ChangeRoundNotPreparedError) Prepare(t *testing.T) {
+func (test *NotPreparedError) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -38,7 +38,7 @@ func (test *ChangeRoundNotPreparedError) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *ChangeRoundNotPreparedError) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *NotPreparedError) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
@@ -54,7 +54,7 @@ func (test *ChangeRoundNotPreparedError) MessagesSequence(t *testing.T) []*proto
 }
 
 // Run runs the test
-func (test *ChangeRoundNotPreparedError) Run(t *testing.T) {
+func (test *NotPreparedError) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 

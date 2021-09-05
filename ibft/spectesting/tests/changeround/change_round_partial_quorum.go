@@ -10,20 +10,20 @@ import (
 	"testing"
 )
 
-// ChangeRoundPartialQuorum tests partial round change behaviour
-type ChangeRoundPartialQuorum struct {
+// PartialQuorum tests partial round change behaviour
+type PartialQuorum struct {
 	instances  []*ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *ChangeRoundPartialQuorum) Name() string {
+func (test *PartialQuorum) Name() string {
 	return "receive f+1 change round messages -> bump round -> set timer -> broadcast round change"
 }
 
 // Prepare prepares the test
-func (test *ChangeRoundPartialQuorum) Prepare(t *testing.T) {
+func (test *PartialQuorum) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -45,7 +45,7 @@ func (test *ChangeRoundPartialQuorum) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.SignedMessage {
+func (test *PartialQuorum) MessagesSequence(t *testing.T) [][]*proto.SignedMessage {
 	return [][]*proto.SignedMessage{
 		{ // f+1 points to 2
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
@@ -90,7 +90,7 @@ func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.
 }
 
 // Run runs the test
-func (test *ChangeRoundPartialQuorum) Run(t *testing.T) {
+func (test *PartialQuorum) Run(t *testing.T) {
 	require.Len(t, test.instances, 6)
 
 	require.NoError(t, test.instances[0].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
