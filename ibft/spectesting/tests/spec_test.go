@@ -25,6 +25,7 @@ var tests = []SpecTest{
 	&preprepare.Round1PrePrepare{},
 	&preprepare.WrongLeaderPrePrepare{},
 	&preprepare.FuturePrePrepare{},
+	&preprepare.InvalidPrePrepareValue{},
 
 	// prepare
 	&prepare.PrepareAtFutureRound{},
