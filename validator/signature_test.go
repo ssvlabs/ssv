@@ -13,6 +13,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 		skByts        []byte
 		root          []byte
 		useWrongRoot  bool
+		useEmptyRoot  bool
 		ibftID        uint64
 		expectedError string
 	}{
@@ -20,6 +21,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			"valid/ id 1",
 			refSplitShares[0],
 			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+			false,
 			false,
 			1,
 			"",
@@ -29,6 +31,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			refSplitShares[1],
 			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 1},
 			false,
+			false,
 			2,
 			"",
 		},
@@ -36,6 +39,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			"valid/ id 3",
 			refSplitShares[2],
 			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
+			false,
 			false,
 			3,
 			"",
@@ -45,6 +49,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			refSplitShares[2],
 			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
 			false,
+			false,
 			2,
 			"could not verify signature from iBFT member 2",
 		},
@@ -52,6 +57,16 @@ func TestVerifyPartialSignature(t *testing.T) {
 			"wrong root",
 			refSplitShares[2],
 			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
+			true,
+			false,
+			3,
+			"could not verify signature from iBFT member 3",
+		},
+		{
+			"empty root",
+			refSplitShares[2],
+			[]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 2},
+			false,
 			true,
 			3,
 			"could not verify signature from iBFT member 3",
@@ -71,6 +86,9 @@ func TestVerifyPartialSignature(t *testing.T) {
 			usedRoot := test.root
 			if test.useWrongRoot {
 				usedRoot = []byte{0, 0, 0, 0, 0, 0, 0}
+			}
+			if test.useEmptyRoot {
+				usedRoot = []byte{}
 			}
 
 			err := node.verifyPartialSignature(sig.Serialize(), usedRoot, test.ibftID, node.ibfts[beacon.RoleTypeAttester].GetIBFTCommittee()) // TODO need to fetch the committee from storage

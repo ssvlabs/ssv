@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -30,6 +31,7 @@ type Options struct {
 	Network                    network.Network
 	Beacon                     beacon.Beacon
 	ETHNetwork                 *core.Network
+	DB                         basedb.IDb
 }
 
 // Validator struct that manages all ibft wrappers
@@ -44,22 +46,19 @@ type Validator struct {
 	network                    network.Network
 	signatureCollectionTimeout time.Duration
 	valueCheck                 *valcheck.SlashingProtection
+	startOnce                  sync.Once
 }
 
 // New Validator creation
-func New(opt Options, db basedb.IDb) *Validator {
+func New(opt Options) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", opt.Share.NodeID))
 
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.RoleType]ibft.IBFT)
-	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, db, opt.Network, msgQueue, opt.Share)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
-
-	for _, ib := range ibfts { // init all ibfts
-		go ib.Init()
-	}
 
 	if opt.Share.Index != nil { // in order ot update goclient map to prevent getting all network indices bug
 		blsPubkey := spec.BLSPubKey{}
@@ -78,20 +77,26 @@ func New(opt Options, db basedb.IDb) *Validator {
 		ethNetwork:                 opt.ETHNetwork,
 		beacon:                     opt.Beacon,
 		valueCheck:                 valcheck.New(),
+		startOnce:                  sync.Once{},
 	}
 }
 
 // Start validator
 func (v *Validator) Start() error {
-	if v.network.IsSubscribeToValidatorNetwork(v.Share.PublicKey) {
-		v.logger.Debug("already subscribed to validator's topic")
-		return nil
-	}
-	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
-		return errors.Wrap(err, "failed to subscribe topic")
+	if !v.network.IsSubscribeToValidatorNetwork(v.Share.PublicKey) {
+		if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
+			return errors.Wrap(err, "failed to subscribe topic")
+		}
 	}
 
-	go v.listenToSignatureMessages()
+	v.startOnce.Do(func() {
+		go v.listenToSignatureMessages()
+
+		for _, ib := range v.ibfts { // init all ibfts
+			go ib.Init()
+		}
+	})
+
 	return nil
 }
 
