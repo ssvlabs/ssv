@@ -47,6 +47,20 @@ func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
 	return nil
 }
 
+// UpdateValidatorShare updates the share of the corresponding validator
+func (vm *validatorsMap) UpdateValidatorShare(share *storage.Share) bool {
+	// main lock
+	vm.lock.RLock()
+	defer vm.lock.RUnlock()
+
+	if v, ok := vm.validatorsMap[share.PublicKey.SerializeToHexStr()]; ok {
+		v.Share = share
+		return true
+	}
+
+	return false
+}
+
 // GetValidator returns a validator
 func (vm *validatorsMap) GetValidator(pubKey string) (*Validator, bool) {
 	// main lock

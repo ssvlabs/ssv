@@ -196,7 +196,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	logger := c.logger.With(zap.String("validatorPubKey", pubKey))
 	logger.Debug("handles validator added event")
 	// if exist and resync was not forced -> do nothing
-	if _, ok := c.validatorsMap.GetValidator(pubKey); ok && !c.registryResync {
+	if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 		logger.Debug("validator was loaded already")
 		// TODO: handle updateValidator in the future
 		return
@@ -217,10 +217,14 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 			return
 		}
 		logger.Debug("validator share was saved")
+		if c.validatorsMap.UpdateValidatorShare(validatorShare) {
+			logger.Debug("validator share was updated in map")
+		}
 	} else {
 		// TODO: handle updateValidator in the future
 		validatorShare = foundShare
 	}
+
 	v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 
 	if err := v.Start(); err != nil {
