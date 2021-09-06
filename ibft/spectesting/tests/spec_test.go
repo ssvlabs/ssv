@@ -43,6 +43,8 @@ var tests = []SpecTest{
 
 	// common
 	&common.DuplicateMessages{},
+	&common.InvalidSig{},
+	&common.WrongSequenceNumber{},
 	&ValidSimpleRun{},
 
 	// TODO

@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"go.uber.org/zap"
@@ -20,12 +19,7 @@ func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
 		case proto.RoundState_Commit:
 			pp = i.commitMsgPipeline()
 		case proto.RoundState_ChangeRound:
-			pp = pipeline.Combine(
-				i.changeRoundMsgValidationPipeline(),
-				changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
-				i.ChangeRoundPartialQuorumMsgPipeline(),
-				i.changeRoundFullQuorumMsgPipeline(),
-			)
+			pp = i.changeRoundMsgPipeline()
 		default:
 			i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.SignedMessage))
 			return true, nil

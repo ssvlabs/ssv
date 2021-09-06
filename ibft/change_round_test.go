@@ -713,7 +713,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	}
 }
 
-func TestChangeRoundPipeline(t *testing.T) {
+func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
@@ -730,4 +730,23 @@ func TestChangeRoundPipeline(t *testing.T) {
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , if first pipeline non error, continue to second, ", pipeline.Name())
+}
+
+func TestChangeRoundPipeline(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	instance := &Instance{
+		PrepareMessages: msgcontinmem.New(3, 2),
+		Config:          proto.DefaultConsensusParams(),
+		ValidatorShare: &storage.Share{
+			Committee: nodes,
+			PublicKey: sks[1].GetPublicKey(), // just placeholder
+		},
+		State: &proto.State{
+			Round:     threadsafe.Uint64(1),
+			Lambda:    threadsafe.Bytes(nil),
+			SeqNumber: threadsafe.Uint64(0),
+		},
+	}
+	pipeline := instance.changeRoundMsgPipeline()
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , if first pipeline non error, continue to second, , ", pipeline.Name())
 }

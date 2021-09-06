@@ -15,6 +15,15 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
+func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+	return pipeline.Combine(
+		i.changeRoundMsgValidationPipeline(),
+		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
+		i.ChangeRoundPartialQuorumMsgPipeline(),
+		i.changeRoundFullQuorumMsgPipeline(),
+	)
+}
+
 func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),

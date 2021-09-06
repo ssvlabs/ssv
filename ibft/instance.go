@@ -127,7 +127,6 @@ func NewInstance(opts *InstanceOptions) *Instance {
 func (i *Instance) Init() {
 	i.runInitOnce.Do(func() {
 		go i.StartMessagePipeline()
-		//go i.StartPartialChangeRoundPipeline()
 		go i.startRoundTimerLoop()
 		go i.StartMainEventLoop()
 		i.initialized = true

@@ -229,20 +229,20 @@ func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 // RequireReturnedTrueNoError will call ProcessMessage and verifies it returns true and nil for execution
 func RequireReturnedTrueNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
-	require.NoError(t, err)
 	require.True(t, res)
+	require.NoError(t, err)
 }
 
 // RequireReturnedFalseNoError will call ProcessMessage and verifies it returns false and nil for execution
 func RequireReturnedFalseNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
-	require.NoError(t, err)
 	require.False(t, res)
+	require.NoError(t, err)
 }
 
 // RequireReturnedTrueWithError will call ProcessMessage and verifies it returns true and error for execution
 func RequireReturnedTrueWithError(t *testing.T, f func() (bool, error), errStr string) {
 	res, err := f()
-	require.EqualError(t, err, errStr)
 	require.True(t, res)
+	require.EqualError(t, err, errStr)
 }

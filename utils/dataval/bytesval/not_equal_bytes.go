@@ -12,7 +12,7 @@ type notEqualBytesValidation struct {
 	val []byte
 }
 
-// NewEqualBytes is the constructor of bytesValidation
+// NewNotEqualBytes is the constructor of bytesValidation
 func NewNotEqualBytes(val []byte) valcheck.ValueCheck {
 	return &notEqualBytesValidation{
 		val: val,
