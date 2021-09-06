@@ -29,8 +29,8 @@ func TestNewDispatcher(t *testing.T) {
 		}, tid, nil))
 	}
 	go d.Start()
-	for _, t := range tasks {
-		d.Queue(t)
+	for _, ts := range tasks {
+		require.NoError(t, d.Queue(ts))
 	}
 	time.Sleep((100 + 20) * time.Millisecond) // 100 (expected) + 20 (buffer)
 	count := 0
@@ -61,6 +61,30 @@ func TestTask_End(t *testing.T) {
 		Concurrent: 10,
 	})
 
-	d.Queue(*t1)
-	d.Queue(*t2)
+	require.NoError(t, d.Queue(*t1))
+	require.NoError(t, d.Queue(*t2))
+}
+
+
+func TestDispatcher_DistinctTasks(t *testing.T) {
+	d := NewDispatcher(DispatcherOptions{
+		Ctx:        context.TODO(),
+		Logger:     zap.L(),
+		Interval:   1 * time.Millisecond,
+		Concurrent: 10,
+	})
+	var i int64
+	inc := func() error {
+		atomic.AddInt64(&i, 1)
+		return nil
+	}
+	t1 := NewTask(inc, "1", func() {
+		atomic.AddInt64(&i, 1)
+	})
+	t2 := NewTask(inc, "1", func() {
+		atomic.AddInt64(&i, 1)
+	})
+
+	require.NoError(t, d.Queue(*t1))
+	require.Error(t, d.Queue(*t2))
 }

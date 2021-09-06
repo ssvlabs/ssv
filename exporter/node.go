@@ -212,6 +212,7 @@ func (exp *exporter) triggerAllValidators() {
 		exp.logger.Error("could not get validators shares", zap.Error(err))
 		return
 	}
+	exp.logger.Debug("triggering validators", zap.Int("count", len(shares)))
 	for _, share := range shares {
 		if err = exp.triggerValidator(share.PublicKey); err != nil {
 			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),
@@ -259,7 +260,13 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 		logger.Debug("sync is done, starting to read network messages")
 		exp.readNetworkMessages(validatorPubKey)
 	})
-	exp.ibftSyncDispatcher.Queue(*syncTask)
+	if err := exp.ibftSyncDispatcher.Queue(*syncTask); err != nil {
+		if err == tasks.ErrTaskExist {
+			logger.Debug("sync task was already queued")
+			return nil
+		}
+		return err
+	}
 
 	return nil
 }
@@ -273,5 +280,11 @@ func (exp *exporter) readNetworkMessages(validatorPubKey *bls.PublicKey) {
 	})
 	readerTask := tasks.NewTask(ibftMsgReader.Start,
 		fmt.Sprintf("ibft:msgReader/%s", validatorPubKey.SerializeToHexStr()), nil)
-	exp.networkReadDispatcher.Queue(*readerTask)
+	if err := exp.networkReadDispatcher.Queue(*readerTask); err != nil {
+		if err == tasks.ErrTaskExist {
+			exp.logger.Debug("network reader was already queued", zap.String("tid", readerTask.ID))
+			return
+		}
+		exp.logger.Error("could not queue network reader", zap.String("tid", readerTask.ID), zap.Error(err))
+	}
 }
