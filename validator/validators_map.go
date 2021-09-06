@@ -65,14 +65,14 @@ func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *Validator {
 	defer vm.lock.Unlock()
 
 	pubKey := share.PublicKey.SerializeToHexStr()
-	if _, ok := vm.validatorsMap[pubKey]; !ok {
+	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
 		vm.validatorsMap[pubKey] = New(opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil
 	} else {
-		printShare(share, vm.logger, "get validator")
+		printShare(v.Share, vm.logger, "get validator")
 	}
 
 	return vm.validatorsMap[pubKey]
