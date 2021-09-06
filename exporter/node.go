@@ -260,13 +260,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 		logger.Debug("sync is done, starting to read network messages")
 		exp.readNetworkMessages(validatorPubKey)
 	})
-	if err := exp.ibftSyncDispatcher.Queue(*syncTask); err != nil {
-		if err == tasks.ErrTaskExist {
-			logger.Debug("sync task was already queued")
-			return nil
-		}
-		return err
-	}
+	exp.ibftSyncDispatcher.Queue(*syncTask)
 
 	return nil
 }
@@ -280,11 +274,5 @@ func (exp *exporter) readNetworkMessages(validatorPubKey *bls.PublicKey) {
 	})
 	readerTask := tasks.NewTask(ibftMsgReader.Start,
 		fmt.Sprintf("ibft:msgReader/%s", validatorPubKey.SerializeToHexStr()), nil)
-	if err := exp.networkReadDispatcher.Queue(*readerTask); err != nil {
-		if err == tasks.ErrTaskExist {
-			exp.logger.Debug("network reader was already queued", zap.String("tid", readerTask.ID))
-			return
-		}
-		exp.logger.Error("could not queue network reader", zap.String("tid", readerTask.ID), zap.Error(err))
-	}
+	exp.networkReadDispatcher.Queue(*readerTask)
 }

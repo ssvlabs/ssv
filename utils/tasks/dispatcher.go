@@ -2,25 +2,19 @@ package tasks
 
 import (
 	"context"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
 	"time"
 )
 
-const (
-	defaultConcurrentLimit = 100
-)
-
 var (
-	// ErrTaskExist thrown when the task to dispatch already exist
-	ErrTaskExist = errors.New("task exist")
+	defaultConcurrentLimit = 25
 )
 
 // Task represents a some function to execute
 type Task struct {
-	Fn  func() error
-	ID  string
+	Fn func() error
+	ID string
 	end func()
 }
 
@@ -33,7 +27,7 @@ func NewTask(fn func() error, id string, end func()) *Task {
 // Dispatcher maintains a queue of tasks to dispatch
 type Dispatcher interface {
 	// Queue adds a new task
-	Queue(Task) error
+	Queue(Task)
 	// Dispatch will dispatch the next task
 	Dispatch()
 	// Start starts ticks
@@ -72,9 +66,8 @@ type dispatcher struct {
 	ctx    context.Context
 	logger *zap.Logger
 
-	tasks   map[string]Task
-	running map[string]bool
-	waiting []string
+	running int
+	waiting []Task
 	mut     sync.RWMutex
 
 	interval        time.Duration
@@ -91,27 +84,21 @@ func NewDispatcher(opts DispatcherOptions) Dispatcher {
 		logger:          opts.Logger,
 		interval:        opts.Interval,
 		concurrentLimit: opts.Concurrent,
-		tasks:           map[string]Task{},
-		waiting:         []string{},
+		waiting:         []Task{},
 		mut:             sync.RWMutex{},
-		running:         map[string]bool{},
+		running:         0,
 	}
 	return &d
 }
 
-func (d *dispatcher) Queue(task Task) error {
+func (d *dispatcher) Queue(task Task) {
 	d.mut.Lock()
 	defer d.mut.Unlock()
 
-	if _, exist := d.tasks[task.ID]; exist {
-		return ErrTaskExist
-	}
-	d.tasks[task.ID] = task
-	d.waiting = append(d.waiting, task.ID)
+	d.waiting = append(d.waiting, task)
 	d.logger.Debug("task was queued",
 		zap.String("task-id", task.ID),
 		zap.Int("waiting", len(d.waiting)))
-	return nil
 }
 
 func (d *dispatcher) nextTaskToRun() *Task {
@@ -122,13 +109,10 @@ func (d *dispatcher) nextTaskToRun() *Task {
 		return nil
 	}
 	// pop first task in the waiting queue
-	tid := d.waiting[0]
+	task := d.waiting[0]
 	d.waiting = d.waiting[1:]
-	if task, ok := d.tasks[tid]; ok {
-		d.running[tid] = true
-		return &task
-	}
-	return nil
+	d.running++
+	return &task
 }
 
 func (d *dispatcher) Dispatch() {
@@ -137,12 +121,10 @@ func (d *dispatcher) Dispatch() {
 		return
 	}
 	go func() {
-		tid := task.ID
-		logger := d.logger.With(zap.String("task-id", tid))
+		logger := d.logger.With(zap.String("task-id", task.ID))
 		defer func() {
 			d.mut.Lock()
-			delete(d.running, tid)
-			delete(d.tasks, tid)
+			d.running--
 			d.mut.Unlock()
 		}()
 		stats := d.Stats()
@@ -151,7 +133,7 @@ func (d *dispatcher) Dispatch() {
 			zap.Int("waiting", stats.Waiting))
 		err := task.Fn()
 		if err != nil {
-			logger.Error("task failed", zap.Error(err))
+			d.logger.Error("task failed", zap.Error(err))
 		}
 		if task.end != nil {
 			go task.end()
@@ -161,7 +143,7 @@ func (d *dispatcher) Dispatch() {
 
 func (d *dispatcher) Start() {
 	if d.interval.Milliseconds() == 0 {
-		d.logger.Warn("dispatcher interval was set to zero, ticker won't start")
+		d.logger.Debug("dispatcher interval was set to zero, ticker won't start")
 		return
 	}
 	ticker := time.NewTicker(d.interval)
@@ -170,7 +152,7 @@ func (d *dispatcher) Start() {
 		select {
 		case <-ticker.C:
 			d.mut.RLock()
-			running := len(d.running)
+			running := d.running
 			d.mut.RUnlock()
 			if running < d.concurrentLimit {
 				d.Dispatch()
@@ -187,7 +169,7 @@ func (d *dispatcher) Stats() *DispatcherStats {
 	defer d.mut.RUnlock()
 	ds := DispatcherStats{
 		Waiting: len(d.waiting),
-		Running: len(d.running),
+		Running: d.running,
 		Time:    time.Now(),
 	}
 	return &ds
