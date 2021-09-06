@@ -212,6 +212,7 @@ func (exp *exporter) triggerAllValidators() {
 		exp.logger.Error("could not get validators shares", zap.Error(err))
 		return
 	}
+	exp.logger.Debug("triggering validators", zap.Int("count", len(shares)))
 	for _, share := range shares {
 		if err = exp.triggerValidator(share.PublicKey); err != nil {
 			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),

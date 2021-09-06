@@ -98,9 +98,16 @@ func (s *Share) Serialize() ([]byte, error) {
 		NodeID:    s.NodeID,
 		Index:     s.Index,
 		ShareKey:  s.ShareKey.Serialize(),
-		Committee: s.Committee,
+		Committee: map[uint64]*proto.Node{},
 	}
-
+	// copy committee by value
+	for k, n := range s.Committee {
+		value.Committee[k] = &proto.Node{
+			IbftId: n.GetIbftId(),
+			Pk:     n.GetPk()[:],
+			Sk:     n.GetSk()[:],
+		}
+	}
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	if err := e.Encode(value); err != nil {
