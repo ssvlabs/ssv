@@ -104,8 +104,8 @@ func (s *Share) Serialize() ([]byte, error) {
 	for k, n := range s.Committee {
 		value.Committee[k] = &proto.Node{
 			IbftId: n.GetIbftId(),
-			Pk: n.GetPk()[:],
-			Sk: n.GetSk()[:],
+			Pk:     n.GetPk()[:],
+			Sk:     n.GetSk()[:],
 		}
 	}
 	var b bytes.Buffer

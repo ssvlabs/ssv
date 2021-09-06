@@ -96,4 +96,3 @@ func generateRandomValidatorShare() *Share {
 		Committee: ibftCommittee,
 	}
 }
-

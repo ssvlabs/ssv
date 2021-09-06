@@ -51,11 +51,10 @@ type controller struct {
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
-	// locks
-	// validatorsLock should be acquired when updating validator's indices
-	validatorsLock sync.RWMutex
+	validatorsMap *validatorsMap
 
-	runtimeMap *validatorsMap
+	// indicesLock should be acquired when updating validator's indices
+	indicesLock sync.RWMutex
 }
 
 // NewController creates new validator controller
@@ -75,9 +74,9 @@ func NewController(options ControllerOptions) IController {
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
 
 		// locks
-		validatorsLock: sync.RWMutex{},
+		indicesLock: sync.RWMutex{},
 
-		runtimeMap: newValidatorsMap(options.Context, options.Logger, &Options{
+		validatorsMap: newValidatorsMap(options.Context, options.Logger, &Options{
 			Context:                    options.Context,
 			SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 			Logger:                     options.Logger,
@@ -114,16 +113,16 @@ func (c *controller) setupValidators() {
 	}
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	for _, validatorShare := range shares {
-		c.runtimeMap.GetOrCreateValidator(validatorShare)
+		c.validatorsMap.GetOrCreateValidator(validatorShare)
 	}
-	c.logger.Info("setup validators done", zap.Int("map size", c.runtimeMap.Size()))
+	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()))
 }
 
 // StartValidators functions (queue streaming, msgQueue listen, etc)
 func (c *controller) StartValidators() {
 	c.setupValidators()
 	errs := []error{}
-	err := c.runtimeMap.ForEach(func(v *Validator) error {
+	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if err := v.Start(); err != nil {
 			c.logger.Error("could not start validator", zap.Error(err),
 				zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
@@ -141,17 +140,17 @@ func (c *controller) StartValidators() {
 
 // GetValidator returns a validator
 func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
-	return c.runtimeMap.GetValidator(pubKey)
+	return c.validatorsMap.GetValidator(pubKey)
 }
 
 // GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
-	c.validatorsLock.RLock()
-	defer c.validatorsLock.RUnlock()
+	c.indicesLock.RLock()
+	defer c.indicesLock.RUnlock()
 
 	var indices []spec.ValidatorIndex
 	var toFetch []phase0.BLSPubKey
-	err := c.runtimeMap.ForEach(func(v *Validator) error {
+	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if v.Share.Index == nil {
 			blsPubKey := phase0.BLSPubKey{}
 			copy(blsPubKey[:], v.Share.PublicKey.Serialize())
@@ -175,7 +174,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 func (c *controller) GetValidatorsPubKeys() [][]byte {
 	var pubKeys [][]byte
 
-	err := c.runtimeMap.ForEach(func(v *Validator) error {
+	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		pubKeys = append(pubKeys, v.Share.PublicKey.Serialize())
 		return nil
 	})
@@ -190,7 +189,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	logger := c.logger.With(zap.String("validatorPubKey", pubKey))
 	logger.Debug("handles validator added event")
-	if _, ok := c.runtimeMap.GetValidator(pubKey); ok {
+	if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 		logger.Debug("validator was loaded already")
 		// TODO: handle updateValidator in the future
 		return
@@ -215,7 +214,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		// TODO: handle updateValidator in the future
 		validatorShare = foundShare
 	}
-	v := c.runtimeMap.GetOrCreateValidator(validatorShare)
+	v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 
 	if err := v.Start(); err != nil {
 		logger.Error("could not start validator", zap.Error(err))
@@ -223,13 +222,13 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 }
 
 func (c *controller) updateIndices(pubkeys []spec.BLSPubKey) {
-	c.validatorsLock.RLock()
-	defer c.validatorsLock.RUnlock()
+	c.indicesLock.RLock()
+	defer c.indicesLock.RUnlock()
 
 	if len(pubkeys) == 0 {
 		return
 	}
-	c.logger.Debug("fetching indices...", zap.Int("total", len(pubkeys)))
+	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)))
 	validatorsIndexMap, err := c.beacon.GetIndices(pubkeys)
 	if err != nil {
 		c.logger.Error("failed to fetch indices", zap.Error(err))
@@ -250,7 +249,7 @@ func (c *controller) updateIndices(pubkeys []spec.BLSPubKey) {
 }
 
 func (c *controller) updateIndex(pubKey string, index *uint64) error {
-	if v, ok := c.runtimeMap.GetValidator(pubKey); ok {
+	if v, ok := c.validatorsMap.GetValidator(pubKey); ok {
 		v.Share.Index = index
 		err := c.collection.SaveValidatorShare(v.Share)
 		if err != nil {

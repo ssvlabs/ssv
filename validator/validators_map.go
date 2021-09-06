@@ -11,7 +11,7 @@ import (
 // validatorIterator is the function used to iterate over existing validators
 type validatorIterator func(*Validator) error
 
-// validatorsMap holds a collection of validators and responsible for creating validator instances
+// validatorsMap manages a collection of running validators
 type validatorsMap struct {
 	logger *zap.Logger
 	ctx    context.Context
@@ -78,6 +78,7 @@ func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *Validator {
 	return vm.validatorsMap[pubKey]
 }
 
+// Size returns the number of validators in the map
 func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
