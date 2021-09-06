@@ -128,6 +128,9 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
+		if len(cfg.ETH1Options.ETH1SyncOffset) > 0 { // force resync
+			cfg.SSVOptions.ValidatorOptions.RegistryResync = true
+		}
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 

@@ -31,6 +31,7 @@ type ControllerOptions struct {
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	RegistryResync             bool
 }
 
 // IController interface
@@ -55,6 +56,9 @@ type controller struct {
 
 	// indicesLock should be acquired when updating validator's indices
 	indicesLock sync.RWMutex
+
+	// flags
+	registryResync	bool
 }
 
 // NewController creates new validator controller
@@ -85,6 +89,8 @@ func NewController(options ControllerOptions) IController {
 			Beacon:                     options.Beacon,
 			DB:                         options.DB,
 		}),
+
+		registryResync: options.RegistryResync,
 	}
 
 	return &ctrl
@@ -189,7 +195,8 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	logger := c.logger.With(zap.String("validatorPubKey", pubKey))
 	logger.Debug("handles validator added event")
-	if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
+	// if exist and resync was not forced -> do nothing
+	if _, ok := c.validatorsMap.GetValidator(pubKey); ok && !c.registryResync {
 		logger.Debug("validator was loaded already")
 		// TODO: handle updateValidator in the future
 		return
@@ -204,7 +211,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		logger.Error("could not check if validator share exits", zap.Error(err))
 		return
 	}
-	if !found { // save share if not exist
+	if !found || c.registryResync { // save share if not exist or resync was forced
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			logger.Error("failed to save validator share", zap.Error(err))
 			return
