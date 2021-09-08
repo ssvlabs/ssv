@@ -65,6 +65,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			i.ProcessStageChange(proto.RoundState_PrePrepare)
 			logger := i.Logger.With(zap.Uint64("round", signedMessage.Message.Round),
 				zap.Bool("is_leader", isLeader),
+				zap.Uint64("round_leader", i.ThisRoundLeader()),
 				zap.Bool("round_justified", justifyRound))
 
 			logger.Info("change round quorum received")
