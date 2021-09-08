@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 	"sync"
+	"time"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -98,7 +99,8 @@ func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
-	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
+	time.Sleep(time.Second * 60) // Temporary fix to give all peers a chance to connect before moving to syncing.
+	i.waitForMinPeerOnInit(2)    // minimum of 3 validators (me + 2)
 	if err := i.SyncIBFT(); err != nil {
 		i.logger.Error("could not sync history, stopping IBFT init", zap.Error(err))
 		return // returning means initFinished is false, can't start new instances
