@@ -69,14 +69,7 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 					res = append(res, signedMsg)
 
 					// log
-					for _, signer := range signedMsg.SignerIds {
-						s.logger.Debug("received valid change round speedup",
-							zap.Uint64("signer_id", signer),
-							zap.Uint64("peer_round", signedMsg.Message.Round),
-							zap.Uint64("seq_number", signedMsg.Message.SeqNumber),
-							zap.String("lambda", hex.EncodeToString(signedMsg.Message.Lambda)),
-						)
-					}
+					s.logChangeRoundMsg(signedMsg)
 				}
 			}
 			wg.Done()
@@ -95,4 +88,15 @@ func (s *Speedup) lastMsgError(msg *network.SyncMessage) error {
 		return errors.New("invalid result count")
 	}
 	return nil
+}
+
+func (s *Speedup) logChangeRoundMsg(signedMsg *proto.SignedMessage) {
+	for _, signer := range signedMsg.SignerIds {
+		s.logger.Debug("received valid change round speedup",
+			zap.Uint64("signer_id", signer),
+			zap.Uint64("peer_round", signedMsg.Message.Round),
+			zap.Uint64("seq_number", signedMsg.Message.SeqNumber),
+			zap.String("lambda", hex.EncodeToString(signedMsg.Message.Lambda)),
+		)
+	}
 }
