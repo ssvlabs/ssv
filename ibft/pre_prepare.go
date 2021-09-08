@@ -53,7 +53,7 @@ func (i *Instance) JustifyPrePrepare(round uint64, value []byte) error {
 	}
 
 	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
-		notPrepared, highest, err := i.highestPrepared(round)
+		notPrepared, highest, err := i.HighestPrepared(round)
 		if err != nil {
 			return err
 		}

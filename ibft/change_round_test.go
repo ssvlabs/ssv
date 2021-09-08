@@ -573,7 +573,7 @@ func TestHighestPrepared(t *testing.T) {
 	})
 
 	// test one higher than other
-	notPrepared, highest, err := instance.highestPrepared(3)
+	notPrepared, highest, err := instance.HighestPrepared(3)
 	require.NoError(t, err)
 	require.False(t, notPrepared)
 	require.EqualValues(t, 2, highest.PreparedRound)
@@ -592,7 +592,7 @@ func TestHighestPrepared(t *testing.T) {
 		},
 		SignerIds: []uint64{2},
 	})
-	notPrepared, highest, err = instance.highestPrepared(3)
+	notPrepared, highest, err = instance.HighestPrepared(3)
 	require.NoError(t, err)
 	require.False(t, notPrepared)
 	require.EqualValues(t, 2, highest.PreparedRound)

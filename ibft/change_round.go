@@ -77,11 +77,11 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 				zap.Bool("round_justified", justifyRound))
 			logger.Info("change round quorum received")
 
-			if !i.IsLeader() {
+			if !i.IsLeader() || !justifyRound {
 				return
 			}
 
-			notPrepared, highest, e := i.highestPrepared(signedMessage.Message.Round)
+			notPrepared, highest, e := i.HighestPrepared(signedMessage.Message.Round)
 			if e != nil {
 				err = e
 				return
@@ -187,7 +187,7 @@ func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 	//		∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
 	//			(pr, pv) = HighestPrepared(Qrc)
 
-	notPrepared, _, err := i.highestPrepared(round)
+	notPrepared, _, err := i.HighestPrepared(round)
 	if err != nil {
 		return false, err
 	}
@@ -213,8 +213,8 @@ func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
 				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 */
-// highestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
-func (i *Instance) highestPrepared(round uint64) (notPrepared bool, highestPrepared *proto.ChangeRoundData, err error) {
+// HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
+func (i *Instance) HighestPrepared(round uint64) (notPrepared bool, highestPrepared *proto.ChangeRoundData, err error) {
 	notPrepared = true
 	for _, msg := range i.ChangeRoundMessages.ReadOnlyMessagesByRound(round) {
 		candidateChangeData := &proto.ChangeRoundData{}
