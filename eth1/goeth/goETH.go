@@ -281,7 +281,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	}
 
 	ec.logger.Debug("finished syncing registry contract",
-		zap.Int("total events", len(logs)))
+		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
 	// publishing SyncEndedEvent so other components could track the sync
 	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
 
