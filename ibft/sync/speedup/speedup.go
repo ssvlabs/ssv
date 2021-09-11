@@ -60,6 +60,7 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 			if err != nil {
 				s.logger.Error("error fetching latest change round", zap.Error(err))
 			} else if err := s.lastMsgError(msg); err != nil {
+				// TODO - if error is kv.EntryNotFoundError we shouldn't print it as error
 				s.logger.Debug("could not fetch latest change round", zap.Error(err))
 			} else {
 				signedMsg := msg.SignedMessages[0]
