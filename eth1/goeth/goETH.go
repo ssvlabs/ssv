@@ -78,8 +78,9 @@ var _ metrics.HealthCheckAgent = &eth1Client{}
 
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
-	logger := opts.Logger.With(zap.String("component", "eth1GoETH"))
-	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr), zap.String("contract", opts.RegistryContractAddr))
+	logger := opts.Logger.With(zap.String("component", "eth1GoETH"),
+		zap.String("address", opts.RegistryContractAddr))
+	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr))
 
 	ec := eth1Client{
 		ctx:                        opts.Ctx,
@@ -290,11 +291,6 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 
 func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contractAbi abi.ABI) ([]types.Log, int, error) {
 	logger := ec.logger.With(zap.Int64("fromBlock", fromBlock.Int64()))
-	if toBlock != nil {
-		logger = logger.With(zap.Int64("toBlock", toBlock.Int64()))
-	}
-	logger.Debug("fetching event logs")
-
 	contractAddress := common.HexToAddress(ec.registryContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -302,7 +298,9 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	}
 	if toBlock != nil {
 		query.ToBlock = toBlock
+		logger = logger.With(zap.Int64("toBlock", toBlock.Int64()))
 	}
+	logger.Debug("fetching event logs")
 	logs, err := ec.conn.FilterLogs(ec.ctx, query)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to get event logs")
