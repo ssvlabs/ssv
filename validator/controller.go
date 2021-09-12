@@ -277,7 +277,7 @@ func (c *controller) fetchIndices(sharesPubKeys [][]byte) (map[string]uint64, er
 	var pubkeys []phase0.BLSPubKey
 	for _, pk := range sharesPubKeys {
 		blsPubKey := phase0.BLSPubKey{}
-		copy(blsPubKey[:], pk[:])
+		copy(blsPubKey[:], pk)
 		pubkeys = append(pubkeys, blsPubKey)
 	}
 	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)),

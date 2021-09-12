@@ -97,13 +97,6 @@ func (n *operatorNode) Start() error {
 func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	n.logger.Info("starting operator node syncing with eth1")
 
-	// setup validator controller to listen to ValidatorAdded events
-	// this will handle events from the sync as well
-	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
-	if err != nil {
-		return errors.Wrap(err, "failed to register on contract events subject")
-	}
-
 	// sync past events
 	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset,
 		n.validatorController.ProcessEth1Event); err != nil {
@@ -111,6 +104,11 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	}
 	n.logger.Info("manage to sync contract events")
 
+	// setup validator controller to listen to new events
+	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
+	if err != nil {
+		return errors.Wrap(err, "failed to register on contract events subject")
+	}
 	go n.validatorController.ListenToEth1Events(cnValidators)
 
 	// starts the eth1 events subscription

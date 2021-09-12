@@ -52,10 +52,12 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	defer client.EventsSubject().Deregister("SyncEth1")
 
+	var errsLock sync.Mutex
 	var errs []error
 	// Stop once SyncEndedEvent arrives
 	var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
+	var eventsProcessWg sync.WaitGroup
 	syncWg.Add(1)
 	go func() {
 		defer syncWg.Done()
@@ -67,9 +69,15 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 				logger.Debug("got new event from eth1 sync",
 					zap.Uint64("BlockNumber", event.Log.BlockNumber))
 				if handler != nil {
-					if err := handler(event); err != nil {
-						errs = append(errs, err)
-					}
+					eventsProcessWg.Add(1)
+					go func() {
+						defer eventsProcessWg.Done()
+						if err := handler(event); err != nil {
+							errsLock.Lock()
+							errs = append(errs, err)
+							errsLock.Unlock()
+						}
+					}()
 				}
 			}
 		}
@@ -81,6 +89,8 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	// waiting for eth1 sync to finish
 	syncWg.Wait()
+	// waiting for all events to be processed
+	eventsProcessWg.Wait()
 
 	if len(errs) > 0 {
 		logger.Error("failed to handle all events from sync", zap.Any("errs", errs))
