@@ -1,10 +1,22 @@
 package roundtimer
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/require"
+	"runtime"
 	"testing"
 	"time"
 )
+
+func TestRoundTimer_Performance(t *testing.T) {
+	timer := New()
+
+	for i := 0; i < 1000; i++ {
+		timer.Reset(time.Millisecond * 100)
+	}
+	time.Sleep(time.Second)
+	fmt.Println(runtime.NumGoroutine())
+}
 
 func TestRoundTimer_Reset(t *testing.T) {
 	timer := New()
@@ -45,6 +57,9 @@ func TestRoundTimer_ResetBeforeLapsed(t *testing.T) {
 func TestRoundTimer_Stop(t *testing.T) {
 	timer := New()
 	timer.Reset(time.Millisecond * 500)
-	timer.Stop()
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		timer.Stop()
+	}()
 	require.False(t, <-timer.ResultChan())
 }
