@@ -98,7 +98,10 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 	for e := range cn {
 		if event, ok := e.(eth1.Event); ok {
 			if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
-				c.handleValidatorAddedEvent(validatorAddedEvent)
+				if err := c.handleValidatorAddedEvent(validatorAddedEvent); err != nil {
+					c.logger.Error("could not process validator", zap.Error(err),
+						zap.String("pubkey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
+				}
 			}
 		}
 	}
@@ -199,7 +202,7 @@ func (c *controller) GetValidatorsPubKeys() [][]byte {
 	return pubKeys
 }
 
-func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) {
+func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) error {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	logger := c.logger.With(zap.String("validatorPubKey", pubKey))
 	logger.Debug("handles validator added event")
@@ -207,26 +210,22 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 		logger.Debug("validator was loaded already")
 		// TODO: handle updateValidator in the future
-		return
+		return nil
 	}
 	validatorShare, err := c.createShare(validatorAddedEvent)
 	if err != nil {
-		logger.Error("failed to create share", zap.Error(err))
-		return
+		return errors.Wrap(err, "failed to create share")
 	}
 	foundShare, found, err := c.collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
 	if err != nil {
-		logger.Error("could not check if validator share exits", zap.Error(err))
-		return
+		return errors.Wrap(err, "could not check if validator share exits")
 	}
 	if !found {
 		if err := c.addValidatorIndex(validatorShare); err != nil {
-			logger.Error("failed to add validator index", zap.Error(err))
-			return
+			return errors.Wrap(err, "failed to add validator index")
 		}
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-			logger.Error("failed to save new share", zap.Error(err))
-			return
+			return errors.Wrap(err, "failed to save new share")
 		}
 		logger.Debug("new validator share was saved")
 	} else {
@@ -237,8 +236,9 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 
 	if err := v.Start(); err != nil {
-		logger.Error("could not start validator", zap.Error(err))
+		return errors.Wrap(err, "could not start validator")
 	}
+	return nil
 }
 
 // addValidatorIndex is called whenever a new validator is added (and it was not persist yet)
