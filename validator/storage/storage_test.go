@@ -54,7 +54,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	validatorShare2 := generateRandomValidatorShare()
 	require.NoError(t, collection.SaveValidatorShare(validatorShare2))
 
-	validatorShareByKey, found, err := collection.GetValidatorsShare(validatorShare.PublicKey.Serialize())
+	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, validatorShareByKey.PublicKey.SerializeToHexStr(), validatorShare.PublicKey.SerializeToHexStr())

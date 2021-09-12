@@ -15,6 +15,7 @@ type IDb interface {
 	Get(prefix []byte, key []byte) (Obj, bool, error)
 	GetAllByCollection(prefix []byte) ([]Obj, error)
 	CountByCollection(prefix []byte) (int64, error)
+	RemoveAllByCollection(prefix []byte) error
 	Close()
 }
 

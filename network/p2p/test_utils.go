@@ -40,3 +40,7 @@ func (v *TestValidatorStorage) SaveValidatorShare(validator *storage.Share) erro
 func (v *TestValidatorStorage) GetAllValidatorsShare() ([]*storage.Share, error) {
 	return validators(), nil
 }
+// CleanAllShares implementation
+func (v *TestValidatorStorage) CleanAllShares() error {
+	return nil
+}

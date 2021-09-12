@@ -123,6 +123,11 @@ func (b *BadgerDb) CountByCollection(prefix []byte) (int64, error) {
 	return res, err
 }
 
+// RemoveAllByCollection cleans all items in a collection
+func (b *BadgerDb) RemoveAllByCollection(prefix []byte) error {
+	return b.db.DropPrefix(prefix)
+}
+
 // Close close db
 func (b *BadgerDb) Close() {
 	if err := b.db.Close(); err != nil {

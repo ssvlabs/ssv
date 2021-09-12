@@ -238,7 +238,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if !exp.shouldProcessValidator(pubkey) {
 		return nil
 	}
-	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	validatorShare, found, err := exp.validatorStorage.GetValidatorShare(validatorPubKey.Serialize())
 	if !found {
 		return errors.New("could not find validator share")
 	}
