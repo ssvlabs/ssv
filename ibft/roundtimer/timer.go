@@ -13,7 +13,7 @@ type RoundTimer struct {
 	resC    chan bool
 
 	stopped  bool
-	syncLock sync.Mutex
+	syncLock sync.RWMutex
 }
 
 // New returns a new instance of RoundTimer
@@ -23,7 +23,7 @@ func New() *RoundTimer {
 		cancelC:  make(chan bool),
 		lapsedC:  make(chan bool),
 		stopped:  true,
-		syncLock: sync.Mutex{},
+		syncLock: sync.RWMutex{},
 	}
 	go ret.eventLoop()
 	return ret
@@ -41,12 +41,24 @@ func (t *RoundTimer) ResultChan() chan bool {
 	return t.resC
 }
 
-func (t *RoundTimer) fireChannelEvent(value bool) {
+// CloseChan closes the results chan
+func (t *RoundTimer) CloseChan() {
 	t.syncLock.Lock()
 	defer t.syncLock.Unlock()
+	if t.resC != nil {
+		close(t.resC)
+		t.resC = nil
+	}
+}
+
+func (t *RoundTimer) fireChannelEvent(value bool) {
+	t.syncLock.RLock()
+	defer t.syncLock.RUnlock()
 
 	if t.resC != nil {
-		t.resC <- value
+		go func() {
+			t.resC <- value
+		}()
 	}
 }
 
@@ -70,19 +82,21 @@ func (t *RoundTimer) Reset(d time.Duration) {
 
 // Stopped returns true if there is no running timer
 func (t *RoundTimer) Stopped() bool {
-	t.syncLock.Lock()
-	defer t.syncLock.Unlock()
+	t.syncLock.RLock()
+	defer t.syncLock.RUnlock()
 	return t.stopped
 }
 
 // Stop will stop the timer and send false on the result chan
 func (t *RoundTimer) Stop() {
-	t.syncLock.Lock()
-	defer t.syncLock.Unlock()
+	t.syncLock.RLock()
 
 	if t.timer != nil {
 		t.timer.Stop()
+		t.syncLock.RUnlock()
 		t.cancelC <- true
+	} else {
+		t.syncLock.RUnlock()
 	}
 }
 

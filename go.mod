@@ -37,6 +37,7 @@ require (
 	github.com/wealdtech/go-eth2-util v1.6.2
 	go.opencensus.io v0.22.5
 	go.uber.org/zap v1.16.0
+	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	google.golang.org/grpc v1.37.0
 	google.golang.org/protobuf v1.26.0
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
