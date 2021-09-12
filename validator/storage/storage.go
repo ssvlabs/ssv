@@ -91,7 +91,7 @@ func (s *Collection) SaveValidatorShare(validator *Share) error {
 	return s.db.Set(s.prefix, validator.PublicKey.Serialize(), value)
 }
 
-// GetValidatorsShare by key
+// GetValidatorShare by key
 func (s *Collection) GetValidatorShare(key []byte) (*Share, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -112,6 +112,7 @@ func (s *Collection) CleanAllShares() error {
 	return s.db.RemoveAllByCollection(s.prefix)
 }
 
+// GetAllValidatorsShare returns all shares
 func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
