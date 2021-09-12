@@ -238,6 +238,9 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	if err := v.Start(); err != nil {
 		return errors.Wrap(err, "could not start validator")
 	}
+
+	logger.Debug("new validator was added and started successfully")
+
 	return nil
 }
 
