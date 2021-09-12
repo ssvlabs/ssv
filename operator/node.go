@@ -49,7 +49,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	ssv := &operatorNode{
+	node := &operatorNode{
 		context:             opts.Context,
 		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
 		validatorController: opts.ValidatorController,
@@ -69,11 +69,11 @@ func New(opts Options) Node {
 		}),
 	}
 
-	if err := ssv.init(opts); err != nil {
-		ssv.logger.Fatal("failed to init", zap.Error(err))
+	if err := node.init(opts); err != nil {
+		node.logger.Panic("failed to init", zap.Error(err))
 	}
 
-	return ssv
+	return node
 }
 
 func (n *operatorNode) init(opts Options) error {

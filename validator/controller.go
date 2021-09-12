@@ -86,7 +86,9 @@ func NewController(options ControllerOptions) IController {
 		}),
 	}
 
-	ctrl.initShares(options)
+	if err := ctrl.initShares(options); err != nil {
+		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
+	}
 
 	return &ctrl
 }
@@ -103,10 +105,10 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 }
 
 // initShares initializes shares
-func (c *controller) initShares(options ControllerOptions) {
+func (c *controller) initShares(options ControllerOptions) error {
 	if options.CleanRegistryData {
 		if err := c.collection.CleanAllShares(); err != nil {
-			c.logger.Fatal("failed to clean shares", zap.Error(err))
+			return errors.Wrap(err, "failed to clean shares")
 		} else {
 			c.logger.Debug("all shares were removed")
 		}
@@ -115,6 +117,7 @@ func (c *controller) initShares(options ControllerOptions) {
 	if len(options.Shares) > 0 {
 		c.collection.LoadMultipleFromConfig(options.Shares)
 	}
+	return nil
 }
 
 // setupValidators for each validatorShare with proper ibft wrappers

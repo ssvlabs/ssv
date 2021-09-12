@@ -104,7 +104,7 @@ func New(opts Options) Exporter {
 	}
 
 	if err := e.init(opts); err != nil {
-		e.logger.Fatal("failed to init", zap.Error(err))
+		e.logger.Panic("failed to init", zap.Error(err))
 	}
 
 	return &e
