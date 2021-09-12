@@ -103,7 +103,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 	}
 	if found && syncOffsetFromStorage != nil {
 		logger.Debug("using last sync offset",
-			zap.Uint64("syncOffset", syncOffset.Uint64()))
+			zap.Uint64("syncOffset", syncOffsetFromStorage.Uint64()))
 		return syncOffsetFromStorage
 	}
 	if syncOffset != nil { // if provided sync offset is nil - use default sync offset
