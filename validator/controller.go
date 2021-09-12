@@ -220,7 +220,11 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		return
 	}
 	if !found {
-		if err := c.onNewShare(validatorShare); err != nil {
+		if err := c.addValidatorIndex(validatorShare); err != nil {
+			logger.Error("failed to add validator index", zap.Error(err))
+			return
+		}
+		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			logger.Error("failed to save new share", zap.Error(err))
 			return
 		}
@@ -237,27 +241,23 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	}
 }
 
-func (c *controller) onNewShare(validatorShare *validatorstorage.Share) error {
+// addValidatorIndex is called whenever a new validator is added (and it was not persist yet)
+// validator's index is fetched as part of this method
+func (c *controller) addValidatorIndex(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
-	indices, err := c.getIndices([][]byte{validatorShare.PublicKey.Serialize()})
+	indices, err := c.fetchIndices([][]byte{validatorShare.PublicKey.Serialize()})
 	if err != nil {
-		return errors.Wrap(err, "failed to get indices")
-	}
-	if len(indices) < 1 {
-		return errors.New("missing results from beacon")
+		return errors.Wrap(err, "failed to fetch indices")
 	}
 	index, ok := indices[pubKey]
 	if !ok {
-		return errors.New("missing index from beacon")
+		return errors.New("missing results from beacon")
 	}
 	validatorShare.Index = &index
-	if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-		return errors.Wrap(err, "failed to save validator share")
-	}
 	return nil
 }
 
-func (c *controller) getIndices(sharesPubKeys [][]byte) (map[string]uint64, error) {
+func (c *controller) fetchIndices(sharesPubKeys [][]byte) (map[string]uint64, error) {
 	c.indicesLock.Lock()
 	defer c.indicesLock.Unlock()
 
@@ -273,7 +273,7 @@ func (c *controller) getIndices(sharesPubKeys [][]byte) (map[string]uint64, erro
 	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)))
 	validatorsIndexMap, err := c.beacon.GetIndices(pubkeys)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to fetch indices")
+		return nil, errors.Wrap(err, "failed to get indices from beacon")
 	}
 	indices := map[string]uint64{}
 	for index, v := range validatorsIndexMap {
