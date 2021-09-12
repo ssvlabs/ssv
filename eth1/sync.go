@@ -16,6 +16,9 @@ const (
 // SyncOffset is the type of variable used for passing around the offset
 type SyncOffset = big.Int
 
+// SyncEventHandler handles a given event
+type SyncEventHandler func(Event) error
+
 // SyncOffsetStorage represents the interface for compatible storage
 type SyncOffsetStorage interface {
 	// SaveSyncOffset saves the offset (block number)
@@ -40,15 +43,16 @@ func HexStringToSyncOffset(shex string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, observerID string, syncOffset *SyncOffset) error {
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
-	cn, err := client.EventsSubject().Register(observerID)
+	cn, err := client.EventsSubject().Register("SyncEth1")
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}
-	defer client.EventsSubject().Deregister(observerID)
+	defer client.EventsSubject().Deregister("SyncEth1")
 
+	var errs []error
 	// Stop once SyncEndedEvent arrives
 	var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
@@ -60,7 +64,13 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 				if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
 					return
 				}
-				logger.Debug("got new event from eth1 sync", zap.Uint64("BlockNumber", event.Log.BlockNumber))
+				logger.Debug("got new event from eth1 sync",
+					zap.Uint64("BlockNumber", event.Log.BlockNumber))
+				if handler != nil {
+					if err := handler(event); err != nil {
+						errs = append(errs, err)
+					}
+				}
 			}
 		}
 	}()
@@ -71,6 +81,11 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	// waiting for eth1 sync to finish
 	syncWg.Wait()
+
+	if len(errs) > 0 {
+		logger.Error("failed to handle all events from sync", zap.Any("errs", errs))
+		return errors.New("failed to handle all events from sync")
+	}
 
 	return upgradeSyncOffset(logger, storage, syncOffset, syncEndedEvent)
 }

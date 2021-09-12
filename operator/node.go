@@ -103,13 +103,15 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}
-	go n.validatorController.ListenToEth1Events(cnValidators)
 
 	// sync past events
-	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, "SSVNodeEth1Sync", syncOffset); err != nil {
+	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset,
+		n.validatorController.ProcessEth1Event); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	n.logger.Info("manage to sync contract events")
+
+	go n.validatorController.ListenToEth1Events(cnValidators)
 
 	// starts the eth1 events subscription
 	err = n.eth1Client.Start()
@@ -135,3 +137,4 @@ func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
 	}
 	return agents
 }
+

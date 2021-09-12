@@ -14,10 +14,14 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
+	"strings"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+)
+
+var (
+	errIndicesNotFound = errors.New("indices not found")
 )
 
 // ControllerOptions for controller struct creation
@@ -37,6 +41,7 @@ type ControllerOptions struct {
 // IController interface
 type IController interface {
 	ListenToEth1Events(cn pubsub.SubjectChannel)
+	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
 	GetValidatorsPubKeys() [][]byte
 	GetValidatorsIndices() []spec.ValidatorIndex
@@ -53,9 +58,6 @@ type controller struct {
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
 	validatorsMap *validatorsMap
-
-	// indicesLock should be acquired when updating validator's indices
-	indicesLock sync.RWMutex
 }
 
 // NewController creates new validator controller
@@ -71,9 +73,6 @@ func NewController(options ControllerOptions) IController {
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
-
-		// locks
-		indicesLock: sync.RWMutex{},
 
 		validatorsMap: newValidatorsMap(options.Context, options.Logger, &Options{
 			Context:                    options.Context,
@@ -97,14 +96,28 @@ func NewController(options ControllerOptions) IController {
 func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 	for e := range cn {
 		if event, ok := e.(eth1.Event); ok {
-			if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
-				if err := c.handleValidatorAddedEvent(validatorAddedEvent); err != nil {
-					c.logger.Error("could not process validator", zap.Error(err),
-						zap.String("pubkey", hex.EncodeToString(validatorAddedEvent.PublicKey)))
-				}
+			if err := c.ProcessEth1Event(event); err != nil {
+				c.logger.Error("could not process event", zap.Error(err))
 			}
 		}
 	}
+}
+
+// ProcessEth1Event handles a single event
+func (c *controller) ProcessEth1Event(e eth1.Event) error {
+	if validatorAddedEvent, ok := e.Data.(eth1.ValidatorAddedEvent); ok {
+		if err := c.handleValidatorAddedEvent(validatorAddedEvent); err != nil {
+			logger := c.logger.With(zap.String("pubkey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
+				zap.Error(err))
+			if strings.Contains(err.Error(), errIndicesNotFound.Error()) {
+				logger.Warn("indices not found, please check validator")
+				return nil
+			}
+			logger.Error("could not process validator")
+			return err
+		}
+	}
+	return nil
 }
 
 // initShares initializes shares
@@ -166,9 +179,6 @@ func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 
 // GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
-	c.indicesLock.RLock()
-	defer c.indicesLock.RUnlock()
-
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if v.Share.Index == nil {
@@ -254,26 +264,24 @@ func (c *controller) addValidatorIndex(validatorShare *validatorstorage.Share) e
 	}
 	index, ok := indices[pubKey]
 	if !ok {
-		return errors.New("missing results from beacon")
+		return errIndicesNotFound
 	}
 	validatorShare.Index = &index
 	return nil
 }
 
 func (c *controller) fetchIndices(sharesPubKeys [][]byte) (map[string]uint64, error) {
-	c.indicesLock.Lock()
-	defer c.indicesLock.Unlock()
-
 	if len(sharesPubKeys) == 0 {
 		return nil, errors.New("invalid pubkeys. at least one validator is required")
 	}
 	var pubkeys []phase0.BLSPubKey
 	for _, pk := range sharesPubKeys {
 		blsPubKey := phase0.BLSPubKey{}
-		copy(blsPubKey[:], pk)
+		copy(blsPubKey[:], pk[:])
 		pubkeys = append(pubkeys, blsPubKey)
 	}
-	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)))
+	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)),
+		zap.Any("pubkeys", pubkeys))
 	validatorsIndexMap, err := c.beacon.GetIndices(pubkeys)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get indices from beacon")
