@@ -101,6 +101,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = network
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
+		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
 		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
@@ -128,9 +129,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
-		if len(cfg.ETH1Options.ETH1SyncOffset) > 0 { // force resync
-			cfg.SSVOptions.ValidatorOptions.RegistryResync = true
-		}
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 

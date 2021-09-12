@@ -31,7 +31,7 @@ type ControllerOptions struct {
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
-	RegistryResync             bool
+	CleanRegistryData          bool
 }
 
 // IController interface
@@ -56,9 +56,6 @@ type controller struct {
 
 	// indicesLock should be acquired when updating validator's indices
 	indicesLock sync.RWMutex
-
-	// flags
-	registryResync	bool
 }
 
 // NewController creates new validator controller
@@ -67,8 +64,6 @@ func NewController(options ControllerOptions) IController {
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
-
-	collection.LoadMultipleFromConfig(options.Shares)
 
 	ctrl := controller{
 		collection:                 collection,
@@ -89,8 +84,10 @@ func NewController(options ControllerOptions) IController {
 			Beacon:                     options.Beacon,
 			DB:                         options.DB,
 		}),
+	}
 
-		registryResync: options.RegistryResync,
+	if err := ctrl.initShares(options); err != nil {
+		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
 
 	return &ctrl
@@ -105,6 +102,21 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 			}
 		}
 	}
+}
+
+// initShares initializes shares
+func (c *controller) initShares(options ControllerOptions) error {
+	if options.CleanRegistryData {
+		if err := c.collection.CleanAllShares(); err != nil {
+			return errors.Wrap(err, "failed to clean shares")
+		}
+		c.logger.Debug("all shares were removed")
+	}
+
+	if len(options.Shares) > 0 {
+		c.collection.LoadMultipleFromConfig(options.Shares)
+	}
+	return nil
 }
 
 // setupValidators for each validatorShare with proper ibft wrappers
@@ -206,20 +218,17 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		logger.Error("failed to create share", zap.Error(err))
 		return
 	}
-	foundShare, found, err := c.collection.GetValidatorsShare(validatorShare.PublicKey.Serialize())
+	foundShare, found, err := c.collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
 	if err != nil {
 		logger.Error("could not check if validator share exits", zap.Error(err))
 		return
 	}
-	if !found || c.registryResync { // save share if not exist or resync was forced
+	if !found { // save share if not exist
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			logger.Error("failed to save validator share", zap.Error(err))
 			return
 		}
 		logger.Debug("validator share was saved")
-		if c.validatorsMap.UpdateValidatorShare(validatorShare) {
-			logger.Debug("validator share was updated in map")
-		}
 	} else {
 		// TODO: handle updateValidator in the future
 		validatorShare = foundShare

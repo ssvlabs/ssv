@@ -16,6 +16,8 @@ type Storage interface {
 	eth1.SyncOffsetStorage
 	OperatorsCollection
 	ValidatorsCollection
+
+	Clean() error
 }
 
 type exporterStorage struct {
@@ -27,6 +29,11 @@ type exporterStorage struct {
 func NewExporterStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	es := exporterStorage{db, logger.With(zap.String("component", "exporter/storage"))}
 	return &es
+}
+
+// Clean clears all information
+func (es *exporterStorage) Clean() error {
+	return es.db.RemoveAllByCollection(storagePrefix)
 }
 
 // nextIndex returns the next index for operator

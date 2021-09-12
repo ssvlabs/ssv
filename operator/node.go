@@ -49,7 +49,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	ssv := &operatorNode{
+	node := &operatorNode{
 		context:             opts.Context,
 		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
 		validatorController: opts.ValidatorController,
@@ -68,7 +68,21 @@ func New(opts Options) Node {
 			DutyLimit:           opts.DutyLimit,
 		}),
 	}
-	return ssv
+
+	if err := node.init(opts); err != nil {
+		node.logger.Panic("failed to init", zap.Error(err))
+	}
+
+	return node
+}
+
+func (n *operatorNode) init(opts Options) error {
+	if opts.ValidatorOptions.CleanRegistryData {
+		if err := n.storage.(*storage).cleanSyncOffset(); err != nil {
+			return errors.Wrap(err, "could not clean sync offset")
+		}
+	}
+	return nil
 }
 
 // Start starts to stream duties and run IBFT instances

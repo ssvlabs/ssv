@@ -12,8 +12,9 @@ type ICollection interface {
 	LoadMultipleFromConfig(items []ShareOptions)
 	LoadFromConfig(options ShareOptions) (string, error)
 	SaveValidatorShare(share *Share) error
-	GetValidatorsShare(key []byte) (*Share, bool, error)
+	GetValidatorShare(key []byte) (*Share, bool, error)
 	GetAllValidatorsShare() ([]*Share, error)
+	CleanAllShares() error
 }
 
 // CollectionOptions struct
@@ -90,8 +91,8 @@ func (s *Collection) SaveValidatorShare(validator *Share) error {
 	return s.db.Set(s.prefix, validator.PublicKey.Serialize(), value)
 }
 
-// GetValidatorsShare by key
-func (s *Collection) GetValidatorsShare(key []byte) (*Share, bool, error) {
+// GetValidatorShare by key
+func (s *Collection) GetValidatorShare(key []byte) (*Share, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -106,7 +107,12 @@ func (s *Collection) GetValidatorsShare(key []byte) (*Share, bool, error) {
 	return share, found, err
 }
 
-// GetAllValidatorsShare returns ALL validators shares from db
+// CleanAllShares cleans all existing shares from DB
+func (s *Collection) CleanAllShares() error {
+	return s.db.RemoveAllByCollection(s.prefix)
+}
+
+// GetAllValidatorsShare returns all shares
 func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()

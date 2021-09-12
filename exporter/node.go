@@ -49,9 +49,10 @@ type Options struct {
 
 	DB basedb.IDb
 
-	WS              api.WebSocketServer
-	WsAPIPort       int
-	IbftSyncEnabled bool
+	WS                api.WebSocketServer
+	WsAPIPort         int
+	IbftSyncEnabled   bool
+	CleanRegistryData bool
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -72,22 +73,20 @@ type exporter struct {
 
 // New creates a new Exporter instance
 func New(opts Options) Exporter {
-	validatorStorage := validatorstorage.NewCollection(
-		validatorstorage.CollectionOptions{
-			DB:     opts.DB,
-			Logger: opts.Logger,
-		},
-	)
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
-	logger := opts.Logger.With(zap.String("component", "exporter/node"))
 	e := exporter{
-		ctx:              opts.Ctx,
-		storage:          storage.NewExporterStorage(opts.DB, opts.Logger),
-		ibftStorage:      &ibftStorage,
-		validatorStorage: validatorStorage,
-		logger:           logger,
-		network:          opts.Network,
-		eth1Client:       opts.Eth1Client,
+		ctx:         opts.Ctx,
+		storage:     storage.NewExporterStorage(opts.DB, opts.Logger),
+		ibftStorage: &ibftStorage,
+		validatorStorage: validatorstorage.NewCollection(
+			validatorstorage.CollectionOptions{
+				DB:     opts.DB,
+				Logger: opts.Logger,
+			},
+		),
+		logger:     opts.Logger.With(zap.String("component", "exporter/node")),
+		network:    opts.Network,
+		eth1Client: opts.Eth1Client,
 		ibftSyncDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
 			Ctx:      opts.Ctx,
 			Logger:   opts.Logger.With(zap.String("component", "ibftSyncDispatcher")),
@@ -104,7 +103,24 @@ func New(opts Options) Exporter {
 		ibftSyncEnabled: opts.IbftSyncEnabled,
 	}
 
+	if err := e.init(opts); err != nil {
+		e.logger.Panic("failed to init", zap.Error(err))
+	}
+
 	return &e
+}
+
+func (exp *exporter) init(opts Options) error {
+	if opts.CleanRegistryData {
+		if err := exp.validatorStorage.CleanAllShares(); err != nil {
+			return errors.Wrap(err, "could not clean existing shares")
+		}
+		if err := exp.storage.Clean(); err != nil {
+			return errors.Wrap(err, "could not clean existing data")
+		}
+		exp.logger.Debug("manage to cleanup registry data")
+	}
+	return nil
 }
 
 // Start starts the IBFT dispatcher for syncing data nd listen to messages
@@ -238,7 +254,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if !exp.shouldProcessValidator(pubkey) {
 		return nil
 	}
-	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	validatorShare, found, err := exp.validatorStorage.GetValidatorShare(validatorPubKey.Serialize())
 	if !found {
 		return errors.New("could not find validator share")
 	}
