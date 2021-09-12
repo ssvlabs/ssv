@@ -8,7 +8,9 @@ import (
 )
 
 const (
-	defaultSyncOffset string = "49e08f"
+	// prod contract genesis
+	defaultSyncOffset string = "4e706f"
+	// stage contract genesis -> 49e08f
 )
 
 // SyncOffset is the type of variable used for passing around the offset
@@ -91,19 +93,26 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 }
 
 // determineSyncOffset decides what is the value of sync offset by using one of (by priority):
-//   1. provided value (from config)
-//   2. last sync offset
+//   1. last saved sync offset
+//   2. provided value (from config)
 //   3. default sync offset (the genesis block of the contract)
 func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset) *SyncOffset {
-	if syncOffset == nil {
-		var err error
-		var found bool
-		syncOffset, found, err = storage.GetSyncOffset()
-		if err != nil || !found{
-			logger.Debug("could not get sync offset for eth1 sync, using default offset",
-				zap.String("defaultSyncOffset", defaultSyncOffset))
-			syncOffset = DefaultSyncOffset()
-		}
+	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
+	if err != nil {
+		logger.Warn("failed to get sync offset", zap.Error(err))
 	}
+	if found && syncOffsetFromStorage != nil {
+		logger.Debug("using last sync offset",
+			zap.Uint64("syncOffset", syncOffset.Uint64()))
+		return syncOffsetFromStorage
+	}
+	if syncOffset != nil { // if provided sync offset is nil - use default sync offset
+		logger.Debug("using provided sync offset",
+			zap.Uint64("syncOffset", syncOffset.Uint64()))
+		return syncOffset
+	}
+	syncOffset = DefaultSyncOffset()
+	logger.Debug("using default sync offset",
+		zap.Uint64("syncOffset", syncOffset.Uint64()))
 	return syncOffset
 }
