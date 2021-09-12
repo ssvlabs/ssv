@@ -35,6 +35,7 @@ Build stage Docker image:
   only:
     - eth1_data
 
+
 Deploy ssv exporter to blox-infra-stage cluster:
   stage: deploy
   tags:
