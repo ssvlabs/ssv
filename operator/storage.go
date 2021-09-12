@@ -40,6 +40,10 @@ func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 	return s.db.Set(prefix, syncOffsetKey, offset.Bytes())
 }
 
+func (s *storage) cleanSyncOffset() error {
+	return s.db.RemoveAllByCollection(append(prefix, syncOffsetKey...))
+}
+
 // GetSyncOffset returns the offset
 func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 	obj, found, err := s.db.Get(prefix, syncOffsetKey)

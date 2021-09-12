@@ -68,7 +68,21 @@ func New(opts Options) Node {
 			DutyLimit:           opts.DutyLimit,
 		}),
 	}
+
+	if err := ssv.init(opts); err != nil {
+		ssv.logger.Fatal("failed to init", zap.Error(err))
+	}
+
 	return ssv
+}
+
+func (n *operatorNode) init(opts Options) error {
+	if opts.ValidatorOptions.CleanRegistryData {
+		if err := n.storage.(*storage).cleanSyncOffset(); err != nil {
+			return errors.Wrap(err, "could not clean sync offset")
+		}
+	}
+	return nil
 }
 
 // Start starts to stream duties and run IBFT instances
