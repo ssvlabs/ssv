@@ -109,9 +109,8 @@ func (c *controller) initShares(options ControllerOptions) error {
 	if options.CleanRegistryData {
 		if err := c.collection.CleanAllShares(); err != nil {
 			return errors.Wrap(err, "failed to clean shares")
-		} else {
-			c.logger.Debug("all shares were removed")
 		}
+		c.logger.Debug("all shares were removed")
 	}
 
 	if len(options.Shares) > 0 {
