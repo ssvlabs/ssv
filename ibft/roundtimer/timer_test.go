@@ -45,6 +45,9 @@ func TestRoundTimer_ResetBeforeLapsed(t *testing.T) {
 func TestRoundTimer_Stop(t *testing.T) {
 	timer := New()
 	timer.Reset(time.Millisecond * 500)
-	timer.Stop()
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		timer.Stop()
+	}()
 	require.False(t, <-timer.ResultChan())
 }
