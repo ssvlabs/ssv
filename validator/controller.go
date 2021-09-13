@@ -43,7 +43,6 @@ type IController interface {
 	ListenToEth1Events(cn pubsub.SubjectChannel)
 	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
-	GetValidatorsPubKeys() [][]byte
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
 }
@@ -183,7 +182,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if v.Share.Index == nil {
-			c.logger.Error("validator share doesn't have an index",
+			c.logger.Warn("validator share doesn't have an index",
 				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
 		} else {
@@ -199,21 +198,6 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	go c.addValidatorsIndices(toFetch)
 
 	return indices
-}
-
-// GetValidatorsPubKeys returns a list of all the validators public keys
-func (c *controller) GetValidatorsPubKeys() [][]byte {
-	var pubKeys [][]byte
-
-	err := c.validatorsMap.ForEach(func(v *Validator) error {
-		pubKeys = append(pubKeys, v.Share.PublicKey.Serialize())
-		return nil
-	})
-	if err != nil {
-		c.logger.Error("failed to get all validators public keys", zap.Error(err))
-	}
-
-	return pubKeys
 }
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) error {
@@ -274,7 +258,7 @@ func (c *controller) addValidatorIndex(validatorShare *validatorstorage.Share) e
 	return nil
 }
 
-// addValidatorsIndices adds indices for all given validators
+// addValidatorsIndices adds indices for all given validators. shares are taken from validators map
 func (c *controller) addValidatorsIndices(toFetch [][]byte) {
 	indices , err := c.fetchIndices(toFetch)
 	if err != nil {
