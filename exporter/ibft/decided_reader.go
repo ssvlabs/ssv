@@ -50,7 +50,7 @@ func NewDecidedReader(opts DecidedReaderOptions) SyncRead {
 		network:        opts.Network,
 		config:         opts.Config,
 		validatorShare: opts.ValidatorShare,
-		identifier: []byte(validator.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(), beacon.RoleTypeAttester)),
+		identifier:     []byte(validator.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(), beacon.RoleTypeAttester)),
 	}
 	return &r
 }
@@ -152,7 +152,7 @@ func (r *decidedReader) checkHighestDecided(msg *proto.SignedMessage) error {
 				zap.Uint64("highestSeqKnown", highestSeqKnown))
 			return nil
 		}
-		if seq > highestSeqKnown + 1 {
+		if seq > highestSeqKnown+1 {
 			if err := r.Sync(); err != nil {
 				logger.Debug("could not sync", zap.Uint64("seq", seq),
 					zap.Uint64("highestSeqKnown", highestSeqKnown))

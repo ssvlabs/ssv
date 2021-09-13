@@ -1,15 +1,16 @@
 package ibft
 
-// Reader is a minimal interface for ibft in the context of an exporter
+// Reader is an interface for ibft in the context of an exporter
 type Reader interface {
 	Start() error
 }
 
-// Syncer is a minimal interface for syncing data
+// Syncer is an interface for syncing data
 type Syncer interface {
 	Sync() error
 }
 
+// SyncRead reads and sync data
 type SyncRead interface {
 	Reader
 	Syncer

@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	ibftSyncDispatcherTick = 1 * time.Second
+	ibftSyncDispatcherTick    = 1 * time.Second
 	networkReadDispatcherTick = 100 * time.Millisecond
 )
 
@@ -288,7 +288,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 			exp.logger.Error("could not queue decided reader", zap.String("tid", readDecidedTask.ID), zap.Error(err))
 		}
 	})
-	if err := exp.ibftSyncDispatcher.Queue(*syncTask); err != nil && err != tasks.ErrTaskExist  {
+	if err := exp.ibftSyncDispatcher.Queue(*syncTask); err != nil && err != tasks.ErrTaskExist {
 		return err
 	}
 
@@ -304,7 +304,7 @@ func (exp *exporter) readNetworkMessages(validatorPubKey *bls.PublicKey) {
 	})
 	readerTask := tasks.NewTask(ibftMsgReader.Start,
 		fmt.Sprintf("ibft:msgReader/%s", validatorPubKey.SerializeToHexStr()), nil)
-	if err := exp.networkReadDispatcher.Queue(*readerTask); err != nil && err != tasks.ErrTaskExist  {
+	if err := exp.networkReadDispatcher.Queue(*readerTask); err != nil && err != tasks.ErrTaskExist {
 		exp.logger.Error("could not queue network reader", zap.String("tid", readerTask.ID), zap.Error(err))
 	}
 }
