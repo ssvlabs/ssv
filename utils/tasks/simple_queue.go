@@ -9,7 +9,6 @@ import (
 type Queue interface {
 	Start()
 	Stop()
-	Stopped() bool
 	Queue(fn Fn)
 	Wait()
 	Errors() []error
@@ -51,8 +50,8 @@ func (q *simpleQueue) Stop() {
 	q.stopped = true
 }
 
-// Stopped returns the queue state
-func (q *simpleQueue) Stopped() bool {
+// isStopped returns the queue state
+func (q *simpleQueue) isStopped() bool {
 	q.lock.RLock()
 	defer q.lock.RUnlock()
 

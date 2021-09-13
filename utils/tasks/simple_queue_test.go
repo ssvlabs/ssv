@@ -39,10 +39,8 @@ func TestSimpleQueue(t *testing.T) {
 		atomic.AddInt64(&i, 1)
 		return nil
 	})
-	require.Equal(t, 1, len(q.(*simpleQueue).getWaiting()))
-
 	q.Wait()
-	require.Equal(t, int64(1), i)
+	require.Equal(t, int64(1), atomic.LoadInt64(&i))
 	require.Equal(t, 0, len(q.(*simpleQueue).getWaiting()))
 	require.Equal(t, 0, len(q.(*simpleQueue).errs))
 }
@@ -60,11 +58,10 @@ func TestSimpleQueue_Stop(t *testing.T) {
 	require.Equal(t, 1, len(q.(*simpleQueue).getWaiting()))
 	time.Sleep(2 * time.Millisecond)
 	require.Equal(t, 0, len(q.(*simpleQueue).getWaiting()))
-	require.Equal(t, int64(1), i)
 
-	require.False(t, q.Stopped())
+	require.False(t, q.(*simpleQueue).isStopped())
 	q.Stop()
-	require.True(t, q.Stopped())
+	require.True(t, q.(*simpleQueue).isStopped())
 	q.Queue(func() error {
 		atomic.AddInt64(&i, 1)
 		return nil
@@ -72,7 +69,7 @@ func TestSimpleQueue_Stop(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	// q was stopped, therefore the function should be kept in waiting
 	require.Equal(t, 1, len(q.(*simpleQueue).getWaiting()))
-	require.Equal(t, int64(1), i)
+	require.Equal(t, int64(1), atomic.LoadInt64(&i))
 }
 
 
@@ -83,5 +80,5 @@ func TestSimpleQueue_Empty(t *testing.T) {
 
 	q.Wait()
 	q.Stop()
-	require.True(t, q.Stopped())
+	require.True(t, q.(*simpleQueue).isStopped())
 }
