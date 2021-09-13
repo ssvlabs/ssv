@@ -1,10 +1,12 @@
 package eth1
 
 import (
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math/big"
 	"sync"
+	"time"
 )
 
 const (
@@ -52,12 +54,12 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	defer client.EventsSubject().Deregister("SyncEth1")
 
-	var errsLock sync.Mutex
-	var errs []error
+	q := tasks.NewSimpleQueue(5 * time.Millisecond)
+	go q.Start()
+	defer q.Stop()
 	// Stop once SyncEndedEvent arrives
 	var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
-	var eventsProcessWg sync.WaitGroup
 	syncWg.Add(1)
 	go func() {
 		defer syncWg.Done()
@@ -69,15 +71,9 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 				logger.Debug("got new event from eth1 sync",
 					zap.Uint64("BlockNumber", event.Log.BlockNumber))
 				if handler != nil {
-					eventsProcessWg.Add(1)
-					go func() {
-						defer eventsProcessWg.Done()
-						if err := handler(event); err != nil {
-							errsLock.Lock()
-							errs = append(errs, err)
-							errsLock.Unlock()
-						}
-					}()
+					q.Queue(func() error {
+						return handler(event)
+					})
 				}
 			}
 		}
@@ -90,9 +86,9 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	// waiting for eth1 sync to finish
 	syncWg.Wait()
 	// waiting for all events to be processed
-	eventsProcessWg.Wait()
+	q.Wait()
 
-	if len(errs) > 0 {
+	if errs := q.Errors(); len(errs) > 0 {
 		logger.Error("failed to handle all events from sync", zap.Any("errs", errs))
 		return errors.New("failed to handle all events from sync")
 	}
