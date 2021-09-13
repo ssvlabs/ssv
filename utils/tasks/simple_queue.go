@@ -5,14 +5,17 @@ import (
 	"time"
 )
 
+// Queue is an interface for event queue
 type Queue interface {
 	Start()
 	Stop()
+	Stopped() bool
 	Queue(fn Fn)
 	Wait()
 	Errors() []error
 }
 
+// simpleQueue implements Queue interface
 type simpleQueue struct {
 	waiting []Fn
 	stopped bool
@@ -25,6 +28,7 @@ type simpleQueue struct {
 	interval time.Duration
 }
 
+// NewSimpleQueue creates a new instance
 func NewSimpleQueue(interval time.Duration) Queue {
 	if interval.Milliseconds() == 0 {
 		interval = 10 * time.Millisecond // default interval
@@ -39,6 +43,7 @@ func NewSimpleQueue(interval time.Duration) Queue {
 	return &q
 }
 
+// Stop stops the queue
 func (q *simpleQueue) Stop() {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -46,7 +51,20 @@ func (q *simpleQueue) Stop() {
 	q.stopped = true
 }
 
+// Stopped returns the queue state
+func (q *simpleQueue) Stopped() bool {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+
+	return q.stopped
+}
+
+// Start starts executing events
 func (q *simpleQueue) Start() {
+	q.lock.Lock()
+	q.stopped = false
+	q.lock.Unlock()
+
 	for {
 		q.lock.Lock()
 		if q.stopped {
@@ -65,6 +83,7 @@ func (q *simpleQueue) Start() {
 	}
 }
 
+// Queue adds an event to the queue
 func (q *simpleQueue) Queue(fn Fn) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -73,10 +92,12 @@ func (q *simpleQueue) Queue(fn Fn) {
 	q.waiting = append(q.waiting, fn)
 }
 
+// Wait waits until all events were executed
 func (q *simpleQueue) Wait() {
 	q.wg.Wait()
 }
 
+// Errors returns the errors of events
 func (q *simpleQueue) Errors() []error {
 	q.lock.RLock()
 	defer q.lock.RUnlock()
@@ -92,4 +113,12 @@ func (q *simpleQueue) exec(fn Fn) {
 		q.errs = append(q.errs, err)
 		q.lock.Unlock()
 	}
+}
+
+// getWaiting returns waiting events
+func (q *simpleQueue) getWaiting() []Fn {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+
+	return q.waiting
 }

@@ -17,6 +17,7 @@ var (
 	ErrTaskExist = errors.New("task exist")
 )
 
+// Fn represents a function
 type Fn func() error
 
 // Task represents a some function to execute
