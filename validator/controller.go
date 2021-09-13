@@ -179,11 +179,13 @@ func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 
 // GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
+	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if v.Share.Index == nil {
 			c.logger.Error("validator share doesn't have an index",
 				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
 		} else {
 			index := spec.ValidatorIndex(*v.Share.Index)
 			indices = append(indices, index)
@@ -193,6 +195,8 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	if err != nil {
 		c.logger.Error("failed to get all validators public keys", zap.Error(err))
 	}
+
+	go c.addValidatorsIndices(toFetch)
 
 	return indices
 }
@@ -232,7 +236,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	}
 	if !found {
 		if err := c.addValidatorIndex(validatorShare); err != nil {
-			return errors.Wrap(err, "failed to add validator index")
+			logger.Warn("could not add validator index", zap.Error(err))
 		}
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
 			return errors.Wrap(err, "failed to save new share")
@@ -254,20 +258,41 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	return nil
 }
 
-// addValidatorIndex is called whenever a new validator is added (and it was not persist yet)
-// validator's index is fetched as part of this method
+// addValidatorIndex adding validator's index to the share
 func (c *controller) addValidatorIndex(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	indices, err := c.fetchIndices([][]byte{validatorShare.PublicKey.Serialize()})
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch indices")
 	}
-	index, ok := indices[pubKey]
+	i, ok := indices[pubKey]
 	if !ok {
 		return errIndicesNotFound
 	}
+	index := i
 	validatorShare.Index = &index
 	return nil
+}
+
+// addValidatorsIndices adds indices for all given validators
+func (c *controller) addValidatorsIndices(toFetch [][]byte) {
+	indices , err := c.fetchIndices(toFetch)
+	if err != nil {
+		c.logger.Error("failed to fetch indices", zap.Error(err))
+		return
+	}
+	for pk, i := range indices {
+		if v, exist := c.validatorsMap.GetValidator(pk); exist {
+			c.logger.Debug("updating indices for validator", zap.String("pubkey", pk),
+				zap.Uint64("index", i))
+			index := i
+			v.Share.Index = &index
+			if err := c.collection.SaveValidatorShare(v.Share); err != nil {
+				c.logger.Debug("could not save share", zap.String("pubkey", pk), zap.Error(err))
+			}
+		}
+	}
+	c.logger.Debug("updated indices", zap.Any("indices", indices))
 }
 
 func (c *controller) fetchIndices(sharesPubKeys [][]byte) (map[string]uint64, error) {
