@@ -17,15 +17,18 @@ var (
 	ErrTaskExist = errors.New("task exist")
 )
 
+// Fn represents a function
+type Fn func() error
+
 // Task represents a some function to execute
 type Task struct {
-	Fn  func() error
+	Fn  Fn
 	ID  string
 	end func()
 }
 
 // NewTask creates a new task
-func NewTask(fn func() error, id string, end func()) *Task {
+func NewTask(fn Fn, id string, end func()) *Task {
 	t := Task{fn, id, end}
 	return &t
 }
