@@ -128,8 +128,8 @@ func (c *controller) initShares(options ControllerOptions) error {
 	return nil
 }
 
-// setupValidators for each validatorShare with proper ibft wrappers
-func (c *controller) setupValidators() {
+// StartValidators functions (queue streaming, msgQueue listen, etc)
+func (c *controller) StartValidators() {
 	shares, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
@@ -139,32 +139,19 @@ func (c *controller) setupValidators() {
 		return
 	}
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
+	var errs []error
 	for _, validatorShare := range shares {
-		c.validatorsMap.GetOrCreateValidator(validatorShare)
-	}
-	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()))
-}
-
-// StartValidators functions (queue streaming, msgQueue listen, etc)
-func (c *controller) StartValidators() {
-	c.setupValidators()
-	errs := []error{}
-	err := c.validatorsMap.ForEach(func(v *Validator) error {
+		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 		if err := v.Start(); err != nil {
 			c.logger.Error("could not start validator", zap.Error(err),
 				zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
 			errs = append(errs, err)
-		} else {
-			c.logger.Debug("validator started", zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
+			continue
 		}
-		return nil
-	})
-	if err != nil {
-		c.logger.Error("failed to start validators", zap.Error(err))
+		c.logger.Debug("validator started", zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
 	}
-	if len(errs) > 0 {
-		c.logger.Warn("failed to start all validators", zap.Int("count", len(errs)))
-	}
+	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
+		zap.Int("failures", len(errs)), zap.Int("shares count", len(shares)))
 }
 
 // GetValidator returns a validator
