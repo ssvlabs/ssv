@@ -14,7 +14,6 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strings"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -106,13 +105,8 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 func (c *controller) ProcessEth1Event(e eth1.Event) error {
 	if validatorAddedEvent, ok := e.Data.(eth1.ValidatorAddedEvent); ok {
 		if err := c.handleValidatorAddedEvent(validatorAddedEvent); err != nil {
-			logger := c.logger.With(zap.String("pubkey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
-				zap.Error(err))
-			if strings.Contains(err.Error(), errIndicesNotFound.Error()) {
-				logger.Warn("indices not found, please check validator")
-				return nil
-			}
-			logger.Error("could not process validator")
+			c.logger.Error("could not process validator",
+				zap.String("pubkey", hex.EncodeToString(validatorAddedEvent.PublicKey)), zap.Error(err))
 			return err
 		}
 	}
@@ -160,6 +154,8 @@ func (c *controller) StartValidators() {
 			c.logger.Error("could not start validator", zap.Error(err),
 				zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
 			errs = append(errs, err)
+		} else {
+			c.logger.Debug("validator started", zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
 		}
 		return nil
 	})
@@ -202,7 +198,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) error {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-	logger := c.logger.With(zap.String("validatorPubKey", pubKey))
+	logger := c.logger.With(zap.String("pubKey", pubKey))
 	logger.Debug("handles validator added event")
 	// if exist and resync was not forced -> do nothing
 	if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
@@ -237,7 +233,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		return errors.Wrap(err, "could not start validator")
 	}
 
-	logger.Debug("new validator was added and started successfully")
+	logger.Debug("validator started")
 
 	return nil
 }
