@@ -23,7 +23,7 @@ func TestSyncEth1(t *testing.T) {
 		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.Sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, "Eth1SyncTest", nil)
+	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -40,12 +40,26 @@ func TestSyncEth1Error(t *testing.T) {
 		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
 		eth1Client.Sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, "FailedEth1SyncTest", nil)
+	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, found, err := storage.GetSyncOffset()
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+func TestSyncEth1HandlerError(t *testing.T) {
+	logger, eth1Client, storage := setupStorageWithEth1ClientMock()
+	go func() {
+		logs := []types.Log{{}, {BlockNumber: DefaultSyncOffset().Uint64()}}
+		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.Sub.Notify(Event{Data: struct{}{}, Log: logs[1]})
+		eth1Client.Sub.Notify(Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
+	}()
+	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) error {
+		return errors.New("test")
+	})
+	require.EqualError(t, err, "failed to handle all events from sync")
 }
 
 func TestDetermineSyncOffset(t *testing.T) {
