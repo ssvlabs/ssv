@@ -195,6 +195,13 @@ func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChanne
 func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	exp.logger.Info("starting node -> eth1")
 
+	// sync events
+	syncErr := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, syncOffset, exp.handleEth1Event)
+	if syncErr != nil {
+		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
+	}
+	exp.logger.Info("managed to sync contract events")
+
 	// register for contract events that will arrive from eth1Client
 	eth1EventChan, err := exp.eth1Client.EventsSubject().Register("Eth1ExporterObserver")
 	if err != nil {
@@ -207,13 +214,6 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 			exp.logger.Warn("could not handle eth1 event", zap.Error(err))
 		}
 	}()
-	// sync events
-	syncErr := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, syncOffset, nil)
-	if syncErr != nil {
-		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
-	}
-	exp.logger.Info("managed to sync contract events")
-
 	// start events stream
 	err = exp.eth1Client.Start()
 	if err != nil {
