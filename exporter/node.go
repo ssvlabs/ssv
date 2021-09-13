@@ -96,7 +96,7 @@ func New(opts Options) Exporter {
 			Ctx:        opts.Ctx,
 			Logger:     opts.Logger.With(zap.String("component", "networkReadDispatcher")),
 			Interval:   ibftSyncDispatcherTick,
-			Concurrent: 1000, // using a large limit of concurrency as listening to network messages remains open
+			Concurrent: 10000, // listening to network messages remains open, therefore using a large limit for concurrency
 		}),
 		ws:              opts.WS,
 		wsAPIPort:       opts.WsAPIPort,
