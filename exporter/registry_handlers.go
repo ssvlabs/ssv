@@ -18,19 +18,24 @@ func (exp *exporter) listenToEth1Events(cn pubsub.SubjectChannel) chan error {
 	go func() {
 		for e := range cn {
 			if event, ok := e.(eth1.Event); ok {
-				var err error = nil
-				if validatorAddedEvent, ok := event.Data.(eth1.ValidatorAddedEvent); ok {
-					err = exp.handleValidatorAddedEvent(validatorAddedEvent)
-				} else if opertaorAddedEvent, ok := event.Data.(eth1.OperatorAddedEvent); ok {
-					err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
-				}
-				if err != nil {
+				if err := exp.handleEth1Event(event); err != nil {
 					cnErr <- err
 				}
 			}
 		}
 	}()
 	return cnErr
+}
+
+// ListenToEth1Events register for eth1 events
+func (exp *exporter) handleEth1Event(e eth1.Event) error {
+	var err error = nil
+	if validatorAddedEvent, ok := e.Data.(eth1.ValidatorAddedEvent); ok {
+		err = exp.handleValidatorAddedEvent(validatorAddedEvent)
+	} else if opertaorAddedEvent, ok := e.Data.(eth1.OperatorAddedEvent); ok {
+		err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
+	}
+	return err
 }
 
 // handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator
