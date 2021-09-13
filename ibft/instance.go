@@ -209,7 +209,7 @@ func (i *Instance) stop() {
 	defer i.stopLock.Unlock()
 	i.Logger.Debug("STOPPING IBFT -> pass stopLock")
 	i.stopped = true
-	i.roundTimer.Stop()
+	i.roundTimer.Kill()
 	i.Logger.Debug("STOPPING IBFT -> stopped round timer")
 	i.ProcessStageChange(proto.RoundState_Stopped)
 	i.Logger.Debug("STOPPING IBFT -> set stage to stop")

@@ -47,7 +47,7 @@ func TestRoundTimer_Stop(t *testing.T) {
 	timer.Reset(time.Millisecond * 500)
 	go func() {
 		time.Sleep(time.Millisecond * 100)
-		timer.Stop()
+		timer.Kill()
 	}()
 	require.False(t, <-timer.ResultChan())
 }

@@ -8,9 +8,9 @@ import (
 // RoundTimer is a wrapper around timer to fit the use in an iBFT instance
 type RoundTimer struct {
 	timer   *time.Timer
-	cancelC chan bool
 	lapsedC chan bool
 	resC    chan bool
+	killC   chan bool
 
 	stopped  bool
 	syncLock sync.RWMutex
@@ -20,8 +20,8 @@ type RoundTimer struct {
 func New() *RoundTimer {
 	ret := &RoundTimer{
 		timer:    nil,
-		cancelC:  make(chan bool),
 		lapsedC:  make(chan bool),
+		killC:    make(chan bool),
 		stopped:  true,
 		syncLock: sync.RWMutex{},
 	}
@@ -85,36 +85,32 @@ func (t *RoundTimer) Stopped() bool {
 	return t.stopped
 }
 
-// Stop will stop the timer and send false on the result chan
-func (t *RoundTimer) Stop() {
-	t.syncLock.RLock()
+// Kill will stop the timer (without the ability to restart it) and send false on the result chan
+func (t *RoundTimer) Kill() {
+	t.syncLock.Lock()
 
 	if t.timer != nil {
 		t.timer.Stop()
-		t.syncLock.RUnlock()
-		t.cancelC <- true
-	} else {
-		t.syncLock.RUnlock()
 	}
+	t.stopped = true
+	t.killC <- true
+
+	t.syncLock.Unlock()
+
+	go t.fireChannelEvent(false)
 }
 
 func (t *RoundTimer) eventLoop() {
+loop:
 	for {
 		select {
 		case <-t.lapsedC:
-			t.markStopped()
+			t.syncLock.Lock()
+			t.stopped = true
+			t.syncLock.Unlock()
 			go t.fireChannelEvent(true)
-		case <-t.cancelC:
-			t.markStopped()
-			go t.fireChannelEvent(false)
+		case <-t.killC:
+			break loop
 		}
 	}
-}
-
-// markStopped set stopped flag to true
-func (t *RoundTimer) markStopped() {
-	t.syncLock.Lock()
-	defer t.syncLock.Unlock()
-
-	t.stopped = true
 }

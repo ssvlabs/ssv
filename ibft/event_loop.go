@@ -148,8 +148,3 @@ func (i *Instance) resetRoundTimer() {
 	i.roundTimer.Reset(roundTimeout)
 	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round.Get()))
 }
-
-func (i *Instance) stopRoundTimer() {
-	i.Logger.Info("stopping timeout clock")
-	i.roundTimer.Stop()
-}
