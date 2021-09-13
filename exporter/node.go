@@ -212,7 +212,7 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	if syncErr != nil {
 		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
 	}
-	exp.logger.Info("manage to sync contract events")
+	exp.logger.Info("managed to sync contract events")
 
 	// start events stream
 	err = exp.eth1Client.Start()
