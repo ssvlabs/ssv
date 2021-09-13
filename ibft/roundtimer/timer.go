@@ -56,9 +56,7 @@ func (t *RoundTimer) fireChannelEvent(value bool) {
 	defer t.syncLock.RUnlock()
 
 	if t.resC != nil {
-		go func() {
-			t.resC <- value
-		}()
+		t.resC <- value
 	}
 }
 
@@ -105,10 +103,10 @@ func (t *RoundTimer) eventLoop() {
 		select {
 		case <-t.lapsedC:
 			t.markStopped()
-			t.fireChannelEvent(true)
+			go t.fireChannelEvent(true)
 		case <-t.cancelC:
 			t.markStopped()
-			t.fireChannelEvent(false)
+			go t.fireChannelEvent(false)
 		}
 	}
 }
