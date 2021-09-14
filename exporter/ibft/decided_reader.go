@@ -40,8 +40,8 @@ type decidedReader struct {
 	identifier []byte
 }
 
-// NewDecidedReader creates  new instance of DecidedReader
-func NewDecidedReader(opts DecidedReaderOptions) SyncRead {
+// newDecidedReader creates new instance of DecidedReader
+func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 	r := decidedReader{
 		logger: opts.Logger.With(
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
@@ -110,10 +110,10 @@ func (r *decidedReader) listenToNetwork() {
 			logger.Debug("received invalid decided")
 			continue
 		}
-		//if msg.Message.SeqNumber == 0 {
-		//	logger.Debug("received invalid sequence")
-		//	continue
-		//}
+		if msg.Message.SeqNumber == 0 {
+			logger.Debug("received invalid sequence")
+			continue
+		}
 		if err := r.handleNewDecidedMessage(msg); err != nil {
 			logger.Error("could not save highest decided")
 		}

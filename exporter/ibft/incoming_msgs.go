@@ -28,8 +28,8 @@ type incomingMsgsReader struct {
 	publicKey *bls.PublicKey
 }
 
-// NewIncomingMsgsReader creates new instance
-func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
+// newIncomingMsgsReader creates new instance
+func newIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
 		logger: opts.Logger.With(zap.String("ibft", "msg_reader"),
 			zap.String("pubKey", opts.PK.SerializeToHexStr())),

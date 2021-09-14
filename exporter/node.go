@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	ibftSyncDispatcherTick    = 1 * time.Second
-	networkReadDispatcherTick = 100 * time.Millisecond
+	mainQueueInterval    = 100 * time.Millisecond
+	readerQueuesInterval = 10 * time.Millisecond
 )
 
 var (
@@ -58,19 +58,19 @@ type Options struct {
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx                   context.Context
-	storage               storage.Storage
-	validatorStorage      validatorstorage.ICollection
-	ibftStorage           collections.Iibft
-	logger                *zap.Logger
-	network               network.Network
-	eth1Client            eth1.Client
-	ibftSyncDispatcher    tasks.Dispatcher
-	networkReadDispatcher tasks.Dispatcher
-	decidedReadDispatcher tasks.Dispatcher
-	ws                    api.WebSocketServer
-	wsAPIPort             int
-	ibftSyncEnabled       bool
+	ctx                 context.Context
+	storage             storage.Storage
+	validatorStorage    validatorstorage.ICollection
+	ibftStorage         collections.Iibft
+	logger              *zap.Logger
+	network             network.Network
+	eth1Client          eth1.Client
+	mainQueue           tasks.Queue
+	decidedReadersQueue tasks.Queue
+	networkReadersQueue tasks.Queue
+	ws                  api.WebSocketServer
+	wsAPIPort           int
+	ibftSyncEnabled     bool
 }
 
 // New creates a new Exporter instance
@@ -86,29 +86,15 @@ func New(opts Options) Exporter {
 				Logger: opts.Logger,
 			},
 		),
-		logger:     opts.Logger.With(zap.String("component", "exporter/node")),
-		network:    opts.Network,
-		eth1Client: opts.Eth1Client,
-		ibftSyncDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx:      opts.Ctx,
-			Logger:   opts.Logger.With(zap.String("component", "ibftSyncDispatcher")),
-			Interval: ibftSyncDispatcherTick,
-		}),
-		networkReadDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx:        opts.Ctx,
-			Logger:     opts.Logger.With(zap.String("component", "networkReadDispatcher")),
-			Interval:   networkReadDispatcherTick,
-			Concurrent: 1000, // using a large limit of concurrency as listening to network messages remains open in the background
-		}),
-		decidedReadDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx:        opts.Ctx,
-			Logger:     opts.Logger.With(zap.String("component", "decidedReadDispatcher")),
-			Interval:   networkReadDispatcherTick,
-			Concurrent: 1000, // using a large limit of concurrency as listening to network messages remains open in the background
-		}),
-		ws:              opts.WS,
-		wsAPIPort:       opts.WsAPIPort,
-		ibftSyncEnabled: opts.IbftSyncEnabled,
+		logger:              opts.Logger.With(zap.String("component", "exporter/node")),
+		network:             opts.Network,
+		eth1Client:          opts.Eth1Client,
+		mainQueue:           tasks.NewExecutionQueue(mainQueueInterval),
+		decidedReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
+		networkReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
+		ws:                  opts.WS,
+		wsAPIPort:           opts.WsAPIPort,
+		ibftSyncEnabled:     opts.IbftSyncEnabled,
 	}
 
 	if err := e.init(opts); err != nil {
@@ -135,8 +121,9 @@ func (exp *exporter) init(opts Options) error {
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
-	go exp.ibftSyncDispatcher.Start()
-	go exp.networkReadDispatcher.Start()
+	go exp.mainQueue.Start()
+	go exp.decidedReadersQueue.Start()
+	go exp.networkReadersQueue.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -270,41 +257,45 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 		return errors.Wrap(err, "could not get validator share")
 	}
 	logger := exp.logger.With(zap.String("pubKey", pubkey))
-	logger.Debug("ibft sync was triggered")
+	logger.Debug("validator was triggered")
 
-	decidedReader := ibft.NewDecidedReader(ibft.DecidedReaderOptions{
+	exp.mainQueue.QueueDistinct(func() error {
+		return exp.setup(validatorShare)
+	}, fmt.Sprintf("ibft:setup/%s", pubkey))
+
+	return nil
+}
+
+func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
+	pubKey := validatorShare.PublicKey.SerializeToHexStr()
+	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	decidedReader := exp.getDecidedReader(validatorShare)
+	if err := decidedReader.Sync(); err != nil {
+		logger.Error("could not setup validator, sync failed", zap.Error(err))
+		return err
+	}
+	logger.Debug("sync is done, starting to read network messages")
+	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
+	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
+	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
+	return nil
+}
+
+func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ibft.SyncRead {
+	return ibft.NewDecidedReader(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-
-	syncTask := tasks.NewTask(decidedReader.Sync, fmt.Sprintf("ibft:sync/%s", pubkey), func() {
-		logger.Debug("sync is done, starting to read network messages")
-		exp.readNetworkMessages(validatorPubKey)
-		readDecidedTask := tasks.NewTask(decidedReader.Start, fmt.Sprintf("ibft:readDecided/%s", pubkey), nil)
-		if err := exp.decidedReadDispatcher.Queue(*readDecidedTask); err != nil && err != tasks.ErrTaskExist {
-			exp.logger.Error("could not queue decided reader", zap.String("tid", readDecidedTask.ID), zap.Error(err))
-		}
-	})
-	if err := exp.ibftSyncDispatcher.Queue(*syncTask); err != nil && err != tasks.ErrTaskExist {
-		return err
-	}
-
-	return nil
 }
 
-func (exp *exporter) readNetworkMessages(validatorPubKey *bls.PublicKey) {
-	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
+func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reader {
+	return ibft.NewNetworkReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
 		Network: exp.network,
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-	readerTask := tasks.NewTask(ibftMsgReader.Start,
-		fmt.Sprintf("ibft:msgReader/%s", validatorPubKey.SerializeToHexStr()), nil)
-	if err := exp.networkReadDispatcher.Queue(*readerTask); err != nil && err != tasks.ErrTaskExist {
-		exp.logger.Error("could not queue network reader", zap.String("tid", readerTask.ID), zap.Error(err))
-	}
 }
