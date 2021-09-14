@@ -107,7 +107,7 @@ func (r *decidedReader) listenToNetwork() {
 		}
 		logger := r.logger.With(messageFields(msg)...)
 		if err := validateDecidedMsg(msg, r.validatorShare); err != nil {
-			logger.Debug("received invalid decided")
+			logger.Debug("received invalid decided message")
 			continue
 		}
 		if msg.Message.SeqNumber == 0 {
@@ -115,7 +115,7 @@ func (r *decidedReader) listenToNetwork() {
 			continue
 		}
 		if err := r.handleNewDecidedMessage(msg); err != nil {
-			logger.Error("could not save highest decided")
+			logger.Error("could not handle decided message")
 		}
 	}
 }
