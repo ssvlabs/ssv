@@ -19,6 +19,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -46,11 +47,12 @@ func init() {
 
 // goClient implementing Beacon struct
 type goClient struct {
-	ctx      context.Context
-	logger   *zap.Logger
-	network  core.Network
-	client   client.Service
-	graffiti []byte
+	ctx           context.Context
+	logger        *zap.Logger
+	network       core.Network
+	client        client.Service
+	clientMapLock sync.Mutex
+	graffiti      []byte
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -75,11 +77,12 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger.Info("successfully connected to beacon client")
 
 	_client := &goClient{
-		ctx:      opt.Context,
-		logger:   logger,
-		network:  core.NetworkFromString(opt.Network),
-		client:   autoClient,
-		graffiti: []byte("BloxStaking"),
+		ctx:           opt.Context,
+		logger:        logger,
+		network:       core.NetworkFromString(opt.Network),
+		client:        autoClient,
+		clientMapLock: sync.Mutex{},
+		graffiti:      []byte("BloxStaking"),
 	}
 
 	return _client, nil
@@ -109,6 +112,9 @@ func (gc *goClient) HealthCheck() []string {
 }
 
 func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {
+	gc.clientMapLock.Lock()
+	defer gc.clientMapLock.Unlock()
+
 	gc.client.ExtendIndexMap(map[spec.ValidatorIndex]spec.BLSPubKey{index: pubKey})
 }
 
