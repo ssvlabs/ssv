@@ -178,7 +178,9 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 		c.logger.Error("failed to get all validators public keys", zap.Error(err))
 	}
 
-	go c.addValidatorsIndices(toFetch)
+	if len(toFetch) > 0 {
+		go c.addValidatorsIndices(toFetch)
+	}
 
 	return indices
 }
