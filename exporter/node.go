@@ -256,8 +256,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
-	logger := exp.logger.With(zap.String("pubKey", pubkey))
-	logger.Debug("validator was triggered")
+	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
 	exp.mainQueue.QueueDistinct(func() error {
 		return exp.setup(validatorShare)
@@ -270,7 +269,13 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
 	decidedReader := exp.getDecidedReader(validatorShare)
-	if err := decidedReader.Sync(); err != nil {
+	if 	err := tasks.Retry(func() error {
+		if err := decidedReader.Sync(); err != nil {
+			logger.Error("could not sync validator", zap.Error(err))
+			return err
+		}
+		return nil
+	}, 5); err != nil {
 		logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}
