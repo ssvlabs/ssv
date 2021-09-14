@@ -11,7 +11,7 @@ import (
 
 var (
 	metricsHighestDecidedSigners = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_decided_signers",
+		Name: "ssv:validator:ibft_decided_signers_exp",
 		Help: "The highest decided sequence number",
 	}, []string{"lambda", "pubKey", "nodeId"})
 )
