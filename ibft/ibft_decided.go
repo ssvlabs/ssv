@@ -61,6 +61,8 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		return
 	}
 
+	reportDecided(msg, i.ValidatorShare)
+
 	// decided for current instance
 	if i.forceDecideCurrentInstance(msg) {
 		return

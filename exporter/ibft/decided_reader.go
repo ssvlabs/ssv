@@ -130,6 +130,7 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) error 
 		return errors.Wrap(err, "could not save decided")
 	}
 	logger.Debug("decided saved")
+	reportDecided(msg, r.validatorShare)
 	return r.checkHighestDecided(msg)
 }
 
