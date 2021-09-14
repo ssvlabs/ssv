@@ -94,12 +94,11 @@ func (r *decidedReader) Start() error {
 	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 2); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	r.listenToNetwork()
+	r.listenToNetwork(r.network.ReceivedDecidedChan())
 	return nil
 }
 
-func (r *decidedReader) listenToNetwork() {
-	cn := r.network.ReceivedDecidedChan()
+func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 	r.logger.Debug("listening to decided messages")
 	for msg := range cn {
 		if err := validateMsg(msg, string(r.identifier)); err != nil {

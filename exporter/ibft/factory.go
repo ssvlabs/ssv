@@ -2,6 +2,9 @@ package ibft
 
 import "sync"
 
+// TODO: add to ibft package as most of parts here are code duplicates
+// 		 tests should be added as well, currently it would cause redundant maintenance
+
 var (
 	decidedReaders sync.Map
 	networkReaders sync.Map
