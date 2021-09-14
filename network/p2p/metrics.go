@@ -44,9 +44,9 @@ func init() {
 
 func reportIncomingSignedMessage(cm *network.Message, topic string) {
 	if cm.SignedMessage != nil && len(cm.SignedMessage.SignerIds) > 0 {
-		for _, nodeId := range cm.SignedMessage.SignerIds {
+		for _, nodeID := range cm.SignedMessage.SignerIds {
 			metricsNetMsgsInbound.WithLabelValues(unwrapTopicName(topic), cm.Type.String(),
-				strconv.FormatUint(nodeId, 10)).Inc()
+				strconv.FormatUint(nodeID, 10)).Inc()
 		}
 	}
 }

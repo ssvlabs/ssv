@@ -23,8 +23,8 @@ func init() {
 }
 
 func reportDecided(msg *proto.SignedMessage, share *storage.Share) {
-	for _, nodeId := range msg.SignerIds {
+	for _, nodeID := range msg.SignerIds {
 		metricsHighestDecidedSigners.WithLabelValues(string(msg.Message.GetLambda()),
-			share.PublicKey.SerializeToHexStr(), strconv.FormatUint(nodeId, 10))
+			share.PublicKey.SerializeToHexStr(), strconv.FormatUint(nodeID, 10))
 	}
 }
