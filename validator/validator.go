@@ -97,6 +97,8 @@ func (v *Validator) Start() error {
 		}
 	})
 
+	metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusOnline))
+
 	return nil
 }
 
