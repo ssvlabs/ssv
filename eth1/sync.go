@@ -54,7 +54,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	defer client.EventsSubject().Deregister("SyncEth1")
 
-	q := tasks.NewSimpleQueue(5 * time.Millisecond)
+	q := tasks.NewExecutionQueue(5 * time.Millisecond)
 	go q.Start()
 	defer q.Stop()
 	// Stop once SyncEndedEvent arrives
