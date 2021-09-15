@@ -55,8 +55,7 @@ func reportIncomingSignedMessage(cm *network.Message, topic string) {
 				seq := strconv.FormatUint(cm.SignedMessage.Message.SeqNumber, 10)
 				round := strconv.FormatUint(cm.SignedMessage.Message.Round, 10)
 				metricsIBFTMsgsInbound.WithLabelValues(unwrapTopicName(topic),
-					strconv.FormatUint(nodeID, 10),
-					cm.SignedMessage.Message.Type.String(), seq, round,
+					strconv.FormatUint(nodeID, 10), seq, round,
 					cm.SignedMessage.Message.Type.String()).Inc()
 			}
 		}
