@@ -104,6 +104,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
+		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
 		exporterNode = exporter.New(*exporterOptions)
 

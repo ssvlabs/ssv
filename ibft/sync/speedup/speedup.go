@@ -1,6 +1,7 @@
 package speedup
 
 import (
+	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	sync2 "github.com/bloxapp/ssv/ibft/sync"
@@ -59,6 +60,7 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 			if err != nil {
 				s.logger.Error("error fetching latest change round", zap.Error(err))
 			} else if err := s.lastMsgError(msg); err != nil {
+				// TODO - if error is kv.EntryNotFoundError we shouldn't print it as error.
 				s.logger.Debug("could not fetch latest change round", zap.Error(err))
 			} else {
 				signedMsg := msg.SignedMessages[0]
@@ -66,6 +68,9 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 					s.logger.Error("invalid change round msg", zap.Error(err))
 				} else {
 					res = append(res, signedMsg)
+
+					// log
+					s.logChangeRoundMsg(signedMsg)
 				}
 			}
 			wg.Done()
@@ -84,4 +89,15 @@ func (s *Speedup) lastMsgError(msg *network.SyncMessage) error {
 		return errors.New("invalid result count")
 	}
 	return nil
+}
+
+func (s *Speedup) logChangeRoundMsg(signedMsg *proto.SignedMessage) {
+	for _, signer := range signedMsg.SignerIds {
+		s.logger.Debug("received valid change round speedup",
+			zap.Uint64("signer_id", signer),
+			zap.Uint64("peer_round", signedMsg.Message.Round),
+			zap.Uint64("seq_number", signedMsg.Message.SeqNumber),
+			zap.String("lambda", hex.EncodeToString(signedMsg.Message.Lambda)),
+		)
+	}
 }

@@ -101,6 +101,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = network
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
+		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
 		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
 		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {

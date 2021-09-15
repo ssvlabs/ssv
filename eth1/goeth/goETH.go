@@ -24,7 +24,8 @@ import (
 )
 
 const (
-	healthCheckTimeout = 10 * time.Second
+	healthCheckTimeout        = 10 * time.Second
+	blocksInBatch      uint64 = 100000
 )
 
 type eth1NodeStatus int32
@@ -77,8 +78,9 @@ var _ metrics.HealthCheckAgent = &eth1Client{}
 
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
-	logger := opts.Logger.With(zap.String("component", "eth1GoETH"))
-	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr), zap.String("contract", opts.RegistryContractAddr))
+	logger := opts.Logger.With(zap.String("component", "eth1GoETH"),
+		zap.String("address", opts.RegistryContractAddr))
+	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr))
 
 	ec := eth1Client{
 		ctx:                        opts.Ctx,
@@ -254,35 +256,75 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
+	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get current block")
+	}
+	var logs []types.Log
+	var nSuccess int
+	for {
+		var toBlock *big.Int
+		if currentBlock-fromBlock.Uint64() > blocksInBatch {
+			toBlock = big.NewInt(int64(fromBlock.Uint64() + blocksInBatch))
+		} else { // no more batches are required -> setting toBlock to nil
+			toBlock = nil
+		}
+		_logs, _nSuccess, err := ec.fetchAndProcessEvents(fromBlock, toBlock, contractAbi)
+		if err != nil {
+			return errors.Wrap(err, "failed to get events")
+		}
+		nSuccess += _nSuccess
+		logs = append(logs, _logs...)
+		if toBlock == nil { // finished
+			break
+		}
+		fromBlock = toBlock
+	}
+
+	ec.logger.Debug("finished syncing registry contract",
+		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
+	// publishing SyncEndedEvent so other components could track the sync
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
+
+	return nil
+}
+
+func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contractAbi abi.ABI) ([]types.Log, int, error) {
+	logger := ec.logger.With(zap.Int64("fromBlock", fromBlock.Int64()))
 	contractAddress := common.HexToAddress(ec.registryContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
 		FromBlock: fromBlock,
 	}
+	if toBlock != nil {
+		query.ToBlock = toBlock
+		logger = logger.With(zap.Int64("toBlock", toBlock.Int64()))
+	}
+	logger.Debug("fetching event logs")
 	logs, err := ec.conn.FilterLogs(ec.ctx, query)
 	if err != nil {
-		return errors.Wrap(err, "failed to get event logs")
+		return nil, 0, errors.Wrap(err, "failed to get event logs")
 	}
-	nResults := len(logs)
-	ec.logger.Debug(fmt.Sprintf("got event logs, number of results: %d", nResults))
+	nSuccess := len(logs)
+	logger = logger.With(zap.Int("results", len(logs)))
+	logger.Debug("got event logs")
 
 	for _, vLog := range logs {
 		err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			nResults--
+			nSuccess--
 			ec.logger.Error("Failed to handle event during sync", zap.Error(err))
 			continue
 		}
 	}
-	ec.logger.Debug(fmt.Sprintf("%d event logs were received and parsed successfully", nResults))
-	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nResults == len(logs)})
+	logger.Debug("event logs were received and parsed successfully",
+		zap.Int("successCount", nSuccess))
 
-	return nil
+	return logs, nSuccess, nil
 }
 
 func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
-	ec.logger.Debug("handling smart contract event")
+	ec.logger.Debug("handling smart contract event", zap.Any("vLog", vLog))
 
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
@@ -316,6 +358,8 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.logger.Debug("Validator doesn't belong to operator",
 				zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)))
 		}
+		ec.logger.Debug("parsed data",
+			zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)), zap.Any("parsed", parsed))
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || shareEncryptionKey == nil {
 			ec.fireEvent(vLog, *parsed)

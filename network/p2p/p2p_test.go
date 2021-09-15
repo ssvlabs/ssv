@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/fixtures"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestP2PNetworker(t *testing.T) {
 	require.NoError(t, err)
 
 	pk := &bls.PublicKey{}
-	require.NoError(t, pk.Deserialize(refPk))
+	require.NoError(t, pk.Deserialize(fixtures.RefPk))
 	require.NoError(t, peer1.SubscribeToValidatorNetwork(pk))
 	require.NoError(t, peer2.SubscribeToValidatorNetwork(pk))
 

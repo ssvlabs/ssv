@@ -9,21 +9,8 @@ import (
 	"github.com/prysmaticlabs/go-ssz"
 )
 
-// SigningRoot is a wrapping type for byte array
-type SigningRoot [32]byte
-
-// IsEmpty returns checks if the array was set with some value
-func (sr *SigningRoot) IsEmpty() bool {
-	for i := range sr {
-		if sr[i] != 0 {
-			return false
-		}
-	}
-	return true
-}
-
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *spec.AttestationData) (SigningRoot, error) {
+func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(uint64(data.Slot))
 	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
 	if err != nil {

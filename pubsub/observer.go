@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-const defaultChannelBuffer = 10
+const defaultChannelBuffer = 25
 
 func newChannel(bufSize int) SubjectChannel {
 	return make(SubjectChannel, bufSize)

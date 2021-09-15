@@ -13,6 +13,10 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
+	"sync"
 )
 
 // StartOptions defines type for IBFT instance options
@@ -110,7 +114,7 @@ func (i *ibftImpl) Init() {
 	i.listenToSyncMessages()
 	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
 	if err := i.SyncIBFT(); err != nil {
-		i.logger.Error("crashing.. ", zap.Error(err))
+		i.logger.Error("could not sync history, stopping IBFT init", zap.Error(err))
 		return // returning means initFinished is false, can't start new instances
 	}
 	i.listenToNetworkMessages()

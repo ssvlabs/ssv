@@ -1,18 +1,25 @@
 package eth1
 
 import (
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math/big"
 	"sync"
+	"time"
 )
 
 const (
-	defaultSyncOffset string = "49e08f"
+	// prod contract genesis
+	defaultSyncOffset string = "4e706f"
+	// stage contract genesis -> 49e08f
 )
 
 // SyncOffset is the type of variable used for passing around the offset
 type SyncOffset = big.Int
+
+// SyncEventHandler handles a given event
+type SyncEventHandler func(Event) error
 
 // SyncOffsetStorage represents the interface for compatible storage
 type SyncOffsetStorage interface {
@@ -38,15 +45,18 @@ func HexStringToSyncOffset(shex string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, observerID string, syncOffset *SyncOffset) error {
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
-	cn, err := client.EventsSubject().Register(observerID)
+	cn, err := client.EventsSubject().Register("SyncEth1")
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}
-	defer client.EventsSubject().Deregister(observerID)
+	defer client.EventsSubject().Deregister("SyncEth1")
 
+	q := tasks.NewExecutionQueue(5 * time.Millisecond)
+	go q.Start()
+	defer q.Stop()
 	// Stop once SyncEndedEvent arrives
 	var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
@@ -58,7 +68,13 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 				if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
 					return
 				}
-				logger.Debug("got new event from eth1 sync", zap.Uint64("BlockNumber", event.Log.BlockNumber))
+				logger.Debug("got new event from eth1 sync",
+					zap.Uint64("BlockNumber", event.Log.BlockNumber))
+				if handler != nil {
+					q.Queue(func() error {
+						return handler(event)
+					})
+				}
 			}
 		}
 	}()
@@ -69,6 +85,13 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	}
 	// waiting for eth1 sync to finish
 	syncWg.Wait()
+	// waiting for all events to be processed
+	q.Wait()
+
+	if errs := q.Errors(); len(errs) > 0 {
+		logger.Error("failed to handle all events from sync", zap.Any("errs", errs))
+		return errors.New("failed to handle all events from sync")
+	}
 
 	return upgradeSyncOffset(logger, storage, syncOffset, syncEndedEvent)
 }
@@ -91,19 +114,26 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 }
 
 // determineSyncOffset decides what is the value of sync offset by using one of (by priority):
-//   1. provided value (from config)
-//   2. last sync offset
+//   1. last saved sync offset
+//   2. provided value (from config)
 //   3. default sync offset (the genesis block of the contract)
 func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset) *SyncOffset {
-	if syncOffset == nil {
-		var err error
-		var found bool
-		syncOffset, found, err = storage.GetSyncOffset()
-		if err != nil || !found{
-			logger.Debug("could not get sync offset for eth1 sync, using default offset",
-				zap.String("defaultSyncOffset", defaultSyncOffset))
-			syncOffset = DefaultSyncOffset()
-		}
+	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
+	if err != nil {
+		logger.Warn("failed to get sync offset", zap.Error(err))
 	}
+	if found && syncOffsetFromStorage != nil {
+		logger.Debug("using last sync offset",
+			zap.Uint64("syncOffset", syncOffsetFromStorage.Uint64()))
+		return syncOffsetFromStorage
+	}
+	if syncOffset != nil { // if provided sync offset is nil - use default sync offset
+		logger.Debug("using provided sync offset",
+			zap.Uint64("syncOffset", syncOffset.Uint64()))
+		return syncOffset
+	}
+	syncOffset = DefaultSyncOffset()
+	logger.Debug("using default sync offset",
+		zap.Uint64("syncOffset", syncOffset.Uint64()))
 	return syncOffset
 }

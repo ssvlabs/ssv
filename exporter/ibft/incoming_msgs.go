@@ -10,7 +10,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strings"
 	"time"
 )
 
@@ -29,8 +28,8 @@ type incomingMsgsReader struct {
 	publicKey *bls.PublicKey
 }
 
-// NewIncomingMsgsReader creates new instance
-func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
+// newIncomingMsgsReader creates new instance
+func newIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 	r := &incomingMsgsReader{
 		logger: opts.Logger.With(zap.String("ibft", "msg_reader"),
 			zap.String("pubKey", opts.PK.SerializeToHexStr())),
@@ -42,12 +41,12 @@ func NewIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 }
 
 func (i *incomingMsgsReader) Start() error {
-	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
-		if !strings.Contains(err.Error(), "topic already exists") {
-			return errors.Wrap(err, "could not subscribe to subnet")
+	if !i.network.IsSubscribeToValidatorNetwork(i.publicKey) {
+		if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
+			return errors.Wrap(err, "failed to subscribe topic")
 		}
-		i.logger.Debug("no need to subscribe, topic already exist")
 	}
+
 	if err := i.waitForMinPeers(i.publicKey, 2); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
@@ -67,16 +66,10 @@ func (i *incomingMsgsReader) listenToNetwork() {
 		// filtering irrelevant messages
 		// TODO: handle other types of roles
 		if identifier != string(msg.Message.Lambda) {
-			i.logger.Debug("ignoring message with wrong identifier")
 			continue
 		}
 
-		fields := []zap.Field{
-			zap.Uint64("seq_num", msg.Message.SeqNumber),
-			zap.Uint64("round", msg.Message.Round),
-			zap.String("signers", msg.SignersIDString()),
-			zap.String("identifier", string(msg.Message.Lambda)),
-		}
+		fields := messageFields(msg)
 
 		switch msg.Message.Type {
 		case proto.RoundState_PrePrepare:
@@ -85,8 +78,6 @@ func (i *incomingMsgsReader) listenToNetwork() {
 			i.logger.Info("prepare msg", fields...)
 		case proto.RoundState_Commit:
 			i.logger.Info("commit msg", fields...)
-		case proto.RoundState_Decided:
-			i.logger.Info("decided msg", fields...)
 		case proto.RoundState_ChangeRound:
 			i.logger.Info("change round msg", fields...)
 		default:
@@ -96,7 +87,6 @@ func (i *incomingMsgsReader) listenToNetwork() {
 }
 
 // waitForMinPeers will wait until enough peers joined the topic
-// it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
 	ctx := commons.WaitMinPeersCtx{
 		Ctx:    context.Background(),
@@ -105,4 +95,13 @@ func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int
 	}
 	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
 		1*time.Second, 64*time.Second, false)
+}
+
+func messageFields(msg *proto.SignedMessage) []zap.Field {
+	return []zap.Field{
+		zap.Uint64("seq_num", msg.Message.SeqNumber),
+		zap.Uint64("round", msg.Message.Round),
+		zap.String("signers", msg.SignersIDString()),
+		zap.String("identifier", string(msg.Message.Lambda)),
+	}
 }

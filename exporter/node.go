@@ -23,7 +23,8 @@ import (
 )
 
 const (
-	ibftSyncDispatcherTick = 1 * time.Second
+	mainQueueInterval    = 100 * time.Millisecond
+	readerQueuesInterval = 10 * time.Millisecond
 )
 
 var (
@@ -49,70 +50,80 @@ type Options struct {
 
 	DB basedb.IDb
 
-	WS              api.WebSocketServer
-	WsAPIPort       int
-	IbftSyncEnabled bool
+	WS                api.WebSocketServer
+	WsAPIPort         int
+	IbftSyncEnabled   bool
+	CleanRegistryData bool
 }
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx                   context.Context
-	storage               storage.Storage
-	validatorStorage      validatorstorage.ICollection
-	ibftStorage           collections.Iibft
-	logger                *zap.Logger
-	network               network.Network
-	eth1Client            eth1.Client
-	ibftSyncDispatcher    tasks.Dispatcher
-	networkReadDispatcher tasks.Dispatcher
-	ws                    api.WebSocketServer
-	wsAPIPort             int
-	ibftSyncEnabled       bool
+	ctx                 context.Context
+	storage             storage.Storage
+	validatorStorage    validatorstorage.ICollection
+	ibftStorage         collections.Iibft
+	logger              *zap.Logger
+	network             network.Network
+	eth1Client          eth1.Client
+	mainQueue           tasks.Queue
+	decidedReadersQueue tasks.Queue
+	networkReadersQueue tasks.Queue
+	ws                  api.WebSocketServer
+	wsAPIPort           int
+	ibftSyncEnabled     bool
 }
 
 // New creates a new Exporter instance
 func New(opts Options) Exporter {
-	validatorStorage := validatorstorage.NewCollection(
-		validatorstorage.CollectionOptions{
-			DB:     opts.DB,
-			Logger: opts.Logger,
-		},
-	)
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
-	logger := opts.Logger.With(zap.String("component", "exporter/node"))
 	e := exporter{
-		ctx:              opts.Ctx,
-		storage:          storage.NewExporterStorage(opts.DB, opts.Logger),
-		ibftStorage:      &ibftStorage,
-		validatorStorage: validatorStorage,
-		logger:           logger,
-		network:          opts.Network,
-		eth1Client:       opts.Eth1Client,
-		ibftSyncDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx:      opts.Ctx,
-			Logger:   opts.Logger.With(zap.String("component", "ibftSyncDispatcher")),
-			Interval: ibftSyncDispatcherTick,
-		}),
-		networkReadDispatcher: tasks.NewDispatcher(tasks.DispatcherOptions{
-			Ctx:        opts.Ctx,
-			Logger:     opts.Logger.With(zap.String("component", "networkReadDispatcher")),
-			Interval:   ibftSyncDispatcherTick,
-			Concurrent: 1000, // using a large limit of concurrency as listening to network messages remains open
-		}),
-		ws:              opts.WS,
-		wsAPIPort:       opts.WsAPIPort,
-		ibftSyncEnabled: opts.IbftSyncEnabled,
+		ctx:         opts.Ctx,
+		storage:     storage.NewExporterStorage(opts.DB, opts.Logger),
+		ibftStorage: &ibftStorage,
+		validatorStorage: validatorstorage.NewCollection(
+			validatorstorage.CollectionOptions{
+				DB:     opts.DB,
+				Logger: opts.Logger,
+			},
+		),
+		logger:              opts.Logger.With(zap.String("component", "exporter/node")),
+		network:             opts.Network,
+		eth1Client:          opts.Eth1Client,
+		mainQueue:           tasks.NewExecutionQueue(mainQueueInterval),
+		decidedReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
+		networkReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
+		ws:                  opts.WS,
+		wsAPIPort:           opts.WsAPIPort,
+		ibftSyncEnabled:     opts.IbftSyncEnabled,
+	}
+
+	if err := e.init(opts); err != nil {
+		e.logger.Panic("failed to init", zap.Error(err))
 	}
 
 	return &e
+}
+
+func (exp *exporter) init(opts Options) error {
+	if opts.CleanRegistryData {
+		if err := exp.validatorStorage.CleanAllShares(); err != nil {
+			return errors.Wrap(err, "could not clean existing shares")
+		}
+		if err := exp.storage.Clean(); err != nil {
+			return errors.Wrap(err, "could not clean existing data")
+		}
+		exp.logger.Debug("manage to cleanup registry data")
+	}
+	return nil
 }
 
 // Start starts the IBFT dispatcher for syncing data nd listen to messages
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
-	go exp.ibftSyncDispatcher.Start()
-	go exp.networkReadDispatcher.Start()
+	go exp.mainQueue.Start()
+	go exp.decidedReadersQueue.Start()
+	go exp.networkReadersQueue.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -179,6 +190,13 @@ func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChanne
 func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	exp.logger.Info("starting node -> eth1")
 
+	// sync events
+	syncErr := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, syncOffset, exp.handleEth1Event)
+	if syncErr != nil {
+		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
+	}
+	exp.logger.Info("managed to sync contract events")
+
 	// register for contract events that will arrive from eth1Client
 	eth1EventChan, err := exp.eth1Client.EventsSubject().Register("Eth1ExporterObserver")
 	if err != nil {
@@ -191,13 +209,6 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 			exp.logger.Warn("could not handle eth1 event", zap.Error(err))
 		}
 	}()
-	// sync events
-	syncErr := eth1.SyncEth1Events(exp.logger, exp.eth1Client, exp.storage, "ExporterSync", syncOffset)
-	if syncErr != nil {
-		return errors.Wrap(syncErr, "failed to sync eth1 contract events")
-	}
-	exp.logger.Info("manage to sync contract events")
-
 	// start events stream
 	err = exp.eth1Client.Start()
 	if err != nil {
@@ -212,6 +223,7 @@ func (exp *exporter) triggerAllValidators() {
 		exp.logger.Error("could not get validators shares", zap.Error(err))
 		return
 	}
+	exp.logger.Debug("triggering validators", zap.Int("count", len(shares)))
 	for _, share := range shares {
 		if err = exp.triggerValidator(share.PublicKey); err != nil {
 			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),
@@ -237,41 +249,58 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if !exp.shouldProcessValidator(pubkey) {
 		return nil
 	}
-	validatorShare, found, err := exp.validatorStorage.GetValidatorsShare(validatorPubKey.Serialize())
+	validatorShare, found, err := exp.validatorStorage.GetValidatorShare(validatorPubKey.Serialize())
 	if !found {
 		return errors.New("could not find validator share")
 	}
 	if err != nil {
 		return errors.Wrap(err, "could not get validator share")
 	}
-	logger := exp.logger.With(zap.String("pubKey", pubkey))
-	logger.Debug("ibft sync was triggered")
+	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
-	syncDecidedReader := ibft.NewIbftDecidedReadOnly(ibft.DecidedReaderOptions{
+	exp.mainQueue.QueueDistinct(func() error {
+		return exp.setup(validatorShare)
+	}, fmt.Sprintf("ibft:setup/%s", pubkey))
+
+	return nil
+}
+
+func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
+	pubKey := validatorShare.PublicKey.SerializeToHexStr()
+	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	decidedReader := exp.getDecidedReader(validatorShare)
+	if 	err := tasks.Retry(func() error {
+		if err := decidedReader.Sync(); err != nil {
+			logger.Error("could not sync validator", zap.Error(err))
+			return err
+		}
+		return nil
+	}, 5); err != nil {
+		logger.Error("could not setup validator, sync failed", zap.Error(err))
+		return err
+	}
+	logger.Debug("sync is done, starting to read network messages")
+	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
+	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
+	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
+	return nil
+}
+
+func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ibft.SyncRead {
+	return ibft.NewDecidedReader(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
 	})
-
-	syncTask := tasks.NewTask(syncDecidedReader.Start, fmt.Sprintf("ibft:sync/%s", pubkey), func() {
-		logger.Debug("sync is done, starting to read network messages")
-		exp.readNetworkMessages(validatorPubKey)
-	})
-	exp.ibftSyncDispatcher.Queue(*syncTask)
-
-	return nil
 }
 
-func (exp *exporter) readNetworkMessages(validatorPubKey *bls.PublicKey) {
-	ibftMsgReader := ibft.NewIncomingMsgsReader(ibft.IncomingMsgsReaderOptions{
+func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reader {
+	return ibft.NewNetworkReader(ibft.IncomingMsgsReaderOptions{
 		Logger:  exp.logger,
 		Network: exp.network,
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-	readerTask := tasks.NewTask(ibftMsgReader.Start,
-		fmt.Sprintf("ibft:msgReader/%s", validatorPubKey.SerializeToHexStr()), nil)
-	exp.networkReadDispatcher.Queue(*readerTask)
 }

@@ -49,7 +49,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	ssv := &operatorNode{
+	node := &operatorNode{
 		context:             opts.Context,
 		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
 		validatorController: opts.ValidatorController,
@@ -68,7 +68,21 @@ func New(opts Options) Node {
 			DutyLimit:           opts.DutyLimit,
 		}),
 	}
-	return ssv
+
+	if err := node.init(opts); err != nil {
+		node.logger.Panic("failed to init", zap.Error(err))
+	}
+
+	return node
+}
+
+func (n *operatorNode) init(opts Options) error {
+	if opts.ValidatorOptions.CleanRegistryData {
+		if err := n.storage.(*storage).cleanSyncOffset(); err != nil {
+			return errors.Wrap(err, "could not clean sync offset")
+		}
+	}
+	return nil
 }
 
 // Start starts to stream duties and run IBFT instances
@@ -83,19 +97,19 @@ func (n *operatorNode) Start() error {
 func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	n.logger.Info("starting operator node syncing with eth1")
 
-	// setup validator controller to listen to ValidatorAdded events
-	// this will handle events from the sync as well
+	// sync past events
+	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset,
+		n.validatorController.ProcessEth1Event); err != nil {
+		return errors.Wrap(err, "failed to sync contract events")
+	}
+	n.logger.Info("manage to sync contract events")
+
+	// setup validator controller to listen to new events
 	cnValidators, err := n.eth1Client.EventsSubject().Register("ValidatorControllerObserver")
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}
 	go n.validatorController.ListenToEth1Events(cnValidators)
-
-	// sync past events
-	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, "SSVNodeEth1Sync", syncOffset); err != nil {
-		return errors.Wrap(err, "failed to sync contract events")
-	}
-	n.logger.Info("manage to sync contract events")
 
 	// starts the eth1 events subscription
 	err = n.eth1Client.Start()
@@ -121,3 +135,4 @@ func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
 	}
 	return agents
 }
+

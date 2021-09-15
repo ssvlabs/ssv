@@ -22,6 +22,8 @@ func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID
 			return errors.Wrap(err, "could not deserialized signature")
 		}
 
+		// protect nil root
+		root = ensureRoot(root)
 		// verify
 		if !sig.VerifyByte(pk, root) {
 			return errors.Errorf("could not verify signature from iBFT member %d", ibftID)
@@ -53,7 +55,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty, shareKey *b
 		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
 		sig = signedAttestation.Signature[:]
-		root = r
+		root = ensureRoot(r)
 	//case beacon.RoleTypeAggregator:
 	//	s := &proto.InputValue_Aggregation{}
 	//	if err := json.Unmarshal(decidedValue, s); err != nil {
@@ -129,4 +131,17 @@ func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatu
 		return errors.New("role is undefined, can't reconstruct signature")
 	}
 	return nil
+}
+
+// ensureRoot ensures that root will have sufficient allocated memory
+// otherwise we get panic from bls:
+// github.com/herumi/bls-eth-go-binary/bls.(*Sign).VerifyByte:738
+func ensureRoot(root []byte) []byte {
+	n := len(root)
+	if n == 0 {
+		n = 1
+	}
+	tmp := make([]byte, n)
+	copy(tmp[:], root[:])
+	return tmp[:]
 }
