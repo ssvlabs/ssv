@@ -16,7 +16,7 @@ var (
 	metricsNetMsgsInbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:net_messages_inbound",
 		Help: "Count incoming network messages",
-	}, []string{"pubKey", "type", "signer", "seq", "round"})
+	}, []string{"pubKey", "type", "signer"})
 	metricsIBFTMsgsInbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:ibft_messages_inbound",
 		Help: "Count incoming network messages",
