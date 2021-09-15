@@ -24,10 +24,11 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 		return errors.Wrap(err, "failed to get topic")
 	}
 
-	n.logger.Debug("broadcasting ibft msg", zap.String("lambda", string(msg.Message.Lambda)), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
+	n.logger.Debug("broadcasting ibft msg", zap.String("lambda", string(msg.Message.Lambda)),
+		zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
 
 	metricsIBFTMsgsOutbound.WithLabelValues(unwrapTopicName(topic.String()), msg.Message.Type.String(),
-		strconv.FormatUint(msg.Message.SeqNumber, 10)).Inc()
+		strconv.FormatUint(msg.Message.SeqNumber, 10), strconv.FormatUint(msg.Message.Round, 10)).Inc()
 
 	return topic.Publish(n.ctx, msgBytes)
 }
