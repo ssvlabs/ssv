@@ -10,21 +10,21 @@ import (
 )
 
 var (
-	metricsHighestDecidedSigners = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	metricsDecidedSignersExp = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_decided_signers_exp",
 		Help: "Signers of the highest decided sequence number",
 	}, []string{"lambda", "pubKey", "seq", "nodeId"})
 )
 
 func init() {
-	if err := prometheus.Register(metricsHighestDecidedSigners); err != nil {
+	if err := prometheus.Register(metricsDecidedSignersExp); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
 
 func reportDecided(msg *proto.SignedMessage, share *storage.Share) {
 	for _, nodeID := range msg.SignerIds {
-		metricsHighestDecidedSigners.WithLabelValues(string(msg.Message.GetLambda()),
+		metricsDecidedSignersExp.WithLabelValues(string(msg.Message.GetLambda()),
 			share.PublicKey.SerializeToHexStr(), strconv.FormatUint(msg.Message.SeqNumber, 10),
 			strconv.FormatUint(nodeID, 10))
 	}
