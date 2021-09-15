@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +35,7 @@ const (
 	// MsgChanSize is the buffer size of the message channel
 	MsgChanSize = 128
 
-	topicFmt = "bloxstaking.ssv.%s"
+	topicPrefix = "bloxstaking.ssv"
 
 	syncStreamProtocol = "/sync/0.0.1"
 )
@@ -244,7 +245,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
-			metricsNetMsgsInbound.WithLabelValues(t).Inc()
+			reportIncomingSignedMessage(&cm, t)
 			n.propagateSignedMsg(&cm)
 		}
 	}
@@ -328,8 +329,13 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 }
 
 // getTopicName return formatted topic name
-func getTopicName(topicName string) string {
-	return fmt.Sprintf(topicFmt, topicName)
+func getTopicName(pk string) string {
+	return fmt.Sprintf("%s.%s", topicPrefix, pk)
+}
+
+// getTopicName return formatted topic name
+func unwrapTopicName(topicName string) string {
+	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
 }
 
 func (n *p2pNetwork) MaxBatch() uint64 {
