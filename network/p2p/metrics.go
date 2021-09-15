@@ -20,7 +20,7 @@ var (
 	metricsIBFTMsgsInbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:ibft_messages_inbound",
 		Help: "Count incoming network messages",
-	}, []string{"pubKey", "signer", "seq", "round"})
+	}, []string{"pubKey", "signer", "seq", "round", "type"})
 	metricsIBFTMsgsOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:ibft_messages_outbound",
 		Help: "Count IBFT messages outbound",
@@ -55,7 +55,9 @@ func reportIncomingSignedMessage(cm *network.Message, topic string) {
 				seq := strconv.FormatUint(cm.SignedMessage.Message.SeqNumber, 10)
 				round := strconv.FormatUint(cm.SignedMessage.Message.Round, 10)
 				metricsIBFTMsgsInbound.WithLabelValues(unwrapTopicName(topic),
-					strconv.FormatUint(nodeID, 10), seq, round).Inc()
+					strconv.FormatUint(nodeID, 10),
+					cm.SignedMessage.Message.Type.String(), seq, round,
+					cm.SignedMessage.Message.Type.String()).Inc()
 			}
 		}
 	}
