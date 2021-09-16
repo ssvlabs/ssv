@@ -222,17 +222,18 @@ func (i *Instance) JustifyRoundChange(round uint64) error {
 	return nil
 }
 
-/**
-### Algorithm 4 IBFT pseudocode for process pi: message justification
-	Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
-	the prepared round and the prepared value of the ROUND-CHANGE message in Qrc with the highest prepared round.
-	function HighestPrepared(Qrc)
-		return (pr, pv) such that:
-			∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
-				∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
-*/
 // HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
 func (i *Instance) HighestPrepared(round uint64) (notPrepared bool, highestPrepared *proto.ChangeRoundData, err error) {
+	/**
+	### Algorithm 4 IBFT pseudocode for process pi: message justification
+		Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
+		the prepared round and the prepared value of the ROUND-CHANGE message in Qrc with the highest prepared round.
+		function HighestPrepared(Qrc)
+			return (pr, pv) such that:
+				∃⟨ROUND-CHANGE, λi, round, pr, pv⟩ ∈ Qrc :
+					∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
+	*/
+
 	notPrepared = true
 	for _, msg := range i.ChangeRoundMessages.ReadOnlyMessagesByRound(round) {
 		candidateChangeData := &proto.ChangeRoundData{}

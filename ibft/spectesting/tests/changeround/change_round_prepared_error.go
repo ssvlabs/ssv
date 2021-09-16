@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// NotPreparedError tests a pre-prepare following a change round with justification of a previously prepared round
+// PreparedFollowedByPrePrepared tests a pre-prepare following a change round with justification of a previously prepared round
 type PreparedFollowedByPrePrepared struct {
 	instance   *ibft.Instance
 	inputValue []byte
