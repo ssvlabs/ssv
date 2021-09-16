@@ -41,15 +41,13 @@ var tests = []SpecTest{
 	&changeround.PartialQuorum{},
 	&changeround.NotPreparedError{},
 	&changeround.PreparedFollowedByPrePrepared{},
+	&changeround.FuturePrePrepareAfterChangeRound{},
 
 	// common
 	&common.DuplicateMessages{},
 	&common.InvalidSig{},
 	&common.WrongSequenceNumber{},
 	&ValidSimpleRun{},
-
-	// TODO
-	// invalid pre-prepare value, justify pre-prepare and change round are wrong they need to use highest prepared
 }
 
 func TestAllSpecTests(t *testing.T) {

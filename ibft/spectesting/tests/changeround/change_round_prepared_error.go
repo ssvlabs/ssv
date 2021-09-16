@@ -72,7 +72,7 @@ func (test *PreparedFollowedByPrePrepared) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
-	require.EqualError(t, test.instance.JustifyPrePrepare(4, nil), "unjustified change round for pre-prepare, value different than highest prepared")
+	require.EqualError(t, test.instance.JustifyPrePrepare(4, nil), "preparedValue different than highest prepared")
 	notPrepared, highest, err := test.instance.HighestPrepared(4)
 	require.NoError(t, err)
 	require.False(t, notPrepared)

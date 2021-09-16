@@ -13,10 +13,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
-	"sync"
 )
 
 // StartOptions defines type for IBFT instance options

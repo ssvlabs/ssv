@@ -87,5 +87,5 @@ func (test *NonJustifiedPrePrepapre2) Run(t *testing.T) {
 	require.EqualValues(t, 2, test.instance.State.Round.Get())
 
 	// try to broadcast unjustified pre-prepare
-	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "Unjustified pre-prepare: unjustified change round for pre-prepare, value different than highest prepared")
+	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "Unjustified pre-prepare: preparedValue different than highest prepared")
 }

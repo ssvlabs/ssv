@@ -17,7 +17,6 @@ func (i *Instance) prepareMsgPipeline() pipeline.Pipeline {
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),
 		auth.ValidateLambdas(i.State.Lambda.Get()),
-
 		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {

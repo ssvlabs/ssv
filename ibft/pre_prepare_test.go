@@ -94,7 +94,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 
 	t.Run("wrong value, unjustified", func(t *testing.T) {
 		err := instance.JustifyPrePrepare(2, []byte("wrong value"))
-		require.EqualError(t, err, "unjustified change round for pre-prepare, value different than highest prepared")
+		require.EqualError(t, err, "preparedValue different than highest prepared")
 	})
 }
 
@@ -159,10 +159,8 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("wrong value", func(t *testing.T) {
-		// test with wrong value
-		err := instance.JustifyPrePrepare(2, []byte("wrong value"))
-		require.EqualError(t, err, "unjustified change round for pre-prepare, value should be nil")
+	t.Run("any value can be in pre-prepare", func(t *testing.T) {
+		require.NoError(t, instance.JustifyPrePrepare(2, []byte("wrong value")))
 	})
 }
 

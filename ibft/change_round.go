@@ -61,11 +61,15 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 		// change round if quorum reached
 		if !quorum {
-			i.Logger.Info("change round - quorum not reached", zap.Uint64("round", signedMessage.Message.Round), zap.Int("msgsCount", msgsCount), zap.Int("committeeSize", committeeSize))
+			i.Logger.Info("change round - quorum not reached",
+				zap.Uint64("round", signedMessage.Message.Round),
+				zap.Int("msgsCount", msgsCount),
+				zap.Int("committeeSize", committeeSize),
+			)
 			return nil
 		}
 
-		justifyRound, err := i.JustifyRoundChange(signedMessage.Message.Round)
+		err = i.JustifyRoundChange(signedMessage.Message.Round)
 		if err != nil {
 			return errors.Wrap(err, "could not justify change round quorum")
 		}
@@ -74,10 +78,11 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 			i.ProcessStageChange(proto.RoundState_PrePrepare)
 			logger := i.Logger.With(zap.Uint64("round", signedMessage.Message.Round),
 				zap.Bool("is_leader", i.IsLeader()),
-				zap.Bool("round_justified", justifyRound))
+				zap.Bool("round_justified", true))
 			logger.Info("change round quorum received")
 
-			if !i.IsLeader() || !justifyRound {
+			if !i.IsLeader() {
+				err = i.actOnExistingPrePrepare(signedMessage)
 				return
 			}
 
@@ -105,6 +110,19 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 		})
 		return err
 	})
+}
+
+// actOnExistingPrePrepare will try to find exiting pre-prepare msg and run the UponPrePrepareMsg if found.
+// We do this in case a future pre-prepare msg was sent before we reached change round quorum, this check is to prevent the instance to wait another round.
+func (i *Instance) actOnExistingPrePrepare(signedMessage *proto.SignedMessage) error {
+	found, msg, err := i.checkExistingPrePrepare(signedMessage.Message.Round)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return nil
+	}
+	return i.UponPrePrepareMsg().Run(msg)
 }
 
 func (i *Instance) changeRoundQuorum(round uint64) (quorum bool, t int, n int) {
@@ -180,7 +198,7 @@ func (i *Instance) broadcastChangeRound() error {
 }
 
 // JustifyRoundChange see below
-func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
+func (i *Instance) JustifyRoundChange(round uint64) error {
 	// ### Algorithm 4 IBFT pseudocode for process pi: message justification
 	//	predicate JustifyRoundChange(Qrc) return
 	//		∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
@@ -189,10 +207,10 @@ func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 
 	notPrepared, _, err := i.HighestPrepared(round)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if notPrepared && i.isPrepared() {
-		return false, errors.New("highest prepared doesn't match prepared state")
+		return errors.New("highest prepared doesn't match prepared state")
 	}
 
 	/**
@@ -201,7 +219,7 @@ func (i *Instance) JustifyRoundChange(round uint64) (bool, error) {
 	will not include un justified prepared round/ value indicated by a change round msg.
 	*/
 
-	return true, nil
+	return nil
 }
 
 /**

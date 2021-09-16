@@ -92,9 +92,8 @@ func (test *PreparedAndDecideAfterChangeRound) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	justified, err := test.instance.JustifyRoundChange(2)
+	err := test.instance.JustifyRoundChange(2)
 	require.NoError(t, err)
-	require.True(t, justified)
 
 	// justify pre-prepare
 	err = test.instance.JustifyPrePrepare(2, test.inputValue)

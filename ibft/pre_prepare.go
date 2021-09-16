@@ -47,7 +47,7 @@ func (i *Instance) prePrepareMsgValidationPipeline() pipeline.Pipeline {
 // 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
-func (i *Instance) JustifyPrePrepare(round uint64, value []byte) error {
+func (i *Instance) JustifyPrePrepare(round uint64, preparedValue []byte) error {
 	if round == 1 {
 		return nil
 	}
@@ -57,12 +57,10 @@ func (i *Instance) JustifyPrePrepare(round uint64, value []byte) error {
 		if err != nil {
 			return err
 		}
-		if notPrepared && value == nil {
+		if notPrepared {
 			return nil
-		} else if notPrepared && value != nil {
-			return errors.New("unjustified change round for pre-prepare, value should be nil")
-		} else if !bytes.Equal(value, highest.PreparedValue) {
-			return errors.New("unjustified change round for pre-prepare, value different than highest prepared")
+		} else if !bytes.Equal(preparedValue, highest.PreparedValue) {
+			return errors.New("preparedValue different than highest prepared")
 		}
 		return nil
 	}
@@ -78,10 +76,8 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
-		prepareValueToBroadcast := signedMessage.Message.Value
-
 		// Pre-prepare justification
-		err := i.JustifyPrePrepare(signedMessage.Message.Round, prepareValueToBroadcast)
+		err := i.JustifyPrePrepare(signedMessage.Message.Round, signedMessage.Message.Value)
 		if err != nil {
 			return errors.Wrap(err, "Unjustified pre-prepare")
 		}
@@ -90,7 +86,7 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 		i.ProcessStageChange(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
-		broadcastMsg := i.generatePrepareMessage(prepareValueToBroadcast)
+		broadcastMsg := i.generatePrepareMessage(signedMessage.Message.Value)
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err
@@ -107,4 +103,14 @@ func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 		SeqNumber: i.State.SeqNumber.Get(),
 		Value:     value,
 	}
+}
+
+func (i *Instance) checkExistingPrePrepare(round uint64) (bool, *proto.SignedMessage, error) {
+	msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round)
+	if len(msgs) == 1 {
+		return true, msgs[0], nil
+	} else if len(msgs) > 1 {
+		return false, nil, errors.New("multiple pre-preparer msgs, can't decide which one to use")
+	}
+	return false, nil, nil
 }
