@@ -41,6 +41,7 @@ func init() {
 	}
 }
 
+// reportDutyExecutionMetrics reports duty execution metrics, returns done function to be called once duty is done
 func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	// reporting metrics
 	metricsRunningIBFTsCount.Inc()
@@ -55,6 +56,7 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	return func() {
 		metricsRunningIBFTsCount.Dec()
 		metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
+		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusReady))
 	}
 }
 
@@ -64,6 +66,6 @@ var (
 	validatorStatusInactive validatorStatus = 0
 	validatorStatusNoIndex  validatorStatus = 1
 	validatorStatusError    validatorStatus = 2
-	validatorStatusOnline   validatorStatus = 3
+	validatorStatusReady    validatorStatus = 3
 	validatorStatusRunning  validatorStatus = 4
 )
