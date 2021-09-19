@@ -117,12 +117,12 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
 
-	if ps, err := n.setupGossipPubsub(cfg); err != nil {
+	ps, err := n.setupGossipPubsub(cfg)
+	if err != nil {
 		n.logger.Error("failed to start pubsub", zap.Error(err))
 		return nil, errors.Wrap(err, "failed to start pubsub")
-	} else {
-		n.pubsub = ps
 	}
+	n.pubsub = ps
 
 	if cfg.DiscoveryType == "mdns" { // use mdns discovery {
 		// Setup Local mDNS discovery
@@ -189,12 +189,12 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	}
 
 	if len(cfg.PubSubTraceOut) > 0 {
-		if tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut); err != nil {
+		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
+		if err != nil {
 			return nil, errors.Wrap(err, "could not create pubsub tracer")
-		} else {
-			n.logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
-			psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
 		}
+		n.logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
+		psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
 	}
 
 	setPubSubParameters()
