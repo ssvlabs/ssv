@@ -143,10 +143,17 @@ func (c *controller) StartValidators() {
 	var errs []error
 	for _, validatorShare := range shares {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
+		pk := v.Share.PublicKey.SerializeToHexStr()
+		if v.Share.Index == nil {
+			if err := c.addValidatorIndex(v.Share); err != nil {
+				c.logger.Error("could not start validator: missing index", zap.String("pubkey", pk),
+					zap.Error(err))
+				metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
+				continue
+			}
+		}
 		if err := v.Start(); err != nil {
-			pk := v.Share.PublicKey.SerializeToHexStr()
-			c.logger.Error("could not start validator", zap.Error(err),
-				zap.String("pubkey", pk))
+			c.logger.Error("could not start validator", zap.String("pubkey", pk), zap.Error(err))
 			metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusError))
 			errs = append(errs, err)
 			continue
@@ -224,6 +231,11 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 
 	v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 
+	if v.Share.Index == nil {
+		logger.Warn("could not start validator without index")
+		return nil
+	}
+
 	if err := v.Start(); err != nil {
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 		return errors.Wrap(err, "could not start validator")
@@ -265,6 +277,10 @@ func (c *controller) addValidatorsIndices(toFetch [][]byte) {
 			v.Share.Index = &index
 			if err := c.collection.SaveValidatorShare(v.Share); err != nil {
 				c.logger.Debug("could not save share", zap.String("pubkey", pk), zap.Error(err))
+			}
+			if err := v.Start(); err != nil {
+				c.logger.Error("could not start validator", zap.String("pubkey", pk), zap.Error(err))
+				metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusError))
 			}
 		}
 	}
