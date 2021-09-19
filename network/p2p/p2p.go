@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"path"
 	"strings"
 	"sync"
 	"time"
@@ -119,37 +117,12 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
 
-	// Gossipsub registration is done before we add in any new peers
-	// due to libp2p's gossipsub implementation not taking into
-	// account previously added peers when creating the gossipsub
-	// object.
-	psOpts := []pubsub.Option{
-		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
-		//pubsub.WithNoAuthor(),
-		//pubsub.WithMessageIdFn(msgIDFunction),
-		//pubsub.WithSubscriptionFilter(s),
-		pubsub.WithPeerOutboundQueueSize(256),
-		pubsub.WithValidateQueueSize(256),
+	if ps, err := n.setupGossipPubsub(cfg); err != nil {
+		n.logger.Error("failed to start pubsub", zap.Error(err))
+		return nil, errors.Wrap(err, "failed to start pubsub")
+	} else {
+		n.pubsub = ps
 	}
-
-	if len(cfg.PubSubTraceOut) > 0 {
-		if tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut); err != nil {
-			logger.Error("could not create pubsub tracer", zap.Error(err))
-		} else {
-			logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
-			psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
-		}
-	}
-
-	setPubSubParameters()
-
-	// Create a new PubSub service using the GossipSub router
-	gs, err := pubsub.NewGossipSub(ctx, n.host, psOpts...)
-	if err != nil {
-		n.logger.Error("Failed to start pubsub")
-		return nil, err
-	}
-	n.pubsub = gs
 
 	if cfg.DiscoveryType == "mdns" { // use mdns discovery {
 		// Setup Local mDNS discovery
@@ -199,6 +172,35 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.watchTopicPeers()
 
 	return n, nil
+}
+
+func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
+	// Gossipsub registration is done before we add in any new peers
+	// due to libp2p's gossipsub implementation not taking into
+	// account previously added peers when creating the gossipsub
+	// object.
+	psOpts := []pubsub.Option{
+		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		//pubsub.WithNoAuthor(),
+		//pubsub.WithMessageIdFn(msgIDFunction),
+		//pubsub.WithSubscriptionFilter(s),
+		pubsub.WithPeerOutboundQueueSize(256),
+		pubsub.WithValidateQueueSize(256),
+	}
+
+	if len(cfg.PubSubTraceOut) > 0 {
+		if tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut); err != nil {
+			return nil, errors.Wrap(err, "could not create pubsub tracer")
+		} else {
+			n.logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
+			psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
+		}
+	}
+
+	setPubSubParameters()
+
+	// Create a new PubSub service using the GossipSub router
+	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
 
 func (n *p2pNetwork) watchTopicPeers() {
@@ -358,13 +360,4 @@ func ignorePeers() map[string]bool {
 	return map[string]bool{
 		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
 	}
-}
-
-func ensureBaseDir(fpath string) error {
-	baseDir := path.Dir(fpath)
-	info, err := os.Stat(baseDir)
-	if err == nil && info.IsDir() {
-		return nil
-	}
-	return os.MkdirAll(baseDir, 0755)
 }
