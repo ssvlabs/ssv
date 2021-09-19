@@ -51,12 +51,9 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 
 	metricsCurrentSlot.WithLabelValues(pubKey).Set(float64(duty.Slot))
 
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRunning))
-
 	return func() {
 		metricsRunningIBFTsCount.Dec()
 		metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
-		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusReady))
 	}
 }
 
@@ -67,5 +64,4 @@ var (
 	validatorStatusNoIndex  validatorStatus = 1
 	validatorStatusError    validatorStatus = 2
 	validatorStatusReady    validatorStatus = 3
-	validatorStatusRunning  validatorStatus = 4
 )
