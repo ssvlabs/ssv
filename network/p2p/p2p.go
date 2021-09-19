@@ -130,6 +130,14 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		pubsub.WithValidateQueueSize(256),
 	}
 
+	if len(cfg.PubSubTraceJSON) > 0 {
+		if tracer, err := pubsub.NewJSONTracer(cfg.PubSubTraceJSON); err != nil {
+			logger.Error("could not create JSON tracer", zap.Error(err))
+		} else {
+			psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
+		}
+	}
+
 	setPubSubParameters()
 
 	// Create a new PubSub service using the GossipSub router
