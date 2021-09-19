@@ -95,6 +95,8 @@ func (v *Validator) Start() error {
 		for _, ib := range v.ibfts { // init all ibfts
 			go ib.Init()
 		}
+
+		v.logger.Debug("validator started")
 	})
 
 	metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
