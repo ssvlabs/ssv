@@ -515,11 +515,6 @@
                         "color": "green",
                         "index": 3,
                         "text": "Ready"
-                      },
-                      "4": {
-                        "color": "green",
-                        "index": 4,
-                        "text": "Running"
                       }
                     },
                     "type": "value"
