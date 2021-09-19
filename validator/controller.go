@@ -104,9 +104,10 @@ func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
 // ProcessEth1Event handles a single event
 func (c *controller) ProcessEth1Event(e eth1.Event) error {
 	if validatorAddedEvent, ok := e.Data.(eth1.ValidatorAddedEvent); ok {
+		pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 		if err := c.handleValidatorAddedEvent(validatorAddedEvent); err != nil {
 			c.logger.Error("could not process validator",
-				zap.String("pubkey", hex.EncodeToString(validatorAddedEvent.PublicKey)), zap.Error(err))
+				zap.String("pubkey", pubKey), zap.Error(err))
 			return err
 		}
 	}
@@ -143,8 +144,10 @@ func (c *controller) StartValidators() {
 	for _, validatorShare := range shares {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 		if err := v.Start(); err != nil {
+			pk := v.Share.PublicKey.SerializeToHexStr()
 			c.logger.Error("could not start validator", zap.Error(err),
-				zap.String("pubkey", v.Share.PublicKey.SerializeToHexStr()))
+				zap.String("pubkey", pk))
+			metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusError))
 			errs = append(errs, err)
 			continue
 		}
@@ -168,6 +171,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 			c.logger.Warn("validator share doesn't have an index",
 				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
+			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusNoIndex))
 		} else {
 			index := spec.ValidatorIndex(*v.Share.Index)
 			indices = append(indices, index)
@@ -178,7 +182,9 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 		c.logger.Error("failed to get all validators public keys", zap.Error(err))
 	}
 
-	go c.addValidatorsIndices(toFetch)
+	if len(toFetch) > 0 {
+		go c.addValidatorsIndices(toFetch)
+	}
 
 	return indices
 }
@@ -193,6 +199,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		// TODO: handle updateValidator in the future
 		return nil
 	}
+	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, err := c.createShare(validatorAddedEvent)
 	if err != nil {
 		return errors.Wrap(err, "failed to create share")
@@ -203,6 +210,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	}
 	if !found {
 		if err := c.addValidatorIndex(validatorShare); err != nil {
+			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusNoIndex))
 			logger.Warn("could not add validator index", zap.Error(err))
 		}
 		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
@@ -217,6 +225,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 
 	if err := v.Start(); err != nil {
+		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 		return errors.Wrap(err, "could not start validator")
 	}
 

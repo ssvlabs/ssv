@@ -52,10 +52,13 @@ In order to setup a grafana dashboard do the following:
 1. Enable metrics (`MetricsAPIPort`)
 2. Setup Prometheus as mentioned in the beginning of this document and add as data source
     * Job name assumed to be '`ssv`'
-3. Import [SSV Operator dashboard](./grafana/dashboard_ssv_operator.json) to Grafana
-4. Align dashboard variables:
+3. Import dashboards to Grafana:
+   * [SSV Operator Node dashboard](./grafana/dashboard_ssv_operator.json) 
+   * [SSV Validator dashboard](./grafana/dashboard_ssv_validator.json)
+5. Align dashboard variables:
     * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
       In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
+    * `validator_dashboard_id` - exist only in operator dashboard, points to validator dashboard
 
 **Note:** In order to show `Process Health` panels, the following K8S metrics should be exposed:
 * `kubelet_volume_stats_used_bytes`

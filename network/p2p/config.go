@@ -18,6 +18,8 @@ type Config struct {
 	HostDNS          string        `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"50" env-description:"maximum number of returned objects in a batch"`
+	PubSubTraceOut   string        `yaml:"PubSubTraceOut" env:"PUBSUB_TRACE_OUT" env-description:"File path to hold collected pubsub traces"`
+	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
 
 	// objects / instances
 	HostID              peer.ID

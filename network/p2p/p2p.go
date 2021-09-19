@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +35,7 @@ const (
 	// MsgChanSize is the buffer size of the message channel
 	MsgChanSize = 128
 
-	topicFmt = "bloxstaking.ssv.%s"
+	topicPrefix = "bloxstaking.ssv"
 
 	syncStreamProtocol = "/sync/0.0.1"
 )
@@ -116,28 +117,12 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
 
-	// Gossipsub registration is done before we add in any new peers
-	// due to libp2p's gossipsub implementation not taking into
-	// account previously added peers when creating the gossipsub
-	// object.
-	psOpts := []pubsub.Option{
-		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
-		//pubsub.WithNoAuthor(),
-		//pubsub.WithMessageIdFn(msgIDFunction),
-		//pubsub.WithSubscriptionFilter(s),
-		pubsub.WithPeerOutboundQueueSize(256),
-		pubsub.WithValidateQueueSize(256),
-	}
-
-	setPubSubParameters()
-
-	// Create a new PubSub service using the GossipSub router
-	gs, err := pubsub.NewGossipSub(ctx, n.host, psOpts...)
+	ps, err := n.setupGossipPubsub(cfg)
 	if err != nil {
-		n.logger.Error("Failed to start pubsub")
-		return nil, err
+		n.logger.Error("failed to start pubsub", zap.Error(err))
+		return nil, errors.Wrap(err, "failed to start pubsub")
 	}
-	n.pubsub = gs
+	n.pubsub = ps
 
 	if cfg.DiscoveryType == "mdns" { // use mdns discovery {
 		// Setup Local mDNS discovery
@@ -187,6 +172,35 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.watchTopicPeers()
 
 	return n, nil
+}
+
+func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
+	// Gossipsub registration is done before we add in any new peers
+	// due to libp2p's gossipsub implementation not taking into
+	// account previously added peers when creating the gossipsub
+	// object.
+	psOpts := []pubsub.Option{
+		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		//pubsub.WithNoAuthor(),
+		//pubsub.WithMessageIdFn(msgIDFunction),
+		//pubsub.WithSubscriptionFilter(s),
+		pubsub.WithPeerOutboundQueueSize(256),
+		pubsub.WithValidateQueueSize(256),
+	}
+
+	if len(cfg.PubSubTraceOut) > 0 {
+		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not create pubsub tracer")
+		}
+		n.logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
+		psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
+	}
+
+	setPubSubParameters()
+
+	// Create a new PubSub service using the GossipSub router
+	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
 
 func (n *p2pNetwork) watchTopicPeers() {
@@ -244,7 +258,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
-			metricsNetMsgsInbound.WithLabelValues(t).Inc()
+			reportIncomingSignedMessage(&cm, t)
 			n.propagateSignedMsg(&cm)
 		}
 	}
@@ -328,8 +342,13 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 }
 
 // getTopicName return formatted topic name
-func getTopicName(topicName string) string {
-	return fmt.Sprintf(topicFmt, topicName)
+func getTopicName(pk string) string {
+	return fmt.Sprintf("%s.%s", topicPrefix, pk)
+}
+
+// getTopicName return formatted topic name
+func unwrapTopicName(topicName string) string {
+	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
 }
 
 func (n *p2pNetwork) MaxBatch() uint64 {

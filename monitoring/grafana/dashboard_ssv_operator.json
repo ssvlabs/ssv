@@ -2,11 +2,18 @@
   "__inputs": [
     {
       "name": "DS_PROMETHEUS",
-      "label": "prometheus-infra-stage",
+      "label": "prometheus-infra-prod",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
+    },
+    {
+      "name": "VAR_VALIDATOR_DASHBOARD_ID",
+      "type": "constant",
+      "label": "validator_dashboard_id",
+      "value": "XIbEQ37aa",
+      "description": ""
     }
   ],
   "__requires": [
@@ -64,7 +71,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1630047547674,
+  "iteration": 1631686313507,
   "links": [],
   "panels": [
     {
@@ -122,7 +129,7 @@
                   {
                     "options": {
                       "0": {
-                        "color": "text",
+                        "color": "rgba(92, 92, 92, 1)",
                         "index": 0,
                         "text": "Not Started"
                       },
@@ -163,7 +170,7 @@
               },
               {
                 "id": "custom.width",
-                "value": 150
+                "value": 123
               }
             ]
           },
@@ -215,7 +222,7 @@
               },
               {
                 "id": "custom.width",
-                "value": 125
+                "value": 146
               }
             ]
           },
@@ -271,14 +278,14 @@
               },
               {
                 "id": "custom.width",
-                "value": 125
+                "value": 100
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Running Instance"
+              "options": "IBFT Instance"
             },
             "properties": [
               {
@@ -286,12 +293,16 @@
                 "value": "color-text"
               },
               {
+                "id": "custom.width",
+                "value": 148
+              },
+              {
                 "id": "mappings",
                 "value": [
                   {
                     "options": {
                       "0": {
-                        "color": "transparent",
+                        "color": "gray",
                         "index": 0,
                         "text": "IDLE"
                       }
@@ -306,15 +317,11 @@
                         "index": 1,
                         "text": "Running"
                       },
-                      "to": 2
+                      "to": 3
                     },
                     "type": "range"
                   }
                 ]
-              },
-              {
-                "id": "custom.width",
-                "value": 150
               }
             ]
           },
@@ -363,6 +370,16 @@
                       }
                     },
                     "type": "value"
+                  },
+                  {
+                    "options": {
+                      "match": "null+nan",
+                      "result": {
+                        "index": 1,
+                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                      }
+                    },
+                    "type": "special"
                   }
                 ]
               },
@@ -412,6 +429,109 @@
               {
                 "id": "custom.width",
                 "value": 125
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Dashboard"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "ssv": {
+                        "index": 0,
+                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                      }
+                    },
+                    "type": "value"
+                  },
+                  {
+                    "options": {
+                      "match": "null+nan",
+                      "result": {
+                        "index": 1,
+                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                      }
+                    },
+                    "type": "special"
+                  }
+                ]
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "",
+                    "url": "https://grafana.k8.blox.io/d/${validator_dashboard_id}/ssv-validator?orgId=1&refresh=10s&var-instance=${instance}&var-pubkey=${__data.fields[\"Public Key\"]}"
+                  }
+                ]
+              },
+              {
+                "id": "custom.width",
+                "value": 84
+              },
+              {
+                "id": "custom.filterable"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "image"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Validator Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "gray",
+                        "index": 0,
+                        "text": "Inactive"
+                      },
+                      "1": {
+                        "color": "orange",
+                        "index": 1,
+                        "text": "No Index"
+                      },
+                      "2": {
+                        "color": "red",
+                        "index": 2,
+                        "text": "Error"
+                      },
+                      "3": {
+                        "color": "green",
+                        "index": 3,
+                        "text": "Ready"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.align",
+                "value": "left"
+              },
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              },
+              {
+                "id": "custom.width",
+                "value": 162
               }
             ]
           }
@@ -497,6 +617,16 @@
           "interval": "",
           "legendFormat": "",
           "refId": "G"
+        },
+        {
+          "exemplar": true,
+          "expr": "ssv:validator:status{instance=~\"$instance.*\"}",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "legendFormat": "",
+          "refId": "H"
         }
       ],
       "title": "Validators (Attestation)",
@@ -518,6 +648,7 @@
               "Time 5": true,
               "Time 6": true,
               "Time 7": true,
+              "Time 8": true,
               "__name__ 1": true,
               "__name__ 2": true,
               "__name__ 3": true,
@@ -525,6 +656,7 @@
               "__name__ 5": true,
               "__name__ 6": true,
               "__name__ 7": true,
+              "__name__ 8": true,
               "instance 1": true,
               "instance 2": true,
               "instance 3": true,
@@ -532,58 +664,65 @@
               "instance 5": true,
               "instance 6": true,
               "instance 7": true,
+              "instance 8": true,
               "job 1": false,
-              "job 2": true,
+              "job 2": false,
               "job 3": true,
               "job 4": true,
               "job 5": true,
               "job 6": true,
               "job 7": true,
+              "job 8": true,
               "lambda 1": true,
               "lambda 2": true,
               "lambda 3": true,
               "lambda 4": true
             },
             "indexByName": {
-              "Time 1": 11,
-              "Time 2": 16,
-              "Time 3": 10,
-              "Time 4": 22,
-              "Time 5": 27,
-              "Time 6": 32,
-              "Time 7": 36,
-              "Value #A": 9,
+              "Time 1": 12,
+              "Time 2": 17,
+              "Time 3": 11,
+              "Time 4": 23,
+              "Time 5": 28,
+              "Time 6": 33,
+              "Time 7": 37,
+              "Time 8": 41,
+              "Value #A": 10,
               "Value #B": 3,
-              "Value #C": 8,
-              "Value #D": 6,
-              "Value #E": 5,
-              "Value #F": 4,
-              "Value #G": 7,
-              "__name__ 1": 12,
-              "__name__ 2": 15,
-              "__name__ 3": 18,
-              "__name__ 4": 23,
-              "__name__ 5": 28,
-              "__name__ 6": 33,
-              "__name__ 7": 37,
-              "instance 1": 13,
-              "instance 2": 17,
-              "instance 3": 19,
-              "instance 4": 24,
-              "instance 5": 29,
-              "instance 6": 34,
-              "instance 7": 38,
+              "Value #C": 9,
+              "Value #D": 7,
+              "Value #E": 6,
+              "Value #F": 5,
+              "Value #G": 8,
+              "Value #H": 4,
+              "__name__ 1": 13,
+              "__name__ 2": 16,
+              "__name__ 3": 19,
+              "__name__ 4": 24,
+              "__name__ 5": 29,
+              "__name__ 6": 34,
+              "__name__ 7": 38,
+              "__name__ 8": 42,
+              "instance 1": 14,
+              "instance 2": 18,
+              "instance 3": 20,
+              "instance 4": 25,
+              "instance 5": 30,
+              "instance 6": 35,
+              "instance 7": 39,
+              "instance 8": 43,
               "job 1": 1,
               "job 2": 0,
-              "job 3": 20,
-              "job 4": 25,
-              "job 5": 30,
-              "job 6": 35,
-              "job 7": 39,
-              "lambda 1": 14,
-              "lambda 2": 21,
-              "lambda 3": 26,
-              "lambda 4": 31,
+              "job 3": 21,
+              "job 4": 26,
+              "job 5": 31,
+              "job 6": 36,
+              "job 7": 40,
+              "job 8": 44,
+              "lambda 1": 15,
+              "lambda 2": 22,
+              "lambda 3": 27,
+              "lambda 4": 32,
               "pubKey": 2
             },
             "renameByName": {
@@ -593,8 +732,9 @@
               "Value #C": "Current Sequence",
               "Value #D": "Round",
               "Value #E": "Stage",
-              "Value #F": "Running Instance",
+              "Value #F": "IBFT Instance",
               "Value #G": "Current slot",
+              "Value #H": "Validator Status",
               "job 1": "Beaconcha",
               "job 2": "Dashboard",
               "pubKey": "Public Key"
@@ -755,6 +895,10 @@
           "interval": "",
           "legendFormat": "SSV Operator",
           "refId": "C"
+        },
+        {
+          "hide": false,
+          "refId": "D"
         }
       ],
       "title": "Current Health Status",
@@ -795,27 +939,17 @@
               "mode": "off"
             }
           },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "index": 0,
-                  "text": "Unhealthy"
-                },
-                "1": {
-                  "index": 1,
-                  "text": "Healthy"
-                }
-              },
-              "type": "value"
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
               }
             ]
           },
@@ -1518,7 +1652,7 @@
       }
     }
   ],
-  "refresh": "10s",
+  "refresh": "30s",
   "schemaVersion": 30,
   "style": "dark",
   "tags": [],
@@ -1558,9 +1692,14 @@
             "selected": false,
             "text": "ssv-node-v2-4",
             "value": "ssv-node-v2-4"
+          },
+          {
+            "selected": false,
+            "text": "ssv-exporter",
+            "value": "ssv-exporter"
           }
         ],
-        "query": "ssv-node-v2-1,ssv-node-v2-2,ssv-node-v2-3,ssv-node-v2-4",
+        "query": "ssv-node-v2-1,ssv-node-v2-2,ssv-node-v2-3,ssv-node-v2-4,ssv-exporter",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
@@ -1569,8 +1708,8 @@
         "allValue": null,
         "current": {
           "selected": false,
-          "text": "https://explorer.ssv.network",
-          "value": "https://explorer.ssv.network"
+          "text": "https://explorer.stage.ssv.network",
+          "value": "https://explorer.stage.ssv.network"
         },
         "description": "SSV explorer link",
         "error": null,
@@ -1582,19 +1721,41 @@
         "options": [
           {
             "selected": true,
-            "text": "https://explorer.ssv.network",
-            "value": "https://explorer.ssv.network"
+            "text": "https://explorer.stage.ssv.network",
+            "value": "https://explorer.stage.ssv.network"
           },
           {
             "selected": false,
-            "text": "https://explorer.stage.ssv.network",
-            "value": "https://explorer.stage.ssv.network"
+            "text": "https://explorer.ssv.network",
+            "value": "https://explorer.ssv.network"
           }
         ],
-        "query": "https://explorer.ssv.network,https://explorer.stage.ssv.network",
+        "query": "https://explorer.stage.ssv.network,https://explorer.ssv.network",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
+      },
+      {
+        "description": null,
+        "error": null,
+        "hide": 2,
+        "label": null,
+        "name": "validator_dashboard_id",
+        "query": "${VAR_VALIDATOR_DASHBOARD_ID}",
+        "skipUrlSync": false,
+        "type": "constant",
+        "current": {
+          "value": "${VAR_VALIDATOR_DASHBOARD_ID}",
+          "text": "${VAR_VALIDATOR_DASHBOARD_ID}",
+          "selected": false
+        },
+        "options": [
+          {
+            "value": "${VAR_VALIDATOR_DASHBOARD_ID}",
+            "text": "${VAR_VALIDATOR_DASHBOARD_ID}",
+            "selected": false
+          }
+        ]
       }
     ]
   },
@@ -1606,5 +1767,5 @@
   "timezone": "",
   "title": "SSV Operator Node",
   "uid": "FIbEQ37nk",
-  "version": 36
+  "version": 45
 }

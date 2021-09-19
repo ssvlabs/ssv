@@ -20,6 +20,10 @@ var (
 		Name: "ssv:validator:ibft_current_slot",
 		Help: "Current running slot",
 	}, []string{"pubKey"})
+	metricsValidatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:status",
+		Help: "Validator status",
+	}, []string{"pubKey"})
 )
 
 func init() {
@@ -32,8 +36,12 @@ func init() {
 	if err := prometheus.Register(metricsCurrentSlot); err != nil {
 		log.Println("could not register prometheus collector")
 	}
+	if err := prometheus.Register(metricsValidatorStatus); err != nil {
+		log.Println("could not register prometheus collector")
+	}
 }
 
+// reportDutyExecutionMetrics reports duty execution metrics, returns done function to be called once duty is done
 func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	// reporting metrics
 	metricsRunningIBFTsCount.Inc()
@@ -48,3 +56,12 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 		metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
 	}
 }
+
+type validatorStatus int32
+
+var (
+	validatorStatusInactive validatorStatus = 0
+	validatorStatusNoIndex  validatorStatus = 1
+	validatorStatusError    validatorStatus = 2
+	validatorStatusReady    validatorStatus = 3
+)
