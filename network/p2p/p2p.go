@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -130,10 +132,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		pubsub.WithValidateQueueSize(256),
 	}
 
-	if len(cfg.PubSubTraceJSON) > 0 {
-		if tracer, err := pubsub.NewJSONTracer(cfg.PubSubTraceJSON); err != nil {
-			logger.Error("could not create JSON tracer", zap.Error(err))
+	if len(cfg.PubSubTraceOut) > 0 {
+		if tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut); err != nil {
+			logger.Error("could not create pubsub tracer", zap.Error(err))
 		} else {
+			logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
 			psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
 		}
 	}
@@ -355,4 +358,13 @@ func ignorePeers() map[string]bool {
 	return map[string]bool{
 		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
 	}
+}
+
+func ensureBaseDir(fpath string) error {
+	baseDir := path.Dir(fpath)
+	info, err := os.Stat(baseDir)
+	if err == nil && info.IsDir() {
+		return nil
+	}
+	return os.MkdirAll(baseDir, 0755)
 }
