@@ -49,6 +49,6 @@ func reportDecided(msg *proto.SignedMessage, share *storage.Share) {
 			string(msg.Message.GetLambda()),
 			share.PublicKey.SerializeToHexStr(),
 			strconv.FormatUint(msg.Message.SeqNumber, 10),
-			strconv.FormatUint(nodeID, 10))
+			strconv.FormatUint(nodeID, 10)).Set(1)
 	}
 }
