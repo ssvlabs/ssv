@@ -84,6 +84,7 @@ func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	var err error
 	err = b.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
+		opt.PrefetchSize = 1000 // if the number of items is larger than this size, results get mixed up
 		opt.Prefix = prefix
 		it := txn.NewIterator(opt)
 		defer it.Close()
