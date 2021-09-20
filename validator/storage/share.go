@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -29,6 +30,7 @@ type Share struct {
 	Index     *uint64 // pointer in order to support nil
 	ShareKey  *bls.SecretKey
 	Committee map[uint64]*proto.Node
+	Status    v1.ValidatorState
 }
 
 //  serializedShare struct
@@ -37,6 +39,7 @@ type serializedShare struct {
 	Index     *uint64 // pointer in order to support nil
 	ShareKey  []byte
 	Committee map[uint64]*proto.Node
+	Status    v1.ValidatorState
 }
 
 // CommitteeSize returns the IBFT committee size
@@ -99,6 +102,7 @@ func (s *Share) Serialize() ([]byte, error) {
 		Index:     s.Index,
 		ShareKey:  s.ShareKey.Serialize(),
 		Committee: map[uint64]*proto.Node{},
+		Status:    s.Status,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {
@@ -140,5 +144,21 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		Index:     value.Index,
 		ShareKey:  shareSecret,
 		Committee: value.Committee,
+		Status:    value.Status,
 	}, nil
+}
+
+// Deposited returns true if the validator is not unknown. It might be pending activation or active
+func (s *Share) Deposited() bool {
+	return s.Status != v1.ValidatorStateUnknown
+}
+
+// Exiting returns true if the validator is existing or exited
+func (s *Share) Exiting() bool {
+	return s.Status == v1.ValidatorStateActiveExiting || s.Status == v1.ValidatorStateExitedUnslashed
+}
+
+// Slashed returns true if the validator is existing or exited due to slashing
+func (s *Share) Slashed() bool {
+	return s.Status == v1.ValidatorStateExitedSlashed || s.Status == v1.ValidatorStateActiveSlashed
 }
