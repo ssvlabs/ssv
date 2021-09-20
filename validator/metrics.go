@@ -60,8 +60,11 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 type validatorStatus int32
 
 var (
-	validatorStatusInactive validatorStatus = 0
-	validatorStatusNoIndex  validatorStatus = 1
-	validatorStatusError    validatorStatus = 2
-	validatorStatusReady    validatorStatus = 3
+	validatorStatusInactive     validatorStatus = 0
+	validatorStatusNoIndex      validatorStatus = 1
+	validatorStatusError        validatorStatus = 2
+	validatorStatusReady        validatorStatus = 3
+	validatorStatusNotDeposited validatorStatus = 4
+	validatorStatusExiting      validatorStatus = 5
+	validatorStatusSlashed      validatorStatus = 6
 )
