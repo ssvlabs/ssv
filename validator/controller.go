@@ -3,8 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -185,21 +183,18 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
+		logger := c.logger.With(zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
 		if !v.Share.Deposited() {
-			c.logger.Warn("validator not deposited",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+			logger.Warn("validator not deposited")
 			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusNotDeposited))
 		} else if v.Share.Exiting() {
-			c.logger.Warn("validator exiting/ exited",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+			logger.Warn("validator exiting/ exited")
 			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusExiting))
 		} else if v.Share.Slashed() {
-			c.logger.Warn("validator slashed",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+			logger.Warn("validator slashed")
 			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusSlashed))
 		} else if v.Share.Index == nil {
-			c.logger.Warn("validator share doesn't have an index",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+			logger.Warn("validator share doesn't have an index")
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
 			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusNoIndex))
 		} else {
@@ -271,7 +266,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 // TODO - is this a duplicate of updateValidatorsIndicesAndStatus?
 func (c *controller) addValidatorIndexAndStatus(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
-	indices, err := c.fetchBeaconValidator([][]byte{validatorShare.PublicKey.Serialize()})
+	indices, err := beacon.FetchValidators(c.beacon, [][]byte{validatorShare.PublicKey.Serialize()})
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch indices")
 	}
@@ -287,18 +282,18 @@ func (c *controller) addValidatorIndexAndStatus(validatorShare *validatorstorage
 
 // updateValidatorsIndicesAndStatus adds indices for all given validators. shares are taken from validators map
 func (c *controller) updateValidatorsIndicesAndStatus(toFetch [][]byte) {
-	vals, err := c.fetchBeaconValidator(toFetch)
+	vals, err := beacon.FetchValidators(c.beacon, toFetch)
 	if err != nil {
 		c.logger.Error("failed to fetch indices", zap.Error(err))
 		return
 	}
-	updatedIndeces := make(map[string]uint64)
+	updatedIndices := make(map[string]uint64)
 	for pk, val := range vals {
 		if v, exist := c.validatorsMap.GetValidator(pk); exist {
 			c.logger.Debug("updating indices for validator", zap.String("pubkey", pk),
 				zap.Uint64("index", uint64(val.Index)))
 			index := uint64(val.Index)
-			updatedIndeces[pk] = uint64(val.Index)
+			updatedIndices[pk] = uint64(val.Index)
 			v.Share.Index = &index
 			v.Share.Status = val.Status
 			if err := c.collection.SaveValidatorShare(v.Share); err != nil {
@@ -310,32 +305,7 @@ func (c *controller) updateValidatorsIndicesAndStatus(toFetch [][]byte) {
 			}
 		}
 	}
-	c.logger.Debug("updated indices", zap.Any("indices", updatedIndeces))
-}
-
-func (c *controller) fetchBeaconValidator(sharesPubKeys [][]byte) (map[string]*v1.Validator, error) {
-	if len(sharesPubKeys) == 0 {
-		return nil, errors.New("invalid pubkeys. at least one validator is required")
-	}
-	var pubkeys []phase0.BLSPubKey
-	for _, pk := range sharesPubKeys {
-		blsPubKey := phase0.BLSPubKey{}
-		copy(blsPubKey[:], pk)
-		pubkeys = append(pubkeys, blsPubKey)
-	}
-	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)),
-		zap.Any("pubkeys", pubkeys))
-	validatorsIndexMap, err := c.beacon.GetValidatorData(pubkeys)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get validator data from beacon")
-	}
-	ret := make(map[string]*v1.Validator)
-	for index, v := range validatorsIndexMap {
-		pk := hex.EncodeToString(v.Validator.PublicKey[:])
-		ret[pk] = v
-		c.beacon.ExtendIndexMap(index, v.Validator.PublicKey) // updating goClient map
-	}
-	return ret, nil
+	c.logger.Debug("updated indices", zap.Any("indices", updatedIndices))
 }
 
 func (c *controller) createShare(validatorAddedEvent eth1.ValidatorAddedEvent) (*validatorstorage.Share, error) {
