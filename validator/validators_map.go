@@ -80,6 +80,9 @@ func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *Validator {
 
 // Size returns the number of validators in the map
 func (vm *validatorsMap) Size() int {
+	vm.lock.RLock()
+	defer vm.lock.RUnlock()
+
 	return len(vm.validatorsMap)
 }
 

@@ -96,9 +96,11 @@ func (v *Validator) Start() error {
 			go ib.Init()
 		}
 
-		metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
-			Set(float64(validatorStatusReady))
+		v.logger.Debug("validator started")
 	})
+
+	metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
+		Set(float64(validatorStatusReady))
 
 	return nil
 }
