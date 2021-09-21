@@ -327,7 +327,7 @@ func (c *controller) fetchBeaconValidator(sharesPubKeys [][]byte) (map[string]*v
 		zap.Any("pubkeys", pubkeys))
 	validatorsIndexMap, err := c.beacon.GetValidatorData(pubkeys)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get indices from beacon")
+		return nil, errors.Wrap(err, "failed to get validator data from beacon")
 	}
 	ret := make(map[string]*v1.Validator)
 	for index, v := range validatorsIndexMap {
