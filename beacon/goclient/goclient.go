@@ -142,7 +142,8 @@ func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.Validato
 	return nil, errors.New("client does not support AttesterDutiesProvider")
 }
 
-func (gc *goClient) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
+// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
+func (gc *goClient) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
 	if provider, isProvider := gc.client.(eth2client.ValidatorsProvider); isProvider {
 		validatorsMap, err := provider.ValidatorsByPubKey(gc.ctx, "head", validatorPubKeys) // TODO maybe need to get the chainId (head) as var
 		if err != nil {

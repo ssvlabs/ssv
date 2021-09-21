@@ -128,7 +128,7 @@ func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.Validat
 	return nil, nil
 }
 
-func (b *testBeacon) GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
+func (b *testBeacon) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
 	return nil, nil
 }
 
