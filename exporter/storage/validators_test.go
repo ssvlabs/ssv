@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/hex"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -118,4 +119,46 @@ func TestStorage_ListValidators(t *testing.T) {
 	validators, err := storage.ListValidators(0, 0)
 	require.NoError(t, err)
 	require.Equal(t, 5, len(validators))
+}
+
+func TestStorage_UpdateValidator(t *testing.T) {
+	storage, done := newStorageForTest()
+	require.NotNil(t, storage)
+	defer done()
+
+	pk, _, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
+	index := uint64(12)
+	validator := ValidatorInformation{
+		PublicKey:   hex.EncodeToString(pk),
+		Operators:   []OperatorNodeLink{},
+		Status:      v1.ValidatorStateUnknown,
+		Balance:     10000,
+		BeaconIndex: &index,
+	}
+	err = storage.SaveValidatorInformation(&validator)
+	require.NoError(t, err)
+
+	// update
+	index = uint64(1)
+	updatedValidator := ValidatorInformation{
+		PublicKey:   hex.EncodeToString(pk),
+		Operators:   []OperatorNodeLink{{1, "12"}},
+		Status:      v1.ValidatorStateExitedSlashed,
+		Balance:     1000001,
+		BeaconIndex: &index,
+	}
+
+	err = storage.UpdateValidatorInformation(&updatedValidator)
+	require.NoError(t, err)
+
+	// get
+	gotVal, _, err := storage.GetValidatorInformation(hex.EncodeToString(pk))
+	require.NoError(t, err)
+	require.Len(t, gotVal.Operators, 1)
+	require.EqualValues(t, 1, gotVal.Operators[0].ID)
+	require.EqualValues(t, "12", gotVal.Operators[0].PublicKey)
+	require.EqualValues(t, 7, gotVal.Status)
+	require.EqualValues(t, 1000001, gotVal.Balance)
+	require.EqualValues(t, 1, *gotVal.BeaconIndex)
 }

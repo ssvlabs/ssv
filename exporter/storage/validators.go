@@ -3,6 +3,8 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -13,15 +15,19 @@ var (
 
 // ValidatorInformation represents a validator
 type ValidatorInformation struct {
-	Index     int64              `json:"index"`
-	PublicKey string             `json:"publicKey"`
-	Operators []OperatorNodeLink `json:"operators"`
+	Index       int64              `json:"index"`
+	PublicKey   string             `json:"publicKey"`
+	Balance     spec.Gwei          `json:"balance"`
+	Status      v1.ValidatorState  `json:"status"`
+	BeaconIndex *uint64            `json:"beacon_index"` // pointer in order to support nil
+	Operators   []OperatorNodeLink `json:"operators"`
 }
 
 // ValidatorsCollection is the interface for managing validators information
 type ValidatorsCollection interface {
 	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error)
 	SaveValidatorInformation(validatorInformation *ValidatorInformation) error
+	UpdateValidatorInformation(validatorInformation *ValidatorInformation) error
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
 
@@ -34,6 +40,9 @@ type OperatorNodeLink struct {
 // ListValidators returns information of all the known validators
 // when 'to' equals zero, all validators will be returned
 func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInformation, error) {
+	es.validatorsLock.RLock()
+	defer es.validatorsLock.RUnlock()
+
 	objs, err := es.db.GetAllByCollection(append(storagePrefix, validatorsPrefix...))
 	if err != nil {
 		return nil, err
@@ -52,6 +61,9 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 
 // GetValidatorInformation returns information of the given validator by public key
 func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error) {
+	es.validatorsLock.RLock()
+	defer es.validatorsLock.RUnlock()
+
 	obj, found, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
 	if !found {
 		return nil, found, nil
@@ -70,6 +82,11 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
+
+	// lock for writing
+	es.validatorsLock.Lock()
+	defer es.validatorsLock.Unlock()
+
 	if found {
 		es.logger.Debug("validator already exist",
 			zap.String("pubKey", validatorInformation.PublicKey))
@@ -81,11 +98,39 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 	if err != nil {
 		return errors.Wrap(err, "could not calculate next validator index")
 	}
-	raw, err := json.Marshal(validatorInformation)
+	return es.saveValidatorNotSafe(validatorInformation)
+}
+
+func (es *exporterStorage) UpdateValidatorInformation(updatedInfo *ValidatorInformation) error {
+	// find validator
+	info, found, err := es.GetValidatorInformation(updatedInfo.PublicKey)
+	if err != nil {
+		return errors.Wrap(err, "could not read information from DB")
+	}
+	if !found {
+		return errors.New("validator not found")
+	}
+
+	// lock for writing
+	es.validatorsLock.Lock()
+	defer es.validatorsLock.Unlock()
+
+	// update info
+	info.Status = updatedInfo.Status
+	info.Balance = updatedInfo.Balance
+	info.BeaconIndex = updatedInfo.BeaconIndex
+	info.Operators = updatedInfo.Operators
+
+	// save
+	return es.saveValidatorNotSafe(info)
+}
+
+func (es *exporterStorage) saveValidatorNotSafe(val *ValidatorInformation) error {
+	raw, err := json.Marshal(val)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal validator information")
 	}
-	return es.db.Set(storagePrefix, validatorKey(validatorInformation.PublicKey), raw)
+	return es.db.Set(storagePrefix, validatorKey(val.PublicKey), raw)
 }
 
 func validatorKey(pubKey string) []byte {
