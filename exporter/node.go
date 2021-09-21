@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
@@ -45,6 +46,7 @@ type Options struct {
 	ETHNetwork *core.Network
 
 	Eth1Client eth1.Client
+	Beacon     beacon.Beacon
 
 	Network network.Network
 
@@ -65,6 +67,7 @@ type exporter struct {
 	logger              *zap.Logger
 	network             network.Network
 	eth1Client          eth1.Client
+	beacon              beacon.Beacon
 	mainQueue           tasks.Queue
 	decidedReadersQueue tasks.Queue
 	networkReadersQueue tasks.Queue
@@ -89,6 +92,7 @@ func New(opts Options) Exporter {
 		logger:              opts.Logger.With(zap.String("component", "exporter/node")),
 		network:             opts.Network,
 		eth1Client:          opts.Eth1Client,
+		beacon:              opts.Beacon,
 		mainQueue:           tasks.NewExecutionQueue(mainQueueInterval),
 		decidedReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
 		networkReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
@@ -149,9 +153,12 @@ func (exp *exporter) HealthCheck() []string {
 	return metrics.ProcessAgents(exp.healthAgents())
 }
 
-func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
+func (n *exporter) healthAgents() []metrics.HealthCheckAgent {
 	var agents []metrics.HealthCheckAgent
-	if agent, ok := exp.eth1Client.(metrics.HealthCheckAgent); ok {
+	if agent, ok := n.eth1Client.(metrics.HealthCheckAgent); ok {
+		agents = append(agents, agent)
+	}
+	if agent, ok := n.beacon.(metrics.HealthCheckAgent); ok {
 		agents = append(agents, agent)
 	}
 	return agents
@@ -269,7 +276,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
 	decidedReader := exp.getDecidedReader(validatorShare)
-	if 	err := tasks.Retry(func() error {
+	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {
 			logger.Error("could not sync validator", zap.Error(err))
 			return err
