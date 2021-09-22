@@ -76,9 +76,6 @@ func TestExecQueue_QueueDistinct(t *testing.T) {
 	var i int64
 	q := NewExecutionQueue(2 * time.Millisecond)
 
-	go q.Start()
-	defer q.Stop()
-
 	inc := func() error {
 		atomic.AddInt64(&i, 1)
 		return nil
@@ -87,9 +84,13 @@ func TestExecQueue_QueueDistinct(t *testing.T) {
 	q.QueueDistinct(inc, "1")
 	q.QueueDistinct(inc, "1")
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
+	go q.Start()
+	defer q.Stop()
 	// waiting for function to execute
 	time.Sleep(4 * time.Millisecond)
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
+	q.QueueDistinct(inc, "1")
+	q.QueueDistinct(inc, "1")
 	q.QueueDistinct(inc, "1")
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
 
