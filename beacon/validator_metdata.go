@@ -38,7 +38,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon) error {
-	logger := logex.GetLogger(zap.String("func", "FetchValidatorsMetadata"))
+	logger := logex.GetLogger(zap.String("who", "FetchValidatorsMetadata"))
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
@@ -68,7 +68,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 
 // FetchValidatorsMetadata is fetching validators data from beacon
 func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
-	logger := logex.GetLogger(zap.String("func", "FetchValidatorsMetadata"))
+	logger := logex.GetLogger(zap.String("who", "FetchValidatorsMetadata"))
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}

@@ -59,7 +59,7 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 }
 
 func reportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
-	logger = logger.With(zap.String("pubKey", pk))
+	logger = logger.With(zap.String("pubKey", pk), zap.String("who", "reportValidatorStatus"))
 	if meta == nil {
 		logger.Warn("validator metadata not found")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
