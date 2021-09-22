@@ -163,12 +163,12 @@ func (exp *exporter) HealthCheck() []string {
 	return metrics.ProcessAgents(exp.healthAgents())
 }
 
-func (n *exporter) healthAgents() []metrics.HealthCheckAgent {
+func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 	var agents []metrics.HealthCheckAgent
-	if agent, ok := n.eth1Client.(metrics.HealthCheckAgent); ok {
+	if agent, ok := exp.eth1Client.(metrics.HealthCheckAgent); ok {
 		agents = append(agents, agent)
 	}
-	if agent, ok := n.beacon.(metrics.HealthCheckAgent); ok {
+	if agent, ok := exp.beacon.(metrics.HealthCheckAgent); ok {
 		agents = append(agents, agent)
 	}
 	return agents
@@ -261,7 +261,7 @@ func (exp *exporter) continuouslyUpdateValidatorMetaData() {
 
 		start := 0
 		end := metaDataBatchSize
-		batches := int(math.Ceil(float64(len(shares) / metaDataBatchSize)))
+		batches := int(math.Ceil(float64(len(shares)) / float64(metaDataBatchSize)))
 
 		for i := 0; i <= batches; i++ {
 			if i == batches { // last batch
