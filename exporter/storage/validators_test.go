@@ -155,9 +155,7 @@ func TestStorage_UpdateValidator(t *testing.T) {
 	// get
 	gotVal, _, err := storage.GetValidatorInformation(hex.EncodeToString(pk))
 	require.NoError(t, err)
-	require.Len(t, gotVal.Operators, 1)
-	require.EqualValues(t, 1, gotVal.Operators[0].ID)
-	require.EqualValues(t, "12", gotVal.Operators[0].PublicKey)
+	require.Len(t, gotVal.Operators, 0)
 	require.EqualValues(t, 7, gotVal.Status)
 	require.EqualValues(t, 1000001, gotVal.Balance)
 	require.EqualValues(t, 1, *gotVal.BeaconIndex)

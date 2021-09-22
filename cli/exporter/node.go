@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"time"
 )
 
 type config struct {
@@ -32,11 +33,12 @@ type config struct {
 	ETH1Options                eth1.Options   `yaml:"eth1"`
 	ETH2Options                beacon.Options `yaml:"eth2"`
 
-	WsAPIPort         int    `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
-	MetricsAPIPort    int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile     bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	IbftSyncEnabled   bool   `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
-	NetworkPrivateKey string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	WsAPIPort                       int           `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	MetricsAPIPort                  int           `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile                   bool          `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	IbftSyncEnabled                 bool          `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
+	ValidatorMetaDataUpdateInterval time.Duration `yaml:"IbftSyncEnabled" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
+	NetworkPrivateKey               string        `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 }
 
 var cfg config
@@ -118,6 +120,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
+		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
 
 		exporterNode = exporter.New(*exporterOptions)
 
