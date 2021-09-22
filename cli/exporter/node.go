@@ -55,6 +55,11 @@ var StartExporterNodeCmd = &cobra.Command{
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal(err)
+			}
+		}
 		// configure logger and db
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
 		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
