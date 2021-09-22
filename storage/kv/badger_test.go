@@ -1,10 +1,12 @@
 package kv
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
+	"time"
 )
 
 func TestBadgerEndToEnd(t *testing.T) {
@@ -58,4 +60,56 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, toSave[2].key, obj.Key)
 	require.EqualValues(t, toSave[2].value, obj.Value)
+}
+
+func TestBadgerDb_GetAllByCollection(t *testing.T) {
+	options := basedb.Options{
+		Type:   "badger-memory",
+		Logger: zap.L(),
+		Path:   "",
+	}
+
+	t.Run("100_items", func(t *testing.T) {
+		db, err := New(options)
+		require.NoError(t, err)
+		defer db.Close()
+
+		getAllByCollectionTest(t, 100, db)
+	})
+
+	t.Run("10K_items", func(t *testing.T) {
+		db, err := New(options)
+		require.NoError(t, err)
+		defer db.Close()
+
+		getAllByCollectionTest(t, 10000, db)
+	})
+
+	t.Run("100K_items", func(t *testing.T) {
+		db, err := New(options)
+		require.NoError(t, err)
+		defer db.Close()
+
+		getAllByCollectionTest(t, 100000, db)
+	})
+}
+
+func getAllByCollectionTest(t *testing.T, n int, db basedb.IDb) {
+	// populating DB
+	prefix := []byte("test")
+	for i := 0; i < n; i++ {
+		id := fmt.Sprintf("test-%d", i)
+		db.Set(prefix, []byte(id), []byte(id+"-data"))
+	}
+	time.Sleep(1 * time.Millisecond)
+
+	all, err := db.GetAllByCollection(prefix)
+	require.Equal(t, n, len(all))
+	require.NoError(t, err)
+	visited := map[string][]byte{}
+	for _, item := range all {
+		visited[string(item.Key[:])] = item.Value[:]
+	}
+	require.Equal(t, n, len(visited))
+	require.NoError(t, db.RemoveAllByCollection(prefix))
 }

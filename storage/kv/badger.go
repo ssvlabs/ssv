@@ -69,7 +69,7 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		return err
 	})
 	found := err == nil || err.Error() != EntryNotFoundError
-	if !found{
+	if !found {
 		return basedb.Obj{}, found, nil
 	}
 	return basedb.Obj{
@@ -81,29 +81,14 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 // GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
 func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	var res []basedb.Obj
-	var err error
-	err = b.db.View(func(txn *badger.Txn) error {
-		opt := badger.DefaultIteratorOptions
-		opt.PrefetchSize = 1000 // if the number of items is larger than this size, results get mixed up
-		opt.Prefix = prefix
-		it := txn.NewIterator(opt)
-		defer it.Close()
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			item := it.Item()
-			resKey := item.Key()
-			trimmedResKey := bytes.TrimPrefix(resKey, prefix)
-			val, err := item.ValueCopy(nil)
-			if err != nil {
-				b.logger.Error("failed to copy value", zap.Error(err))
-				continue
-			}
-			obj := basedb.Obj{
-				Key:   trimmedResKey,
-				Value: val,
-			}
-			res = append(res, obj)
-		}
-		return err
+
+	// we got issues when reading more than 100 items with iterator (items get mixed up)
+	// instead, the keys are first fetched using an iterator, and afterwards the values are fetched one by one
+	// to avoid issues
+	err := b.db.View(func(txn *badger.Txn) error {
+		rawKeys := b.listRawKeys(prefix, txn)
+		res = b.getAll(rawKeys, prefix, txn)
+		return nil
 	})
 	return res, err
 }
@@ -134,4 +119,45 @@ func (b *BadgerDb) Close() {
 	if err := b.db.Close(); err != nil {
 		b.logger.Fatal("failed to close db", zap.Error(err))
 	}
+}
+
+func (b *BadgerDb) getAll(rawKeys [][]byte, prefix []byte, txn *badger.Txn) []basedb.Obj {
+	var res []basedb.Obj
+
+	for _, k := range rawKeys {
+		trimmedResKey := bytes.TrimPrefix(k, prefix)
+		item, err := txn.Get(k)
+		if err != nil {
+			b.logger.Error("failed to get value", zap.Error(err),
+				zap.String("trimmedResKey", string(trimmedResKey)))
+			continue
+		}
+		val, err := item.ValueCopy(nil)
+		if err != nil {
+			b.logger.Error("failed to copy value", zap.Error(err))
+			continue
+		}
+		obj := basedb.Obj{
+			Key:   trimmedResKey,
+			Value: val,
+		}
+		res = append(res, obj)
+	}
+
+	return res
+}
+
+func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
+	var keys [][]byte
+
+	opt := badger.DefaultIteratorOptions
+	opt.Prefix = prefix
+	it := txn.NewIterator(opt)
+	defer it.Close()
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		item := it.Item()
+		keys = append(keys, item.KeyCopy(nil))
+	}
+
+	return keys
 }
