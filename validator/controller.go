@@ -152,7 +152,7 @@ func (c *controller) setupValidators(shares []*validatorstorage.Share) {
 		pk := v.Share.PublicKey.SerializeToHexStr()
 		logger := c.logger.With(zap.String("pubkey", pk))
 		if v.Share.Index == nil {
-			if err := c.addValidatorIndex(v.Share); err != nil {
+			if err := c.addValidatorIndexAndStatus(v.Share); err != nil {
 				if err == errIndicesNotFound {
 					logger.Warn("could not start validator: missing index")
 				} else {
