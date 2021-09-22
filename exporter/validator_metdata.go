@@ -32,6 +32,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection storage.ValidatorsCol
 			Status:      val.Status,
 			BeaconIndex: &index,
 		}
+		reportValidatorStatus(toUpdate) // TODO: need to report also if validator not found
 		if err := collection.UpdateValidatorInformation(toUpdate); err != nil {
 			logger.Error("failed to update validator info",
 				zap.String("pk", pubKey.SerializeToHexStr()), zap.Error(err))
