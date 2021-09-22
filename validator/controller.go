@@ -178,7 +178,8 @@ func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-// GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
+// GetValidatorsIndices returns a list of all the active validators indices
+// and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
@@ -202,12 +203,12 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	return indices
 }
 
-// UpdateValidatorMetadata cleans all existing shares from DB
-func (c *controller) UpdateValidatorMetadata(pkHex string, metadata *beacon.ValidatorMetadata) error {
+// UpdateValidatorMetadata updates a given validator with metadata
+func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
-	if v, found := c.validatorsMap.GetValidator(pkHex); found {
+	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.Metadata = metadata
 		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
 			return err
@@ -219,6 +220,7 @@ func (c *controller) UpdateValidatorMetadata(pkHex string, metadata *beacon.Vali
 	return nil
 }
 
+// handleValidatorAddedEvent handles registry contract event for validator added
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) error {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey[:])
 	logger := c.logger.With(zap.String("pubKey", pubKey))
@@ -268,7 +270,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 	return nil
 }
 
-// updateShareMetadata is a wrapper function on top of updateSharesMetadata
+// startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *Validator) error {
 	reportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
 	if !v.Share.HasMetadata() {
@@ -284,7 +286,7 @@ func (c *controller) startValidator(v *Validator) error {
 	return nil
 }
 
-// updateShareMetadata is a wrapper function on top of updateSharesMetadata
+// updateShareMetadata will update the given share
 func (c *controller) updateShareMetadata(share *validatorstorage.Share) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beacon.FetchValidatorsMetadata(c.beacon, [][]byte{share.PublicKey.Serialize()})
