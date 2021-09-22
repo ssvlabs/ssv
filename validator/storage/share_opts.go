@@ -56,7 +56,7 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 
 		share := Share{
 			NodeID:    options.NodeID,
-			Index:     nil,
+			Metadata:  nil,
 			PublicKey: validatorPk,
 			ShareKey:  shareKey,
 			Committee: ibftCommittee,

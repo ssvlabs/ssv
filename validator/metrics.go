@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 	"log"
 )
 
@@ -54,6 +55,26 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	return func() {
 		metricsRunningIBFTsCount.Dec()
 		metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
+	}
+}
+
+func reportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
+	logger = logger.With(zap.String("pubKey", pk))
+	if meta == nil {
+		logger.Warn("validator metadata not found")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
+	} else if !meta.Deposited() {
+		logger.Warn("validator not deposited")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotDeposited))
+	} else if meta.Exiting() {
+		logger.Warn("validator exiting/ exited")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusExiting))
+	} else if meta.Slashed() {
+		logger.Warn("validator slashed")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusSlashed))
+	} else if meta.Index == 0 {
+		logger.Warn("validator index not found")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
 	}
 }
 

@@ -1,8 +1,7 @@
 package exporter
 
 import (
-	"github.com/bloxapp/ssv/exporter/storage"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"log"
@@ -34,19 +33,18 @@ var (
 	validatorStatusSlashed      validatorStatus = 6
 )
 
-func reportValidatorStatus(vi *storage.ValidatorInformation) {
-	share := validatorstorage.Share{
-		Status: vi.Status,
-	}
-	if !share.Deposited() {
-		metricsValidatorStatusExp.WithLabelValues(vi.PublicKey).Set(float64(validatorStatusNotDeposited))
-	} else if share.Exiting() {
-		metricsValidatorStatusExp.WithLabelValues(vi.PublicKey).Set(float64(validatorStatusExiting))
-	} else if share.Slashed() {
-		metricsValidatorStatusExp.WithLabelValues(vi.PublicKey).Set(float64(validatorStatusSlashed))
-	} else if vi.Index == 0 {
-		metricsValidatorStatusExp.WithLabelValues(vi.PublicKey).Set(float64(validatorStatusNoIndex))
+func reportValidatorStatus(pk string, meta *beacon.ValidatorMetadata) {
+	if meta == nil {
+		metricsValidatorStatusExp.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
+	} else if !meta.Deposited() {
+		metricsValidatorStatusExp.WithLabelValues(pk).Set(float64(validatorStatusNotDeposited))
+	} else if meta.Exiting() {
+		metricsValidatorStatusExp.WithLabelValues(pk).Set(float64(validatorStatusExiting))
+	} else if meta.Slashed() {
+		metricsValidatorStatusExp.WithLabelValues(pk).Set(float64(validatorStatusSlashed))
+	} else if meta.Index == 0 {
+		metricsValidatorStatusExp.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
 	} else {
-		metricsValidatorStatusExp.WithLabelValues(vi.PublicKey).Set(float64(validatorStatusReady))
+		metricsValidatorStatusExp.WithLabelValues(pk).Set(float64(validatorStatusReady))
 	}
 }

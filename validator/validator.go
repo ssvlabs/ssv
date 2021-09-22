@@ -60,10 +60,10 @@ func New(opt Options) *Validator {
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
-	if opt.Share.Index != nil { // in order ot update goclient map to prevent getting all network indices bug
+	if opt.Share.HasMetadata() && opt.Share.Metadata.Index > 0 { // in order ot update goclient map to prevent getting all network indices bug
 		blsPubkey := spec.BLSPubKey{}
 		copy(blsPubkey[:], opt.Share.PublicKey.Serialize())
-		opt.Beacon.ExtendIndexMap(spec.ValidatorIndex(*opt.Share.Index), blsPubkey)
+		opt.Beacon.ExtendIndexMap(opt.Share.Metadata.Index, blsPubkey)
 	}
 
 	return &Validator{

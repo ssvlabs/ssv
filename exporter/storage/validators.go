@@ -3,8 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -15,19 +14,18 @@ var (
 
 // ValidatorInformation represents a validator
 type ValidatorInformation struct {
-	Index       int64              `json:"index"`
-	PublicKey   string             `json:"publicKey"`
-	Balance     spec.Gwei          `json:"balance"`
-	Status      v1.ValidatorState  `json:"status"`
-	BeaconIndex *uint64            `json:"beacon_index"` // pointer in order to support nil
-	Operators   []OperatorNodeLink `json:"operators"`
+	Index     int64                     `json:"index"`
+	PublicKey string                    `json:"publicKey"`
+	Metadata  *beacon.ValidatorMetadata `json:"metadata"`
+	Operators []OperatorNodeLink        `json:"operators"`
 }
 
 // ValidatorsCollection is the interface for managing validators information
 type ValidatorsCollection interface {
+	beacon.ValidatorMetadataStorage
+
 	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error)
 	SaveValidatorInformation(validatorInformation *ValidatorInformation) error
-	UpdateValidatorInformation(validatorInformation *ValidatorInformation) error
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
 
@@ -101,9 +99,9 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 	return es.saveValidatorNotSafe(validatorInformation)
 }
 
-func (es *exporterStorage) UpdateValidatorInformation(updatedInfo *ValidatorInformation) error {
+func (es *exporterStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
 	// find validator
-	info, found, err := es.GetValidatorInformation(updatedInfo.PublicKey)
+	info, found, err := es.GetValidatorInformation(pk)
 	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
@@ -115,11 +113,7 @@ func (es *exporterStorage) UpdateValidatorInformation(updatedInfo *ValidatorInfo
 	es.validatorsLock.Lock()
 	defer es.validatorsLock.Unlock()
 
-	// update info
-	info.Status = updatedInfo.Status
-	info.Balance = updatedInfo.Balance
-	info.BeaconIndex = updatedInfo.BeaconIndex
-
+	info.Metadata = metadata
 	// save
 	return es.saveValidatorNotSafe(info)
 }

@@ -272,6 +272,7 @@ func (exp *exporter) continuouslyUpdateValidatorMetaData() {
 			for j := start; j < end; j++ {
 				share := shares[j]
 				batch = append(batch, share.PublicKey.Serialize())
+				reportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata)
 			}
 			// run task
 			exp.metaDataReadersQueue.QueueDistinct(exp.updateMetadataTask(batch), fmt.Sprintf("batch_%d", i))
@@ -358,6 +359,6 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 
 func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
 	return func() error {
-		return UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, exp.logger)
+		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon)
 	}
 }
