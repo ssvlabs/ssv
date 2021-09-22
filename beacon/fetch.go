@@ -9,8 +9,9 @@ import (
 	"go.uber.org/zap"
 )
 
-func FetchValidators(bc Beacon, pubKeys [][]byte) (map[string]*v1.Validator, error) {
-	logger := logex.GetLogger(zap.String("func", "FetchValidators"))
+// FetchValidatorsData is fetching validators data from beacon
+func FetchValidatorsData(bc Beacon, pubKeys [][]byte) (map[string]*v1.Validator, error) {
+	logger := logex.GetLogger(zap.String("func", "FetchValidatorsData"))
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
