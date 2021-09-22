@@ -267,16 +267,14 @@ func (exp *exporter) continuouslyUpdateValidatorMetaData() {
 			if i == batches { // last batch
 				end = len(shares)
 			}
-
 			// collect pks
-			batch := make([]string, 0)
+			batch := make([][]byte, 0)
 			for j := start; j < end; j++ {
 				share := shares[j]
-				pk := share.PublicKey.SerializeToHexStr()
-				batch = append(batch, pk)
+				batch = append(batch, share.PublicKey.Serialize())
 			}
 			// run task
-			exp.metaDataReadersQueue.QueueDistinct(exp.getMetaDataReader(batch).Start, fmt.Sprintf("batch_%d", i))
+			exp.metaDataReadersQueue.QueueDistinct(exp.updateMetadataTask(batch), fmt.Sprintf("batch_%d", i))
 
 			// reset start and end
 			start = end
@@ -358,11 +356,8 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 	})
 }
 
-func (exp *exporter) getMetaDataReader(pks []string) ibft.Reader {
-	return ibft.NewMetaDataFetcher(ibft.MetaDataFetcherOptions{
-		Logger:  exp.logger,
-		Beacon:  exp.beacon,
-		Storage: exp.storage,
-		PKs:     pks,
-	})
+func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
+	return func() error {
+		return UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, exp.logger)
+	}
 }
