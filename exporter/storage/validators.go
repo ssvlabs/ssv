@@ -119,7 +119,6 @@ func (es *exporterStorage) UpdateValidatorInformation(updatedInfo *ValidatorInfo
 	info.Status = updatedInfo.Status
 	info.Balance = updatedInfo.Balance
 	info.BeaconIndex = updatedInfo.BeaconIndex
-	info.Operators = updatedInfo.Operators
 
 	// save
 	return es.saveValidatorNotSafe(info)

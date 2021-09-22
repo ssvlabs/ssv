@@ -20,12 +20,15 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math"
 	"time"
 )
 
 const (
-	mainQueueInterval    = 100 * time.Millisecond
-	readerQueuesInterval = 10 * time.Millisecond
+	mainQueueInterval            = 100 * time.Millisecond
+	readerQueuesInterval         = 10 * time.Millisecond
+	metaDataReaderQueuesInterval = 5 * time.Second
+	metaDataBatchSize            = 25
 )
 
 var (
@@ -52,28 +55,31 @@ type Options struct {
 
 	DB basedb.IDb
 
-	WS                api.WebSocketServer
-	WsAPIPort         int
-	IbftSyncEnabled   bool
-	CleanRegistryData bool
+	WS                              api.WebSocketServer
+	WsAPIPort                       int
+	IbftSyncEnabled                 bool
+	CleanRegistryData               bool
+	ValidatorMetaDataUpdateInterval time.Duration
 }
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx                 context.Context
-	storage             storage.Storage
-	validatorStorage    validatorstorage.ICollection
-	ibftStorage         collections.Iibft
-	logger              *zap.Logger
-	network             network.Network
-	eth1Client          eth1.Client
-	beacon              beacon.Beacon
-	mainQueue           tasks.Queue
-	decidedReadersQueue tasks.Queue
-	networkReadersQueue tasks.Queue
-	ws                  api.WebSocketServer
-	wsAPIPort           int
-	ibftSyncEnabled     bool
+	ctx                             context.Context
+	storage                         storage.Storage
+	validatorStorage                validatorstorage.ICollection
+	ibftStorage                     collections.Iibft
+	logger                          *zap.Logger
+	network                         network.Network
+	eth1Client                      eth1.Client
+	beacon                          beacon.Beacon
+	mainQueue                       tasks.Queue
+	decidedReadersQueue             tasks.Queue
+	networkReadersQueue             tasks.Queue
+	metaDataReadersQueue            tasks.Queue
+	ws                              api.WebSocketServer
+	wsAPIPort                       int
+	ibftSyncEnabled                 bool
+	validatorMetaDataUpdateInterval time.Duration
 }
 
 // New creates a new Exporter instance
@@ -89,16 +95,18 @@ func New(opts Options) Exporter {
 				Logger: opts.Logger,
 			},
 		),
-		logger:              opts.Logger.With(zap.String("component", "exporter/node")),
-		network:             opts.Network,
-		eth1Client:          opts.Eth1Client,
-		beacon:              opts.Beacon,
-		mainQueue:           tasks.NewExecutionQueue(mainQueueInterval),
-		decidedReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
-		networkReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
-		ws:                  opts.WS,
-		wsAPIPort:           opts.WsAPIPort,
-		ibftSyncEnabled:     opts.IbftSyncEnabled,
+		logger:                          opts.Logger.With(zap.String("component", "exporter/node")),
+		network:                         opts.Network,
+		eth1Client:                      opts.Eth1Client,
+		beacon:                          opts.Beacon,
+		mainQueue:                       tasks.NewExecutionQueue(mainQueueInterval),
+		decidedReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
+		networkReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
+		metaDataReadersQueue:            tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
+		ws:                              opts.WS,
+		wsAPIPort:                       opts.WsAPIPort,
+		ibftSyncEnabled:                 opts.IbftSyncEnabled,
+		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
 	}
 
 	if err := e.init(opts); err != nil {
@@ -128,6 +136,7 @@ func (exp *exporter) Start() error {
 	go exp.mainQueue.Start()
 	go exp.decidedReadersQueue.Start()
 	go exp.networkReadersQueue.Start()
+	go exp.metaDataReadersQueue.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -144,6 +153,7 @@ func (exp *exporter) Start() error {
 	}()
 
 	go exp.triggerAllValidators()
+	go exp.continuouslyUpdateValidatorMetaData()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
@@ -239,6 +249,42 @@ func (exp *exporter) triggerAllValidators() {
 	}
 }
 
+func (exp *exporter) continuouslyUpdateValidatorMetaData() {
+	for {
+		time.Sleep(exp.validatorMetaDataUpdateInterval)
+
+		shares, err := exp.validatorStorage.GetAllValidatorsShare()
+		if err != nil {
+			exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
+			continue
+		}
+
+		start := 0
+		end := metaDataBatchSize
+		batches := int(math.Ceil(float64(len(shares) / metaDataBatchSize)))
+
+		for i := 0; i <= batches; i++ {
+			if i == batches { // last batch
+				end = len(shares)
+			}
+
+			// collect pks
+			batch := make([]string, 0)
+			for j := start; j < end; j++ {
+				share := shares[j]
+				pk := share.PublicKey.SerializeToHexStr()
+				batch = append(batch, pk)
+			}
+			// run task
+			exp.metaDataReadersQueue.QueueDistinct(exp.getMetaDataReader(batch).Start, fmt.Sprintf("batch_%d", i))
+
+			// reset start and end
+			start = end
+			end = start + metaDataBatchSize
+		}
+	}
+}
+
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	for _, pk := range syncWhitelist {
 		if pubkey == pk {
@@ -309,5 +355,14 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 		Network: exp.network,
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
+	})
+}
+
+func (exp *exporter) getMetaDataReader(pks []string) ibft.Reader {
+	return ibft.NewMetaDataFetcher(ibft.MetaDataFetcherOptions{
+		Logger:  exp.logger,
+		Beacon:  exp.beacon,
+		Storage: exp.storage,
+		PKs:     pks,
 	})
 }
