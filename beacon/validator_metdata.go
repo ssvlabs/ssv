@@ -36,8 +36,11 @@ func (m *ValidatorMetadata) Slashed() bool {
 	return m.Status == v1.ValidatorStateExitedSlashed || m.Status == v1.ValidatorStateActiveSlashed
 }
 
+// OnUpdated represents a function to be called once validator's metadata was updated
+type OnUpdated func(pk string, meta *ValidatorMetadata)
+
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon) error {
+func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
 	logger := logex.GetLogger(zap.String("who", "FetchValidatorsMetadata"))
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
@@ -53,6 +56,9 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 			logger.Error("failed to update validator metadata",
 				zap.String("pk", pk), zap.Error(err))
 			errs = append(errs, err)
+		}
+		if onUpdated != nil {
+			onUpdated(pk, meta)
 		}
 		logger.Debug("managed to update validator metadata",
 			zap.String("pk", pk), zap.Any("metadata", *meta))
