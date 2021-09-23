@@ -248,6 +248,19 @@ func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) b
 	return ok
 }
 
+// closeTopic closes the given topic
+func (n *p2pNetwork) closeTopic(topicName string) error {
+	n.psTopicsLock.RLock()
+	defer n.psTopicsLock.RUnlock()
+
+	pk := unwrapTopicName(topicName)
+	if t, ok := n.cfg.Topics[pk]; ok {
+		delete(n.cfg.Topics, pk)
+		return t.Close()
+	}
+	return nil
+}
+
 // listen listens to some validator's topic
 func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	t := sub.Topic()
@@ -255,12 +268,8 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	for {
 		select {
 		case <-n.ctx.Done():
-			n.psTopicsLock.Lock()
-			if err := n.cfg.Topics[t].Close(); err != nil {
-				n.psTopicsLock.Unlock()
-				n.logger.Error("failed to close Topics", zap.Error(err))
-			} else {
-				n.psTopicsLock.Unlock()
+			if err := n.closeTopic(t); err != nil {
+				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
 			}
 			sub.Cancel()
 		default:
