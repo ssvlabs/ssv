@@ -268,7 +268,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 	} else {
 		logger.Debug("validator metadata was updated",
 			zap.Uint64("index", uint64(share.Metadata.Index)))
-		reportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
+		ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {
 		return errors.Wrap(err, "failed to save new share")
@@ -279,7 +279,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *Validator) error {
-	reportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
+	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
 	if !v.Share.HasMetadata() {
 		return errors.New("could not start validator: metadata not found")
 	}

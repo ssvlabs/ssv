@@ -99,8 +99,7 @@ func (v *Validator) Start() error {
 		v.logger.Debug("validator started")
 	})
 
-	metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
-		Set(float64(validatorStatusReady))
+	ReportValidatorStatusReady(v.Share.PublicKey.SerializeToHexStr())
 
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -331,6 +332,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 		return err
 	}
 	logger.Debug("sync is done, starting to read network messages")
+	validator.ReportValidatorStatusReady(pubKey)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
 	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
@@ -358,6 +360,8 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 
 func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
 	return func() error {
-		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, reportValidatorStatus)
+		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, func(pk string, meta *beacon.ValidatorMetadata) {
+			validator.ReportValidatorStatus(pk, meta, exp.logger)
+		})
 	}
 }

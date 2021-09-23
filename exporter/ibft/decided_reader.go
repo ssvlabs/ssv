@@ -3,6 +3,7 @@ package ibft
 import (
 	"context"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -130,7 +131,7 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) error 
 		return errors.Wrap(err, "could not save decided")
 	}
 	logger.Debug("decided saved")
-	reportDecided(msg, r.validatorShare)
+	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
 	return r.checkHighestDecided(msg)
 }
 
