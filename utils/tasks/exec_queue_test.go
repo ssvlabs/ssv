@@ -21,13 +21,6 @@ func TestExecQueue(t *testing.T) {
 				atomic.AddInt64(&i, 1)
 				return nil
 			})
-		}
-	}()
-
-	go func() {
-		count := 100
-		for count > 0 {
-			count--
 			q.Queue(func() error {
 				atomic.AddInt64(&i, -1)
 				return nil
@@ -42,7 +35,7 @@ func TestExecQueue(t *testing.T) {
 	q.Wait()
 	require.Equal(t, int64(1), atomic.LoadInt64(&i))
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
-	require.Equal(t, 0, len(q.(*executionQueue).errs))
+	require.Equal(t, 0, len(q.Errors()))
 }
 
 func TestExecQueue_Stop(t *testing.T) {
