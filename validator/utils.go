@@ -13,7 +13,8 @@ import (
 	"strings"
 )
 
-// updateShareMetadata will update the given share, it will be called only when a new share is created
+// updateShareMetadata will update the given share object w/o involving storage,
+// it will be called only when a new share is created
 func updateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beacon.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
@@ -28,7 +29,7 @@ func updateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 	return true, nil
 }
 
-// createShare creates a new share object from event
+// createShareWithOperatorKey creates a new share object from event
 func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, error) {
 	operatorPrivKey, found, err := shareEncryptionKeyProvider()
 	if !found {

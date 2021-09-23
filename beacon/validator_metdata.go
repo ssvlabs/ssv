@@ -41,7 +41,7 @@ type OnUpdated func(pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
-	logger := logex.GetLogger(zap.String("who", "FetchValidatorsMetadata"))
+	logger := logex.GetLogger(zap.String("who", "UpdateValidatorsMetadata"))
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
@@ -84,8 +84,7 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 		copy(blsPubKey[:], pk)
 		pubkeys = append(pubkeys, blsPubKey)
 	}
-	logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)),
-		zap.Any("pubkeys", pubkeys))
+	logger.Debug("fetching metadata for public keys", zap.Int("total", len(pubkeys)))
 	validatorsIndexMap, err := bc.GetValidatorData(pubkeys)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get validators data from beacon")
