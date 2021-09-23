@@ -23,12 +23,12 @@ type ValidatorMetadata struct {
 
 // Deposited returns true if the validator is not unknown. It might be pending activation or active
 func (m *ValidatorMetadata) Deposited() bool {
-	return m.Status != v1.ValidatorStateUnknown
+	return m.Status.HasActivated()
 }
 
 // Exiting returns true if the validator is existing or exited
 func (m *ValidatorMetadata) Exiting() bool {
-	return m.Status.IsExited()
+	return m.Status.IsExited() || m.Status.HasExited()
 }
 
 // Slashed returns true if the validator is existing or exited due to slashing
