@@ -3,7 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"

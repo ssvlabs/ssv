@@ -3,6 +3,8 @@ package storage
 import (
 	"encoding/hex"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"testing"

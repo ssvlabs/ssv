@@ -3,8 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -27,7 +26,6 @@ type ValidatorsCollection interface {
 
 	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error)
 	SaveValidatorInformation(validatorInformation *ValidatorInformation) error
-	UpdateValidatorInformation(validatorInformation *ValidatorInformation) error
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
 

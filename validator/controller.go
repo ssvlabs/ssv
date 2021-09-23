@@ -3,8 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -175,6 +173,23 @@ func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 	}
 }
 
+// UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
+func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+	if metadata == nil {
+		return errors.New("could not update empty metadata")
+	}
+	if v, found := c.validatorsMap.GetValidator(pk); found {
+		v.Share.Metadata = metadata
+		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
+			return err
+		}
+		if err := c.startValidator(v); err != nil {
+			c.logger.Error("could not start validator", zap.Error(err))
+		}
+	}
+	return nil
+}
+
 // GetValidator returns a validator
 func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
@@ -203,23 +218,6 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	go c.updateValidatorsMetadata(toFetch)
 
 	return indices
-}
-
-// UpdateValidatorMetadata updates a given validator with metadata
-func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
-	if metadata == nil {
-		return errors.New("could not update empty metadata")
-	}
-	if v, found := c.validatorsMap.GetValidator(pk); found {
-		v.Share.Metadata = metadata
-		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
-			return err
-		}
-		if err := c.startValidator(v); err != nil {
-			c.logger.Error("could not start validator", zap.Error(err))
-		}
-	}
-	return nil
 }
 
 // handleValidatorAddedEvent handles registry contract event for validator added
