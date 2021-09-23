@@ -3,6 +3,8 @@ package exporter
 import (
 	"crypto/rsa"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
@@ -21,6 +23,7 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"time"
 )
 
 type config struct {
@@ -28,12 +31,14 @@ type config struct {
 	DBOptions                  basedb.Options `yaml:"db"`
 	P2pNetworkConfig           p2p.Config     `yaml:"p2p"`
 	ETH1Options                eth1.Options   `yaml:"eth1"`
+	ETH2Options                beacon.Options `yaml:"eth2"`
 
-	WsAPIPort         int    `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
-	MetricsAPIPort    int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile     bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	IbftSyncEnabled   bool   `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
-	NetworkPrivateKey string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	WsAPIPort                       int           `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	MetricsAPIPort                  int           `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile                   bool          `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	IbftSyncEnabled                 bool          `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
+	ValidatorMetaDataUpdateInterval time.Duration `yaml:"ValidatorMetaDataUpdateInterval" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
+	NetworkPrivateKey               string        `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 }
 
 var cfg config
@@ -49,6 +54,11 @@ var StartExporterNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
+		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 		// configure logger and db
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
@@ -95,8 +105,18 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
+		// TODO Not refactored yet Start
+		cfg.ETH2Options.Context = cmd.Context()
+		cfg.ETH2Options.Logger = Logger
+		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
+		beaconClient, err := goclient.New(cfg.ETH2Options)
+		if err != nil {
+			Logger.Fatal("failed to create beacon go-client", zap.Error(err))
+		}
+
 		exporterOptions := new(exporter.Options)
 		exporterOptions.Eth1Client = eth1Client
+		exporterOptions.Beacon = beaconClient
 		exporterOptions.Logger = Logger
 		exporterOptions.Network = network
 		exporterOptions.DB = db
@@ -105,10 +125,12 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
+		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
 
 		exporterNode = exporter.New(*exporterOptions)
 
 		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
+		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))

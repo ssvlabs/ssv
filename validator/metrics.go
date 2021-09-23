@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 	"log"
 )
 
@@ -57,11 +58,45 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	}
 }
 
+// ReportValidatorStatusReady reports the ready status of validator
+func ReportValidatorStatusReady(pk string) {
+	metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusReady))
+}
+
+// ReportValidatorStatus reports the current status of validator
+func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
+	logger = logger.With(zap.String("pubKey", pk), zap.String("who", "ReportValidatorStatus"),
+		zap.Any("metadata", meta))
+	if meta == nil {
+		logger.Warn("validator metadata not found")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotFound))
+	} else if !meta.Deposited() {
+		logger.Warn("validator not deposited")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotDeposited))
+	} else if meta.Slashed() {
+		logger.Warn("validator slashed")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusSlashed))
+	} else if meta.Exiting() {
+		logger.Warn("validator exiting / exited")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusExiting))
+	} else if meta.Index == 0 {
+		logger.Warn("validator index not found")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
+	} else {
+		logger.Warn("validator is ready")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusReady))
+	}
+}
+
 type validatorStatus int32
 
 var (
-	validatorStatusInactive validatorStatus = 0
-	validatorStatusNoIndex  validatorStatus = 1
-	validatorStatusError    validatorStatus = 2
-	validatorStatusReady    validatorStatus = 3
+	validatorStatusInactive     validatorStatus = 0
+	validatorStatusNoIndex      validatorStatus = 1
+	validatorStatusError        validatorStatus = 2
+	validatorStatusReady        validatorStatus = 3
+	validatorStatusNotDeposited validatorStatus = 4
+	validatorStatusExiting      validatorStatus = 5
+	validatorStatusSlashed      validatorStatus = 6
+	validatorStatusNotFound     validatorStatus = 7
 )

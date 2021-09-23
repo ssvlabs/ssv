@@ -139,6 +139,8 @@ spec:
           name: port-15000
           hostPort: 15000
         env:
+          - name: SHARE_CONFIG
+            value: "./data/share.yaml"
           - name: ETH_1_ADDR
             valueFrom:
               secretKeyRef:

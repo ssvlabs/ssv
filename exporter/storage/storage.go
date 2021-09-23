@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"go.uber.org/zap"
 	"math"
+	"sync"
 )
 
 var (
@@ -23,11 +24,17 @@ type Storage interface {
 type exporterStorage struct {
 	db     basedb.IDb
 	logger *zap.Logger
+
+	validatorsLock sync.RWMutex
 }
 
 // NewExporterStorage creates a new instance of Storage
 func NewExporterStorage(db basedb.IDb, logger *zap.Logger) Storage {
-	es := exporterStorage{db, logger.With(zap.String("component", "exporter/storage"))}
+	es := exporterStorage{
+		db:             db,
+		logger:         logger.With(zap.String("component", "exporter/storage")),
+		validatorsLock: sync.RWMutex{},
+	}
 	return &es
 }
 

@@ -84,7 +84,11 @@ func (eq *executionQueue) Start() {
 // QueueDistinct adds unique events to the queue
 func (eq *executionQueue) QueueDistinct(fn Fn, id string) {
 	if _, exist := eq.visited.Load(id); !exist {
-		eq.Queue(fn)
+		eq.Queue(func() error {
+			err := fn()
+			eq.visited.Delete(id)
+			return err
+		})
 		eq.visited.Store(id, true)
 	}
 }

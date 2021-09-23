@@ -74,7 +74,7 @@ var StartNodeCmd = &cobra.Command{
 
 		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
 
-		// TODO Not refactored yet Start:
+		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
 		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
@@ -92,7 +92,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.Beacon = &beaconClient
+		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
