@@ -20,10 +20,6 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-var (
-	errIndicesNotFound = errors.New("indices not found")
-)
-
 // ControllerOptions for controller struct creation
 type ControllerOptions struct {
 	Context                    context.Context
@@ -147,32 +143,36 @@ func (c *controller) StartValidators() {
 func (c *controller) setupValidators(shares []*validatorstorage.Share) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var errs []error
+	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 		pk := v.Share.PublicKey.SerializeToHexStr()
 		logger := c.logger.With(zap.String("pubkey", pk))
-		if v.Share.Index == nil {
-			if err := c.addValidatorIndexAndStatus(v.Share); err != nil {
-				if err == errIndicesNotFound {
-					logger.Warn("could not start validator: missing index")
-				} else {
-					logger.Error("could not start validator: could not add index", zap.Error(err))
-				}
-				metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
-				errs = append(errs, err)
-				continue
-			}
-			logger.Debug("updated index for validator", zap.Uint64("index", *v.Share.Index))
-		}
-		if err := v.Start(); err != nil {
-			logger.Error("could not start validator", zap.Error(err))
-			metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusError))
-			errs = append(errs, err)
+		if !v.Share.HasMetadata() { // fetching index and status in case not exist
+			fetchMetadata = append(fetchMetadata, v.Share.PublicKey.Serialize())
+			logger.Warn("could not start validator: metadata not found")
+			errs = append(errs, errors.New("metadata not found"))
 			continue
+		}
+		if err := c.startValidator(v); err != nil {
+			logger.Warn("could not start validator", zap.Error(err))
+			errs = append(errs, err)
 		}
 	}
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("shares count", len(shares)))
+
+	go c.updateValidatorsMetadata(fetchMetadata)
+}
+
+// GetValidator returns a validator
+func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
+	if len(pubKeys) > 0 {
+		c.logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
+		if err := beacon.UpdateValidatorsMetadata(pubKeys, c, c.beacon); err != nil {
+			c.logger.Error("could not update all validators", zap.Error(err))
+		}
+	}
 }
 
 // GetValidator returns a validator
@@ -180,162 +180,130 @@ func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-// GetValidatorsIndices returns a list of all the active validators indices and fetch indices for missing once (could be first time attesting or non active once)
+// GetValidatorsIndices returns a list of all the active validators indices
+// and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
-		if !v.Share.Deposited() {
-			c.logger.Warn("validator not deposited",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
-			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusNotDeposited))
-		} else if v.Share.Exiting() {
-			c.logger.Warn("validator exiting/ exited",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
-			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusExiting))
-		} else if v.Share.Slashed() {
-			c.logger.Warn("validator slashed",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
-			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusSlashed))
-		} else if v.Share.Index == nil {
-			c.logger.Warn("validator share doesn't have an index",
-				zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+		logger := c.logger.With(zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
+		if !v.Share.HasMetadata() {
+			logger.Warn("validator share doesn't have an index")
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
-			metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusNoIndex))
 		} else {
-			index := spec.ValidatorIndex(*v.Share.Index)
-			indices = append(indices, index)
+			indices = append(indices, v.Share.Metadata.Index)
 		}
+		reportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
 		return nil
 	})
 	if err != nil {
 		c.logger.Error("failed to get all validators public keys", zap.Error(err))
 	}
 
-	if len(toFetch) > 0 {
-		go c.updateValidatorsIndicesAndStatus(toFetch)
-	}
+	go c.updateValidatorsMetadata(toFetch)
 
 	return indices
 }
 
+// UpdateValidatorMetadata updates a given validator with metadata
+func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+	if metadata == nil {
+		return errors.New("could not update empty metadata")
+	}
+	if v, found := c.validatorsMap.GetValidator(pk); found {
+		v.Share.Metadata = metadata
+		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
+			return err
+		}
+		if err := c.startValidator(v); err != nil {
+			c.logger.Error("could not start validator", zap.Error(err))
+		}
+	}
+	return nil
+}
+
+// handleValidatorAddedEvent handles registry contract event for validator added
 func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) error {
-	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
+	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey[:])
 	logger := c.logger.With(zap.String("pubKey", pubKey))
 	logger.Debug("handles validator added event")
-	// if exist and resync was not forced -> do nothing
+	// if exist -> do nothing
 	if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 		logger.Debug("validator was loaded already")
 		// TODO: handle updateValidator in the future
 		return nil
 	}
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
-	validatorShare, err := c.createShare(validatorAddedEvent)
-	if err != nil {
-		return errors.Wrap(err, "failed to create share")
-	}
-	foundShare, found, err := c.collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
+	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey[:])
 	if err != nil {
 		return errors.Wrap(err, "could not check if validator share exits")
 	}
 	if !found {
-		if err := c.addValidatorIndexAndStatus(validatorShare); err != nil {
-			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusNoIndex))
-			logger.Warn("could not add validator index", zap.Error(err))
+		validatorShare, err = c.createShare(validatorAddedEvent)
+		if err != nil {
+			return errors.Wrap(err, "failed to create share")
 		}
-		if err := c.collection.SaveValidatorShare(validatorShare); err != nil {
-			return errors.Wrap(err, "failed to save new share")
+		if err := c.onNewShare(validatorShare); err != nil {
+			return err
 		}
-		logger.Debug("new validator share was saved")
-	} else {
-		// TODO: handle updateValidator in the future
-		validatorShare = foundShare
 	}
 
 	v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 
-	if v.Share.Index == nil {
-		logger.Warn("could not start validator without index")
-		return nil
+	if err := c.startValidator(v); err != nil {
+		logger.Warn("could not start validator", zap.Error(err))
 	}
 
+	return nil
+}
+
+// onNewShare is called when a new validator was added or during registry sync
+func (c *controller) onNewShare(share *validatorstorage.Share) error {
+	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+	if updated, err := c.updateShareMetadata(share); err != nil {
+		logger.Warn("could not add validator metadata", zap.Error(err))
+	} else if !updated {
+		logger.Warn("could not find validator metadata")
+	}
+	if err := c.collection.SaveValidatorShare(share); err != nil {
+		return errors.Wrap(err, "failed to save new share")
+	}
+	logger.Debug("new validator share was saved")
+	return nil
+}
+
+// startValidator will start the given validator if applicable
+func (c *controller) startValidator(v *Validator) error {
+	reportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
+	if !v.Share.HasMetadata() {
+		return errors.New("could not start validator: metadata not found")
+	}
+	if v.Share.Metadata.Index == 0 {
+		return errors.New("could not start validator: index not found")
+	}
 	if err := v.Start(); err != nil {
-		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
+		metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusError))
 		return errors.Wrap(err, "could not start validator")
 	}
-
 	return nil
 }
 
-// addValidatorIndexAndStatus adding validator's index to the share
-// TODO - is this a duplicate of updateValidatorsIndicesAndStatus?
-func (c *controller) addValidatorIndexAndStatus(validatorShare *validatorstorage.Share) error {
-	pubKey := validatorShare.PublicKey.SerializeToHexStr()
-	indices, err := c.fetchBeaconValidator([][]byte{validatorShare.PublicKey.Serialize()})
-	if err != nil {
-		return errors.Wrap(err, "failed to fetch indices")
-	}
-	v, ok := indices[pubKey]
-	if !ok {
-		return errIndicesNotFound
-	}
-	index := uint64(v.Index)
-	validatorShare.Index = &index
-	validatorShare.Status = v.Status
-	return nil
-}
-
-// updateValidatorsIndicesAndStatus adds indices for all given validators. shares are taken from validators map
-func (c *controller) updateValidatorsIndicesAndStatus(toFetch [][]byte) {
-	vals, err := c.fetchBeaconValidator(toFetch)
+// updateShareMetadata will update the given share
+func (c *controller) updateShareMetadata(share *validatorstorage.Share) (bool, error) {
+	pk := share.PublicKey.SerializeToHexStr()
+	results, err := beacon.FetchValidatorsMetadata(c.beacon, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {
 		c.logger.Error("failed to fetch indices", zap.Error(err))
-		return
+		return false, err
 	}
-	updatedIndeces := make(map[string]uint64)
-	for pk, val := range vals {
-		if v, exist := c.validatorsMap.GetValidator(pk); exist {
-			c.logger.Debug("updating indices for validator", zap.String("pubkey", pk),
-				zap.Uint64("index", uint64(val.Index)))
-			index := uint64(val.Index)
-			updatedIndeces[pk] = uint64(val.Index)
-			v.Share.Index = &index
-			v.Share.Status = val.Status
-			if err := c.collection.SaveValidatorShare(v.Share); err != nil {
-				c.logger.Debug("could not save share", zap.String("pubkey", pk), zap.Error(err))
-			}
-			if err := v.Start(); err != nil {
-				c.logger.Error("could not start validator", zap.String("pubkey", pk), zap.Error(err))
-				metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusError))
-			}
-		}
+	meta, ok := results[pk]
+	if !ok {
+		return false, nil
 	}
-	c.logger.Debug("updated indices", zap.Any("indices", updatedIndeces))
-}
-
-func (c *controller) fetchBeaconValidator(sharesPubKeys [][]byte) (map[string]*v1.Validator, error) {
-	if len(sharesPubKeys) == 0 {
-		return nil, errors.New("invalid pubkeys. at least one validator is required")
-	}
-	var pubkeys []phase0.BLSPubKey
-	for _, pk := range sharesPubKeys {
-		blsPubKey := phase0.BLSPubKey{}
-		copy(blsPubKey[:], pk)
-		pubkeys = append(pubkeys, blsPubKey)
-	}
-	c.logger.Debug("fetching indices for public keys", zap.Int("total", len(pubkeys)),
-		zap.Any("pubkeys", pubkeys))
-	validatorsIndexMap, err := c.beacon.GetValidatorData(pubkeys)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get validator data from beacon")
-	}
-	ret := make(map[string]*v1.Validator)
-	for index, v := range validatorsIndexMap {
-		pk := hex.EncodeToString(v.Validator.PublicKey[:])
-		ret[pk] = v
-		c.beacon.ExtendIndexMap(index, v.Validator.PublicKey) // updating goClient map
-	}
-	return ret, nil
+	c.logger.Debug("updating metadata for validator", zap.String("pubkey", pk),
+		zap.Uint64("index", uint64(meta.Index)))
+	share.Metadata = meta
+	return true, nil
 }
 
 func (c *controller) createShare(validatorAddedEvent eth1.ValidatorAddedEvent) (*validatorstorage.Share, error) {

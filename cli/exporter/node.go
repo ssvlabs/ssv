@@ -37,7 +37,7 @@ type config struct {
 	MetricsAPIPort                  int           `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile                   bool          `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	IbftSyncEnabled                 bool          `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
-	ValidatorMetaDataUpdateInterval time.Duration `yaml:"IbftSyncEnabled" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
+	ValidatorMetaDataUpdateInterval time.Duration `yaml:"ValidatorMetaDataUpdateInterval" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
 	NetworkPrivateKey               string        `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 }
 
@@ -54,6 +54,11 @@ var StartExporterNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
+		}
+		if globalArgs.ShareConfigPath != "" {
+			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
+				log.Fatal(err)
+			}
 		}
 		// configure logger and db
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)

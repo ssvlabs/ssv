@@ -128,35 +128,30 @@ func TestStorage_UpdateValidator(t *testing.T) {
 
 	pk, _, err := rsaencryption.GenerateKeys()
 	require.NoError(t, err)
-	index := uint64(12)
 	validator := ValidatorInformation{
-		PublicKey:   hex.EncodeToString(pk),
-		Operators:   []OperatorNodeLink{},
-		Status:      v1.ValidatorStateUnknown,
-		Balance:     10000,
-		BeaconIndex: &index,
+		PublicKey: hex.EncodeToString(pk),
+		Operators: []OperatorNodeLink{},
+		Metadata: &beacon.ValidatorMetadata{
+			Status:  v1.ValidatorStateUnknown,
+			Balance: 10000,
+			Index:   spec.ValidatorIndex(12),
+		},
 	}
 	err = storage.SaveValidatorInformation(&validator)
 	require.NoError(t, err)
 
-	// update
-	index = uint64(1)
-	updatedValidator := ValidatorInformation{
-		PublicKey:   hex.EncodeToString(pk),
-		Operators:   []OperatorNodeLink{{1, "12"}},
-		Status:      v1.ValidatorStateExitedSlashed,
-		Balance:     1000001,
-		BeaconIndex: &index,
-	}
-
-	err = storage.UpdateValidatorInformation(&updatedValidator)
+	err = storage.UpdateValidatorMetadata(validator.PublicKey, &beacon.ValidatorMetadata{
+		Status:  v1.ValidatorStateExitedSlashed,
+		Balance: 1000001,
+		Index:   spec.ValidatorIndex(1),
+	})
 	require.NoError(t, err)
 
 	// get
 	gotVal, _, err := storage.GetValidatorInformation(hex.EncodeToString(pk))
 	require.NoError(t, err)
 	require.Len(t, gotVal.Operators, 0)
-	require.EqualValues(t, 7, gotVal.Status)
-	require.EqualValues(t, 1000001, gotVal.Balance)
-	require.EqualValues(t, 1, *gotVal.BeaconIndex)
+	require.EqualValues(t, 7, gotVal.Metadata.Status)
+	require.EqualValues(t, 1000001, gotVal.Metadata.Balance)
+	require.EqualValues(t, 1, gotVal.Metadata.Index)
 }
