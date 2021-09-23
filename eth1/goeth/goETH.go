@@ -324,8 +324,6 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 }
 
 func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
-	ec.logger.Debug("handling smart contract event", zap.Any("vLog", vLog))
-
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
 		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
@@ -354,12 +352,10 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		if err != nil {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
-		if !isEventBelongsToOperator {
-			ec.logger.Debug("Validator doesn't belong to operator",
+		if isEventBelongsToOperator {
+			ec.logger.Debug("validator is assigned to this operator",
 				zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)))
 		}
-		ec.logger.Debug("parsed data",
-			zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)), zap.Any("parsed", parsed))
 		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
 		if isEventBelongsToOperator || shareEncryptionKey == nil {
 			ec.fireEvent(vLog, *parsed)

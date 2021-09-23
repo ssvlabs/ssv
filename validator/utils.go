@@ -19,7 +19,7 @@ func updateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beacon.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {
-		return false, errors.Wrap(err, "failed to fetch indices")
+		return false, errors.Wrap(err, "failed to fetch metadata for share")
 	}
 	meta, ok := results[pk]
 	if !ok {
