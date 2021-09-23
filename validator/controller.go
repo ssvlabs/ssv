@@ -17,7 +17,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-// ControllerOptions for controller struct creation
+// ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
 	DB                         basedb.IDb
@@ -138,6 +138,7 @@ func (c *controller) StartValidators() {
 }
 
 // setupValidators setup and starts validators from the given shares
+// shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*validatorstorage.Share) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var errs []error
@@ -163,14 +164,13 @@ func (c *controller) setupValidators(shares []*validatorstorage.Share) {
 	go c.updateValidatorsMetadata(fetchMetadata)
 }
 
-// updateValidatorsMetadata updates metadata of the given public keys
+// updateValidatorsMetadata updates metadata of the given public keys.
+// as part of the flow in beacon.UpdateValidatorsMetadata,
+// UpdateValidatorMetadata is called to persist metadata and start a specific validator
 func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 	if len(pubKeys) > 0 {
 		c.logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
-		onUpdated := func(pk string, meta *beacon.ValidatorMetadata) {
-			reportValidatorStatus(pk, meta, c.logger)
-		}
-		if err := beacon.UpdateValidatorsMetadata(pubKeys, c, c.beacon, onUpdated); err != nil {
+		if err := beacon.UpdateValidatorsMetadata(pubKeys, c, c.beacon, nil); err != nil {
 			c.logger.Error("could not update all validators", zap.Error(err))
 		}
 	}
@@ -193,7 +193,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 	return nil
 }
 
-// GetValidator returns a validator instance
+// GetValidator returns a validator instance from validatorsMap
 func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }

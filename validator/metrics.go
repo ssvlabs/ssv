@@ -62,7 +62,7 @@ func reportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *za
 	logger = logger.With(zap.String("pubKey", pk), zap.String("who", "reportValidatorStatus"))
 	if meta == nil {
 		logger.Warn("validator metadata not found")
-		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotFound))
 	} else if !meta.Deposited() {
 		logger.Warn("validator not deposited")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotDeposited))
@@ -88,4 +88,5 @@ var (
 	validatorStatusNotDeposited validatorStatus = 4
 	validatorStatusExiting      validatorStatus = 5
 	validatorStatusSlashed      validatorStatus = 6
+	validatorStatusNotFound     validatorStatus = 7
 )
