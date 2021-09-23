@@ -21,7 +21,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math"
 	"time"
 )
 
@@ -134,6 +133,11 @@ func (exp *exporter) init(opts Options) error {
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
+	if err := exp.warmupValidatorsMetaData(); err != nil {
+		exp.logger.Error("failed to warmup validators metadata", zap.Error(err))
+	}
+	go exp.continuouslyUpdateValidatorMetaData()
+
 	go exp.mainQueue.Start()
 	go exp.decidedReadersQueue.Start()
 	go exp.networkReadersQueue.Start()
@@ -154,7 +158,6 @@ func (exp *exporter) Start() error {
 	}()
 
 	go exp.triggerAllValidators()
-	go exp.continuouslyUpdateValidatorMetaData()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
@@ -250,40 +253,6 @@ func (exp *exporter) triggerAllValidators() {
 	}
 }
 
-func (exp *exporter) continuouslyUpdateValidatorMetaData() {
-	for {
-		time.Sleep(exp.validatorMetaDataUpdateInterval)
-
-		shares, err := exp.validatorStorage.GetAllValidatorsShare()
-		if err != nil {
-			exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
-			continue
-		}
-
-		start := 0
-		end := metaDataBatchSize
-		batches := int(math.Ceil(float64(len(shares)) / float64(metaDataBatchSize)))
-
-		for i := 0; i <= batches; i++ {
-			if i == batches { // last batch
-				end = len(shares)
-			}
-			// collect pks
-			batch := make([][]byte, 0)
-			for j := start; j < end; j++ {
-				share := shares[j]
-				batch = append(batch, share.PublicKey.Serialize())
-			}
-			// run task
-			exp.metaDataReadersQueue.QueueDistinct(exp.updateMetadataTask(batch), fmt.Sprintf("batch_%d", i))
-
-			// reset start and end
-			start = end
-			end = start + metaDataBatchSize
-		}
-	}
-}
-
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	for _, pk := range syncWhitelist {
 		if pubkey == pk {
@@ -320,8 +289,10 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
-	// report validator status upon setup
-	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
+	// report validator status upon setup, doing it with defer as sync might fail
+	defer func() {
+		validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
+	}()
 	decidedReader := exp.getDecidedReader(validatorShare)
 	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {
@@ -334,8 +305,6 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 		return err
 	}
 	logger.Debug("sync is done, starting to read network messages")
-	// report status ready as we managed to pass IBFT sync
-	validator.ReportValidatorStatusReady(pubKey)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
 	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
