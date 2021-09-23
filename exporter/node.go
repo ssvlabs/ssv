@@ -320,6 +320,8 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	// report validator status upon setup
+	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	decidedReader := exp.getDecidedReader(validatorShare)
 	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {
@@ -332,6 +334,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 		return err
 	}
 	logger.Debug("sync is done, starting to read network messages")
+	// report status ready as we managed to pass IBFT sync
 	validator.ReportValidatorStatusReady(pubKey)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
