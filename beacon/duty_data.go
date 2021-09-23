@@ -56,8 +56,9 @@ type IsInputValueSignedData interface {
 type InputValueAttestation struct {
 	Attestation *phase0.Attestation
 }
+
 // isInputValueSignedData implementation
- func (*InputValueAttestation) isInputValueSignedData() {}
+func (*InputValueAttestation) isInputValueSignedData() {}
 
 // GetSignedData returns input data
 func (m *DutyData) GetSignedData() IsInputValueSignedData {
