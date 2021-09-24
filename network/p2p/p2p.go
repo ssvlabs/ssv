@@ -59,6 +59,8 @@ type p2pNetwork struct {
 	peers         *peers.Status
 	host          p2pHost.Host
 	pubsub        *pubsub.PubSub
+
+	psTopicsLock *sync.RWMutex
 }
 
 // New is the constructor of p2pNetworker
@@ -72,6 +74,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		ctx:           ctx,
 		cfg:           cfg,
 		listenersLock: &sync.Mutex{},
+		psTopicsLock:  &sync.RWMutex{},
 		logger:        logger,
 	}
 
@@ -205,6 +208,9 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 func (n *p2pNetwork) watchTopicPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		n.psTopicsLock.RLock()
+		defer n.psTopicsLock.RUnlock()
+
 		for name, topic := range n.cfg.Topics {
 			peers := n.allPeersOfTopic(topic)
 			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
@@ -214,6 +220,9 @@ func (n *p2pNetwork) watchTopicPeers() {
 }
 
 func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+	n.psTopicsLock.Lock()
+	defer n.psTopicsLock.Unlock()
+
 	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
 	if err != nil {
 		return errors.Wrap(err, "failed to join to Topics")
@@ -232,8 +241,24 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 
 // IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
 func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
+	n.psTopicsLock.RLock()
+	defer n.psTopicsLock.RUnlock()
+
 	_, ok := n.cfg.Topics[validatorPk.SerializeToHexStr()]
 	return ok
+}
+
+// closeTopic closes the given topic
+func (n *p2pNetwork) closeTopic(topicName string) error {
+	n.psTopicsLock.RLock()
+	defer n.psTopicsLock.RUnlock()
+
+	pk := unwrapTopicName(topicName)
+	if t, ok := n.cfg.Topics[pk]; ok {
+		delete(n.cfg.Topics, pk)
+		return t.Close()
+	}
+	return nil
 }
 
 // listen listens to some validator's topic
@@ -243,8 +268,8 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	for {
 		select {
 		case <-n.ctx.Done():
-			if err := n.cfg.Topics[t].Close(); err != nil {
-				n.logger.Error("failed to close Topics", zap.Error(err))
+			if err := n.closeTopic(t); err != nil {
+				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
 			}
 			sub.Cancel()
 		default:
@@ -299,6 +324,9 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 
 // getTopic return topic by validator public key
 func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
+	n.psTopicsLock.RLock()
+	defer n.psTopicsLock.RUnlock()
+
 	if validatorPK == nil {
 		return nil, errors.New("ValidatorPk is nil")
 	}

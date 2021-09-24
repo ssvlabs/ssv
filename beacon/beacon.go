@@ -27,8 +27,8 @@ type Beacon interface {
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error)
 
-	// GetIndices returns indices for each pubkey from the node
-	GetIndices(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error)
+	// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
+	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error)
 
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error)

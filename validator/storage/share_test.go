@@ -44,7 +44,7 @@ func TestThresholdSize(t *testing.T) {
 			share := &Share{
 				NodeID:    0,
 				PublicKey: nil,
-				Index:     nil,
+				Metadata:  nil,
 				ShareKey:  nil,
 				Committee: map[uint64]*proto.Node{},
 			}

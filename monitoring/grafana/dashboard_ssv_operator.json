@@ -366,7 +366,7 @@
                     "options": {
                       "ssv": {
                         "index": 0,
-                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                        "text": "Open"
                       }
                     },
                     "type": "value"
@@ -376,7 +376,7 @@
                       "match": "null+nan",
                       "result": {
                         "index": 1,
-                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                        "text": "Open"
                       }
                     },
                     "type": "special"
@@ -385,7 +385,7 @@
               },
               {
                 "id": "custom.displayMode",
-                "value": "image"
+                "value": "auto"
               },
               {
                 "id": "custom.width",
@@ -393,6 +393,10 @@
               },
               {
                 "id": "custom.filterable"
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
               }
             ]
           },
@@ -445,7 +449,7 @@
                     "options": {
                       "ssv": {
                         "index": 0,
-                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                        "text": "Open"
                       }
                     },
                     "type": "value"
@@ -455,7 +459,7 @@
                       "match": "null+nan",
                       "result": {
                         "index": 1,
-                        "text": "https://explorer.stage.ssv.network/images/beaconcha-white.svg"
+                        "text": "Open"
                       }
                     },
                     "type": "special"
@@ -474,14 +478,18 @@
               },
               {
                 "id": "custom.width",
-                "value": 84
+                "value": 86
               },
               {
                 "id": "custom.filterable"
               },
               {
                 "id": "custom.displayMode",
-                "value": "image"
+                "value": "auto"
+              },
+              {
+                "id": "custom.align",
+                "value": "center"
               }
             ]
           },
@@ -515,6 +523,26 @@
                         "color": "green",
                         "index": 3,
                         "text": "Ready"
+                      },
+                      "4": {
+                        "color": "grey",
+                        "index": 4,
+                        "text": "Not Activated"
+                      },
+                      "5": {
+                        "color": "gray",
+                        "index": 5,
+                        "text": "Exited"
+                      },
+                      "6": {
+                        "color": "red",
+                        "index": 6,
+                        "text": "Slashed"
+                      },
+                      "7": {
+                        "color": "red",
+                        "index": 7,
+                        "text": "Not Found"
                       }
                     },
                     "type": "value"

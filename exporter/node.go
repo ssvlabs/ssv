@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
@@ -15,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -23,8 +25,10 @@ import (
 )
 
 const (
-	mainQueueInterval    = 100 * time.Millisecond
-	readerQueuesInterval = 10 * time.Millisecond
+	mainQueueInterval            = 100 * time.Millisecond
+	readerQueuesInterval         = 10 * time.Millisecond
+	metaDataReaderQueuesInterval = 5 * time.Second
+	metaDataBatchSize            = 25
 )
 
 var (
@@ -45,32 +49,37 @@ type Options struct {
 	ETHNetwork *core.Network
 
 	Eth1Client eth1.Client
+	Beacon     beacon.Beacon
 
 	Network network.Network
 
 	DB basedb.IDb
 
-	WS                api.WebSocketServer
-	WsAPIPort         int
-	IbftSyncEnabled   bool
-	CleanRegistryData bool
+	WS                              api.WebSocketServer
+	WsAPIPort                       int
+	IbftSyncEnabled                 bool
+	CleanRegistryData               bool
+	ValidatorMetaDataUpdateInterval time.Duration
 }
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx                 context.Context
-	storage             storage.Storage
-	validatorStorage    validatorstorage.ICollection
-	ibftStorage         collections.Iibft
-	logger              *zap.Logger
-	network             network.Network
-	eth1Client          eth1.Client
-	mainQueue           tasks.Queue
-	decidedReadersQueue tasks.Queue
-	networkReadersQueue tasks.Queue
-	ws                  api.WebSocketServer
-	wsAPIPort           int
-	ibftSyncEnabled     bool
+	ctx                             context.Context
+	storage                         storage.Storage
+	validatorStorage                validatorstorage.ICollection
+	ibftStorage                     collections.Iibft
+	logger                          *zap.Logger
+	network                         network.Network
+	eth1Client                      eth1.Client
+	beacon                          beacon.Beacon
+	mainQueue                       tasks.Queue
+	decidedReadersQueue             tasks.Queue
+	networkReadersQueue             tasks.Queue
+	metaDataReadersQueue            tasks.Queue
+	ws                              api.WebSocketServer
+	wsAPIPort                       int
+	ibftSyncEnabled                 bool
+	validatorMetaDataUpdateInterval time.Duration
 }
 
 // New creates a new Exporter instance
@@ -86,15 +95,18 @@ func New(opts Options) Exporter {
 				Logger: opts.Logger,
 			},
 		),
-		logger:              opts.Logger.With(zap.String("component", "exporter/node")),
-		network:             opts.Network,
-		eth1Client:          opts.Eth1Client,
-		mainQueue:           tasks.NewExecutionQueue(mainQueueInterval),
-		decidedReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
-		networkReadersQueue: tasks.NewExecutionQueue(readerQueuesInterval),
-		ws:                  opts.WS,
-		wsAPIPort:           opts.WsAPIPort,
-		ibftSyncEnabled:     opts.IbftSyncEnabled,
+		logger:                          opts.Logger.With(zap.String("component", "exporter/node")),
+		network:                         opts.Network,
+		eth1Client:                      opts.Eth1Client,
+		beacon:                          opts.Beacon,
+		mainQueue:                       tasks.NewExecutionQueue(mainQueueInterval),
+		decidedReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
+		networkReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
+		metaDataReadersQueue:            tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
+		ws:                              opts.WS,
+		wsAPIPort:                       opts.WsAPIPort,
+		ibftSyncEnabled:                 opts.IbftSyncEnabled,
+		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
 	}
 
 	if err := e.init(opts); err != nil {
@@ -121,9 +133,15 @@ func (exp *exporter) init(opts Options) error {
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
+	if err := exp.warmupValidatorsMetaData(); err != nil {
+		exp.logger.Error("failed to warmup validators metadata", zap.Error(err))
+	}
+	go exp.continuouslyUpdateValidatorMetaData()
+
 	go exp.mainQueue.Start()
 	go exp.decidedReadersQueue.Start()
 	go exp.networkReadersQueue.Start()
+	go exp.metaDataReadersQueue.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -152,6 +170,9 @@ func (exp *exporter) HealthCheck() []string {
 func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 	var agents []metrics.HealthCheckAgent
 	if agent, ok := exp.eth1Client.(metrics.HealthCheckAgent); ok {
+		agents = append(agents, agent)
+	}
+	if agent, ok := exp.beacon.(metrics.HealthCheckAgent); ok {
 		agents = append(agents, agent)
 	}
 	return agents
@@ -268,8 +289,12 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	// report validator status upon setup, doing it with defer as sync might fail
+	defer func() {
+		validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
+	}()
 	decidedReader := exp.getDecidedReader(validatorShare)
-	if 	err := tasks.Retry(func() error {
+	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {
 			logger.Error("could not sync validator", zap.Error(err))
 			return err
@@ -303,4 +328,12 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
+}
+
+func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
+	return func() error {
+		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, func(pk string, meta *beacon.ValidatorMetadata) {
+			validator.ReportValidatorStatus(pk, meta, exp.logger)
+		})
+	}
 }
