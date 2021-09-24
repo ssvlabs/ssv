@@ -21,8 +21,8 @@ type ValidatorMetadata struct {
 	Index   spec.ValidatorIndex `json:"index"` // pointer in order to support nil
 }
 
-// Deposited returns true if the validator is not unknown. It might be pending activation or active
-func (m *ValidatorMetadata) Deposited() bool {
+// Activated returns true if the validator is not unknown. It might be pending activation or active
+func (m *ValidatorMetadata) Activated() bool {
 	return m.Status.HasActivated()
 }
 
