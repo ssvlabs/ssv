@@ -289,10 +289,6 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
-	// report validator status upon setup finished
-	defer func() {
-		validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
-	}()
 	decidedReader := exp.getDecidedReader(validatorShare)
 	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {

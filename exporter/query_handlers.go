@@ -2,8 +2,12 @@ package exporter
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/ibft/sync/incoming"
+	"github.com/bloxapp/ssv/storage/collections"
+	validator "github.com/bloxapp/ssv/validator"
 	"go.uber.org/zap"
 )
 
@@ -55,12 +59,34 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 	}
 }
 
-func handleDutiesQuery(logger *zap.Logger, nm *api.NetworkMessage) {
-	logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
-	nm.Msg = api.Message{
-		Type: api.TypeError,
-		Data: []string{"bad request - not implemented yet"},
+func handleDutiesQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
+	logger.Debug("handles duties request",
+		zap.Int64("from", nm.Msg.Filter.From),
+		zap.Int64("to", nm.Msg.Filter.To),
+		zap.String("pk", nm.Msg.Filter.PublicKey))
+	res := api.Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
 	}
+	if validators, err := getValidators(validatorStorage, nm.Msg.Filter); err != nil {
+		logger.Warn("failed to get validators", zap.Error(err))
+		res.Data = []string{"internal error - could not get validator"}
+	} else if len(validators) == 0 {
+		logger.Warn("validator not found")
+		res.Data = []string{"internal error - could not find validator"}
+	} else {
+		v := validators[0]
+		identifier := validator.IdentifierFormat([]byte(v.PublicKey), beacon.RoleTypeAttester)
+		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
+			uint64(nm.Msg.Filter.To), logger, ibftStorage)
+		if err != nil {
+			logger.Warn("failed to get decided messages", zap.Error(err))
+			res.Data = []string{"internal error - could not get decided messages"}
+		} else {
+			res.Data = msgs
+		}
+	}
+	nm.Msg = res
 }
 
 func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {

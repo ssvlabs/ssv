@@ -3,6 +3,7 @@ package incoming
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -23,20 +24,9 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 			endSeq = startSeq + s.paginationMaxSize
 		}
 
-		ret := make([]*proto.SignedMessage, 0)
-		for i := startSeq; i <= endSeq; i++ {
-			decidedMsg, found, err := s.storage.GetDecided(s.identifier, i)
-			logger := s.logger.With(zap.ByteString("identifier", s.identifier), zap.Uint64("sequence", i))
-			if !found{
-				logger.Error("decided was not found")
-				continue
-			}
-			if err != nil {
-				logger.Error("failed to get decided", zap.Error(err))
-				continue
-			}
-
-			ret = append(ret, decidedMsg)
+		ret, err := GetDecidedInRange(s.identifier, startSeq, endSeq, s.logger, s.storage)
+		if err != nil {
+			ret = make([]*proto.SignedMessage, 0)
 		}
 		retMsg.SignedMessages = ret
 	}
@@ -57,4 +47,23 @@ func (s *ReqHandler) validateGetDecidedReq(msg *network.SyncChanObj) error {
 		return errors.New("sync msg invalid: param[0] should be <= param[1]")
 	}
 	return nil
+}
+
+func GetDecidedInRange(identifier []byte, start, end uint64, logger *zap.Logger, storage collections.Iibft) ([]*proto.SignedMessage, error) {
+	ret := make([]*proto.SignedMessage, 0)
+	for i := start; i <= end; i++ {
+		decidedMsg, found, err := storage.GetDecided(identifier, i)
+		logger = logger.With(zap.ByteString("identifier", identifier), zap.Uint64("sequence", i))
+		if !found{
+			logger.Error("decided was not found")
+			continue
+		}
+		if err != nil {
+			logger.Error("failed to get decided", zap.Error(err))
+			continue
+		}
+
+		ret = append(ret, decidedMsg)
+	}
+	return ret, nil
 }
