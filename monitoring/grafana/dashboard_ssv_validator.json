@@ -72,7 +72,7 @@
             {
               "options": {
                 "0": {
-                  "color": "red",
+                  "color": "grey",
                   "index": 0,
                   "text": "Inactive"
                 },
@@ -90,6 +90,26 @@
                   "color": "green",
                   "index": 3,
                   "text": "Ready"
+                },
+                "4": {
+                  "color": "gray",
+                  "index": 4,
+                  "text": "Not Activated"
+                },
+                "5": {
+                  "color": "gray",
+                  "index": 5,
+                  "text": "Exited"
+                },
+                "6": {
+                  "color": "red",
+                  "index": 6,
+                  "text": "Slashed"
+                },
+                "7": {
+                  "color": "red",
+                  "index": 7,
+                  "text": "Not Found"
                 }
               },
               "type": "value"
@@ -150,6 +170,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "No Peers",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1214,12 +1235,17 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -1277,6 +1303,7 @@
                   "text": "IDLE"
                 },
                 "1": {
+                  "color": "green",
                   "index": 0,
                   "text": "Running"
                 }
@@ -1285,11 +1312,12 @@
             }
           ],
           "max": 1,
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "grey",
                 "value": null
               }
             ]
@@ -1382,11 +1410,12 @@
               "type": "value"
             }
           ],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "grey",
                 "value": null
               }
             ]
@@ -1437,12 +1466,17 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -1492,12 +1526,17 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -1547,12 +1586,17 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               },
               {
                 "color": "#EAB839",
