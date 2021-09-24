@@ -133,6 +133,7 @@ func (exp *exporter) init(opts Options) error {
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
+	go exp.metaDataReadersQueue.Start()
 	if err := exp.warmupValidatorsMetaData(); err != nil {
 		exp.logger.Error("failed to warmup validators metadata", zap.Error(err))
 	}
@@ -141,7 +142,6 @@ func (exp *exporter) Start() error {
 	go exp.mainQueue.Start()
 	go exp.decidedReadersQueue.Start()
 	go exp.networkReadersQueue.Start()
-	go exp.metaDataReadersQueue.Start()
 
 	if exp.ws == nil {
 		return nil
@@ -289,7 +289,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
-	// report validator status upon setup, doing it with defer as sync might fail
+	// report validator status upon setup finished
 	defer func() {
 		validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	}()
