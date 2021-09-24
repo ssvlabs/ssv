@@ -21,7 +21,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 		meta := &ValidatorMetadata{
 			Status: v1.ValidatorStateActiveOngoing,
 		}
-		require.True(t, meta.Deposited())
+		require.True(t, meta.Activated())
 		require.False(t, meta.Exiting())
 		require.False(t, meta.Slashed())
 	})
@@ -31,7 +31,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 			Status: v1.ValidatorStateWithdrawalPossible,
 		}
 		require.True(t, meta.Exiting())
-		require.True(t, meta.Deposited())
+		require.True(t, meta.Activated())
 		require.False(t, meta.Slashed())
 	})
 
@@ -41,7 +41,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 		}
 		require.True(t, meta.Slashed())
 		require.True(t, meta.Exiting())
-		require.True(t, meta.Deposited())
+		require.True(t, meta.Activated())
 	})
 }
 

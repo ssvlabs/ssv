@@ -70,9 +70,9 @@ func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *za
 	if meta == nil {
 		logger.Warn("validator metadata not found")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotFound))
-	} else if !meta.Deposited() {
-		logger.Warn("validator not deposited")
-		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotDeposited))
+	} else if !meta.Activated() {
+		logger.Warn("validator not activated")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotActivated))
 	} else if meta.Slashed() {
 		logger.Warn("validator slashed")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusSlashed))
@@ -95,7 +95,7 @@ var (
 	validatorStatusNoIndex      validatorStatus = 1
 	validatorStatusError        validatorStatus = 2
 	validatorStatusReady        validatorStatus = 3
-	validatorStatusNotDeposited validatorStatus = 4
+	validatorStatusNotActivated validatorStatus = 4
 	validatorStatusExiting      validatorStatus = 5
 	validatorStatusSlashed      validatorStatus = 6
 	validatorStatusNotFound     validatorStatus = 7
