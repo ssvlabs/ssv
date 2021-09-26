@@ -5,7 +5,9 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"go.uber.org/zap"
+	"time"
 )
 
 const (
@@ -40,6 +42,10 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	_db := BadgerDb{
 		db:     db,
 		logger: options.Logger,
+	}
+
+	if options.Reporting && options.Ctx != nil {
+		runutil.RunEvery(options.Ctx, 1*time.Minute, _db.report)
 	}
 
 	options.Logger.Info("Badger db initialized")
@@ -119,6 +125,20 @@ func (b *BadgerDb) Close() {
 	if err := b.db.Close(); err != nil {
 		b.logger.Fatal("failed to close db", zap.Error(err))
 	}
+}
+
+// report the db size and metrics
+func (b *BadgerDb) report() {
+	logger := b.logger.With(zap.String("who", "BadgerDBReporting"))
+	lsm, vlog := b.db.Size()
+	logger.Debug("Size", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog))
+	metricsBadgerLSMSize.Set(float64(lsm))
+	metricsBadgerVLOGSize.Set(float64(vlog))
+
+	blockCache := b.db.BlockCacheMetrics()
+	logger.Debug("BlockCacheMetrics", zap.String("value", blockCache.String()))
+	indexCache := b.db.IndexCacheMetrics()
+	logger.Debug("IndexCacheMetrics", zap.String("value", indexCache.String()))
 }
 
 func (b *BadgerDb) getAll(rawKeys [][]byte, prefix []byte, txn *badger.Txn) []basedb.Obj {
