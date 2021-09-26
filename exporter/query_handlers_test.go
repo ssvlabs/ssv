@@ -257,7 +257,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	}))
 
 	t.Run("valid range", func(t *testing.T) {
-		nm := newDecidedApiMsg(pk.SerializeToHexStr(), 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
 		handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
@@ -266,7 +266,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("invalid range", func(t *testing.T) {
-		nm := newDecidedApiMsg(pk.SerializeToHexStr(), 400, 404)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 400, 404)
 		handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
@@ -275,7 +275,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-exist validator", func(t *testing.T) {
-		nm := newDecidedApiMsg("xxx", 400, 404)
+		nm := newDecidedAPIMsg("xxx", 400, 404)
 		handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
@@ -284,7 +284,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 }
 
-func newDecidedApiMsg(pk string, from, to int64) *api.NetworkMessage {
+func newDecidedAPIMsg(pk string, from, to int64) *api.NetworkMessage {
 	return &api.NetworkMessage{
 		Msg: api.Message{
 			Type:   api.TypeDecided,
