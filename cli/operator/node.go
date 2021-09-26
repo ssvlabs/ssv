@@ -67,6 +67,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Logger = Logger
+		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
