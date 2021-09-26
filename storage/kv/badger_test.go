@@ -1,6 +1,7 @@
 package kv
 
 import (
+	"context"
 	"fmt"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
@@ -10,10 +11,14 @@ import (
 )
 
 func TestBadgerEndToEnd(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	options := basedb.Options{
 		Type:   "badger-memory",
 		Logger: zap.L(),
 		Path:   "",
+		Reporting: true,
+		Ctx: ctx,
 	}
 
 	db, err := New(options)
@@ -60,6 +65,11 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, toSave[2].key, obj.Key)
 	require.EqualValues(t, toSave[2].value, obj.Value)
+
+	db.(*BadgerDb).report()
+
+	require.NoError(t, db.RemoveAllByCollection([]byte("prefix1")))
+	require.NoError(t, db.RemoveAllByCollection([]byte("prefix2")))
 }
 
 func TestBadgerDb_GetAllByCollection(t *testing.T) {
