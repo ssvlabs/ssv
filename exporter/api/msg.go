@@ -1,6 +1,9 @@
 package api
 
-import "github.com/bloxapp/ssv/exporter/storage"
+import (
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/exporter/storage"
+)
 
 // Message represents an exporter message
 type Message struct {
@@ -20,7 +23,7 @@ type MessageFilter struct {
 	To int64 `json:"to"`
 	// Role is the duty type enum, optional as it's relevant for IBFT data
 	Role DutyRole `json:"role,omitempty"`
-	// PublicKey is optional as it's relevant for IBFT data
+	// PublicKey is optional, used for fetching decided messages or information about specific validator/operator
 	PublicKey string `json:"publicKey,omitempty"`
 }
 
@@ -32,8 +35,8 @@ const (
 	TypeValidator MessageType = "validator"
 	// TypeOperator is an enum for operator type messages
 	TypeOperator MessageType = "operator"
-	// TypeIBFT is an enum for ibft type messages
-	TypeIBFT MessageType = "ibft"
+	// TypeDecided is an enum for ibft type messages
+	TypeDecided MessageType = "decided"
 	// TypeError is an enum for error type messages
 	TypeError MessageType = "error"
 )
@@ -49,6 +52,19 @@ const (
 	// RoleProposer is an enum for proposer role
 	RoleProposer DutyRole = "PROPOSER"
 )
+
+func ToBeaconRoleType(dr DutyRole) beacon.RoleType {
+	switch dr {
+	case RoleAttester:
+		return beacon.RoleTypeAttester
+	case RoleAggregator:
+		return beacon.RoleTypeAggregator
+	case RoleProposer:
+		return beacon.RoleTypeProposer
+	default:
+		return beacon.RoleTypeUnknown
+	}
+}
 
 // ValidatorsMessage represents message for validators response
 type ValidatorsMessage struct {

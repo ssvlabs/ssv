@@ -196,8 +196,8 @@ func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChanne
 			handleOperatorsQuery(exp.logger, exp.storage, &nm)
 		case api.TypeValidator:
 			handleValidatorsQuery(exp.logger, exp.storage, &nm)
-		case api.TypeIBFT:
-			handleDutiesQuery(exp.logger, &nm)
+		case api.TypeDecided:
+			handleDecidedQuery(exp.logger, exp.storage, exp.ibftStorage, &nm)
 		case api.TypeError:
 			handleErrorQuery(exp.logger, &nm)
 		default:

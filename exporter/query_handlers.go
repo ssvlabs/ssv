@@ -2,7 +2,6 @@ package exporter
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
@@ -21,20 +20,17 @@ func handleOperatorsQuery(logger *zap.Logger, storage storage.OperatorsCollectio
 		zap.Int64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
+	res := api.Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
+	}
 	if err != nil {
 		logger.Error("could not get operators", zap.Error(err))
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   []string{"internal error - could not get operators"},
-		}
+		res.Data = []string{"internal error - could not get operators"}
 	} else {
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   operators,
-		}
+		res.Data = operators
 	}
+	nm.Msg = res
 }
 
 func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
@@ -42,28 +38,26 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
+	res := api.Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
+	}
 	validators, err := getValidators(s, nm.Msg.Filter)
 	if err != nil {
 		logger.Warn("failed to get validators", zap.Error(err))
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   []string{"internal error - could not get validators"},
-		}
+		res.Data = []string{"internal error - could not get validators"}
 	} else {
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   validators,
-		}
+		res.Data = validators
 	}
+	nm.Msg = res
 }
 
-func handleDutiesQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
-	logger.Debug("handles duties request",
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
+	logger.Debug("handles decided request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
-		zap.String("pk", nm.Msg.Filter.PublicKey))
+		zap.String("pk", nm.Msg.Filter.PublicKey),
+		zap.String("role", string(nm.Msg.Filter.Role)))
 	res := api.Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
@@ -76,7 +70,7 @@ func handleDutiesQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCo
 		res.Data = []string{"internal error - could not find validator"}
 	} else {
 		v := validators[0]
-		identifier := validator.IdentifierFormat([]byte(v.PublicKey), beacon.RoleTypeAttester)
+		identifier := validator.IdentifierFormat([]byte(v.PublicKey), api.ToBeaconRoleType(nm.Msg.Filter.Role))
 		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
 			uint64(nm.Msg.Filter.To), logger, ibftStorage)
 		if err != nil {
