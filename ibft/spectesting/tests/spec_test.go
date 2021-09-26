@@ -22,6 +22,7 @@ var tests = []SpecTest{
 	&DuplicateMessages{},
 	&ValidSimpleRun{},
 	&ChangeRoundPartialQuorum{},
+	&ChangeRoundThePartialQuorumTheDecide{},
 }
 
 func TestAllSpecTests(t *testing.T) {
