@@ -3,11 +3,17 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/sync"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -72,8 +78,9 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleOperatorsQuery(t *testing.T) {
-	s, l, done := newStorageForTest()
+	db, l, done := newDBAndLoggerForTest()
 	defer done()
+	s, _ := newStorageForTest(db, l)
 
 	ois := []storage.OperatorInformation{
 		{
@@ -152,8 +159,9 @@ func TestHandleOperatorsQuery(t *testing.T) {
 }
 
 func TestHandleValidatorsQuery(t *testing.T) {
-	s, l, done := newStorageForTest()
+	db, l, done := newDBAndLoggerForTest()
 	defer done()
+	s, _ := newStorageForTest(db, l)
 
 	vis := []storage.ValidatorInformation{
 		{
@@ -229,7 +237,47 @@ func TestHandleValidatorsQuery(t *testing.T) {
 	})
 }
 
-func newStorageForTest() (storage.Storage, *zap.Logger, func()) {
+func TestHandleDecidedQuery(t *testing.T) {
+	db, l, done := newDBAndLoggerForTest()
+	defer done()
+	exporterStorage, ibftStorage := newStorageForTest(db, l)
+	_ = bls.Init(bls.BLS12_381)
+
+	sks, _ := sync.GenerateNodes(4)
+	pk := sks[1].GetPublicKey()
+	identifier := validator.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester)
+	decided250Seq := sync.DecidedArr(t, 250, sks, []byte(identifier))
+
+	// save decided
+	for _, d := range decided250Seq {
+		require.NoError(t, ibftStorage.SaveDecided(d))
+	}
+	require.NoError(t, exporterStorage.SaveValidatorInformation(&storage.ValidatorInformation{
+		PublicKey: pk.SerializeToHexStr(),
+	}))
+
+	nm := api.NetworkMessage{
+		Msg: api.Message{
+			Type:   api.TypeDecided,
+			Filter: api.MessageFilter{
+				PublicKey: pk.SerializeToHexStr(),
+				From: 0,
+				To: 250,
+				Role: api.RoleAttester,
+			},
+		},
+		Err:  nil,
+		Conn: nil,
+	}
+	require.Nil(t, nm.Msg.Data)
+	handleDecidedQuery(l, exporterStorage, ibftStorage, &nm)
+	require.NotNil(t, nm.Msg.Data)
+	msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
+	require.True(t, ok)
+	require.Equal(t, 251, len(msgs)) // seq 0 - 250
+}
+
+func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	logger := zap.L()
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
@@ -239,10 +287,15 @@ func newStorageForTest() (storage.Storage, *zap.Logger, func()) {
 	if err != nil {
 		return nil, nil, func() {}
 	}
-	s := storage.NewExporterStorage(db, logger)
-	return s, logger, func() {
+	return db, logger, func() {
 		db.Close()
 	}
+}
+
+func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, collections.Iibft) {
+	sExporter := storage.NewExporterStorage(db, logger)
+	sIbft := collections.NewIbft(db, logger, "attestation")
+	return sExporter, &sIbft
 }
 
 func getMockOperatorLinks() []storage.OperatorNodeLink {

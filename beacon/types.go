@@ -26,17 +26,3 @@ const (
 	RoleTypeAggregator
 	RoleTypeProposer
 )
-
-// ToRoleType takes a string and convert it to RoleType
-func ToRoleType(role string) RoleType {
-	switch role {
-	case "ATTESTER":
-		return RoleTypeAttester
-	case "AGGREGATOR":
-		return RoleTypeAggregator
-	case "PROPOSER":
-		return RoleTypeProposer
-	default:
-		return RoleTypeUnknown
-	}
-}
