@@ -55,7 +55,7 @@ func GetDecidedInRange(identifier []byte, start, end uint64, logger *zap.Logger,
 	for i := start; i <= end; i++ {
 		decidedMsg, found, err := storage.GetDecided(identifier, i)
 		logger = logger.With(zap.ByteString("identifier", identifier), zap.Uint64("sequence", i))
-		if !found{
+		if !found {
 			logger.Error("decided was not found")
 			continue
 		}

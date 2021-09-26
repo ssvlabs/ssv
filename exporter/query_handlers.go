@@ -2,12 +2,10 @@ package exporter
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/storage/collections"
-	validator "github.com/bloxapp/ssv/validator"
 	"go.uber.org/zap"
 )
 
@@ -71,7 +69,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 		res.Data = []string{"internal error - could not find validator"}
 	} else {
 		v := validators[0]
-		identifier := validator.IdentifierFormat([]byte(v.PublicKey), beacon.ToRoleType(string(nm.Msg.Filter.Role)))
+		identifier := fmt.Sprintf("%s_%s", v.PublicKey,string(nm.Msg.Filter.Role))
 		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
 			uint64(nm.Msg.Filter.To), logger, ibftStorage)
 		if err != nil {
