@@ -49,6 +49,7 @@ func (s *ReqHandler) validateGetDecidedReq(msg *network.SyncChanObj) error {
 	return nil
 }
 
+// GetDecidedInRange returns decided messages of the validator (and role) for the given range
 func GetDecidedInRange(identifier []byte, start, end uint64, logger *zap.Logger, storage collections.Iibft) ([]*proto.SignedMessage, error) {
 	ret := make([]*proto.SignedMessage, 0)
 	for i := start; i <= end; i++ {

@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
@@ -70,7 +71,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 		res.Data = []string{"internal error - could not find validator"}
 	} else {
 		v := validators[0]
-		identifier := validator.IdentifierFormat([]byte(v.PublicKey), api.ToBeaconRoleType(nm.Msg.Filter.Role))
+		identifier := validator.IdentifierFormat([]byte(v.PublicKey), beacon.ToRoleType(string(nm.Msg.Filter.Role)))
 		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
 			uint64(nm.Msg.Filter.To), logger, ibftStorage)
 		if err != nil {

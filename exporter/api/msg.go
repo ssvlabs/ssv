@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/storage"
 )
 
@@ -52,19 +51,6 @@ const (
 	// RoleProposer is an enum for proposer role
 	RoleProposer DutyRole = "PROPOSER"
 )
-
-func ToBeaconRoleType(dr DutyRole) beacon.RoleType {
-	switch dr {
-	case RoleAttester:
-		return beacon.RoleTypeAttester
-	case RoleAggregator:
-		return beacon.RoleTypeAggregator
-	case RoleProposer:
-		return beacon.RoleTypeProposer
-	default:
-		return beacon.RoleTypeUnknown
-	}
-}
 
 // ValidatorsMessage represents message for validators response
 type ValidatorsMessage struct {
