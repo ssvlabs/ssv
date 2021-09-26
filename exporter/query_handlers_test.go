@@ -256,25 +256,48 @@ func TestHandleDecidedQuery(t *testing.T) {
 		PublicKey: pk.SerializeToHexStr(),
 	}))
 
-	nm := api.NetworkMessage{
+	t.Run("valid range", func(t *testing.T) {
+		nm := newDecidedApiMsg(pk.SerializeToHexStr(), 0, 250)
+		handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
+		require.True(t, ok)
+		require.Equal(t, 251, len(msgs)) // seq 0 - 250
+	})
+
+	t.Run("invalid range", func(t *testing.T) {
+		nm := newDecidedApiMsg(pk.SerializeToHexStr(), 400, 404)
+		handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
+		require.True(t, ok)
+		require.Equal(t, 0, len(msgs)) // seq 0 - 250
+	})
+
+	t.Run("non-exist validator", func(t *testing.T) {
+		nm := newDecidedApiMsg("xxx", 400, 404)
+		handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		errs, ok := nm.Msg.Data.([]string)
+		require.True(t, ok)
+		require.Equal(t, "internal error - could not find validator", errs[0])
+	})
+}
+
+func newDecidedApiMsg(pk string, from, to int64) *api.NetworkMessage {
+	return &api.NetworkMessage{
 		Msg: api.Message{
 			Type:   api.TypeDecided,
 			Filter: api.MessageFilter{
-				PublicKey: pk.SerializeToHexStr(),
-				From: 0,
-				To: 250,
+				PublicKey: pk,
+				From: from,
+				To: to,
 				Role: api.RoleAttester,
 			},
 		},
 		Err:  nil,
 		Conn: nil,
 	}
-	require.Nil(t, nm.Msg.Data)
-	handleDecidedQuery(l, exporterStorage, ibftStorage, &nm)
-	require.NotNil(t, nm.Msg.Data)
-	msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
-	require.True(t, ok)
-	require.Equal(t, 251, len(msgs)) // seq 0 - 250
 }
 
 func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {

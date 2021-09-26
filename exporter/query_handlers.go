@@ -61,15 +61,15 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
-	if validators, err := getValidators(validatorStorage, nm.Msg.Filter); err != nil {
+	v, found, err := validatorStorage.GetValidatorInformation(nm.Msg.Filter.PublicKey)
+	if err != nil {
 		logger.Warn("failed to get validators", zap.Error(err))
 		res.Data = []string{"internal error - could not get validator"}
-	} else if len(validators) == 0 {
+	} else if !found {
 		logger.Warn("validator not found")
 		res.Data = []string{"internal error - could not find validator"}
 	} else {
-		v := validators[0]
-		identifier := fmt.Sprintf("%s_%s", v.PublicKey,string(nm.Msg.Filter.Role))
+		identifier := fmt.Sprintf("%s_%s", v.PublicKey, string(nm.Msg.Filter.Role))
 		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
 			uint64(nm.Msg.Filter.To), logger, ibftStorage)
 		if err != nil {
