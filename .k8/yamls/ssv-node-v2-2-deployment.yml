@@ -133,6 +133,8 @@ spec:
           value: "debug"
         - name: STORAGE_PATH
           value: "./data/db"
+        - name: DB_REPORTING
+          value: "true"
         - name: METRICS_API_PORT
           value: "15000"
         - name: ENABLE_PROFILE
