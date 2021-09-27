@@ -172,7 +172,7 @@ spec:
             value: discv5
           - name: NETWORK
             value: prater
-          - name: STORAGE_PATH
+          - name: DB_PATH
             value: ./data/db
           - name: DB_REPORTING
             value: "true"

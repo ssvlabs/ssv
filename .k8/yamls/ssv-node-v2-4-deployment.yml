@@ -131,7 +131,7 @@ spec:
           value: "1"
         - name: LOGGER_LEVEL
           value: "debug"
-        - name: STORAGE_PATH
+        - name: DB_PATH
           value: "./data/db"
         - name: DB_REPORTING
           value: "true"
