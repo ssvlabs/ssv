@@ -23,7 +23,7 @@ func (i *Instance) uponChangeRoundPartialQuorum() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon change round partial quorum", func(_ *proto.SignedMessage) error {
 		foundPartialQuorum, lowestChangeRound := i.ChangeRoundMessages.PartialChangeRoundQuorum(i.State.Round.Get())
 		if foundPartialQuorum {
-			i.State.Round.Set(lowestChangeRound)
+			i.bumpToRound(lowestChangeRound)
 
 			// metrics
 			metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),

@@ -1,4 +1,4 @@
-package tests
+package changeround
 
 import (
 	"github.com/bloxapp/ssv/ibft"
@@ -77,12 +77,12 @@ func (test *ChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	justified, err := test.instance.JustifyRoundChange(2)
+	err := test.instance.JustifyRoundChange(2)
 	require.NoError(t, err)
-	require.True(t, justified)
 
 	// f+1
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessChangeRoundPartialQuorum)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.EqualValues(t, 5, test.instance.State.Round.Get())
 
 	// full change round quorum
@@ -90,12 +90,11 @@ func (test *ChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	require.EqualValues(t, proto.RoundState_PrePrepare, test.instance.State.Stage.Get())
-	justified, err = test.instance.JustifyRoundChange(5)
+	err = test.instance.JustifyRoundChange(5)
 	require.NoError(t, err)
-	require.True(t, justified)
 
 	// check pre-prepare justification
-	err = test.instance.JustifyPrePrepare(2)
+	err = test.instance.JustifyPrePrepare(2, test.inputValue)
 	require.NoError(t, err)
 
 	// process all messages

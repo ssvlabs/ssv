@@ -242,7 +242,7 @@ func (i *Instance) BumpRound() {
 func (i *Instance) bumpToRound(round uint64) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
-	newRound := i.State.Round.Get() + 1
+	newRound := round
 	i.State.Round.Set(newRound)
 	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
 		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(newRound))
