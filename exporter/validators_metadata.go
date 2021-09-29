@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"math"
@@ -27,6 +28,10 @@ func (exp *exporter) warmupValidatorsMetaData() error {
 	if err != nil {
 		exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 		return err
+	}
+	// reporting on warmup to fill statuses of validators w/o metadata
+	for _, share := range shares {
+		validator.ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, exp.logger)
 	}
 	exp.updateValidatorsMetadata(shares, metaDataBatchSize)
 	return err
