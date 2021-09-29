@@ -5,7 +5,9 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"go.uber.org/zap"
+	"time"
 )
 
 const (
@@ -42,6 +44,10 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		logger: options.Logger,
 	}
 
+	if options.Reporting && options.Ctx != nil {
+		runutil.RunEvery(options.Ctx, 1*time.Minute, _db.report)
+	}
+
 	options.Logger.Info("Badger db initialized")
 	return &_db, nil
 }
@@ -69,7 +75,7 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		return err
 	})
 	found := err == nil || err.Error() != EntryNotFoundError
-	if !found{
+	if !found {
 		return basedb.Obj{}, found, nil
 	}
 	return basedb.Obj{
@@ -81,28 +87,14 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 // GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
 func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	var res []basedb.Obj
-	var err error
-	err = b.db.View(func(txn *badger.Txn) error {
-		opt := badger.DefaultIteratorOptions
-		opt.Prefix = prefix
-		it := txn.NewIterator(opt)
-		defer it.Close()
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			item := it.Item()
-			resKey := item.Key()
-			trimmedResKey := bytes.TrimPrefix(resKey, prefix)
-			val, err := item.ValueCopy(nil)
-			if err != nil {
-				b.logger.Error("failed to copy value", zap.Error(err))
-				continue
-			}
-			obj := basedb.Obj{
-				Key:   trimmedResKey,
-				Value: val,
-			}
-			res = append(res, obj)
-		}
-		return err
+
+	// we got issues when reading more than 100 items with iterator (items get mixed up)
+	// instead, the keys are first fetched using an iterator, and afterwards the values are fetched one by one
+	// to avoid issues
+	err := b.db.View(func(txn *badger.Txn) error {
+		rawKeys := b.listRawKeys(prefix, txn)
+		res = b.getAll(rawKeys, prefix, txn)
+		return nil
 	})
 	return res, err
 }
@@ -133,4 +125,59 @@ func (b *BadgerDb) Close() {
 	if err := b.db.Close(); err != nil {
 		b.logger.Fatal("failed to close db", zap.Error(err))
 	}
+}
+
+// report the db size and metrics
+func (b *BadgerDb) report() {
+	logger := b.logger.With(zap.String("who", "BadgerDBReporting"))
+	lsm, vlog := b.db.Size()
+	logger.Debug("Size", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog))
+	metricsBadgerLSMSize.Set(float64(lsm))
+	metricsBadgerVLOGSize.Set(float64(vlog))
+
+	blockCache := b.db.BlockCacheMetrics()
+	logger.Debug("BlockCacheMetrics", zap.String("value", blockCache.String()))
+	indexCache := b.db.IndexCacheMetrics()
+	logger.Debug("IndexCacheMetrics", zap.String("value", indexCache.String()))
+}
+
+func (b *BadgerDb) getAll(rawKeys [][]byte, prefix []byte, txn *badger.Txn) []basedb.Obj {
+	var res []basedb.Obj
+
+	for _, k := range rawKeys {
+		trimmedResKey := bytes.TrimPrefix(k, prefix)
+		item, err := txn.Get(k)
+		if err != nil {
+			b.logger.Error("failed to get value", zap.Error(err),
+				zap.String("trimmedResKey", string(trimmedResKey)))
+			continue
+		}
+		val, err := item.ValueCopy(nil)
+		if err != nil {
+			b.logger.Error("failed to copy value", zap.Error(err))
+			continue
+		}
+		obj := basedb.Obj{
+			Key:   trimmedResKey,
+			Value: val,
+		}
+		res = append(res, obj)
+	}
+
+	return res
+}
+
+func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
+	var keys [][]byte
+
+	opt := badger.DefaultIteratorOptions
+	opt.Prefix = prefix
+	it := txn.NewIterator(opt)
+	defer it.Close()
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		item := it.Item()
+		keys = append(keys, item.KeyCopy(nil))
+	}
+
+	return keys
 }

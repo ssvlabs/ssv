@@ -196,3 +196,75 @@ func TestSetStage(t *testing.T) {
 	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
 	require.NotNil(t, instance.stageChangedChan)
 }
+
+func TestBumpRound(t *testing.T) {
+	secretKeys, _ := GenerateNodes(1)
+	instance := &Instance{
+		MsgQueue:   msgqueue.New(),
+		eventQueue: eventqueue.New(),
+		Config:     proto.DefaultConsensusParams(),
+		State: &proto.State{
+			Round:     threadsafe.Uint64(1),
+			Stage:     threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
+			Lambda:    threadsafe.BytesS("Lambda"),
+			SeqNumber: threadsafe.Uint64(1),
+		},
+		Logger:     zaptest.NewLogger(t),
+		roundTimer: roundtimer.New(),
+		ValidatorShare: &storage.Share{
+			PublicKey: secretKeys[1].GetPublicKey(),
+		},
+	}
+
+	t.Run("test bump to round", func(t *testing.T) {
+		// trigger for later testing
+		instance.processChangeRoundQuorumOnce.Do(func() {})
+		instance.processPrepareQuorumOnce.Do(func() {})
+		instance.processCommitQuorumOnce.Do(func() {})
+
+		instance.bumpToRound(100)
+
+		// test
+		didA, didB, didC := false, false, false
+		instance.processChangeRoundQuorumOnce.Do(func() {
+			didA = true
+		})
+		instance.processPrepareQuorumOnce.Do(func() {
+			didB = true
+		})
+		instance.processCommitQuorumOnce.Do(func() {
+			didC = true
+		})
+		require.True(t, didA)
+		require.True(t, didB)
+		require.True(t, didC)
+
+		require.EqualValues(t, 100, instance.State.Round.Get())
+	})
+
+	t.Run("test bump by 1", func(t *testing.T) {
+		// trigger for later testing
+		instance.processChangeRoundQuorumOnce.Do(func() {})
+		instance.processPrepareQuorumOnce.Do(func() {})
+		instance.processCommitQuorumOnce.Do(func() {})
+
+		instance.BumpRound()
+
+		// test
+		didA, didB, didC := false, false, false
+		instance.processChangeRoundQuorumOnce.Do(func() {
+			didA = true
+		})
+		instance.processPrepareQuorumOnce.Do(func() {
+			didB = true
+		})
+		instance.processCommitQuorumOnce.Do(func() {
+			didC = true
+		})
+		require.True(t, didA)
+		require.True(t, didB)
+		require.True(t, didC)
+
+		require.EqualValues(t, 101, instance.State.Round.Get())
+	})
+}

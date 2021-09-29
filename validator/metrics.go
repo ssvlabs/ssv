@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 	"log"
 )
 
@@ -41,6 +42,7 @@ func init() {
 	}
 }
 
+// reportDutyExecutionMetrics reports duty execution metrics, returns done function to be called once duty is done
 func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	// reporting metrics
 	metricsRunningIBFTsCount.Inc()
@@ -50,20 +52,51 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 
 	metricsCurrentSlot.WithLabelValues(pubKey).Set(float64(duty.Slot))
 
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRunning))
-
 	return func() {
 		metricsRunningIBFTsCount.Dec()
 		metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
 	}
 }
 
+// ReportValidatorStatusReady reports the ready status of validator
+func ReportValidatorStatusReady(pk string) {
+	metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusReady))
+}
+
+// ReportValidatorStatus reports the current status of validator
+func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
+	logger = logger.With(zap.String("pubKey", pk), zap.String("who", "ReportValidatorStatus"),
+		zap.Any("metadata", meta))
+	if meta == nil {
+		logger.Warn("validator metadata not found")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotFound))
+	} else if !meta.Activated() {
+		logger.Warn("validator not activated")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotActivated))
+	} else if meta.Slashed() {
+		logger.Warn("validator slashed")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusSlashed))
+	} else if meta.Exiting() {
+		logger.Warn("validator exiting / exited")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusExiting))
+	} else if meta.Index == 0 {
+		logger.Warn("validator index not found")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
+	} else {
+		logger.Warn("validator is ready")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusReady))
+	}
+}
+
 type validatorStatus int32
 
 var (
-	validatorStatusInactive validatorStatus = 0
-	validatorStatusNoIndex  validatorStatus = 1
-	validatorStatusError    validatorStatus = 2
-	validatorStatusOnline   validatorStatus = 3
-	validatorStatusRunning  validatorStatus = 4
+	validatorStatusInactive     validatorStatus = 0
+	validatorStatusNoIndex      validatorStatus = 1
+	validatorStatusError        validatorStatus = 2
+	validatorStatusReady        validatorStatus = 3
+	validatorStatusNotActivated validatorStatus = 4
+	validatorStatusExiting      validatorStatus = 5
+	validatorStatusSlashed      validatorStatus = 6
+	validatorStatusNotFound     validatorStatus = 7
 )

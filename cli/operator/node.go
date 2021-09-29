@@ -67,6 +67,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Logger = Logger
+		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
@@ -74,13 +75,14 @@ var StartNodeCmd = &cobra.Command{
 
 		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
 
-		// TODO Not refactored yet Start:
+		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
 		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
 		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
-			Logger.Fatal("failed to create beacon go-client", zap.Error(err))
+			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
+				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
@@ -92,7 +94,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.Beacon = &beaconClient
+		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network

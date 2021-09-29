@@ -131,12 +131,16 @@ spec:
           value: "1"
         - name: LOGGER_LEVEL
           value: "debug"
-        - name: STORAGE_PATH
+        - name: DB_PATH
           value: "./data/db"
+        - name: DB_REPORTING
+          value: "true"
         - name: METRICS_API_PORT
           value: "15000"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: PUBSUB_TRACE_OUT
+          value: "./data/pubsub_trace.out"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-3

@@ -62,7 +62,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		return
 	}
 
-	reportDecided(msg, i.ValidatorShare)
+	ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
 	// decided for current instance
 	if i.forceDecideCurrentInstance(msg) {

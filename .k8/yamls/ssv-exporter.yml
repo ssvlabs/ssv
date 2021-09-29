@@ -139,6 +139,8 @@ spec:
           name: port-15000
           hostPort: 15000
         env:
+          - name: SHARE_CONFIG
+            value: "./data/share.yaml"
           - name: ETH_1_ADDR
             valueFrom:
               secretKeyRef:
@@ -170,14 +172,18 @@ spec:
             value: discv5
           - name: NETWORK
             value: prater
-          - name: STORAGE_PATH
+          - name: DB_PATH
             value: ./data/db
+          - name: DB_REPORTING
+            value: "true"
           - name: METRICS_API_PORT
             value: "15000"
           - name: ENABLE_PROFILE
             value: "true"
           - name: IBFT_SYNC_ENABLED
             value: "true"
+          - name: PUBSUB_TRACE_OUT
+            value: "./data/pubsub_trace.out"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter

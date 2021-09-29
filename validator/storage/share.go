@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/gob"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -26,17 +27,17 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 type Share struct {
 	NodeID    uint64
 	PublicKey *bls.PublicKey
-	Index     *uint64 // pointer in order to support nil
 	ShareKey  *bls.SecretKey
 	Committee map[uint64]*proto.Node
+	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
 }
 
 //  serializedShare struct
 type serializedShare struct {
 	NodeID    uint64
-	Index     *uint64 // pointer in order to support nil
 	ShareKey  []byte
 	Committee map[uint64]*proto.Node
+	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
 }
 
 // CommitteeSize returns the IBFT committee size
@@ -96,9 +97,9 @@ func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
 		NodeID:    s.NodeID,
-		Index:     s.Index,
 		ShareKey:  s.ShareKey.Serialize(),
 		Committee: map[uint64]*proto.Node{},
+		Metadata:  s.Metadata,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {
@@ -137,8 +138,13 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 	return &Share{
 		NodeID:    value.NodeID,
 		PublicKey: pubKey,
-		Index:     value.Index,
 		ShareKey:  shareSecret,
 		Committee: value.Committee,
+		Metadata:  value.Metadata,
 	}, nil
+}
+
+// HasMetadata returns true if the validator metadata was fetched
+func (s *Share) HasMetadata() bool {
+	return s.Metadata != nil
 }

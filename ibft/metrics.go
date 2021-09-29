@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"log"
@@ -43,12 +42,12 @@ func init() {
 	}
 }
 
-func reportDecided(msg *proto.SignedMessage, share *storage.Share) {
+// ReportDecided reports on a decided message
+func ReportDecided(pk string, msg *proto.SignedMessage) {
 	for _, nodeID := range msg.SignerIds {
 		metricsDecidedSigners.WithLabelValues(
-			string(msg.Message.GetLambda()),
-			share.PublicKey.SerializeToHexStr(),
+			string(msg.Message.GetLambda()), pk,
 			strconv.FormatUint(msg.Message.SeqNumber, 10),
-			strconv.FormatUint(nodeID, 10))
+			strconv.FormatUint(nodeID, 10)).Set(1)
 	}
 }

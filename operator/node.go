@@ -22,7 +22,7 @@ type Node interface {
 // Options contains options to create the node
 type Options struct {
 	ETHNetwork          *core.Network
-	Beacon              *beacon.Beacon
+	Beacon              beacon.Beacon
 	Context             context.Context
 	Logger              *zap.Logger
 	Eth1Client          eth1.Client
@@ -54,14 +54,14 @@ func New(opts Options) Node {
 		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
 		validatorController: opts.ValidatorController,
 		ethNetwork:          *opts.ETHNetwork,
-		beacon:              *opts.Beacon,
+		beacon:              opts.Beacon,
 		eth1Client:          opts.Eth1Client,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
 			Ctx:                 opts.Context,
-			BeaconClient:        *opts.Beacon,
+			BeaconClient:        opts.Beacon,
 			EthNetwork:          *opts.ETHNetwork,
 			ValidatorController: opts.ValidatorController,
 			GenesisEpoch:        opts.GenesisEpoch,
@@ -135,4 +135,3 @@ func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
 	}
 	return agents
 }
-
