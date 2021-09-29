@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -26,6 +27,7 @@ var tests = []SpecTest{
 }
 
 func TestAllSpecTests(t *testing.T) {
+	require.Len(t, tests, 10)
 	for _, test := range tests {
 		t.Run(test.Name(), func(tt *testing.T) {
 			test.Prepare(tt)
