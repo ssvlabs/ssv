@@ -283,7 +283,6 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
-			reportIncomingSignedMessage(&cm, t)
 			n.propagateSignedMsg(&cm)
 		}
 	}
