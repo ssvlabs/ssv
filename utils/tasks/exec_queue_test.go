@@ -13,25 +13,23 @@ func TestExecQueue(t *testing.T) {
 
 	go q.Start()
 
-	go func() {
-		count := 100
-		for count > 0 {
-			count--
-			q.Queue(func() error {
-				atomic.AddInt64(&i, 1)
-				return nil
-			})
-			q.Queue(func() error {
-				atomic.AddInt64(&i, -1)
-				return nil
-			})
-		}
-	}()
-
+	count := 100
+	for count > 0 {
+		count--
+		q.Queue(func() error {
+			atomic.AddInt64(&i, 1)
+			return nil
+		})
+		q.Queue(func() error {
+			atomic.AddInt64(&i, -1)
+			return nil
+		})
+	}
 	q.Queue(func() error {
 		atomic.AddInt64(&i, 1)
 		return nil
 	})
+
 	q.Wait()
 	require.Equal(t, int64(1), atomic.LoadInt64(&i))
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
@@ -86,15 +84,12 @@ func TestExecQueue_QueueDistinct(t *testing.T) {
 	q.QueueDistinct(inc, "1")
 	q.QueueDistinct(inc, "1")
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
-
 }
 
 func TestExecQueue_Empty(t *testing.T) {
 	q := NewExecutionQueue(1 * time.Millisecond)
-
 	go q.Start()
-
-	q.Wait()
+	time.Sleep(time.Millisecond)
 	q.Stop()
 	require.True(t, q.(*executionQueue).isStopped())
 }
