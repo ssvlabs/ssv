@@ -15,4 +15,3 @@ func TestIdentifierFormat(t *testing.T) {
 	identifier := IdentifierFormat([]byte("111"), "ATTESTER")
 	require.Equal(t, "313131_ATTESTER", identifier)
 }
-
