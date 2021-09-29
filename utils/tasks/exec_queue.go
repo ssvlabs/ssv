@@ -23,10 +23,10 @@ type executionQueue struct {
 	waiting []Fn
 	stopped bool
 
-	wg   sync.WaitGroup
-	lock sync.RWMutex
+	wg   *sync.WaitGroup
+	lock *sync.RWMutex
 
-	visited sync.Map
+	visited *sync.Map
 
 	errs []error
 
@@ -40,9 +40,9 @@ func NewExecutionQueue(interval time.Duration) Queue {
 	}
 	q := executionQueue{
 		waiting:  []Fn{},
-		wg:       sync.WaitGroup{},
-		lock:     sync.RWMutex{},
-		visited:  sync.Map{},
+		wg:       &sync.WaitGroup{},
+		lock:     &sync.RWMutex{},
+		visited:  &sync.Map{},
 		errs:     []error{},
 		interval: interval,
 	}

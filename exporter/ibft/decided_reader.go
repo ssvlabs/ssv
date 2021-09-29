@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/validator"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -51,7 +51,8 @@ func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 		network:        opts.Network,
 		config:         opts.Config,
 		validatorShare: opts.ValidatorShare,
-		identifier:     []byte(validator.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(), beacon.RoleTypeAttester)),
+		identifier:     []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
+			beacon.RoleTypeAttester.String())),
 	}
 	return &r
 }

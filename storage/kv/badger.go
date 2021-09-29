@@ -131,14 +131,12 @@ func (b *BadgerDb) Close() {
 func (b *BadgerDb) report() {
 	logger := b.logger.With(zap.String("who", "BadgerDBReporting"))
 	lsm, vlog := b.db.Size()
-	logger.Debug("Size", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog))
-	metricsBadgerLSMSize.Set(float64(lsm))
-	metricsBadgerVLOGSize.Set(float64(vlog))
-
 	blockCache := b.db.BlockCacheMetrics()
-	logger.Debug("BlockCacheMetrics", zap.String("value", blockCache.String()))
 	indexCache := b.db.IndexCacheMetrics()
-	logger.Debug("IndexCacheMetrics", zap.String("value", indexCache.String()))
+
+	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
+		zap.String("BlockCacheMetrics", blockCache.String()),
+		zap.String("IndexCacheMetrics", indexCache.String()))
 }
 
 func (b *BadgerDb) getAll(rawKeys [][]byte, prefix []byte, txn *badger.Txn) []basedb.Obj {

@@ -1,8 +1,6 @@
 package validator
 
 import (
-	"encoding/hex"
-	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -80,9 +78,4 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 	validatorShare.Committee = ibftCommittee
 
 	return &validatorShare, nil
-}
-
-// IdentifierFormat return base format for lambda
-func IdentifierFormat(pubKey []byte, role beacon.RoleType) string {
-	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), role.String())
 }

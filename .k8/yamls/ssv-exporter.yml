@@ -182,8 +182,6 @@ spec:
             value: "true"
           - name: IBFT_SYNC_ENABLED
             value: "true"
-          - name: PUBSUB_TRACE_OUT
-            value: "./data/pubsub_trace.out"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter
