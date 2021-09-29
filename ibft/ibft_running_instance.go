@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -20,8 +21,8 @@ func (i *ibftImpl) startInstanceWithOptions(instanceOpts *InstanceOptions, value
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	metricsCurrentSequence.WithLabelValues(string(i.Identifier),
-		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(i.currentInstance.State.SeqNumber.Get()))
+	pk, role := format.IdentifierUnformat(string(i.Identifier))
+	metricsCurrentSequence.WithLabelValues(role, pk).Set(float64(i.currentInstance.State.SeqNumber.Get()))
 
 	// catch up if we can
 	go i.fastChangeRoundCatchup(i.currentInstance)

@@ -11,7 +11,7 @@ import (
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/validator"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -245,7 +245,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	sks, _ := sync.GenerateNodes(4)
 	pk := sks[1].GetPublicKey()
-	identifier := validator.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester)
+	identifier := format.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester.String())
 	decided250Seq := sync.DecidedArr(t, 250, sks, []byte(identifier))
 
 	// save decided
