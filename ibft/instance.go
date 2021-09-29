@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
@@ -81,8 +82,8 @@ type Instance struct {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *InstanceOptions) *Instance {
-	metricsIBFTStage.WithLabelValues(string(opts.Lambda),
-		opts.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(proto.RoundState_NotStarted))
+	pk, role := validator.IdentifierUnformat(string(opts.Lambda))
+	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
 	return &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		State: &proto.State{
@@ -159,8 +160,8 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())))
 	i.State.InputValue.Set(inputValue)
 	i.State.Round.Set(1) // start from 1
-	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
-		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(1)
+	pk, role := validator.IdentifierUnformat(string(i.State.Lambda.Get()))
+	metricsIBFTRound.WithLabelValues(role, pk).Set(1)
 
 	if i.IsLeader() {
 		go func() {
@@ -246,14 +247,14 @@ func (i *Instance) bumpToRound(round uint64) {
 	i.processCommitQuorumOnce = sync.Once{}
 	newRound := round
 	i.State.Round.Set(newRound)
-	metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
-		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(newRound))
+	pk, role := validator.IdentifierUnformat(string(i.State.Lambda.Get()))
+	metricsIBFTRound.WithLabelValues(role, pk).Set(float64(newRound))
 }
 
 // ProcessStageChange set the State's round State and pushed the new State into the State channel
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
-	metricsIBFTStage.WithLabelValues(string(i.State.Lambda.Get()),
-		i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(stage))
+	pk, role := validator.IdentifierUnformat(string(i.State.Lambda.Get()))
+	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(stage))
 
 	i.State.Stage.Set(int32(stage))
 
