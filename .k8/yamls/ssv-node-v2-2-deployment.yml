@@ -139,8 +139,6 @@ spec:
           value: "15000"
         - name: ENABLE_PROFILE
           value: "true"
-        - name: PUBSUB_TRACE_OUT
-          value: "./data/pubsub_trace.out"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-2
