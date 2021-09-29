@@ -13,7 +13,7 @@ import (
 func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 	sks, _ := sync.GenerateNodes(4)
 
-	decided250Seq := sync.DecidedArr(t, 250, sks)
+	decided250Seq := sync.DecidedArr(t, 250, sks, []byte("lambda"))
 
 	tests := []struct {
 		name           string

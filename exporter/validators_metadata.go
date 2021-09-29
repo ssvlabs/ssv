@@ -28,7 +28,7 @@ func (exp *exporter) warmupValidatorsMetaData() error {
 		exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 		return err
 	}
-	exp.updateValidatorsMetadata(shares, 100)
+	exp.updateValidatorsMetadata(shares, metaDataBatchSize)
 	return err
 }
 
@@ -49,6 +49,6 @@ func (exp *exporter) updateValidatorsMetadata(shares []*validatorstorage.Share, 
 
 		// reset start and end
 		start = end
-		end = int(math.Min(float64(len(shares)), float64(start + batchSize)))
+		end = int(math.Min(float64(len(shares)), float64(start+batchSize)))
 	}
 }

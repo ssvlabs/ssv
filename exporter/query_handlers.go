@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/ibft/sync/incoming"
+	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
 )
 
@@ -17,20 +19,17 @@ func handleOperatorsQuery(logger *zap.Logger, storage storage.OperatorsCollectio
 		zap.Int64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
+	res := api.Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
+	}
 	if err != nil {
 		logger.Error("could not get operators", zap.Error(err))
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   []string{"internal error - could not get operators"},
-		}
+		res.Data = []string{"internal error - could not get operators"}
 	} else {
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   operators,
-		}
+		res.Data = operators
 	}
+	nm.Msg = res
 }
 
 func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
@@ -38,29 +37,49 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
+	res := api.Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
+	}
 	validators, err := getValidators(s, nm.Msg.Filter)
 	if err != nil {
 		logger.Warn("failed to get validators", zap.Error(err))
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   []string{"internal error - could not get validators"},
-		}
+		res.Data = []string{"internal error - could not get validators"}
 	} else {
-		nm.Msg = api.Message{
-			Type:   nm.Msg.Type,
-			Filter: nm.Msg.Filter,
-			Data:   validators,
-		}
+		res.Data = validators
 	}
+	nm.Msg = res
 }
 
-func handleDutiesQuery(logger *zap.Logger, nm *api.NetworkMessage) {
-	logger.Warn("not implemented yet", zap.String("messageType", string(nm.Msg.Type)))
-	nm.Msg = api.Message{
-		Type: api.TypeError,
-		Data: []string{"bad request - not implemented yet"},
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
+	logger.Debug("handles decided request",
+		zap.Int64("from", nm.Msg.Filter.From),
+		zap.Int64("to", nm.Msg.Filter.To),
+		zap.String("pk", nm.Msg.Filter.PublicKey),
+		zap.String("role", string(nm.Msg.Filter.Role)))
+	res := api.Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
 	}
+	v, found, err := validatorStorage.GetValidatorInformation(nm.Msg.Filter.PublicKey)
+	if err != nil {
+		logger.Warn("failed to get validators", zap.Error(err))
+		res.Data = []string{"internal error - could not get validator"}
+	} else if !found {
+		logger.Warn("validator not found")
+		res.Data = []string{"internal error - could not find validator"}
+	} else {
+		identifier := fmt.Sprintf("%s_%s", v.PublicKey, string(nm.Msg.Filter.Role))
+		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
+			uint64(nm.Msg.Filter.To), logger, ibftStorage)
+		if err != nil {
+			logger.Warn("failed to get decided messages", zap.Error(err))
+			res.Data = []string{"internal error - could not get decided messages"}
+		} else {
+			res.Data = msgs
+		}
+	}
+	nm.Msg = res
 }
 
 func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
