@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-// ChangeRoundThePartialQuorumTheDecide tests coming to consensus after an f+1 (after change round)
-type ChangeRoundThePartialQuorumTheDecide struct {
+// FullChangeRoundThePartialQuorumTheDecide tests coming to consensus after an f+1 (after change round)
+type FullChangeRoundThePartialQuorumTheDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *ChangeRoundThePartialQuorumTheDecide) Name() string {
+func (test *FullChangeRoundThePartialQuorumTheDecide) Name() string {
 	return "pre-prepare -> change round -> bump f+1 to higher round-> change round-> decide"
 }
 
 // Prepare prepares the test
-func (test *ChangeRoundThePartialQuorumTheDecide) Prepare(t *testing.T) {
+func (test *FullChangeRoundThePartialQuorumTheDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,7 +39,7 @@ func (test *ChangeRoundThePartialQuorumTheDecide) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *ChangeRoundThePartialQuorumTheDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *FullChangeRoundThePartialQuorumTheDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
 
@@ -67,7 +67,7 @@ func (test *ChangeRoundThePartialQuorumTheDecide) MessagesSequence(t *testing.T)
 }
 
 // Run runs the test
-func (test *ChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
+func (test *FullChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.SimulateTimeout(test.instance, 2)

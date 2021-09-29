@@ -43,7 +43,7 @@ var tests = []SpecTest{
 	&changeround.NotPreparedError{},
 	&changeround.PreparedFollowedByPrePrepared{},
 	&changeround.FuturePrePrepareAfterChangeRound{},
-	&changeround.ChangeRoundThePartialQuorumTheDecide{},
+	&changeround.FullChangeRoundThePartialQuorumTheDecide{},
 
 	// common
 	&common.DuplicateMessages{},

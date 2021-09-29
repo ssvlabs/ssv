@@ -237,7 +237,7 @@ func TestBumpRound(t *testing.T) {
 		})
 		require.True(t, didA)
 		require.True(t, didB)
-		require.True(t, didC)
+		require.False(t, didC) // commit can be called only once
 
 		require.EqualValues(t, 100, instance.State.Round.Get())
 	})
@@ -263,7 +263,7 @@ func TestBumpRound(t *testing.T) {
 		})
 		require.True(t, didA)
 		require.True(t, didB)
-		require.True(t, didC)
+		require.False(t, didC) // commit can be called only once
 
 		require.EqualValues(t, 101, instance.State.Round.Get())
 	})
