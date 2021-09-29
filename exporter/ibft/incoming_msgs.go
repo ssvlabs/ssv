@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/validator"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -56,7 +56,7 @@ func (i *incomingMsgsReader) Start() error {
 
 func (i *incomingMsgsReader) listenToNetwork() {
 	msgChan := i.network.ReceivedMsgChan()
-	identifier := validator.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester)
+	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
 	i.logger.Debug("listening to network messages")
 	for msg := range msgChan {
 		if msg == nil || msg.Message == nil {

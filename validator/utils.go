@@ -1,8 +1,6 @@
 package validator
 
 import (
-	"encoding/hex"
-	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -10,7 +8,6 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"regexp"
 	"strings"
 )
 
@@ -81,22 +78,4 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 	validatorShare.Committee = ibftCommittee
 
 	return &validatorShare, nil
-}
-
-// IdentifierFormat return base format for lambda
-func IdentifierFormat(pubKey []byte, role beacon.RoleType) string {
-	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), role.String())
-}
-
-var (
-	identifierRegexp = regexp.MustCompile("(.+)_(ATTESTER)|(PROPOSER)|(AGGREGATOR)")
-)
-
-// IdentifierUnformat return parts of the given lambda
-func IdentifierUnformat(identifier string) (string, string) {
-	parts := identifierRegexp.FindStringSubmatch(identifier)
-	if len(parts) < 2 {
-		return "", ""
-	}
-	return parts[1], parts[2]
 }

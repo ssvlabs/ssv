@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
@@ -130,10 +131,12 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 	return start
 }
 
-func setupIbftController(role int, logger *zap.Logger, db basedb.IDb, network network.Network, msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.IBFT {
-	ibftStorage := collections.NewIbft(db, logger, beacon.RoleType(role).String())
-	identifier := []byte(IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleType(role)))
-	return ibft.New(beacon.RoleType(role), identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
+func setupIbftController(role beacon.RoleType, logger *zap.Logger, db basedb.IDb, network network.Network,
+	msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.IBFT {
+
+	ibftStorage := collections.NewIbft(db, logger, role.String())
+	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
+	return ibft.New(role, identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
 }
 
 // oneOfIBFTIdentifiers will return true if provided identifier matches one of the iBFT instances.

@@ -2,7 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/validator"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"log"
@@ -45,7 +45,7 @@ func init() {
 
 // ReportDecided reports on a decided message
 func ReportDecided(pk string, msg *proto.SignedMessage) {
-	_, role := validator.IdentifierUnformat(string(msg.Message.GetLambda()))
+	_, role := format.IdentifierUnformat(string(msg.Message.GetLambda()))
 	for _, nodeID := range msg.SignerIds {
 		metricsDecidedSigners.WithLabelValues(
 			role, pk,

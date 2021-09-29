@@ -1,7 +1,6 @@
-package validator
+package format
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -13,6 +12,7 @@ func TestIdentifierUnformat(t *testing.T) {
 }
 
 func TestIdentifierFormat(t *testing.T) {
-	identifier := IdentifierFormat([]byte("xxx"), beacon.RoleTypeAttester)
-	require.Equal(t, "787878_ATTESTER", identifier)
+	identifier := IdentifierFormat([]byte("111"), "ATTESTER")
+	require.Equal(t, "313131_ATTESTER", identifier)
 }
+

@@ -21,7 +21,7 @@ func (r RoleType) String() string {
 
 // List of roles
 const (
-	RoleTypeUnknown = iota
+	RoleTypeUnknown RoleType = iota
 	RoleTypeAttester
 	RoleTypeAggregator
 	RoleTypeProposer
