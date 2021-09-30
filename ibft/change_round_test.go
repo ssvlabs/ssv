@@ -725,7 +725,7 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundFullQuorumMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , if first pipeline non error, continue to second, ", pipeline.Name())
+	require.EqualValues(t, "if first pipeline non error, continue to second", pipeline.Name())
 }
 
 func TestChangeRoundPipeline(t *testing.T) {
@@ -744,5 +744,5 @@ func TestChangeRoundPipeline(t *testing.T) {
 		},
 	}
 	pipeline := instance.changeRoundMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , if first pipeline non error, continue to second, , ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
 }

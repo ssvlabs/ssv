@@ -36,12 +36,9 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 }
 
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
-	return pipeline.Combine(
-		i.changeRoundMsgValidationPipeline(),
-		pipeline.IfFirstTrueContinueToSecond(
-			auth.ValidateRound(i.State.Round.Get()),
-			i.uponChangeRoundFullQuorum(),
-		),
+	return pipeline.IfFirstTrueContinueToSecond(
+		auth.ValidateRound(i.State.Round.Get()),
+		i.uponChangeRoundFullQuorum(),
 	)
 }
 
