@@ -25,10 +25,6 @@ func (i *Instance) uponChangeRoundPartialQuorum() pipeline.Pipeline {
 		if foundPartialQuorum {
 			i.bumpToRound(lowestChangeRound)
 
-			// metrics
-			metricsIBFTRound.WithLabelValues(string(i.State.Lambda.Get()),
-				i.ValidatorShare.PublicKey.SerializeToHexStr()).Set(float64(lowestChangeRound))
-
 			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round.Get()))
 			i.resetRoundTimer()
 			i.ProcessStageChange(proto.RoundState_ChangeRound)
