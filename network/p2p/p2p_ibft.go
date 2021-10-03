@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strconv"
 )
 
 // Broadcast propagates a signed message to all peers
@@ -26,9 +25,6 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 
 	n.logger.Debug("broadcasting ibft msg", zap.String("lambda", string(msg.Message.Lambda)),
 		zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
-
-	metricsIBFTMsgsOutbound.WithLabelValues(unwrapTopicName(topic.String()), msg.Message.Type.String(),
-		strconv.FormatUint(msg.Message.SeqNumber, 10), strconv.FormatUint(msg.Message.Round, 10)).Inc()
 
 	return topic.Publish(n.ctx, msgBytes)
 }
