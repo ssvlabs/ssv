@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	maxPeers = 50
+	maxPeers = 100
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
