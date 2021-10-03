@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -48,7 +49,10 @@ func reportConnectionsCount(n *p2pNetwork) {
 	for _, conn := range conns {
 		connsIDs = append(connsIDs, conn.RemotePeer().String())
 	}
-	peersActiveDisv5 := n.peers.Active()
+	var peersActiveDisv5 []peer.ID
+	if n.peers != nil {
+		peersActiveDisv5 = n.peers.Active()
+	}
 	n.logger.Debug("connected peers status",
 		zap.Int("count", len(conns)),
 		zap.Any("connsIDs", connsIDs),
