@@ -1,8 +1,10 @@
 package p2p
 
 import (
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 	"log"
 )
 
@@ -38,4 +40,25 @@ func init() {
 	if err := prometheus.Register(metricsIBFTDecidedMsgsOutbound); err != nil {
 		log.Println("could not register prometheus collector")
 	}
+}
+
+func reportConnectionsCount(n *p2pNetwork) {
+	conns := n.host.Network().Conns()
+	var connsIDs []string
+	for _, conn := range conns {
+		connsIDs = append(connsIDs, conn.RemotePeer().String())
+	}
+	peersActiveDisv5 := n.peers.Active()
+	n.logger.Debug("connected peers status",
+		zap.Int("count active discv5", len(peersActiveDisv5)),
+		zap.Int("count conns", len(conns)),
+		zap.Any("connsIDs", connsIDs),
+		zap.Any("peersActiveDisv5", peersActiveDisv5))
+	metricsAllConnectedPeers.Set(float64(len(conns)))
+}
+
+func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
+	peers := n.allPeersOfTopic(topic)
+	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
+	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
