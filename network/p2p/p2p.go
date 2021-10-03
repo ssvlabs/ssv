@@ -208,27 +208,13 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		// all peers
-		conns := n.host.Network().Conns()
-		var connsIDs []string
-		for _, conn := range conns {
-			connsIDs = append(connsIDs, conn.RemotePeer().String())
-		}
-		peersActiveDisv5 := n.peers.Active()
-		n.logger.Debug("connected peers status",
-			zap.Int("count active discv5", len(peersActiveDisv5)),
-			zap.Int("count conns", len(conns)),
-			zap.Any("connsIDs", connsIDs),
-			zap.Any("peersActiveDisv5", peersActiveDisv5))
-		metricsAllConnectedPeers.Set(float64(len(conns)))
+		go reportConnectionsCount(n)
 
 		// topic peers
 		n.psTopicsLock.RLock()
 		defer n.psTopicsLock.RUnlock()
 		for name, topic := range n.cfg.Topics {
-			peers := n.allPeersOfTopic(topic)
-			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
-			metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+			reportTopicPeers(n, name, topic)
 		}
 	})
 }
