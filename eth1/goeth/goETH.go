@@ -25,7 +25,7 @@ import (
 
 const (
 	healthCheckTimeout        = 10 * time.Second
-	blocksInBatch      uint64 = 100000
+	blocksInBatch      uint64 = 25000
 )
 
 type eth1NodeStatus int32
