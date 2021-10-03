@@ -209,9 +209,12 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		// all peers
-		peers := n.host.Peerstore().Peers()
-		n.logger.Debug("connected peers status", zap.Int("count", len(peers)), zap.Any("peers", peers))
-		metricsAllConnectedPeers.Set(float64(len(peers)))
+		peersFromStore := n.host.Peerstore().Peers()
+		peersActive := n.peers.Active()
+		n.logger.Debug("connected peers status",
+			zap.Int("count active", len(peersActive)), zap.Int("count", len(peersFromStore)),
+			zap.Any("peersActive", peersActive), zap.Any("peers", peersFromStore))
+		metricsAllConnectedPeers.Set(float64(len(peersActive)))
 
 		// topic peers
 		n.psTopicsLock.RLock()
