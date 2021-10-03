@@ -16,7 +16,7 @@ import (
 	noise "github.com/libp2p/go-libp2p-noise"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
-	"github.com/libp2p/go-tcp-transport"
+	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/prysmaticlabs/prysm/shared/featureconfig"
@@ -38,6 +38,9 @@ import (
 
 const (
 	maxPeers = 100
+	udp4     = "udp4"
+	udp6     = "udp6"
+	tcp      = "tcp"
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -176,7 +179,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 		libp2p.UserAgent(version.GetBuildData()),
 		// TODO
 		//libp2p.ConnectionGater(&prysmP2pService.Service{}),
-		libp2p.Transport(tcp.NewTCPTransport),
+		libp2p.Transport(libp2ptcp.NewTCPTransport),
 	}
 
 	options = append(options, libp2p.Security(noise.ID, noise.New))
@@ -235,7 +238,7 @@ func (n *p2pNetwork) connectToBootnodes() error {
 			return err
 		}
 		// do not dial bootnodes with their tcp ports not set
-		if err := bootNode.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
+		if err := bootNode.Record().Load(enr.WithEntry(tcp, new(enr.TCP))); err != nil {
 			if !enr.IsNotFound(err) {
 				n.logger.Error("Could not retrieve tcp port", zap.Error(err))
 			}
@@ -256,9 +259,9 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 	// by default we will listen to all interfaces.
 	var bindIP net.IP
 	switch udpVersionFromIP(ipAddr) {
-	case "udp4":
+	case udp4:
 		bindIP = net.IPv4zero
-	case "udp6":
+	case udp6:
 		bindIP = net.IPv6zero
 	default:
 		return nil, errors.New("invalid ip provided")
@@ -435,9 +438,9 @@ func (n *p2pNetwork) isPeerAtLimit(inbound bool) bool {
 
 func udpVersionFromIP(ipAddr net.IP) string {
 	if ipAddr.To4() != nil {
-		return "udp4"
+		return udp4
 	}
-	return "udp6"
+	return udp6
 }
 
 func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort int) (*enode.LocalNode, error) {
@@ -497,7 +500,7 @@ func convertToSingleMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get peer id")
 	}
-	return multiAddressBuilderWithID(node.IP().String(), "tcp", uint(node.TCP()), id)
+	return multiAddressBuilderWithID(node.IP().String(), tcp, uint(node.TCP()), id)
 }
 
 func convertToInterfacePubkey(pubkey *ecdsa.PublicKey) crypto.PubKey {
