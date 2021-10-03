@@ -70,6 +70,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 		cfg.DBOptions.Logger = Logger
+		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))

@@ -67,6 +67,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Logger = Logger
+		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
@@ -80,7 +81,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
 		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
-			Logger.Fatal("failed to create beacon go-client", zap.Error(err))
+			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
+				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)

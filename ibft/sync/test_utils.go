@@ -46,14 +46,14 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 	return sks, nodes
 }
 
-// DecidedArr returns an array of signed decided msgs
-func DecidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey) []*proto.SignedMessage {
+// DecidedArr returns an array of signed decided msgs for the given identifier
+func DecidedArr(t *testing.T, maxSeq uint64, sks map[uint64]*bls.SecretKey, identifier []byte) []*proto.SignedMessage {
 	ret := make([]*proto.SignedMessage, 0)
 	for i := uint64(0); i <= maxSeq; i++ {
 		ret = append(ret, MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
 			Type:      proto.RoundState_Decided,
 			Round:     1,
-			Lambda:    []byte("lambda"),
+			Lambda:    identifier[:],
 			SeqNumber: i,
 		}))
 	}

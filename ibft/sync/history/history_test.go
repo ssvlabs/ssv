@@ -28,7 +28,7 @@ func TestSync(t *testing.T) {
 		Lambda:    []byte("lambda"),
 		SeqNumber: 2,
 	})
-	decided250Seq := sync.DecidedArr(t, 250, sks)
+	decided250Seq := sync.DecidedArr(t, 250, sks, []byte("lambda"))
 
 	tests := []struct {
 		name               string

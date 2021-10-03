@@ -134,7 +134,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		}
 	} else if cfg.DiscoveryType == "discv5" {
 		n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
-			PeerLimit: 45,
+			PeerLimit: maxPeers,
 			ScorerParams: &scorers.Config{
 				BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
 					Threshold:     5,
@@ -172,7 +172,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.handleStream()
 
-	n.watchTopicPeers()
+	n.watchPeers()
 
 	return n, nil
 }
@@ -206,15 +206,15 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
 
-func (n *p2pNetwork) watchTopicPeers() {
+func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		go reportConnectionsCount(n)
+
+		// topic peers
 		n.psTopicsLock.RLock()
 		defer n.psTopicsLock.RUnlock()
-
 		for name, topic := range n.cfg.Topics {
-			peers := n.allPeersOfTopic(topic)
-			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
-			metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+			reportTopicPeers(n, name, topic)
 		}
 	})
 }
@@ -283,7 +283,6 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to unmarshal message", zap.Error(err))
 				continue
 			}
-			reportIncomingSignedMessage(&cm, t)
 			n.propagateSignedMsg(&cm)
 		}
 	}
