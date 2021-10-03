@@ -50,8 +50,7 @@ func reportConnectionsCount(n *p2pNetwork) {
 	}
 	peersActiveDisv5 := n.peers.Active()
 	n.logger.Debug("connected peers status",
-		zap.Int("count active discv5", len(peersActiveDisv5)),
-		zap.Int("count conns", len(conns)),
+		zap.Int("count", len(conns)),
 		zap.Any("connsIDs", connsIDs),
 		zap.Any("peersActiveDisv5", peersActiveDisv5))
 	metricsAllConnectedPeers.Set(float64(len(conns)))
