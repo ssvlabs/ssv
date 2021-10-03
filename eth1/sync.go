@@ -93,7 +93,21 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 		return errors.New("failed to handle all events from sync")
 	}
 
-	return upgradeSyncOffset(logger, storage, syncOffset, syncEndedEvent)
+	if err := upgradeSyncOffset(logger, storage, syncOffset, syncEndedEvent); err != nil {
+		return err
+	}
+
+	if len(syncEndedEvent.Logs) > 0 {
+		// check if we need to fetch events that were fired during sync (in case it took too long)
+		currentBlock, err := client.CurrentBlock()
+		if err != nil {
+			logger.Warn("could not get current block to fetch events that were fired during sync")
+		} else if syncOffset.Uint64() < currentBlock {
+			return SyncEth1Events(logger, client, storage, syncOffset, handler)
+		}
+	}
+
+	return nil
 }
 
 // upgradeSyncOffset updates the sync offset after a sync

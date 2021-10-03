@@ -29,3 +29,8 @@ func (ec *ClientMock) Sync(fromBlock *big.Int) error {
 	<-time.After(ec.SyncTimeout)
 	return ec.SyncResponse
 }
+
+// CurrentBlock returns currentBlock
+func (ec *ClientMock) CurrentBlock() (uint64, error) {
+	return 0, nil
+}

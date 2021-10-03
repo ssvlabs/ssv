@@ -146,6 +146,10 @@ func (ec *eth1Client) HealthCheck() []string {
 	return []string{}
 }
 
+func (ec *eth1Client) CurrentBlock() (uint64, error) {
+	return ec.conn.BlockNumber(ec.ctx)
+}
+
 // connect connects to eth1 client
 func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
@@ -258,7 +262,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
-	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	currentBlock, err := ec.CurrentBlock()
 	if err != nil {
 		return errors.Wrap(err, "failed to get current block")
 	}

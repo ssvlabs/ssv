@@ -40,4 +40,5 @@ type Client interface {
 	EventsFeed() *event.Feed
 	Start() error
 	Sync(fromBlock *big.Int) error
+	CurrentBlock() (uint64, error)
 }
