@@ -10,13 +10,12 @@ import (
 )
 
 // ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, expectedLeaderF func(round uint64) uint64) pipeline.Pipeline {
+func ValidatePrePrepareMsg(valueCheck valcheck.ValueCheck, expectedLeader uint64) pipeline.Pipeline {
 	return pipeline.WrapFunc("validate pre-prepare", func(signedMessage *proto.SignedMessage) error {
 		if len(signedMessage.SignerIds) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")
 		}
 
-		expectedLeader := expectedLeaderF(signedMessage.Message.Round)
 		if signedMessage.SignerIds[0] != expectedLeader {
 			return errors.New(fmt.Sprintf("pre-prepare message sender (id %d) is not the round's leader (expected %d)", signedMessage.SignerIds[0], expectedLeader))
 		}

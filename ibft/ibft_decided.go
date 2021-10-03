@@ -20,7 +20,6 @@ func (i *ibftImpl) processDecidedQueueMessages() {
 			time.Sleep(time.Millisecond * 100)
 		}
 	}()
-	i.logger.Info("decided message queue started")
 }
 
 func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {

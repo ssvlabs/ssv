@@ -104,10 +104,10 @@ func NewInstance(opts *InstanceOptions) *Instance {
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
 
 		MsgQueue:            opts.Queue,
-		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-		PrepareMessages:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
+		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		PrepareMessages:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
+		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize())),
 
 		roundTimer: roundtimer.New(),
 
@@ -128,6 +128,7 @@ func NewInstance(opts *InstanceOptions) *Instance {
 func (i *Instance) Init() {
 	i.runInitOnce.Do(func() {
 		go i.StartMessagePipeline()
+		go i.StartPartialChangeRoundPipeline()
 		go i.startRoundTimerLoop()
 		go i.StartMainEventLoop()
 		i.initialized = true
@@ -243,6 +244,7 @@ func (i *Instance) BumpRound() {
 func (i *Instance) bumpToRound(round uint64) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
+	i.processCommitQuorumOnce = sync.Once{}
 	newRound := round
 	i.State.Round.Set(newRound)
 	pk, role := format.IdentifierUnformat(string(i.State.Lambda.Get()))
@@ -259,7 +261,7 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
 		for j := uint64(1); j <= i.State.Round.Get(); j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get()))
+			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), j))
 		}
 	}
 

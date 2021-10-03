@@ -12,8 +12,6 @@ type MessageContainer interface {
 	// QuorumAchieved returns true if enough msgs were received (round, value)
 	QuorumAchieved(round uint64, value []byte) (bool, []*proto.SignedMessage)
 
-	PartialChangeRoundQuorum(stateRound uint64) (found bool, lowestChangeRound uint64)
-
 	// AddMessage adds the given message to the container
 	AddMessage(msg *proto.SignedMessage)
 
