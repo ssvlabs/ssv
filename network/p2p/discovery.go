@@ -36,6 +36,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	maxPeers = 50
+)
+
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
 type discoveryNotifee struct {
 	host   host.Host
@@ -414,7 +418,6 @@ func (n *p2pNetwork) listenForNewNodes() {
 // active peers are above our set max peer limit.
 func (n *p2pNetwork) isPeerAtLimit(inbound bool) bool {
 	numOfConns := len(n.host.Network().Peers())
-	maxPeers := 45
 	// If we are measuring the limit for inbound peers
 	// we apply the high watermark buffer.
 	//if inbound {

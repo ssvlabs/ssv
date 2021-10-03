@@ -134,7 +134,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		}
 	} else if cfg.DiscoveryType == "discv5" {
 		n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
-			PeerLimit: 45,
+			PeerLimit: maxPeers,
 			ScorerParams: &scorers.Config{
 				BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
 					Threshold:     5,
@@ -209,12 +209,18 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		// all peers
-		peersFromStore := n.host.Peerstore().Peers()
-		peersActive := n.peers.Active()
+		conns := n.host.Network().Conns()
+		var connsIDs []string
+		for _, conn := range conns {
+			connsIDs = append(connsIDs, conn.RemotePeer().String())
+		}
+		peersActiveDisv5 := n.peers.Active()
 		n.logger.Debug("connected peers status",
-			zap.Int("count active", len(peersActive)), zap.Int("count", len(peersFromStore)),
-			zap.Any("peersActive", peersActive), zap.Any("peers", peersFromStore))
-		metricsAllConnectedPeers.Set(float64(len(peersActive)))
+			zap.Int("count active discv5", len(peersActiveDisv5)),
+			zap.Int("count conns", len(conns)),
+			zap.Any("connsIDs", connsIDs),
+			zap.Any("peersActiveDisv5", peersActiveDisv5))
+		metricsAllConnectedPeers.Set(float64(len(conns)))
 
 		// topic peers
 		n.psTopicsLock.RLock()
