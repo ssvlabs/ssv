@@ -3,9 +3,13 @@ module github.com/bloxapp/ssv
 go 1.15
 
 require (
+	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/attestantio/go-eth2-client v0.6.30
 	github.com/bloxapp/eth2-key-manager v1.0.6
 	github.com/dgraph-io/badger/v3 v3.2011.1
+	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-metrics v0.0.1 // indirect
+	github.com/docker/go-units v0.4.0 // indirect
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/ferranbt/fastssz v0.0.0-20210316165225-412ceaa5950e
 	github.com/gogo/protobuf v1.3.2
@@ -22,6 +26,8 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.4.0
 	github.com/libp2p/go-tcp-transport v0.2.1
 	github.com/multiformats/go-multiaddr v0.3.1
+	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pborman/uuid v1.2.1
 	github.com/pkg/errors v0.9.1
@@ -39,7 +45,6 @@ require (
 	go.uber.org/zap v1.16.0
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	google.golang.org/grpc v1.37.0
-	google.golang.org/protobuf v1.26.0
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )
 

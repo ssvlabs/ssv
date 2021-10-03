@@ -23,9 +23,9 @@ func TestInstanceStop(t *testing.T) {
 	instance := &Instance{
 		MsgQueue:           msgqueue.New(),
 		eventQueue:         eventqueue.New(),
-		PrepareMessages:    msgcontinmem.New(3),
-		PrePrepareMessages: msgcontinmem.New(3),
-		CommitMessages:     msgcontinmem.New(3),
+		PrepareMessages:    msgcontinmem.New(3, 2),
+		PrePrepareMessages: msgcontinmem.New(3, 2),
+		CommitMessages:     msgcontinmem.New(3, 2),
 		Config:             proto.DefaultConsensusParams(),
 		State: &proto.State{
 			Round:     threadsafe.Uint64(1),
@@ -39,7 +39,7 @@ func TestInstanceStop(t *testing.T) {
 			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
-		ValueCheck:     bytesval.New([]byte(time.Now().Weekday().String())),
+		ValueCheck:     bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:         zaptest.NewLogger(t),
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 		roundTimer:     roundtimer.New(),
@@ -104,8 +104,8 @@ func TestInstanceStop(t *testing.T) {
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
 	require.EqualValues(t, proto.RoundState_Stopped, instance.State.Stage.Get())
-	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get())))
-	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber, instance.State.Round.Get()))
+	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber)))
+	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State.Lambda.Get(), msg.Message.SeqNumber))
 	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
 }
 
@@ -237,7 +237,7 @@ func TestBumpRound(t *testing.T) {
 		})
 		require.True(t, didA)
 		require.True(t, didB)
-		require.True(t, didC)
+		require.False(t, didC) // commit can be called only once
 
 		require.EqualValues(t, 100, instance.State.Round.Get())
 	})
@@ -263,7 +263,7 @@ func TestBumpRound(t *testing.T) {
 		})
 		require.True(t, didA)
 		require.True(t, didB)
-		require.True(t, didC)
+		require.False(t, didC) // commit can be called only once
 
 		require.EqualValues(t, 101, instance.State.Round.Get())
 	})

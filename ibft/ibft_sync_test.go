@@ -15,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync"
 	"testing"
 	"time"
 )
@@ -97,7 +98,7 @@ func TestSyncFromScratch(t *testing.T) {
 
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
-	i1.(*ibftImpl).SyncIBFT()
+	require.NoError(t, i1.(*ibftImpl).SyncIBFT())
 	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
@@ -120,13 +121,42 @@ func TestSyncFromMiddle(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
-	i1.(*ibftImpl).SyncIBFT()
+	require.NoError(t, i1.(*ibftImpl).SyncIBFT())
 
 	// test after sync
 	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
+}
+
+func TestConcurrentSync(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	network := local.NewLocalNetwork()
+
+	identifier := []byte("lambda_11")
+	s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
+	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes)
+
+	// first sync
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		require.NoError(t, i1.(*ibftImpl).SyncIBFT())
+		highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+		require.True(t, found)
+		require.NoError(t, err)
+		require.EqualValues(t, 100, highest.Message.SeqNumber)
+		wg.Done()
+	}()
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		require.EqualError(t, i1.(*ibftImpl).SyncIBFT(), "failed to start iBFT sync, already running")
+	}()
+
+	wg.Wait()
 }
 
 func TestSyncFromScratch100Sequences(t *testing.T) {
@@ -139,7 +169,7 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes)
 
-	i1.(*ibftImpl).SyncIBFT()
+	require.NoError(t, i1.(*ibftImpl).SyncIBFT())
 	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
@@ -164,7 +194,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, found)
 
-		i1.(*ibftImpl).SyncIBFT()
+		require.NoError(t, i1.(*ibftImpl).SyncIBFT())
 
 		// test after sync
 		highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -190,7 +220,7 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, found)
 
-		i1.(*ibftImpl).SyncIBFT()
+		require.NoError(t, i1.(*ibftImpl).SyncIBFT())
 		time.Sleep(time.Second * 1) // wait for sync to complete
 
 		// test after sync

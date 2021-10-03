@@ -53,7 +53,7 @@ loop:
 		}
 
 		var wg sync.WaitGroup
-		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get(), i.State.Round.Get())); queueCnt > 0 {
+		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())); queueCnt > 0 {
 			logger := i.Logger.With(zap.Uint64("round", i.State.Round.Get()))
 			logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
@@ -75,42 +75,6 @@ loop:
 		}
 	}
 	i.Logger.Debug("instance msg pipeline loop stopped")
-}
-
-// StartPartialChangeRoundPipeline continuously tries to find partial change round quorum
-func (i *Instance) StartPartialChangeRoundPipeline() {
-loop:
-	for {
-		if i.Stopped() {
-			break loop
-		}
-
-		var wg sync.WaitGroup
-		if i.MsgQueue.MsgCount(msgqueue.IBFTAllRoundChangeIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())) > 0 {
-			wg.Add(1)
-			if added := i.eventQueue.Add(func() {
-				found, err := i.ProcessChangeRoundPartialQuorum()
-				if err != nil {
-					i.Logger.Error("failed finding partial change round quorum", zap.Error(err))
-				}
-				if !found {
-					// if not found, wait 1 second and then finish to try again
-					time.Sleep(time.Second * 1)
-				}
-				//i.Logger.Debug("done with round change message")
-				wg.Done()
-			}); !added {
-				i.Logger.Debug("could not add round change to event queue")
-				time.Sleep(time.Second * 1)
-				wg.Done()
-			}
-			// If we added a task to the queue, wait for it to finish and then loop again to add more
-			wg.Wait()
-		} else {
-			time.Sleep(time.Second * 1)
-		}
-	}
-	i.Logger.Debug("instance partial change round pipeline loop stopped")
 }
 
 func (i *Instance) startRoundTimerLoop() {
