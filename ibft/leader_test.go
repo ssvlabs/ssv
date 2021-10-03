@@ -19,7 +19,7 @@ func TestLeaderCalculation(t *testing.T) {
 
 	sk, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3, 2),
+		PrepareMessages: msgcontinmem.New(3),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
 		State: &proto.State{

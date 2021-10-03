@@ -105,7 +105,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 		ValidatorShare: TestShares()[1],
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
-		ValueCheck:     bytesval.NewNotEqualBytes(InvalidTestInputValue()),
+		ValueCheck:     bytesval.New(TestInputValue()),
 		Config:         proto.DefaultConsensusParams(),
 		Lambda:         lambda,
 		LeaderSelector: &constant.Constant{LeaderIndex: 0},
@@ -215,11 +215,6 @@ func TestInputValue() []byte {
 	return []byte("testing value")
 }
 
-// InvalidTestInputValue a const input invalid test value
-func InvalidTestInputValue() []byte {
-	return []byte("invalid testing value")
-}
-
 // SimulateTimeout simulates instance timeout
 func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 	instance.BumpRound()
@@ -229,20 +224,20 @@ func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
 // RequireReturnedTrueNoError will call ProcessMessage and verifies it returns true and nil for execution
 func RequireReturnedTrueNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
-	require.True(t, res)
 	require.NoError(t, err)
+	require.True(t, res)
 }
 
 // RequireReturnedFalseNoError will call ProcessMessage and verifies it returns false and nil for execution
 func RequireReturnedFalseNoError(t *testing.T, f func() (bool, error)) {
 	res, err := f()
-	require.False(t, res)
 	require.NoError(t, err)
+	require.False(t, res)
 }
 
 // RequireReturnedTrueWithError will call ProcessMessage and verifies it returns true and error for execution
 func RequireReturnedTrueWithError(t *testing.T, f func() (bool, error), errStr string) {
 	res, err := f()
-	require.True(t, res)
 	require.EqualError(t, err, errStr)
+	require.True(t, res)
 }

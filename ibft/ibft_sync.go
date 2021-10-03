@@ -23,7 +23,6 @@ func (i *ibftImpl) processSyncQueueMessages() {
 			time.Sleep(time.Millisecond * 100)
 		}
 	}()
-	i.logger.Info("sync messages queue started")
 }
 
 func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
@@ -43,7 +42,6 @@ func (i *ibftImpl) SyncIBFT() error {
 		return errors.New("failed to start iBFT sync, already running")
 	}
 	defer i.syncingLock.Release(1)
-
 	i.logger.Info("syncing iBFT..")
 
 	// stop current instance and return any waiting chan.

@@ -110,12 +110,12 @@ func TestSyncMessageIndex(t *testing.T) {
 }
 
 func TestIBFTMessageIndexKey(t *testing.T) {
-	require.EqualValues(t, "lambda_01020304_seqNumber_1", IBFTMessageIndexKey([]byte{1, 2, 3, 4}, 1))
+	require.EqualValues(t, "lambda_01020304_seqNumber_1_round_2", IBFTMessageIndexKey([]byte{1, 2, 3, 4}, 1, 2))
 }
 
 func TestIBFTMessageIndex(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
-		require.EqualValues(t, []string{"lambda_01020304_seqNumber_1"}, iBFTMessageIndex()(&network.Message{
+		require.EqualValues(t, []string{"lambda_01020304_seqNumber_1_round_2"}, iBFTMessageIndex()(&network.Message{
 			SignedMessage: &proto.SignedMessage{
 				Message: &proto.Message{
 					Lambda:    []byte{1, 2, 3, 4},
