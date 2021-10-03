@@ -172,7 +172,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.handleStream()
 
-	n.watchTopicPeers()
+	n.watchPeers()
 
 	return n, nil
 }
@@ -206,11 +206,16 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
 
-func (n *p2pNetwork) watchTopicPeers() {
+func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		// all peers
+		peers := n.host.Peerstore().Peers()
+		n.logger.Debug("connected peers status", zap.Int("count", len(peers)), zap.Any("peers", peers))
+		metricsAllConnectedPeers.Set(float64(len(peers)))
+
+		// topic peers
 		n.psTopicsLock.RLock()
 		defer n.psTopicsLock.RUnlock()
-
 		for name, topic := range n.cfg.Topics {
 			peers := n.allPeersOfTopic(topic)
 			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))

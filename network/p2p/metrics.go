@@ -7,6 +7,10 @@ import (
 )
 
 var (
+	metricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:network:all_connected_peers",
+		Help: "Count connected peers for a validator",
+	})
 	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:connected_peers",
 		Help: "Count connected peers for a validator",
@@ -22,6 +26,9 @@ var (
 )
 
 func init() {
+	if err := prometheus.Register(metricsAllConnectedPeers); err != nil {
+		log.Println("could not register prometheus collector")
+	}
 	if err := prometheus.Register(metricsConnectedPeers); err != nil {
 		log.Println("could not register prometheus collector")
 	}
@@ -32,4 +39,3 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 }
-
