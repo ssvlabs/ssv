@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 )
 
-// BroadcastMainChannel broadcasts the given msg on main channel
-func (n *p2pNetwork) BroadcastMainChannel(msg *proto.SignedMessage) error {
+// BroadcastMainTopic broadcasts the given msg on main channel
+func (n *p2pNetwork) BroadcastMainTopic(msg *proto.SignedMessage) error {
 	msgBytes, err := json.Marshal(network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
@@ -39,4 +40,20 @@ func (n *p2pNetwork) SubscribeToMainTopic() error {
 	go n.listen(sub)
 
 	return nil
+}
+
+// getTopic return topic by validator public key
+func (n *p2pNetwork) getMainTopic() (*pubsub.Topic, error) {
+	n.psTopicsLock.RLock()
+	defer n.psTopicsLock.RUnlock()
+
+	name := "main"
+	if _, ok := n.cfg.Topics[name]; !ok {
+		topic, err := n.pubsub.Join(getTopicName(name))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to join main topic")
+		}
+		n.cfg.Topics[name] = topic
+	}
+	return n.cfg.Topics[name], nil
 }

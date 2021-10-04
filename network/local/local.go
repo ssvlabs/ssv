@@ -203,8 +203,8 @@ func (n *Local) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *netw
 	return nil
 }
 
-// BroadcastMainChannel implementation
-func (n *Local) BroadcastMainChannel(msg *proto.SignedMessage) error {
+// BroadcastMainTopic implementation
+func (n *Local) BroadcastMainTopic(msg *proto.SignedMessage) error {
 	return nil
 }
 
