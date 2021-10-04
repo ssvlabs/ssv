@@ -341,6 +341,22 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 	return n.cfg.Topics[topic], nil
 }
 
+// getTopic return topic by validator public key
+func (n *p2pNetwork) getMainTopic() (*pubsub.Topic, error) {
+	n.psTopicsLock.RLock()
+	defer n.psTopicsLock.RUnlock()
+
+	name := "main"
+	if _, ok := n.cfg.Topics[name]; !ok {
+		topic, err := n.pubsub.Join(getTopicName(name))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to join main topic")
+		}
+		n.cfg.Topics[name] = topic
+	}
+	return n.cfg.Topics[name], nil
+}
+
 // AllPeers returns all connected peers for a validator PK (except for the validator itself)
 func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	topic, err := n.getTopic(validatorPk)

@@ -291,6 +291,16 @@ func (n *TestNetwork) MaxBatch() uint64 {
 	return uint64(n.maxBatch)
 }
 
+// BroadcastMainChannel implementation
+func (n *TestNetwork) BroadcastMainChannel(msg *proto.SignedMessage) error {
+	return nil
+}
+
+// SubscribeToMainTopic implementation
+func (n *TestNetwork) SubscribeToMainTopic() error {
+	return nil
+}
+
 // TestStream struct
 type TestStream struct {
 	C    chan []byte

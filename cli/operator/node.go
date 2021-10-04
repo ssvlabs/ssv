@@ -96,6 +96,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.Network = p2pNet
 
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger

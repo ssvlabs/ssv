@@ -157,6 +157,8 @@ func (exp *exporter) Start() error {
 		exp.processIncomingExportRequests(cn, exp.ws.OutboundSubject())
 	}()
 
+	exp.startMainTopic()
+
 	go exp.triggerAllValidators()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
@@ -176,6 +178,13 @@ func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 		agents = append(agents, agent)
 	}
 	return agents
+}
+
+// startMainTopic starts to listen to main topic
+func (exp *exporter) startMainTopic() {
+	if err := tasks.Retry(exp.network.SubscribeToMainTopic, 5); err != nil {
+		exp.logger.Error("failed to subscribe to main topic", zap.Error(err))
+	}
 }
 
 // processIncomingExportRequests waits for incoming messages and

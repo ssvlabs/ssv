@@ -26,6 +26,15 @@ func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage
 
 	n.logger.Debug("Broadcasting decided message", zap.String("lambda", string(msg.Message.Lambda)), zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
 
+	// publishing on main topic as well
+	go func() {
+		if mainTopic, err := n.getMainTopic(); err != nil {
+			n.logger.Error("failed to get main topic")
+		} else if err := mainTopic.Publish(n.ctx, msgBytes[:]); err != nil {
+			n.logger.Error("failed to publish on main topic")
+		}
+	}()
+
 	metricsIBFTDecidedMsgsOutbound.WithLabelValues(unwrapTopicName(topic.String()),
 		strconv.FormatUint(msg.Message.SeqNumber, 10)).Inc()
 

@@ -90,4 +90,10 @@ type Network interface {
 
 	// MaxBatch returns the maximum batch size for network responses
 	MaxBatch() uint64
+
+	// BroadcastMainChannel broadcasts the given msg on main channel
+	BroadcastMainChannel(msg *proto.SignedMessage) error
+
+	// SubscribeToMainTopic subscribes to main topic
+	SubscribeToMainTopic() error
 }
