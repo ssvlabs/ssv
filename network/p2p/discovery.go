@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/commons"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -22,7 +23,6 @@ import (
 	"github.com/prysmaticlabs/prysm/shared/featureconfig"
 	"github.com/prysmaticlabs/prysm/shared/fileutil"
 	"github.com/prysmaticlabs/prysm/shared/iputils"
-	"github.com/prysmaticlabs/prysm/shared/version"
 	"go.opencensus.io/trace"
 	"net"
 	"path/filepath"
@@ -176,7 +176,7 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	options := []libp2p.Option{
 		privKeyOption(priKey),
 		libp2p.ListenAddrs(listen),
-		libp2p.UserAgent(version.GetBuildData()),
+		libp2p.UserAgent(commons.GetBuildData()),
 		// TODO
 		//libp2p.ConnectionGater(&prysmP2pService.Service{}),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
