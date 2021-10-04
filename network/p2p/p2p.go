@@ -189,6 +189,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		//pubsub.WithSubscriptionFilter(s),
 		pubsub.WithPeerOutboundQueueSize(256),
 		pubsub.WithValidateQueueSize(256),
+		pubsub.WithFloodPublish(true),
 	}
 
 	if len(cfg.PubSubTraceOut) > 0 {
