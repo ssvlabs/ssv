@@ -157,9 +157,9 @@ func (exp *exporter) Start() error {
 		exp.processIncomingExportRequests(cn, exp.ws.OutboundSubject())
 	}()
 
-	exp.startMainTopic()
-
 	go exp.triggerAllValidators()
+
+	exp.startMainTopic()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
