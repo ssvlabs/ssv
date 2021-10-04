@@ -62,6 +62,7 @@ func reportConnectionsCount(n *p2pNetwork) {
 
 func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 	peers := n.allPeersOfTopic(topic)
-	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
+	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
+		zap.Any("peers", peers))
 	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
