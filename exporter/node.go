@@ -182,7 +182,7 @@ func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 
 // startMainTopic starts to listen to main topic
 func (exp *exporter) startMainTopic() {
-	if err := tasks.Retry(exp.network.SubscribeToMainTopic, 5); err != nil {
+	if err := tasks.Retry(exp.network.SubscribeToMainTopic, 3); err != nil {
 		exp.logger.Error("failed to subscribe to main topic", zap.Error(err))
 	}
 }
@@ -305,7 +305,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 			return err
 		}
 		return nil
-	}, 5); err != nil {
+	}, 3); err != nil {
 		logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}

@@ -93,7 +93,7 @@ func (n *operatorNode) init(opts Options) error {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
-	if err := tasks.Retry(n.net.SubscribeToMainTopic, 5); err != nil {
+	if err := tasks.Retry(n.net.SubscribeToMainTopic, 3); err != nil {
 		n.logger.Error("failed to subscribe to main topic", zap.Error(err))
 	}
 	n.validatorController.StartValidators()
