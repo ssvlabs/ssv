@@ -94,10 +94,10 @@ func (n *operatorNode) init(opts Options) error {
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 	n.validatorController.StartValidators()
-	n.dutyCtrl.Start()
 	if err := tasks.Retry(n.net.SubscribeToMainTopic, 3); err != nil {
 		n.logger.Error("failed to subscribe to main topic", zap.Error(err))
 	}
+	n.dutyCtrl.Start()
 
 	return nil
 }
