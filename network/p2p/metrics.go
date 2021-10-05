@@ -44,24 +44,25 @@ func init() {
 }
 
 func reportConnectionsCount(n *p2pNetwork) {
-	conns := n.host.Network().Conns()
-	var connsIDs []string
-	for _, conn := range conns {
-		connsIDs = append(connsIDs, conn.RemotePeer().String())
+	peers := n.host.Network().Peers()
+	var ids []string
+	for _, pid := range peers {
+		ids = append(ids, pid.String())
 	}
 	var peersActiveDisv5 []peer.ID
 	if n.peers != nil {
 		peersActiveDisv5 = n.peers.Active()
 	}
 	n.logger.Debug("connected peers status",
-		zap.Int("count", len(conns)),
-		zap.Any("connsIDs", connsIDs),
+		zap.Int("count", len(ids)),
+		zap.Any("ids", ids),
 		zap.Any("peersActiveDisv5", peersActiveDisv5))
-	metricsAllConnectedPeers.Set(float64(len(conns)))
+	metricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
 func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 	peers := n.allPeersOfTopic(topic)
-	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
+	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
+		zap.Any("peers", peers))
 	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }

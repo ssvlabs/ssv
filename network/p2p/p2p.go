@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -49,16 +50,17 @@ type listener struct {
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx           context.Context
-	cfg           *Config
-	listenersLock sync.Locker
-	dv5Listener   iListener
-	listeners     []listener
-	logger        *zap.Logger
-	privKey       *ecdsa.PrivateKey
-	peers         *peers.Status
-	host          p2pHost.Host
-	pubsub        *pubsub.PubSub
+	ctx             context.Context
+	cfg             *Config
+	listenersLock   sync.Locker
+	dv5Listener     iListener
+	listeners       []listener
+	logger          *zap.Logger
+	privKey         *ecdsa.PrivateKey
+	peers           *peers.Status
+	host            p2pHost.Host
+	pubsub          *pubsub.PubSub
+	operatorPrivKey *rsa.PrivateKey
 
 	psTopicsLock *sync.RWMutex
 }
@@ -189,6 +191,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		//pubsub.WithSubscriptionFilter(s),
 		pubsub.WithPeerOutboundQueueSize(256),
 		pubsub.WithValidateQueueSize(256),
+		pubsub.WithFloodPublish(true),
 	}
 
 	if len(cfg.PubSubTraceOut) > 0 {
@@ -210,7 +213,13 @@ func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		go reportConnectionsCount(n)
 
-		// topic peers
+		// main topic peers
+		mainTopic, err := n.getMainTopic()
+		if err != nil {
+			n.logger.Warn("could not get main topic", zap.String("err", err.Error()))
+		}
+		reportTopicPeers(n, "main", mainTopic)
+		// topics peers
 		n.psTopicsLock.RLock()
 		defer n.psTopicsLock.RUnlock()
 		for name, topic := range n.cfg.Topics {

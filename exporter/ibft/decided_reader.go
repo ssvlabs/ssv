@@ -51,7 +51,7 @@ func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 		network:        opts.Network,
 		config:         opts.Config,
 		validatorShare: opts.ValidatorShare,
-		identifier:     []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
+		identifier: []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
 			beacon.RoleTypeAttester.String())),
 	}
 	return &r

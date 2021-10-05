@@ -80,10 +80,6 @@ func TestExecQueue_QueueDistinct(t *testing.T) {
 	// waiting for function to execute
 	time.Sleep(4 * time.Millisecond)
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
-	q.QueueDistinct(inc, "1")
-	q.QueueDistinct(inc, "1")
-	q.QueueDistinct(inc, "1")
-	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
 }
 
 func TestExecQueue_Empty(t *testing.T) {
