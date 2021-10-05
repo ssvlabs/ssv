@@ -96,10 +96,10 @@ func New(opts Options) Exporter {
 		},
 	)
 	e := exporter{
-		ctx:         opts.Ctx,
-		storage:     storage.NewExporterStorage(opts.DB, opts.Logger),
-		ibftStorage: &ibftStorage,
-		validatorStorage: validatorStorage,
+		ctx:                  opts.Ctx,
+		storage:              storage.NewExporterStorage(opts.DB, opts.Logger),
+		ibftStorage:          &ibftStorage,
+		validatorStorage:     validatorStorage,
 		logger:               opts.Logger.With(zap.String("component", "exporter/node")),
 		network:              opts.Network,
 		eth1Client:           opts.Eth1Client,
@@ -110,10 +110,10 @@ func New(opts Options) Exporter {
 		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
 		ws:                   opts.WS,
 		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
-			Logger:  opts.Logger,
-			Network: opts.Network,
+			Logger:           opts.Logger,
+			Network:          opts.Network,
 			ValidatorStorage: validatorStorage,
-			IbftStorage: &ibftStorage,
+			IbftStorage:      &ibftStorage,
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
