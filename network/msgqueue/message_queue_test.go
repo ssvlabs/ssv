@@ -143,7 +143,7 @@ func TestMessageQueue_Concurrent(t *testing.T) {
 		}
 	}()
 
-	// waiting for 2 messages to be added nd then starts to count and pop messages
+	// waiting for 2 messages to be added and then starts to count and pop messages
 	<- ibftMsgAdded
 	<- sigMsgAdded
 
@@ -170,7 +170,7 @@ func TestMessageQueue_Concurrent(t *testing.T) {
 				require.NotNil(t, msgQ.PopMessage(fmt.Sprintf("lambda_01020304_seqNumber_%d_round_%d", seq, r)))
 				require.NotNil(t, msgQ.PopMessage(fmt.Sprintf("sig_lambda_01020304_seqNumber_%d", seq)))
 			}
-			time.Sleep(1 * time.Millisecond)
+			time.Sleep(2 * time.Millisecond)
 		}
 	}()
 
