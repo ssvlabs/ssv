@@ -97,11 +97,10 @@ func (cr *commitReader) onValidCommitMessage(msg *proto.SignedMessage) error {
 	if !found {
 		return nil
 	}
-	if err := decided.VerifyForAggregation(msg); err != nil {
-		logger.Debug("not verified for aggregation", zap.String("why", err.Error()))
-		return nil
-	}
 	if err = decided.Aggregate(msg); err != nil {
+		if err == proto.ErrDuplicateMsgSigner {
+			return nil
+		}
 		return errors.Wrap(err, "could not aggregate commit message")
 	}
 	if err := cr.ibftStorage.SaveDecided(decided); err != nil {

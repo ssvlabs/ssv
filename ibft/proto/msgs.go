@@ -9,6 +9,10 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
+var (
+	ErrDuplicateMsgSigner = errors.New("could not aggregate messages with duplicate signers")
+)
+
 // Compare returns true if both messages are equal.
 // DOES NOT compare signatures
 func (msg *Message) Compare(other *Message) bool {
@@ -101,26 +105,6 @@ func (msg *SignedMessage) SignersIDString() string {
 
 // Aggregate serialize and aggregates signature and signer ID to signed message
 func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
-	if err := msg.VerifyForAggregation(other); err != nil {
-		return err
-	}
-	// aggregate
-	sig := &bls.Sign{}
-	if err := sig.Deserialize(msg.Signature); err != nil {
-		return err
-	}
-	otherSig := &bls.Sign{}
-	if err := otherSig.Deserialize(other.Signature); err != nil {
-		return err
-	}
-	sig.Add(otherSig)
-	msg.Signature = sig.Serialize()
-	msg.SignerIds = append(msg.SignerIds, other.SignerIds...)
-	return nil
-}
-
-// VerifyForAggregation verifies that the given message is valid for aggregation
-func (msg *SignedMessage) VerifyForAggregation(other *SignedMessage) error {
 	root, err := msg.Message.SigningRoot()
 	if err != nil {
 		return err
@@ -137,10 +121,22 @@ func (msg *SignedMessage) VerifyForAggregation(other *SignedMessage) error {
 	for _, id := range msg.SignerIds {
 		for _, otherID := range other.SignerIds {
 			if id == otherID {
-				return errors.New("can't aggregate messages with similar signers")
+				return ErrDuplicateMsgSigner
 			}
 		}
 	}
+	// aggregate
+	sig := &bls.Sign{}
+	if err := sig.Deserialize(msg.Signature); err != nil {
+		return err
+	}
+	otherSig := &bls.Sign{}
+	if err := otherSig.Deserialize(other.Signature); err != nil {
+		return err
+	}
+	sig.Add(otherSig)
+	msg.Signature = sig.Serialize()
+	msg.SignerIds = append(msg.SignerIds, other.SignerIds...)
 	return nil
 }
 
