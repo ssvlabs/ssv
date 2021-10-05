@@ -3,6 +3,7 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -106,6 +107,7 @@ func (cr *commitReader) onValidCommitMessage(msg *proto.SignedMessage) error {
 	if err := cr.ibftStorage.SaveDecided(decided); err != nil {
 		return errors.Wrap(err, "could not save aggregated decided message")
 	}
+	ibft.ReportDecided(pkHex, msg)
 	logger.Debug("decided message was updated", zap.Uint64("seq", decided.Message.SeqNumber))
 	return nil
 }
