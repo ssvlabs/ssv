@@ -101,7 +101,25 @@ func (msg *SignedMessage) SignersIDString() string {
 
 // Aggregate serialize and aggregates signature and signer ID to signed message
 func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
-	// verify same message
+	if err := msg.VerifyForAggregation(other); err != nil {
+		return err
+	}
+	// aggregate
+	sig := &bls.Sign{}
+	if err := sig.Deserialize(msg.Signature); err != nil {
+		return err
+	}
+	otherSig := &bls.Sign{}
+	if err := otherSig.Deserialize(other.Signature); err != nil {
+		return err
+	}
+	sig.Add(otherSig)
+	msg.Signature = sig.Serialize()
+	msg.SignerIds = append(msg.SignerIds, other.SignerIds...)
+	return nil
+}
+
+func (msg *SignedMessage) VerifyForAggregation(other *SignedMessage) error {
 	root, err := msg.Message.SigningRoot()
 	if err != nil {
 		return err
@@ -122,19 +140,6 @@ func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 			}
 		}
 	}
-
-	// aggregate
-	sig := &bls.Sign{}
-	if err := sig.Deserialize(msg.Signature); err != nil {
-		return err
-	}
-	otherSig := &bls.Sign{}
-	if err := otherSig.Deserialize(other.Signature); err != nil {
-		return err
-	}
-	sig.Add(otherSig)
-	msg.Signature = sig.Serialize()
-	msg.SignerIds = append(msg.SignerIds, other.SignerIds...)
 	return nil
 }
 

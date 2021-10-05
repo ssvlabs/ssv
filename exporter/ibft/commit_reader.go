@@ -81,6 +81,10 @@ func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
 	}
 	decided, found, err := cr.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if found {
+		if err := decided.VerifyForAggregation(msg); err != nil {
+			logger.Debug("could not verify for aggregation", zap.String("why", err.Error()))
+			return nil
+		}
 		if err = decided.Aggregate(msg); err != nil {
 			return errors.Wrap(err, "could not aggregate commit message")
 		}
