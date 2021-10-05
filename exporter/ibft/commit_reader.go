@@ -88,7 +88,10 @@ func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
 		if err = decided.Aggregate(msg); err != nil {
 			return errors.Wrap(err, "could not aggregate commit message")
 		}
-		return cr.ibftStorage.SaveDecided(decided)
+		if err := cr.ibftStorage.SaveDecided(decided); err != nil {
+			return errors.Wrap(err, "could not save aggregated decided message")
+		}
+		logger.Debug("decided message was updated", zap.Uint64("seq", decided.Message.SeqNumber))
 	}
 	return err
 }
