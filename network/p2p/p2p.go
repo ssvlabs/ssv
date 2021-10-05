@@ -213,7 +213,13 @@ func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
 		go reportConnectionsCount(n)
 
-		// topic peers
+		// main topic peers
+		mainTopic, err := n.getMainTopic()
+		if err != nil {
+			n.logger.Warn("could not get main topic", zap.String("err", err.Error()))
+		}
+		reportTopicPeers(n, "main", mainTopic)
+		// topics peers
 		n.psTopicsLock.RLock()
 		defer n.psTopicsLock.RUnlock()
 		for name, topic := range n.cfg.Topics {
