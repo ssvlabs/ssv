@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -58,7 +59,7 @@ func (cr *commitReader) listenToNetwork(msgChan <-chan *proto.SignedMessage) {
 			continue
 		}
 		if err := cr.handleCommitMessage(msg); err != nil {
-			cr.logger.Warn("could not handle commit message", zap.String("err", err.Error()))
+			cr.logger.Debug("could not handle commit message", zap.String("err", err.Error()))
 		}
 	}
 }
@@ -80,7 +81,6 @@ func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
 		return nil
 	}
 	if err := validateCommitMsg(msg, share); err != nil {
-		logger.Debug("invalid commit message")
 		return errors.Wrap(err, "invalid commit message")
 	}
 	return cr.onValidCommitMessage(msg)
@@ -112,11 +112,12 @@ func (cr *commitReader) onValidCommitMessage(msg *proto.SignedMessage) error {
 
 // validateCommitMsg validates commit message
 func validateCommitMsg(msg *proto.SignedMessage, share *validatorstorage.Share) error {
+	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String()))
 	p := pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
+		auth.ValidateLambdas(identifier),
 		auth.AuthorizeMsg(share),
-		auth.ValidateQuorum(share.ThresholdSize()),
 	)
 	return p.Run(msg)
 }
