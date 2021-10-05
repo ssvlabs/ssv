@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -18,8 +17,6 @@ import (
 type CommitReaderOptions struct {
 	Logger  *zap.Logger
 	Network network.Network
-	Config  *proto.InstanceConfig
-	PK      *bls.PublicKey
 }
 
 type commitReader struct {
@@ -27,15 +24,13 @@ type commitReader struct {
 	network          network.Network
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
-	publicKey        *bls.PublicKey
 }
 
-// newCommitReader creates new instance
-func newCommitReader(opts CommitReaderOptions) Reader {
+// NewCommitReader creates new instance
+func NewCommitReader(opts CommitReaderOptions) Reader {
 	r := &commitReader{
-		logger:    opts.Logger.With(zap.String("who", "commit_reader")),
-		network:   opts.Network,
-		publicKey: opts.PK,
+		logger:  opts.Logger.With(zap.String("who", "commit_reader")),
+		network: opts.Network,
 	}
 	return r
 }

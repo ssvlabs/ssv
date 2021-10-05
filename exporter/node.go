@@ -64,22 +64,26 @@ type Options struct {
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx                             context.Context
-	storage                         storage.Storage
-	validatorStorage                validatorstorage.ICollection
-	ibftStorage                     collections.Iibft
-	logger                          *zap.Logger
-	network                         network.Network
-	eth1Client                      eth1.Client
-	beacon                          beacon.Beacon
-	mainQueue                       tasks.Queue
-	decidedReadersQueue             tasks.Queue
-	networkReadersQueue             tasks.Queue
-	metaDataReadersQueue            tasks.Queue
-	ws                              api.WebSocketServer
+	ctx              context.Context
+	storage          storage.Storage
+	validatorStorage validatorstorage.ICollection
+	ibftStorage      collections.Iibft
+	logger           *zap.Logger
+	network          network.Network
+	eth1Client       eth1.Client
+	beacon           beacon.Beacon
+
+	ws           api.WebSocketServer
+	commitReader ibft.Reader
+
 	wsAPIPort                       int
 	ibftSyncEnabled                 bool
 	validatorMetaDataUpdateInterval time.Duration
+
+	mainQueue            tasks.Queue
+	decidedReadersQueue  tasks.Queue
+	networkReadersQueue  tasks.Queue
+	metaDataReadersQueue tasks.Queue
 }
 
 // New creates a new Exporter instance
@@ -95,15 +99,19 @@ func New(opts Options) Exporter {
 				Logger: opts.Logger,
 			},
 		),
-		logger:                          opts.Logger.With(zap.String("component", "exporter/node")),
-		network:                         opts.Network,
-		eth1Client:                      opts.Eth1Client,
-		beacon:                          opts.Beacon,
-		mainQueue:                       tasks.NewExecutionQueue(mainQueueInterval),
-		decidedReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
-		networkReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
-		metaDataReadersQueue:            tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
-		ws:                              opts.WS,
+		logger:               opts.Logger.With(zap.String("component", "exporter/node")),
+		network:              opts.Network,
+		eth1Client:           opts.Eth1Client,
+		beacon:               opts.Beacon,
+		mainQueue:            tasks.NewExecutionQueue(mainQueueInterval),
+		decidedReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
+		networkReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
+		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
+		ws:                   opts.WS,
+		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
+			Logger:  opts.Logger,
+			Network: opts.Network,
+		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
 		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
@@ -159,7 +167,9 @@ func (exp *exporter) Start() error {
 
 	go exp.triggerAllValidators()
 
-	exp.startMainTopic()
+	go exp.commitReader.Start()
+
+	go exp.startMainTopic()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
