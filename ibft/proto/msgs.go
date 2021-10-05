@@ -119,6 +119,7 @@ func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 	return nil
 }
 
+// VerifyForAggregation verifies that the given message is valid for aggregation
 func (msg *SignedMessage) VerifyForAggregation(other *SignedMessage) error {
 	root, err := msg.Message.SigningRoot()
 	if err != nil {
