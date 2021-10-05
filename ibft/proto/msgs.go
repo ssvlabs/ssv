@@ -11,7 +11,7 @@ import (
 
 var (
 	// ErrDuplicateMsgSigner is thrown when trying to aggregate duplicated signers
-	ErrDuplicateMsgSigner = errors.New("could not aggregate messages with duplicate signers")
+	ErrDuplicateMsgSigner = errors.New("can't aggregate messages with similar signers")
 )
 
 // Compare returns true if both messages are equal.
