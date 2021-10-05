@@ -159,6 +159,8 @@ func (exp *exporter) Start() error {
 
 	go exp.triggerAllValidators()
 
+	exp.startMainTopic()
+
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
 
@@ -176,6 +178,13 @@ func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 		agents = append(agents, agent)
 	}
 	return agents
+}
+
+// startMainTopic starts to listen to main topic
+func (exp *exporter) startMainTopic() {
+	if err := tasks.Retry(exp.network.SubscribeToMainTopic, 3); err != nil {
+		exp.logger.Error("failed to subscribe to main topic", zap.Error(err))
+	}
 }
 
 // processIncomingExportRequests waits for incoming messages and
@@ -296,7 +305,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 			return err
 		}
 		return nil
-	}, 5); err != nil {
+	}, 3); err != nil {
 		logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}

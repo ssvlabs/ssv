@@ -202,3 +202,13 @@ func (n *Local) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) 
 func (n *Local) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
 	return nil
 }
+
+// BroadcastMainTopic implementation
+func (n *Local) BroadcastMainTopic(msg *proto.SignedMessage) error {
+	return nil
+}
+
+// SubscribeToMainTopic implementation
+func (n *Local) SubscribeToMainTopic() error {
+	return nil
+}

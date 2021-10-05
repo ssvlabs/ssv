@@ -124,7 +124,7 @@ func (c *controller) initShares(options ControllerOptions) error {
 	return nil
 }
 
-// StartValidators loads all persisted shares nd setup the corresponding validators
+// StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
 	shares, err := c.collection.GetAllValidatorsShare()
 	if err != nil {
