@@ -15,8 +15,10 @@ import (
 
 // CommitReaderOptions defines the required parameters to create an instance
 type CommitReaderOptions struct {
-	Logger  *zap.Logger
-	Network network.Network
+	Logger           *zap.Logger
+	Network          network.Network
+	ValidatorStorage validatorstorage.ICollection
+	IbftStorage      collections.Iibft
 }
 
 type commitReader struct {
@@ -29,8 +31,10 @@ type commitReader struct {
 // NewCommitReader creates new instance
 func NewCommitReader(opts CommitReaderOptions) Reader {
 	r := &commitReader{
-		logger:  opts.Logger.With(zap.String("who", "commit_reader")),
-		network: opts.Network,
+		logger:           opts.Logger.With(zap.String("who", "commit_reader")),
+		network:          opts.Network,
+		validatorStorage: opts.ValidatorStorage,
+		ibftStorage:      opts.IbftStorage,
 	}
 	return r
 }

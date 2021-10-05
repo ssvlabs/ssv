@@ -89,16 +89,17 @@ type exporter struct {
 // New creates a new Exporter instance
 func New(opts Options) Exporter {
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
+	validatorStorage := validatorstorage.NewCollection(
+		validatorstorage.CollectionOptions{
+			DB:     opts.DB,
+			Logger: opts.Logger,
+		},
+	)
 	e := exporter{
 		ctx:         opts.Ctx,
 		storage:     storage.NewExporterStorage(opts.DB, opts.Logger),
 		ibftStorage: &ibftStorage,
-		validatorStorage: validatorstorage.NewCollection(
-			validatorstorage.CollectionOptions{
-				DB:     opts.DB,
-				Logger: opts.Logger,
-			},
-		),
+		validatorStorage: validatorStorage,
 		logger:               opts.Logger.With(zap.String("component", "exporter/node")),
 		network:              opts.Network,
 		eth1Client:           opts.Eth1Client,
@@ -111,6 +112,8 @@ func New(opts Options) Exporter {
 		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
 			Logger:  opts.Logger,
 			Network: opts.Network,
+			ValidatorStorage: validatorStorage,
+			IbftStorage: &ibftStorage,
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
