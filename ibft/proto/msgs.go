@@ -9,6 +9,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
+var (
+	// ErrDuplicateMsgSigner is thrown when trying to aggregate duplicated signers
+	ErrDuplicateMsgSigner = errors.New("can't aggregate messages with similar signers")
+)
+
 // Compare returns true if both messages are equal.
 // DOES NOT compare signatures
 func (msg *Message) Compare(other *Message) bool {
@@ -101,7 +106,6 @@ func (msg *SignedMessage) SignersIDString() string {
 
 // Aggregate serialize and aggregates signature and signer ID to signed message
 func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
-	// verify same message
 	root, err := msg.Message.SigningRoot()
 	if err != nil {
 		return err
@@ -118,11 +122,10 @@ func (msg *SignedMessage) Aggregate(other *SignedMessage) error {
 	for _, id := range msg.SignerIds {
 		for _, otherID := range other.SignerIds {
 			if id == otherID {
-				return errors.New("can't aggregate messages with similar signers")
+				return ErrDuplicateMsgSigner
 			}
 		}
 	}
-
 	// aggregate
 	sig := &bls.Sign{}
 	if err := sig.Deserialize(msg.Signature); err != nil {

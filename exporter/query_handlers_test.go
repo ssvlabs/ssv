@@ -287,12 +287,12 @@ func TestHandleDecidedQuery(t *testing.T) {
 func newDecidedAPIMsg(pk string, from, to int64) *api.NetworkMessage {
 	return &api.NetworkMessage{
 		Msg: api.Message{
-			Type:   api.TypeDecided,
+			Type: api.TypeDecided,
 			Filter: api.MessageFilter{
 				PublicKey: pk,
-				From: from,
-				To: to,
-				Role: api.RoleAttester,
+				From:      from,
+				To:        to,
+				Role:      api.RoleAttester,
 			},
 		},
 		Err:  nil,
