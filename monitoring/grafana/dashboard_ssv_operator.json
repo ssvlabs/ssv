@@ -768,6 +768,24 @@
               "pubKey": "Public Key"
             }
           }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": "main"
+                  }
+                },
+                "fieldName": "Public Key"
+              }
+            ],
+            "match": "any",
+            "type": "exclude"
+          }
         }
       ],
       "type": "table"
