@@ -23,6 +23,8 @@ type CommitReaderOptions struct {
 	IbftStorage      collections.Iibft
 }
 
+// commitReader responsible for reading all commit messages
+// it will try to aggregate existing decided message to make sure all participating operators are listed
 type commitReader struct {
 	logger           *zap.Logger
 	network          network.Network
