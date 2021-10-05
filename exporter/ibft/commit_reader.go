@@ -63,7 +63,7 @@ func (cr *commitReader) listenToNetwork(msgChan <-chan *proto.SignedMessage) {
 	}
 }
 
-// handleCommitMessage handles a specific message
+// handleCommitMessage handles a new commit message
 func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
 	pkHex, _ := format.IdentifierUnformat(string(msg.Message.Lambda))
 	logger := cr.logger.With(zap.String("pk", pkHex))
@@ -83,21 +83,32 @@ func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
 		logger.Debug("invalid commit message")
 		return errors.Wrap(err, "invalid commit message")
 	}
+	return cr.onValidCommitMessage(msg)
+}
+
+// onValidCommitMessage
+func (cr *commitReader) onValidCommitMessage(msg *proto.SignedMessage) error {
+	pkHex, _ := format.IdentifierUnformat(string(msg.Message.Lambda))
+	logger := cr.logger.With(zap.String("pk", pkHex))
 	decided, found, err := cr.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
-	if found {
-		if err := decided.VerifyForAggregation(msg); err != nil {
-			logger.Debug("could not verify for aggregation", zap.String("why", err.Error()))
-			return nil
-		}
-		if err = decided.Aggregate(msg); err != nil {
-			return errors.Wrap(err, "could not aggregate commit message")
-		}
-		if err := cr.ibftStorage.SaveDecided(decided); err != nil {
-			return errors.Wrap(err, "could not save aggregated decided message")
-		}
-		logger.Debug("decided message was updated", zap.Uint64("seq", decided.Message.SeqNumber))
+	if err != nil {
+		return err
 	}
-	return err
+	if !found {
+		return nil
+	}
+	if err := decided.VerifyForAggregation(msg); err != nil {
+		logger.Debug("not verified for aggregation", zap.String("why", err.Error()))
+		return nil
+	}
+	if err = decided.Aggregate(msg); err != nil {
+		return errors.Wrap(err, "could not aggregate commit message")
+	}
+	if err := cr.ibftStorage.SaveDecided(decided); err != nil {
+		return errors.Wrap(err, "could not save aggregated decided message")
+	}
+	logger.Debug("decided message was updated", zap.Uint64("seq", decided.Message.SeqNumber))
+	return nil
 }
 
 // validateCommitMsg validates commit message
