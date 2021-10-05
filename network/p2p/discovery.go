@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -173,10 +175,12 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	//		log.Fatalf("Failed to p2p listen: %v", err)
 	//	}
 	//}
+	ua := n.getUserAgent()
+	n.logger.Info("Libp2p User Agent", zap.String("value", ua))
 	options := []libp2p.Option{
 		privKeyOption(priKey),
 		libp2p.ListenAddrs(listen),
-		libp2p.UserAgent(commons.GetBuildData()),
+		libp2p.UserAgent(ua),
 		// TODO
 		//libp2p.ConnectionGater(&prysmP2pService.Service{}),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
@@ -218,6 +222,19 @@ func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.
 	// Disable Ping Service.
 	options = append(options, libp2p.Ping(false))
 	return options
+}
+
+func (n *p2pNetwork) getUserAgent() string {
+	ua := commons.GetBuildData()
+	if n.operatorPrivKey != nil {
+		operatorPubKey, err := rsaencryption.ExtractPublicKey(n.operatorPrivKey)
+		if err != nil || len(operatorPubKey) == 0 {
+			n.logger.Error("could not extract operator public key", zap.Error(err))
+		}
+		h := sha256.Sum256([]byte(operatorPubKey))
+		ua = fmt.Sprintf("%s:%x", ua, h)
+	}
+	return ua
 }
 
 func (n *p2pNetwork) startDiscoveryV5(addr net.IP, privKey *ecdsa.PrivateKey) (*discover.UDPv5, error) {

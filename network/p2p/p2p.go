@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -49,16 +50,17 @@ type listener struct {
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx           context.Context
-	cfg           *Config
-	listenersLock sync.Locker
-	dv5Listener   iListener
-	listeners     []listener
-	logger        *zap.Logger
-	privKey       *ecdsa.PrivateKey
-	peers         *peers.Status
-	host          p2pHost.Host
-	pubsub        *pubsub.PubSub
+	ctx             context.Context
+	cfg             *Config
+	listenersLock   sync.Locker
+	dv5Listener     iListener
+	listeners       []listener
+	logger          *zap.Logger
+	privKey         *ecdsa.PrivateKey
+	peers           *peers.Status
+	host            p2pHost.Host
+	pubsub          *pubsub.PubSub
+	operatorPrivKey *rsa.PrivateKey
 
 	psTopicsLock *sync.RWMutex
 }

@@ -85,6 +85,15 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
+		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
+		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
+			Logger.Fatal("failed to setup operator private key", zap.Error(err))
+		}
+		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()
+		if err != nil || !found {
+			Logger.Fatal("failed to get operator private key", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
@@ -106,10 +115,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
-		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
-		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
-			Logger.Fatal("failed to setup operator private key", zap.Error(err))
-		}
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
 		// create new eth1 client
