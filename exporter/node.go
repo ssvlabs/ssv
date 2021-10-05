@@ -167,7 +167,11 @@ func (exp *exporter) Start() error {
 
 	go exp.triggerAllValidators()
 
-	go exp.commitReader.Start()
+	go func() {
+		if err := exp.commitReader.Start(); err != nil {
+			exp.logger.Error("could not start commit reader", zap.Error(err))
+		}
+	}()
 
 	go exp.startMainTopic()
 
