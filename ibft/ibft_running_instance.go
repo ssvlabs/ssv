@@ -2,15 +2,15 @@ package ibft
 
 import (
 	"context"
-	"time"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"time"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
@@ -114,51 +114,34 @@ func (i *ibftImpl) listenToLateCommitMsgs(runningInstance *Instance) {
 			if stopper.IsStopped() {
 				break loop
 			}
-
-			if netMsg := runningInstance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(runningInstance.State.Lambda.Get(), runningInstance.State.SeqNumber.Get(), runningInstance.State.Round.Get())); netMsg != nil {
-				if netMsg.SignedMessage.Message.Type == proto.RoundState_Commit {
-					// verify message
-					if err := runningInstance.commitMsgValidationPipeline().Run(netMsg.SignedMessage); err != nil {
-						i.logger.Error("received invalid late commit message", zap.Error(err))
-						continue
-					}
-
-					// find stored decided
-					decidedMsg, found, err := i.ibftStorage.GetDecided(netMsg.SignedMessage.Message.Lambda, netMsg.SignedMessage.Message.SeqNumber)
-					if err != nil {
-						i.logger.Error("could not fetch decided for late commit message", zap.Error(err))
-						continue
-					}
-					if !found {
-						i.logger.Error("received late commit message for unknown decided", zap.Error(err))
-						continue
-					}
-
-					// aggregate message with stored decided
-					if err := decidedMsg.Aggregate(netMsg.SignedMessage); err != nil {
-						if err == proto.ErrDuplicateMsgSigner {
-							i.logger.Debug("received late commit message with duplicate signers, not saving to storage")
-							continue
-						}
-						i.logger.Error("could not aggregate late commit message with known decided msg", zap.Error(err))
-						continue
-					}
-
-					// save to storage
-					if err := i.ibftStorage.SaveDecided(decidedMsg); err != nil {
-						i.logger.Error("could not save aggregated late commit message", zap.Error(err))
-					}
+			idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State.Lambda.Get(),
+				runningInstance.State.SeqNumber.Get(), runningInstance.State.Round.Get())
+			if netMsg := runningInstance.MsgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
+				if netMsg.SignedMessage.Message == nil || netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
+					// not a commit message -> skip
+					continue
+				}
+				logger := i.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
+					zap.String("identifier", string(netMsg.SignedMessage.Message.Lambda)))
+				if err := runningInstance.commitMsgValidationPipeline().Run(netMsg.SignedMessage); err != nil {
+					i.logger.Error("received invalid late commit message", zap.Error(err))
+					continue
+				}
+				updated, err := ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage)
+				if err != nil {
+					logger.Error("failed to process late commit message", zap.Error(err))
+				} else if updated {
+					logger.Debug("decided message was updated")
 				}
 			} else {
 				time.Sleep(time.Millisecond * 100)
 			}
 		}
-
 		return nil, nil
 	}
 
 	i.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", runningInstance.State.SeqNumber.Get()))
-	tasks.ExecWithTimeout(context.Background(), f, time.Minute*6)
+	_, _, _ = tasks.ExecWithTimeout(context.Background(), f, time.Minute*6)
 	i.logger.Debug("stopped listening to late commit msgs")
 }
 

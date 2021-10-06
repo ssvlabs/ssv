@@ -2,14 +2,39 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+// ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
+func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft) (bool, error) {
+	// find stored decided
+	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+	if err != nil {
+		return false, errors.Wrap(err, "could not fetch decided for late commit")
+	}
+	if !found {
+		return false, nil
+	}
+	// aggregate message with stored decided
+	if err := decidedMsg.Aggregate(msg); err != nil {
+		if err == proto.ErrDuplicateMsgSigner {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "could not aggregate commit message")
+	}
+	// save to storage
+	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
+		return false, errors.Wrap(err, "could not save aggregated decided message")
+	}
+	return true, nil
+}
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(

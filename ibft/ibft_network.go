@@ -10,7 +10,7 @@ import (
 
 var (
 	waitMinPeersIntervalStart = 1 * time.Second
-	waitMinPeersIntervalEnd = 64 * time.Second
+	waitMinPeersIntervalEnd   = 64 * time.Second
 )
 
 // waitForMinPeerOnInit is called once during IBFT init
@@ -27,9 +27,9 @@ func (i *ibftImpl) waitForMinPeerOnInit(minPeerCount int) {
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *ibftImpl) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 	ctx := commons.WaitMinPeersCtx{
-		Ctx: context.Background(),
+		Ctx:    context.Background(),
 		Logger: i.logger,
-		Net: i.network,
+		Net:    i.network,
 	}
 	return commons.WaitForMinPeers(ctx, i.ValidatorShare.PublicKey.Serialize(), minPeerCount,
 		waitMinPeersIntervalStart, waitMinPeersIntervalEnd, stopAtLimit)
