@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -46,9 +47,8 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		appName := fmt.Sprintf("%s:%s", cmd.Parent().Short, cmd.Parent().Version)
-		log.Printf("starting %s", appName)
-
+		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+		log.Printf("starting %s", commons.GetBuildData())
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
@@ -58,7 +58,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 		}
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(appName, loggerLevel, &logex.EncodingConfig{
+		Logger := logex.Build(commons.GetBuildData(), loggerLevel, &logex.EncodingConfig{
 			Format:       cfg.GlobalConfig.LogFormat,
 			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
 		})
@@ -85,7 +85,16 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
+		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
+		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
+			Logger.Fatal("failed to setup operator private key", zap.Error(err))
+		}
+		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()
+		if err != nil || !found {
+			Logger.Fatal("failed to get operator private key", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
@@ -96,19 +105,16 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.Network = p2pNet
 
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
-		cfg.SSVOptions.ValidatorOptions.Network = network
+		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
-		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
-		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
-			Logger.Fatal("failed to setup operator private key", zap.Error(err))
-		}
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
 		// create new eth1 client

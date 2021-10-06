@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -49,16 +50,17 @@ type listener struct {
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx           context.Context
-	cfg           *Config
-	listenersLock sync.Locker
-	dv5Listener   iListener
-	listeners     []listener
-	logger        *zap.Logger
-	privKey       *ecdsa.PrivateKey
-	peers         *peers.Status
-	host          p2pHost.Host
-	pubsub        *pubsub.PubSub
+	ctx             context.Context
+	cfg             *Config
+	listenersLock   sync.Locker
+	dv5Listener     iListener
+	listeners       []listener
+	logger          *zap.Logger
+	privKey         *ecdsa.PrivateKey
+	peers           *peers.Status
+	host            p2pHost.Host
+	pubsub          *pubsub.PubSub
+	operatorPrivKey *rsa.PrivateKey
 
 	psTopicsLock *sync.RWMutex
 }
@@ -134,7 +136,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		}
 	} else if cfg.DiscoveryType == "discv5" {
 		n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
-			PeerLimit: 45,
+			PeerLimit: maxPeers,
 			ScorerParams: &scorers.Config{
 				BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
 					Threshold:     5,
@@ -172,7 +174,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.handleStream()
 
-	n.watchTopicPeers()
+	n.watchPeers()
 
 	return n, nil
 }
@@ -189,6 +191,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		//pubsub.WithSubscriptionFilter(s),
 		pubsub.WithPeerOutboundQueueSize(256),
 		pubsub.WithValidateQueueSize(256),
+		pubsub.WithFloodPublish(true),
 	}
 
 	if len(cfg.PubSubTraceOut) > 0 {
@@ -206,15 +209,15 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
 
-func (n *p2pNetwork) watchTopicPeers() {
+func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		go reportConnectionsCount(n)
+
+		// topics peers
 		n.psTopicsLock.RLock()
 		defer n.psTopicsLock.RUnlock()
-
 		for name, topic := range n.cfg.Topics {
-			peers := n.allPeersOfTopic(topic)
-			n.logger.Debug("topic peers status", zap.String("topic", name), zap.Any("peers", peers))
-			metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+			reportTopicPeers(n, name, topic)
 		}
 	})
 }

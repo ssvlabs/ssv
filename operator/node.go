@@ -6,8 +6,10 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,6 +25,7 @@ type Node interface {
 type Options struct {
 	ETHNetwork          *core.Network
 	Beacon              beacon.Beacon
+	Network             network.Network
 	Context             context.Context
 	Logger              *zap.Logger
 	Eth1Client          eth1.Client
@@ -42,6 +45,7 @@ type operatorNode struct {
 	validatorController validator.IController
 	logger              *zap.Logger
 	beacon              beacon.Beacon
+	net                 network.Network
 	storage             Storage
 	eth1Client          eth1.Client
 	dutyCtrl            duties.DutyController
@@ -55,6 +59,7 @@ func New(opts Options) Node {
 		validatorController: opts.ValidatorController,
 		ethNetwork:          *opts.ETHNetwork,
 		beacon:              opts.Beacon,
+		net:                 opts.Network,
 		eth1Client:          opts.Eth1Client,
 		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
 
@@ -89,7 +94,11 @@ func (n *operatorNode) init(opts Options) error {
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 	n.validatorController.StartValidators()
+	if err := tasks.Retry(n.net.SubscribeToMainTopic, 3); err != nil {
+		n.logger.Error("failed to subscribe to main topic", zap.Error(err))
+	}
 	n.dutyCtrl.Start()
+
 	return nil
 }
 

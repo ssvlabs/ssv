@@ -64,46 +64,57 @@ type Options struct {
 
 // exporter is the internal implementation of Exporter interface
 type exporter struct {
-	ctx                             context.Context
-	storage                         storage.Storage
-	validatorStorage                validatorstorage.ICollection
-	ibftStorage                     collections.Iibft
-	logger                          *zap.Logger
-	network                         network.Network
-	eth1Client                      eth1.Client
-	beacon                          beacon.Beacon
-	mainQueue                       tasks.Queue
-	decidedReadersQueue             tasks.Queue
-	networkReadersQueue             tasks.Queue
-	metaDataReadersQueue            tasks.Queue
-	ws                              api.WebSocketServer
+	ctx              context.Context
+	storage          storage.Storage
+	validatorStorage validatorstorage.ICollection
+	ibftStorage      collections.Iibft
+	logger           *zap.Logger
+	network          network.Network
+	eth1Client       eth1.Client
+	beacon           beacon.Beacon
+
+	ws           api.WebSocketServer
+	commitReader ibft.Reader
+
 	wsAPIPort                       int
 	ibftSyncEnabled                 bool
 	validatorMetaDataUpdateInterval time.Duration
+
+	mainQueue            tasks.Queue
+	decidedReadersQueue  tasks.Queue
+	networkReadersQueue  tasks.Queue
+	metaDataReadersQueue tasks.Queue
 }
 
 // New creates a new Exporter instance
 func New(opts Options) Exporter {
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
+	validatorStorage := validatorstorage.NewCollection(
+		validatorstorage.CollectionOptions{
+			DB:     opts.DB,
+			Logger: opts.Logger,
+		},
+	)
 	e := exporter{
-		ctx:         opts.Ctx,
-		storage:     storage.NewExporterStorage(opts.DB, opts.Logger),
-		ibftStorage: &ibftStorage,
-		validatorStorage: validatorstorage.NewCollection(
-			validatorstorage.CollectionOptions{
-				DB:     opts.DB,
-				Logger: opts.Logger,
-			},
-		),
-		logger:                          opts.Logger.With(zap.String("component", "exporter/node")),
-		network:                         opts.Network,
-		eth1Client:                      opts.Eth1Client,
-		beacon:                          opts.Beacon,
-		mainQueue:                       tasks.NewExecutionQueue(mainQueueInterval),
-		decidedReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
-		networkReadersQueue:             tasks.NewExecutionQueue(readerQueuesInterval),
-		metaDataReadersQueue:            tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
-		ws:                              opts.WS,
+		ctx:                  opts.Ctx,
+		storage:              storage.NewExporterStorage(opts.DB, opts.Logger),
+		ibftStorage:          &ibftStorage,
+		validatorStorage:     validatorStorage,
+		logger:               opts.Logger.With(zap.String("component", "exporter/node")),
+		network:              opts.Network,
+		eth1Client:           opts.Eth1Client,
+		beacon:               opts.Beacon,
+		mainQueue:            tasks.NewExecutionQueue(mainQueueInterval),
+		decidedReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
+		networkReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
+		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
+		ws:                   opts.WS,
+		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
+			Logger:           opts.Logger,
+			Network:          opts.Network,
+			ValidatorStorage: validatorStorage,
+			IbftStorage:      &ibftStorage,
+		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
 		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
@@ -159,6 +170,14 @@ func (exp *exporter) Start() error {
 
 	go exp.triggerAllValidators()
 
+	go func() {
+		if err := exp.commitReader.Start(); err != nil {
+			exp.logger.Error("could not start commit reader", zap.Error(err))
+		}
+	}()
+
+	go exp.startMainTopic()
+
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
 
@@ -176,6 +195,13 @@ func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 		agents = append(agents, agent)
 	}
 	return agents
+}
+
+// startMainTopic starts to listen to main topic
+func (exp *exporter) startMainTopic() {
+	if err := tasks.Retry(exp.network.SubscribeToMainTopic, 3); err != nil {
+		exp.logger.Error("failed to subscribe to main topic", zap.Error(err))
+	}
 }
 
 // processIncomingExportRequests waits for incoming messages and
@@ -296,7 +322,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 			return err
 		}
 		return nil
-	}, 5); err != nil {
+	}, 3); err != nil {
 		logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}

@@ -768,6 +768,24 @@
               "pubKey": "Public Key"
             }
           }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "config": {
+                  "id": "equal",
+                  "options": {
+                    "value": "main"
+                  }
+                },
+                "fieldName": "Public Key"
+              }
+            ],
+            "match": "any",
+            "type": "exclude"
+          }
         }
       ],
       "type": "table"
@@ -780,6 +798,193 @@
         "w": 24,
         "x": 0,
         "y": 14
+      },
+      "id": 50,
+      "panels": [],
+      "title": "Networking",
+      "type": "row"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 9,
+        "x": 0,
+        "y": 15
+      },
+      "id": 44,
+      "options": {
+        "legend": {
+          "calcs": [
+            "min",
+            "max",
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "ssv:network:all_connected_peers{instance=~\"$instance.*\"}",
+          "interval": "",
+          "legendFormat": "Connections",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Connections Count",
+      "type": "timeseries"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "${DS_PROMETHEUS}",
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 5,
+        "x": 9,
+        "y": 15
+      },
+      "hiddenSeries": false,
+      "id": 48,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "8.0.4",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "ssv:network:connected_peers{instance=~\"$instance.*\",pubKey=\"main\"}",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Main Topic Peer Count",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:144",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:145",
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "collapsed": false,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
       },
       "id": 38,
       "panels": [],
@@ -881,7 +1086,7 @@
         "h": 5,
         "w": 9,
         "x": 0,
-        "y": 15
+        "y": 24
       },
       "id": 42,
       "options": {
@@ -989,7 +1194,7 @@
         "h": 5,
         "w": 4,
         "x": 9,
-        "y": 15
+        "y": 24
       },
       "id": 28,
       "options": {
@@ -1101,7 +1306,7 @@
         "h": 5,
         "w": 4,
         "x": 13,
-        "y": 15
+        "y": 24
       },
       "id": 26,
       "options": {
@@ -1211,7 +1416,7 @@
         "h": 5,
         "w": 4,
         "x": 17,
-        "y": 15
+        "y": 24
       },
       "id": 24,
       "options": {
@@ -1244,7 +1449,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 29
       },
       "id": 36,
       "panels": [],
@@ -1304,7 +1509,7 @@
         "h": 6,
         "w": 7,
         "x": 0,
-        "y": 21
+        "y": 30
       },
       "id": 30,
       "options": {
@@ -1362,7 +1567,7 @@
         "h": 6,
         "w": 7,
         "x": 7,
-        "y": 21
+        "y": 30
       },
       "hiddenSeries": false,
       "id": 8,
@@ -1476,7 +1681,7 @@
         "h": 5,
         "w": 8,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "height": "",
       "hiddenSeries": false,
@@ -1599,7 +1804,7 @@
         "h": 5,
         "w": 10,
         "x": 8,
-        "y": 27
+        "y": 36
       },
       "hiddenSeries": false,
       "id": 32,
@@ -1795,5 +2000,5 @@
   "timezone": "",
   "title": "SSV Operator Node",
   "uid": "FIbEQ37nk",
-  "version": 45
+  "version": 46
 }

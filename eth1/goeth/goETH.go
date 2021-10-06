@@ -271,7 +271,28 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 		}
 		_logs, _nSuccess, err := ec.fetchAndProcessEvents(fromBlock, toBlock, contractAbi)
 		if err != nil {
-			return errors.Wrap(err, "failed to get events")
+			// in case request exceeded limit, try again with less blocks
+			// will stop after log(blocksInBatch) tries
+			if !strings.Contains(err.Error(), "websocket: read limit exceeded") {
+				return errors.Wrap(err, "failed to get events")
+			}
+			currentBatchSize := int64(blocksInBatch)
+		retryLoop:
+			for currentBatchSize > 1 {
+				currentBatchSize /= 2
+				ec.logger.Debug("using a lower batch size", zap.Int64("currentBatchSize", currentBatchSize))
+				toBlock = big.NewInt(int64(fromBlock.Uint64()) + currentBatchSize)
+				_logs, _nSuccess, err = ec.fetchAndProcessEvents(fromBlock, toBlock, contractAbi)
+				if err != nil {
+					if !strings.Contains(err.Error(), "websocket: read limit exceeded") {
+						return errors.Wrap(err, "failed to get events")
+					}
+					// limit exceeded
+					continue retryLoop
+				}
+				// done
+				break retryLoop
+			}
 		}
 		nSuccess += _nSuccess
 		logs = append(logs, _logs...)
@@ -280,7 +301,6 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 		}
 		fromBlock = toBlock
 	}
-
 	ec.logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
 	// publishing SyncEndedEvent so other components could track the sync

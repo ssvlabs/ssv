@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
+	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -61,8 +62,10 @@ var StartExporterNodeCmd = &cobra.Command{
 			}
 		}
 		// configure logger and db
+		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+		log.Printf("starting %s", commons.GetBuildData())
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{
+		Logger := logex.Build(commons.GetBuildData(), loggerLevel, &logex.EncodingConfig{
 			Format:       cfg.GlobalConfig.LogFormat,
 			LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
 		})
