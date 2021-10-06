@@ -1,10 +1,8 @@
 package p2p
 
 import (
-	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -28,10 +26,6 @@ var (
 		Name: "ssv:network:ibft_decided_messages_outbound",
 		Help: "Count IBFT decided messages outbound",
 	}, []string{"pubKey", "seq"})
-	metricsIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:identity",
-		Help: "Identity of peers",
-	}, []string{"pid", "opk"})
 )
 
 func init() {
@@ -50,15 +44,12 @@ func init() {
 }
 
 func reportConnectionsCount(n *p2pNetwork) {
-	peers := n.host.Network().Conns()
+	conns := n.host.Network().Conns()
 	var ids []string
-	for _, conn := range peers {
-		go func(conn network.Conn) {
-			if err := reportPeerIdentity(n, conn); err != nil {
-				n.logger.Warn("failed to report peer identity", zap.String("peer", conn.RemotePeer().String()))
-			}
-		}(conn)
-		ids = append(ids, conn.RemotePeer().String())
+	for _, conn := range conns {
+		pid := conn.RemotePeer().String()
+		ids = append(ids, pid)
+		reportPeerIdentity(n, pid)
 	}
 	var peersActiveDisv5 []peer.ID
 	if n.peers != nil {
@@ -78,20 +69,7 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
-func reportPeerIdentity(n *p2pNetwork, conn network.Conn) error {
-	if n.ids != nil {
-		pid := conn.RemotePeer()
-		n.ids.IdentifyConn(conn)
-		avRaw, err := n.host.Peerstore().Get(pid, "AgentVersion")
-		if err != nil {
-			return errors.Wrap(err, "could not read user agent")
-		}
-		av, ok := avRaw.(string)
-		if !ok {
-			return errors.Wrap(err, "could not parse user agent")
-		}
-		n.logger.Debug("peer identity", zap.String("peer", pid.String()), zap.String("ua", av))
-		metricsIdentity.WithLabelValues(pid.String(), av).Set(1)
-	}
-	return nil
+func reportPeerIdentity(n *p2pNetwork, pid string) {
+	ua := n.peersIndex.GetPeerData(pid, UserAgentKey)
+	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua))
 }

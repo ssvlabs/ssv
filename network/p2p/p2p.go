@@ -60,7 +60,7 @@ type p2pNetwork struct {
 	peers           *peers.Status
 	host            p2pHost.Host
 	pubsub          *pubsub.PubSub
-	ids             *identify.IDService
+	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
 
 	psTopicsLock *sync.RWMutex
@@ -83,6 +83,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 
 	var _ipAddr net.IP
+	var ids *identify.IDService
 
 	if cfg.DiscoveryType == "mdns" { // use mdns discovery
 		// Create a new libp2p Host that listens on a random TCP port
@@ -117,12 +118,14 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		//host.RemoveStreamHandler(identify.IDDelta)
 		ua := n.getUserAgent()
 		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
-		n.ids = identify.NewIDService(host, identify.UserAgent(ua))
+		ids = identify.NewIDService(host, identify.UserAgent(ua))
 		n.host = host
 	} else {
 		logger.Error("Unsupported discovery flag")
 		return nil, errors.New("Unsupported discovery flag")
 	}
+
+	n.peersIndex = NewPeersIndex(n.host, ids)
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
@@ -213,6 +216,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+		go n.peersIndex.Run()
 		go reportConnectionsCount(n)
 
 		// topics peers
