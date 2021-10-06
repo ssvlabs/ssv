@@ -11,6 +11,7 @@ import (
 
 const (
 	libp2pAgentKey = "AgentVersion"
+	// UserAgentKey is the key for storing to the user agent value
 	UserAgentKey   = "user-agent"
 )
 
@@ -56,7 +57,6 @@ func (pi *peersIndex) Run() {
 			pi.logger.Warn("failed to report peer identity", zap.String("peer", conn.RemotePeer().String()))
 		}
 	}
-	return
 }
 
 // GetPeerData returns data of the given peer and key

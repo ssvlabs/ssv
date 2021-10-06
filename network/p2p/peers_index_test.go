@@ -15,8 +15,8 @@ func TestNewPeersIndex(t *testing.T) {
 	ctx := context.Background()
 	ua := "test:0.0.0:xxx"
 
-	host1, pi1 := newHostWithPeersIndex(t, ctx, ua + "1")
-	host2, pi2 := newHostWithPeersIndex(t, ctx, ua + "2")
+	host1, pi1 := newHostWithPeersIndex(ctx, t, ua + "1")
+	host2, pi2 := newHostWithPeersIndex(ctx, t, ua + "2")
 
 	require.NoError(t, host1.Connect(context.TODO(), peer.AddrInfo{
 		ID:    host2.ID(),
@@ -43,7 +43,7 @@ func TestNewPeersIndex(t *testing.T) {
 	})
 }
 
-func newHostWithPeersIndex(t *testing.T, ctx context.Context, ua string) (host.Host, PeersIndex) {
+func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.Host, PeersIndex) {
 	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
 		libp2p.UserAgent(ua))
