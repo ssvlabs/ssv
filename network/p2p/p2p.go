@@ -216,8 +216,11 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		go n.peersIndex.Run()
-		go reportConnectionsCount(n)
+		// index all peers and report
+		go func() {
+			n.peersIndex.Run()
+			reportAllConnections(n)
+		}()
 
 		// topics peers
 		n.psTopicsLock.RLock()

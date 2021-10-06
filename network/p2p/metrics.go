@@ -43,7 +43,7 @@ func init() {
 	}
 }
 
-func reportConnectionsCount(n *p2pNetwork) {
+func reportAllConnections(n *p2pNetwork) {
 	conns := n.host.Network().Conns()
 	var ids []string
 	for _, conn := range conns {
