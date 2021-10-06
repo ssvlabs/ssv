@@ -115,6 +115,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		}
 		//host.RemoveStreamHandler(identify.IDDelta)
 		ua := n.getUserAgent()
+		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
 		n.ids = identify.NewIDService(host, identify.UserAgent(ua))
 		n.host = host
 	} else {

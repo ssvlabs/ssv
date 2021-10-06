@@ -53,11 +53,12 @@ func reportConnectionsCount(n *p2pNetwork) {
 	peers := n.host.Network().Conns()
 	var ids []string
 	for _, conn := range peers {
-		pid := conn.RemotePeer()
-		if err := reportPeerIdentity(n, conn); err != nil {
-			n.logger.Warn("failed to report peer identity", zap.String("peer", pid.String()))
-		}
-		ids = append(ids, pid.String())
+		go func(conn network.Conn) {
+			if err := reportPeerIdentity(n, conn); err != nil {
+				n.logger.Warn("failed to report peer identity", zap.String("peer", conn.RemotePeer().String()))
+			}
+		}(conn)
+		ids = append(ids, conn.RemotePeer().String())
 	}
 	var peersActiveDisv5 []peer.ID
 	if n.peers != nil {
