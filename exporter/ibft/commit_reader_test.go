@@ -68,6 +68,8 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 		require.NoError(t, cr.ibftStorage.SaveDecided(d))
 	}
 
+	// TODO: add test for valid message
+
 	t.Run("different message value", func(t *testing.T) {
 		commitMsg := signMsg(t, 4, sks[4], &proto.Message{
 			Type:      proto.RoundState_Commit,
