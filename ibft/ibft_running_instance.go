@@ -127,7 +127,8 @@ func (i *ibftImpl) listenToLateCommitMsgs(runningInstance *Instance) {
 					i.logger.Error("received invalid late commit message", zap.Error(err))
 					continue
 				}
-				updated, err := ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage)
+				updated, err := ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage,
+					i.ValidatorShare.PublicKey.SerializeToHexStr())
 				if err != nil {
 					logger.Error("failed to process late commit message", zap.Error(err))
 				} else if updated {

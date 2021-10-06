@@ -90,7 +90,7 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	if err := validateCommitMsg(msg, share); err != nil {
 		return errors.Wrap(err, "invalid commit message")
 	}
-	updated, err := ibft.ProcessLateCommitMsg(msg, cr.ibftStorage)
+	updated, err := ibft.ProcessLateCommitMsg(msg, cr.ibftStorage, share.PublicKey.SerializeToHexStr())
 	if err != nil {
 		return errors.Wrap(err, "failed to process late commit message")
 	}

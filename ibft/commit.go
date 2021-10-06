@@ -13,7 +13,7 @@ import (
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft) (bool, error) {
+func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, pubkey string) (bool, error) {
 	// find stored decided
 	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
@@ -33,6 +33,7 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
 		return false, errors.Wrap(err, "could not save aggregated decided message")
 	}
+	ReportDecided(pubkey, msg)
 	return true, nil
 }
 
