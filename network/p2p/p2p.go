@@ -74,11 +74,12 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	logger = logger.With(zap.String("component", "p2p"))
 
 	n := &p2pNetwork{
-		ctx:           ctx,
-		cfg:           cfg,
-		listenersLock: &sync.Mutex{},
-		psTopicsLock:  &sync.RWMutex{},
-		logger:        logger,
+		ctx:             ctx,
+		cfg:             cfg,
+		listenersLock:   &sync.Mutex{},
+		psTopicsLock:    &sync.RWMutex{},
+		logger:          logger,
+		operatorPrivKey: cfg.OperatorPrivateKey,
 	}
 
 	var _ipAddr net.IP
