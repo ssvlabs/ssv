@@ -166,14 +166,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		go n.listenForNewNodes()
 
 		if n.cfg.HostAddress != "" {
-			//logExternalIPAddr(s.host.ID(), p2pHostAddress, p2pTCPPort)
 			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
-			conn, err := net.DialTimeout("tcp", a, time.Second*10)
-			if err != nil {
-				n.logger.Error("IP address is not accessible", zap.Error(err))
-			}
-			if err := conn.Close(); err != nil {
-				n.logger.Error("Could not close connection", zap.Error(err))
+			if err := checkAddress(a); err != nil {
+				n.logger.Debug("failed to check address", zap.String("addr", a), zap.String("err", err.Error()))
+			} else {
+				n.logger.Debug("address was checked successfully", zap.String("addr", a))
 			}
 		}
 	}
@@ -395,4 +392,16 @@ func ignorePeers() map[string]bool {
 	return map[string]bool{
 		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
 	}
+}
+
+// checkAddress checks that some address is accessible
+func checkAddress(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, time.Second*10)
+	if err != nil {
+		return errors.Wrap(err, "IP address is not accessible")
+	}
+	if err := conn.Close(); err != nil {
+		return errors.Wrap(err, "could not close connection")
+	}
+	return nil
 }
