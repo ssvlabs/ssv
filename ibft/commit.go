@@ -117,6 +117,7 @@ func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedM
 	return AggregateMessages(i.Logger, sigs)
 }
 
+// AggregateMessages aggregates the given messages
 func AggregateMessages(logger *zap.Logger, sigs []*proto.SignedMessage) *proto.SignedMessage {
 	var decided *proto.SignedMessage
 	var err error
