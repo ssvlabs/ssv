@@ -114,17 +114,21 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 }
 
 func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedMessage {
+	return AggregateMessages(i.Logger, sigs)
+}
+
+func AggregateMessages(logger *zap.Logger, sigs []*proto.SignedMessage) *proto.SignedMessage {
 	var decided *proto.SignedMessage
 	var err error
 	for _, msg := range sigs {
 		if decided == nil {
 			decided, err = msg.DeepCopy()
 			if err != nil {
-				i.Logger.Error("could not copy message")
+				logger.Error("could not copy message")
 			}
 		} else {
 			if err := decided.Aggregate(msg); err != nil {
-				i.Logger.Error("could not aggregate message")
+				logger.Error("could not aggregate message")
 			}
 		}
 	}
