@@ -1,8 +1,8 @@
 package ibft
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -51,75 +51,118 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 
 	sks, committee := ibftsync.GenerateNodes(4)
 	pk := sks[1].GetPublicKey()
-	for i, sk := range sks {
-		require.NoError(t, cr.validatorStorage.SaveValidatorShare(&validatorstorage.Share{
-			NodeID:    i + 1,
-			PublicKey: pk,
-			ShareKey:  sk,
-			Committee: committee,
-			Metadata:  nil,
+	require.NoError(t, cr.validatorStorage.SaveValidatorShare(&validatorstorage.Share{
+		NodeID:    1,
+		PublicKey: pk,
+		ShareKey:  sks[1],
+		Committee: committee,
+		Metadata:  nil,
+	}))
+	identifier := format.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester.String())
+	var sigs []*proto.SignedMessage
+	for i := 1; i < 4; i++ {
+		sigs = append(sigs, signMsg(t, uint64(i), sks[uint64(i)], &proto.Message{
+			Type:      proto.RoundState_Commit,
+			Round:     1,
+			SeqNumber: 1,
+			Lambda:    []byte(identifier),
+			Value:     []byte("value"),
 		}))
 	}
-	identifier := format.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester.String())
-	decided25Seq := ibftsync.DecidedArr(t, 25, sks, []byte(identifier))
+	decided := ibft.AggregateMessages(zap.L(), sigs)
 
-	// save decided
-	for _, d := range decided25Seq {
-		require.NoError(t, cr.ibftStorage.SaveDecided(d))
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	tests := []struct {
+		name        string
+		expectedErr string
+		msg         *proto.SignedMessage
+		after       func(t *testing.T)
+	}{
+		{
+			"valid",
+			"",
+			signMsg(t, uint64(4), sks[uint64(4)], &proto.Message{
+				Type:      proto.RoundState_Commit,
+				Round:     1,
+				SeqNumber: 1,
+				Lambda:    []byte(identifier),
+				Value:     []byte("value"),
+			}),
+			func(t *testing.T) {
+				updated, found, err := cr.ibftStorage.GetDecided([]byte(identifier), uint64(1))
+				require.Nil(t, err)
+				require.True(t, found)
+				require.Equal(t, 4, len(updated.SignerIds))
+			},
+		},
+		{
+			"different value",
+			"can't aggregate different messages",
+			signMsg(t, uint64(4), sks[uint64(4)], &proto.Message{
+				Type:      proto.RoundState_Commit,
+				Round:     1,
+				SeqNumber: 1,
+				Lambda:    []byte(identifier),
+				Value:     []byte("xxx"),
+			}),
+			nil,
+		},
+		{
+			"invalid lambda",
+			"could not read public key",
+			signMsg(t, 4, sks[4], &proto.Message{
+				Type:      proto.RoundState_Commit,
+				Round:     1,
+				SeqNumber: 1,
+				Lambda:    []byte("xxx_ATTESTER"),
+			}),
+			nil,
+		},
+		{
+			"share not found",
+			"",
+			signMsg(t, 4, sk, &proto.Message{
+				Type:      proto.RoundState_Commit,
+				Round:     1,
+				SeqNumber: 25,
+				Lambda:    []byte(format.IdentifierFormat(sk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())),
+			}),
+			nil,
+		},
+		{
+			"invalid message",
+			"invalid commit message",
+			func() *proto.SignedMessage {
+				commitMsg := signMsg(t, 4, sks[4], &proto.Message{
+					Type:      proto.RoundState_Commit,
+					Round:     1,
+					SeqNumber: 1,
+					Lambda:    []byte(identifier),
+				})
+				commitMsg.Signature = []byte("dummy")
+				return commitMsg
+			}(),
+			nil,
+		},
 	}
 
-	// TODO: add test for valid message
-
-	t.Run("different message value", func(t *testing.T) {
-		commitMsg := signMsg(t, 4, sks[4], &proto.Message{
-			Type:      proto.RoundState_Commit,
-			Round:     1,
-			SeqNumber: 25,
-			Lambda:    decided25Seq[25].Message.GetLambda(),
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.NoError(t, cr.ibftStorage.SaveDecided(decided))
+			err := cr.onCommitMessage(test.msg)
+			if len(test.expectedErr) > 0 {
+				require.NotNil(t, err)
+				require.True(t, strings.Contains(err.Error(), test.expectedErr))
+			} else {
+				require.Nil(t, err)
+			}
+			if test.after != nil {
+				test.after(t)
+			}
 		})
-		err := cr.onCommitMessage(commitMsg)
-		require.NotNil(t, err)
-		require.True(t, strings.Contains(err.Error(), "can't aggregate different messages"))
-	})
-
-	t.Run("non-valid lambda", func(t *testing.T) {
-		commitMsg := signMsg(t, 4, sks[4], &proto.Message{
-			Type:      proto.RoundState_Commit,
-			Round:     1,
-			SeqNumber: 25,
-			Lambda:    []byte("xxx_ATTESTER"),
-		})
-		err := cr.onCommitMessage(commitMsg)
-		require.NotNil(t, err)
-		require.True(t, strings.Contains(err.Error(), "could not read public key"))
-	})
-
-	t.Run("share not found", func(t *testing.T) {
-		sk := &bls.SecretKey{}
-		sk.SetByCSPRNG()
-		commitMsg := signMsg(t, 4, sk, &proto.Message{
-			Type:      proto.RoundState_Commit,
-			Round:     1,
-			SeqNumber: 25,
-			Lambda:    []byte(format.IdentifierFormat(sk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())),
-		})
-		err := cr.onCommitMessage(commitMsg)
-		require.Nil(t, err)
-	})
-
-	t.Run("invalid message", func(t *testing.T) {
-		commitMsg := signMsg(t, 4, sks[4], &proto.Message{
-			Type:      proto.RoundState_Commit,
-			Round:     1,
-			SeqNumber: 25,
-			Lambda:    decided25Seq[25].Message.GetLambda(),
-		})
-		commitMsg.Signature = []byte("dummy")
-		err := cr.onCommitMessage(commitMsg)
-		require.NotNil(t, err)
-		fmt.Println(err.Error())
-		require.True(t, strings.Contains(err.Error(), "invalid commit message"))
-	})
+	}
 }
 
 func setupReaderForTest(t *testing.T) Reader {
