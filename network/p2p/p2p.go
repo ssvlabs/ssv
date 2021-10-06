@@ -60,6 +60,7 @@ type p2pNetwork struct {
 	peers           *peers.Status
 	host            p2pHost.Host
 	pubsub          *pubsub.PubSub
+	ids             *identify.IDService
 	operatorPrivKey *rsa.PrivateKey
 
 	psTopicsLock *sync.RWMutex
@@ -112,7 +113,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to create p2p host")
 		}
-		host.RemoveStreamHandler(identify.IDDelta)
+		//host.RemoveStreamHandler(identify.IDDelta)
+		ua := n.getUserAgent()
+		n.ids = identify.NewIDService(host, identify.UserAgent(ua))
 		n.host = host
 	} else {
 		logger.Error("Unsupported discovery flag")
