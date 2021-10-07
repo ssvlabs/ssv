@@ -124,7 +124,9 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 		}
 		if err := r.handleNewDecidedMessage(msg); err != nil {
 			logger.Error("could not handle decided message")
+			continue
 		}
+		go r.out.Notify(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	}
 }
 
@@ -140,7 +142,6 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) error 
 	}
 	logger.Debug("decided saved")
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
-	go r.out.Notify(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	return r.checkHighestDecided(msg)
 }
 
