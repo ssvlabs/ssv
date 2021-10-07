@@ -36,7 +36,7 @@ type InstanceResult struct {
 // IBFT represents behavior of the IBFT
 type IBFT interface {
 	// Init should be called after creating an IBFT instance to init the instance, sync it, etc.
-	Init()
+	Init() error
 
 	// StartInstance starts a new instance by the given options
 	StartInstance(opts StartOptions) (*InstanceResult, error)
@@ -103,7 +103,7 @@ func New(
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
-func (i *ibftImpl) Init() {
+func (i *ibftImpl) Init() error {
 	i.logger.Info("iBFT implementation init started")
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
@@ -112,11 +112,11 @@ func (i *ibftImpl) Init() {
 	i.listenToNetworkDecidedMessages()
 	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
 	if err := i.SyncIBFT(); err != nil {
-		i.logger.Error("could not sync history, stopping IBFT init", zap.Error(err))
-		return // returning means initFinished is false, can't start new instances
+		return errors.Wrap(err, "could not sync history, stopping IBFT init")
 	}
 	i.initFinished = true
 	i.logger.Info("iBFT implementation init finished")
+	return nil
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {

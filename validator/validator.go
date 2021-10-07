@@ -96,9 +96,13 @@ func (v *Validator) Start() error {
 
 		for _, ib := range v.ibfts { // init all ibfts
 			go func(ib ibft.IBFT) {
-				ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), false)
-				defer ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), true)
-				ib.Init()
+				ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), false, false)
+				if err := ib.Init(); err != nil {
+					v.logger.Error("could not initialize ibft instance", zap.Error(err))
+					ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), false, true)
+				} else {
+					ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), true, false)
+				}
 			}(ib)
 		}
 

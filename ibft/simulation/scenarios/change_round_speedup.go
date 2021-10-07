@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -36,19 +37,25 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validat
 
 	// init ibfts
 	go func(node ibft.IBFT, index uint64) {
-		node.Init()
+		if err := node.Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(node, index)
 	}(nodes[0], 1)
 	go func(node ibft.IBFT, index uint64) {
 		time.Sleep(time.Second * 13)
-		node.Init()
+		if err := node.Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(node, index)
 	}(nodes[1], 2)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func(node ibft.IBFT, index uint64) {
 		time.Sleep(time.Second * 60)
-		node.Init()
+		if err := node.Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(node, index)
 		wg.Done()
 	}(nodes[2], 3)

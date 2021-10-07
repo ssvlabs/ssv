@@ -58,11 +58,16 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	}
 }
 
-func ReportIBFTStatus(pk string, finished bool) {
-	if finished {
-		metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitialized))
+// ReportIBFTStatus reports the current iBFT status
+func ReportIBFTStatus(pk string, finished, errorFound bool) {
+	if errorFound {
+		metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftErrored))
 	} else {
-		metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitializing))
+		if finished {
+			metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitialized))
+		} else {
+			metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitializing))
+		}
 	}
 }
 
@@ -110,4 +115,5 @@ var (
 	ibftRunning      ibftStatus = 1
 	ibftInitializing ibftStatus = 2
 	ibftInitialized  ibftStatus = 3
+	ibftErrored      ibftStatus = 4
 )

@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -36,7 +37,9 @@ func (r *farFutureSync) Start(nodes []ibft.IBFT, shares map[uint64]*validatorsto
 	for i := uint64(1); i < uint64(nodeCount); i++ {
 		wg.Add(1)
 		go func(node ibft.IBFT) {
-			node.Init()
+			if err := node.Init(); err != nil {
+				fmt.Printf("error initializing ibft")
+			}
 			wg.Done()
 		}(nodes[i-1])
 	}
@@ -65,7 +68,9 @@ loop:
 	}
 
 	r.logger.Info("starting node $4")
-	nodes[3].Init()
+	if err := nodes[3].Init(); err != nil {
+		fmt.Printf("error initializing ibft")
+	}
 
 	nextSeq, err := nodes[3].NextSeqNumber()
 	if err != nil {

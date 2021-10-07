@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -32,7 +33,9 @@ func (r *regular) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.S
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
 		go func(node ibft.IBFT) {
-			node.Init()
+			if err := node.Init(); err != nil {
+				fmt.Printf("error initializing ibft")
+			}
 			wg.Done()
 		}(nodes[i-1])
 	}

@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -31,18 +32,24 @@ func (r *f1MultiRound) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstor
 	//
 	wg := sync.WaitGroup{}
 	go func(node ibft.IBFT, index uint64) {
-		r.nodes[0].Init()
+		if err := r.nodes[0].Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(node, index)
 	}(r.nodes[0], 1)
 	go func(node ibft.IBFT, index uint64) {
-		r.nodes[1].Init()
+		if err := r.nodes[1].Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		time.Sleep(time.Second * 13)
 		r.startNode(node, index)
 	}(r.nodes[1], 2)
 	wg.Add(1)
 	go func() {
 		time.Sleep(time.Second * 30)
-		r.nodes[2].Init()
+		if err := r.nodes[2].Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(r.nodes[2], 3)
 		wg.Done()
 	}()
