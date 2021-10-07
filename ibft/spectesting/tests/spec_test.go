@@ -1,6 +1,11 @@
 package tests
 
 import (
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/changeround"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/commit"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/common"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/prepare"
+	"github.com/bloxapp/ssv/ibft/spectesting/tests/preprepare"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -14,20 +19,41 @@ type SpecTest interface {
 }
 
 var tests = []SpecTest{
-	&PrepareAtDifferentRound{},
-	&ChangeRoundAndDecide{},
-	&PrepareChangeRoundAndDecide{},
-	&DecideDifferentValue{},
-	&PrepareAtDifferentRound{},
-	&NonJustifiedPrePrepapre{},
-	&DuplicateMessages{},
+	// pre-prepare
+	&preprepare.NonJustifiedPrePrepapre1{},
+	&preprepare.NonJustifiedPrePrepapre2{},
+	&preprepare.NonJustifiedPrePrepapre3{},
+	&preprepare.Round1PrePrepare{},
+	&preprepare.WrongLeaderPrePrepare{},
+	&preprepare.FuturePrePrepare{},
+	&preprepare.InvalidPrePrepareValue{},
+
+	// prepare
+	&prepare.PreparedAtFutureRound{},
+	&prepare.PreparedAndDecideAfterChangeRound{},
+
+	// commit
+	&commit.DecideDifferentValue{},
+	&commit.PrevRoundDecided{},
+	&commit.FutureRoundDecided{},
+
+	// change round
+	&changeround.ChangeToRound2AndDecide{},
+	&changeround.PartialQuorum{},
+	&changeround.NotPreparedError{},
+	&changeround.PreparedFollowedByPrePrepared{},
+	&changeround.FuturePrePrepareAfterChangeRound{},
+	&changeround.FullChangeRoundThePartialQuorumTheDecide{},
+
+	// common
+	&common.DuplicateMessages{},
+	&common.InvalidSig{},
+	&common.WrongSequenceNumber{},
 	&ValidSimpleRun{},
-	&ChangeRoundPartialQuorum{},
-	&ChangeRoundThePartialQuorumTheDecide{},
 }
 
 func TestAllSpecTests(t *testing.T) {
-	require.Len(t, tests, 10)
+	require.Len(t, tests, 22)
 	for _, test := range tests {
 		t.Run(test.Name(), func(tt *testing.T) {
 			test.Prepare(tt)

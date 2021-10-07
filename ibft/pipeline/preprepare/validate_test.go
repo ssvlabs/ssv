@@ -44,7 +44,7 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *pr
 
 func TestValidatePrePrepareValue(t *testing.T) {
 	sks, _ := GenerateNodes(4)
-	consensus := bytesval.New([]byte(time.Now().Weekday().String()))
+	consensus := bytesval.NewEqualBytes([]byte(time.Now().Weekday().String()))
 
 	tests := []struct {
 		name string
@@ -112,7 +112,9 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidatePrePrepareMsg(consensus, 1).Run(test.msg)
+			err := ValidatePrePrepareMsg(consensus, func(round uint64) uint64 {
+				return 1
+			}).Run(test.msg)
 			if len(test.err) > 0 {
 				require.EqualError(t, err, test.err)
 			} else {

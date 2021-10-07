@@ -12,18 +12,22 @@ import (
 type messagesContainer struct {
 	messagesByRound         map[uint64][]*proto.SignedMessage
 	messagesByRoundAndValue map[uint64]map[string][]*proto.SignedMessage // map[round]map[valueHex]msgs
+	allChangeRoundMessages  []*proto.SignedMessage
 	exitingMsgSigners       map[uint64]map[uint64]bool
 	quorumThreshold         uint64
+	partialQuorumThreshold  uint64
 	lock                    sync.RWMutex
 }
 
 // New is the constructor of MessagesContainer
-func New(quorumThreshold uint64) msgcont.MessageContainer {
+func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContainer {
 	return &messagesContainer{
 		messagesByRound:         make(map[uint64][]*proto.SignedMessage),
 		messagesByRoundAndValue: make(map[uint64]map[string][]*proto.SignedMessage),
+		allChangeRoundMessages:  make([]*proto.SignedMessage, 0),
 		exitingMsgSigners:       make(map[uint64]map[uint64]bool),
 		quorumThreshold:         quorumThreshold,
+		partialQuorumThreshold:  partialQuorumThreshold,
 	}
 }
 
@@ -95,6 +99,11 @@ func (c *messagesContainer) AddMessage(msg *proto.SignedMessage) {
 		c.messagesByRoundAndValue[msg.Message.Round][valueHex] = make([]*proto.SignedMessage, 0)
 	}
 
+	// add to all change round messages
+	if msg.Message.Type == proto.RoundState_ChangeRound {
+		c.allChangeRoundMessages = append(c.allChangeRoundMessages, msg)
+	}
+
 	for _, signer := range msg.SignerIds {
 		c.exitingMsgSigners[msg.Message.Round][signer] = true
 	}
@@ -112,4 +121,37 @@ func (c *messagesContainer) OverrideMessages(msg *proto.SignedMessage) {
 
 	// override
 	c.AddMessage(msg)
+}
+
+func (c *messagesContainer) PartialChangeRoundQuorum(stateRound uint64) (found bool, lowestChangeRound uint64) {
+	lowestChangeRound = uint64(100000) // just a random really large round number
+	foundMsgs := make(map[uint64]*proto.SignedMessage)
+	quorumCount := 0
+
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	for _, msg := range c.allChangeRoundMessages {
+		if msg.Message.Round <= stateRound {
+			continue
+		}
+
+		for _, signer := range msg.SignerIds {
+			if existingMsg, found := foundMsgs[signer]; found {
+				if existingMsg.Message.Round > msg.Message.Round {
+					foundMsgs[signer] = msg
+				}
+			} else {
+				foundMsgs[signer] = msg
+				quorumCount++
+			}
+
+			// recalculate lowest
+			if foundMsgs[signer].Message.Round < lowestChangeRound {
+				lowestChangeRound = msg.Message.Round
+			}
+		}
+	}
+
+	return quorumCount >= int(c.partialQuorumThreshold), lowestChangeRound
 }

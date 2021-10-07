@@ -1,4 +1,4 @@
-package tests
+package commit
 
 import (
 	"github.com/bloxapp/ssv/ibft"

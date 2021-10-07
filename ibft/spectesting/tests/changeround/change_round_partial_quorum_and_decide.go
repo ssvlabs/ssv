@@ -1,4 +1,4 @@
-package tests
+package changeround
 
 import (
 	"github.com/bloxapp/ssv/ibft"
@@ -9,20 +9,20 @@ import (
 	"testing"
 )
 
-// PrepareAtDifferentRound tests receiving a quorum of prepare msgs in a different round than state round.
-type PrepareAtDifferentRound struct {
+// FullChangeRoundThePartialQuorumTheDecide tests coming to consensus after an f+1 (after change round)
+type FullChangeRoundThePartialQuorumTheDecide struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *PrepareAtDifferentRound) Name() string {
-	return "pre-prepare -> prepare for round 5 -> change round until round 5 -> commit"
+func (test *FullChangeRoundThePartialQuorumTheDecide) Name() string {
+	return "pre-prepare -> change round -> bump f+1 to higher round-> change round-> decide"
 }
 
 // Prepare prepares the test
-func (test *PrepareAtDifferentRound) Prepare(t *testing.T) {
+func (test *FullChangeRoundThePartialQuorumTheDecide) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,9 +39,20 @@ func (test *PrepareAtDifferentRound) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes all test messages
-func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *FullChangeRoundThePartialQuorumTheDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	return []*proto.SignedMessage{
 		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 1, 1),
+
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 2, 2),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 2, 3),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 2, 4),
+
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 5, 3),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 5, 4),
+		spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 5, 1),
+
+		spectesting.PrePrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 5, 1),
 
 		spectesting.PrepareMsg(t, spectesting.TestSKs()[0], test.lambda, test.inputValue, 5, 1),
 		spectesting.PrepareMsg(t, spectesting.TestSKs()[1], test.lambda, test.inputValue, 5, 2),
@@ -56,36 +67,41 @@ func (test *PrepareAtDifferentRound) MessagesSequence(t *testing.T) []*proto.Sig
 }
 
 // Run runs the test
-func (test *PrepareAtDifferentRound) Run(t *testing.T) {
+func (test *FullChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.SimulateTimeout(test.instance, 2)
 
-	// simulate a later round prepare and how the node gets there in terms of change round timeouts
-	for i := 2; i <= 5; i++ {
-		spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage)
-		spectesting.SimulateTimeout(test.instance, uint64(i))
+	// change round
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	err := test.instance.JustifyRoundChange(2)
+	require.NoError(t, err)
+
+	// f+1
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	require.EqualValues(t, 5, test.instance.State.Round.Get())
+
+	// full change round quorum
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
+	require.EqualValues(t, proto.RoundState_PrePrepare, test.instance.State.Stage.Get())
+	err = test.instance.JustifyRoundChange(5)
+	require.NoError(t, err)
+
+	// check pre-prepare justification
+	err = test.instance.JustifyPrePrepare(2, test.inputValue)
+	require.NoError(t, err)
+
+	// process all messages
+	for {
+		if res, _ := test.instance.ProcessMessage(); !res {
+			break
+		}
 	}
-
-	// non qualified prepare quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ := test.instance.PrepareMessages.QuorumAchieved(5, test.inputValue)
-	require.False(t, quorum)
-	// qualified prepare quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ = test.instance.PrepareMessages.QuorumAchieved(5, test.inputValue)
-	require.True(t, quorum)
-	// non qualified commit quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	quorum, _ = test.instance.CommitMessages.QuorumAchieved(5, test.inputValue)
-	require.False(t, quorum)
-	// qualified commit quorum
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
-	quorum, _ = test.instance.CommitMessages.QuorumAchieved(5, test.inputValue)
-	require.True(t, quorum)
-
 	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
 }

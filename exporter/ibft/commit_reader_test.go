@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -69,7 +68,8 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 			Value:     []byte("value"),
 		}))
 	}
-	decided := ibft.AggregateMessages(zap.L(), sigs)
+	decided, err := proto.AggregateMessages(sigs)
+	require.NoError(t, err)
 
 	sk := &bls.SecretKey{}
 	sk.SetByCSPRNG()

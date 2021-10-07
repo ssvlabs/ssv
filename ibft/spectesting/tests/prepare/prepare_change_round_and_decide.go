@@ -1,4 +1,4 @@
-package tests
+package prepare
 
 import (
 	"github.com/bloxapp/ssv/ibft"
@@ -10,20 +10,20 @@ import (
 	"testing"
 )
 
-// PrepareChangeRoundAndDecide tests coming to consensus after preparing and then changing round.
-type PrepareChangeRoundAndDecide struct {
+// PreparedAndDecideAfterChangeRound tests coming to consensus after preparing and then changing round.
+type PreparedAndDecideAfterChangeRound struct {
 	instance   *ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *PrepareChangeRoundAndDecide) Name() string {
+func (test *PreparedAndDecideAfterChangeRound) Name() string {
 	return "pre-prepare -> prepare -> change round -> prepare -> decide"
 }
 
 // Prepare prepares the test
-func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
+func (test *PreparedAndDecideAfterChangeRound) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -40,7 +40,7 @@ func (test *PrepareChangeRoundAndDecide) Prepare(t *testing.T) {
 }
 
 // MessagesSequence includes test messages
-func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto.SignedMessage {
+func (test *PreparedAndDecideAfterChangeRound) MessagesSequence(t *testing.T) []*proto.SignedMessage {
 	signersMap := map[uint64]*bls.SecretKey{
 		1: spectesting.TestSKs()[0],
 		2: spectesting.TestSKs()[1],
@@ -76,7 +76,7 @@ func (test *PrepareChangeRoundAndDecide) MessagesSequence(t *testing.T) []*proto
 }
 
 // Run runs the test
-func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
+func (test *PreparedAndDecideAfterChangeRound) Run(t *testing.T) {
 	// pre-prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 
@@ -92,12 +92,11 @@ func (test *PrepareChangeRoundAndDecide) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	justified, err := test.instance.JustifyRoundChange(2)
+	err := test.instance.JustifyRoundChange(2)
 	require.NoError(t, err)
-	require.True(t, justified)
 
 	// justify pre-prepare
-	err = test.instance.JustifyPrePrepare(2)
+	err = test.instance.JustifyPrePrepare(2, test.inputValue)
 	require.NoError(t, err)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 

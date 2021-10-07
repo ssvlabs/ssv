@@ -1,4 +1,4 @@
-package tests
+package changeround
 
 import (
 	"github.com/bloxapp/ssv/ibft"
@@ -10,20 +10,20 @@ import (
 	"testing"
 )
 
-// ChangeRoundPartialQuorum tests partial round change behaviour
-type ChangeRoundPartialQuorum struct {
+// PartialQuorum tests partial round change behaviour
+type PartialQuorum struct {
 	instances  []*ibft.Instance
 	inputValue []byte
 	lambda     []byte
 }
 
 // Name returns test name
-func (test *ChangeRoundPartialQuorum) Name() string {
+func (test *PartialQuorum) Name() string {
 	return "receive f+1 change round messages -> bump round -> set timer -> broadcast round change"
 }
 
 // Prepare prepares the test
-func (test *ChangeRoundPartialQuorum) Prepare(t *testing.T) {
+func (test *PartialQuorum) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
@@ -39,12 +39,13 @@ func (test *ChangeRoundPartialQuorum) Prepare(t *testing.T) {
 				SignedMessage: msg,
 				Type:          network.NetworkMsg_IBFTType,
 			})
+			spectesting.RequireReturnedTrueNoError(t, instance.ProcessMessage)
 		}
 	}
 }
 
 // MessagesSequence includes all test messages
-func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.SignedMessage {
+func (test *PartialQuorum) MessagesSequence(t *testing.T) [][]*proto.SignedMessage {
 	return [][]*proto.SignedMessage{
 		{ // f+1 points to 2
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 2, 1),
@@ -75,49 +76,47 @@ func (test *ChangeRoundPartialQuorum) MessagesSequence(t *testing.T) [][]*proto.
 		{ // f points to 2, no partial quorum
 			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 10, 1),
 		},
+		{ // f+1 points to 7
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 0, 1),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 0, 2),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 4, 2),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 5, 1),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[2], test.lambda, 4, 3),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[3], test.lambda, 7, 4),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[1], test.lambda, 1, 2),
+			spectesting.ChangeRoundMsg(t, spectesting.TestSKs()[0], test.lambda, 9, 1),
+		},
 	}
 }
 
 // Run runs the test
-func (test *ChangeRoundPartialQuorum) Run(t *testing.T) {
-	require.Len(t, test.instances, 5)
+func (test *PartialQuorum) Run(t *testing.T) {
+	require.Len(t, test.instances, 6)
 
-	spectesting.RequireReturnedTrueNoError(t, test.instances[0].ProcessChangeRoundPartialQuorum)
+	require.NoError(t, test.instances[0].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
 	require.EqualValues(t, 2, test.instances[0].State.Round.Get())
-	require.Len(t, test.instances[0].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
-		test.instances[0].State.Lambda.Get(),
-		test.instances[0].State.SeqNumber.Get())), 2)
-	test.instances[0].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTAllRoundChangeIndexKey(
+	test.instances[0].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(
 		test.instances[0].State.Lambda.Get(),
 		test.instances[0].State.SeqNumber.Get()))
 
-	spectesting.RequireReturnedTrueNoError(t, test.instances[1].ProcessChangeRoundPartialQuorum)
+	require.NoError(t, test.instances[0].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
 	require.EqualValues(t, 3, test.instances[1].State.Round.Get())
-	require.Len(t, test.instances[1].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
-		test.instances[1].State.Lambda.Get(),
-		test.instances[1].State.SeqNumber.Get())), 4)
-	test.instances[1].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTAllRoundChangeIndexKey(
+	test.instances[1].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(
 		test.instances[1].State.Lambda.Get(),
 		test.instances[1].State.SeqNumber.Get()))
 
-	spectesting.RequireReturnedTrueNoError(t, test.instances[2].ProcessChangeRoundPartialQuorum)
-	require.EqualValues(t, 4, test.instances[2].State.Round.Get())
-	require.Len(t, test.instances[2].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
-		test.instances[2].State.Lambda.Get(),
-		test.instances[2].State.SeqNumber.Get())), 8)
-	test.instances[2].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTAllRoundChangeIndexKey(
+	require.NoError(t, test.instances[2].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
+	require.EqualValues(t, 8, test.instances[2].State.Round.Get())
+	test.instances[2].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(
 		test.instances[2].State.Lambda.Get(),
 		test.instances[2].State.SeqNumber.Get()))
 
-	spectesting.RequireReturnedFalseNoError(t, test.instances[3].ProcessChangeRoundPartialQuorum)
+	require.NoError(t, test.instances[3].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
 	require.EqualValues(t, 3, test.instances[3].State.Round.Get())
-	require.Len(t, test.instances[3].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
-		test.instances[3].State.Lambda.Get(),
-		test.instances[3].State.SeqNumber.Get())), 4)
 
-	spectesting.RequireReturnedFalseNoError(t, test.instances[4].ProcessChangeRoundPartialQuorum)
+	require.NoError(t, test.instances[4].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
 	require.EqualValues(t, 4, test.instances[4].State.Round.Get())
-	require.Len(t, test.instances[4].MsgQueue.MessagesForIndex(msgqueue.IBFTAllRoundChangeIndexKey(
-		test.instances[4].State.Lambda.Get(),
-		test.instances[4].State.SeqNumber.Get())), 1)
+
+	require.NoError(t, test.instances[5].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
+	require.EqualValues(t, 7, test.instances[5].State.Round.Get())
 }

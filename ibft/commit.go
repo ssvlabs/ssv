@@ -39,7 +39,6 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		auth.ValidateRound(i.State.Round.Get()),
 		i.commitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
@@ -101,39 +100,18 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()),
 					zap.Int("got_votes", len(sigs)))
 
-				if aggMsg := i.aggregateMessages(sigs); aggMsg != nil {
-					i.decidedMsg = aggMsg
-					// mark instance commit
-					i.ProcessStageChange(proto.RoundState_Decided)
-					i.Stop()
+				aggMsg, err := proto.AggregateMessages(sigs)
+				if err != nil {
+					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err))
 				}
+				i.decidedMsg = aggMsg
+				// mark instance commit
+				i.ProcessStageChange(proto.RoundState_Decided)
+				i.Stop()
 			})
 		}
 		return nil
 	})
-}
-
-func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedMessage {
-	return AggregateMessages(i.Logger, sigs)
-}
-
-// AggregateMessages aggregates the given messages
-func AggregateMessages(logger *zap.Logger, sigs []*proto.SignedMessage) *proto.SignedMessage {
-	var decided *proto.SignedMessage
-	var err error
-	for _, msg := range sigs {
-		if decided == nil {
-			decided, err = msg.DeepCopy()
-			if err != nil {
-				logger.Error("could not copy message")
-			}
-		} else {
-			if err := decided.Aggregate(msg); err != nil {
-				logger.Error("could not aggregate message")
-			}
-		}
-	}
-	return decided
 }
 
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {

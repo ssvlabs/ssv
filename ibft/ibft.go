@@ -1,6 +1,11 @@
 package ibft
 
 import (
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
+	"sync"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
@@ -8,10 +13,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
-	"sync"
 )
 
 // StartOptions defines type for IBFT instance options
@@ -53,47 +54,57 @@ type IBFT interface {
 
 // ibftImpl implements IBFT interface
 type ibftImpl struct {
-	role                beacon.RoleType
-	currentInstance     *Instance
-	currentInstanceLock sync.Locker
-	logger              *zap.Logger
-	ibftStorage         collections.Iibft
-	network             network.Network
-	msgQueue            *msgqueue.MessageQueue
-	instanceConfig      *proto.InstanceConfig
-	ValidatorShare      *storage.Share
-	Identifier          []byte
+	currentInstance *Instance
+	logger          *zap.Logger
+	ibftStorage     collections.Iibft
+	network         network.Network
+	msgQueue        *msgqueue.MessageQueue
+	instanceConfig  *proto.InstanceConfig
+	ValidatorShare  *storage.Share
+	Identifier      []byte
 
 	// flags
 	initFinished bool
 
-	syncingLock *semaphore.Weighted
+	// locks
+	currentInstanceLock sync.Locker
+	syncingLock         *semaphore.Weighted
 }
 
 // New is the constructor of IBFT
-func New(role beacon.RoleType, identifier []byte, logger *zap.Logger, storage collections.Iibft, network network.Network, queue *msgqueue.MessageQueue, instanceConfig *proto.InstanceConfig, ValidatorShare *storage.Share) IBFT {
+func New(
+	role beacon.RoleType,
+	identifier []byte,
+	logger *zap.Logger,
+	storage collections.Iibft,
+	network network.Network,
+	queue *msgqueue.MessageQueue,
+	instanceConfig *proto.InstanceConfig,
+	ValidatorShare *storage.Share,
+) IBFT {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &ibftImpl{
-		role:                role,
-		ibftStorage:         storage,
-		currentInstanceLock: &sync.Mutex{},
-		logger:              logger,
-		network:             network,
-		msgQueue:            queue,
-		instanceConfig:      instanceConfig,
-		ValidatorShare:      ValidatorShare,
-		Identifier:          identifier,
+		ibftStorage:    storage,
+		logger:         logger,
+		network:        network,
+		msgQueue:       queue,
+		instanceConfig: instanceConfig,
+		ValidatorShare: ValidatorShare,
+		Identifier:     identifier,
 
 		// flags
 		initFinished: false,
 
-		syncingLock: semaphore.NewWeighted(1),
+		// locks
+		currentInstanceLock: &sync.Mutex{},
+		syncingLock:         semaphore.NewWeighted(1),
 	}
 	return ret
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *ibftImpl) Init() {
+	i.logger.Info("iBFT implementation init started")
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
@@ -105,7 +116,7 @@ func (i *ibftImpl) Init() {
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
 	i.initFinished = true
-	i.logger.Debug("iBFT implementation init finished")
+	i.logger.Info("iBFT implementation init finished")
 }
 
 func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
