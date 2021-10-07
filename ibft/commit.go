@@ -3,6 +3,7 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
@@ -99,7 +100,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()),
 					zap.Int("got_votes", len(sigs)))
 
-				aggMsg, err := i.aggregateMessages(sigs)
+				aggMsg, err := proto.AggregateMessages(sigs)
 				if err != nil {
 					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err))
 				}
@@ -111,29 +112,6 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		}
 		return nil
 	})
-}
-
-func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) (*proto.SignedMessage, error) {
-	var decided *proto.SignedMessage
-	var err error
-	for _, msg := range sigs {
-		if decided == nil {
-			decided, err = msg.DeepCopy()
-			if err != nil {
-				return nil, errors.Wrap(err, "could not copy message")
-			}
-		} else {
-			if err := decided.Aggregate(msg); err != nil {
-				return nil, errors.Wrap(err, "could not aggregate message")
-			}
-		}
-	}
-
-	if decided == nil {
-		return nil, errors.New("could not aggregate decided messages, no msgs")
-	}
-
-	return decided, nil
 }
 
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {

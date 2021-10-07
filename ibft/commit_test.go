@@ -87,8 +87,7 @@ func TestAggregatedMsg(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			instance := &Instance{}
-			agg, err := instance.aggregateMessages(test.msgs)
+			agg, err := proto.AggregateMessages(test.msgs)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
@@ -143,7 +142,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		Value:  []byte("value"),
 	}))
 
-	instance.decidedMsg, err = instance.aggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
+	instance.decidedMsg, err = proto.AggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 	require.NoError(t, err)
 
 	// test aggregation
@@ -195,7 +194,8 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Value:  []byte("value"),
 		}))
 	}
-	decided := AggregateMessages(zap.L(), sigs)
+	decided, err := proto.AggregateMessages(sigs)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name        string

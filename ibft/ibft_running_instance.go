@@ -114,8 +114,7 @@ func (i *ibftImpl) listenToLateCommitMsgs(runningInstance *Instance) {
 			if stopper.IsStopped() {
 				break loop
 			}
-			idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State.Lambda.Get(),
-				runningInstance.State.SeqNumber.Get(), runningInstance.State.Round.Get())
+			idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State.Lambda.Get(), runningInstance.State.SeqNumber.Get())
 			if netMsg := runningInstance.MsgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
 				if netMsg.SignedMessage.Message == nil || netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
 					// not a commit message -> skip
