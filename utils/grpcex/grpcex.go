@@ -21,7 +21,7 @@ const (
 
 // DialConn dials GRPC connection
 func DialConn(addr string) (*grpc.ClientConn, error) {
-	baseOpts, err := constructDialOptions(defaultMaxCallRecvMsgSize, defaultGRPCRetries, )
+	baseOpts, err := constructDialOptions(defaultMaxCallRecvMsgSize, defaultGRPCRetries)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to construct base dial options")
 	}

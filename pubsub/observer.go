@@ -16,7 +16,7 @@ type observer struct {
 	channel SubjectChannel
 	active  bool
 	mut     sync.Mutex
-	logger *zap.Logger
+	logger  *zap.Logger
 }
 
 func newSubjectObserver(logger *zap.Logger) *observer {
@@ -42,7 +42,6 @@ func (so *observer) close() {
 		if err := recover(); err != nil {
 			// catch "close of closed channel"
 			so.logger.Debug("recovering from panic", zap.Error(err.(error)))
-			//fmt.Printf("recovering from panic: %s\n", err)
 		}
 	}()
 
@@ -63,7 +62,6 @@ func (so *observer) notifyCallback(e SubjectEvent) {
 				if err := recover(); err != nil {
 					// catch "send on closed channel"
 					so.logger.Debug("recovering from panic", zap.Error(err.(error)))
-					//fmt.Printf("recovering from panic: %s\n", err)
 				}
 			}()
 			// in case the channel is blocking - the observer should be locked

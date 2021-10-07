@@ -107,4 +107,3 @@ func (mh *metricsHandler) configureProfiling() {
 	runtime.SetBlockProfileRate(1000)
 	runtime.SetMutexProfileFraction(1)
 }
-
