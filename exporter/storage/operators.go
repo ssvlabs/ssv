@@ -30,6 +30,9 @@ type OperatorsCollection interface {
 // ListOperators returns information of all the known operators
 // when 'to' equals zero, all operators will be returned
 func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInformation, error) {
+	es.operatorsLock.RLock()
+	defer es.operatorsLock.RUnlock()
+
 	objs, err := es.db.GetAllByCollection(append(storagePrefix, operatorsPrefix...))
 	if err != nil {
 		return nil, err
@@ -48,6 +51,9 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 
 // GetOperatorInformation returns information of the given operator by public key
 func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
+	es.operatorsLock.RLock()
+	defer es.operatorsLock.RUnlock()
+
 	obj, found, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
 	if !found {
 		return nil, found, nil
@@ -73,6 +79,9 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 		// TODO: update operator information (i.e. change name)
 		return nil
 	}
+	es.operatorsLock.Lock()
+	defer es.operatorsLock.Unlock()
+
 	operatorInformation.Index, err = es.nextIndex(operatorsPrefix)
 	if err != nil {
 		return errors.Wrap(err, "could not calculate next operator index")

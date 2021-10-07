@@ -26,6 +26,7 @@ type exporterStorage struct {
 	logger *zap.Logger
 
 	validatorsLock sync.RWMutex
+	operatorsLock  sync.RWMutex
 }
 
 // NewExporterStorage creates a new instance of Storage
@@ -34,6 +35,7 @@ func NewExporterStorage(db basedb.IDb, logger *zap.Logger) Storage {
 		db:             db,
 		logger:         logger.With(zap.String("component", "exporter/storage")),
 		validatorsLock: sync.RWMutex{},
+		operatorsLock:  sync.RWMutex{},
 	}
 	return &es
 }
