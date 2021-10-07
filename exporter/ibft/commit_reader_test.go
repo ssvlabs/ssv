@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/pubsub"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -185,6 +186,7 @@ func setupReaderForTest(t *testing.T) Reader {
 		Network:          nil,
 		ValidatorStorage: validatorStorage,
 		IbftStorage:      &ibftStorage,
+		Out:              pubsub.NewSubject(logger),
 	})
 
 	return cr
