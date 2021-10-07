@@ -60,6 +60,7 @@ type p2pNetwork struct {
 	peers           *peers.Status
 	host            p2pHost.Host
 	pubsub          *pubsub.PubSub
+	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
 
 	psTopicsLock *sync.RWMutex
@@ -73,14 +74,16 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	logger = logger.With(zap.String("component", "p2p"))
 
 	n := &p2pNetwork{
-		ctx:           ctx,
-		cfg:           cfg,
-		listenersLock: &sync.Mutex{},
-		psTopicsLock:  &sync.RWMutex{},
-		logger:        logger,
+		ctx:             ctx,
+		cfg:             cfg,
+		listenersLock:   &sync.Mutex{},
+		psTopicsLock:    &sync.RWMutex{},
+		logger:          logger,
+		operatorPrivKey: cfg.OperatorPrivateKey,
 	}
 
 	var _ipAddr net.IP
+	var ids *identify.IDService
 
 	if cfg.DiscoveryType == "mdns" { // use mdns discovery
 		// Create a new libp2p Host that listens on a random TCP port
@@ -112,12 +115,17 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to create p2p host")
 		}
-		host.RemoveStreamHandler(identify.IDDelta)
+		//host.RemoveStreamHandler(identify.IDDelta)
+		ua := n.getUserAgent()
+		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
+		ids = identify.NewIDService(host, identify.UserAgent(ua))
 		n.host = host
 	} else {
 		logger.Error("Unsupported discovery flag")
 		return nil, errors.New("Unsupported discovery flag")
 	}
+
+	n.peersIndex = NewPeersIndex(n.host, ids)
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
@@ -161,14 +169,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		go n.listenForNewNodes()
 
 		if n.cfg.HostAddress != "" {
-			//logExternalIPAddr(s.host.ID(), p2pHostAddress, p2pTCPPort)
 			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
-			conn, err := net.DialTimeout("tcp", a, time.Second*10)
-			if err != nil {
-				n.logger.Error("IP address is not accessible", zap.Error(err))
-			}
-			if err := conn.Close(); err != nil {
-				n.logger.Error("Could not close connection", zap.Error(err))
+			if err := checkAddress(a); err != nil {
+				n.logger.Debug("failed to check address", zap.String("addr", a), zap.String("err", err.Error()))
+			} else {
+				n.logger.Debug("address was checked successfully", zap.String("addr", a))
 			}
 		}
 	}
@@ -211,7 +216,11 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
-		go reportConnectionsCount(n)
+		// index all peers and report
+		go func() {
+			n.peersIndex.Run()
+			reportAllConnections(n)
+		}()
 
 		// topics peers
 		n.psTopicsLock.RLock()
@@ -390,4 +399,16 @@ func ignorePeers() map[string]bool {
 	return map[string]bool{
 		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
 	}
+}
+
+// checkAddress checks that some address is accessible
+func checkAddress(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, time.Second*10)
+	if err != nil {
+		return errors.Wrap(err, "IP address is not accessible")
+	}
+	if err := conn.Close(); err != nil {
+		return errors.Wrap(err, "could not close connection")
+	}
+	return nil
 }

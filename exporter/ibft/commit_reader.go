@@ -45,32 +45,36 @@ func NewCommitReader(opts CommitReaderOptions) Reader {
 
 // Start starts the reader
 func (cr *commitReader) Start() error {
-	cr.listenToNetwork(cr.network.ReceivedMsgChan())
+	msgCn := cr.network.ReceivedMsgChan()
+	cr.logger.Debug("listening to network messages")
+	for msg := range msgCn {
+		if processed := cr.onMessage(msg); processed {
+			cr.logger.Debug("managed to process commit message",
+				zap.String("", string(msg.Message.Lambda)), zap.Uint64("seq", msg.Message.SeqNumber))
+		}
+	}
 	return nil
 }
 
-// listenToNetwork listens to commit messages
-func (cr *commitReader) listenToNetwork(msgChan <-chan *proto.SignedMessage) {
-	cr.logger.Debug("listening to network messages")
-	for msg := range msgChan {
-		if err := auth.BasicMsgValidation().Run(msg); err != nil {
-			// received invalid msg
-			continue
-		}
-		// filtering irrelevant messages
-		if msg.Message.Type != proto.RoundState_Commit {
-			continue
-		}
-		if err := cr.handleCommitMessage(msg); err != nil {
-			cr.logger.Debug("could not handle commit message", zap.String("err", err.Error()))
-		}
+func (cr *commitReader) onMessage(msg *proto.SignedMessage) bool {
+	if err := auth.BasicMsgValidation().Run(msg); err != nil {
+		// received invalid msg
+		return false
 	}
+	// filtering irrelevant messages
+	if msg.Message.Type != proto.RoundState_Commit {
+		return false
+	}
+	if err := cr.onCommitMessage(msg); err != nil {
+		cr.logger.Debug("could not handle commit message", zap.String("err", err.Error()))
+	}
+	return true
 }
 
-// handleCommitMessage handles a new commit message
-func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
+// onCommitMessage handles a new commit message
+func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	pkHex, _ := format.IdentifierUnformat(string(msg.Message.Lambda))
-	logger := cr.logger.With(zap.String("pk", pkHex))
+	logger := cr.logger.With(zap.String("pk", pkHex), zap.Uint64("seq", msg.Message.SeqNumber))
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return errors.Wrap(err, "could not read public key")
@@ -86,31 +90,13 @@ func (cr *commitReader) handleCommitMessage(msg *proto.SignedMessage) error {
 	if err := validateCommitMsg(msg, share); err != nil {
 		return errors.Wrap(err, "invalid commit message")
 	}
-	return cr.onValidCommitMessage(msg)
-}
-
-// onValidCommitMessage
-func (cr *commitReader) onValidCommitMessage(msg *proto.SignedMessage) error {
-	pkHex, _ := format.IdentifierUnformat(string(msg.Message.Lambda))
-	logger := cr.logger.With(zap.String("pk", pkHex))
-	decided, found, err := cr.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+	updated, err := ibft.ProcessLateCommitMsg(msg, cr.ibftStorage, share.PublicKey.SerializeToHexStr())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to process late commit message")
 	}
-	if !found {
-		return nil
+	if updated {
+		logger.Debug("decided message was updated")
 	}
-	if err = decided.Aggregate(msg); err != nil {
-		if err == proto.ErrDuplicateMsgSigner {
-			return nil
-		}
-		return errors.Wrap(err, "could not aggregate commit message")
-	}
-	if err := cr.ibftStorage.SaveDecided(decided); err != nil {
-		return errors.Wrap(err, "could not save aggregated decided message")
-	}
-	ibft.ReportDecided(pkHex, msg)
-	logger.Debug("decided message was updated", zap.Uint64("seq", decided.Message.SeqNumber))
 	return nil
 }
 

@@ -1,8 +1,11 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"go.uber.org/zap"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -177,4 +180,78 @@ func TestCommitPipeline(t *testing.T) {
 	}
 	pipeline := instance.commitMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, upon commit msg, ", pipeline.Name())
+}
+
+func TestProcessLateCommitMsg(t *testing.T) {
+	sks, _ := GenerateNodes(4)
+	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
+
+	var sigs []*proto.SignedMessage
+	for i := 1; i < 4; i++ {
+		sigs = append(sigs, SignMsg(t, uint64(i), sks[uint64(i)], &proto.Message{
+			Type:   proto.RoundState_Commit,
+			Round:  3,
+			Lambda: []byte("Lambda_ATTESTER"),
+			Value:  []byte("value"),
+		}))
+	}
+	decided := AggregateMessages(zap.L(), sigs)
+
+	tests := []struct {
+		name        string
+		expectedErr string
+		updated     bool
+		msg         *proto.SignedMessage
+	}{
+		{
+			"valid",
+			"",
+			true,
+			SignMsg(t, 4, sks[4], &proto.Message{
+				Type:   proto.RoundState_Commit,
+				Round:  3,
+				Lambda: []byte("Lambda_ATTESTER"),
+				Value:  []byte("value"),
+			}),
+		},
+		{
+			"invalid",
+			"could not aggregate commit message",
+			false,
+			func() *proto.SignedMessage {
+				msg := SignMsg(t, 4, sks[4], &proto.Message{
+					Type:   proto.RoundState_Commit,
+					Round:  3,
+					Lambda: []byte("Lambda_ATTESTER"),
+					Value:  []byte("value"),
+				})
+				msg.Signature = []byte("dummy")
+				return msg
+			}(),
+		},
+		{
+			"not found",
+			"",
+			false,
+			SignMsg(t, 4, sks[4], &proto.Message{
+				Type:   proto.RoundState_Commit,
+				Round:  3,
+				Lambda: []byte("xxx_ATTESTER"),
+				Value:  []byte("value"),
+			}),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.NoError(t, storage.SaveDecided(decided))
+			updated, err := ProcessLateCommitMsg(test.msg, &storage, "Lambda")
+			if len(test.expectedErr) > 0 {
+				require.NotNil(t, err)
+				require.True(t, strings.Contains(err.Error(), test.expectedErr))
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, test.updated, updated)
+		})
+	}
 }
