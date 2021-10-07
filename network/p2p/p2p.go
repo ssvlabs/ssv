@@ -290,9 +290,13 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
 				return
 			}
+
+			// For debugging
+			n.logger.Debug("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
+
 			var cm network.Message
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
-				n.logger.Error("failed to unmarshal message", zap.Error(err))
+				n.logger.Error("failed to un-marshal message", zap.Error(err))
 				continue
 			}
 			n.propagateSignedMsg(&cm)
@@ -309,6 +313,7 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 		n.logger.Debug("could not propagate nil message")
 		return
 	}
+
 	switch cm.Type {
 	case network.NetworkMsg_IBFTType:
 		for _, ls := range n.listeners {
