@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/pubsub"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -48,6 +50,20 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
 	reader := setupReaderForTest(t)
 	cr := reader.(*commitReader)
+	cn, err := cr.out.(pubsub.Subscriber).Register("test")
+	require.NoError(t, err)
+
+	var incoming []api.NetworkMessage
+	var mut sync.Mutex
+	go func() {
+		for outbound := range cn {
+			netMsg, ok := outbound.(api.NetworkMessage)
+			require.True(t, ok)
+			mut.Lock()
+			incoming = append(incoming, netMsg)
+			mut.Unlock()
+		}
+	}()
 
 	sks, committee := ibftsync.GenerateNodes(4)
 	pk := sks[1].GetPublicKey()
@@ -164,6 +180,10 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 			}
 		})
 	}
+
+	mut.Lock()
+	defer mut.Unlock()
+	require.Equal(t, 1, len(incoming))
 }
 
 func setupReaderForTest(t *testing.T) Reader {
