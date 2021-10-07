@@ -108,13 +108,13 @@ func (i *ibftImpl) Init() {
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
+	i.listenToNetworkMessages()
+	i.listenToNetworkDecidedMessages()
 	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
 	if err := i.SyncIBFT(); err != nil {
 		i.logger.Error("could not sync history, stopping IBFT init", zap.Error(err))
 		return // returning means initFinished is false, can't start new instances
 	}
-	i.listenToNetworkMessages()
-	i.listenToNetworkDecidedMessages()
 	i.initFinished = true
 	i.logger.Info("iBFT implementation init finished")
 }
