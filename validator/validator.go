@@ -95,7 +95,11 @@ func (v *Validator) Start() error {
 		go v.listenToSignatureMessages()
 
 		for _, ib := range v.ibfts { // init all ibfts
-			go ib.Init()
+			go func(ib ibft.IBFT) {
+				ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), false)
+				defer ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), true)
+				ib.Init()
+			}(ib)
 		}
 
 		v.logger.Debug("validator started")
