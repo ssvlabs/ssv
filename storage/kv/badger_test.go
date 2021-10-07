@@ -14,11 +14,11 @@ func TestBadgerEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	options := basedb.Options{
-		Type:   "badger-memory",
-		Logger: zap.L(),
-		Path:   "",
+		Type:      "badger-memory",
+		Logger:    zap.L(),
+		Path:      "",
 		Reporting: true,
-		Ctx: ctx,
+		Ctx:       ctx,
 	}
 
 	db, err := New(options)

@@ -171,7 +171,7 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 						break // already exist, pass
 					}
 				}
-				if !exist{
+				if !exist {
 					dutiesToAdd = append(dutiesToAdd, newDuty)
 				}
 			}
