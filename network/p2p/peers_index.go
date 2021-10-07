@@ -12,7 +12,7 @@ import (
 const (
 	libp2pAgentKey = "AgentVersion"
 	// UserAgentKey is the key for storing to the user agent value
-	UserAgentKey   = "user-agent"
+	UserAgentKey = "user-agent"
 )
 
 // IndexData is the type of stored data

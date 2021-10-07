@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"fmt"
 )
 
 // Deterministic Round robin leader selection is a fair and sequential leader selection.
@@ -35,7 +34,6 @@ func (rr *Deterministic) setSeed(seed []byte) error {
 		return err
 	}
 	rr.baseInt = binary.LittleEndian.Uint64(s)
-	fmt.Printf("seed - %d\n", rr.baseInt)
 	return nil
 }
 
