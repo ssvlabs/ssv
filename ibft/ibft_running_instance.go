@@ -1,12 +1,16 @@
 package ibft
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
@@ -45,7 +49,7 @@ instanceLoop:
 		if exit { // exited with no error means instance decided
 			// fetch decided msg and return
 			retMsg, found, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
-			if !found{
+			if !found {
 				err = errors.New("could not find decided msg after instance finished")
 				break instanceLoop
 			}
@@ -92,12 +96,54 @@ func (i *ibftImpl) instanceStageChange(stage proto.RoundState) (bool, error) {
 			return true, errors.Wrap(err, "could not broadcast decided message")
 		}
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
+		go i.listenToLateCommitMsgs(i.currentInstance)
 		return false, nil
 	case proto.RoundState_Stopped:
 		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State.SeqNumber.Get()))
 		return true, nil
 	}
 	return false, nil
+}
+
+// listenToLateCommitMsgs handles late arrivals of commit messages as the ibft instance terminates after a quorum
+// is reached which doesn't guarantee that late commit msgs will be aggregated into the stored decided msg.
+func (i *ibftImpl) listenToLateCommitMsgs(runningInstance *Instance) {
+	f := func(stopper tasks.Stopper) (interface{}, error) {
+	loop:
+		for {
+			if stopper.IsStopped() {
+				break loop
+			}
+			idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State.Lambda.Get(),
+				runningInstance.State.SeqNumber.Get(), runningInstance.State.Round.Get())
+			if netMsg := runningInstance.MsgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
+				if netMsg.SignedMessage.Message == nil || netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
+					// not a commit message -> skip
+					continue
+				}
+				logger := i.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
+					zap.String("identifier", string(netMsg.SignedMessage.Message.Lambda)))
+				if err := runningInstance.commitMsgValidationPipeline().Run(netMsg.SignedMessage); err != nil {
+					i.logger.Error("received invalid late commit message", zap.Error(err))
+					continue
+				}
+				updated, err := ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage,
+					i.ValidatorShare.PublicKey.SerializeToHexStr())
+				if err != nil {
+					logger.Error("failed to process late commit message", zap.Error(err))
+				} else if updated {
+					logger.Debug("decided message was updated")
+				}
+			} else {
+				time.Sleep(time.Millisecond * 100)
+			}
+		}
+		return nil, nil
+	}
+
+	i.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", runningInstance.State.SeqNumber.Get()))
+	_, _, _ = tasks.ExecWithTimeout(context.Background(), f, time.Minute*6)
+	i.logger.Debug("stopped listening to late commit msgs")
 }
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.

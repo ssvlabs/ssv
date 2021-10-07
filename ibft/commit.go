@@ -2,14 +2,40 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+// ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
+func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, pubkey string) (bool, error) {
+	// find stored decided
+	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+	if err != nil {
+		return false, errors.Wrap(err, "could not fetch decided for late commit")
+	}
+	if !found {
+		return false, nil
+	}
+	// aggregate message with stored decided
+	if err := decidedMsg.Aggregate(msg); err != nil {
+		if err == proto.ErrDuplicateMsgSigner {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "could not aggregate commit message")
+	}
+	// save to storage
+	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
+		return false, errors.Wrap(err, "could not save aggregated decided message")
+	}
+	ReportDecided(pubkey, msg)
+	return true, nil
+}
 
 func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
@@ -88,17 +114,22 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 }
 
 func (i *Instance) aggregateMessages(sigs []*proto.SignedMessage) *proto.SignedMessage {
+	return AggregateMessages(i.Logger, sigs)
+}
+
+// AggregateMessages aggregates the given messages
+func AggregateMessages(logger *zap.Logger, sigs []*proto.SignedMessage) *proto.SignedMessage {
 	var decided *proto.SignedMessage
 	var err error
 	for _, msg := range sigs {
 		if decided == nil {
 			decided, err = msg.DeepCopy()
 			if err != nil {
-				i.Logger.Error("could not copy message")
+				logger.Error("could not copy message")
 			}
 		} else {
 			if err := decided.Aggregate(msg); err != nil {
-				i.Logger.Error("could not aggregate message")
+				logger.Error("could not aggregate message")
 			}
 		}
 	}
