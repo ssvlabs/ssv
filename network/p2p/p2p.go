@@ -283,6 +283,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 			if err := n.closeTopic(t); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
 			}
+			n.logger.Info("closed topic", zap.String("topic", t))
 			sub.Cancel()
 		default:
 			msg, err := sub.Next(n.ctx)
