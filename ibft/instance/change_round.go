@@ -15,10 +15,12 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
+// ChangeRoundMsgPipeline - the main change round msg pipeline
 func (i *Instance) ChangeRoundMsgPipeline() pipeline.Pipeline {
 	return i.fork.ChangeRoundMsgPipeline()
 }
 
+// ChangeRoundMsgPipelineV0 - genesis version 0
 func (i *Instance) ChangeRoundMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.ChangeRoundMsgValidationPipeline(),
@@ -34,10 +36,12 @@ func (i *Instance) ChangeRoundMsgPipelineV0() pipeline.Pipeline {
 	)
 }
 
+// ChangeRoundMsgValidationPipeline - the main change round msg validation pipeline
 func (i *Instance) ChangeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return i.fork.ChangeRoundMsgValidationPipeline()
 }
 
+// ChangeRoundMsgValidationPipelineV0 - genesis version 0
 func (i *Instance) ChangeRoundMsgValidationPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),

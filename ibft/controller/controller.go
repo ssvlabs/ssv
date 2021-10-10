@@ -88,6 +88,7 @@ func (i *Controller) Init() error {
 	return nil
 }
 
+// StartInstance - starts an ibft instance or returns error
 func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceResult, error) {
 	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
 	if err != nil {

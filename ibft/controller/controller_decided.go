@@ -24,10 +24,12 @@ func (i *Controller) processDecidedQueueMessages() {
 	i.logger.Info("decided message queue started")
 }
 
+// ValidateDecidedMsg - the main decided msg pipeline
 func (i *Controller) ValidateDecidedMsg(msg *proto.SignedMessage) error {
 	return i.fork.ValidateDecidedMsg().Run(msg)
 }
 
+// ValidateDecidedMsgV0 - genesis version 0
 func (i *Controller) ValidateDecidedMsgV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),

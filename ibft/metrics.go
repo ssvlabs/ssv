@@ -10,14 +10,17 @@ import (
 )
 
 var (
+	// MetricsCurrentSequence for current instance
 	MetricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_sequence",
 		Help: "The highest decided sequence number",
 	}, []string{"lambda", "pubKey"})
+	// MetricsIBFTStage for ibft stage
 	MetricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_stage",
 		Help: "IBFTs stage",
 	}, []string{"lambda", "pubKey"})
+	// MetricsIBFTRound for ibft round
 	MetricsIBFTRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_round",
 		Help: "IBFTs round",

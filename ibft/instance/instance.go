@@ -151,6 +151,7 @@ func (i *Instance) Init() {
 	})
 }
 
+// State returns instance state
 func (i *Instance) State() *proto.State {
 	return i.state
 }

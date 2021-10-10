@@ -26,6 +26,7 @@ func (i *Controller) processSyncQueueMessages() {
 	i.logger.Info("sync messages queue started")
 }
 
+// ProcessSyncMessage - processes sync messages
 func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)

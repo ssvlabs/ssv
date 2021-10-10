@@ -45,6 +45,7 @@ type Controller interface {
 	GetIdentifier() []byte
 }
 
+// Instance represents an iBFT instance (a single sequence number)
 type Instance interface {
 	Pipelines
 	Init()
@@ -57,6 +58,7 @@ type Instance interface {
 	CommittedAggregatedMsg() (*proto.SignedMessage, error)
 }
 
+// Pipelines holds all major instance pipeline implementations
 type Pipelines interface {
 	// PrePrepareMsgPipeline is the full processing msg pipeline for a pre-prepare msg
 	PrePrepareMsgPipeline() pipeline.Pipeline

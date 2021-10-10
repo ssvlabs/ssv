@@ -38,10 +38,12 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 	return true, nil
 }
 
+// CommitMsgPipeline - the main commit msg pipeline
 func (i *Instance) CommitMsgPipeline() pipeline.Pipeline {
 	return i.fork.CommitMsgPipeline()
 }
 
+// CommitMsgPipelineV0 - genesis version 0
 func (i *Instance) CommitMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.CommitMsgValidationPipeline(),
@@ -56,10 +58,12 @@ func (i *Instance) CommitMsgPipelineV0() pipeline.Pipeline {
 	)
 }
 
+// CommitMsgValidationPipeline is the main commit msg pipeline
 func (i *Instance) CommitMsgValidationPipeline() pipeline.Pipeline {
 	return i.fork.CommitMsgValidationPipeline()
 }
 
+// CommitMsgValidationPipelineV0 is version 0
 func (i *Instance) CommitMsgValidationPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
@@ -70,10 +74,12 @@ func (i *Instance) CommitMsgValidationPipelineV0() pipeline.Pipeline {
 	)
 }
 
+// DecidedMsgPipeline is the main pipeline for decided msgs
 func (i *Instance) DecidedMsgPipeline() pipeline.Pipeline {
 	return i.fork.DecidedMsgPipeline()
 }
 
+// DecidedMsgPipelineV0 is version 0
 func (i *Instance) DecidedMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.CommitMsgValidationPipeline(),

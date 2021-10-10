@@ -11,11 +11,12 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
+// PrePrepareMsgPipeline is the main pre-prepare msg pipeline
 func (i *Instance) PrePrepareMsgPipeline() pipeline.Pipeline {
 	return i.fork.PrePrepareMsgPipeline()
 }
 
-// PrePrepareMsgPipelineV0
+// PrePrepareMsgPipelineV0 is version 0
 func (i *Instance) PrePrepareMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.prePrepareMsgValidationPipeline(),
