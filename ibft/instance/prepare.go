@@ -13,6 +13,10 @@ import (
 )
 
 func (i *Instance) PrepareMsgPipeline() pipeline.Pipeline {
+	return i.fork.PrepareMsgPipeline()
+}
+
+func (i *Instance) PrepareMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Prepare),

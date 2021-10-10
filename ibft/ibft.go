@@ -1,12 +1,9 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/leader"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 )
@@ -48,23 +45,6 @@ type Controller interface {
 	GetIdentifier() []byte
 }
 
-// InstanceOptions defines option attributes for the Instance
-type InstanceOptions struct {
-	Logger         *zap.Logger
-	ValidatorShare *storage.Share
-	//Me             *proto.Node
-	Network        network.Network
-	Queue          *msgqueue.MessageQueue
-	ValueCheck     valcheck.ValueCheck
-	LeaderSelector leader.Selector
-	Config         *proto.InstanceConfig
-	Lambda         []byte
-	SeqNumber      uint64
-	// RequireMinPeers flag to require minimum peers before starting an instance
-	// useful for tests where we want (sometimes) to avoid networking
-	RequireMinPeers bool
-}
-
 type Instance interface {
 	Pipelines
 	Init()
@@ -88,7 +68,7 @@ type Pipelines interface {
 	CommitMsgPipeline() pipeline.Pipeline
 	// DecidedMsgPipeline is a specific full processing pipeline for a decided msg
 	DecidedMsgPipeline() pipeline.Pipeline
-	// ChangeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
+	// changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
 	ChangeRoundMsgValidationPipeline() pipeline.Pipeline
 	// ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
 	ChangeRoundMsgPipeline() pipeline.Pipeline

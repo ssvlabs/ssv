@@ -39,6 +39,10 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 }
 
 func (i *Instance) CommitMsgPipeline() pipeline.Pipeline {
+	return i.fork.CommitMsgPipeline()
+}
+
+func (i *Instance) CommitMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.CommitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
@@ -53,6 +57,10 @@ func (i *Instance) CommitMsgPipeline() pipeline.Pipeline {
 }
 
 func (i *Instance) CommitMsgValidationPipeline() pipeline.Pipeline {
+	return i.fork.CommitMsgValidationPipeline()
+}
+
+func (i *Instance) CommitMsgValidationPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
@@ -63,6 +71,10 @@ func (i *Instance) CommitMsgValidationPipeline() pipeline.Pipeline {
 }
 
 func (i *Instance) DecidedMsgPipeline() pipeline.Pipeline {
+	return i.fork.DecidedMsgPipeline()
+}
+
+func (i *Instance) DecidedMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.CommitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {

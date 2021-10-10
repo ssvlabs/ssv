@@ -15,11 +15,14 @@ import (
 	"testing"
 )
 
-func testIBFTInstance(t *testing.T) *controller {
-	return &controller{
+func testIBFTInstance(t *testing.T) *Controller {
+	ret := &Controller{
 		Identifier: []byte("lambda_11"),
 		//instances: make([]*Instance, 0),
 	}
+
+	ret.fork = testFork(ret)
+	return ret
 }
 
 func TestCanStartNewInstance(t *testing.T) {

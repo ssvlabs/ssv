@@ -12,6 +12,11 @@ import (
 )
 
 func (i *Instance) PrePrepareMsgPipeline() pipeline.Pipeline {
+	return i.fork.PrePrepareMsgPipeline()
+}
+
+// PrePrepareMsgPipelineV0
+func (i *Instance) PrePrepareMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.prePrepareMsgValidationPipeline(),
 		pipeline.WrapFunc("add pre-prepare msg", func(signedMessage *proto.SignedMessage) error {

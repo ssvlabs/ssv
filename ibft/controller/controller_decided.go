@@ -12,7 +12,7 @@ import (
 )
 
 // processDecidedQueueMessages is listen for all the ibft decided msg's and process them
-func (i *controller) processDecidedQueueMessages() {
+func (i *Controller) processDecidedQueueMessages() {
 	go func() {
 		for {
 			if decidedMsg := i.msgQueue.PopMessage(msgqueue.DecidedIndexKey(i.GetIdentifier())); decidedMsg != nil {
@@ -24,14 +24,17 @@ func (i *controller) processDecidedQueueMessages() {
 	i.logger.Info("decided message queue started")
 }
 
-func (i *controller) validateDecidedMsg(msg *proto.SignedMessage) error {
-	p := pipeline.Combine(
+func (i *Controller) ValidateDecidedMsg(msg *proto.SignedMessage) error {
+	return i.fork.ValidateDecidedMsg().Run(msg)
+}
+
+func (i *Controller) ValidateDecidedMsgV0() pipeline.Pipeline {
+	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
 	)
-	return p.Run(msg)
 }
 
 // ProcessDecidedMessage is responsible for processing an incoming decided message.
@@ -44,8 +47,8 @@ upon receiving a valid hROUND-CHANGE, λi, −, −, −i message from pj ∧ pi
 by calling Decide(λi,− , Qcommit) do
 	send Qcommit to process pj
 */
-func (i *controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
-	if err := i.validateDecidedMsg(msg); err != nil {
+func (i *Controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
+	if err := i.ValidateDecidedMsg(msg); err != nil {
 		i.logger.Error("received invalid decided message", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
 		return
 	}
@@ -86,7 +89,7 @@ func (i *controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
 
 // forceDecideCurrentInstance will force the current instance to decide provided a signed decided msg.
 // will return true if executed, false otherwise
-func (i *controller) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
+func (i *Controller) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 	if i.decidedForCurrentInstance(msg) {
 		// stop current instance
 		if i.currentInstance != nil {
@@ -98,7 +101,7 @@ func (i *controller) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 }
 
 // highestKnownDecided returns the highest known decided instance
-func (i *controller) highestKnownDecided() (*proto.SignedMessage, error) {
+func (i *Controller) highestKnownDecided() (*proto.SignedMessage, error) {
 	highestKnown, _, err := i.ibftStorage.GetHighestDecidedInstance(i.GetIdentifier())
 	if err != nil {
 		return nil, err
@@ -106,7 +109,7 @@ func (i *controller) highestKnownDecided() (*proto.SignedMessage, error) {
 	return highestKnown, nil
 }
 
-func (i *controller) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
+func (i *Controller) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 	_, found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
@@ -115,14 +118,14 @@ func (i *controller) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 }
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
-func (i *controller) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
+func (i *Controller) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
 	return i.currentInstance != nil && i.currentInstance.State().SeqNumber.Get() == msg.Message.SeqNumber
 }
 
 // decidedRequiresSync returns true if:
 // 		- highest known seq lower than msg seq
 // 		- AND msg is not for current instance
-func (i *controller) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
+func (i *Controller) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	if i.decidedForCurrentInstance(msg) {
 		return false, nil
 	}

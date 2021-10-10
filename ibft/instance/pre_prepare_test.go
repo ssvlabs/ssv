@@ -199,7 +199,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = instance.PrePrepareMsgPipeline().Run(msg)
+	err = instance.PrePrepareMsgPipelineV0().Run(msg)
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
@@ -287,6 +287,6 @@ func TestPrePreparePipeline(t *testing.T) {
 		},
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
-	pipeline := instance.PrePrepareMsgPipeline()
+	pipeline := instance.PrePrepareMsgPipelineV0()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }

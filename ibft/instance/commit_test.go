@@ -188,6 +188,7 @@ func TestCommitPipeline(t *testing.T) {
 			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
+	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, upon commit msg, ", pipeline.Name())
 }

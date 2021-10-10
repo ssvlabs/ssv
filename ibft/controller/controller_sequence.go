@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/pkg/errors"
 	"strconv"
@@ -13,7 +14,7 @@ An incremental number for a new iBFT instance.
 A fully synced iBFT node must have all sequences to be fully synced, no skips or missing sequences.
 */
 
-func (i *controller) canStartNewInstance(opts ibft.InstanceOptions) error {
+func (i *Controller) canStartNewInstance(opts ibft2.InstanceOptions) error {
 	if !i.initFinished {
 		return errors.New("iBFT hasn't initialized yet")
 	}
@@ -49,7 +50,7 @@ func (i *controller) canStartNewInstance(opts ibft.InstanceOptions) error {
 
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (i *controller) NextSeqNumber() (uint64, error) {
+func (i *Controller) NextSeqNumber() (uint64, error) {
 	knownDecided, err := i.highestKnownDecided()
 	if err != nil {
 		return 0, err
@@ -60,14 +61,14 @@ func (i *controller) NextSeqNumber() (uint64, error) {
 	return knownDecided.Message.SeqNumber + 1, nil
 }
 
-func (i *controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceOptions, error) {
+func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartInstanceOptions) (*ibft2.InstanceOptions, error) {
 	leaderSelectionSeed := append(i.Identifier, []byte(strconv.FormatUint(opts.SeqNumber, 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(i.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err
 	}
 
-	return &ibft.InstanceOptions{
+	return &ibft2.InstanceOptions{
 		Logger:         opts.Logger,
 		ValidatorShare: i.ValidatorShare,
 		Network:        i.network,
@@ -77,5 +78,6 @@ func (i *controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartIn
 		Config:         i.instanceConfig,
 		Lambda:         i.Identifier,
 		SeqNumber:      opts.SeqNumber,
+		Fork:           i.fork.InstanceFork(),
 	}, nil
 }

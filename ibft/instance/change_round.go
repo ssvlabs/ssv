@@ -16,6 +16,10 @@ import (
 )
 
 func (i *Instance) ChangeRoundMsgPipeline() pipeline.Pipeline {
+	return i.fork.ChangeRoundMsgPipeline()
+}
+
+func (i *Instance) ChangeRoundMsgPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.ChangeRoundMsgValidationPipeline(),
 		pipeline.WrapFunc("add change round msg", func(signedMessage *proto.SignedMessage) error {
@@ -31,6 +35,10 @@ func (i *Instance) ChangeRoundMsgPipeline() pipeline.Pipeline {
 }
 
 func (i *Instance) ChangeRoundMsgValidationPipeline() pipeline.Pipeline {
+	return i.fork.ChangeRoundMsgValidationPipeline()
+}
+
+func (i *Instance) ChangeRoundMsgValidationPipelineV0() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),

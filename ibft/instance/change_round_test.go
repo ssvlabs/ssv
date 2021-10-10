@@ -2,6 +2,8 @@ package ibft
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
@@ -14,6 +16,53 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+type testFork struct {
+	instance *Instance
+}
+
+func (v0 *testFork) Apply(instance ibft.Instance) {
+
+}
+
+// PrePrepareMsgPipelineV0 is the full processing msg pipeline for a pre-prepare msg
+func (v0 *testFork) PrePrepareMsgPipeline() pipeline.Pipeline {
+	return v0.instance.PrePrepareMsgPipelineV0()
+}
+
+// PrepareMsgPipeline is the full processing msg pipeline for a prepare msg
+func (v0 *testFork) PrepareMsgPipeline() pipeline.Pipeline {
+	return v0.instance.PrepareMsgPipelineV0()
+}
+
+// CommitMsgValidationPipeline is a msg validation ONLY pipeline
+func (v0 *testFork) CommitMsgValidationPipeline() pipeline.Pipeline {
+	return v0.instance.CommitMsgValidationPipelineV0()
+}
+
+// CommitMsgPipeline is the full processing msg pipeline for a commit msg
+func (v0 *testFork) CommitMsgPipeline() pipeline.Pipeline {
+	return v0.instance.CommitMsgPipelineV0()
+}
+
+// DecidedMsgPipeline is a specific full processing pipeline for a decided msg
+func (v0 *testFork) DecidedMsgPipeline() pipeline.Pipeline {
+	return v0.instance.DecidedMsgPipelineV0()
+}
+
+// changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
+func (v0 *testFork) ChangeRoundMsgValidationPipeline() pipeline.Pipeline {
+	return v0.instance.ChangeRoundMsgValidationPipelineV0()
+}
+
+// ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
+func (v0 *testFork) ChangeRoundMsgPipeline() pipeline.Pipeline {
+	return v0.instance.ChangeRoundMsgPipelineV0()
+}
+
+func testingFork(instance *Instance) *testFork {
+	return &testFork{instance: instance}
+}
 
 func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
 	ret, _ := json.Marshal(input)
@@ -696,6 +745,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 			Lambda:    threadsafe.BytesS("lambda"),
 		},
 	}
+	instance.fork = testingFork(instance)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -743,6 +793,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
+	instance.fork = testingFork(instance)
 	pipeline := instance.ChangeRoundMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
 }

@@ -44,6 +44,7 @@ func TestInstanceStop(t *testing.T) {
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 		roundTimer:     roundtimer.New(),
 	}
+	instance.fork = testingFork(instance)
 	instance.Init()
 
 	// pre prepare

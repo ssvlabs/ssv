@@ -14,7 +14,7 @@ var (
 )
 
 // waitForMinPeerOnInit is called once during IBFTController init
-func (i *controller) waitForMinPeerOnInit(minPeerCount int) {
+func (i *Controller) waitForMinPeerOnInit(minPeerCount int) {
 	// warmup to avoid network errors
 	time.Sleep(500 * time.Millisecond)
 
@@ -25,7 +25,7 @@ func (i *controller) waitForMinPeerOnInit(minPeerCount int) {
 
 // waitForMinPeers will wait until enough peers joined the topic
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
-func (i *controller) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
+func (i *Controller) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 	ctx := commons.WaitMinPeersCtx{
 		Ctx:    context.Background(),
 		Logger: i.logger,
@@ -35,7 +35,7 @@ func (i *controller) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 		waitMinPeersIntervalStart, waitMinPeersIntervalEnd, stopAtLimit)
 }
 
-func (i *controller) listenToNetworkMessages() {
+func (i *Controller) listenToNetworkMessages() {
 	msgChan := i.network.ReceivedMsgChan()
 	go func() {
 		for msg := range msgChan {
@@ -49,7 +49,7 @@ func (i *controller) listenToNetworkMessages() {
 	}()
 }
 
-func (i *controller) listenToNetworkDecidedMessages() {
+func (i *Controller) listenToNetworkDecidedMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
@@ -63,7 +63,7 @@ func (i *controller) listenToNetworkDecidedMessages() {
 	}()
 }
 
-func (i *controller) listenToSyncMessages() {
+func (i *Controller) listenToSyncMessages() {
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan {
@@ -78,6 +78,6 @@ func (i *controller) listenToSyncMessages() {
 	}()
 }
 
-func (i *controller) equalIdentifier(toCheck []byte) bool {
+func (i *Controller) equalIdentifier(toCheck []byte) bool {
 	return bytes.Equal(toCheck, i.Identifier)
 }

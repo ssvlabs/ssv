@@ -3,6 +3,7 @@ package p2p
 import (
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"time"
@@ -21,6 +22,8 @@ type Config struct {
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"50" env-description:"maximum number of returned objects in a batch"`
 	PubSubTraceOut   string        `yaml:"PubSubTraceOut" env:"PUBSUB_TRACE_OUT" env-description:"File path to hold collected pubsub traces"`
 	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
+
+	Fork forks.Fork
 
 	// objects / instances
 	HostID              peer.ID

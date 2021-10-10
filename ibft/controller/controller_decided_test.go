@@ -163,7 +163,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := controller{
+			ibft := Controller{
 				currentInstance: test.currentInstance,
 				ibftStorage:     &testStorage{highestDecided: test.highestDecided},
 			}
@@ -235,7 +235,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := controller{currentInstance: test.currentInstance}
+			ibft := Controller{currentInstance: test.currentInstance}
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
 	}
@@ -250,7 +250,7 @@ func TestForceDecided(t *testing.T) {
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
 
 	// test before sync
-	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.SeqNumber)
@@ -266,7 +266,7 @@ func TestForceDecided(t *testing.T) {
 			Lambda:    identifier,
 			Value:     []byte("value"),
 		})
-		i1.(*controller).ProcessDecidedMessage(decidedMsg)
+		i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 	}()
 
 	share := &storage.Share{
@@ -285,7 +285,7 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, found, err = i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
@@ -302,7 +302,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
@@ -315,10 +315,10 @@ func TestSyncAfterDecided(t *testing.T) {
 		Value:     []byte("value"),
 	})
 
-	i1.(*controller).ProcessDecidedMessage(decidedMsg)
+	i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, found, err = i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
@@ -347,10 +347,10 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Value:     []byte("value"),
 	})
 
-	i1.(*controller).ProcessDecidedMessage(decidedMsg)
+	i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
@@ -416,10 +416,10 @@ func TestValidateDecidedMsg(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.expectedError != nil {
-				err := ibft.(*controller).validateDecidedMsg(test.msg)
+				err := ibft.(*Controller).ValidateDecidedMsg(test.msg)
 				require.EqualError(t, err, test.expectedError.Error())
 			} else {
-				require.NoError(t, ibft.(*controller).validateDecidedMsg(test.msg))
+				require.NoError(t, ibft.(*Controller).ValidateDecidedMsg(test.msg))
 			}
 		})
 	}

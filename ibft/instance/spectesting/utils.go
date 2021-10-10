@@ -3,8 +3,8 @@ package spectesting
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/fixtures"
-	"github.com/bloxapp/ssv/ibft"
 	ibft2 "github.com/bloxapp/ssv/ibft/instance"
+	v0 "github.com/bloxapp/ssv/ibft/instance/forks/v0"
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
@@ -101,7 +101,7 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk *bls.SecretKey, lambda, prepare
 
 // TestIBFTInstance returns a test iBFT instance
 func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
-	opts := &ibft.InstanceOptions{
+	opts := &ibft2.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
 		ValidatorShare: TestShares()[1],
 		Network:        local.NewLocalNetwork(),
@@ -110,6 +110,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
 		Config:         proto.DefaultConsensusParams(),
 		Lambda:         lambda,
 		LeaderSelector: &constant.Constant{LeaderIndex: 0},
+		Fork:           v0.New(),
 	}
 
 	return ibft2.NewInstance(opts).(*ibft2.Instance)

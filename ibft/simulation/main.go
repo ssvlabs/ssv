@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/controller"
+	v0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"github.com/bloxapp/ssv/network"
@@ -142,6 +143,7 @@ func main() {
 				LeaderPreprepareDelaySeconds: 1,
 			},
 			shares[i],
+			v0.New(),
 		)
 		nodes = append(nodes, node)
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
+	"github.com/bloxapp/ssv/ibft/instance/forks"
 	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/utils/format"
@@ -24,6 +25,25 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 )
 
+// InstanceOptions defines option attributes for the Instance
+type InstanceOptions struct {
+	Logger         *zap.Logger
+	ValidatorShare *storage.Share
+	//Me             *proto.Node
+	Network        network.Network
+	Queue          *msgqueue.MessageQueue
+	ValueCheck     valcheck.ValueCheck
+	LeaderSelector leader.Selector
+	Config         *proto.InstanceConfig
+	Lambda         []byte
+	SeqNumber      uint64
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
+	// Fork sets the current fork to apply on instance
+	Fork forks.Fork
+}
+
 // Instance defines the instance attributes
 type Instance struct {
 	ValidatorShare *storage.Share
@@ -34,6 +54,7 @@ type Instance struct {
 	Config         *proto.InstanceConfig
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
+	fork           forks.Fork
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue
@@ -72,10 +93,10 @@ func NewInstanceWithState(state *proto.State) ibft.Instance {
 }
 
 // NewInstance is the constructor of Instance
-func NewInstance(opts *ibft.InstanceOptions) ibft.Instance {
+func NewInstance(opts *InstanceOptions) ibft.Instance {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
 	ibft.MetricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
-	return &Instance{
+	ret := &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		state: &proto.State{
 			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
@@ -113,6 +134,10 @@ func NewInstance(opts *ibft.InstanceOptions) ibft.Instance {
 		stopLock:                     sync.Mutex{},
 		lastChangeRoundMsgLock:       sync.RWMutex{},
 	}
+
+	ret.setFork(opts.Fork)
+
+	return ret
 }
 
 // Init must be called before start can be
@@ -318,4 +343,12 @@ func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
 		return i.decidedMsg, nil
 	}
 	return nil, errors.New("missing decided message")
+}
+
+func (i *Instance) setFork(fork forks.Fork) {
+	if fork == nil {
+		return
+	}
+	i.fork = fork
+	i.fork.Apply(i)
 }

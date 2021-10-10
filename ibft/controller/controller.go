@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/bloxapp/ssv/ibft"
+	forks2 "github.com/bloxapp/ssv/ibft/controller/forks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
@@ -15,8 +16,8 @@ import (
 	"github.com/bloxapp/ssv/validator/storage"
 )
 
-// controller implements Controller interface
-type controller struct {
+// Controller implements Controller interface
+type Controller struct {
 	currentInstance ibft.Instance
 	logger          *zap.Logger
 	ibftStorage     collections.Iibft
@@ -25,6 +26,7 @@ type controller struct {
 	instanceConfig  *proto.InstanceConfig
 	ValidatorShare  *storage.Share
 	Identifier      []byte
+	fork            forks2.Fork
 
 	// flags
 	initFinished bool
@@ -44,9 +46,10 @@ func New(
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
 	ValidatorShare *storage.Share,
+	fork forks2.Fork,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
-	ret := &controller{
+	ret := &Controller{
 		ibftStorage:    storage,
 		logger:         logger,
 		network:        network,
@@ -62,11 +65,14 @@ func New(
 		currentInstanceLock: &sync.Mutex{},
 		syncingLock:         semaphore.NewWeighted(1),
 	}
+
+	ret.setFork(fork)
+
 	return ret
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
-func (i *controller) Init() error {
+func (i *Controller) Init() error {
 	i.logger.Info("iBFT implementation init started")
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
@@ -82,7 +88,7 @@ func (i *controller) Init() error {
 	return nil
 }
 
-func (i *controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceResult, error) {
+func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceResult, error) {
 	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
@@ -96,11 +102,20 @@ func (i *controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (*i
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *controller) GetIBFTCommittee() map[uint64]*proto.Node {
+func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
 	return i.ValidatorShare.Committee
 }
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
-func (i *controller) GetIdentifier() []byte {
+func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier //TODO should use mutex to lock var?
+}
+
+// setFork sets Controller fork for any new instances
+func (i *Controller) setFork(fork forks2.Fork) {
+	if fork == nil {
+		return
+	}
+	i.fork = fork
+	i.fork.Apply(i)
 }

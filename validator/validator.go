@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
@@ -34,6 +35,7 @@ type Options struct {
 	Beacon                     beacon.Beacon
 	ETHNetwork                 *core.Network
 	DB                         basedb.IDb
+	Fork                       forks.Fork
 }
 
 // Validator struct that manages all ibft wrappers
@@ -49,6 +51,7 @@ type Validator struct {
 	signatureCollectionTimeout time.Duration
 	valueCheck                 *valcheck.SlashingProtection
 	startOnce                  sync.Once
+	fork                       forks.Fork
 }
 
 // New Validator creation
@@ -58,7 +61,7 @@ func New(opt Options) *Validator {
 
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.RoleType]ibft.Controller)
-	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
@@ -81,6 +84,7 @@ func New(opt Options) *Validator {
 		beacon:                     opt.Beacon,
 		valueCheck:                 valcheck.New(),
 		startOnce:                  sync.Once{},
+		fork:                       opt.Fork,
 	}
 }
 
@@ -140,12 +144,19 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 	return start
 }
 
-func setupIbftController(role beacon.RoleType, logger *zap.Logger, db basedb.IDb, network network.Network,
-	msgQueue *msgqueue.MessageQueue, share *storage.Share) ibft.Controller {
+func setupIbftController(
+	role beacon.RoleType,
+	logger *zap.Logger,
+	db basedb.IDb,
+	network network.Network,
+	msgQueue *msgqueue.MessageQueue,
+	share *storage.Share,
+	fork forks.Fork,
+) ibft.Controller {
 
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
-	return controller2.New(role, identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share)
+	return controller2.New(role, identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share, fork.IBFTControllerFork())
 }
 
 // oneOfIBFTIdentifiers will return true if provided identifier matches one of the iBFT instances.

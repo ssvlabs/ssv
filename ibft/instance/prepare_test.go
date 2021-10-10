@@ -92,6 +92,7 @@ func TestPreparePipeline(t *testing.T) {
 			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
+	instance.fork = testingFork(instance)
 	pipeline := instance.PrepareMsgPipeline()
 	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, sequence, authorize, add prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }

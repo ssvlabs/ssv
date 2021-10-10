@@ -11,7 +11,7 @@ import (
 )
 
 // processSyncQueueMessages is listen for all the ibft sync msg's and process them
-func (i *controller) processSyncQueueMessages() {
+func (i *Controller) processSyncQueueMessages() {
 	go func() {
 		for {
 			if syncMsg := i.msgQueue.PopMessage(msgqueue.SyncIndexKey(i.Identifier)); syncMsg != nil {
@@ -26,7 +26,7 @@ func (i *controller) processSyncQueueMessages() {
 	i.logger.Info("sync messages queue started")
 }
 
-func (i *controller) ProcessSyncMessage(msg *network.SyncChanObj) {
+func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)
 	if i.currentInstance != nil {
@@ -38,7 +38,7 @@ func (i *controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 }
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
-func (i *controller) SyncIBFT() error {
+func (i *Controller) SyncIBFT() error {
 	if !i.syncingLock.TryAcquire(1) {
 		return errors.New("failed to start iBFT sync, already running")
 	}
@@ -52,7 +52,7 @@ func (i *controller) SyncIBFT() error {
 	}
 
 	// sync
-	s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.validateDecidedMsg)
+	s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
 	err := s.Start()
 	if err != nil {
 		return errors.Wrap(err, "history sync failed")

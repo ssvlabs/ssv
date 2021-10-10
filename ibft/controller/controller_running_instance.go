@@ -17,7 +17,7 @@ import (
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (i *controller) startInstanceWithOptions(instanceOpts *ibft.InstanceOptions, value []byte) (*ibft.InstanceResult, error) {
+func (i *Controller) startInstanceWithOptions(instanceOpts *ibft2.InstanceOptions, value []byte) (*ibft.InstanceResult, error) {
 	i.currentInstance = ibft2.NewInstance(instanceOpts)
 	i.currentInstance.Init()
 	stageChan := i.currentInstance.GetStageChan()
@@ -77,7 +77,7 @@ instanceLoop:
 }
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
-func (i *controller) instanceStageChange(stage proto.RoundState) (bool, error) {
+func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 	switch stage {
 	case proto.RoundState_Prepare:
 		if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State()); err != nil {
@@ -109,7 +109,7 @@ func (i *controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 
 // listenToLateCommitMsgs handles late arrivals of commit messages as the ibft instance terminates after a quorum
 // is reached which doesn't guarantee that late commit msgs will be aggregated into the stored decided msg.
-func (i *controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
+func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 	f := func(stopper tasks.Stopper) (interface{}, error) {
 	loop:
 		for {
@@ -149,7 +149,7 @@ func (i *controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
-func (i *controller) fastChangeRoundCatchup(instance ibft.Instance) {
+func (i *Controller) fastChangeRoundCatchup(instance ibft.Instance) {
 	sync := speedup.New(
 		i.logger,
 		i.Identifier,
