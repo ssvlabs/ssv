@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/pubsub"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
@@ -114,7 +115,9 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.Sub
 		if nm.Conn == conn || nm.Conn == nil {
 			logger.Debug("sending outbound",
 				zap.String("msg.type", string(nm.Msg.Type)))
-			err := ws.adapter.Send(conn, &nm.Msg)
+			err := tasks.Retry(func() error {
+				return ws.adapter.Send(conn, &nm.Msg)
+			}, 3)
 			if err != nil {
 				logger.Error("could not send message", zap.Error(err))
 				break
