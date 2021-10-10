@@ -12,7 +12,7 @@ import (
 
 type regular struct {
 	logger     *zap.Logger
-	nodes      []ibft.IBFT
+	nodes      []ibft.Controller
 	valueCheck valcheck.ValueCheck
 }
 
@@ -24,7 +24,7 @@ func NewRegularScenario(logger *zap.Logger, valueCheck valcheck.ValueCheck) ISce
 	}
 }
 
-func (r *regular) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *regular) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	nodeCount := len(nodes)
 
@@ -32,7 +32,7 @@ func (r *regular) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.S
 	var wg sync.WaitGroup
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.IBFT) {
+		go func(node ibft.Controller) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -46,9 +46,9 @@ func (r *regular) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.S
 	r.logger.Info("start instances")
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.IBFT, index uint64) {
+		go func(node ibft.Controller, index uint64) {
 			defer wg.Done()
-			res, err := node.StartInstance(ibft.StartOptions{
+			res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 				Logger:         r.logger,
 				ValueCheck:     r.valueCheck,
 				SeqNumber:      1,

@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
+	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -66,6 +67,9 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
+		// TODO - change via command line?
+		fork := v0.New()
+
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
@@ -94,12 +98,14 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
 		ctx := cmd.Context()
+		cfg.SSVOptions.Fork = fork
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
 		cfg.SSVOptions.DB = db
@@ -107,6 +113,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.Network = p2pNet
 
+		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx

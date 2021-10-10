@@ -3,7 +3,7 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -90,7 +90,7 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	if err := validateCommitMsg(msg, share); err != nil {
 		return errors.Wrap(err, "invalid commit message")
 	}
-	updated, err := ibft.ProcessLateCommitMsg(msg, cr.ibftStorage, share.PublicKey.SerializeToHexStr())
+	updated, err := ibft2.ProcessLateCommitMsg(msg, cr.ibftStorage, share.PublicKey.SerializeToHexStr())
 	if err != nil {
 		return errors.Wrap(err, "failed to process late commit message")
 	}

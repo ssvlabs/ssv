@@ -13,7 +13,7 @@ import (
 
 type f1Speedup struct {
 	logger     *zap.Logger
-	nodes      []ibft.IBFT
+	nodes      []ibft.Controller
 	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
@@ -26,7 +26,7 @@ func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *f1Speedup) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	nodeCount := len(nodes)
@@ -40,14 +40,14 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 	for i := uint64(1); i <= uint64(3); i++ {
 		if i <= 2 {
 			wg.Add(1)
-			go func(node ibft.IBFT) {
+			go func(node ibft.Controller) {
 				if err := node.Init(); err != nil {
 					fmt.Printf("error initializing ibft")
 				}
 				wg.Done()
 			}(nodes[i-1])
 		} else {
-			go func(node ibft.IBFT, index uint64) {
+			go func(node ibft.Controller, index uint64) {
 				time.Sleep(time.Second * 13)
 				if err := node.Init(); err != nil {
 					fmt.Printf("error initializing ibft")
@@ -63,7 +63,7 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 	r.logger.Info("start instances")
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.IBFT, index uint64) {
+		go func(node ibft.Controller, index uint64) {
 			defer wg.Done()
 			r.startNode(node, index)
 		}(nodes[i-1], i)
@@ -72,8 +72,8 @@ func (r *f1Speedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage
 	wg.Wait()
 }
 
-func (r *f1Speedup) startNode(node ibft.IBFT, index uint64) {
-	res, err := node.StartInstance(ibft.StartOptions{
+func (r *f1Speedup) startNode(node ibft.Controller, index uint64) {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,
 		SeqNumber:      1,
