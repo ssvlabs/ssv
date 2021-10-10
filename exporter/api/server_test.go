@@ -101,7 +101,7 @@ func TestHandleStream(t *testing.T) {
 
 	// expecting outbound messages
 	var wg sync.WaitGroup
-	wg.Add(msgCount*2)
+	wg.Add(msgCount * 2)
 	go func() {
 		i := 0
 		for {
