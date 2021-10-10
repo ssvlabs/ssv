@@ -18,7 +18,13 @@ import (
 func (i *Instance) ChangeRoundMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.ChangeRoundMsgValidationPipeline(),
-		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State()),
+		pipeline.WrapFunc("add change round msg", func(signedMessage *proto.SignedMessage) error {
+			i.Logger.Info("received valid change round message for round",
+				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
+				zap.Uint64("round", signedMessage.Message.Round))
+			i.ChangeRoundMessages.AddMessage(signedMessage)
+			return nil
+		}),
 		i.ChangeRoundPartialQuorumMsgPipeline(),
 		i.changeRoundFullQuorumMsgPipeline(),
 	)

@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/eventqueue"
-	"github.com/bloxapp/ssv/ibft/roundtimer"
+	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
+	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
@@ -17,8 +17,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/msgcont"
-	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/instance/msgcont"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"

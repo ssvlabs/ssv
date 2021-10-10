@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 
-	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 

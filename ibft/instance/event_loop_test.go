@@ -1,10 +1,10 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/eventqueue"
-	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
+	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/roundtimer"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threadsafe"
