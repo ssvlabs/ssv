@@ -122,27 +122,28 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 			logger.Debug("received invalid sequence")
 			continue
 		}
-		if err := r.handleNewDecidedMessage(msg); err != nil {
+		if saved, err := r.handleNewDecidedMessage(msg); err != nil {
 			logger.Error("could not handle decided message")
 			continue
+		} else if saved {
+			go r.out.Notify(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 		}
-		go r.out.Notify(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	}
 }
 
 // handleNewDecidedMessage saves an incoming (valid) decided message
-func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) error {
+func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool, error) {
 	logger := r.logger.With(messageFields(msg)...)
 	if decided, found, _ := r.storage.GetDecided(r.identifier, msg.Message.SeqNumber); found && decided != nil {
 		logger.Debug("received known sequence")
-		return nil
+		return false, nil
 	}
 	if err := r.storage.SaveDecided(msg); err != nil {
-		return errors.Wrap(err, "could not save decided")
+		return false, errors.Wrap(err, "could not save decided")
 	}
 	logger.Debug("decided saved")
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
-	return r.checkHighestDecided(msg)
+	return true, r.checkHighestDecided(msg)
 }
 
 // checkHighestDecided check if highest decided should be updated
