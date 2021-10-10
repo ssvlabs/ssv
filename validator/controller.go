@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
@@ -29,6 +30,7 @@ type ControllerOptions struct {
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
+	Fork                       forks.Fork
 }
 
 // IController represent the validators controller,
@@ -75,6 +77,7 @@ func NewController(options ControllerOptions) IController {
 			ETHNetwork:                 options.ETHNetwork,
 			Beacon:                     options.Beacon,
 			DB:                         options.DB,
+			Fork:                       options.Fork,
 		}),
 	}
 

@@ -140,7 +140,7 @@ func (exp *exporter) init(opts Options) error {
 	return nil
 }
 
-// Start starts the IBFT dispatcher for syncing data nd listen to messages
+// Start starts the Controller dispatcher for syncing data nd listen to messages
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 

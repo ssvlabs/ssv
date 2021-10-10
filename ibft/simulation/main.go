@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/controller"
+	v0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"github.com/bloxapp/ssv/network"
@@ -22,10 +24,10 @@ import (
 )
 
 /**
-IBFT Simulator
+Controller Simulator
 
 This simulator is a tool for running many iBFT scenarios for manual testing.
-The scenario interface can be overriden with any writen scenario to manually test the IBFT inner workings, debug and more.
+The scenario interface can be overriden with any writen scenario to manually test the Controller inner workings, debug and more.
 */
 
 var (
@@ -121,7 +123,7 @@ func main() {
 	logger.Info("pubkey", zap.String("pk", pkHex))
 
 	// generate iBFT nodes
-	nodes := make([]ibft.IBFT, 0)
+	nodes := make([]ibft.Controller, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		net := networking()
 		if err := net.SubscribeToValidatorNetwork(pk); err != nil {
@@ -129,7 +131,7 @@ func main() {
 		}
 		dbs = append(dbs, db())
 
-		node := ibft.New(
+		node := controller.New(
 			beacon.RoleTypeAttester,
 			identifier,
 			logger.With(zap.Uint64("simulation_node_id", i)),
@@ -141,6 +143,7 @@ func main() {
 				LeaderPreprepareDelaySeconds: 1,
 			},
 			shares[i],
+			v0.New(),
 		)
 		nodes = append(nodes, node)
 	}
