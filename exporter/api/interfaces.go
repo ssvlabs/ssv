@@ -20,6 +20,7 @@ type NetworkMessage struct {
 	Conn Connection
 }
 
+// QueryMessageHandler handles the given message
 type QueryMessageHandler func(nm *NetworkMessage)
 
 // EndPointHandler is an interface to abstract the actual websocket handler implementation

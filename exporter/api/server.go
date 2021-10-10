@@ -66,6 +66,9 @@ func (ws *wsServer) OutboundSubject() pubsub.Publisher {
 
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleQuery(conn Connection) {
+	if ws.handler == nil {
+		return
+	}
 	cid := ConnectionID(conn)
 	logger := ws.logger.With(zap.String("cid", cid))
 
