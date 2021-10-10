@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/pkg/errors"
@@ -33,13 +34,13 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
 		return false, errors.Wrap(err, "could not save aggregated decided message")
 	}
-	ReportDecided(pubkey, msg)
+	ibft.ReportDecided(pubkey, msg)
 	return true, nil
 }
 
-func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
+func (i *Instance) CommitMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		i.commitMsgValidationPipeline(),
+		i.CommitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
@@ -51,19 +52,19 @@ func (i *Instance) commitMsgPipeline() pipeline.Pipeline {
 	)
 }
 
-func (i *Instance) commitMsgValidationPipeline() pipeline.Pipeline {
+func (i *Instance) CommitMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
+		auth.ValidateLambdas(i.State().Lambda.Get()),
+		auth.ValidateSequenceNumber(i.State().SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 	)
 }
 
-func (i *Instance) forceDecidedPipeline() pipeline.Pipeline {
+func (i *Instance) DecidedMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		i.commitMsgValidationPipeline(),
+		i.CommitMsgValidationPipeline(),
 		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
 			i.Logger.Info("received valid decided message for round",
 				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
@@ -73,17 +74,6 @@ func (i *Instance) forceDecidedPipeline() pipeline.Pipeline {
 		}),
 		i.uponCommitMsg(),
 	)
-}
-
-// CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
-func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
-	if i.State == nil {
-		return nil, errors.New("missing instance state")
-	}
-	if i.decidedMsg != nil {
-		return i.decidedMsg, nil
-	}
-	return nil, errors.New("missing decided message")
 }
 
 /**
@@ -97,7 +87,7 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", hex.EncodeToString(i.State.Lambda.Get())), zap.Uint64("round", i.State.Round.Get()),
+					zap.String("Lambda", hex.EncodeToString(i.State().Lambda.Get())), zap.Uint64("round", i.State().Round.Get()),
 					zap.Int("got_votes", len(sigs)))
 
 				aggMsg, err := proto.AggregateMessages(sigs)
@@ -117,9 +107,9 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_Commit,
-		Round:     i.State.Round.Get(),
-		Lambda:    i.State.Lambda.Get(),
-		SeqNumber: i.State.SeqNumber.Get(),
+		Round:     i.State().Round.Get(),
+		Lambda:    i.State().Lambda.Get(),
+		SeqNumber: i.State().SeqNumber.Get(),
 		Value:     value,
 	}
 }

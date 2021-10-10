@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
@@ -99,7 +100,7 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk *bls.SecretKey, lambda, prepare
 }
 
 // TestIBFTInstance returns a test iBFT instance
-func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
+func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
 	opts := &ibft.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
 		ValidatorShare: TestShares()[1],
@@ -111,7 +112,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft.Instance {
 		LeaderSelector: &constant.Constant{LeaderIndex: 0},
 	}
 
-	return ibft.NewInstance(opts)
+	return ibft2.NewInstance(opts).(*ibft2.Instance)
 }
 
 // TestShares generates test nodes for SSV
@@ -221,7 +222,7 @@ func InvalidTestInputValue() []byte {
 }
 
 // SimulateTimeout simulates instance timeout
-func SimulateTimeout(instance *ibft.Instance, toRound uint64) {
+func SimulateTimeout(instance *ibft2.Instance, toRound uint64) {
 	instance.BumpRound()
 	instance.ProcessStageChange(proto.RoundState_ChangeRound)
 }

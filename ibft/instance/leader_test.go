@@ -22,7 +22,7 @@ func TestLeaderCalculation(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
@@ -35,7 +35,7 @@ func TestLeaderCalculation(t *testing.T) {
 		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
 			instance.BumpRound()
 			require.EqualValues(t, uint64(i%4+1), instance.ThisRoundLeader())
-			require.EqualValues(t, uint64(i+1), instance.State.Round.Get())
+			require.EqualValues(t, uint64(i+1), instance.State().Round.Get())
 
 			if instance.ThisRoundLeader() == 1 {
 				require.True(t, instance.IsLeader())

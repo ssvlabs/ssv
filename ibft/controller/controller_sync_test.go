@@ -1,8 +1,9 @@
-package ibft
+package controller
 
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -19,6 +20,37 @@ import (
 	"testing"
 	"time"
 )
+
+// SignMsg signs the given message by the given private key
+func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
+	bls.Init(bls.BLS12_381)
+
+	signature, err := msg.Sign(sk)
+	require.NoError(t, err)
+	return &proto.SignedMessage{
+		Message:   msg,
+		Signature: signature.Serialize(),
+		SignerIds: []uint64{id},
+	}
+}
+
+// GenerateNodes generates randomly nodes
+func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
+	_ = bls.Init(bls.BLS12_381)
+	nodes := make(map[uint64]*proto.Node)
+	sks := make(map[uint64]*bls.SecretKey)
+	for i := 1; i <= cnt; i++ {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		nodes[uint64(i)] = &proto.Node{
+			IbftId: uint64(i),
+			Pk:     sk.GetPublicKey().Serialize(),
+		}
+		sks[uint64(i)] = sk
+	}
+	return sks, nodes
+}
 
 func validatorPK(sks map[uint64]*bls.SecretKey) *bls.PublicKey {
 	return sks[1].GetPublicKey()
@@ -64,7 +96,7 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 	return &storage
 }
 
-func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftStorage collections.Iibft, sks map[uint64]*bls.SecretKey, nodes map[uint64]*proto.Node) IBFT {
+func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftStorage collections.Iibft, sks map[uint64]*bls.SecretKey, nodes map[uint64]*proto.Node) ibft.Controller {
 	queue := msgqueue.New()
 	share := &storage.Share{
 		NodeID:    nodeID,
@@ -75,11 +107,11 @@ func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftS
 	ret := New(beacon.RoleTypeAttester, identifier, logex.Build("", zap.DebugLevel, nil),
 		ibftStorage, network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))), queue,
 		proto.DefaultConsensusParams(), share)
-	ret.(*ibftImpl).initFinished = true // as if they are already synced
-	ret.(*ibftImpl).listenToNetworkMessages()
-	ret.(*ibftImpl).listenToSyncMessages()
-	ret.(*ibftImpl).processDecidedQueueMessages()
-	ret.(*ibftImpl).processSyncQueueMessages()
+	ret.(*controller).initFinished = true // as if they are already synced
+	ret.(*controller).listenToNetworkMessages()
+	ret.(*controller).listenToSyncMessages()
+	ret.(*controller).processDecidedQueueMessages()
+	ret.(*controller).processSyncQueueMessages()
 	return ret
 }
 
@@ -98,8 +130,8 @@ func TestSyncFromScratch(t *testing.T) {
 
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
-	require.NoError(t, i1.(*ibftImpl).SyncIBFT())
-	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.NoError(t, i1.(*controller).SyncIBFT())
+	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
@@ -116,15 +148,15 @@ func TestSyncFromMiddle(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
 
-	require.NoError(t, i1.(*ibftImpl).SyncIBFT())
+	require.NoError(t, i1.(*controller).SyncIBFT())
 
 	// test after sync
-	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
@@ -144,8 +176,8 @@ func TestConcurrentSync(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		require.NoError(t, i1.(*ibftImpl).SyncIBFT())
-		highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+		require.NoError(t, i1.(*controller).SyncIBFT())
+		highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 		require.True(t, found)
 		require.NoError(t, err)
 		require.EqualValues(t, 100, highest.Message.SeqNumber)
@@ -153,7 +185,7 @@ func TestConcurrentSync(t *testing.T) {
 	}()
 	go func() {
 		time.Sleep(time.Millisecond * 10)
-		require.EqualError(t, i1.(*ibftImpl).SyncIBFT(), "failed to start iBFT sync, already running")
+		require.EqualError(t, i1.(*controller).SyncIBFT(), "failed to start iBFT sync, already running")
 	}()
 
 	wg.Wait()
@@ -169,8 +201,8 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes)
 
-	require.NoError(t, i1.(*ibftImpl).SyncIBFT())
-	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	require.NoError(t, i1.(*controller).SyncIBFT())
+	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 100, highest.Message.SeqNumber)
@@ -190,14 +222,14 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		_ = populatedIbft(4, identifier, network, populatedStorage(t, sks, 89), sks, nodes)
 
 		// test before sync
-		_, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+		_, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 		require.NoError(t, err)
 		require.False(t, found)
 
-		require.NoError(t, i1.(*ibftImpl).SyncIBFT())
+		require.NoError(t, i1.(*controller).SyncIBFT())
 
 		// test after sync
-		highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+		highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 		require.True(t, found)
 		require.NoError(t, err)
 		require.EqualValues(t, 105, highest.Message.SeqNumber)
@@ -216,15 +248,15 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 		_ = populatedIbft(4, identifier, network, populatedStorage(t, sks, 89), sks, nodes)
 
 		// test before sync
-		_, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+		_, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 		require.NoError(t, err)
 		require.False(t, found)
 
-		require.NoError(t, i1.(*ibftImpl).SyncIBFT())
+		require.NoError(t, i1.(*controller).SyncIBFT())
 		time.Sleep(time.Second * 1) // wait for sync to complete
 
 		// test after sync
-		highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+		highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 		require.True(t, found)
 		require.NoError(t, err)
 		require.EqualValues(t, 89, highest.Message.SeqNumber)

@@ -1,6 +1,7 @@
-package ibft
+package controller
 
 import (
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -11,7 +12,7 @@ import (
 )
 
 // processDecidedQueueMessages is listen for all the ibft decided msg's and process them
-func (i *ibftImpl) processDecidedQueueMessages() {
+func (i *controller) processDecidedQueueMessages() {
 	go func() {
 		for {
 			if decidedMsg := i.msgQueue.PopMessage(msgqueue.DecidedIndexKey(i.GetIdentifier())); decidedMsg != nil {
@@ -23,7 +24,7 @@ func (i *ibftImpl) processDecidedQueueMessages() {
 	i.logger.Info("decided message queue started")
 }
 
-func (i *ibftImpl) validateDecidedMsg(msg *proto.SignedMessage) error {
+func (i *controller) validateDecidedMsg(msg *proto.SignedMessage) error {
 	p := pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
@@ -43,7 +44,7 @@ upon receiving a valid hROUND-CHANGE, λi, −, −, −i message from pj ∧ pi
 by calling Decide(λi,− , Qcommit) do
 	send Qcommit to process pj
 */
-func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
+func (i *controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	if err := i.validateDecidedMsg(msg); err != nil {
 		i.logger.Error("received invalid decided message", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
 		return
@@ -62,7 +63,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		return
 	}
 
-	ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+	ibft.ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
 	// decided for current instance
 	if i.forceDecideCurrentInstance(msg) {
@@ -85,7 +86,7 @@ func (i *ibftImpl) ProcessDecidedMessage(msg *proto.SignedMessage) {
 
 // forceDecideCurrentInstance will force the current instance to decide provided a signed decided msg.
 // will return true if executed, false otherwise
-func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
+func (i *controller) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 	if i.decidedForCurrentInstance(msg) {
 		// stop current instance
 		if i.currentInstance != nil {
@@ -97,7 +98,7 @@ func (i *ibftImpl) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 }
 
 // highestKnownDecided returns the highest known decided instance
-func (i *ibftImpl) highestKnownDecided() (*proto.SignedMessage, error) {
+func (i *controller) highestKnownDecided() (*proto.SignedMessage, error) {
 	highestKnown, _, err := i.ibftStorage.GetHighestDecidedInstance(i.GetIdentifier())
 	if err != nil {
 		return nil, err
@@ -105,7 +106,7 @@ func (i *ibftImpl) highestKnownDecided() (*proto.SignedMessage, error) {
 	return highestKnown, nil
 }
 
-func (i *ibftImpl) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
+func (i *controller) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 	_, found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
@@ -114,14 +115,14 @@ func (i *ibftImpl) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
 }
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
-func (i *ibftImpl) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
-	return i.currentInstance != nil && i.currentInstance.State.SeqNumber.Get() == msg.Message.SeqNumber
+func (i *controller) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
+	return i.currentInstance != nil && i.currentInstance.State().SeqNumber.Get() == msg.Message.SeqNumber
 }
 
 // decidedRequiresSync returns true if:
 // 		- highest known seq lower than msg seq
 // 		- AND msg is not for current instance
-func (i *ibftImpl) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
+func (i *controller) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	if i.decidedForCurrentInstance(msg) {
 		return false, nil
 	}

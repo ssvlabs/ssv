@@ -1,7 +1,7 @@
 package prepare
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -11,7 +11,7 @@ import (
 
 // PreparedAtFutureRound tests receiving a quorum of prepare msgs in a different round than state round.
 type PreparedAtFutureRound struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -27,7 +27,7 @@ func (test *PreparedAtFutureRound) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -79,5 +79,5 @@ func (test *PreparedAtFutureRound) Run(t *testing.T) {
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(5, test.inputValue)
 	require.True(t, quorum)
 
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State().Stage.Get())
 }

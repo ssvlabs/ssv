@@ -20,7 +20,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 			NodeID:    1,
 			ShareKey:  sks[1],
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
 			PreparedRound: threadsafe.Uint64(0),
@@ -32,8 +32,8 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "state not prepared")
 
 	// set prepared state
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("value"))
+	instance.State().PreparedRound.Set(1)
+	instance.State().PreparedValue.Set([]byte("value"))
 
 	// test prepared but no msgs
 	_, err = instance.PreparedAggregatedMsg()
@@ -86,12 +86,12 @@ func TestPreparePipeline(t *testing.T) {
 			NodeID:    1,
 			PublicKey: sks[1].GetPublicKey(),
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
-	pipeline := instance.prepareMsgPipeline()
+	pipeline := instance.PrepareMsgPipeline()
 	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, sequence, authorize, add prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }

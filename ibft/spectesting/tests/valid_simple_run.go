@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -11,7 +11,7 @@ import (
 
 // ValidSimpleRun is a simple happy flow of iBFT
 type ValidSimpleRun struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -27,7 +27,7 @@ func (test *ValidSimpleRun) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -80,5 +80,5 @@ func (test *ValidSimpleRun) Run(t *testing.T) {
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State().Stage.Get())
 }

@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -10,7 +10,7 @@ import (
 
 // WrongSequenceNumber tests processing msgs with wrong seq number.
 type WrongSequenceNumber struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -26,8 +26,8 @@ func (test *WrongSequenceNumber) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
-	test.instance.State.SeqNumber.Set(100)
+	test.instance.State().Round.Set(1)
+	test.instance.State().SeqNumber.Set(100)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {

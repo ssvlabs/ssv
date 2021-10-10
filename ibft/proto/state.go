@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/ssv/utils/threadsafe"
 )
 
-// State holds an iBFT state, thread safe
+// state holds an iBFT state, thread safe
 type State struct {
 	Stage *threadsafe.SafeInt32
 	// lambda is an instance unique identifier, much like a block hash in a blockchain

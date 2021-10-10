@@ -1,7 +1,7 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -12,7 +12,7 @@ import (
 
 // PartialQuorum tests partial round change behaviour
 type PartialQuorum struct {
-	instances  []*ibft.Instance
+	instances  []*ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -27,11 +27,11 @@ func (test *PartialQuorum) Prepare(t *testing.T) {
 	test.lambda = []byte{1, 2, 3, 4}
 	test.inputValue = spectesting.TestInputValue()
 
-	test.instances = make([]*ibft.Instance, 0)
+	test.instances = make([]*ibft2.Instance, 0)
 	for i, msgs := range test.MessagesSequence(t) {
 		instance := spectesting.TestIBFTInstance(t, test.lambda)
 		test.instances = append(test.instances, instance)
-		instance.State.Round.Set(uint64(i))
+		instance.State().Round.Set(uint64(i))
 
 		// load messages to queue
 		for _, msg := range msgs {
@@ -94,29 +94,29 @@ func (test *PartialQuorum) Run(t *testing.T) {
 	require.Len(t, test.instances, 6)
 
 	require.NoError(t, test.instances[0].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
-	require.EqualValues(t, 2, test.instances[0].State.Round.Get())
+	require.EqualValues(t, 2, test.instances[0].State().Round.Get())
 	test.instances[0].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(
-		test.instances[0].State.Lambda.Get(),
-		test.instances[0].State.SeqNumber.Get()))
+		test.instances[0].State().Lambda.Get(),
+		test.instances[0].State().SeqNumber.Get()))
 
 	require.NoError(t, test.instances[0].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
-	require.EqualValues(t, 3, test.instances[1].State.Round.Get())
+	require.EqualValues(t, 3, test.instances[1].State().Round.Get())
 	test.instances[1].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(
-		test.instances[1].State.Lambda.Get(),
-		test.instances[1].State.SeqNumber.Get()))
+		test.instances[1].State().Lambda.Get(),
+		test.instances[1].State().SeqNumber.Get()))
 
 	require.NoError(t, test.instances[2].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
-	require.EqualValues(t, 8, test.instances[2].State.Round.Get())
+	require.EqualValues(t, 8, test.instances[2].State().Round.Get())
 	test.instances[2].MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(
-		test.instances[2].State.Lambda.Get(),
-		test.instances[2].State.SeqNumber.Get()))
+		test.instances[2].State().Lambda.Get(),
+		test.instances[2].State().SeqNumber.Get()))
 
 	require.NoError(t, test.instances[3].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
-	require.EqualValues(t, 3, test.instances[3].State.Round.Get())
+	require.EqualValues(t, 3, test.instances[3].State().Round.Get())
 
 	require.NoError(t, test.instances[4].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
-	require.EqualValues(t, 4, test.instances[4].State.Round.Get())
+	require.EqualValues(t, 4, test.instances[4].State().Round.Get())
 
 	require.NoError(t, test.instances[5].ChangeRoundPartialQuorumMsgPipeline().Run(nil))
-	require.EqualValues(t, 7, test.instances[5].State.Round.Get())
+	require.EqualValues(t, 7, test.instances[5].State().Round.Get())
 }

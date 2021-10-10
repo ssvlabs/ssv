@@ -62,7 +62,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
 		ValidatorShare:  &storage.Share{Committee: nodes},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
@@ -114,8 +114,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte("value"),
 	}))
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("value"))
+	instance.State().PreparedRound.Set(1)
+	instance.State().PreparedValue.Set([]byte("value"))
 
 	// with a prepared round
 	byts, err = instance.roundChangeInputValue()
@@ -131,7 +131,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	instance := &Instance{
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
@@ -440,7 +440,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			2: {IbftId: 2},
 			3: {IbftId: 3},
 		}},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
@@ -488,8 +488,8 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	t.Run("change round quorum not prepared, instance prepared previously", func(t *testing.T) {
-		instance.State.PreparedRound.Set(1)
-		instance.State.PreparedValue.Set([]byte("hello"))
+		instance.State().PreparedRound.Set(1)
+		instance.State().PreparedValue.Set([]byte("hello"))
 		err := instance.JustifyRoundChange(2)
 		require.EqualError(t, err, "highest prepared doesn't match prepared state")
 	})
@@ -690,7 +690,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			SeqNumber: threadsafe.Uint64(1),
 			Lambda:    threadsafe.BytesS("lambda"),
@@ -699,7 +699,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := instance.changeRoundMsgValidationPipeline().Run(test.msg)
+			err := instance.ChangeRoundMsgValidationPipeline().Run(test.msg)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
@@ -718,7 +718,7 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
@@ -737,12 +737,12 @@ func TestChangeRoundPipeline(t *testing.T) {
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
-	pipeline := instance.changeRoundMsgPipeline()
+	pipeline := instance.ChangeRoundMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
 }

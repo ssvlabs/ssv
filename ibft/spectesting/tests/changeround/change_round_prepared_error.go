@@ -1,7 +1,7 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -12,7 +12,7 @@ import (
 
 // PreparedFollowedByPrePrepared tests a pre-prepare following a change round with justification of a previously prepared round
 type PreparedFollowedByPrePrepared struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -28,7 +28,7 @@ func (test *PreparedFollowedByPrePrepared) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {

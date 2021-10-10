@@ -1,7 +1,9 @@
-package ibft
+package controller
 
 import (
 	"github.com/bloxapp/ssv/beacon/valcheck"
+	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -55,7 +57,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	secretKeys, _ := GenerateNodes(4)
 	tests := []struct {
 		name            string
-		currentInstance *Instance
+		currentInstance ibft.Instance
 		highestDecided  *proto.SignedMessage
 		msg             *proto.SignedMessage
 		expectedRes     bool
@@ -63,12 +65,10 @@ func TestDecidedRequiresSync(t *testing.T) {
 	}{
 		{
 			"decided from future, requires sync.",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(3),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(3),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
@@ -96,12 +96,10 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided from far future, requires sync.",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(3),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(3),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
@@ -115,12 +113,10 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided from past, doesn't requires sync.",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(3),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(3),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
@@ -134,12 +130,10 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided for current",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(3),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(3),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
@@ -153,12 +147,10 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided for seq 0",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(0),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(0),
+			}),
 			nil,
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
@@ -171,7 +163,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := ibftImpl{
+			ibft := controller{
 				currentInstance: test.currentInstance,
 				ibftStorage:     &testStorage{highestDecided: test.highestDecided},
 			}
@@ -190,18 +182,16 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	secretKeys, _ := GenerateNodes(4)
 	tests := []struct {
 		name            string
-		currentInstance *Instance
+		currentInstance ibft.Instance
 		msg             *proto.SignedMessage
 		expectedRes     bool
 	}{
 		{
 			"current instance",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(1),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(1),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 1,
@@ -219,12 +209,10 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance seq lower",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(1),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(1),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
@@ -233,12 +221,10 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance seq higher",
-			&Instance{
-				State: &proto.State{
-					Lambda:    nil,
-					SeqNumber: threadsafe.Uint64(4),
-				},
-			},
+			ibft2.NewInstanceWithState(&proto.State{
+				Lambda:    nil,
+				SeqNumber: threadsafe.Uint64(4),
+			}),
 			SignMsg(t, 1, secretKeys[1], &proto.Message{
 				Type:      proto.RoundState_Commit,
 				SeqNumber: 2,
@@ -249,7 +235,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := ibftImpl{currentInstance: test.currentInstance}
+			ibft := controller{currentInstance: test.currentInstance}
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
 	}
@@ -264,7 +250,7 @@ func TestForceDecided(t *testing.T) {
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
 
 	// test before sync
-	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.SeqNumber)
@@ -280,7 +266,7 @@ func TestForceDecided(t *testing.T) {
 			Lambda:    identifier,
 			Value:     []byte("value"),
 		})
-		i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
+		i1.(*controller).ProcessDecidedMessage(decidedMsg)
 	}()
 
 	share := &storage.Share{
@@ -289,7 +275,7 @@ func TestForceDecided(t *testing.T) {
 		ShareKey:  sks[1],
 		Committee: nodes,
 	}
-	res, err := i1.StartInstance(StartOptions{
+	res, err := i1.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:         logex.GetLogger(),
 		ValueCheck:     &valcheck.AttestationValueCheck{},
 		SeqNumber:      4,
@@ -299,7 +285,7 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
@@ -316,7 +302,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
 
 	// test before sync
-	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.SeqNumber)
@@ -329,10 +315,10 @@ func TestSyncAfterDecided(t *testing.T) {
 		Value:     []byte("value"),
 	})
 
-	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
+	i1.(*controller).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, found, err = i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err = i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
@@ -361,10 +347,10 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Value:     []byte("value"),
 	})
 
-	i1.(*ibftImpl).ProcessDecidedMessage(decidedMsg)
+	i1.(*controller).ProcessDecidedMessage(decidedMsg)
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, found, err := i1.(*ibftImpl).ibftStorage.GetHighestDecidedInstance(identifier)
+	highest, found, err := i1.(*controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.SeqNumber)
@@ -430,10 +416,10 @@ func TestValidateDecidedMsg(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if test.expectedError != nil {
-				err := ibft.(*ibftImpl).validateDecidedMsg(test.msg)
+				err := ibft.(*controller).validateDecidedMsg(test.msg)
 				require.EqualError(t, err, test.expectedError.Error())
 			} else {
-				require.NoError(t, ibft.(*ibftImpl).validateDecidedMsg(test.msg))
+				require.NoError(t, ibft.(*controller).validateDecidedMsg(test.msg))
 			}
 		})
 	}

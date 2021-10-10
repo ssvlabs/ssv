@@ -1,7 +1,7 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -10,7 +10,7 @@ import (
 
 // Round1PrePrepare tests a simple round 1 pre-prepare msg
 type Round1PrePrepare struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -26,7 +26,7 @@ func (test *Round1PrePrepare) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {

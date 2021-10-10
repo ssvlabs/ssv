@@ -1,7 +1,7 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -11,7 +11,7 @@ import (
 
 // FuturePrePrepare tests a future pre-prepare msg (followed by prepare msg)
 type FuturePrePrepare struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -27,7 +27,7 @@ func (test *FuturePrePrepare) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -66,6 +66,6 @@ func (test *FuturePrePrepare) Run(t *testing.T) {
 
 	// broadcast prepare
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, test.inputValue, test.instance.State.PreparedValue.Get())
-	require.EqualValues(t, 2, test.instance.State.PreparedRound.Get())
+	require.EqualValues(t, test.inputValue, test.instance.State().PreparedValue.Get())
+	require.EqualValues(t, 2, test.instance.State().PreparedRound.Get())
 }

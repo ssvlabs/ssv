@@ -1,7 +1,7 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
@@ -12,7 +12,7 @@ import (
 
 // FuturePrePrepareAfterChangeRound tests handling a pre-prepare msgs received before a change round happened
 type FuturePrePrepareAfterChangeRound struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -29,7 +29,7 @@ func (test *FuturePrePrepareAfterChangeRound) Prepare(t *testing.T) {
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
 	test.instance.LeaderSelector = &constant.Constant{LeaderIndex: 1}
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -63,18 +63,18 @@ func (test *FuturePrePrepareAfterChangeRound) Run(t *testing.T) {
 
 	// change round
 	spectesting.SimulateTimeout(test.instance, 2)
-	require.EqualValues(t, proto.RoundState_ChangeRound, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_ChangeRound, test.instance.State().Stage.Get())
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, proto.RoundState_ChangeRound, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_ChangeRound, test.instance.State().Stage.Get())
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, proto.RoundState_ChangeRound, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_ChangeRound, test.instance.State().Stage.Get())
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, proto.RoundState_PrePrepare, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_PrePrepare, test.instance.State().Stage.Get())
 
 	// process prepare msgs
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, proto.RoundState_Prepare, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_Prepare, test.instance.State().Stage.Get())
 }

@@ -25,7 +25,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		PrePrepareMessages:  msgcontinmem.New(3, 2),
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: threadsafe.Uint64(0),
@@ -106,7 +106,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		PrepareMessages:     msgcontinmem.New(3, 2),
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: threadsafe.Uint64(0),
@@ -172,7 +172,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		PrePrepareMessages: msgcontinmem.New(3, 2),
 		PrepareMessages:    msgcontinmem.New(3, 2),
 		Config:             proto.DefaultConsensusParams(),
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			Lambda:        threadsafe.BytesS("Lambda"),
 			PreparedRound: threadsafe.Uint64(0),
@@ -199,12 +199,12 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = instance.prePrepareMsgPipeline().Run(msg)
+	err = instance.PrePrepareMsgPipeline().Run(msg)
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.State.Stage.Get() == int32(proto.RoundState_PrePrepare))
+	require.True(t, instance.State().Stage.Get() == int32(proto.RoundState_PrePrepare))
 
 	// return nil if another pre-prepare received.
 	err = instance.UponPrePrepareMsg().Run(msg)
@@ -221,7 +221,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 			NodeID:    1,
 			ShareKey:  secretKeys[1],
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
@@ -233,7 +233,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 
 	// try to justify round 2 without round change
-	instance.State.Round.Set(2)
+	instance.State().Round.Set(2)
 	err = instance.JustifyPrePrepare(2, nil)
 	require.EqualError(t, err, "no change round quorum")
 
@@ -280,13 +280,13 @@ func TestPrePreparePipeline(t *testing.T) {
 			NodeID:    1,
 			PublicKey: sks[1].GetPublicKey(),
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
 	}
-	pipeline := instance.prePrepareMsgPipeline()
+	pipeline := instance.PrePrepareMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }

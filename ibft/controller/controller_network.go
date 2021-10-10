@@ -1,4 +1,4 @@
-package ibft
+package controller
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ var (
 	waitMinPeersIntervalEnd   = 64 * time.Second
 )
 
-// waitForMinPeerOnInit is called once during IBFT init
-func (i *ibftImpl) waitForMinPeerOnInit(minPeerCount int) {
+// waitForMinPeerOnInit is called once during IBFTController init
+func (i *controller) waitForMinPeerOnInit(minPeerCount int) {
 	// warmup to avoid network errors
 	time.Sleep(500 * time.Millisecond)
 
@@ -25,7 +25,7 @@ func (i *ibftImpl) waitForMinPeerOnInit(minPeerCount int) {
 
 // waitForMinPeers will wait until enough peers joined the topic
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
-func (i *ibftImpl) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
+func (i *controller) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 	ctx := commons.WaitMinPeersCtx{
 		Ctx:    context.Background(),
 		Logger: i.logger,
@@ -35,7 +35,7 @@ func (i *ibftImpl) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 		waitMinPeersIntervalStart, waitMinPeersIntervalEnd, stopAtLimit)
 }
 
-func (i *ibftImpl) listenToNetworkMessages() {
+func (i *controller) listenToNetworkMessages() {
 	msgChan := i.network.ReceivedMsgChan()
 	go func() {
 		for msg := range msgChan {
@@ -49,7 +49,7 @@ func (i *ibftImpl) listenToNetworkMessages() {
 	}()
 }
 
-func (i *ibftImpl) listenToNetworkDecidedMessages() {
+func (i *controller) listenToNetworkDecidedMessages() {
 	decidedChan := i.network.ReceivedDecidedChan()
 	go func() {
 		for msg := range decidedChan {
@@ -63,7 +63,7 @@ func (i *ibftImpl) listenToNetworkDecidedMessages() {
 	}()
 }
 
-func (i *ibftImpl) listenToSyncMessages() {
+func (i *controller) listenToSyncMessages() {
 	syncChan := i.network.ReceivedSyncMsgChan()
 	go func() {
 		for msg := range syncChan {
@@ -78,6 +78,6 @@ func (i *ibftImpl) listenToSyncMessages() {
 	}()
 }
 
-func (i *ibftImpl) equalIdentifier(toCheck []byte) bool {
+func (i *controller) equalIdentifier(toCheck []byte) bool {
 	return bytes.Equal(toCheck, i.Identifier)
 }

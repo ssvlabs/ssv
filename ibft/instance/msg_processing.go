@@ -9,17 +9,17 @@ import (
 
 // ProcessMessage pulls messages from the queue to be processed sequentially
 func (i *Instance) ProcessMessage() (processedMsg bool, err error) {
-	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())); netMsg != nil {
+	if netMsg := i.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(i.State().Lambda.Get(), i.State().SeqNumber.Get())); netMsg != nil {
 		var pp pipeline.Pipeline
 		switch netMsg.SignedMessage.Message.Type {
 		case proto.RoundState_PrePrepare:
-			pp = i.prePrepareMsgPipeline()
+			pp = i.PrePrepareMsgPipeline()
 		case proto.RoundState_Prepare:
-			pp = i.prepareMsgPipeline()
+			pp = i.PrepareMsgPipeline()
 		case proto.RoundState_Commit:
-			pp = i.commitMsgPipeline()
+			pp = i.CommitMsgPipeline()
 		case proto.RoundState_ChangeRound:
-			pp = i.changeRoundMsgPipeline()
+			pp = i.ChangeRoundMsgPipeline()
 		default:
 			i.Logger.Warn("undefined message type", zap.Any("msg", netMsg.SignedMessage))
 			return true, nil

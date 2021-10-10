@@ -1,4 +1,4 @@
-package ibft
+package controller
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -11,7 +11,7 @@ import (
 )
 
 // processSyncQueueMessages is listen for all the ibft sync msg's and process them
-func (i *ibftImpl) processSyncQueueMessages() {
+func (i *controller) processSyncQueueMessages() {
 	go func() {
 		for {
 			if syncMsg := i.msgQueue.PopMessage(msgqueue.SyncIndexKey(i.Identifier)); syncMsg != nil {
@@ -26,19 +26,19 @@ func (i *ibftImpl) processSyncQueueMessages() {
 	i.logger.Info("sync messages queue started")
 }
 
-func (i *ibftImpl) ProcessSyncMessage(msg *network.SyncChanObj) {
+func (i *controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)
 	if i.currentInstance != nil {
 		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
-		currentInstaceSeqNumber = int64(i.currentInstance.State.SeqNumber.Get())
+		currentInstaceSeqNumber = int64(i.currentInstance.State().SeqNumber.Get())
 	}
 	s := incoming.New(i.logger, i.Identifier, currentInstaceSeqNumber, i.network, i.ibftStorage, lastChangeRoundMsg)
 	go s.Process(msg)
 }
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
-func (i *ibftImpl) SyncIBFT() error {
+func (i *controller) SyncIBFT() error {
 	if !i.syncingLock.TryAcquire(1) {
 		return errors.New("failed to start iBFT sync, already running")
 	}

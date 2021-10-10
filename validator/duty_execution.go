@@ -174,7 +174,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	result, err := v.ibfts[duty.Type].StartInstance(ibft.StartOptions{
+	result, err := v.ibfts[duty.Type].StartInstance(ibft.ControllerStartInstanceOptions{
 		ValidatorShare:  v.Share,
 		Logger:          logger,
 		ValueCheck:      valCheckInstance,

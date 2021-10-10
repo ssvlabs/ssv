@@ -1,7 +1,7 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -11,7 +11,7 @@ import (
 
 // WrongLeaderPrePrepare tests wrong pre-prepare leader
 type WrongLeaderPrePrepare struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -27,7 +27,7 @@ func (test *WrongLeaderPrePrepare) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -63,7 +63,7 @@ func (test *WrongLeaderPrePrepare) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, 2, test.instance.State.Round.Get())
+	require.EqualValues(t, 2, test.instance.State().Round.Get())
 
 	// try to broadcast unjustified pre-prepare
 	spectesting.RequireReturnedTrueWithError(t, test.instance.ProcessMessage, "pre-prepare message sender (id 2) is not the round's leader (expected 1)")

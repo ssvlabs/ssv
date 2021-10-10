@@ -23,7 +23,7 @@ func TestMsgRound(t *testing.T) {
 			"different msg rounds",
 			1,
 			2,
-			"message round (2) does not equal State round (1)",
+			"message round (2) does not equal state round (1)",
 		},
 	}
 

@@ -13,7 +13,7 @@ import (
 
 type changeRoundSpeedup struct {
 	logger     *zap.Logger
-	nodes      []ibft.IBFT
+	nodes      []ibft.Controller
 	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
@@ -26,7 +26,7 @@ func NewChangeRoundSpeedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) I
 	}
 }
 
-func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *changeRoundSpeedup) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	nodeCount := len(nodes)
@@ -36,13 +36,13 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validat
 	}
 
 	// init ibfts
-	go func(node ibft.IBFT, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		if err := node.Init(); err != nil {
 			fmt.Printf("error initializing ibft")
 		}
 		r.startNode(node, index)
 	}(nodes[0], 1)
-	go func(node ibft.IBFT, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		time.Sleep(time.Second * 13)
 		if err := node.Init(); err != nil {
 			fmt.Printf("error initializing ibft")
@@ -51,7 +51,7 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validat
 	}(nodes[1], 2)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go func(node ibft.IBFT, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		time.Sleep(time.Second * 60)
 		if err := node.Init(); err != nil {
 			fmt.Printf("error initializing ibft")
@@ -63,8 +63,8 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.IBFT, shares map[uint64]*validat
 	wg.Wait()
 }
 
-func (r *changeRoundSpeedup) startNode(node ibft.IBFT, index uint64) {
-	res, err := node.StartInstance(ibft.StartOptions{
+func (r *changeRoundSpeedup) startNode(node ibft.Controller, index uint64) {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,
 		SeqNumber:      1,

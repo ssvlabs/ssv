@@ -12,7 +12,7 @@ import (
 
 type farFutureSync struct {
 	logger     *zap.Logger
-	nodes      []ibft.IBFT
+	nodes      []ibft.Controller
 	shares     map[uint64]*validatorstorage.Share
 	dbs        []collections.Iibft
 	valueCheck valcheck.ValueCheck
@@ -26,7 +26,7 @@ func FarFutureSync(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario
 	}
 }
 
-func (r *farFutureSync) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, dbs []collections.Iibft) {
+func (r *farFutureSync) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, dbs []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	r.dbs = dbs
@@ -36,7 +36,7 @@ func (r *farFutureSync) Start(nodes []ibft.IBFT, shares map[uint64]*validatorsto
 	var wg sync.WaitGroup
 	for i := uint64(1); i < uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.IBFT) {
+		go func(node ibft.Controller) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -54,7 +54,7 @@ loop:
 		r.logger.Info("started instances")
 		for i := uint64(1); i < uint64(nodeCount); i++ {
 			wg.Add(1)
-			go func(node ibft.IBFT, index uint64) {
+			go func(node ibft.Controller, index uint64) {
 				r.startNode(node, index, seqNumber)
 				wg.Done()
 			}(nodes[i-1], i)
@@ -80,8 +80,8 @@ loop:
 	}
 }
 
-func (r *farFutureSync) startNode(node ibft.IBFT, index uint64, seqNumber uint64) {
-	res, err := node.StartInstance(ibft.StartOptions{
+func (r *farFutureSync) startNode(node ibft.Controller, index uint64, seqNumber uint64) {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,
 		SeqNumber:      seqNumber,

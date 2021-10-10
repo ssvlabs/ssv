@@ -1,22 +1,18 @@
 package ibft
 
 import (
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
-	"sync"
-
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
+	"go.uber.org/zap"
 )
 
-// StartOptions defines type for IBFT instance options
-type StartOptions struct {
+// ControllerStartInstanceOptions defines type for Controller instance options
+type ControllerStartInstanceOptions struct {
 	Logger         *zap.Logger
 	ValueCheck     valcheck.ValueCheck
 	SeqNumber      uint64
@@ -33,13 +29,13 @@ type InstanceResult struct {
 	Msg     *proto.SignedMessage
 }
 
-// IBFT represents behavior of the IBFT
-type IBFT interface {
-	// Init should be called after creating an IBFT instance to init the instance, sync it, etc.
+// Controller represents behavior of the Controller
+type Controller interface {
+	// Init should be called after creating an Controller instance to init the instance, sync it, etc.
 	Init() error
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts StartOptions) (*InstanceResult, error)
+	StartInstance(opts ControllerStartInstanceOptions) (*InstanceResult, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
@@ -52,92 +48,48 @@ type IBFT interface {
 	GetIdentifier() []byte
 }
 
-// ibftImpl implements IBFT interface
-type ibftImpl struct {
-	currentInstance *Instance
-	logger          *zap.Logger
-	ibftStorage     collections.Iibft
-	network         network.Network
-	msgQueue        *msgqueue.MessageQueue
-	instanceConfig  *proto.InstanceConfig
-	ValidatorShare  *storage.Share
-	Identifier      []byte
-
-	// flags
-	initFinished bool
-
-	// locks
-	currentInstanceLock sync.Locker
-	syncingLock         *semaphore.Weighted
+// InstanceOptions defines option attributes for the Instance
+type InstanceOptions struct {
+	Logger         *zap.Logger
+	ValidatorShare *storage.Share
+	//Me             *proto.Node
+	Network        network.Network
+	Queue          *msgqueue.MessageQueue
+	ValueCheck     valcheck.ValueCheck
+	LeaderSelector leader.Selector
+	Config         *proto.InstanceConfig
+	Lambda         []byte
+	SeqNumber      uint64
+	// RequireMinPeers flag to require minimum peers before starting an instance
+	// useful for tests where we want (sometimes) to avoid networking
+	RequireMinPeers bool
 }
 
-// New is the constructor of IBFT
-func New(
-	role beacon.RoleType,
-	identifier []byte,
-	logger *zap.Logger,
-	storage collections.Iibft,
-	network network.Network,
-	queue *msgqueue.MessageQueue,
-	instanceConfig *proto.InstanceConfig,
-	ValidatorShare *storage.Share,
-) IBFT {
-	logger = logger.With(zap.String("role", role.String()))
-	ret := &ibftImpl{
-		ibftStorage:    storage,
-		logger:         logger,
-		network:        network,
-		msgQueue:       queue,
-		instanceConfig: instanceConfig,
-		ValidatorShare: ValidatorShare,
-		Identifier:     identifier,
-
-		// flags
-		initFinished: false,
-
-		// locks
-		currentInstanceLock: &sync.Mutex{},
-		syncingLock:         semaphore.NewWeighted(1),
-	}
-	return ret
+type Instance interface {
+	Pipelines
+	Init()
+	Start(inputValue []byte) error
+	Stop()
+	State() *proto.State
+	ForceDecide(msg *proto.SignedMessage)
+	GetStageChan() chan proto.RoundState
+	GetLastChangeRoundMsg() *proto.SignedMessage
+	CommittedAggregatedMsg() (*proto.SignedMessage, error)
 }
 
-// Init sets all major processes of iBFT while blocking until completed.
-func (i *ibftImpl) Init() error {
-	i.logger.Info("iBFT implementation init started")
-	i.processDecidedQueueMessages()
-	i.processSyncQueueMessages()
-	i.listenToSyncMessages()
-	i.listenToNetworkMessages()
-	i.listenToNetworkDecidedMessages()
-	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
-	if err := i.SyncIBFT(); err != nil {
-		return errors.Wrap(err, "could not sync history, stopping IBFT init")
-	}
-	i.initFinished = true
-	i.logger.Info("iBFT implementation init finished")
-	return nil
-}
-
-func (i *ibftImpl) StartInstance(opts StartOptions) (*InstanceResult, error) {
-	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
-	if err != nil {
-		return nil, errors.WithMessage(err, "can't generate instance options")
-	}
-
-	if err := i.canStartNewInstance(*instanceOpts); err != nil {
-		return nil, errors.WithMessage(err, "can't start new iBFT instance")
-	}
-
-	return i.startInstanceWithOptions(instanceOpts, opts.Value)
-}
-
-// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *ibftImpl) GetIBFTCommittee() map[uint64]*proto.Node {
-	return i.ValidatorShare.Committee
-}
-
-// GetIdentifier returns ibft identifier made of public key and role (type)
-func (i *ibftImpl) GetIdentifier() []byte {
-	return i.Identifier //TODO should use mutex to lock var?
+type Pipelines interface {
+	// PrePrepareMsgPipeline is the full processing msg pipeline for a pre-prepare msg
+	PrePrepareMsgPipeline() pipeline.Pipeline
+	// PrepareMsgPipeline is the full processing msg pipeline for a prepare msg
+	PrepareMsgPipeline() pipeline.Pipeline
+	// CommitMsgValidationPipeline is a msg validation ONLY pipeline
+	CommitMsgValidationPipeline() pipeline.Pipeline
+	// CommitMsgPipeline is the full processing msg pipeline for a commit msg
+	CommitMsgPipeline() pipeline.Pipeline
+	// DecidedMsgPipeline is a specific full processing pipeline for a decided msg
+	DecidedMsgPipeline() pipeline.Pipeline
+	// ChangeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
+	ChangeRoundMsgValidationPipeline() pipeline.Pipeline
+	// ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
+	ChangeRoundMsgPipeline() pipeline.Pipeline
 }

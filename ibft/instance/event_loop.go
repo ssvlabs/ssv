@@ -53,8 +53,8 @@ loop:
 		}
 
 		var wg sync.WaitGroup
-		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State.Lambda.Get(), i.State.SeqNumber.Get())); queueCnt > 0 {
-			logger := i.Logger.With(zap.Uint64("round", i.State.Round.Get()))
+		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State().Lambda.Get(), i.State().SeqNumber.Get())); queueCnt > 0 {
+			logger := i.Logger.With(zap.Uint64("round", i.State().Round.Get()))
 			logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
 			if added := i.eventQueue.Add(func() {
@@ -90,7 +90,7 @@ loop:
 				i.uponChangeRoundTrigger()
 			})
 		} else { // stopped
-			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State.Round.Get()))
+			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State().Round.Get()))
 		}
 	}
 	i.roundTimer.CloseChan()
@@ -99,10 +99,10 @@ loop:
 
 /**
 "Timer:
-	In addition to the State variables, each correct process pi also maintains a timer represented by timeri,
+	In addition to the state variables, each correct process pi also maintains a timer represented by timeri,
 	which is used to trigger a round change when the algorithm does not sufficiently progress.
 	The timer can be in one of two states: running or expired.
-	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the State changes to expired."
+	When set to running, it is also set a time t(ri), which is an exponential function of the round number ri, after which the state changes to expired."
 
 	resetRoundTimer will reset the current timer (including stopping the previous one)
 */
@@ -110,5 +110,5 @@ func (i *Instance) resetRoundTimer() {
 	// stat new timer
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)
-	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State.Round.Get()))
+	i.Logger.Info("started timeout clock", zap.Float64("seconds", roundTimeout.Seconds()), zap.Uint64("round", i.State().Round.Get()))
 }

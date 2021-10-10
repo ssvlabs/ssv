@@ -26,7 +26,7 @@ func TestChangeRoundTimer(t *testing.T) {
 			RoundChangeDurationSeconds:   0.2,
 			LeaderPreprepareDelaySeconds: 0.1,
 		},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			Stage:         threadsafe.Int32(int32(proto.RoundState_PrePrepare)),
 			Lambda:        threadsafe.BytesS("Lambda"),
@@ -51,5 +51,5 @@ func TestChangeRoundTimer(t *testing.T) {
 	instance.resetRoundTimer()
 	time.Sleep(time.Millisecond * 500)
 	instance.eventQueue.Pop()()
-	require.EqualValues(t, 2, instance.State.Round.Get())
+	require.EqualValues(t, 2, instance.State().Round.Get())
 }

@@ -15,21 +15,21 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) changeRoundMsgPipeline() pipeline.Pipeline {
+func (i *Instance) ChangeRoundMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
-		i.changeRoundMsgValidationPipeline(),
-		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State),
+		i.ChangeRoundMsgValidationPipeline(),
+		changeround.AddChangeRoundMessage(i.Logger, i.ChangeRoundMessages, i.State()),
 		i.ChangeRoundPartialQuorumMsgPipeline(),
 		i.changeRoundFullQuorumMsgPipeline(),
 	)
 }
 
-func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
+func (i *Instance) ChangeRoundMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_ChangeRound),
-		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
+		auth.ValidateLambdas(i.State().Lambda.Get()),
+		auth.ValidateSequenceNumber(i.State().SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		changeround.Validate(i.ValidatorShare),
 	)
@@ -37,7 +37,7 @@ func (i *Instance) changeRoundMsgValidationPipeline() pipeline.Pipeline {
 
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipeline.Pipeline {
 	return pipeline.IfFirstTrueContinueToSecond(
-		auth.ValidateRound(i.State.Round.Get()),
+		auth.ValidateRound(i.State().Round.Get()),
 		i.uponChangeRoundFullQuorum(),
 	)
 }
@@ -92,7 +92,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipeline.Pipeline {
 
 			var value []byte
 			if notPrepared {
-				value = i.State.InputValue.Get()
+				value = i.State().InputValue.Get()
 				logger.Info("broadcasting pre-prepare as leader after round change with input value")
 			} else {
 				value = highest.PreparedValue
@@ -136,7 +136,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	var aggSig []byte
 	ids := make([]uint64, 0)
 	if i.isPrepared() {
-		_, msgs := i.PrepareMessages.QuorumAchieved(i.State.PreparedRound.Get(), i.State.PreparedValue.Get())
+		_, msgs := i.PrepareMessages.QuorumAchieved(i.State().PreparedRound.Get(), i.State().PreparedValue.Get())
 		var aggregatedSig *bls.Sign
 		justificationMsg = msgs[0].Message
 		for _, msg := range msgs {
@@ -158,8 +158,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	}
 
 	data := &proto.ChangeRoundData{
-		PreparedRound:    i.State.PreparedRound.Get(),
-		PreparedValue:    i.State.PreparedValue.Get(),
+		PreparedRound:    i.State().PreparedRound.Get(),
+		PreparedValue:    i.State().PreparedValue.Get(),
 		JustificationMsg: justificationMsg,
 		JustificationSig: aggSig,
 		SignerIds:        ids,
@@ -169,7 +169,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *Instance) uponChangeRoundTrigger() {
-	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State.Round.Get()))
+	i.Logger.Info("round timeout, changing round", zap.Uint64("round", i.State().Round.Get()))
 	// bump round
 	i.BumpRound()
 	// mark stage
@@ -197,7 +197,7 @@ func (i *Instance) broadcastChangeRound() error {
 
 // JustifyRoundChange see below
 func (i *Instance) JustifyRoundChange(round uint64) error {
-	// ### Algorithm 4 IBFT pseudocode for process pi: message justification
+	// ### Algorithm 4 IBFTController pseudocode for process pi: message justification
 	//	predicate JustifyRoundChange(Qrc) return
 	//		∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
 	//		∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
@@ -223,7 +223,7 @@ func (i *Instance) JustifyRoundChange(round uint64) error {
 // HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
 func (i *Instance) HighestPrepared(round uint64) (notPrepared bool, highestPrepared *proto.ChangeRoundData, err error) {
 	/**
-	### Algorithm 4 IBFT pseudocode for process pi: message justification
+	### Algorithm 4 IBFTController pseudocode for process pi: message justification
 		Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
 		the prepared round and the prepared value of the ROUND-CHANGE message in Qrc with the highest prepared round.
 		function HighestPrepared(Qrc)
@@ -263,14 +263,14 @@ func (i *Instance) generateChangeRoundMessage() (*proto.Message, error) {
 
 	return &proto.Message{
 		Type:      proto.RoundState_ChangeRound,
-		Round:     i.State.Round.Get(),
-		Lambda:    i.State.Lambda.Get(),
-		SeqNumber: i.State.SeqNumber.Get(),
+		Round:     i.State().Round.Get(),
+		Lambda:    i.State().Lambda.Get(),
+		SeqNumber: i.State().SeqNumber.Get(),
 		Value:     data,
 	}, nil
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State.Round.Get()))
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State().Round.Get()))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }

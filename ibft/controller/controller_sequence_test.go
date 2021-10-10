@@ -1,7 +1,9 @@
-package ibft
+package controller
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -13,8 +15,8 @@ import (
 	"testing"
 )
 
-func testIBFTInstance(t *testing.T) *ibftImpl {
-	return &ibftImpl{
+func testIBFTInstance(t *testing.T) *controller {
+	return &controller{
 		Identifier: []byte("lambda_11"),
 		//instances: make([]*Instance, 0),
 	}
@@ -25,16 +27,16 @@ func TestCanStartNewInstance(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		opts            StartOptions
+		opts            ibft.ControllerStartInstanceOptions
 		share           *validatorstorage.Share
 		storage         collections.Iibft
 		initFinished    bool
-		currentInstance *Instance
+		currentInstance ibft.Instance
 		expectedError   string
 	}{
 		{
 			"valid next instance start",
-			StartOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 11,
 			},
 			&validatorstorage.Share{
@@ -50,7 +52,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"valid first instance",
-			StartOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 0,
 			},
 			&validatorstorage.Share{
@@ -66,7 +68,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"didn't finish initialization",
-			StartOptions{},
+			ibft.ControllerStartInstanceOptions{},
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
@@ -80,7 +82,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"sequence skips",
-			StartOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 12,
 			},
 			&validatorstorage.Share{
@@ -96,7 +98,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"past instance",
-			StartOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 10,
 			},
 			&validatorstorage.Share{
@@ -112,7 +114,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"didn't finish current instance",
-			StartOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 11,
 			},
 			&validatorstorage.Share{
@@ -123,7 +125,9 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
-			&Instance{State: &proto.State{SeqNumber: threadsafe.Uint64(10)}},
+			ibft2.NewInstanceWithState(&proto.State{
+				SeqNumber: threadsafe.Uint64(10),
+			}),
 			fmt.Sprintf("current instance (%d) is still running", 10),
 		},
 	}

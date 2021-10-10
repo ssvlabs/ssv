@@ -1,7 +1,7 @@
 package commit
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -12,7 +12,7 @@ import (
 
 // PrevRoundDecided tests a delayed commit message from previous round arrives and decides the instance
 type PrevRoundDecided struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -28,7 +28,7 @@ func (test *PrevRoundDecided) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -89,7 +89,7 @@ func (test *PrevRoundDecided) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, 2, test.instance.State.Round.Get())
+	require.EqualValues(t, 2, test.instance.State().Round.Get())
 
 	// receive last commit message for quorum
 	test.instance.MsgQueue.AddMessage(&network.Message{
@@ -97,5 +97,5 @@ func (test *PrevRoundDecided) Run(t *testing.T) {
 		Type:          network.NetworkMsg_IBFTType,
 	})
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State().Stage.Get())
 }

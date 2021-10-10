@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
-func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
+func (i *Instance) PrePrepareMsgPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		i.prePrepareMsgValidationPipeline(),
 		pipeline.WrapFunc("add pre-prepare msg", func(signedMessage *proto.SignedMessage) error {
@@ -22,7 +22,7 @@ func (i *Instance) prePrepareMsgPipeline() pipeline.Pipeline {
 			return nil
 		}),
 		pipeline.IfFirstTrueContinueToSecond(
-			auth.ValidateRound(i.State.Round.Get()),
+			auth.ValidateRound(i.State().Round.Get()),
 			i.UponPrePrepareMsg(),
 		),
 	)
@@ -32,8 +32,8 @@ func (i *Instance) prePrepareMsgValidationPipeline() pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
-		auth.ValidateLambdas(i.State.Lambda.Get()),
-		auth.ValidateSequenceNumber(i.State.SeqNumber.Get()),
+		auth.ValidateLambdas(i.State().Lambda.Get()),
+		auth.ValidateSequenceNumber(i.State().SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.RoundLeader),
 	)
@@ -68,7 +68,7 @@ func (i *Instance) JustifyPrePrepare(round uint64, preparedValue []byte) error {
 }
 
 /*
-UponPrePrepareMsg Algorithm 2 IBFT pseudocode for process pi: normal case operation
+UponPrePrepareMsg Algorithm 2 IBFTController pseudocode for process pi: normal case operation
 upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(λi, round) such that:
 	JustifyPrePrepare(m) do
 		set timer i to running and expire after t(ri)
@@ -82,7 +82,7 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 			return errors.Wrap(err, "Unjustified pre-prepare")
 		}
 
-		// mark State
+		// mark state
 		i.ProcessStageChange(proto.RoundState_PrePrepare)
 
 		// broadcast prepare msg
@@ -98,9 +98,9 @@ func (i *Instance) UponPrePrepareMsg() pipeline.Pipeline {
 func (i *Instance) generatePrePrepareMessage(value []byte) *proto.Message {
 	return &proto.Message{
 		Type:      proto.RoundState_PrePrepare,
-		Round:     i.State.Round.Get(),
-		Lambda:    i.State.Lambda.Get(),
-		SeqNumber: i.State.SeqNumber.Get(),
+		Round:     i.State().Round.Get(),
+		Lambda:    i.State().Lambda.Get(),
+		SeqNumber: i.State().SeqNumber.Get(),
 		Value:     value,
 	}
 }

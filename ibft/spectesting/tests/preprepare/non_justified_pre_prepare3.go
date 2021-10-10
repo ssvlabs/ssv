@@ -1,7 +1,7 @@
 package preprepare
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -12,7 +12,7 @@ import (
 
 // NonJustifiedPrePrepapre3 tests non justified change round quorum (not prepared vs prepared state)
 type NonJustifiedPrePrepapre3 struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -28,7 +28,7 @@ func (test *NonJustifiedPrePrepapre3) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -85,8 +85,8 @@ func (test *NonJustifiedPrePrepapre3) Run(t *testing.T) {
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, test.inputValue, test.instance.State.PreparedValue.Get())
-	require.EqualValues(t, 1, test.instance.State.PreparedRound.Get())
+	require.EqualValues(t, test.inputValue, test.instance.State().PreparedValue.Get())
+	require.EqualValues(t, 1, test.instance.State().PreparedRound.Get())
 
 	// change round not justified
 	spectesting.SimulateTimeout(test.instance, 2)

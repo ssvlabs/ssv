@@ -13,7 +13,7 @@ import (
 
 type f1MultiRound struct {
 	logger     *zap.Logger
-	nodes      []ibft.IBFT
+	nodes      []ibft.Controller
 	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
@@ -26,18 +26,18 @@ func NewF1MultiRound(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenar
 	}
 }
 
-func (r *f1MultiRound) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *f1MultiRound) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	//
 	wg := sync.WaitGroup{}
-	go func(node ibft.IBFT, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		if err := r.nodes[0].Init(); err != nil {
 			fmt.Printf("error initializing ibft")
 		}
 		r.startNode(node, index)
 	}(r.nodes[0], 1)
-	go func(node ibft.IBFT, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		if err := r.nodes[1].Init(); err != nil {
 			fmt.Printf("error initializing ibft")
 		}
@@ -56,8 +56,8 @@ func (r *f1MultiRound) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstor
 	wg.Wait()
 }
 
-func (r *f1MultiRound) startNode(node ibft.IBFT, index uint64) {
-	res, err := node.StartInstance(ibft.StartOptions{
+func (r *f1MultiRound) startNode(node ibft.Controller, index uint64) {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,
 		SeqNumber:      1,

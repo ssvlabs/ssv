@@ -1,7 +1,9 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
@@ -13,6 +15,15 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/ibft/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func newInMemDb() basedb.IDb {
+	db, _ := kv.New(basedb.Options{
+		Type:   "badger-memory",
+		Path:   "",
+		Logger: zap.L(),
+	})
+	return db
+}
 
 func TestAggregatedMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
@@ -103,7 +114,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		CommitMessages: msgcontinmem.New(3, 2),
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: &storage.Share{Committee: nodes},
-		State: &proto.State{
+		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
 			PreparedRound: threadsafe.Uint64(0),
@@ -115,8 +126,8 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "missing decided message")
 
 	// set prepared state
-	instance.State.PreparedRound.Set(1)
-	instance.State.PreparedValue.Set([]byte("value"))
+	instance.State().PreparedRound.Set(1)
+	instance.State().PreparedValue.Set([]byte("value"))
 
 	// test prepared but no committed msgs
 	_, err = instance.CommittedAggregatedMsg()
@@ -171,13 +182,13 @@ func TestCommitPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
-		State: &proto.State{
+		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
 			SeqNumber: threadsafe.Uint64(0),
 		},
 	}
-	pipeline := instance.commitMsgPipeline()
+	pipeline := instance.CommitMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, upon commit msg, ", pipeline.Name())
 }
 

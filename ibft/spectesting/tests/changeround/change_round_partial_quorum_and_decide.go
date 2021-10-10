@@ -1,7 +1,7 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/spectesting"
 	"github.com/bloxapp/ssv/network"
@@ -11,7 +11,7 @@ import (
 
 // FullChangeRoundThePartialQuorumTheDecide tests coming to consensus after an f+1 (after change round)
 type FullChangeRoundThePartialQuorumTheDecide struct {
-	instance   *ibft.Instance
+	instance   *ibft2.Instance
 	inputValue []byte
 	lambda     []byte
 }
@@ -27,7 +27,7 @@ func (test *FullChangeRoundThePartialQuorumTheDecide) Prepare(t *testing.T) {
 	test.inputValue = spectesting.TestInputValue()
 
 	test.instance = spectesting.TestIBFTInstance(t, test.lambda)
-	test.instance.State.Round.Set(1)
+	test.instance.State().Round.Set(1)
 
 	// load messages to queue
 	for _, msg := range test.MessagesSequence(t) {
@@ -83,13 +83,13 @@ func (test *FullChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
 	// f+1
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, 5, test.instance.State.Round.Get())
+	require.EqualValues(t, 5, test.instance.State().Round.Get())
 
 	// full change round quorum
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	require.EqualValues(t, proto.RoundState_PrePrepare, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_PrePrepare, test.instance.State().Stage.Get())
 	err = test.instance.JustifyRoundChange(5)
 	require.NoError(t, err)
 
@@ -103,5 +103,5 @@ func (test *FullChangeRoundThePartialQuorumTheDecide) Run(t *testing.T) {
 			break
 		}
 	}
-	require.EqualValues(t, proto.RoundState_Decided, test.instance.State.Stage.Get())
+	require.EqualValues(t, proto.RoundState_Decided, test.instance.State().Stage.Get())
 }

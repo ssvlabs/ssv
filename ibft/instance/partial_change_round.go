@@ -21,11 +21,11 @@ func (i *Instance) ChangeRoundPartialQuorumMsgPipeline() pipeline.Pipeline {
 //		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
 func (i *Instance) uponChangeRoundPartialQuorum() pipeline.Pipeline {
 	return pipeline.WrapFunc("upon change round partial quorum", func(_ *proto.SignedMessage) error {
-		foundPartialQuorum, lowestChangeRound := i.ChangeRoundMessages.PartialChangeRoundQuorum(i.State.Round.Get())
+		foundPartialQuorum, lowestChangeRound := i.ChangeRoundMessages.PartialChangeRoundQuorum(i.State().Round.Get())
 		if foundPartialQuorum {
 			i.bumpToRound(lowestChangeRound)
 
-			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State.Round.Get()))
+			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", i.State().Round.Get()))
 			i.resetRoundTimer()
 			i.ProcessStageChange(proto.RoundState_ChangeRound)
 
