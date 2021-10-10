@@ -101,14 +101,14 @@ func TestHandleStream(t *testing.T) {
 
 	// expecting outbound messages
 	var wg sync.WaitGroup
-	wg.Add(msgCount)
+	wg.Add(msgCount*2)
 	go func() {
 		i := 0
 		for {
 			<-adapter.Out
 			i++
-			if i >= msgCount {
-				if i > msgCount {
+			if i >= msgCount*2 {
+				if i > msgCount*2 {
 					t.Error("should not send too many requests")
 				}
 				wg.Done()
@@ -133,14 +133,14 @@ func TestHandleStream(t *testing.T) {
 			Conn: nil,
 		}
 		ws.OutboundSubject().Notify(nm)
-
 		time.Sleep(10 * time.Millisecond)
+
 		nm.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
 		ws.OutboundSubject().Notify(nm)
-
 		time.Sleep(10 * time.Millisecond)
+		conn.Close()
 		nm.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
@@ -150,8 +150,8 @@ func TestHandleStream(t *testing.T) {
 	}()
 
 	go func() {
-		ws.handleStream(&conn)
-		ws.handleStream(&conn2)
+		go ws.handleStream(&conn)
+		go ws.handleStream(&conn2)
 	}()
 
 	wg.Wait()
