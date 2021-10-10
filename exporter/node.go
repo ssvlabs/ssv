@@ -341,6 +341,7 @@ func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ib
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
+		Out:            exp.ws.OutboundSubject(),
 	})
 }
 
