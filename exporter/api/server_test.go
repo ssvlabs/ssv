@@ -2,10 +2,12 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -67,10 +69,39 @@ func TestHandleStream(t *testing.T) {
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
 	require.NoError(t, err)
 	conn := connectionMock{addr: ipAddr}
+	_, ipAddr2, err := net.ParseCIDR("192.0.2.1/26")
+	require.NoError(t, err)
+	conn2 := connectionMock{addr: ipAddr2}
+
+	// register a listener to count how many messages are passed on outbound subject
+	var outCnCount int64
+	var wgCn sync.WaitGroup
+	wgCn.Add(3)
+	go func() {
+		sub, ok := ws.OutboundSubject().(pubsub.Subject)
+		require.True(t, ok)
+		cn, err := sub.Register("xxx-1")
+		require.NoError(t, err)
+		for range cn {
+			atomic.AddInt64(&outCnCount, int64(1))
+			wgCn.Done()
+		}
+	}()
+	// registers a dummy lister to mock disconnections
+	go func() {
+		sub, ok := ws.OutboundSubject().(pubsub.Subject)
+		require.True(t, ok)
+		cn, err := sub.Register("xxx-2")
+		require.NoError(t, err)
+		for range cn {
+			sub.Deregister("xxx-2")
+			return
+		}
+	}()
 
 	// expecting outbound messages
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(msgCount)
 	go func() {
 		i := 0
 		for {
@@ -80,6 +111,7 @@ func TestHandleStream(t *testing.T) {
 				if i > msgCount {
 					t.Error("should not send too many requests")
 				}
+				wg.Done()
 				return
 			}
 			wg.Done()
@@ -113,13 +145,19 @@ func TestHandleStream(t *testing.T) {
 			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
+		// let the message propagate
+		time.Sleep(10 * time.Millisecond)
 	}()
 
 	go func() {
 		ws.handleStream(&conn)
+		ws.handleStream(&conn2)
 	}()
 
 	wg.Wait()
+	wgCn.Wait()
+
+	require.Equal(t, int64(msgCount), atomic.LoadInt64(&outCnCount))
 }
 
 type connectionMock struct {
