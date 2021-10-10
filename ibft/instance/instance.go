@@ -95,7 +95,7 @@ func NewInstanceWithState(state *proto.State) ibft.Instance {
 // NewInstance is the constructor of Instance
 func NewInstance(opts *InstanceOptions) ibft.Instance {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
-	ibft.MetricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
+	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
 	ret := &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		state: &proto.State{
@@ -181,7 +181,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.State().InputValue.Set(inputValue)
 	i.State().Round.Set(1) // start from 1
 	pk, role := format.IdentifierUnformat(string(i.State().Lambda.Get()))
-	ibft.MetricsIBFTRound.WithLabelValues(role, pk).Set(1)
+	metricsIBFTRound.WithLabelValues(role, pk).Set(1)
 
 	if i.IsLeader() {
 		go func() {
@@ -267,13 +267,13 @@ func (i *Instance) bumpToRound(round uint64) {
 	newRound := round
 	i.State().Round.Set(newRound)
 	pk, role := format.IdentifierUnformat(string(i.State().Lambda.Get()))
-	ibft.MetricsIBFTRound.WithLabelValues(role, pk).Set(float64(newRound))
+	metricsIBFTRound.WithLabelValues(role, pk).Set(float64(newRound))
 }
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
 func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	pk, role := format.IdentifierUnformat(string(i.State().Lambda.Get()))
-	ibft.MetricsIBFTStage.WithLabelValues(role, pk).Set(float64(stage))
+	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(stage))
 
 	i.State().Stage.Set(int32(stage))
 

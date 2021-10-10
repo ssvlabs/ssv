@@ -28,7 +28,7 @@ func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOpt
 	}
 
 	pk, role := format.IdentifierUnformat(string(i.Identifier))
-	ibft.MetricsCurrentSequence.WithLabelValues(role, pk).Set(float64(i.currentInstance.State().SeqNumber.Get()))
+	metricsCurrentSequence.WithLabelValues(role, pk).Set(float64(i.currentInstance.State().SeqNumber.Get()))
 
 	// catch up if we can
 	go i.fastChangeRoundCatchup(i.currentInstance)
