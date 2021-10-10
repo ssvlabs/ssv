@@ -15,34 +15,18 @@ import (
 func TestHandleQuery(t *testing.T) {
 	logger := zap.L()
 	adapter := NewAdapterMock(logger).(*AdapterMock)
-	ws := NewWsServer(logger, adapter, nil).(*wsServer)
-
-	inCn, err := ws.IncomingSubject().Register("TestHandleQuery")
-	require.NoError(t, err)
-	defer ws.IncomingSubject().Deregister("TestHandleQuery")
 
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/24")
 	require.NoError(t, err)
 	conn := connectionMock{addr: ipAddr}
 
-	go func() {
-		// notify outbound using a bad struct -> should do nothing (except warning log)
-		ws.OutboundSubject().Notify(struct{ id string }{"bad-struct"})
-	}()
-
-	go func() {
-		for incoming := range inCn {
-			nm, ok := incoming.(NetworkMessage)
-			require.True(t, ok)
-			require.Equal(t, &conn, nm.Conn)
-			nm.Msg.Data = []storage.ValidatorInformation{
-				{PublicKey: "pubkey1"},
-				{PublicKey: "pubkey2"},
-			}
-			ws.OutboundSubject().Notify(nm)
-			return
+	ws := NewWsServer(logger, adapter, func(nm *NetworkMessage) {
+		require.Equal(t, &conn, nm.Conn)
+		nm.Msg.Data = []storage.OperatorInformation{
+			{PublicKey: "pubkey1"},
+			{PublicKey: "pubkey2"},
 		}
-	}()
+	}, nil).(*wsServer)
 
 	go func() {
 		time.Sleep(5 * time.Millisecond)
@@ -64,7 +48,7 @@ func TestHandleStream(t *testing.T) {
 	msgCount := 3
 	logger := zap.L()
 	adapter := NewAdapterMock(logger).(*AdapterMock)
-	ws := NewWsServer(logger, adapter, nil).(*wsServer)
+	ws := NewWsServer(logger, adapter, nil, nil).(*wsServer)
 
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
 	require.NoError(t, err)
