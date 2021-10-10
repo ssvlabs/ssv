@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	forks2 "github.com/bloxapp/ssv/ibft/instance/forks"
-	v02 "github.com/bloxapp/ssv/ibft/instance/forks/v0"
+	"github.com/bloxapp/ssv/ibft/instance/forks"
+	v0forks "github.com/bloxapp/ssv/ibft/instance/forks/v0"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
@@ -35,8 +35,8 @@ func testFork(controller *Controller) *testingFork {
 func (v0 *testingFork) Apply(controller ibft.Controller) {
 }
 
-func (v0 *testingFork) InstanceFork() forks2.Fork {
-	return v02.New()
+func (v0 *testingFork) InstanceFork() forks.Fork {
+	return v0forks.New()
 }
 
 func (v0 *testingFork) ValidateDecidedMsg() pipeline.Pipeline {

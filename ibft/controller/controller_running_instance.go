@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"github.com/bloxapp/ssv/ibft"
-	ibft2 "github.com/bloxapp/ssv/ibft/instance"
+	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
@@ -17,8 +17,8 @@ import (
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (i *Controller) startInstanceWithOptions(instanceOpts *ibft2.InstanceOptions, value []byte) (*ibft.InstanceResult, error) {
-	i.currentInstance = ibft2.NewInstance(instanceOpts)
+func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOptions, value []byte) (*ibft.InstanceResult, error) {
+	i.currentInstance = instance.NewInstance(instanceOpts)
 	i.currentInstance.Init()
 	stageChan := i.currentInstance.GetStageChan()
 
@@ -128,7 +128,7 @@ func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 					i.logger.Error("received invalid late commit message", zap.Error(err))
 					continue
 				}
-				updated, err := ibft2.ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage,
+				updated, err := instance.ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage,
 					i.ValidatorShare.PublicKey.SerializeToHexStr())
 				if err != nil {
 					logger.Error("failed to process late commit message", zap.Error(err))

@@ -3,7 +3,7 @@ package controller
 import (
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/ibft"
-	ibft2 "github.com/bloxapp/ssv/ibft/instance"
+	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -65,7 +65,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	}{
 		{
 			"decided from future, requires sync.",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(3),
 			}),
@@ -96,7 +96,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided from far future, requires sync.",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(3),
 			}),
@@ -113,7 +113,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided from past, doesn't requires sync.",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(3),
 			}),
@@ -130,7 +130,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided for current",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(3),
 			}),
@@ -147,7 +147,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided for seq 0",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(0),
 			}),
@@ -188,7 +188,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	}{
 		{
 			"current instance",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(1),
 			}),
@@ -209,7 +209,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance seq lower",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(1),
 			}),
@@ -221,7 +221,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance seq higher",
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				Lambda:    nil,
 				SeqNumber: threadsafe.Uint64(4),
 			}),

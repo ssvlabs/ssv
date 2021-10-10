@@ -2,7 +2,7 @@ package controller
 
 import (
 	"github.com/bloxapp/ssv/ibft"
-	forks2 "github.com/bloxapp/ssv/ibft/controller/forks"
+	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
@@ -26,7 +26,7 @@ type Controller struct {
 	instanceConfig  *proto.InstanceConfig
 	ValidatorShare  *storage.Share
 	Identifier      []byte
-	fork            forks2.Fork
+	fork            contollerforks.Fork
 
 	// flags
 	initFinished bool
@@ -46,7 +46,7 @@ func New(
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
 	ValidatorShare *storage.Share,
-	fork forks2.Fork,
+	fork contollerforks.Fork,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &Controller{
@@ -113,7 +113,7 @@ func (i *Controller) GetIdentifier() []byte {
 }
 
 // setFork sets Controller fork for any new instances
-func (i *Controller) setFork(fork forks2.Fork) {
+func (i *Controller) setFork(fork contollerforks.Fork) {
 	if fork == nil {
 		return
 	}

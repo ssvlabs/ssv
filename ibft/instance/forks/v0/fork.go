@@ -1,14 +1,14 @@
 package v0
 
 import (
-	ibft2 "github.com/bloxapp/ssv/ibft"
-	ibft "github.com/bloxapp/ssv/ibft/instance"
+	"github.com/bloxapp/ssv/ibft"
+	ibftinstance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 )
 
 // ForkV0 is the genesis fork for instances
 type ForkV0 struct {
-	instance *ibft.Instance
+	instance *ibftinstance.Instance
 }
 
 // New returns new ForkV0
@@ -17,8 +17,8 @@ func New() *ForkV0 {
 }
 
 // Apply - applies instance fork
-func (v0 *ForkV0) Apply(instance ibft2.Instance) {
-	v0.instance = instance.(*ibft.Instance)
+func (v0 *ForkV0) Apply(instance ibft.Instance) {
+	v0.instance = instance.(*ibftinstance.Instance)
 }
 
 // PrePrepareMsgPipeline - is the full processing msg pipeline for a pre-prepare msg

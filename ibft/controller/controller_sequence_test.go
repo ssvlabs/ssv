@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/ibft"
-	ibft2 "github.com/bloxapp/ssv/ibft/instance"
+	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -128,7 +128,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
-			ibft2.NewInstanceWithState(&proto.State{
+			instance.NewInstanceWithState(&proto.State{
 				SeqNumber: threadsafe.Uint64(10),
 			}),
 			fmt.Sprintf("current instance (%d) is still running", 10),

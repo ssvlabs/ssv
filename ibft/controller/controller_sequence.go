@@ -2,7 +2,7 @@ package controller
 
 import (
 	"github.com/bloxapp/ssv/ibft"
-	ibft2 "github.com/bloxapp/ssv/ibft/instance"
+	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/pkg/errors"
 	"strconv"
@@ -14,7 +14,7 @@ An incremental number for a new iBFT instance.
 A fully synced iBFT node must have all sequences to be fully synced, no skips or missing sequences.
 */
 
-func (i *Controller) canStartNewInstance(opts ibft2.InstanceOptions) error {
+func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 	if !i.initFinished {
 		return errors.New("iBFT hasn't initialized yet")
 	}
@@ -61,14 +61,14 @@ func (i *Controller) NextSeqNumber() (uint64, error) {
 	return knownDecided.Message.SeqNumber + 1, nil
 }
 
-func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartInstanceOptions) (*ibft2.InstanceOptions, error) {
+func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
 	leaderSelectionSeed := append(i.Identifier, []byte(strconv.FormatUint(opts.SeqNumber, 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(i.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err
 	}
 
-	return &ibft2.InstanceOptions{
+	return &instance.InstanceOptions{
 		Logger:         opts.Logger,
 		ValidatorShare: i.ValidatorShare,
 		Network:        i.network,
