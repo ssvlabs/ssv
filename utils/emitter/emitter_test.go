@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type testData struct {
@@ -57,6 +58,33 @@ func TestNewEmitter(t *testing.T) {
 
 	wg.Wait()
 	require.Equal(t, int64(20), atomic.LoadInt64(&i))
+	e.(*emitter).mut.Lock()
+	require.Equal(t, 1, len(e.(*emitter).handlers["inc"]))
+	e.(*emitter).mut.Unlock()
+}
+
+func TestEmitter_Once(t *testing.T) {
+	var i int64
+	e := NewEmitter()
+
+	e.Once("inc", func(data EventData) {
+		if toAdd, ok := data.(testData); ok {
+			atomic.AddInt64(&i, -toAdd.i)
+		}
+	})
+	e.On("inc", func(data EventData) {
+		if toAdd, ok := data.(testData); ok {
+			atomic.AddInt64(&i, toAdd.i)
+		}
+	})
+
+	e.Notify("inc", testData{i: int64(5)})
+	e.Notify("inc", testData{i: int64(5)})
+
+	time.Sleep(10 * time.Millisecond)
+
+	require.Equal(t, int64(5), atomic.LoadInt64(&i))
+
 	e.(*emitter).mut.Lock()
 	require.Equal(t, 1, len(e.(*emitter).handlers["inc"]))
 	e.(*emitter).mut.Unlock()

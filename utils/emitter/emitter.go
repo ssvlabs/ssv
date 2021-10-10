@@ -23,6 +23,7 @@ type DeregisterFunc func()
 // EventSubscriber is able to subscribe on events
 type EventSubscriber interface {
 	On(event string, handler EventHandler) DeregisterFunc
+	Once(event string, handler EventHandler)
 	Channel(event string) (<-chan EventData, DeregisterFunc)
 }
 
@@ -71,6 +72,18 @@ func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
 		deregister()
 		go close(cn)
 	}
+}
+
+// Once register once to event as a channel
+func (e *emitter) Once(event string, handler EventHandler) {
+	var once sync.Once
+	var deregister DeregisterFunc
+	deregister = e.On(event, func(data EventData) {
+		once.Do(func() {
+			defer deregister()
+			handler(data)
+		})
+	})
 }
 
 // On register to event, returns a function for de-registration
