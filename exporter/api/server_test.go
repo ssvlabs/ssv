@@ -29,16 +29,16 @@ func TestHandleQuery(t *testing.T) {
 	}, nil).(*wsServer)
 
 	go func() {
+		ws.handleQuery(&conn)
+	}()
+
+	go func() {
 		time.Sleep(5 * time.Millisecond)
 		msg := Message{
 			Type:   TypeOperator,
 			Filter: MessageFilter{From: 1},
 		}
 		adapter.In <- msg
-	}()
-
-	go func() {
-		ws.handleQuery(&conn)
 	}()
 
 	<-adapter.Out
@@ -53,9 +53,12 @@ func TestHandleStream(t *testing.T) {
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
 	require.NoError(t, err)
 	conn := connectionMock{addr: ipAddr}
+	go ws.handleStream(&conn)
+
 	_, ipAddr2, err := net.ParseCIDR("192.0.2.1/26")
 	require.NoError(t, err)
 	conn2 := connectionMock{addr: ipAddr2}
+	go ws.handleStream(&conn2)
 
 	// register a listener to count how many messages are passed on outbound subject
 	var outCnCount int64
@@ -131,11 +134,6 @@ func TestHandleStream(t *testing.T) {
 		ws.OutboundSubject().Notify(nm)
 		// let the message propagate
 		time.Sleep(10 * time.Millisecond)
-	}()
-
-	go func() {
-		go ws.handleStream(&conn)
-		go ws.handleStream(&conn2)
 	}()
 
 	wg.Wait()
