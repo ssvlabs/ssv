@@ -839,7 +839,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 16
       },
       "id": 56,
       "panels": [],
@@ -875,7 +875,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 17
       },
       "id": 42,
       "options": {
@@ -917,14 +917,29 @@
             {
               "options": {
                 "0": {
-                  "color": "green",
-                  "index": 1,
+                  "color": "gray",
+                  "index": 0,
                   "text": "IDLE"
                 },
                 "1": {
                   "color": "green",
-                  "index": 0,
+                  "index": 1,
                   "text": "Running"
+                },
+                "2": {
+                  "color": "yellow",
+                  "index": 2,
+                  "text": "Initializing"
+                },
+                "3": {
+                  "color": "green",
+                  "index": 3,
+                  "text": "Initialized"
+                },
+                "4": {
+                  "color": "red",
+                  "index": 4,
+                  "text": "Error"
                 }
               },
               "type": "value"
@@ -938,6 +953,10 @@
               {
                 "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           },
@@ -949,7 +968,7 @@
         "h": 6,
         "w": 6,
         "x": 8,
-        "y": 44
+        "y": 17
       },
       "id": 50,
       "options": {
@@ -1036,6 +1055,10 @@
               {
                 "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -1046,7 +1069,7 @@
         "h": 6,
         "w": 6,
         "x": 14,
-        "y": 44
+        "y": 17
       },
       "id": 46,
       "options": {
@@ -1106,7 +1129,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 50
+        "y": 23
       },
       "id": 54,
       "options": {
@@ -1166,7 +1189,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 50
+        "y": 23
       },
       "id": 52,
       "options": {
@@ -1214,10 +1237,6 @@
                 "value": null
               },
               {
-                "color": "green",
-                "value": 1
-              },
-              {
                 "color": "#EAB839",
                 "value": 4
               },
@@ -1242,7 +1261,7 @@
         "h": 6,
         "w": 4,
         "x": 16,
-        "y": 50
+        "y": 23
       },
       "id": 48,
       "options": {
