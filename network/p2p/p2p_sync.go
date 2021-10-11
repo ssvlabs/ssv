@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"encoding/json"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -34,7 +33,7 @@ func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, ms
 	}
 
 	// message to bytes
-	msgBytes, err := json.Marshal(network.Message{
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 	})
@@ -67,7 +66,7 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 	}()
 
 	readMsgData := func(stopper tasks.Stopper) (interface{}, error) {
-		msg, err := readMessageData(stream)
+		msg, err := n.readMessageData(stream)
 		if msg == nil {
 			msg = &network.Message{}
 		}

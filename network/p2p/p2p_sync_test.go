@@ -2,6 +2,8 @@ package p2p
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -11,6 +13,28 @@ import (
 	"testing"
 	"time"
 )
+
+// ForkV0 is the genesis version 0 implementation
+type testingFork struct {
+}
+
+func testFork() *testingFork {
+	return &testingFork{}
+}
+
+func (v0 *testingFork) ValidatorTopicID(pkByts []byte) string {
+	return hex.EncodeToString(pkByts)
+}
+
+func (v0 *testingFork) EncodeNetworkMsg(msg *network.Message) ([]byte, error) {
+	return json.Marshal(msg)
+}
+
+func (v0 *testingFork) DecodeNetworkMsg(data []byte) (*network.Message, error) {
+	ret := &network.Message{}
+	err := json.Unmarshal(data, ret)
+	return ret, err
+}
 
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
@@ -23,6 +47,7 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 		TCPPort:          13000,
 		MaxBatchResponse: 10,
 		RequestTimeout:   time.Second * 1,
+		Fork:             testFork(),
 	})
 	require.NoError(t, err)
 
@@ -33,6 +58,7 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 		TCPPort:          13001,
 		MaxBatchResponse: 10,
 		RequestTimeout:   time.Second * 1,
+		Fork:             testFork(),
 	})
 	require.NoError(t, err)
 
@@ -61,6 +87,7 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 		TCPPort:          13000,
 		MaxBatchResponse: 10,
 		RequestTimeout:   time.Second * 1,
+		Fork:             testFork(),
 	})
 	require.NoError(t, err)
 
@@ -71,6 +98,7 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 		TCPPort:          13001,
 		MaxBatchResponse: 10,
 		RequestTimeout:   time.Second * 1,
+		Fork:             testFork(),
 	})
 	require.NoError(t, err)
 
