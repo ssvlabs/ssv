@@ -347,6 +347,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		for _, share := range shares {
 			pks = append(pks, share.PublicKey.Serialize())
 		}
+		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
 		beacon.UpdateValidatorsMetadataBatch(pks, tasks.NewExecutionQueue(10*time.Millisecond), c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
