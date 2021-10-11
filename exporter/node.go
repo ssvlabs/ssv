@@ -15,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -335,12 +334,4 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-}
-
-func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
-	return func() error {
-		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, func(pk string, meta *beacon.ValidatorMetadata) {
-			validator.ReportValidatorStatus(pk, meta, exp.logger)
-		})
-	}
 }
