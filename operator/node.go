@@ -102,9 +102,8 @@ func (n *operatorNode) Start() error {
 	if err := tasks.Retry(n.net.SubscribeToMainTopic, 3); err != nil {
 		n.logger.Error("failed to subscribe to main topic", zap.Error(err))
 	}
-	n.dutyCtrl.Start()
-
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	n.dutyCtrl.Start()
 
 	return nil
 }
