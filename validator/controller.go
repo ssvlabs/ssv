@@ -272,7 +272,15 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 
 // onMetadataUpdated is called when validator's metadata was updated
 func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata) {
+	if meta == nil {
+		return
+	}
 	if v, exist := c.GetValidator(pk); exist {
+		// update share object owned by the validator
+		// TODO: check if this updates running validators
+		if !v.Share.HasMetadata() || !v.Share.Metadata.Equals(meta) {
+			v.Share.Metadata = meta
+		}
 		if err := c.startValidator(v); err != nil {
 			c.logger.Error("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", *meta))
@@ -314,3 +322,21 @@ func (c *controller) startValidator(v *Validator) error {
 	}
 	return nil
 }
+//
+//func (c *controller) continuouslyUpdateValidatorMetaData() {
+//	for {
+//		time.Sleep(c.validatorMetaDataUpdateInterval)
+//
+//		shares, err := c.collection.GetAllValidatorsShare()
+//		if err != nil {
+//			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
+//			continue
+//		}
+//		var pks [][]byte
+//		for _, share := range shares {
+//			pks = append(pks, share.PublicKey.Serialize())
+//		}
+//		beacon.UpdateValidatorsMetadataBatch(pks, tasks.NewExecutionQueue(time.Millisecond), c.collection, c.beacon, c.onMetadataUpdated, 25)
+//		c.updateValidatorsMetadata(pks, metaDataBatchSize)
+//	}
+//}

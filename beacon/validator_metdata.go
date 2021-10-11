@@ -24,6 +24,14 @@ type ValidatorMetadata struct {
 	Index   spec.ValidatorIndex `json:"index"` // pointer in order to support nil
 }
 
+// Equals returns true if the given metadata is equal to current
+func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
+	return other != nil &&
+		m.Status == other.Status &&
+		m.Index == other.Index &&
+		m.Balance == other.Balance
+}
+
 // Activated returns true if the validator is not unknown. It might be pending activation or active
 func (m *ValidatorMetadata) Activated() bool {
 	return m.Status.HasActivated()
