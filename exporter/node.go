@@ -12,11 +12,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -114,6 +112,7 @@ func New(opts Options) Exporter {
 			Network:          opts.Network,
 			ValidatorStorage: validatorStorage,
 			IbftStorage:      &ibftStorage,
+			Out:              opts.WS.OutboundSubject(),
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
@@ -140,7 +139,7 @@ func (exp *exporter) init(opts Options) error {
 	return nil
 }
 
-// Start starts the IBFT dispatcher for syncing data nd listen to messages
+// Start starts the Controller dispatcher for syncing data nd listen to messages
 func (exp *exporter) Start() error {
 	exp.logger.Info("starting node")
 
@@ -158,15 +157,7 @@ func (exp *exporter) Start() error {
 		return nil
 	}
 
-	go func() {
-		cn, err := exp.ws.IncomingSubject().Register("exporter-node")
-		if err != nil {
-			exp.logger.Error("could not register for incoming messages", zap.Error(err))
-		}
-		defer exp.ws.IncomingSubject().Deregister("exporter-node")
-
-		exp.processIncomingExportRequests(cn, exp.ws.OutboundSubject())
-	}()
+	exp.ws.UseQueryHandler(exp.handleQueryRequests)
 
 	go exp.triggerAllValidators()
 
@@ -204,32 +195,24 @@ func (exp *exporter) startMainTopic() {
 	}
 }
 
-// processIncomingExportRequests waits for incoming messages and
-func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChannel, outbound pubsub.Publisher) {
-	for raw := range incoming {
-		nm, ok := raw.(api.NetworkMessage)
-		if !ok {
-			exp.logger.Warn("could not parse export request message")
-			nm = api.NetworkMessage{Msg: api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}}
-		}
-		if nm.Err != nil {
-			nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
-		}
-		exp.logger.Debug("got incoming export request",
-			zap.String("type", string(nm.Msg.Type)))
-		switch nm.Msg.Type {
-		case api.TypeOperator:
-			handleOperatorsQuery(exp.logger, exp.storage, &nm)
-		case api.TypeValidator:
-			handleValidatorsQuery(exp.logger, exp.storage, &nm)
-		case api.TypeDecided:
-			handleDecidedQuery(exp.logger, exp.storage, exp.ibftStorage, &nm)
-		case api.TypeError:
-			handleErrorQuery(exp.logger, &nm)
-		default:
-			handleUnknownQuery(exp.logger, &nm)
-		}
-		outbound.Notify(nm)
+// handleQueryRequests waits for incoming messages and
+func (exp *exporter) handleQueryRequests(nm *api.NetworkMessage) {
+	if nm.Err != nil {
+		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
+	}
+	exp.logger.Debug("got incoming export request",
+		zap.String("type", string(nm.Msg.Type)))
+	switch nm.Msg.Type {
+	case api.TypeOperator:
+		handleOperatorsQuery(exp.logger, exp.storage, nm)
+	case api.TypeValidator:
+		handleValidatorsQuery(exp.logger, exp.storage, nm)
+	case api.TypeDecided:
+		handleDecidedQuery(exp.logger, exp.storage, exp.ibftStorage, nm)
+	case api.TypeError:
+		handleErrorQuery(exp.logger, nm)
+	default:
+		handleUnknownQuery(exp.logger, nm)
 	}
 }
 
@@ -340,6 +323,7 @@ func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ib
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
+		Out:            exp.ws.OutboundSubject(),
 	})
 }
 
@@ -350,12 +334,4 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
-}
-
-func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
-	return func() error {
-		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, func(pk string, meta *beacon.ValidatorMetadata) {
-			validator.ReportValidatorStatus(pk, meta, exp.logger)
-		})
-	}
 }

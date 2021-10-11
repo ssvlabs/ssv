@@ -10,18 +10,6 @@ import (
 )
 
 var (
-	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_current_sequence",
-		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey"})
-	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_stage",
-		Help: "IBFTs stage",
-	}, []string{"lambda", "pubKey"})
-	metricsIBFTRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_round",
-		Help: "IBFTs round",
-	}, []string{"lambda", "pubKey"})
 	metricsDecidedSigners = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_decided_signers",
 		Help: "The highest decided sequence number",
@@ -29,15 +17,6 @@ var (
 )
 
 func init() {
-	if err := prometheus.Register(metricsCurrentSequence); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsIBFTStage); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsIBFTRound); err != nil {
-		log.Println("could not register prometheus collector")
-	}
 	if err := prometheus.Register(metricsDecidedSigners); err != nil {
 		log.Println("could not register prometheus collector")
 	}

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -184,4 +184,28 @@ func verifyUniqueSigners(singerIds []uint64) error {
 		}
 	}
 	return nil
+}
+
+// AggregateMessages will aggregate given msgs or return error
+func AggregateMessages(sigs []*SignedMessage) (*SignedMessage, error) {
+	var decided *SignedMessage
+	var err error
+	for _, msg := range sigs {
+		if decided == nil {
+			decided, err = msg.DeepCopy()
+			if err != nil {
+				return nil, errors.Wrap(err, "could not copy message")
+			}
+		} else {
+			if err := decided.Aggregate(msg); err != nil {
+				return nil, errors.Wrap(err, "could not aggregate message")
+			}
+		}
+	}
+
+	if decided == nil {
+		return nil, errors.New("could not aggregate decided messages, no msgs")
+	}
+
+	return decided, nil
 }

@@ -35,9 +35,9 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
-	@echo "Checking for unformatted files"
 	if [ ! -z "${UNFORMATTED}" ]; then \
-		echo "The following files are not formatted: \n${UNFORMATTED}"; \
+		@echo "Some files requires formatting, please run 'go fmt ./...'"; \
+		@exit 1; \
 	fi
 
 #Test

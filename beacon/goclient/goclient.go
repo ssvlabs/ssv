@@ -103,7 +103,7 @@ func (gc *goClient) HealthCheck() []string {
 		}
 		if syncState != nil && syncState.IsSyncing {
 			metricsBeaconNodeStatus.Set(float64(statusSyncing))
-			return []string{fmt.Sprintf("eth1 node is currently syncing: head=%d, distance=%d",
+			return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
 				syncState.HeadSlot, syncState.SyncDistance)}
 		}
 	}

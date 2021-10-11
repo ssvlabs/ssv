@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -12,7 +13,7 @@ import (
 
 type f1MultiRound struct {
 	logger     *zap.Logger
-	nodes      []ibft.IBFT
+	nodes      []ibft.Controller
 	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
@@ -25,32 +26,38 @@ func NewF1MultiRound(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenar
 	}
 }
 
-func (r *f1MultiRound) Start(nodes []ibft.IBFT, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *f1MultiRound) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
 	r.nodes = nodes
 	r.shares = shares
 	//
 	wg := sync.WaitGroup{}
-	go func(node ibft.IBFT, index uint64) {
-		r.nodes[0].Init()
+	go func(node ibft.Controller, index uint64) {
+		if err := r.nodes[0].Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(node, index)
 	}(r.nodes[0], 1)
-	go func(node ibft.IBFT, index uint64) {
-		r.nodes[1].Init()
+	go func(node ibft.Controller, index uint64) {
+		if err := r.nodes[1].Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		time.Sleep(time.Second * 13)
 		r.startNode(node, index)
 	}(r.nodes[1], 2)
 	wg.Add(1)
 	go func() {
 		time.Sleep(time.Second * 30)
-		r.nodes[2].Init()
+		if err := r.nodes[2].Init(); err != nil {
+			fmt.Printf("error initializing ibft")
+		}
 		r.startNode(r.nodes[2], 3)
 		wg.Done()
 	}()
 	wg.Wait()
 }
 
-func (r *f1MultiRound) startNode(node ibft.IBFT, index uint64) {
-	res, err := node.StartInstance(ibft.StartOptions{
+func (r *f1MultiRound) startNode(node ibft.Controller, index uint64) {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:         r.logger,
 		ValueCheck:     r.valueCheck,
 		SeqNumber:      1,

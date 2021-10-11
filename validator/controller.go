@@ -7,8 +7,10 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -17,18 +19,24 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+const (
+	metadataBatchSize = 25
+)
+
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
 	DB                         basedb.IDb
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
+	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	ETHNetwork                 *core.Network
 	Network                    network.Network
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
+	Fork                       forks.Fork
 }
 
 // IController represent the validators controller,
@@ -39,6 +47,7 @@ type IController interface {
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
+	UpdateValidatorMetaDataLoop()
 }
 
 // controller implements IController
@@ -51,6 +60,8 @@ type controller struct {
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
 	validatorsMap *validatorsMap
+
+	metadataUpdateInterval time.Duration
 }
 
 // NewController creates a new validator controller instance
@@ -75,7 +86,10 @@ func NewController(options ControllerOptions) IController {
 			ETHNetwork:                 options.ETHNetwork,
 			Beacon:                     options.Beacon,
 			DB:                         options.DB,
+			Fork:                       options.Fork,
 		}),
+
+		metadataUpdateInterval: options.MetadataUpdateInterval,
 	}
 
 	if err := ctrl.initShares(options); err != nil {
@@ -214,9 +228,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
-		logger := c.logger.With(zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
 		if !v.Share.HasMetadata() {
-			logger.Warn("validator share doesn't have an index")
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
 		} else {
 			indices = append(indices, v.Share.Metadata.Index)
@@ -269,7 +281,16 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 
 // onMetadataUpdated is called when validator's metadata was updated
 func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata) {
+	if meta == nil {
+		return
+	}
 	if v, exist := c.GetValidator(pk); exist {
+		// update share object owned by the validator
+		// TODO: check if this updates running validators
+		if !v.Share.HasMetadata() || !v.Share.Metadata.Equals(meta) {
+			v.Share.Metadata = meta
+			c.logger.Debug("metadata was updated", zap.String("pk", pk))
+		}
 		if err := c.startValidator(v); err != nil {
 			c.logger.Error("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", *meta))
@@ -310,4 +331,24 @@ func (c *controller) startValidator(v *Validator) error {
 		return errors.Wrap(err, "could not start validator")
 	}
 	return nil
+}
+
+// UpdateValidatorMetaDataLoop updates metadata of validators in an interval
+func (c *controller) UpdateValidatorMetaDataLoop() {
+	for {
+		time.Sleep(c.metadataUpdateInterval)
+
+		shares, err := c.collection.GetAllValidatorsShare()
+		if err != nil {
+			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
+			continue
+		}
+		var pks [][]byte
+		for _, share := range shares {
+			pks = append(pks, share.PublicKey.Serialize())
+		}
+		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
+		beacon.UpdateValidatorsMetadataBatch(pks, tasks.NewExecutionQueue(10*time.Millisecond), c,
+			c.beacon, c.onMetadataUpdated, metadataBatchSize)
+	}
 }

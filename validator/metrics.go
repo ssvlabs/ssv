@@ -48,19 +48,27 @@ func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
 	metricsRunningIBFTsCount.Inc()
 
 	pubKey := v.Share.PublicKey.SerializeToHexStr()
-	metricsRunningIBFTs.WithLabelValues(pubKey).Inc()
+	metricsRunningIBFTs.WithLabelValues(pubKey).Set(float64(ibftRunning))
 
 	metricsCurrentSlot.WithLabelValues(pubKey).Set(float64(duty.Slot))
 
 	return func() {
 		metricsRunningIBFTsCount.Dec()
-		metricsRunningIBFTs.WithLabelValues(pubKey).Dec()
+		metricsRunningIBFTs.WithLabelValues(pubKey).Set(float64(ibftIdle))
 	}
 }
 
-// ReportValidatorStatusReady reports the ready status of validator
-func ReportValidatorStatusReady(pk string) {
-	metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusReady))
+// ReportIBFTStatus reports the current iBFT status
+func ReportIBFTStatus(pk string, finished, errorFound bool) {
+	if errorFound {
+		metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftErrored))
+	} else {
+		if finished {
+			metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitialized))
+		} else {
+			metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitializing))
+		}
+	}
 }
 
 // ReportValidatorStatus reports the current status of validator
@@ -68,27 +76,28 @@ func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *za
 	logger = logger.With(zap.String("pubKey", pk), zap.String("who", "ReportValidatorStatus"),
 		zap.Any("metadata", meta))
 	if meta == nil {
-		logger.Warn("validator metadata not found")
+		logger.Debug("validator metadata not found")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotFound))
 	} else if !meta.Activated() {
-		logger.Warn("validator not activated")
+		logger.Debug("validator not activated")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotActivated))
 	} else if meta.Slashed() {
-		logger.Warn("validator slashed")
+		logger.Debug("validator slashed")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusSlashed))
 	} else if meta.Exiting() {
-		logger.Warn("validator exiting / exited")
+		logger.Debug("validator exiting / exited")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusExiting))
 	} else if meta.Index == 0 {
-		logger.Warn("validator index not found")
+		logger.Debug("validator index not found")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
 	} else {
-		logger.Warn("validator is ready")
+		logger.Debug("validator is ready")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusReady))
 	}
 }
 
 type validatorStatus int32
+type ibftStatus int32
 
 var (
 	validatorStatusInactive     validatorStatus = 0
@@ -99,4 +108,12 @@ var (
 	validatorStatusExiting      validatorStatus = 5
 	validatorStatusSlashed      validatorStatus = 6
 	validatorStatusNotFound     validatorStatus = 7
+)
+
+var (
+	ibftIdle         ibftStatus = 0
+	ibftRunning      ibftStatus = 1
+	ibftInitializing ibftStatus = 2
+	ibftInitialized  ibftStatus = 3
+	ibftErrored      ibftStatus = 4
 )

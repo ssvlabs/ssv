@@ -36,7 +36,6 @@ func New() *MessageQueue {
 		allMessages: cache.New(time.Minute*10, time.Minute*11),
 		indexFuncs: []IndexFunc{
 			iBFTMessageIndex(),
-			iBFTAllRoundChangeIndex(),
 			sigMessageIndex(),
 			decidedMessageIndex(),
 			syncMessageIndex(),

@@ -54,12 +54,13 @@ type testIBFT struct {
 	identifier      []byte
 }
 
-func (t *testIBFT) Init() {
+func (t *testIBFT) Init() error {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
+	return nil
 }
 
-func (t *testIBFT) StartInstance(opts ibft.StartOptions) (*ibft.InstanceResult, error) {
+func (t *testIBFT) StartInstance(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceResult, error) {
 	return &ibft.InstanceResult{
 		Decided: t.decided,
 		Msg: &proto.SignedMessage{
@@ -161,10 +162,10 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.ibfts = make(map[beacon.RoleType]ibft.IBFT)
+	ret.ibfts = make(map[beacon.RoleType]ibft.Controller)
 	ret.ibfts[beacon.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
-	ret.ibfts[beacon.RoleTypeAttester].Init()
+	require.NoError(t, ret.ibfts[beacon.RoleTypeAttester].Init())
 	ret.valueCheck = valcheck.New()
 
 	// nodes

@@ -72,7 +72,7 @@ func (i *IbftStorage) SaveCurrentInstance(identifier []byte, state *proto.State)
 // GetCurrentInstance func implementation
 func (i *IbftStorage) GetCurrentInstance(identifier []byte) (*proto.State, bool, error) {
 	val, found, err := i.get("current", identifier)
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {
@@ -97,7 +97,7 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 // GetDecided returns a signed message for an ibft instance which decided by identifier
 func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, bool, error) {
 	val, found, err := i.get("decided", identifier, uInt64ToByteSlice(seqNumber))
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {
@@ -116,7 +116,6 @@ func (i *IbftStorage) SaveHighestDecidedInstance(signedMsg *proto.SignedMessage)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-
 
 	if err = i.save(value, "highest", signedMsg.Message.Lambda); err != nil {
 		return err
@@ -139,7 +138,7 @@ func reportHighestDecided(signedMsg *proto.SignedMessage) {
 // GetHighestDecidedInstance gets a signed message for an ibft instance which is the highest
 func (i *IbftStorage) GetHighestDecidedInstance(identifier []byte) (*proto.SignedMessage, bool, error) {
 	val, found, err := i.get("highest", identifier)
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {
@@ -162,7 +161,7 @@ func (i *IbftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
 	obj, found, err := i.db.Get(prefix, key)
-	if !found{
+	if !found {
 		return nil, found, nil
 	}
 	if err != nil {
