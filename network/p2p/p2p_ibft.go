@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
@@ -10,7 +9,7 @@ import (
 
 // Broadcast propagates a signed message to all peers
 func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})

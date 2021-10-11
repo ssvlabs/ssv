@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
-	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/network/forks"
 	"net"
 	"strings"
 	"sync"
@@ -62,6 +62,7 @@ type p2pNetwork struct {
 	pubsub          *pubsub.PubSub
 	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
+	fork            forks.Fork
 
 	psTopicsLock *sync.RWMutex
 }
@@ -80,6 +81,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		psTopicsLock:    &sync.RWMutex{},
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,
+		fork:            cfg.Fork,
 	}
 
 	var _ipAddr net.IP
@@ -295,12 +297,12 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 			// For debugging
 			n.logger.Debug("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
 
-			var cm network.Message
-			if err := json.Unmarshal(msg.Data, &cm); err != nil {
+			cm, err := n.fork.DecodeNetworkMsg(msg.Data)
+			if err != nil {
 				n.logger.Error("failed to un-marshal message", zap.Error(err))
 				continue
 			}
-			n.propagateSignedMsg(&cm)
+			n.propagateSignedMsg(cm)
 		}
 	}
 }
@@ -347,11 +349,7 @@ func (n *p2pNetwork) getTopic(validatorPK []byte) (*pubsub.Topic, error) {
 	if validatorPK == nil {
 		return nil, errors.New("ValidatorPk is nil")
 	}
-	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(validatorPK); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize publicKey")
-	}
-	topic := pk.SerializeToHexStr()
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	if _, ok := n.cfg.Topics[topic]; !ok {
 		return nil, errors.New("topic is not exist or registered")
 	}
