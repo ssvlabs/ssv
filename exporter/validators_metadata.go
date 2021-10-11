@@ -1,11 +1,10 @@
 package exporter
 
 import (
-	"fmt"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
-	"math"
 	"time"
 )
 
@@ -38,22 +37,12 @@ func (exp *exporter) warmupValidatorsMetaData() error {
 }
 
 func (exp *exporter) updateValidatorsMetadata(shares []*validatorstorage.Share, batchSize int) {
-	batches := int(math.Ceil(float64(len(shares)) / float64(batchSize)))
-	start := 0
-	end := batchSize
-
-	for i := 0; i <= batches; i++ {
-		// collect pks
-		batch := make([][]byte, 0)
-		for j := start; j < end; j++ {
-			share := shares[j]
-			batch = append(batch, share.PublicKey.Serialize())
-		}
-		// run task
-		exp.metaDataReadersQueue.QueueDistinct(exp.updateMetadataTask(batch), fmt.Sprintf("batch_%d", i))
-
-		// reset start and end
-		start = end
-		end = int(math.Min(float64(len(shares)), float64(start+batchSize)))
+	var pks [][]byte
+	for _, share := range shares {
+		pks = append(pks, share.PublicKey.Serialize())
 	}
+	onUpdated := func(pk string, meta *beacon.ValidatorMetadata) {
+		validator.ReportValidatorStatus(pk, meta, exp.logger)
+	}
+	beacon.UpdateValidatorsMetadataBatch(pks, exp.metaDataReadersQueue, exp.storage, exp.beacon, onUpdated, batchSize)
 }

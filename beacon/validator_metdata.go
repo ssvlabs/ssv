@@ -5,8 +5,10 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math"
 )
 
 // ValidatorMetadataStorage interface for validator metadata
@@ -19,6 +21,14 @@ type ValidatorMetadata struct {
 	Balance spec.Gwei           `json:"balance"`
 	Status  v1.ValidatorState   `json:"status"`
 	Index   spec.ValidatorIndex `json:"index"` // pointer in order to support nil
+}
+
+// Equals returns true if the given metadata is equal to current
+func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
+	return other != nil &&
+		m.Status == other.Status &&
+		m.Index == other.Index &&
+		m.Balance == other.Balance
 }
 
 // Activated returns true if the validator is not unknown. It might be pending activation or active
@@ -104,4 +114,31 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 		bc.ExtendIndexMap(index, v.Validator.PublicKey)
 	}
 	return ret, nil
+}
+
+// UpdateValidatorsMetadataBatch updates the given public keys in batches
+func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
+	queue tasks.Queue,
+	collection ValidatorMetadataStorage,
+	bc Beacon,
+	onUpdated OnUpdated,
+	batchSize int) {
+
+	batches := int(math.Ceil(float64(len(pubKeys)) / float64(batchSize)))
+	start := 0
+	end := batchSize
+
+	batchTask := func(pks [][]byte) func() error {
+		return func() error {
+			return UpdateValidatorsMetadata(pks, collection, bc, onUpdated)
+		}
+	}
+
+	for i := 0; i <= batches; i++ {
+		// run task
+		queue.Queue(batchTask(pubKeys[start:end]))
+		// reset start and end
+		start = end
+		end = int(math.Min(float64(len(pubKeys)), float64(start+batchSize)))
+	}
 }
