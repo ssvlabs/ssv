@@ -2,7 +2,6 @@ package beacon
 
 import (
 	"encoding/hex"
-	"fmt"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -137,7 +136,7 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 
 	for i := 0; i <= batches; i++ {
 		// run task
-		queue.QueueDistinct(batchTask(pubKeys[start:end]), fmt.Sprintf("batch_%d", i))
+		queue.Queue(batchTask(pubKeys[start:end]))
 		// reset start and end
 		start = end
 		end = int(math.Min(float64(len(pubKeys)), float64(start+batchSize)))
