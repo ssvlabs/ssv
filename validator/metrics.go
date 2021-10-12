@@ -87,6 +87,9 @@ func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *za
 	} else if meta.Exiting() {
 		logger.Debug("validator exiting / exited")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusExiting))
+	} else if meta.Pending() {
+		logger.Debug("validator pending")
+		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusPending))
 	} else if meta.Index == 0 {
 		logger.Debug("validator index not found")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNoIndex))
@@ -108,6 +111,7 @@ var (
 	validatorStatusExiting      validatorStatus = 5
 	validatorStatusSlashed      validatorStatus = 6
 	validatorStatusNotFound     validatorStatus = 7
+	validatorStatusPending      validatorStatus = 8
 )
 
 var (

@@ -27,6 +27,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 		require.True(t, meta.Activated())
 		require.False(t, meta.Exiting())
 		require.False(t, meta.Slashed())
+		require.False(t, meta.Pending())
 	})
 
 	t.Run("exited", func(t *testing.T) {
@@ -36,6 +37,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 		require.True(t, meta.Exiting())
 		require.True(t, meta.Activated())
 		require.False(t, meta.Slashed())
+		require.False(t, meta.Pending())
 	})
 
 	t.Run("exitedSlashed", func(t *testing.T) {
@@ -45,6 +47,17 @@ func TestValidatorMetadata_Status(t *testing.T) {
 		require.True(t, meta.Slashed())
 		require.True(t, meta.Exiting())
 		require.True(t, meta.Activated())
+		require.False(t, meta.Pending())
+	})
+
+	t.Run("pending", func(t *testing.T) {
+		meta := &ValidatorMetadata{
+			Status: v1.ValidatorStatePendingQueued,
+		}
+		require.True(t, meta.Pending())
+		require.False(t, meta.Slashed())
+		require.False(t, meta.Exiting())
+		require.False(t, meta.Activated())
 	})
 }
 

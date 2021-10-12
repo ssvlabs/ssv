@@ -31,9 +31,14 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 		m.Balance == other.Balance
 }
 
+// Pending returns true if the validator is pending
+func (m *ValidatorMetadata) Pending() bool {
+	return m.Status.IsPending()
+}
+
 // Activated returns true if the validator is not unknown. It might be pending activation or active
 func (m *ValidatorMetadata) Activated() bool {
-	return m.Status.HasActivated()
+	return m.Status.HasActivated() || m.Status.IsActive() || m.Status.IsAttesting()
 }
 
 // Exiting returns true if the validator is existing or exited
