@@ -287,8 +287,12 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.Share.HasMetadata() || !v.Share.Metadata.Equals(meta) {
+		if !v.Share.HasMetadata() {
 			v.Share.Metadata = meta
+			c.logger.Debug("metadata was updated", zap.String("pk", pk))
+		} else if !v.Share.Metadata.Equals(meta) {
+			v.Share.Metadata.Status = meta.Status
+			v.Share.Metadata.Balance = meta.Balance
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
 		}
 		if err := c.startValidator(v); err != nil {
@@ -307,8 +311,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 	} else if !updated {
 		logger.Warn("could not find validator metadata")
 	} else {
-		logger.Debug("validator metadata was updated",
-			zap.Uint64("index", uint64(share.Metadata.Index)))
+		logger.Debug("validator metadata was updated")
 		ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {
