@@ -131,7 +131,7 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 		return
 	}
 	start := 0
-	end := batchSize
+	end := int(math.Min(n, float64(start+batchSize)))
 
 	batchTask := func(pks [][]byte) func() error {
 		return func() error {
