@@ -124,7 +124,12 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 	onUpdated OnUpdated,
 	batchSize int) {
 
-	batches := int(math.Ceil(float64(len(pubKeys)) / float64(batchSize)))
+	n := float64(len(pubKeys))
+	batches := int(math.Ceil(n / float64(batchSize)))
+	if batches == 0 {
+		// nothing to update..
+		return
+	}
 	start := 0
 	end := batchSize
 
@@ -139,6 +144,6 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 		queue.Queue(batchTask(pubKeys[start:end]))
 		// reset start and end
 		start = end
-		end = int(math.Min(float64(len(pubKeys)), float64(start+batchSize)))
+		end = int(math.Min(n, float64(start+batchSize)))
 	}
 }
