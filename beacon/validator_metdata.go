@@ -123,25 +123,26 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 	bc Beacon,
 	onUpdated OnUpdated,
 	batchSize int) {
-
-	n := float64(len(pubKeys))
-	batches := int(math.Ceil(n / float64(batchSize)))
-	if batches == 0 {
-		// nothing to update..
-		return
-	}
-	start := 0
-	end := int(math.Min(n, float64(start+batchSize)))
-
-	batchTask := func(pks [][]byte) func() error {
+	batch(pubKeys, queue, func(pks [][]byte) func() error {
 		return func() error {
 			return UpdateValidatorsMetadata(pks, collection, bc, onUpdated)
 		}
-	}
+	}, batchSize)
+}
 
-	for i := 0; i <= batches; i++ {
+type batchTask func(pks [][]byte) func() error
+
+func batch(pubKeys [][]byte, queue tasks.Queue, task batchTask, batchSize int) {
+	n := float64(len(pubKeys))
+	// in case the amount of public keys is lower than the batch size
+	batchSize = int(math.Min(n, float64(batchSize)))
+	batches := int(math.Ceil(n / float64(batchSize)))
+	start := 0
+	end := int(math.Min(n, float64(batchSize)))
+
+	for i := 0; i < batches; i++ {
 		// run task
-		queue.Queue(batchTask(pubKeys[start:end]))
+		queue.Queue(task(pubKeys[start:end]))
 		// reset start and end
 		start = end
 		end = int(math.Min(n, float64(start+batchSize)))
