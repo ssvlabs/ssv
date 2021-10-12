@@ -79,7 +79,7 @@ func (i *Controller) Init() error {
 	i.listenToSyncMessages()
 	i.listenToNetworkMessages()
 	i.listenToNetworkDecidedMessages()
-	i.waitForMinPeerOnInit(2) // minimum of 3 validators (me + 2)
+	i.waitForMinPeerOnInit(1) // minimum of 2 validators (me + 1)
 	if err := i.SyncIBFT(); err != nil {
 		return errors.Wrap(err, "could not sync history, stopping Controller init")
 	}
