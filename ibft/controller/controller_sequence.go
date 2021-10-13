@@ -79,6 +79,6 @@ func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartIn
 		Lambda:          i.Identifier,
 		SeqNumber:       opts.SeqNumber,
 		Fork:            i.fork.InstanceFork(),
-		RequireMinPeers: true,
+		RequireMinPeers: opts.RequireMinPeers,
 	}, nil
 }
