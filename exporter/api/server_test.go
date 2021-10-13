@@ -127,7 +127,6 @@ func TestHandleStream(t *testing.T) {
 		}
 		ws.OutboundSubject().Notify(nm)
 		time.Sleep(10 * time.Millisecond)
-		conn.Close()
 		nm.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
