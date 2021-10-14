@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"net"
 	"strings"
 	"sync"
@@ -32,6 +33,9 @@ const (
 
 	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 	DiscoveryServiceTag = "bloxstaking.ssv"
+
+	// ExporterPeerID is a static peer id of the exporter
+	ExporterPeerID = "16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"
 
 	// MsgChanSize is the buffer size of the message channel
 	MsgChanSize = 128
@@ -198,7 +202,12 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		pubsub.WithValidateQueueSize(256),
 		pubsub.WithFloodPublish(true),
 	}
-
+	exporterPeerID, err := peerFromString(ExporterPeerID)
+	if err != nil {
+		n.logger.Error("could not parse peer id", zap.Error(err))
+	} else {
+		pubsub.WithDirectPeers([]peer.AddrInfo{{ID: exporterPeerID}})
+	}
 	if len(cfg.PubSubTraceOut) > 0 {
 		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
 		if err != nil {
@@ -372,7 +381,7 @@ func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 	ret := make([]string, 0)
 
-	invisiblePeers := ignorePeers()
+	invisiblePeers := ignorePeersCount()
 
 	for _, p := range topic.ListPeers() {
 		if s := peerToString(p); invisiblePeers[s] {
@@ -400,10 +409,10 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
-// ignorePeers provides a map of invisible peers (e.g. exporters) to ignore
-func ignorePeers() map[string]bool {
+// ignorePeersCount provides a map of invisible peers (e.g. exporters) to ignore when counting peers
+func ignorePeersCount() map[string]bool {
 	return map[string]bool{
-		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
+		ExporterPeerID: true,
 	}
 }
 
