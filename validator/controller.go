@@ -61,6 +61,7 @@ type controller struct {
 
 	validatorsMap *validatorsMap
 
+	metadataUpdateQueue    tasks.Queue
 	metadataUpdateInterval time.Duration
 }
 
@@ -89,6 +90,7 @@ func NewController(options ControllerOptions) IController {
 			Fork:                       options.Fork,
 		}),
 
+		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 	}
 
@@ -338,6 +340,8 @@ func (c *controller) startValidator(v *Validator) error {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
+	go c.metadataUpdateQueue.Start()
+
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
@@ -351,7 +355,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			pks = append(pks, share.PublicKey.Serialize())
 		}
 		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
-		beacon.UpdateValidatorsMetadataBatch(pks, tasks.NewExecutionQueue(10*time.Millisecond), c,
+		beacon.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
 }
