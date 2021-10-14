@@ -7,6 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"log"
+	"strings"
 )
 
 var (
@@ -14,6 +15,10 @@ var (
 		Name: "ssv:network:all_connected_peers",
 		Help: "Count connected peers for a validator",
 	})
+	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:peers_identity",
+		Help: "Count connected peers for a validator",
+	}, []string{"pubKey", "v"})
 	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:connected_peers",
 		Help: "Count connected peers for a validator",
@@ -30,6 +35,9 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsAllConnectedPeers); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsPeersIdentity); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsConnectedPeers); err != nil {
@@ -72,4 +80,9 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 func reportPeerIdentity(n *p2pNetwork, pid string) {
 	ua := n.peersIndex.GetPeerData(pid, UserAgentKey)
 	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua))
+
+	uaParts := strings.Split(ua, ":")
+	if len(uaParts) > 2 {
+		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1]).Set(1)
+	}
 }
