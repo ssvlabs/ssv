@@ -34,9 +34,6 @@ const (
 	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 	DiscoveryServiceTag = "bloxstaking.ssv"
 
-	// ExporterPeerID is a static peer id of the exporter
-	ExporterPeerID = "16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"
-
 	// MsgChanSize is the buffer size of the message channel
 	MsgChanSize = 128
 
@@ -202,7 +199,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		pubsub.WithValidateQueueSize(256),
 		pubsub.WithFloodPublish(true),
 	}
-	exporterPeerID, err := peerFromString(ExporterPeerID)
+	exporterPeerID, err := peerFromString(cfg.ExporterPeerID)
 	if err != nil {
 		n.logger.Error("could not parse peer id", zap.Error(err))
 	} else {
@@ -377,17 +374,16 @@ func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.allPeersOfTopic(topic), nil
 }
 
-// AllPeers returns all connected peers for a validator PK (except for the validator itself)
+// AllPeers returns all connected peers for a validator PK (except for the validator itself and public peers like exporter)
 func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 	ret := make([]string, 0)
 
-	invisiblePeers := ignorePeersCount()
+	skippedPeers := map[string]bool{
+		n.cfg.ExporterPeerID: true,
+	}
 
 	for _, p := range topic.ListPeers() {
-		if s := peerToString(p); invisiblePeers[s] {
-			// ignoring invisible peer
-			continue
-		} else {
+		if s := peerToString(p); !skippedPeers[s] {
 			ret = append(ret, peerToString(p))
 		}
 	}
@@ -407,13 +403,6 @@ func unwrapTopicName(topicName string) string {
 
 func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
-}
-
-// ignorePeersCount provides a map of invisible peers (e.g. exporters) to ignore when counting peers
-func ignorePeersCount() map[string]bool {
-	return map[string]bool{
-		ExporterPeerID: true,
-	}
 }
 
 // checkAddress checks that some address is accessible
