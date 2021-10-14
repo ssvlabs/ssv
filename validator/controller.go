@@ -297,7 +297,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 		}
 		if err := c.startValidator(v); err != nil {
 			c.logger.Error("could not start validator after metadata update",
-				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", *meta))
+				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 	}
 }

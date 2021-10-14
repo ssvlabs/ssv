@@ -76,7 +76,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 			onUpdated(pk, meta)
 		}
 		logger.Debug("managed to update validator metadata",
-			zap.String("pk", pk), zap.Any("metadata", *meta))
+			zap.String("pk", pk), zap.Any("metadata", meta))
 	}
 	if len(errs) > 0 {
 		logger.Error("could not process validators returned from beacon",
