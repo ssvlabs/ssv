@@ -61,6 +61,7 @@ type controller struct {
 
 	validatorsMap *validatorsMap
 
+	metadataUpdateQueue    tasks.Queue
 	metadataUpdateInterval time.Duration
 }
 
@@ -89,6 +90,7 @@ func NewController(options ControllerOptions) IController {
 			Fork:                       options.Fork,
 		}),
 
+		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 	}
 
@@ -287,13 +289,17 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.Share.HasMetadata() || !v.Share.Metadata.Equals(meta) {
+		if !v.Share.HasMetadata() {
 			v.Share.Metadata = meta
+			c.logger.Debug("metadata was updated", zap.String("pk", pk))
+		} else if !v.Share.Metadata.Equals(meta) {
+			v.Share.Metadata.Status = meta.Status
+			v.Share.Metadata.Balance = meta.Balance
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
 		}
 		if err := c.startValidator(v); err != nil {
 			c.logger.Error("could not start validator after metadata update",
-				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", *meta))
+				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 	}
 }
@@ -307,8 +313,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 	} else if !updated {
 		logger.Warn("could not find validator metadata")
 	} else {
-		logger.Debug("validator metadata was updated",
-			zap.Uint64("index", uint64(share.Metadata.Index)))
+		logger.Debug("validator metadata was updated")
 		ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {
@@ -335,6 +340,8 @@ func (c *controller) startValidator(v *Validator) error {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
+	go c.metadataUpdateQueue.Start()
+
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
@@ -348,7 +355,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			pks = append(pks, share.PublicKey.Serialize())
 		}
 		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
-		beacon.UpdateValidatorsMetadataBatch(pks, tasks.NewExecutionQueue(10*time.Millisecond), c,
+		beacon.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
 }

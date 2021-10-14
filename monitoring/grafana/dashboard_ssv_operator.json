@@ -285,7 +285,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "IBFT Instance"
+              "options": "IBFT Status"
             },
             "properties": [
               {
@@ -305,21 +305,29 @@
                         "color": "gray",
                         "index": 0,
                         "text": "IDLE"
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "from": 1,
-                      "result": {
+                      },
+                      "1": {
                         "color": "green",
                         "index": 1,
                         "text": "Running"
                       },
-                      "to": 3
+                      "2": {
+                        "color": "yellow",
+                        "index": 2,
+                        "text": "Initializing"
+                      },
+                      "3": {
+                        "color": "green",
+                        "index": 3,
+                        "text": "Initialized"
+                      },
+                      "4": {
+                        "color": "red",
+                        "index": 4,
+                        "text": "Error"
+                      }
                     },
-                    "type": "range"
+                    "type": "value"
                   }
                 ]
               }
@@ -760,7 +768,7 @@
               "Value #C": "Current Sequence",
               "Value #D": "Round",
               "Value #E": "Stage",
-              "Value #F": "IBFT Instance",
+              "Value #F": "IBFT Status",
               "Value #G": "Current slot",
               "Value #H": "Validator Status",
               "job 1": "Beaconcha",
@@ -840,6 +848,7 @@
             }
           },
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -848,7 +857,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -902,13 +912,14 @@
       "hiddenSeries": false,
       "id": 48,
       "legend": {
+        "alignAsTable": true,
         "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": false,
+        "current": true,
+        "max": true,
+        "min": true,
+        "show": true,
         "total": false,
-        "values": false
+        "values": true
       },
       "lines": true,
       "linewidth": 1,
@@ -918,7 +929,7 @@
       },
       "percentage": false,
       "pluginVersion": "8.0.4",
-      "pointradius": 2,
+      "pointradius": 0.5,
       "points": false,
       "renderer": "flot",
       "seriesOverrides": [],
@@ -930,7 +941,7 @@
           "exemplar": true,
           "expr": "ssv:network:connected_peers{instance=~\"$instance.*\",pubKey=\"main\"}",
           "interval": "",
-          "legendFormat": "",
+          "legendFormat": "Connected Peers",
           "refId": "A"
         }
       ],
@@ -955,11 +966,12 @@
       "yaxes": [
         {
           "$$hashKey": "object:144",
+          "decimals": null,
           "format": "short",
           "label": null,
           "logBase": 1,
           "max": null,
-          "min": null,
+          "min": "0",
           "show": true
         },
         {

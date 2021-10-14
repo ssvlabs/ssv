@@ -31,9 +31,14 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 		m.Balance == other.Balance
 }
 
+// Pending returns true if the validator is pending
+func (m *ValidatorMetadata) Pending() bool {
+	return m.Status.IsPending()
+}
+
 // Activated returns true if the validator is not unknown. It might be pending activation or active
 func (m *ValidatorMetadata) Activated() bool {
-	return m.Status.HasActivated()
+	return m.Status.HasActivated() || m.Status.IsActive() || m.Status.IsAttesting()
 }
 
 // Exiting returns true if the validator is existing or exited
@@ -71,7 +76,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 			onUpdated(pk, meta)
 		}
 		logger.Debug("managed to update validator metadata",
-			zap.String("pk", pk), zap.Any("metadata", *meta))
+			zap.String("pk", pk), zap.Any("metadata", meta))
 	}
 	if len(errs) > 0 {
 		logger.Error("could not process validators returned from beacon",
@@ -123,22 +128,28 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 	bc Beacon,
 	onUpdated OnUpdated,
 	batchSize int) {
-
-	batches := int(math.Ceil(float64(len(pubKeys)) / float64(batchSize)))
-	start := 0
-	end := batchSize
-
-	batchTask := func(pks [][]byte) func() error {
+	batch(pubKeys, queue, func(pks [][]byte) func() error {
 		return func() error {
 			return UpdateValidatorsMetadata(pks, collection, bc, onUpdated)
 		}
-	}
+	}, batchSize)
+}
 
-	for i := 0; i <= batches; i++ {
+type batchTask func(pks [][]byte) func() error
+
+func batch(pubKeys [][]byte, queue tasks.Queue, task batchTask, batchSize int) {
+	n := float64(len(pubKeys))
+	// in case the amount of public keys is lower than the batch size
+	batchSize = int(math.Min(n, float64(batchSize)))
+	batches := int(math.Ceil(n / float64(batchSize)))
+	start := 0
+	end := int(math.Min(n, float64(batchSize)))
+
+	for i := 0; i < batches; i++ {
 		// run task
-		queue.Queue(batchTask(pubKeys[start:end]))
+		queue.Queue(task(pubKeys[start:end]))
 		// reset start and end
 		start = end
-		end = int(math.Min(float64(len(pubKeys)), float64(start+batchSize)))
+		end = int(math.Min(n, float64(start+batchSize)))
 	}
 }

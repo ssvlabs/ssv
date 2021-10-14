@@ -108,7 +108,7 @@ Request holds a `filter` for making queries of specific data
 and a `type` to distinguish between messages:
 ```
 {
-  "type": "operator" | "validator" | "ibft"
+  "type": "operator" | "validator" | "decided"
   "filter": {
     "from": number,
     "to": number,

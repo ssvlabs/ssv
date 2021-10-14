@@ -79,9 +79,7 @@ $ ./install.sh
 The following command will generate your operator's public and private keys (appear as "pk" and "sk" in the output). 
 
 ```
-$ docker run -d --name=ssv_node_op_key -it 'bloxstaking/ssv-node:latest' \
-/go/bin/ssvnode generate-operator-keys && docker logs ssv_node_op_key --follow \
-&& docker stop ssv_node_op_key && docker rm ssv_node_op_key
+$ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode generate-operator-keys
 ```
 
 ### 5. Create a Configuration File

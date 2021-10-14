@@ -299,6 +299,12 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
 	decidedReader := exp.getDecidedReader(validatorShare)
+
+	// start network reader
+	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
+	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
+
+	// sync decided
 	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {
 			logger.Error("could not sync validator", zap.Error(err))
@@ -311,8 +317,6 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	}
 	logger.Debug("sync is done, starting to read network messages")
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
-	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
-	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
 	return nil
 }
 
