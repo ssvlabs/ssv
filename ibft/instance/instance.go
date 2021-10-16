@@ -41,7 +41,8 @@ type InstanceOptions struct {
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
-	Fork forks.Fork
+	Fork   forks.Fork
+	Signer ibft.Signer
 }
 
 // Instance defines the instance attributes
@@ -55,6 +56,7 @@ type Instance struct {
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
+	signer         ibft.Signer
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue
@@ -114,6 +116,7 @@ func NewInstance(opts *InstanceOptions) ibft.Instance {
 		Logger: opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
 			zap.Uint64("seq_num", opts.SeqNumber),
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
+		signer: opts.Signer,
 
 		MsgQueue:            opts.Queue,
 		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
@@ -300,14 +303,14 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	sig, err := msg.Sign(i.ValidatorShare.ShareKey)
+	sigByts, err := i.signer.SignIBFTMessage(msg)
 	if err != nil {
 		return err
 	}
 
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
-		Signature: sig.Serialize(),
+		Signature: sigByts,
 		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
 

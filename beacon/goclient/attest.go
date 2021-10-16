@@ -4,9 +4,10 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
+	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 )
 
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
@@ -21,8 +22,8 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 	return nil, errors.New("client does not support AttestationDataProvider")
 }
 
-func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {
-	sig, root, err := gc.signAtt(data, shareKey)
+func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty) (*spec.Attestation, []byte, error) {
+	sig, root, err := gc.signAtt(data, duty.PubKey[:])
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}
@@ -56,11 +57,37 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 }
 
 // signAtt returns the signature of an attestation data and its signing root.
-func (gc *goClient) signAtt(data *spec.AttestationData, shareKey *bls.SecretKey) ([]byte, []byte, error) {
-	root, err := gc.getSigningRoot(data)
+func (gc *goClient) signAtt(data *spec.AttestationData, pk []byte) ([]byte, []byte, error) {
+	domain, err := gc.getDomain(data)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get signing root")
+		return nil, nil, errors.Wrap(err, "failed to get domain for signing")
+	}
+	root, err := gc.computeSigningRoot(data, domain[:])
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get root for signing")
+	}
+	sig, err := gc.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain, pk)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to sign attestation")
 	}
 
-	return shareKey.SignByte(root[:]).Serialize(), root[:], nil
+	return sig, root[:], nil
+}
+
+// specAttDataToPrysmAttData a simple func converting between data types
+func specAttDataToPrysmAttData(data *spec.AttestationData) *eth.AttestationData {
+	// TODO - adopt github.com/attestantio/go-eth2-client in eth2-key-manager
+	return &eth.AttestationData{
+		Slot:            types.Slot(data.Slot),
+		CommitteeIndex:  types.CommitteeIndex(data.Index),
+		BeaconBlockRoot: data.BeaconBlockRoot[:],
+		Source: &eth.Checkpoint{
+			Epoch: types.Epoch(data.Source.Epoch),
+			Root:  data.Source.Root[:],
+		},
+		Target: &eth.Checkpoint{
+			Epoch: types.Epoch(data.Target.Epoch),
+			Root:  data.Target.Root[:],
+		},
+	}
 }

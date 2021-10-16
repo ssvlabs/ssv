@@ -118,7 +118,15 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 	return &storage
 }
 
-func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftStorage collections.Iibft, sks map[uint64]*bls.SecretKey, nodes map[uint64]*proto.Node) ibft.Controller {
+func populatedIbft(
+	nodeID uint64,
+	identifier []byte,
+	network *local.Local,
+	ibftStorage collections.Iibft,
+	sks map[uint64]*bls.SecretKey,
+	nodes map[uint64]*proto.Node,
+	signer ibft.Signer,
+) ibft.Controller {
 	queue := msgqueue.New()
 	share := &storage.Share{
 		NodeID:    nodeID,
@@ -135,7 +143,8 @@ func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftS
 		queue,
 		proto.DefaultConsensusParams(),
 		share,
-		nil)
+		nil,
+		signer)
 	ret.(*Controller).setFork(testFork(ret.(*Controller)))
 	ret.(*Controller).initFinished = true // as if they are already synced
 	ret.(*Controller).listenToNetworkMessages()

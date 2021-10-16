@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
@@ -37,6 +38,7 @@ type ControllerOptions struct {
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	Fork                       forks.Fork
+	KeyManager                 beacon.KeyManager
 }
 
 // IController represent the validators controller,
@@ -56,6 +58,7 @@ type controller struct {
 	collection validatorstorage.ICollection
 	logger     *zap.Logger
 	beacon     beacon.Beacon
+	keyManager beacon.KeyManager
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
@@ -78,6 +81,7 @@ func NewController(options ControllerOptions) IController {
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
+		keyManager:                 options.KeyManager,
 
 		validatorsMap: newValidatorsMap(options.Context, options.Logger, &Options{
 			Context:                    options.Context,
@@ -88,6 +92,7 @@ func NewController(options ControllerOptions) IController {
 			Beacon:                     options.Beacon,
 			DB:                         options.DB,
 			Fork:                       options.Fork,
+			Signer:                     options.KeyManager,
 		}),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
@@ -263,11 +268,11 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 		return errors.Wrap(err, "could not check if validator share exits")
 	}
 	if !found {
-		validatorShare, err = createShareWithOperatorKey(validatorAddedEvent, c.shareEncryptionKeyProvider)
+		validatorShare, share, err := createShareWithOperatorKey(validatorAddedEvent, c.shareEncryptionKeyProvider)
 		if err != nil {
 			return errors.Wrap(err, "failed to create share")
 		}
-		if err := c.onNewShare(validatorShare); err != nil {
+		if err := c.onNewShare(validatorShare, share); err != nil {
 			return err
 		}
 		logger.Debug("new validator share was created and saved")
@@ -306,7 +311,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 
 // onNewShare is called when a new validator was added or during registry sync
 // if the validator was persisted already, this function won't be called
-func (c *controller) onNewShare(share *validatorstorage.Share) error {
+func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.SecretKey) error {
 	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
 	if updated, err := updateShareMetadata(share, c.beacon); err != nil {
 		logger.Warn("could not add validator metadata", zap.Error(err))
@@ -316,6 +321,12 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 		logger.Debug("validator metadata was updated")
 		ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
 	}
+	// save secret key
+	if err := c.keyManager.AddShare(shareSecret); err != nil {
+		return errors.Wrap(err, "failed to save new share secret to key manager")
+	}
+
+	// save validator data
 	if err := c.collection.SaveValidatorShare(share); err != nil {
 		return errors.Wrap(err, "failed to save new share")
 	}

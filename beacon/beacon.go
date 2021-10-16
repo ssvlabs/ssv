@@ -2,6 +2,8 @@ package beacon
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
@@ -16,10 +18,12 @@ type Options struct {
 	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
+	DB             basedb.IDb
 }
 
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
+	KeyManager
 
 	// ExtendIndexMap extanding the pubkeys map of the client (in order to prevent redundant call to fetch pubkeys from node)
 	ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey)
@@ -34,11 +38,16 @@ type Beacon interface {
 	GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error)
 
 	// SignAttestation signs the given attestation
-	SignAttestation(data *spec.AttestationData, duty *Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error)
+	SignAttestation(data *spec.AttestationData, duty *Duty) (*spec.Attestation, []byte, error)
 
 	// SubmitAttestation submit the attestation to the node
 	SubmitAttestation(attestation *spec.Attestation) error
 
 	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
 	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
+}
+
+type KeyManager interface {
+	ibft.Signer
+	AddShare(shareKey *bls.SecretKey) error
 }

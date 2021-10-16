@@ -95,7 +95,7 @@ func (msg *SignedMessage) VerifyAggregatedSig(pks []*bls.PublicKey) (bool, error
 	return sig.VerifyByte(aggPK, root), nil
 }
 
-// SignersIDString returns all Signer's Ids as string
+// SignersIDString returns all KeyManager's Ids as string
 func (msg *SignedMessage) SignersIDString() string {
 	ret := ""
 	for _, i := range msg.SignerIds {

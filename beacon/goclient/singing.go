@@ -11,12 +11,7 @@ import (
 
 // getSigningRoot returns signing root
 func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
-	epoch := gc.network.EstimatedEpochAtSlot(uint64(data.Slot))
-	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
-	if err != nil {
-		return [32]byte{}, err
-	}
-	domain, err := gc.getDomainData(domainType, spec.Epoch(epoch))
+	domain, err := gc.getDomain(data)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -25,6 +20,20 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 		return [32]byte{}, err
 	}
 	return root, nil
+}
+
+// getSigningRoot returns signing root
+func (gc *goClient) getDomain(data *spec.AttestationData) ([]byte, error) {
+	epoch := gc.network.EstimatedEpochAtSlot(uint64(data.Slot))
+	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
+	if err != nil {
+		return nil, err
+	}
+	domain, err := gc.getDomainData(domainType, spec.Epoch(epoch))
+	if err != nil {
+		return nil, err
+	}
+	return domain[:], nil
 }
 
 // getDomainType returns domain type by role type

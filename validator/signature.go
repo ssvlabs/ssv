@@ -34,7 +34,7 @@ func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty, shareKey *bls.SecretKey) ([]byte, []byte, *beacon.DutyData, error) {
+func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []byte, *beacon.DutyData, error) {
 	// sign input value
 	var sig []byte
 	var root []byte
@@ -46,7 +46,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty, shareKey *b
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
 		}
-		signedAttestation, r, e := v.beacon.SignAttestation(s, duty, shareKey)
+		signedAttestation, r, e := v.beacon.SignAttestation(s, duty)
 		if e != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
