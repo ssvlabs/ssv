@@ -246,17 +246,25 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	pubKey := validatorPk.SerializeToHexStr()
 
 	if _, ok := n.cfg.Topics[pubKey]; !ok {
-		topic, err := n.pubsub.Join(getTopicName(pubKey))
-		if err != nil {
+		if err := n.joinTopic(pubKey); err != nil {
 			return errors.Wrap(err, "failed to join to topic")
 		}
-		n.cfg.Topics[pubKey] = topic
 	}
 
 	if !n.psSubscribedTopics[pubKey] {
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
-			return errors.Wrap(err, "failed to subscribe on Topic")
+			if err != pubsub.ErrTopicClosed {
+				return errors.Wrap(err, "failed to subscribe on Topic")
+			}
+			// rejoin a topic in case it was closed, and trying to subscribe again
+			if err := n.joinTopic(pubKey); err != nil {
+				return errors.Wrap(err, "failed to join to topic")
+			}
+			sub, err = n.cfg.Topics[pubKey].Subscribe()
+			if err != nil {
+				return errors.Wrap(err, "failed to subscribe on Topic")
+			}
 		}
 		n.psSubscribedTopics[pubKey] = true
 		go func() {
@@ -268,6 +276,17 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 		}()
 	}
 
+	return nil
+}
+
+// joinTopic joins to the given topic and mark it in topics map
+// this method is not thread-safe - should be called after psTopicsLock was acquired
+func (n *p2pNetwork) joinTopic(pubKey string) error {
+	topic, err := n.pubsub.Join(getTopicName(pubKey))
+	if err != nil {
+		return errors.Wrap(err, "failed to join to topic")
+	}
+	n.cfg.Topics[pubKey] = topic
 	return nil
 }
 
