@@ -6,9 +6,9 @@ import (
 )
 
 func (gc *goClient) SignIBFTMessage(message *proto.Message) ([]byte, error) {
-
+	return nil, nil
 }
 
 func (gc *goClient) AddShare(shareKey *bls.SecretKey) error {
-
+	return nil
 }

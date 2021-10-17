@@ -3,6 +3,7 @@ package ibft
 import (
 	"encoding/hex"
 	"errors"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
@@ -42,7 +43,7 @@ type InstanceOptions struct {
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
 	Fork   forks.Fork
-	Signer ibft.Signer
+	Signer beacon.Signer
 }
 
 // Instance defines the instance attributes
@@ -56,7 +57,7 @@ type Instance struct {
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
-	signer         ibft.Signer
+	signer         beacon.Signer
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue

@@ -48,7 +48,8 @@ func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.H
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
 		libp2p.UserAgent(ua))
 	require.NoError(t, err)
-	ids := identify.NewIDService(host, identify.UserAgent(ua))
+	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
+	require.NoError(t, err)
 	pi := NewPeersIndex(host, ids)
 
 	return host, pi

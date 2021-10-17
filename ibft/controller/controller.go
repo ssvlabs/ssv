@@ -27,7 +27,7 @@ type Controller struct {
 	ValidatorShare  *storage.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
-	signer          ibft.Signer
+	signer          beacon.Signer
 
 	// flags
 	initFinished bool
@@ -48,7 +48,7 @@ func New(
 	instanceConfig *proto.InstanceConfig,
 	ValidatorShare *storage.Share,
 	fork contollerforks.Fork,
-	signer ibft.Signer,
+	signer beacon.Signer,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &Controller{

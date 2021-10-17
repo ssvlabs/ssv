@@ -125,7 +125,7 @@ func populatedIbft(
 	ibftStorage collections.Iibft,
 	sks map[uint64]*bls.SecretKey,
 	nodes map[uint64]*proto.Node,
-	signer ibft.Signer,
+	signer beacon.Signer,
 ) ibft.Controller {
 	queue := msgqueue.New()
 	share := &storage.Share{

@@ -8,7 +8,6 @@ import (
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/shared/grpcutils"
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 )

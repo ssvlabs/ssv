@@ -46,7 +46,6 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 			}
 			if uint64(id) == options.NodeID {
 				ibftCommittee[options.NodeID].Pk = shareKey.GetPublicKey().Serialize()
-				ibftCommittee[options.NodeID].Sk = shareKey.Serialize()
 			}
 		}
 
@@ -58,7 +57,6 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 			NodeID:    options.NodeID,
 			Metadata:  nil,
 			PublicKey: validatorPk,
-			ShareKey:  shareKey,
 			Committee: ibftCommittee,
 		}
 		return &share, nil

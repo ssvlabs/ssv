@@ -36,7 +36,7 @@ type Options struct {
 	ETHNetwork                 *core.Network
 	DB                         basedb.IDb
 	Fork                       forks.Fork
-	Signer                     ibft.Signer
+	Signer                     beacon.Signer
 }
 
 // Validator struct that manages all ibft wrappers
@@ -53,7 +53,7 @@ type Validator struct {
 	valueCheck                 *valcheck.SlashingProtection
 	startOnce                  sync.Once
 	fork                       forks.Fork
-	signer                     ibft.Signer
+	signer                     beacon.Signer
 }
 
 // New Validator creation
@@ -155,7 +155,7 @@ func setupIbftController(
 	msgQueue *msgqueue.MessageQueue,
 	share *storage.Share,
 	fork forks.Fork,
-	signer ibft.Signer,
+	signer beacon.Signer,
 ) ibft.Controller {
 
 	ibftStorage := collections.NewIbft(db, logger, role.String())

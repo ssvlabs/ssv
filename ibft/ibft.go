@@ -75,7 +75,3 @@ type Pipelines interface {
 	// ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
 	ChangeRoundMsgPipeline() pipeline.Pipeline
 }
-
-type Signer interface {
-	SignIBFTMessage(message *proto.Message) ([]byte, error)
-}

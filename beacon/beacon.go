@@ -2,7 +2,7 @@ package beacon
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
@@ -48,6 +48,10 @@ type Beacon interface {
 }
 
 type KeyManager interface {
-	ibft.Signer
+	Signer
 	AddShare(shareKey *bls.SecretKey) error
+}
+
+type Signer interface {
+	SignIBFTMessage(message *proto.Message) ([]byte, error)
 }

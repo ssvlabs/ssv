@@ -15,8 +15,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prysmaticlabs/prysm/shared/slotutil"
-	"github.com/prysmaticlabs/prysm/shared/timeutils"
+	prysmTime "github.com/prysmaticlabs/prysm/time"
+	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"log"
@@ -167,10 +167,10 @@ func (gc *goClient) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spe
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
-	delay := slotutil.DivideSlotBy(3 /* a third of the slot duration */)
+	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := timeutils.Until(finalTime)
+	wait := prysmTime.Until(finalTime)
 	if wait <= 0 {
 		return
 	}

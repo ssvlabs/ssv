@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-ssz"
 )
 
@@ -24,7 +25,7 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 
 // getSigningRoot returns signing root
 func (gc *goClient) getDomain(data *spec.AttestationData) ([]byte, error) {
-	epoch := gc.network.EstimatedEpochAtSlot(uint64(data.Slot))
+	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
 	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
 	if err != nil {
 		return nil, err
