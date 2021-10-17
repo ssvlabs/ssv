@@ -241,29 +241,22 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	n.psTopicsLock.Lock()
 	defer n.psTopicsLock.Unlock()
 
-	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
-	if err != nil {
-		return errors.Wrap(err, "failed to join to Topics")
-	}
-	n.cfg.Topics[validatorPk.SerializeToHexStr()] = topic
+	pubKey := validatorPk.SerializeToHexStr()
 
-	sub, err := topic.Subscribe()
-	if err != nil {
-		return errors.Wrap(err, "failed to subscribe on Topic")
+	if _, ok := n.cfg.Topics[pubKey]; !ok {
+		topic, err := n.pubsub.Join(getTopicName(pubKey))
+		if err != nil {
+			return errors.Wrap(err, "failed to join to topic")
+		}
+		n.cfg.Topics[pubKey] = topic
+		sub, err := n.cfg.Topics[pubKey].Subscribe()
+		if err != nil {
+			return errors.Wrap(err, "failed to subscribe on Topic")
+		}
+		go n.listen(sub)
 	}
-
-	go n.listen(sub)
 
 	return nil
-}
-
-// IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
-func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
-	n.psTopicsLock.RLock()
-	defer n.psTopicsLock.RUnlock()
-
-	_, ok := n.cfg.Topics[validatorPk.SerializeToHexStr()]
-	return ok
 }
 
 // closeTopic closes the given topic
@@ -286,11 +279,11 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	for {
 		select {
 		case <-n.ctx.Done():
+			sub.Cancel()
 			if err := n.closeTopic(t); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
 			}
 			n.logger.Info("closed topic", zap.String("topic", t))
-			sub.Cancel()
 		default:
 			msg, err := sub.Next(n.ctx)
 			if err != nil {
