@@ -20,11 +20,6 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 	var err error
 
 	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 {
-		shareKey := &bls.SecretKey{}
-
-		if err = shareKey.SetHexString(options.ShareKey); err != nil {
-			return nil, errors.Wrap(err, "failed to set hex private key")
-		}
 		validatorPk := &bls.PublicKey{}
 		if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
 			return nil, errors.Wrap(err, "failed to decode validator key")
@@ -38,14 +33,10 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 			return val
 		}
 		ibftCommittee := make(map[uint64]*proto.Node)
-
 		for pk, id := range options.Committee {
 			ibftCommittee[uint64(id)] = &proto.Node{
 				IbftId: uint64(id),
 				Pk:     _getBytesFromHex(pk),
-			}
-			if uint64(id) == options.NodeID {
-				ibftCommittee[options.NodeID].Pk = shareKey.GetPublicKey().Serialize()
 			}
 		}
 

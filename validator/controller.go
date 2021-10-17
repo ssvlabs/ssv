@@ -130,21 +130,6 @@ func (c *controller) ProcessEth1Event(e eth1.Event) error {
 	return nil
 }
 
-// initShares initializes shares, should be called upon creation of controller
-func (c *controller) initShares(options ControllerOptions) error {
-	if options.CleanRegistryData {
-		if err := c.collection.CleanAllShares(); err != nil {
-			return errors.Wrap(err, "failed to clean shares")
-		}
-		c.logger.Debug("all shares were removed")
-	}
-
-	if len(options.Shares) > 0 {
-		c.collection.LoadMultipleFromConfig(options.Shares)
-	}
-	return nil
-}
-
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
 	shares, err := c.collection.GetAllValidatorsShare()
