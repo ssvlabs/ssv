@@ -1,7 +1,11 @@
 package spectesting
 
 import (
+	"encoding/hex"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"testing"
 
@@ -19,4 +23,34 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *pr
 		Signature: signature.Serialize(),
 		SignerIds: []uint64{id},
 	}
+}
+
+type testKM struct {
+	keys map[string]*bls.SecretKey
+}
+
+func newTestKM() beacon.KeyManager {
+	return &testKM{}
+}
+
+func (km *testKM) AddShare(shareKey *bls.SecretKey) error {
+	if km.getKey(shareKey.GetPublicKey()) == nil {
+		km.keys[shareKey.GetPublicKey().SerializeToHexStr()] = shareKey
+	}
+	return nil
+}
+
+func (km *testKM) getKey(key *bls.PublicKey) *bls.SecretKey {
+	return km.keys[key.SerializeToHexStr()]
+}
+
+func (km *testKM) SignIBFTMessage(message *proto.Message, key spec.BLSPubKey) ([]byte, error) {
+	if key := km.keys[hex.EncodeToString(key[:])]; key != nil {
+		sig, err := message.Sign(key)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not sign ibft msg")
+		}
+		return sig.Serialize(), nil
+	}
+	return nil, errors.New("could not find key for pk")
 }

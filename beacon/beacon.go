@@ -53,5 +53,5 @@ type KeyManager interface {
 }
 
 type Signer interface {
-	SignIBFTMessage(message *proto.Message) ([]byte, error)
+	SignIBFTMessage(message *proto.Message, key spec.BLSPubKey) ([]byte, error)
 }

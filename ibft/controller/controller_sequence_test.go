@@ -45,7 +45,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
-				ShareKey:  sks[1],
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
@@ -61,7 +60,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
-				ShareKey:  sks[1],
 				Committee: nodes,
 			},
 			nil,
@@ -75,7 +73,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
-				ShareKey:  sks[1],
 				Committee: nodes,
 			},
 			nil,
@@ -91,7 +88,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
-				ShareKey:  sks[1],
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
@@ -107,7 +103,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
-				ShareKey:  sks[1],
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
@@ -123,7 +118,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
-				ShareKey:  sks[1],
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),

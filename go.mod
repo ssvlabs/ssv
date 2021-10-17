@@ -5,7 +5,7 @@ go 1.15
 require (
 	github.com/attestantio/go-eth2-client v0.6.30
 	github.com/bloxapp/eth2-key-manager v1.1.0-rc.5
-	github.com/dgraph-io/badger/v3 v3.2011.1
+	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/ferranbt/fastssz v0.0.0-20210905181407-59cf6761a7d5
 	github.com/gogo/protobuf v1.3.2

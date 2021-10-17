@@ -70,7 +70,7 @@ func (m *mockBeacon) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (m *mockBeacon) SignIBFTMessage(message *proto.Message) ([]byte, error) {
+func (m *mockBeacon) SignIBFTMessage(message *proto.Message, key spec.BLSPubKey) ([]byte, error) {
 	return nil, nil
 }
 

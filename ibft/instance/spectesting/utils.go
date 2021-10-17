@@ -2,6 +2,7 @@ package spectesting
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/fixtures"
 	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	v0 "github.com/bloxapp/ssv/ibft/instance/forks/v0"
@@ -101,9 +102,11 @@ func ChangeRoundMsgWithPrepared(t *testing.T, sk *bls.SecretKey, lambda, prepare
 
 // TestIBFTInstance returns a test iBFT instance
 func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
+	shares, km := TestSharesAndSigner()
+
 	opts := &ibft2.InstanceOptions{
 		Logger:         zaptest.NewLogger(t),
-		ValidatorShare: TestShares()[1],
+		ValidatorShare: shares[1],
 		Network:        local.NewLocalNetwork(),
 		Queue:          msgqueue.New(),
 		ValueCheck:     bytesval.NewNotEqualBytes(InvalidTestInputValue()),
@@ -111,39 +114,43 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
 		Lambda:         lambda,
 		LeaderSelector: &constant.Constant{LeaderIndex: 0},
 		Fork:           v0.New(),
+		Signer:         km,
 	}
 
 	return ibft2.NewInstance(opts).(*ibft2.Instance)
 }
 
 // TestShares generates test nodes for SSV
-func TestShares() map[uint64]*storage.Share {
-	return map[uint64]*storage.Share{
+func TestSharesAndSigner() (map[uint64]*storage.Share, beacon.KeyManager) {
+	shares := map[uint64]*storage.Share{
 		1: {
 			NodeID:    1,
 			PublicKey: TestValidatorPK(),
-			ShareKey:  TestSKs()[0],
 			Committee: TestNodes(),
 		},
 		2: {
 			NodeID:    2,
 			PublicKey: TestValidatorPK(),
-			ShareKey:  TestSKs()[1],
 			Committee: TestNodes(),
 		},
 		3: {
 			NodeID:    3,
 			PublicKey: TestValidatorPK(),
-			ShareKey:  TestSKs()[2],
 			Committee: TestNodes(),
 		},
 		4: {
 			NodeID:    4,
 			PublicKey: TestValidatorPK(),
-			ShareKey:  TestSKs()[3],
 			Committee: TestNodes(),
 		},
 	}
+
+	km := newTestKM()
+	km.AddShare(TestSKs()[0])
+	km.AddShare(TestSKs()[1])
+	km.AddShare(TestSKs()[2])
+	km.AddShare(TestSKs()[3])
+	return shares, km
 }
 
 // TestNodes generates test nodes for SSV
@@ -152,22 +159,18 @@ func TestNodes() map[uint64]*proto.Node {
 		1: {
 			IbftId: 1,
 			Pk:     TestPKs()[0],
-			Sk:     TestSKs()[0].Serialize(),
 		},
 		2: {
 			IbftId: 2,
 			Pk:     TestPKs()[1],
-			Sk:     TestSKs()[1].Serialize(),
 		},
 		3: {
 			IbftId: 3,
 			Pk:     TestPKs()[2],
-			Sk:     TestSKs()[2].Serialize(),
 		},
 		4: {
 			IbftId: 4,
 			Pk:     TestPKs()[3],
-			Sk:     TestSKs()[3].Serialize(),
 		},
 	}
 }

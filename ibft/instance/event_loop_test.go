@@ -37,7 +37,6 @@ func TestChangeRoundTimer(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck: bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),

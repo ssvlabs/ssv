@@ -247,7 +247,7 @@ func TestForceDecided(t *testing.T) {
 
 	identifier := []byte("lambda_11")
 	s1 := populatedStorage(t, sks, 3)
-	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 
 	// test before sync
 	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -272,7 +272,6 @@ func TestForceDecided(t *testing.T) {
 	share := &storage.Share{
 		NodeID:    1,
 		PublicKey: validatorPK(sks),
-		ShareKey:  sks[1],
 		Committee: nodes,
 	}
 	res, err := i1.StartInstance(ibft.ControllerStartInstanceOptions{
@@ -297,9 +296,9 @@ func TestSyncAfterDecided(t *testing.T) {
 
 	identifier := []byte("lambda_11")
 	s1 := populatedStorage(t, sks, 4)
-	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 
-	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes, newTestSigner())
 
 	// test before sync
 	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -335,9 +334,9 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 
 	identifier := []byte("lambda_11")
 	s1 := collections.NewIbft(db, zap.L(), "attestation")
-	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes, newTestSigner())
 
-	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes, newTestSigner())
 
 	decidedMsg := aggregateSign(t, sks, &proto.Message{
 		Type:      proto.RoundState_Commit,
@@ -360,7 +359,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	network := local.NewLocalNetwork()
 	identifier := []byte("lambda_11")
-	ibft := populatedIbft(1, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
+	ibft := populatedIbft(1, identifier, network, populatedStorage(t, sks, 10), sks, nodes, newTestSigner())
 
 	tests := []struct {
 		name          string

@@ -24,6 +24,21 @@ import (
 	"time"
 )
 
+type testSigner struct {
+}
+
+func newTestSigner() beacon.KeyManager {
+	return &testSigner{}
+}
+
+func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (s *testSigner) SignIBFTMessage(message *proto.Message) ([]byte, error) {
+	return nil, nil
+}
+
 type testingFork struct {
 	controller *Controller
 }
