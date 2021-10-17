@@ -64,7 +64,8 @@ type p2pNetwork struct {
 	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
 
-	psTopicsLock *sync.RWMutex
+	psSubscribedTopics map[string]bool
+	psTopicsLock       *sync.RWMutex
 }
 
 // New is the constructor of p2pNetworker
@@ -75,12 +76,13 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	logger = logger.With(zap.String("component", "p2p"))
 
 	n := &p2pNetwork{
-		ctx:             ctx,
-		cfg:             cfg,
-		listenersLock:   &sync.Mutex{},
-		psTopicsLock:    &sync.RWMutex{},
-		logger:          logger,
-		operatorPrivKey: cfg.OperatorPrivateKey,
+		ctx:                ctx,
+		cfg:                cfg,
+		listenersLock:      &sync.Mutex{},
+		logger:             logger,
+		operatorPrivKey:    cfg.OperatorPrivateKey,
+		psSubscribedTopics: make(map[string]bool),
+		psTopicsLock:       &sync.RWMutex{},
 	}
 
 	var _ipAddr net.IP
@@ -249,11 +251,21 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 			return errors.Wrap(err, "failed to join to topic")
 		}
 		n.cfg.Topics[pubKey] = topic
+	}
+
+	if !n.psSubscribedTopics[pubKey] {
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
 			return errors.Wrap(err, "failed to subscribe on Topic")
 		}
-		go n.listen(sub)
+		n.psSubscribedTopics[pubKey] = true
+		go func() {
+			n.listen(sub)
+			// mark topic as not subscribed
+			n.psTopicsLock.Lock()
+			defer n.psTopicsLock.Unlock()
+			n.psSubscribedTopics[pubKey] = false
+		}()
 	}
 
 	return nil
