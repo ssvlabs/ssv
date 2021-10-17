@@ -11,9 +11,9 @@ import (
 
 var (
 	metricsDecidedSigners = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_decided_signers",
+		Name: "ssv:ibft:last_decided_signers",
 		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey", "seq", "nodeId"})
+	}, []string{"lambda", "pubKey", "nodeId"})
 )
 
 func init() {
@@ -28,7 +28,6 @@ func ReportDecided(pk string, msg *proto.SignedMessage) {
 	for _, nodeID := range msg.SignerIds {
 		metricsDecidedSigners.WithLabelValues(
 			role, pk,
-			strconv.FormatUint(msg.Message.SeqNumber, 10),
-			strconv.FormatUint(nodeID, 10)).Set(1)
+			strconv.FormatUint(nodeID, 10)).Set(float64(msg.Message.SeqNumber))
 	}
 }
