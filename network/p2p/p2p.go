@@ -66,6 +66,8 @@ type p2pNetwork struct {
 
 	psSubscribedTopics map[string]bool
 	psTopicsLock       *sync.RWMutex
+
+	reportLastMsg bool
 }
 
 // New is the constructor of p2pNetworker
@@ -83,6 +85,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		operatorPrivKey:    cfg.OperatorPrivateKey,
 		psSubscribedTopics: make(map[string]bool),
 		psTopicsLock:       &sync.RWMutex{},
+		reportLastMsg:      cfg.ReportLastMsg,
 	}
 
 	var _ipAddr net.IP
@@ -329,6 +332,9 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
 				n.logger.Error("failed to un-marshal message", zap.Error(err))
 				continue
+			}
+			if n.reportLastMsg && len(msg.ReceivedFrom) > 0 {
+				reportLastMsg(msg.ReceivedFrom.String())
 			}
 			n.propagateSignedMsg(&cm)
 		}
