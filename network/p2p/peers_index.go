@@ -54,7 +54,7 @@ func (pi *peersIndex) Run() {
 	conns := pi.host.Network().Conns()
 	for _, conn := range conns {
 		if err := pi.indexPeerConnection(conn); err != nil {
-			pi.logger.Warn("failed to report peer identity", zap.String("peer", conn.RemotePeer().String()))
+			pi.logger.Warn("failed to report peer identity")
 		}
 	}
 }

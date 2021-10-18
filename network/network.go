@@ -82,9 +82,6 @@ type Network interface {
 	// SubscribeToValidatorNetwork subscribing and listen to validator network
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
 
-	// IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
-	IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool
-
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)
 
