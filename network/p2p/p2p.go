@@ -128,7 +128,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.New("Unsupported discovery flag")
 	}
 
-	n.peersIndex = NewPeersIndex(n.host, ids)
+	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
