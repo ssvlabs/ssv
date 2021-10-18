@@ -35,18 +35,23 @@ func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID
 
 // signDuty signs the duty after iBFT came to consensus
 func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []byte, *beacon.DutyData, error) {
+	// get operator pk for sig
+	pk, err := v.Share.OperatorPubKey()
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
+	}
+
 	// sign input value
 	var sig []byte
 	var root []byte
 	retValueStruct := &beacon.DutyData{}
-	var err error
 	switch duty.Type {
 	case beacon.RoleTypeAttester:
 		s := &spec.AttestationData{}
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
 		}
-		signedAttestation, r, e := v.beacon.SignAttestation(s, duty)
+		signedAttestation, r, e := v.beacon.SignAttestation(s, duty, pk.Serialize())
 		if e != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}

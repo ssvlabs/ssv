@@ -69,7 +69,14 @@ SigCollectionLoop:
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, seqNumber uint64, decidedValue []byte, signaturesCount int, duty *beacon.Duty) error {
+func (v *Validator) postConsensusDutyExecution(
+	ctx context.Context,
+	logger *zap.Logger,
+	seqNumber uint64,
+	decidedValue []byte,
+	signaturesCount int,
+	duty *beacon.Duty,
+) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := v.signDuty(decidedValue, duty)
 	if err != nil {

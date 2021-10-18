@@ -2,7 +2,6 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
@@ -12,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 
@@ -304,7 +304,12 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	sigByts, err := i.signer.SignIBFTMessage(msg)
+	pk, err := i.ValidatorShare.OperatorPubKey()
+	if err != nil {
+		return errors.Wrap(err, "could not find operator pk for signing msg")
+	}
+
+	sigByts, err := i.signer.SignIBFTMessage(msg, pk.Serialize())
 	if err != nil {
 		return err
 	}

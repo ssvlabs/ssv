@@ -54,6 +54,18 @@ func (s *Share) PartialThresholdSize() int {
 	return int(math.Ceil(float64(s.CommitteeSize()) * 1 / 3))
 }
 
+// OperatorPubKey returns the operator's public key based on the node id
+func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
+	if val, found := s.Committee[s.NodeID]; found {
+		pk := &bls.PublicKey{}
+		if err := pk.Deserialize(val.Pk); err != nil {
+			return nil, errors.Wrap(err, "failed to deserialize public key")
+		}
+		return pk, nil
+	}
+	return nil, errors.New("could not find operator id in committee map")
+}
+
 // PubKeysByID returns the public keys with the associated ids
 func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 	ret := make([]*bls.PublicKey, 0)
@@ -61,7 +73,7 @@ func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 		if val, ok := s.Committee[id]; ok {
 			pk := &bls.PublicKey{}
 			if err := pk.Deserialize(val.Pk); err != nil {
-				return ret, err
+				return ret, errors.Wrap(err, "failed to deserialize public key")
 			}
 			ret = append(ret, pk)
 		} else {

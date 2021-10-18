@@ -38,7 +38,7 @@ type Beacon interface {
 	GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error)
 
 	// SignAttestation signs the given attestation
-	SignAttestation(data *spec.AttestationData, duty *Duty) (*spec.Attestation, []byte, error)
+	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 
 	// SubmitAttestation submit the attestation to the node
 	SubmitAttestation(attestation *spec.Attestation) error
@@ -49,9 +49,10 @@ type Beacon interface {
 
 type KeyManager interface {
 	Signer
+	// AddShare saves a share key
 	AddShare(shareKey *bls.SecretKey) error
 }
 
 type Signer interface {
-	SignIBFTMessage(message *proto.Message, key spec.BLSPubKey) ([]byte, error)
+	SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error)
 }

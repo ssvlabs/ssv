@@ -5,7 +5,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-func (gc *goClient) SignIBFTMessage(message *proto.Message) ([]byte, error) {
+func (gc *goClient) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
 	return nil, nil
 }
 

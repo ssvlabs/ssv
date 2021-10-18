@@ -22,8 +22,8 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 	return nil, errors.New("client does not support AttestationDataProvider")
 }
 
-func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty) (*spec.Attestation, []byte, error) {
-	sig, root, err := gc.signAtt(data, duty.PubKey[:])
+func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	sig, root, err := gc.signAtt(data, pk)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}
