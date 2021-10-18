@@ -214,7 +214,10 @@ func validateMsg(msg *proto.SignedMessage, identifier string) error {
 func newDecidedNetworkMsg(msg *proto.SignedMessage, pk string) api.NetworkMessage {
 	return api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeDecided,
-		Filter: api.MessageFilter{PublicKey: pk, From: int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber)},
+		Filter: api.MessageFilter{
+			PublicKey: pk,
+			From: int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber),
+			Role: api.RoleAttester},
 		Data:   []*proto.SignedMessage{msg},
 	}, Conn: nil}
 }
