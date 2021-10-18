@@ -2,6 +2,8 @@ package exporter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -168,6 +170,8 @@ func (exp *exporter) Start() error {
 	}()
 
 	go exp.startMainTopic()
+
+	go exp.reportOperators()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
@@ -338,4 +342,23 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 		Config:  proto.DefaultConsensusParams(),
 		PK:      validatorPubKey,
 	})
+}
+
+func (exp *exporter) reportOperators() {
+	// TODO: change api maybe, limited to 1000 operators
+	operators, err := exp.storage.ListOperators(0, 1000)
+	if err != nil {
+		exp.logger.Error("could not get operators", zap.Error(err))
+	}
+	for _, op := range operators {
+		bytes, err := hex.DecodeString(op.PublicKey)
+		if err != nil {
+			exp.logger.Error("could not decode public key", zap.Error(err))
+			continue
+		}
+		pkHash := fmt.Sprintf("%x", sha256.Sum256(bytes))
+		metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
+		exp.logger.Debug("report operator", zap.String("pkHash", pkHash),
+			zap.String("name", op.Name), zap.Int64("index", op.Index))
+	}
 }

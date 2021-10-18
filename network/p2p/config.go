@@ -36,6 +36,8 @@ type Config struct {
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPrivateKey is used for operator identity
 	OperatorPrivateKey *rsa.PrivateKey
+	// ReportLastMsg whether to report last msg metric
+	ReportLastMsg bool
 }
 
 // TransformEnr converts defaults enr value and convert it to slice
