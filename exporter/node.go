@@ -350,6 +350,7 @@ func (exp *exporter) reportOperators() {
 	if err != nil {
 		exp.logger.Error("could not get operators", zap.Error(err))
 	}
+	exp.logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for _, op := range operators {
 		bytes, err := hex.DecodeString(op.PublicKey)
 		if err != nil {
@@ -357,6 +358,7 @@ func (exp *exporter) reportOperators() {
 			continue
 		}
 		pkHash := fmt.Sprintf("%x", sha256.Sum256(bytes))
+		//
 		metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
 		exp.logger.Debug("report operator", zap.String("pkHash", pkHash),
 			zap.String("name", op.Name), zap.Int64("index", op.Index))
