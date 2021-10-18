@@ -54,7 +54,7 @@ func (m *mockBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return nil, nil
 }
 
-func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *Duty) (*spec.Attestation, []byte, error) {
+func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 
@@ -70,7 +70,7 @@ func (m *mockBeacon) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (m *mockBeacon) SignIBFTMessage(message *proto.Message, key spec.BLSPubKey) ([]byte, error) {
+func (m *mockBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
 	return nil, nil
 }
 

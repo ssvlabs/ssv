@@ -2,7 +2,6 @@ package spectesting
 
 import (
 	"encoding/json"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/fixtures"
 	ibft2 "github.com/bloxapp/ssv/ibft/instance"

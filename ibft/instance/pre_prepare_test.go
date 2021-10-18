@@ -114,7 +114,6 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 		},
 		ValueCheck: bytesval.NewNotEqualBytes(value),
 		Logger:     zaptest.NewLogger(t),
@@ -217,7 +216,6 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 		},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),

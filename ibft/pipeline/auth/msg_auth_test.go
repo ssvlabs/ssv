@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,7 @@ func SignMsg(t *testing.T, ids []uint64, sks []*bls.SecretKey, msg *proto.Messag
 }
 
 func TestAuthorizeMsg(t *testing.T) {
+	threshold.Init()
 	sks, committee := GenerateNodes(4)
 	tests := []struct {
 		name          string

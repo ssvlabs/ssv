@@ -2,7 +2,6 @@ package spectesting
 
 import (
 	"encoding/hex"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -44,8 +43,8 @@ func (km *testKM) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testKM) SignIBFTMessage(message *proto.Message, key spec.BLSPubKey) ([]byte, error) {
-	if key := km.keys[hex.EncodeToString(key[:])]; key != nil {
+func (km *testKM) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
 		sig, err := message.Sign(key)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign ibft msg")

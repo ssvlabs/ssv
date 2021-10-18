@@ -45,7 +45,6 @@ func TestThresholdSize(t *testing.T) {
 				NodeID:    0,
 				PublicKey: nil,
 				Metadata:  nil,
-				ShareKey:  nil,
 				Committee: map[uint64]*proto.Node{},
 			}
 			// compile committee
