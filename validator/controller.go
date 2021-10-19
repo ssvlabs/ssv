@@ -192,13 +192,6 @@ func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 		if err := beacon.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
 			c.logger.Error("could not update all validators", zap.Error(err))
 		}
-		// once update is done -> update statuses
-		for _, pk := range pubKeys {
-			pkHex := hex.EncodeToString(pk)
-			if v, exist := c.GetValidator(pkHex); exist {
-				ReportValidatorStatus(pkHex, v.Share.Metadata, c.logger)
-			}
-		}
 	}
 }
 
@@ -268,6 +261,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 			return errors.Wrap(err, "failed to create share")
 		}
 		if err := c.onNewShare(validatorShare); err != nil {
+			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return err
 		}
 		logger.Debug("new validator share was created and saved")
@@ -314,7 +308,6 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 		logger.Warn("could not find validator metadata")
 	} else {
 		logger.Debug("validator metadata was updated")
-		ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {
 		return errors.Wrap(err, "failed to save new share")

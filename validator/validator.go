@@ -112,9 +112,6 @@ func (v *Validator) Start() error {
 		v.logger.Debug("validator started")
 	})
 
-	//ReportValidatorStatusReady(v.Share.PublicKey.SerializeToHexStr())
-	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, v.logger)
-
 	return nil
 }
 
