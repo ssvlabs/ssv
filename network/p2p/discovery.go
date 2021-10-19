@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	maxPeers = 100
+	maxPeers = 1000
 	udp4     = "udp4"
 	udp6     = "udp6"
 	tcp      = "tcp"
