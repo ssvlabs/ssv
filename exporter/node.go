@@ -19,6 +19,7 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"go.uber.org/zap"
 	"time"
 )
@@ -344,16 +345,18 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 }
 
 func (exp *exporter) reportOperators() {
-	// TODO: change api maybe, limited to 1000 operators
-	operators, err := exp.storage.ListOperators(0, 1000)
-	if err != nil {
-		exp.logger.Error("could not get operators", zap.Error(err))
-	}
-	exp.logger.Debug("reporting operators", zap.Int("count", len(operators)))
-	for _, op := range operators {
-		pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
-		metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
-		exp.logger.Debug("report operator", zap.String("pkHash", pkHash),
-			zap.String("name", op.Name), zap.Int64("index", op.Index))
-	}
+	runutil.RunEvery(context.Background(), 12*time.Minute, func() {
+		// TODO: change api maybe, limited to 1000 operators
+		operators, err := exp.storage.ListOperators(0, 1000)
+		if err != nil {
+			exp.logger.Error("could not get operators", zap.Error(err))
+		}
+		exp.logger.Debug("reporting operators", zap.Int("count", len(operators)))
+		for _, op := range operators {
+			pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
+			metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
+			exp.logger.Debug("report operator", zap.String("pkHash", pkHash),
+				zap.String("name", op.Name), zap.Int64("index", op.Index))
+		}
+	})
 }
