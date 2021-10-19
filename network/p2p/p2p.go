@@ -63,7 +63,10 @@ type p2pNetwork struct {
 	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
 
-	psTopicsLock *sync.RWMutex
+	psSubscribedTopics map[string]bool
+	psTopicsLock       *sync.RWMutex
+
+	reportLastMsg bool
 }
 
 // New is the constructor of p2pNetworker
@@ -74,12 +77,14 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	logger = logger.With(zap.String("component", "p2p"))
 
 	n := &p2pNetwork{
-		ctx:             ctx,
-		cfg:             cfg,
-		listenersLock:   &sync.Mutex{},
-		psTopicsLock:    &sync.RWMutex{},
-		logger:          logger,
-		operatorPrivKey: cfg.OperatorPrivateKey,
+		ctx:                ctx,
+		cfg:                cfg,
+		listenersLock:      &sync.Mutex{},
+		logger:             logger,
+		operatorPrivKey:    cfg.OperatorPrivateKey,
+		psSubscribedTopics: make(map[string]bool),
+		psTopicsLock:       &sync.RWMutex{},
+		reportLastMsg:      cfg.ReportLastMsg,
 	}
 
 	var _ipAddr net.IP
@@ -128,7 +133,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.New("Unsupported discovery flag")
 	}
 
-	n.peersIndex = NewPeersIndex(n.host, ids)
+	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
@@ -201,7 +206,12 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		pubsub.WithValidateQueueSize(256),
 		pubsub.WithFloodPublish(true),
 	}
-
+	exporterPeerID, err := peerFromString(cfg.ExporterPeerID)
+	if err != nil {
+		n.logger.Error("could not parse peer id", zap.Error(err))
+	} else {
+		pubsub.WithDirectPeers([]peer.AddrInfo{{ID: exporterPeerID}})
+	}
 	if len(cfg.PubSubTraceOut) > 0 {
 		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
 		if err != nil {
@@ -238,29 +248,51 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	n.psTopicsLock.Lock()
 	defer n.psTopicsLock.Unlock()
 
-	topic, err := n.pubsub.Join(getTopicName(validatorPk.SerializeToHexStr()))
-	if err != nil {
-		return errors.Wrap(err, "failed to join to Topics")
-	}
-	n.cfg.Topics[validatorPk.SerializeToHexStr()] = topic
+	pubKey := validatorPk.SerializeToHexStr()
 
-	sub, err := topic.Subscribe()
-	if err != nil {
-		return errors.Wrap(err, "failed to subscribe on Topic")
+	if _, ok := n.cfg.Topics[pubKey]; !ok {
+		if err := n.joinTopic(pubKey); err != nil {
+			return errors.Wrap(err, "failed to join to topic")
+		}
 	}
 
-	go n.listen(sub)
+	if !n.psSubscribedTopics[pubKey] {
+		sub, err := n.cfg.Topics[pubKey].Subscribe()
+		if err != nil {
+			if err != pubsub.ErrTopicClosed {
+				return errors.Wrap(err, "failed to subscribe on Topic")
+			}
+			// rejoin a topic in case it was closed, and trying to subscribe again
+			if err := n.joinTopic(pubKey); err != nil {
+				return errors.Wrap(err, "failed to join to topic")
+			}
+			sub, err = n.cfg.Topics[pubKey].Subscribe()
+			if err != nil {
+				return errors.Wrap(err, "failed to subscribe on Topic")
+			}
+		}
+		n.psSubscribedTopics[pubKey] = true
+		go func() {
+			n.listen(sub)
+			// mark topic as not subscribed
+			n.psTopicsLock.Lock()
+			defer n.psTopicsLock.Unlock()
+			n.psSubscribedTopics[pubKey] = false
+		}()
+	}
 
 	return nil
 }
 
-// IsSubscribeToValidatorNetwork checks if there is a subscription to the validator topic
-func (n *p2pNetwork) IsSubscribeToValidatorNetwork(validatorPk *bls.PublicKey) bool {
-	n.psTopicsLock.RLock()
-	defer n.psTopicsLock.RUnlock()
-
-	_, ok := n.cfg.Topics[validatorPk.SerializeToHexStr()]
-	return ok
+// joinTopic joins to the given topic and mark it in topics map
+// this method is not thread-safe - should be called after psTopicsLock was acquired
+func (n *p2pNetwork) joinTopic(pubKey string) error {
+	topic, err := n.pubsub.Join(getTopicName(pubKey))
+	if err != nil {
+		return errors.Wrap(err, "failed to join to topic")
+	}
+	n.cfg.Topics[pubKey] = topic
+	return nil
 }
 
 // closeTopic closes the given topic
@@ -283,11 +315,11 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 	for {
 		select {
 		case <-n.ctx.Done():
+			sub.Cancel()
 			if err := n.closeTopic(t); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
 			}
 			n.logger.Info("closed topic", zap.String("topic", t))
-			sub.Cancel()
 		default:
 			msg, err := sub.Next(n.ctx)
 			if err != nil {
@@ -302,6 +334,9 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 			if err := json.Unmarshal(msg.Data, &cm); err != nil {
 				n.logger.Error("failed to un-marshal message", zap.Error(err))
 				continue
+			}
+			if n.reportLastMsg && len(msg.ReceivedFrom) > 0 {
+				reportLastMsg(msg.ReceivedFrom.String())
 			}
 			n.propagateSignedMsg(&cm)
 		}
@@ -371,17 +406,16 @@ func (n *p2pNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.allPeersOfTopic(topic), nil
 }
 
-// AllPeers returns all connected peers for a validator PK (except for the validator itself)
+// AllPeers returns all connected peers for a validator PK (except for the validator itself and public peers like exporter)
 func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 	ret := make([]string, 0)
 
-	invisiblePeers := ignorePeers()
+	skippedPeers := map[string]bool{
+		n.cfg.ExporterPeerID: true,
+	}
 
 	for _, p := range topic.ListPeers() {
-		if s := peerToString(p); invisiblePeers[s] {
-			// ignoring invisible peer
-			continue
-		} else {
+		if s := peerToString(p); !skippedPeers[s] {
 			ret = append(ret, peerToString(p))
 		}
 	}
@@ -401,13 +435,6 @@ func unwrapTopicName(topicName string) string {
 
 func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
-}
-
-// ignorePeers provides a map of invisible peers (e.g. exporters) to ignore
-func ignorePeers() map[string]bool {
-	return map[string]bool{
-		"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf": true,
-	}
 }
 
 // checkAddress checks that some address is accessible

@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -46,7 +47,7 @@ func TestHandleQuery(t *testing.T) {
 
 func TestHandleStream(t *testing.T) {
 	msgCount := 3
-	logger := zap.L()
+	logger := zaptest.NewLogger(t)
 	adapter := NewAdapterMock(logger).(*AdapterMock)
 	ws := NewWsServer(logger, adapter, nil, nil).(*wsServer)
 
@@ -60,32 +61,29 @@ func TestHandleStream(t *testing.T) {
 	conn2 := connectionMock{addr: ipAddr2}
 	go ws.handleStream(&conn2)
 
+	sub, ok := ws.OutboundSubject().(pubsub.Subject)
+	require.True(t, ok)
 	// register a listener to count how many messages are passed on outbound subject
 	var outCnCount int64
 	var wgCn sync.WaitGroup
 	wgCn.Add(3)
+	cn1, err := sub.Register("xxx-1")
+	require.NoError(t, err)
 	go func() {
-		sub, ok := ws.OutboundSubject().(pubsub.Subject)
-		require.True(t, ok)
-		cn, err := sub.Register("xxx-1")
-		require.NoError(t, err)
-		for range cn {
+		for range cn1 {
 			atomic.AddInt64(&outCnCount, int64(1))
 			wgCn.Done()
 		}
 	}()
-	// registers a dummy lister to mock disconnections
+	cn2, err := sub.Register("xxx-2")
+	require.NoError(t, err)
+	// registers a dummy listener that de-registers
 	go func() {
-		sub, ok := ws.OutboundSubject().(pubsub.Subject)
-		require.True(t, ok)
-		cn, err := sub.Register("xxx-2")
-		require.NoError(t, err)
-		for range cn {
+		for range cn2 {
 			sub.Deregister("xxx-2")
 			return
 		}
 	}()
-
 	// expecting outbound messages
 	var wg sync.WaitGroup
 	wg.Add(msgCount * 2)
@@ -106,6 +104,9 @@ func TestHandleStream(t *testing.T) {
 	}()
 
 	go func() {
+		// sleep so setup will be finished
+		time.Sleep(10 * time.Millisecond)
+
 		// sending 3 messages in the stream channel
 		nm := NetworkMessage{
 			Msg: Message{
@@ -119,14 +120,12 @@ func TestHandleStream(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		ws.OutboundSubject().Notify(nm)
-		time.Sleep(10 * time.Millisecond)
+		go ws.OutboundSubject().Notify(nm)
 
 		nm.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
-		ws.OutboundSubject().Notify(nm)
-		time.Sleep(10 * time.Millisecond)
+		go ws.OutboundSubject().Notify(nm)
 		nm.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}

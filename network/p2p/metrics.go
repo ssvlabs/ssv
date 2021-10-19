@@ -8,29 +8,26 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"strings"
+	"time"
 )
 
 var (
 	metricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:network:all_connected_peers",
-		Help: "Count connected peers for a validator",
+		Help: "Count connected peers",
 	})
-	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peers_identity",
-		Help: "Count connected peers for a validator",
-	}, []string{"pubKey", "v"})
 	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:connected_peers",
 		Help: "Count connected peers for a validator",
 	}, []string{"pubKey"})
-	metricsNetMsgsInbound = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:net_messages_inbound",
-		Help: "Count incoming network messages",
-	}, []string{"pubKey", "type", "signer"})
-	metricsIBFTDecidedMsgsOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:ibft_decided_messages_outbound",
-		Help: "Count IBFT decided messages outbound",
-	}, []string{"pubKey", "seq"})
+	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:peers_identity",
+		Help: "Peers identity",
+	}, []string{"pubKey", "v", "pid"})
+	metricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:peer_last_msg",
+		Help: "Timestamps of last messages",
+	}, []string{"pid"})
 )
 
 func init() {
@@ -40,13 +37,10 @@ func init() {
 	if err := prometheus.Register(metricsPeersIdentity); err != nil {
 		log.Println("could not register prometheus collector")
 	}
+	if err := prometheus.Register(metricsPeerLastMsg); err != nil {
+		log.Println("could not register prometheus collector")
+	}
 	if err := prometheus.Register(metricsConnectedPeers); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsNetMsgsInbound); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsIBFTDecidedMsgsOutbound); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
@@ -80,9 +74,12 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 func reportPeerIdentity(n *p2pNetwork, pid string) {
 	ua := n.peersIndex.GetPeerData(pid, UserAgentKey)
 	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua))
-
 	uaParts := strings.Split(ua, ":")
 	if len(uaParts) > 2 {
-		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1]).Set(1)
+		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1], pid).Set(1)
 	}
+}
+
+func reportLastMsg(pid string) {
+	metricsPeerLastMsg.WithLabelValues(pid).Set(float64(time.Now().Unix()))
 }

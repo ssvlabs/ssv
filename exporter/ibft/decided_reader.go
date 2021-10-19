@@ -66,10 +66,8 @@ func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 
 // Sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *decidedReader) Sync() error {
-	if !r.network.IsSubscribeToValidatorNetwork(r.validatorShare.PublicKey) {
-		if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-			return errors.Wrap(err, "failed to subscribe topic")
-		}
+	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	// wait for network setup (subscribe to topic)
 	var netWaitGroup sync.WaitGroup
@@ -93,10 +91,8 @@ func (r *decidedReader) Sync() error {
 
 // Start starts to listen to decided messages
 func (r *decidedReader) Start() error {
-	if !r.network.IsSubscribeToValidatorNetwork(r.validatorShare.PublicKey) {
-		if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-			return errors.Wrap(err, "failed to subscribe topic")
-		}
+	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
 	r.logger.Debug("starting to read decided messages")
@@ -217,8 +213,11 @@ func validateMsg(msg *proto.SignedMessage, identifier string) error {
 
 func newDecidedNetworkMsg(msg *proto.SignedMessage, pk string) api.NetworkMessage {
 	return api.NetworkMessage{Msg: api.Message{
-		Type:   api.TypeDecided,
-		Filter: api.MessageFilter{PublicKey: pk, From: int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber)},
-		Data:   []*proto.SignedMessage{msg},
+		Type: api.TypeDecided,
+		Filter: api.MessageFilter{
+			PublicKey: pk,
+			From:      int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber),
+			Role: api.RoleAttester},
+		Data: []*proto.SignedMessage{msg},
 	}, Conn: nil}
 }

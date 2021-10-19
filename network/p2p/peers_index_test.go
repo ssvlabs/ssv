@@ -7,6 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 )
@@ -50,7 +51,7 @@ func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.H
 	require.NoError(t, err)
 	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
 	require.NoError(t, err)
-	pi := NewPeersIndex(host, ids)
+	pi := NewPeersIndex(host, ids, zap.L())
 
 	return host, pi
 }

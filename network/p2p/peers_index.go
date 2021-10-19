@@ -36,11 +36,12 @@ type peersIndex struct {
 }
 
 // NewPeersIndex creates a new instance
-func NewPeersIndex(host host.Host, ids *identify.IDService) PeersIndex {
+func NewPeersIndex(host host.Host, ids *identify.IDService, logger *zap.Logger) PeersIndex {
 	pi := peersIndex{
-		host:  host,
-		ids:   ids,
-		index: new(sync.Map),
+		host:   host,
+		ids:    ids,
+		index:  new(sync.Map),
+		logger: logger,
 	}
 
 	return &pi
@@ -54,7 +55,7 @@ func (pi *peersIndex) Run() {
 	conns := pi.host.Network().Conns()
 	for _, conn := range conns {
 		if err := pi.indexPeerConnection(conn); err != nil {
-			pi.logger.Warn("failed to report peer identity", zap.String("peer", conn.RemotePeer().String()))
+			pi.logger.Warn("failed to report peer identity")
 		}
 	}
 }
@@ -69,7 +70,10 @@ func (pi *peersIndex) GetPeerData(pid, key string) string {
 	if !ok {
 		return ""
 	}
-	return data[key]
+	if res, ok := data[key]; ok {
+		return res
+	}
+	return ""
 }
 
 // indexPeerConnection indexes the given peer / connection
