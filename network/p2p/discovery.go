@@ -382,6 +382,8 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 		//log.Print("-----TEST same id error ---") TODO need to add log with trace level
 		return nil
 	}
+	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
+
 	if n.peers.IsBad(info.ID) {
 		return errors.New("refused to connect to bad peer")
 	}
@@ -389,11 +391,11 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	defer cancel()
 
 	if err := n.host.Connect(ctx, info); err != nil {
-		//s.Peers().Scorers().BadResponsesScorer().Increment(info.ID)
-		//log.Printf("TEST peer %v connect error ------------ %v", info, err) TODO need to add log with trace level
+		n.logger.Warn("failed to connect to peer", zap.String("peerID", info.ID.String()), zap.Error(err))
 		return err
 	}
-	//log.Print("Connected to peer!!!!  ", info) TODO need to add log with trace level
+	n.logger.Debug("connected to peer", zap.String("peerID", info.ID.String()))
+
 	return nil
 }
 
