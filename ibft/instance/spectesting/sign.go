@@ -29,7 +29,9 @@ type testKM struct {
 }
 
 func newTestKM() beacon.KeyManager {
-	return &testKM{}
+	return &testKM{
+		keys: make(map[string]*bls.SecretKey),
+	}
 }
 
 func (km *testKM) AddShare(shareKey *bls.SecretKey) error {

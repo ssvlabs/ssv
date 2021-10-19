@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
@@ -9,11 +10,27 @@ import (
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 )
+
+type testSigner struct {
+}
+
+func newTestSigner() beacon.KeyManager {
+	return &testSigner{}
+}
+
+func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	return nil, nil
+}
 
 func TestChangeRoundTimer(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
@@ -42,6 +59,7 @@ func TestChangeRoundTimer(t *testing.T) {
 		ValueCheck: bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(),
+		signer:     newTestSigner(),
 	}
 	go instance.startRoundTimerLoop()
 	instance.initialized = true

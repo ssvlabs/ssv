@@ -187,6 +187,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Logger:         zaptest.NewLogger(t),
 		network:        local.NewLocalNetwork(),
 		LeaderSelector: leader,
+		signer:         newTestSigner(),
 	}
 
 	// test happy flow

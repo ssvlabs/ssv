@@ -106,7 +106,7 @@ func TestAuthorizeMsg(t *testing.T) {
 			},
 			[]uint64{1},
 			[]*bls.SecretKey{sks[1]},
-			_byteArray("83ffa7e8e65a99fdff0bff0384d4abeee3e79023faceb7973893c541bd6b67f068d10a9986c9dc55f58d421d5f78b83f144c3f191f51cb6d0d655fa87184693329ef885aea1e7070c5ce76500dc86ac16e322d4298386aa330b88d90c2c5121d"),
+			_byteArray("90d44ba2e926c07a71086d3edd04d433746a80335c828f415c0dcb505a1357a454e94338a2139b201d031e4aa6294f3110caa5f2f9ecdd3727fcc9b3ea733e1819993ba06d175cfc55525515d46ef035d1c8bf5c9dab7536b51d936708aeaa22"),
 			"could not verify message signature",
 		},
 	}

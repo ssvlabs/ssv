@@ -47,7 +47,6 @@ func constructDialOptions(
 		grpc_opentracing.UnaryClientInterceptor(),
 		grpc_prometheus.UnaryClientInterceptor,
 		grpc_retry.UnaryClientInterceptor(),
-		grpcutils.LogGRPCRequests,
 	}
 
 	dialOpts := []grpc.DialOption{
@@ -60,7 +59,6 @@ func constructDialOptions(
 		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 		grpc.WithUnaryInterceptor(middleware.ChainUnaryClient(interceptors...)),
 		grpc.WithChainStreamInterceptor(
-			grpcutils.LogGRPCStream,
 			grpc_opentracing.StreamClientInterceptor(),
 			grpc_prometheus.StreamClientInterceptor,
 			grpc_retry.StreamClientInterceptor(),

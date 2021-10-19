@@ -44,10 +44,14 @@ func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, sh
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not create share from event")
 	}
+	if share == nil {
+		return nil, nil, errors.New("could not decode share key from validator added event")
+	}
 	return validatorShare, share, nil
 }
 
-// ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share
+// ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share.
+// share could return nil in case operator key is not present/ different
 func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, *bls.SecretKey, error) {
 	validatorShare := validatorstorage.Share{}
 
@@ -76,11 +80,6 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 		}
 	}
 	validatorShare.Committee = ibftCommittee
-
-	// not found
-	if shareKey == nil {
-		return nil, nil, errors.New("could not decode share secret key")
-	}
 
 	return &validatorShare, shareKey, nil
 }
