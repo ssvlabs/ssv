@@ -51,7 +51,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
 		}
-		signedAttestation, r, e := v.beacon.SignAttestation(s, duty, pk.Serialize())
+		signedAttestation, r, e := v.signer.SignAttestation(s, duty, pk.Serialize())
 		if e != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}

@@ -37,9 +37,6 @@ type Beacon interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error)
 
-	// SignAttestation signs the given attestation
-	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
-
 	// SubmitAttestation submit the attestation to the node
 	SubmitAttestation(attestation *spec.Attestation) error
 
@@ -47,12 +44,17 @@ type Beacon interface {
 	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
 }
 
+// KeyManager is an interface responsible for all key manager functions
 type KeyManager interface {
 	Signer
 	// AddShare saves a share key
 	AddShare(shareKey *bls.SecretKey) error
 }
 
+// Signer is an interface responsible for all signing operations
 type Signer interface {
+	// SignIBFTMessage signs a network iBFT msg
 	SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error)
+	// SignAttestation signs the given attestation
+	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }

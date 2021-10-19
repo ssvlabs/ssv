@@ -120,7 +120,7 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
 	return ibft2.NewInstance(opts).(*ibft2.Instance)
 }
 
-// TestShares generates test nodes for SSV
+// TestSharesAndSigner generates test nodes for SSV
 func TestSharesAndSigner() (map[uint64]*storage.Share, beacon.KeyManager) {
 	shares := map[uint64]*storage.Share{
 		1: {
@@ -146,10 +146,18 @@ func TestSharesAndSigner() (map[uint64]*storage.Share, beacon.KeyManager) {
 	}
 
 	km := newTestKM()
-	km.AddShare(TestSKs()[0])
-	km.AddShare(TestSKs()[1])
-	km.AddShare(TestSKs()[2])
-	km.AddShare(TestSKs()[3])
+	if err := km.AddShare(TestSKs()[0]); err != nil {
+		panic(err)
+	}
+	if err := km.AddShare(TestSKs()[1]); err != nil {
+		panic(err)
+	}
+	if err := km.AddShare(TestSKs()[2]); err != nil {
+		panic(err)
+	}
+	if err := km.AddShare(TestSKs()[3]); err != nil {
+		panic(err)
+	}
 	return shares, km
 }
 

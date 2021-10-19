@@ -81,9 +81,12 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 
 	signerWallet, storage, err := openOrCreateWallet(opt.DB)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create signer")
+		return nil, errors.WithMessage(err, "failed to create signer wallet")
 	}
 	signer, err := newBeaconSigner(signerWallet, storage, core.PraterNetwork)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to create signer")
+	}
 
 	_client := &goClient{
 		ctx:            opt.Context,

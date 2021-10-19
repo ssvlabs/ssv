@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/controller"
@@ -72,6 +73,10 @@ func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
 
 func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
 	return nil, nil
+}
+
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	return nil, nil, nil
 }
 
 func db() collections.Iibft {
