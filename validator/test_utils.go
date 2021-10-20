@@ -175,6 +175,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
 	require.NoError(t, ret.ibfts[beacon.RoleTypeAttester].Init())
 	ret.valueCheck = valcheck.New()
+	ret.signer = ret.beacon
 
 	// nodes
 	ret.network = local.NewLocalNetwork()

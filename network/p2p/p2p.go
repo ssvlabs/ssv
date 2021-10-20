@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/prysmaticlabs/prysm/async"
 	"net"
 	"strings"
