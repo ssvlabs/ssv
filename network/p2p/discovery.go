@@ -385,6 +385,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
 
 	if n.peers.IsBad(info.ID) {
+		n.logger.Warn("bad peer", zap.String("peerID", info.ID.String()))
 		return errors.New("refused to connect to bad peer")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -412,7 +413,7 @@ func (n *p2pNetwork) listenForNewNodes() {
 		if n.isPeerAtLimit(false /* inbound */) {
 			// Pause the main loop for a period to stop looking
 			// for new peers.
-			//log.Trace("Not looking for peers, at peer limit")
+			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
 			continue
 		}
