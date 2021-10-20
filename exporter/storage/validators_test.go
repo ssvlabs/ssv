@@ -71,7 +71,7 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 	})
 
 	t.Run("create and get multiple validators", func(t *testing.T) {
-		i, err := storage.(*exporterStorage).nextIndex(validatorsPrefix)
+		i, err := storage.(*exporterStorage).nextIndex(validatorsPrefix())
 		require.NoError(t, err)
 
 		vis := []ValidatorInformation{

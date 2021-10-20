@@ -8,9 +8,9 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	validatorsPrefix = []byte("validators")
-)
+func validatorsPrefix() []byte {
+	return []byte("validators")
+}
 
 // ValidatorInformation represents a validator
 type ValidatorInformation struct {
@@ -41,7 +41,7 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 	es.validatorsLock.RLock()
 	defer es.validatorsLock.RUnlock()
 
-	objs, err := es.db.GetAllByCollection(append(storagePrefix, validatorsPrefix...))
+	objs, err := es.db.GetAllByCollection(append(storagePrefix(), validatorsPrefix()...))
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,12 @@ func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*Val
 	es.validatorsLock.RLock()
 	defer es.validatorsLock.RUnlock()
 
-	obj, found, err := es.db.Get(storagePrefix, validatorKey(validatorPubKey))
+	return es.getValidatorInformationNotSafe(validatorPubKey)
+}
+
+// GetValidatorInformation returns information of the given validator by public key
+func (es *exporterStorage) getValidatorInformationNotSafe(validatorPubKey string) (*ValidatorInformation, bool, error) {
+	obj, found, err := es.db.Get(storagePrefix(), validatorKey(validatorPubKey))
 	if !found {
 		return nil, found, nil
 	}
@@ -76,14 +81,13 @@ func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*Val
 
 // SaveValidatorInformation saves validator information by its public key
 func (es *exporterStorage) SaveValidatorInformation(validatorInformation *ValidatorInformation) error {
-	info, found, err := es.GetValidatorInformation(validatorInformation.PublicKey)
+	es.validatorsLock.Lock()
+	defer es.validatorsLock.Unlock()
+
+	info, found, err := es.getValidatorInformationNotSafe(validatorInformation.PublicKey)
 	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
-
-	// lock for writing
-	es.validatorsLock.Lock()
-	defer es.validatorsLock.Unlock()
 
 	if found {
 		es.logger.Debug("validator already exist",
@@ -92,7 +96,7 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 		// TODO: update validator information (i.e. change operator)
 		return nil
 	}
-	validatorInformation.Index, err = es.nextIndex(validatorsPrefix)
+	validatorInformation.Index, err = es.nextIndex(validatorsPrefix())
 	if err != nil {
 		return errors.Wrap(err, "could not calculate next validator index")
 	}
@@ -123,12 +127,12 @@ func (es *exporterStorage) saveValidatorNotSafe(val *ValidatorInformation) error
 	if err != nil {
 		return errors.Wrap(err, "could not marshal validator information")
 	}
-	return es.db.Set(storagePrefix, validatorKey(val.PublicKey), raw)
+	return es.db.Set(storagePrefix(), validatorKey(val.PublicKey), raw)
 }
 
 func validatorKey(pubKey string) []byte {
 	return bytes.Join([][]byte{
-		validatorsPrefix[:],
+		validatorsPrefix(),
 		[]byte(pubKey),
 	}, []byte("/"))
 }
