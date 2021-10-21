@@ -79,7 +79,7 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger = logger.With(zap.String("name", autoClient.Name()), zap.String("address", autoClient.Address()))
 	logger.Info("successfully connected to beacon client")
 
-	signerWallet, storage, err := openOrCreateWallet(opt.DB)
+	signerWallet, storage, err := openOrCreateWallet(opt.DB, core.NetworkFromString(opt.Network))
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create signer wallet")
 	}

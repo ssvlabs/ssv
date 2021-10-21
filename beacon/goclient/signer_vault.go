@@ -8,8 +8,8 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
-func openOrCreateWallet(db basedb.IDb) (core.Wallet, *signerStorage, error) {
-	signerStore := newSignerStorage(db)
+func openOrCreateWallet(db basedb.IDb, network core.Network) (core.Wallet, *signerStorage, error) {
+	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	vault, err := eth2keymanager.NewKeyVault(options)
