@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"net"
 	"strings"
 	"sync"
@@ -87,7 +88,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		psSubscribedTopics: make(map[string]bool),
 		psTopicsLock:       &sync.RWMutex{},
 		reportLastMsg:      cfg.ReportLastMsg,
-fork:            cfg.Fork,
+		fork:               cfg.Fork,
 	}
 
 	var _ipAddr net.IP
@@ -373,7 +374,7 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 			if n.reportLastMsg && len(msg.ReceivedFrom) > 0 {
 				reportLastMsg(msg.ReceivedFrom.String())
 			}
-			n.propagateSignedMsg(&cm)
+			n.propagateSignedMsg(cm)
 		}
 	}
 }
