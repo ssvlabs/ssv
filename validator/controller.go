@@ -198,7 +198,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.Metadata = metadata
-		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
+		if err := c.collection.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 			return err
 		}
 		if err := c.startValidator(v); err != nil {
