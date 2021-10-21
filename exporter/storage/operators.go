@@ -33,7 +33,7 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 	es.operatorsLock.RLock()
 	defer es.operatorsLock.RUnlock()
 
-	objs, err := es.db.GetAllByCollection(append(storagePrefix, operatorsPrefix...))
+	objs, err := es.db.GetAllByCollection(append(storagePrefix(), operatorsPrefix...))
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*Opera
 
 // GetOperatorInformation returns information of the given operator by public key
 func (es *exporterStorage) getOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
-	obj, found, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
+	obj, found, err := es.db.Get(storagePrefix(), operatorKey(operatorPubKey))
 	if !found {
 		return nil, found, nil
 	}
@@ -96,7 +96,7 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
 	}
-	return es.db.Set(storagePrefix, operatorKey(operatorInformation.PublicKey), raw)
+	return es.db.Set(storagePrefix(), operatorKey(operatorInformation.PublicKey), raw)
 }
 
 func operatorKey(pubKey string) []byte {

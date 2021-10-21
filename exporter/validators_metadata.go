@@ -28,7 +28,7 @@ func (exp *exporter) warmupValidatorsMetaData() error {
 		exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 		return err
 	}
-	// reporting on warmup to fill statuses of validators w/o metadata
+	//// reporting on warmup to fill statuses of validators w/o metadata
 	for _, share := range shares {
 		validator.ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, exp.logger)
 	}
