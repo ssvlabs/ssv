@@ -5,8 +5,10 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math"
 )
 
 // ValidatorMetadataStorage interface for validator metadata
@@ -21,9 +23,22 @@ type ValidatorMetadata struct {
 	Index   spec.ValidatorIndex `json:"index"` // pointer in order to support nil
 }
 
+// Equals returns true if the given metadata is equal to current
+func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
+	return other != nil &&
+		m.Status == other.Status &&
+		m.Index == other.Index &&
+		m.Balance == other.Balance
+}
+
+// Pending returns true if the validator is pending
+func (m *ValidatorMetadata) Pending() bool {
+	return m.Status.IsPending()
+}
+
 // Activated returns true if the validator is not unknown. It might be pending activation or active
 func (m *ValidatorMetadata) Activated() bool {
-	return m.Status.HasActivated()
+	return m.Status.HasActivated() || m.Status.IsActive() || m.Status.IsAttesting()
 }
 
 // Exiting returns true if the validator is existing or exited
@@ -61,7 +76,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 			onUpdated(pk, meta)
 		}
 		logger.Debug("managed to update validator metadata",
-			zap.String("pk", pk), zap.Any("metadata", *meta))
+			zap.String("pk", pk), zap.Any("metadata", meta))
 	}
 	if len(errs) > 0 {
 		logger.Error("could not process validators returned from beacon",
@@ -104,4 +119,37 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 		bc.ExtendIndexMap(index, v.Validator.PublicKey)
 	}
 	return ret, nil
+}
+
+// UpdateValidatorsMetadataBatch updates the given public keys in batches
+func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
+	queue tasks.Queue,
+	collection ValidatorMetadataStorage,
+	bc Beacon,
+	onUpdated OnUpdated,
+	batchSize int) {
+	batch(pubKeys, queue, func(pks [][]byte) func() error {
+		return func() error {
+			return UpdateValidatorsMetadata(pks, collection, bc, onUpdated)
+		}
+	}, batchSize)
+}
+
+type batchTask func(pks [][]byte) func() error
+
+func batch(pubKeys [][]byte, queue tasks.Queue, task batchTask, batchSize int) {
+	n := float64(len(pubKeys))
+	// in case the amount of public keys is lower than the batch size
+	batchSize = int(math.Min(n, float64(batchSize)))
+	batches := int(math.Ceil(n / float64(batchSize)))
+	start := 0
+	end := int(math.Min(n, float64(batchSize)))
+
+	for i := 0; i < batches; i++ {
+		// run task
+		queue.Queue(task(pubKeys[start:end]))
+		// reset start and end
+		start = end
+		end = int(math.Min(n, float64(start+batchSize)))
+	}
 }

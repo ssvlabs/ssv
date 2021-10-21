@@ -27,59 +27,28 @@ func initBls() {
 	})
 }
 
-func TestExporter_ProcessIncomingExportRequests(t *testing.T) {
-	l := zap.L()
+func TestExporter_handleQueryRequests(t *testing.T) {
 	exp, err := newMockExporter()
-
 	require.NoError(t, err)
-	incoming := pubsub.NewSubject(l)
-	cnIn, err := incoming.Register("TestExporter_ProcessIncomingExportReq")
-	require.NoError(t, err)
-	defer incoming.Deregister("TestExporter_ProcessIncomingExportReq")
 
-	outbound := pubsub.NewSubject(l)
-	cnOut, err := outbound.Register("TestExporter_ProcessIncomingExportReq")
-	require.NoError(t, err)
-	defer outbound.Deregister("TestExporter_ProcessIncomingExportReq")
+	netMsg := api.NetworkMessage{
+		Msg: api.Message{
+			Type:   api.TypeValidator,
+			Filter: api.MessageFilter{From: 0},
+		},
+		Err:  nil,
+		Conn: nil,
+	}
+	exp.handleQueryRequests(&netMsg)
+	require.Equal(t, api.TypeValidator, netMsg.Msg.Type)
 
-	var wg sync.WaitGroup
-	go exp.processIncomingExportRequests(cnIn, outbound)
+	netMsg.Msg.Type = api.TypeOperator
+	exp.handleQueryRequests(&netMsg)
+	require.Equal(t, api.TypeOperator, netMsg.Msg.Type)
 
-	wg.Add(3)
-	go func() {
-		netMsg := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeValidator,
-				Filter: api.MessageFilter{From: 0},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		cnIn <- netMsg
-		m := <-cnOut
-		nm, ok := m.(api.NetworkMessage)
-		require.True(t, ok)
-		require.Equal(t, api.TypeValidator, nm.Msg.Type)
-		wg.Done()
-
-		netMsg.Msg.Type = api.TypeOperator
-		cnIn <- netMsg
-		m = <-cnOut
-		nm, ok = m.(api.NetworkMessage)
-		require.True(t, ok)
-		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		wg.Done()
-
-		netMsg.Msg.Type = "foo"
-		cnIn <- netMsg
-		m = <-cnOut
-		nm, ok = m.(api.NetworkMessage)
-		require.True(t, ok)
-		require.Equal(t, api.TypeError, nm.Msg.Type)
-		wg.Done()
-	}()
-
-	wg.Wait()
+	netMsg.Msg.Type = "foo"
+	exp.handleQueryRequests(&netMsg)
+	require.Equal(t, api.TypeError, netMsg.Msg.Type)
 }
 
 func TestExporter_ListenToEth1Events(t *testing.T) {
@@ -161,7 +130,7 @@ func newMockExporter() (*exporter, error) {
 	}
 
 	adapter := api.NewAdapterMock(logger)
-	ws := api.NewWsServer(logger, adapter, nil)
+	ws := api.NewWsServer(logger, adapter, nil, nil)
 
 	opts := Options{
 		Ctx:        context.Background(),
@@ -174,6 +143,7 @@ func newMockExporter() (*exporter, error) {
 		WsAPIPort:  0,
 	}
 	e := New(opts)
+	ws.UseQueryHandler(e.(*exporter).handleQueryRequests)
 
 	return e.(*exporter), nil
 }

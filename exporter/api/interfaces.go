@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/pubsub"
 	"net"
 	"net/http"
 	"time"
@@ -21,12 +20,8 @@ type NetworkMessage struct {
 	Conn Connection
 }
 
-// WebSocketServer is the interface exposed by this package
-type WebSocketServer interface {
-	Start(addr string) error
-	IncomingSubject() pubsub.Subscriber
-	OutboundSubject() pubsub.Publisher
-}
+// QueryMessageHandler handles the given message
+type QueryMessageHandler func(nm *NetworkMessage)
 
 // EndPointHandler is an interface to abstract the actual websocket handler implementation
 type EndPointHandler = func(conn Connection)

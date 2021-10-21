@@ -90,10 +90,8 @@ func New(opt Options) *Validator {
 
 // Start validator
 func (v *Validator) Start() error {
-	if !v.network.IsSubscribeToValidatorNetwork(v.Share.PublicKey) {
-		if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
-			return errors.Wrap(err, "failed to subscribe topic")
-		}
+	if err := v.network.SubscribeToValidatorNetwork(v.Share.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
 	v.startOnce.Do(func() {
@@ -113,9 +111,6 @@ func (v *Validator) Start() error {
 
 		v.logger.Debug("validator started")
 	})
-
-	//ReportValidatorStatusReady(v.Share.PublicKey.SerializeToHexStr())
-	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, v.logger)
 
 	return nil
 }

@@ -80,6 +80,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
+		cfg.P2pNetworkConfig.ReportLastMsg = true
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
@@ -125,7 +126,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Network = network
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
-		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), http.NewServeMux())
+		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), nil, http.NewServeMux())
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData

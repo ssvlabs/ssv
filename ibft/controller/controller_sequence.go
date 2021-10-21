@@ -40,7 +40,7 @@ func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 	}
 
 	if opts.RequireMinPeers {
-		if err := i.waitForMinPeers(2, true); err != nil {
+		if err := i.waitForMinPeers(1, true); err != nil {
 			return err
 		}
 	}
@@ -69,15 +69,16 @@ func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartIn
 	}
 
 	return &instance.InstanceOptions{
-		Logger:         opts.Logger,
-		ValidatorShare: i.ValidatorShare,
-		Network:        i.network,
-		Queue:          i.msgQueue,
-		ValueCheck:     opts.ValueCheck,
-		LeaderSelector: leaderSelc,
-		Config:         i.instanceConfig,
-		Lambda:         i.Identifier,
-		SeqNumber:      opts.SeqNumber,
-		Fork:           i.fork.InstanceFork(),
+		Logger:          opts.Logger,
+		ValidatorShare:  i.ValidatorShare,
+		Network:         i.network,
+		Queue:           i.msgQueue,
+		ValueCheck:      opts.ValueCheck,
+		LeaderSelector:  leaderSelc,
+		Config:          i.instanceConfig,
+		Lambda:          i.Identifier,
+		SeqNumber:       opts.SeqNumber,
+		Fork:            i.fork.InstanceFork(),
+		RequireMinPeers: opts.RequireMinPeers,
 	}, nil
 }

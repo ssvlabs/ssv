@@ -3,6 +3,7 @@ package ibft
 import (
 	"context"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
@@ -10,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/validator/storage"
@@ -27,6 +29,8 @@ type DecidedReaderOptions struct {
 	Network        network.Network
 	Config         *proto.InstanceConfig
 	ValidatorShare *storage.Share
+
+	Out pubsub.Publisher
 }
 
 // decidedReader reads decided messages history
@@ -37,6 +41,8 @@ type decidedReader struct {
 
 	config         *proto.InstanceConfig
 	validatorShare *storage.Share
+
+	out pubsub.Publisher
 
 	identifier []byte
 }
@@ -51,6 +57,7 @@ func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 		network:        opts.Network,
 		config:         opts.Config,
 		validatorShare: opts.ValidatorShare,
+		out:            opts.Out,
 		identifier: []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
 			beacon.RoleTypeAttester.String())),
 	}
@@ -59,10 +66,8 @@ func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 
 // Sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *decidedReader) Sync() error {
-	if !r.network.IsSubscribeToValidatorNetwork(r.validatorShare.PublicKey) {
-		if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-			return errors.Wrap(err, "failed to subscribe topic")
-		}
+	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	// wait for network setup (subscribe to topic)
 	var netWaitGroup sync.WaitGroup
@@ -86,10 +91,8 @@ func (r *decidedReader) Sync() error {
 
 // Start starts to listen to decided messages
 func (r *decidedReader) Start() error {
-	if !r.network.IsSubscribeToValidatorNetwork(r.validatorShare.PublicKey) {
-		if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-			return errors.Wrap(err, "failed to subscribe topic")
-		}
+	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
 	r.logger.Debug("starting to read decided messages")
@@ -115,25 +118,28 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 			logger.Debug("received invalid sequence")
 			continue
 		}
-		if err := r.handleNewDecidedMessage(msg); err != nil {
+		if saved, err := r.handleNewDecidedMessage(msg); err != nil {
 			logger.Error("could not handle decided message")
+			continue
+		} else if saved {
+			go r.out.Notify(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 		}
 	}
 }
 
 // handleNewDecidedMessage saves an incoming (valid) decided message
-func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) error {
+func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool, error) {
 	logger := r.logger.With(messageFields(msg)...)
 	if decided, found, _ := r.storage.GetDecided(r.identifier, msg.Message.SeqNumber); found && decided != nil {
 		logger.Debug("received known sequence")
-		return nil
+		return false, nil
 	}
 	if err := r.storage.SaveDecided(msg); err != nil {
-		return errors.Wrap(err, "could not save decided")
+		return false, errors.Wrap(err, "could not save decided")
 	}
 	logger.Debug("decided saved")
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
-	return r.checkHighestDecided(msg)
+	return true, r.checkHighestDecided(msg)
 }
 
 // checkHighestDecided check if highest decided should be updated
@@ -203,4 +209,15 @@ func validateMsg(msg *proto.SignedMessage, identifier string) error {
 		auth.ValidateLambdas([]byte(identifier)),
 	)
 	return p.Run(msg)
+}
+
+func newDecidedNetworkMsg(msg *proto.SignedMessage, pk string) api.NetworkMessage {
+	return api.NetworkMessage{Msg: api.Message{
+		Type: api.TypeDecided,
+		Filter: api.MessageFilter{
+			PublicKey: pk,
+			From:      int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber),
+			Role: api.RoleAttester},
+		Data: []*proto.SignedMessage{msg},
+	}, Conn: nil}
 }

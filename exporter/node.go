@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -12,11 +13,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -114,6 +113,7 @@ func New(opts Options) Exporter {
 			Network:          opts.Network,
 			ValidatorStorage: validatorStorage,
 			IbftStorage:      &ibftStorage,
+			Out:              opts.WS.OutboundSubject(),
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
@@ -158,15 +158,7 @@ func (exp *exporter) Start() error {
 		return nil
 	}
 
-	go func() {
-		cn, err := exp.ws.IncomingSubject().Register("exporter-node")
-		if err != nil {
-			exp.logger.Error("could not register for incoming messages", zap.Error(err))
-		}
-		defer exp.ws.IncomingSubject().Deregister("exporter-node")
-
-		exp.processIncomingExportRequests(cn, exp.ws.OutboundSubject())
-	}()
+	exp.ws.UseQueryHandler(exp.handleQueryRequests)
 
 	go exp.triggerAllValidators()
 
@@ -177,6 +169,8 @@ func (exp *exporter) Start() error {
 	}()
 
 	go exp.startMainTopic()
+
+	go exp.reportOperators()
 
 	return exp.ws.Start(fmt.Sprintf(":%d", exp.wsAPIPort))
 }
@@ -204,32 +198,24 @@ func (exp *exporter) startMainTopic() {
 	}
 }
 
-// processIncomingExportRequests waits for incoming messages and
-func (exp *exporter) processIncomingExportRequests(incoming pubsub.SubjectChannel, outbound pubsub.Publisher) {
-	for raw := range incoming {
-		nm, ok := raw.(api.NetworkMessage)
-		if !ok {
-			exp.logger.Warn("could not parse export request message")
-			nm = api.NetworkMessage{Msg: api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}}
-		}
-		if nm.Err != nil {
-			nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
-		}
-		exp.logger.Debug("got incoming export request",
-			zap.String("type", string(nm.Msg.Type)))
-		switch nm.Msg.Type {
-		case api.TypeOperator:
-			handleOperatorsQuery(exp.logger, exp.storage, &nm)
-		case api.TypeValidator:
-			handleValidatorsQuery(exp.logger, exp.storage, &nm)
-		case api.TypeDecided:
-			handleDecidedQuery(exp.logger, exp.storage, exp.ibftStorage, &nm)
-		case api.TypeError:
-			handleErrorQuery(exp.logger, &nm)
-		default:
-			handleUnknownQuery(exp.logger, &nm)
-		}
-		outbound.Notify(nm)
+// handleQueryRequests waits for incoming messages and
+func (exp *exporter) handleQueryRequests(nm *api.NetworkMessage) {
+	if nm.Err != nil {
+		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
+	}
+	exp.logger.Debug("got incoming export request",
+		zap.String("type", string(nm.Msg.Type)))
+	switch nm.Msg.Type {
+	case api.TypeOperator:
+		handleOperatorsQuery(exp.logger, exp.storage, nm)
+	case api.TypeValidator:
+		handleValidatorsQuery(exp.logger, exp.storage, nm)
+	case api.TypeDecided:
+		handleDecidedQuery(exp.logger, exp.storage, exp.ibftStorage, nm)
+	case api.TypeError:
+		handleErrorQuery(exp.logger, nm)
+	default:
+		handleUnknownQuery(exp.logger, nm)
 	}
 }
 
@@ -316,6 +302,12 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
 	decidedReader := exp.getDecidedReader(validatorShare)
+
+	// start network reader
+	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
+	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
+
+	// sync decided
 	if err := tasks.Retry(func() error {
 		if err := decidedReader.Sync(); err != nil {
 			logger.Error("could not sync validator", zap.Error(err))
@@ -328,8 +320,6 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	}
 	logger.Debug("sync is done, starting to read network messages")
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
-	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
-	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
 	return nil
 }
 
@@ -340,6 +330,7 @@ func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ib
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
+		Out:            exp.ws.OutboundSubject(),
 	})
 }
 
@@ -352,10 +343,17 @@ func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reade
 	})
 }
 
-func (exp *exporter) updateMetadataTask(pks [][]byte) func() error {
-	return func() error {
-		return beacon.UpdateValidatorsMetadata(pks, exp.storage, exp.beacon, func(pk string, meta *beacon.ValidatorMetadata) {
-			validator.ReportValidatorStatus(pk, meta, exp.logger)
-		})
+func (exp *exporter) reportOperators() {
+	// TODO: change api maybe, limited to 1000 operators
+	operators, err := exp.storage.ListOperators(0, 1000)
+	if err != nil {
+		exp.logger.Error("could not get operators", zap.Error(err))
+	}
+	exp.logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	for _, op := range operators {
+		pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
+		metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
+		exp.logger.Debug("report operator", zap.String("pkHash", pkHash),
+			zap.String("name", op.Name), zap.Int64("index", op.Index))
 	}
 }

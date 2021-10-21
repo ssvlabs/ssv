@@ -41,10 +41,8 @@ func newIncomingMsgsReader(opts IncomingMsgsReaderOptions) Reader {
 }
 
 func (i *incomingMsgsReader) Start() error {
-	if !i.network.IsSubscribeToValidatorNetwork(i.publicKey) {
-		if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
-			return errors.Wrap(err, "failed to subscribe topic")
-		}
+	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
 	if err := i.waitForMinPeers(i.publicKey, 2); err != nil {

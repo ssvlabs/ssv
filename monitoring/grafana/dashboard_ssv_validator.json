@@ -233,613 +233,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
-      },
-      "id": 72,
-      "panels": [],
-      "title": "Decided Messages",
-      "type": "row"
-    },
-    {
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "auto",
-            "width": 130
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "red",
-                        "index": 0,
-                        "text": "failed"
-                      },
-                      "1": {
-                        "color": "green",
-                        "index": 1,
-                        "text": "signed"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 0,
-        "y": 8
-      },
-      "id": 74,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "8.0.4",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_decided_signers{instance=~\"$instance.*\",pubKey=\"$pubkey\",nodeId=\"1\"}",
-          "format": "table",
-          "interval": "",
-          "legendFormat": "{{seq}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Decided Messages (Node 1)",
-      "transformations": [
-        {
-          "id": "seriesToColumns",
-          "options": {
-            "byField": "seq"
-          }
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Value #A": {
-                "aggregations": [
-                  "lastNotNull"
-                ],
-                "operation": "aggregate"
-              },
-              "seq": {
-                "aggregations": [],
-                "operation": "groupby"
-              }
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "desc": true,
-                "field": "seq"
-              }
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true,
-              "lambda": true,
-              "nodeId": true,
-              "pubKey": true
-            },
-            "indexByName": {
-              "Time": 2,
-              "Value #A": 1,
-              "__name__": 3,
-              "instance": 4,
-              "job": 5,
-              "lambda": 6,
-              "nodeId": 7,
-              "pubKey": 8,
-              "seq": 0
-            },
-            "renameByName": {
-              "Value #A (lastNotNull)": "Status",
-              "seq": "Sequence"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "auto",
-            "width": 130
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "red",
-                        "index": 0,
-                        "text": "failed"
-                      },
-                      "1": {
-                        "color": "green",
-                        "index": 1,
-                        "text": "signed"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 4,
-        "y": 8
-      },
-      "id": 75,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "8.0.4",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_decided_signers{instance=~\"$instance.*\",pubKey=\"$pubkey\",nodeId=\"2\"}",
-          "format": "table",
-          "interval": "",
-          "legendFormat": "{{seq}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Decided Messages (Node 2)",
-      "transformations": [
-        {
-          "id": "seriesToColumns",
-          "options": {
-            "byField": "seq"
-          }
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Value #A": {
-                "aggregations": [
-                  "lastNotNull"
-                ],
-                "operation": "aggregate"
-              },
-              "seq": {
-                "aggregations": [],
-                "operation": "groupby"
-              }
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "desc": true,
-                "field": "seq"
-              }
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true,
-              "lambda": true,
-              "nodeId": true,
-              "pubKey": true
-            },
-            "indexByName": {
-              "Time": 2,
-              "Value #A": 1,
-              "__name__": 3,
-              "instance": 4,
-              "job": 5,
-              "lambda": 6,
-              "nodeId": 7,
-              "pubKey": 8,
-              "seq": 0
-            },
-            "renameByName": {
-              "Value #A (lastNotNull)": "Status",
-              "seq": "Sequence"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "auto",
-            "width": 130
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "red",
-                        "index": 0,
-                        "text": "failed"
-                      },
-                      "1": {
-                        "color": "green",
-                        "index": 1,
-                        "text": "signed"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 8,
-        "y": 8
-      },
-      "id": 76,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "8.0.4",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_decided_signers{instance=~\"$instance.*\",pubKey=\"$pubkey\",nodeId=\"3\"}",
-          "format": "table",
-          "interval": "",
-          "legendFormat": "{{seq}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Decided Messages (Node 3)",
-      "transformations": [
-        {
-          "id": "seriesToColumns",
-          "options": {
-            "byField": "seq"
-          }
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Value #A": {
-                "aggregations": [
-                  "lastNotNull"
-                ],
-                "operation": "aggregate"
-              },
-              "seq": {
-                "aggregations": [],
-                "operation": "groupby"
-              }
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "desc": true,
-                "field": "seq"
-              }
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true,
-              "lambda": true,
-              "nodeId": true,
-              "pubKey": true
-            },
-            "indexByName": {
-              "Time": 2,
-              "Value #A": 1,
-              "__name__": 3,
-              "instance": 4,
-              "job": 5,
-              "lambda": 6,
-              "nodeId": 7,
-              "pubKey": 8,
-              "seq": 0
-            },
-            "renameByName": {
-              "Value #A (lastNotNull)": "Status",
-              "seq": "Sequence"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": "${DS_PROMETHEUS}",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "center",
-            "displayMode": "auto",
-            "width": 130
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "red",
-                        "index": 0,
-                        "text": "failed"
-                      },
-                      "1": {
-                        "color": "green",
-                        "index": 1,
-                        "text": "signed"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 12,
-        "y": 8
-      },
-      "id": 77,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "8.0.4",
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_decided_signers{instance=~\"$instance.*\",pubKey=\"$pubkey\",nodeId=\"4\"}",
-          "format": "table",
-          "interval": "",
-          "legendFormat": "{{seq}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Decided Messages (Node 4)",
-      "transformations": [
-        {
-          "id": "seriesToColumns",
-          "options": {
-            "byField": "seq"
-          }
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Value #A": {
-                "aggregations": [
-                  "lastNotNull"
-                ],
-                "operation": "aggregate"
-              },
-              "seq": {
-                "aggregations": [],
-                "operation": "groupby"
-              }
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "desc": true,
-                "field": "seq"
-              }
-            ]
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true,
-              "lambda": true,
-              "nodeId": true,
-              "pubKey": true
-            },
-            "indexByName": {
-              "Time": 2,
-              "Value #A": 1,
-              "__name__": 3,
-              "instance": 4,
-              "job": 5,
-              "lambda": 6,
-              "nodeId": 7,
-              "pubKey": 8,
-              "seq": 0
-            },
-            "renameByName": {
-              "Value #A (lastNotNull)": "Status",
-              "seq": "Sequence"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "collapsed": false,
-      "datasource": null,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 43
+        "y": 16
       },
       "id": 56,
       "panels": [],
@@ -875,7 +269,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 17
       },
       "id": 42,
       "options": {
@@ -917,14 +311,29 @@
             {
               "options": {
                 "0": {
-                  "color": "green",
-                  "index": 1,
+                  "color": "gray",
+                  "index": 0,
                   "text": "IDLE"
                 },
                 "1": {
                   "color": "green",
-                  "index": 0,
+                  "index": 1,
                   "text": "Running"
+                },
+                "2": {
+                  "color": "yellow",
+                  "index": 2,
+                  "text": "Initializing"
+                },
+                "3": {
+                  "color": "green",
+                  "index": 3,
+                  "text": "Initialized"
+                },
+                "4": {
+                  "color": "red",
+                  "index": 4,
+                  "text": "Error"
                 }
               },
               "type": "value"
@@ -938,6 +347,10 @@
               {
                 "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           },
@@ -949,7 +362,7 @@
         "h": 6,
         "w": 6,
         "x": 8,
-        "y": 44
+        "y": 17
       },
       "id": 50,
       "options": {
@@ -1036,6 +449,10 @@
               {
                 "color": "grey",
                 "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
               }
             ]
           }
@@ -1046,7 +463,7 @@
         "h": 6,
         "w": 6,
         "x": 14,
-        "y": 44
+        "y": 17
       },
       "id": 46,
       "options": {
@@ -1106,7 +523,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 50
+        "y": 23
       },
       "id": 54,
       "options": {
@@ -1166,7 +583,7 @@
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 50
+        "y": 23
       },
       "id": 52,
       "options": {
@@ -1214,10 +631,6 @@
                 "value": null
               },
               {
-                "color": "green",
-                "value": 1
-              },
-              {
                 "color": "#EAB839",
                 "value": 4
               },
@@ -1242,7 +655,7 @@
         "h": 6,
         "w": 4,
         "x": 16,
-        "y": 50
+        "y": 23
       },
       "id": 48,
       "options": {

@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -18,12 +19,17 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
+const (
+	metadataBatchSize = 25
+)
+
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
 	DB                         basedb.IDb
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
+	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	ETHNetwork                 *core.Network
 	Network                    network.Network
 	Beacon                     beacon.Beacon
@@ -41,6 +47,7 @@ type IController interface {
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
+	UpdateValidatorMetaDataLoop()
 }
 
 // controller implements IController
@@ -53,6 +60,9 @@ type controller struct {
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
 	validatorsMap *validatorsMap
+
+	metadataUpdateQueue    tasks.Queue
+	metadataUpdateInterval time.Duration
 }
 
 // NewController creates a new validator controller instance
@@ -79,6 +89,9 @@ func NewController(options ControllerOptions) IController {
 			DB:                         options.DB,
 			Fork:                       options.Fork,
 		}),
+
+		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
+		metadataUpdateInterval: options.MetadataUpdateInterval,
 	}
 
 	if err := ctrl.initShares(options); err != nil {
@@ -179,13 +192,6 @@ func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 		if err := beacon.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
 			c.logger.Error("could not update all validators", zap.Error(err))
 		}
-		// once update is done -> update statuses
-		for _, pk := range pubKeys {
-			pkHex := hex.EncodeToString(pk)
-			if v, exist := c.GetValidator(pkHex); exist {
-				ReportValidatorStatus(pkHex, v.Share.Metadata, c.logger)
-			}
-		}
 	}
 }
 
@@ -217,9 +223,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
-		logger := c.logger.With(zap.String("pubKey", v.Share.PublicKey.SerializeToHexStr()))
 		if !v.Share.HasMetadata() {
-			logger.Warn("validator share doesn't have an index")
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
 		} else {
 			indices = append(indices, v.Share.Metadata.Index)
@@ -257,6 +261,7 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 			return errors.Wrap(err, "failed to create share")
 		}
 		if err := c.onNewShare(validatorShare); err != nil {
+			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return err
 		}
 		logger.Debug("new validator share was created and saved")
@@ -272,10 +277,23 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 
 // onMetadataUpdated is called when validator's metadata was updated
 func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata) {
+	if meta == nil {
+		return
+	}
 	if v, exist := c.GetValidator(pk); exist {
+		// update share object owned by the validator
+		// TODO: check if this updates running validators
+		if !v.Share.HasMetadata() {
+			v.Share.Metadata = meta
+			c.logger.Debug("metadata was updated", zap.String("pk", pk))
+		} else if !v.Share.Metadata.Equals(meta) {
+			v.Share.Metadata.Status = meta.Status
+			v.Share.Metadata.Balance = meta.Balance
+			c.logger.Debug("metadata was updated", zap.String("pk", pk))
+		}
 		if err := c.startValidator(v); err != nil {
 			c.logger.Error("could not start validator after metadata update",
-				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", *meta))
+				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 	}
 }
@@ -289,9 +307,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share) error {
 	} else if !updated {
 		logger.Warn("could not find validator metadata")
 	} else {
-		logger.Debug("validator metadata was updated",
-			zap.Uint64("index", uint64(share.Metadata.Index)))
-		ReportValidatorStatus(share.PublicKey.SerializeToHexStr(), share.Metadata, c.logger)
+		logger.Debug("validator metadata was updated")
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {
 		return errors.Wrap(err, "failed to save new share")
@@ -313,4 +329,26 @@ func (c *controller) startValidator(v *Validator) error {
 		return errors.Wrap(err, "could not start validator")
 	}
 	return nil
+}
+
+// UpdateValidatorMetaDataLoop updates metadata of validators in an interval
+func (c *controller) UpdateValidatorMetaDataLoop() {
+	go c.metadataUpdateQueue.Start()
+
+	for {
+		time.Sleep(c.metadataUpdateInterval)
+
+		shares, err := c.collection.GetAllValidatorsShare()
+		if err != nil {
+			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
+			continue
+		}
+		var pks [][]byte
+		for _, share := range shares {
+			pks = append(pks, share.PublicKey.Serialize())
+		}
+		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
+		beacon.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
+			c.beacon, c.onMetadataUpdated, metadataBatchSize)
+	}
 }

@@ -60,7 +60,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
 		return errors.Wrap(err, "failed to save validator information")
 	}
-	logger.Debug("validator information was saved")
+	logger.Debug("validator information was saved", zap.Any("value", *vi))
 
 	// TODO: aggregate validators in sync scenario
 	// otherwise the network will be overloaded with multiple messages
@@ -91,7 +91,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	if err != nil {
 		return err
 	}
-	l.Debug("managed to save operator information")
+	l.Debug("managed to save operator information", zap.Any("value", oi))
 
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,

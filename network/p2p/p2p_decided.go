@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strconv"
 )
 
 // BroadcastDecided broadcasts a decided instance with collected signatures
@@ -33,9 +32,6 @@ func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage
 			n.logger.Error("failed to publish on main topic")
 		}
 	}()
-
-	metricsIBFTDecidedMsgsOutbound.WithLabelValues(unwrapTopicName(topic.String()),
-		strconv.FormatUint(msg.Message.SeqNumber, 10)).Inc()
 
 	return topic.Publish(n.ctx, msgBytes)
 }

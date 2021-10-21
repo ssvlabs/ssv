@@ -2,10 +2,13 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -13,33 +16,21 @@ import (
 func TestHandleQuery(t *testing.T) {
 	logger := zap.L()
 	adapter := NewAdapterMock(logger).(*AdapterMock)
-	ws := NewWsServer(logger, adapter, nil).(*wsServer)
-
-	inCn, err := ws.IncomingSubject().Register("TestHandleQuery")
-	require.NoError(t, err)
-	defer ws.IncomingSubject().Deregister("TestHandleQuery")
 
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/24")
 	require.NoError(t, err)
 	conn := connectionMock{addr: ipAddr}
 
-	go func() {
-		// notify outbound using a bad struct -> should do nothing (except warning log)
-		ws.OutboundSubject().Notify(struct{ id string }{"bad-struct"})
-	}()
+	ws := NewWsServer(logger, adapter, func(nm *NetworkMessage) {
+		require.Equal(t, &conn, nm.Conn)
+		nm.Msg.Data = []storage.OperatorInformation{
+			{PublicKey: "pubkey1"},
+			{PublicKey: "pubkey2"},
+		}
+	}, nil).(*wsServer)
 
 	go func() {
-		for incoming := range inCn {
-			nm, ok := incoming.(NetworkMessage)
-			require.True(t, ok)
-			require.Equal(t, &conn, nm.Conn)
-			nm.Msg.Data = []storage.ValidatorInformation{
-				{PublicKey: "pubkey1"},
-				{PublicKey: "pubkey2"},
-			}
-			ws.OutboundSubject().Notify(nm)
-			return
-		}
+		ws.handleQuery(&conn)
 	}()
 
 	go func() {
@@ -51,35 +42,61 @@ func TestHandleQuery(t *testing.T) {
 		adapter.In <- msg
 	}()
 
-	go func() {
-		ws.handleQuery(&conn)
-	}()
-
 	<-adapter.Out
 }
 
 func TestHandleStream(t *testing.T) {
 	msgCount := 3
-	logger := zap.L()
+	logger := zaptest.NewLogger(t)
 	adapter := NewAdapterMock(logger).(*AdapterMock)
-	ws := NewWsServer(logger, adapter, nil).(*wsServer)
+	ws := NewWsServer(logger, adapter, nil, nil).(*wsServer)
 
 	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
 	require.NoError(t, err)
 	conn := connectionMock{addr: ipAddr}
+	go ws.handleStream(&conn)
 
+	_, ipAddr2, err := net.ParseCIDR("192.0.2.1/26")
+	require.NoError(t, err)
+	conn2 := connectionMock{addr: ipAddr2}
+	go ws.handleStream(&conn2)
+
+	sub, ok := ws.OutboundSubject().(pubsub.Subject)
+	require.True(t, ok)
+	// register a listener to count how many messages are passed on outbound subject
+	var outCnCount int64
+	var wgCn sync.WaitGroup
+	wgCn.Add(3)
+	cn1, err := sub.Register("xxx-1")
+	require.NoError(t, err)
+	go func() {
+		for range cn1 {
+			atomic.AddInt64(&outCnCount, int64(1))
+			wgCn.Done()
+		}
+	}()
+	cn2, err := sub.Register("xxx-2")
+	require.NoError(t, err)
+	// registers a dummy listener that de-registers
+	go func() {
+		for range cn2 {
+			sub.Deregister("xxx-2")
+			return
+		}
+	}()
 	// expecting outbound messages
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(msgCount * 2)
 	go func() {
 		i := 0
 		for {
 			<-adapter.Out
 			i++
-			if i >= msgCount {
-				if i > msgCount {
+			if i >= msgCount*2 {
+				if i > msgCount*2 {
 					t.Error("should not send too many requests")
 				}
+				wg.Done()
 				return
 			}
 			wg.Done()
@@ -87,6 +104,9 @@ func TestHandleStream(t *testing.T) {
 	}()
 
 	go func() {
+		// sleep so setup will be finished
+		time.Sleep(10 * time.Millisecond)
+
 		// sending 3 messages in the stream channel
 		nm := NetworkMessage{
 			Msg: Message{
@@ -100,26 +120,24 @@ func TestHandleStream(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		ws.OutboundSubject().Notify(nm)
+		go ws.OutboundSubject().Notify(nm)
 
-		time.Sleep(10 * time.Millisecond)
 		nm.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
-		ws.OutboundSubject().Notify(nm)
-
-		time.Sleep(10 * time.Millisecond)
+		go ws.OutboundSubject().Notify(nm)
 		nm.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
 		ws.OutboundSubject().Notify(nm)
-	}()
-
-	go func() {
-		ws.handleStream(&conn)
+		// let the message propagate
+		time.Sleep(10 * time.Millisecond)
 	}()
 
 	wg.Wait()
+	wgCn.Wait()
+
+	require.Equal(t, int64(msgCount), atomic.LoadInt64(&outCnCount))
 }
 
 type connectionMock struct {

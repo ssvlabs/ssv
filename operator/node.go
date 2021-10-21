@@ -42,29 +42,29 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork          core.Network
-	context             context.Context
-	validatorController validator.IController
-	logger              *zap.Logger
-	beacon              beacon.Beacon
-	net                 network.Network
-	storage             Storage
-	eth1Client          eth1.Client
-	dutyCtrl            duties.DutyController
-	fork                forks.Fork
+	ethNetwork     core.Network
+	context        context.Context
+	validatorsCtrl validator.IController
+	logger         *zap.Logger
+	beacon         beacon.Beacon
+	net            network.Network
+	storage        Storage
+	eth1Client     eth1.Client
+	dutyCtrl       duties.DutyController
+	fork           forks.Fork
 }
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
 	node := &operatorNode{
-		context:             opts.Context,
-		logger:              opts.Logger.With(zap.String("component", "operatorNode")),
-		validatorController: opts.ValidatorController,
-		ethNetwork:          *opts.ETHNetwork,
-		beacon:              opts.Beacon,
-		net:                 opts.Network,
-		eth1Client:          opts.Eth1Client,
-		storage:             NewOperatorNodeStorage(opts.DB, opts.Logger),
+		context:        opts.Context,
+		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
+		validatorsCtrl: opts.ValidatorController,
+		ethNetwork:     *opts.ETHNetwork,
+		beacon:         opts.Beacon,
+		net:            opts.Network,
+		eth1Client:     opts.Eth1Client,
+		storage:        NewOperatorNodeStorage(opts.DB, opts.Logger),
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
@@ -98,10 +98,11 @@ func (n *operatorNode) init(opts Options) error {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
-	n.validatorController.StartValidators()
+	n.validatorsCtrl.StartValidators()
 	if err := tasks.Retry(n.net.SubscribeToMainTopic, 3); err != nil {
 		n.logger.Error("failed to subscribe to main topic", zap.Error(err))
 	}
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	n.dutyCtrl.Start()
 
 	return nil
@@ -113,7 +114,7 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 
 	// sync past events
 	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset,
-		n.validatorController.ProcessEth1Event); err != nil {
+		n.validatorsCtrl.ProcessEth1Event); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	n.logger.Info("manage to sync contract events")
@@ -123,7 +124,7 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to register on contract events subject")
 	}
-	go n.validatorController.ListenToEth1Events(cnValidators)
+	go n.validatorsCtrl.ListenToEth1Events(cnValidators)
 
 	// starts the eth1 events subscription
 	err = n.eth1Client.Start()
