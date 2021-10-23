@@ -15,11 +15,13 @@ import (
 )
 
 const (
-	prefix         = "signer_data-"
-	walletPrefix   = prefix + "wallet-"
-	walletPath     = "wallet"
-	accountsPrefix = prefix + "accounts-"
-	accountsPath   = "accounts_%s"
+	prefix                = "signer_data-"
+	walletPrefix          = prefix + "wallet-"
+	walletPath            = "wallet"
+	accountsPrefix        = prefix + "accounts-"
+	accountsPath          = "accounts_%s"
+	highestAttPrefix      = prefix + "highest_att-"
+	highestProposalPrefix = prefix + "highest_prop-"
 )
 
 type signerStorage struct {
@@ -180,23 +182,71 @@ func (s *signerStorage) SetEncryptor(encryptor encryptor.Encryptor, password []b
 func (s *signerStorage) SaveHighestAttestation(pubKey []byte, attestation *eth.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return nil
+
+	data, err := attestation.MarshalSSZ()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal attestation")
+	}
+
+	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
 func (s *signerStorage) RetrieveHighestAttestation(pubKey []byte) *eth.AttestationData {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return nil
+
+	// get wallet bytes
+	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
+	if !found {
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	if obj.Value == nil || len(obj.Value) == 0 {
+		return nil
+	}
+
+	// decode
+	ret := &eth.AttestationData{}
+	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
+		return nil
+	}
+	return ret
 }
 
 func (s *signerStorage) SaveHighestProposal(pubKey []byte, block *eth.BeaconBlock) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return nil
+
+	data, err := block.MarshalSSZ()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal beacon block")
+	}
+
+	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
 func (s *signerStorage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	return nil
+
+	// get wallet bytes
+	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
+	if !found {
+		return nil
+	}
+	if err != nil {
+		return nil
+	}
+	if obj.Value == nil || len(obj.Value) == 0 {
+		return nil
+	}
+
+	// decode
+	ret := &eth.BeaconBlock{}
+	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
+		return nil
+	}
+	return ret
 }
