@@ -25,7 +25,7 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getWalletStorage(t *testing.T) *signerStorage {
+func getStorage(t *testing.T) basedb.IDb {
 	options := basedb.Options{
 		Type:   "badger-memory",
 		Logger: zap.L(),
@@ -33,8 +33,11 @@ func getWalletStorage(t *testing.T) *signerStorage {
 	}
 	db, err := storage.GetStorageFactory(options)
 	require.NoError(t, err)
+	return db
+}
 
-	return newSignerStorage(db, core.PraterNetwork)
+func getWalletStorage(t *testing.T) *signerStorage {
+	return newSignerStorage(getStorage(t), core.PraterNetwork)
 }
 
 func testWallet(t *testing.T) (core.Wallet, *signerStorage) {
