@@ -1,4 +1,4 @@
-package ekg
+package ekm
 
 import (
 	"github.com/bloxapp/eth2-key-manager/core"

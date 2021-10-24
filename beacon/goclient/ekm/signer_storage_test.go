@@ -1,4 +1,4 @@
-package ekg
+package ekm
 
 import (
 	"encoding/hex"
