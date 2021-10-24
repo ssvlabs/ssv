@@ -242,19 +242,19 @@ func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.Validato
 	logger.Debug("new validator, starting setup")
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey[:])
-	var share *bls.SecretKey
 	if err != nil {
 		return errors.Wrap(err, "could not check if validator share exits")
 	}
 	if !found {
-		validatorShare, share, err = createShareWithOperatorKey(validatorAddedEvent, c.shareEncryptionKeyProvider)
+		newValShare, share, err := createShareWithOperatorKey(validatorAddedEvent, c.shareEncryptionKeyProvider)
 		if err != nil {
 			return errors.Wrap(err, "failed to create share")
 		}
-		if err := c.onNewShare(validatorShare); err != nil {
+		if err := c.onNewShare(newValShare, share); err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return err
 		}
+		validatorShare = newValShare
 		logger.Debug("new validator share was created and saved")
 	}
 
