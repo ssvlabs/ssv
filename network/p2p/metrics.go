@@ -51,7 +51,12 @@ func reportAllConnections(n *p2pNetwork) {
 	for _, conn := range conns {
 		pid := conn.RemotePeer().String()
 		ids = append(ids, pid)
-		reportPeerIdentity(n, pid)
+		var addr string
+		ma := conn.RemoteMultiaddr()
+		if ma != nil {
+			addr = ma.String()
+		}
+		reportPeerIdentity(n, pid, addr)
 	}
 	var peersActiveDisv5 []peer.ID
 	if n.peers != nil {
@@ -71,9 +76,10 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
-func reportPeerIdentity(n *p2pNetwork, pid string) {
+func reportPeerIdentity(n *p2pNetwork, pid, addr string) {
 	ua := n.peersIndex.GetPeerData(pid, UserAgentKey)
-	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua))
+	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua),
+		zap.String("addr", addr))
 	uaParts := strings.Split(ua, ":")
 	if len(uaParts) > 2 {
 		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1], pid).Set(1)
