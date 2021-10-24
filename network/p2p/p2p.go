@@ -221,7 +221,7 @@ func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
 					logger = logger.With(zap.String("peerID", p.String()))
 					ai.ID = p
 				}
-				logger.Debug("disconnected peer")
+				logger.Debug("disconnected peer, trying to reconnect..")
 				go n.reconnect(logger, ai)
 			}
 		},
@@ -238,18 +238,18 @@ func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
 func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
 	limit := 128 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
-		// stop after reaching limit
-		if lastTick >= limit {
-			logger.Debug("could not connect to peer after reconnect")
-			return true, false
-		}
 		if err := n.connectWithPeer(context.Background(), ai); err != nil {
-			logger.Debug("could not connect to peer, trying again")
+			// stop after reaching limit
+			if lastTick >= limit {
+				logger.Debug("could not reconnect with peer, aborting")
+				return true, false
+			}
+			logger.Debug("could not connect with peer, trying again")
 			return false, false
 		}
-
+		logger.Debug("managed to reconnect with peer")
 		return true, false
-	}, 8 * time.Second, limit)
+	}, 8*time.Second, limit)
 }
 
 func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
