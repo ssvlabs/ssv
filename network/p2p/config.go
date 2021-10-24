@@ -25,6 +25,8 @@ type Config struct {
 
 	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
 
+	TryReconnect bool `yaml:"TryReconnect" env:"P2P_TRY_RECONNECT"  env-default:"false"  env-description:"flag to turn on reconnections on failures"`
+
 	Fork forks.Fork
 
 	// objects / instances

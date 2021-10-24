@@ -138,7 +138,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
-	n.host.Network().Notify(n.notifiee())
+	n.host.Network().Notify(n.notifiee(cfg.TryReconnect))
 	ps, err := n.setupGossipPubsub(cfg)
 	if err != nil {
 		n.logger.Error("failed to start pubsub", zap.Error(err))
@@ -193,7 +193,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
+func (n *p2pNetwork) notifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			logger := n.logger
@@ -221,8 +221,10 @@ func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
 					logger = logger.With(zap.String("peerID", p.String()))
 					ai.ID = p
 				}
-				logger.Debug("disconnected peer, trying to reconnect..")
-				go n.reconnect(logger, ai)
+				logger.Debug("disconnected peer")
+				if reconnect {
+					go n.reconnect(logger, ai)
+				}
 			}
 		},
 		//ClosedStreamF: func(n network.Network, stream network.Stream) {
