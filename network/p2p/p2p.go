@@ -6,7 +6,9 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"net"
 	"strings"
 	"sync"
@@ -208,13 +210,19 @@ func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			logger := n.logger
 			if conn != nil {
+				var ai peer.AddrInfo
 				if conn.RemoteMultiaddr() != nil {
-					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
+					ma := conn.RemoteMultiaddr()
+					logger = logger.With(zap.String("multiaddr", ma.String()))
+					ai.Addrs = []multiaddr.Multiaddr{ma}
 				}
 				if len(conn.RemotePeer()) > 0 {
-					logger = logger.With(zap.String("peerID", conn.RemotePeer().String()))
+					p := conn.RemotePeer()
+					logger = logger.With(zap.String("peerID", p.String()))
+					ai.ID = p
 				}
 				logger.Debug("disconnected peer")
+				go n.reconnect(logger, ai)
 			}
 		},
 		//ClosedStreamF: func(n network.Network, stream network.Stream) {
@@ -226,6 +234,24 @@ func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
 	}
 }
 
+// reconnect tries to connect to a lost connection
+func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
+	limit := 128 * time.Second
+	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
+		// stop after reaching limit
+		if lastTick >= limit {
+			logger.Debug("could not connect to peer after reconnect")
+			return true, false
+		}
+		if err := n.connectWithPeer(context.Background(), ai); err != nil {
+			logger.Debug("could not connect to peer, trying again")
+			return false, false
+		}
+
+		return true, false
+	}, 8 * time.Second, limit)
+}
+
 func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	// Gossipsub registration is done before we add in any new peers
 	// due to libp2p's gossipsub implementation not taking into
@@ -234,7 +260,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	psOpts := []pubsub.Option{
 		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		//pubsub.WithNoAuthor(),
-		//pubsub.WithMessageIdFn(msgIDFunction),
+		//pubsub.WithMessageIdFn(n.msgId),
 		//pubsub.WithSubscriptionFilter(s),
 		pubsub.WithPeerOutboundQueueSize(256),
 		pubsub.WithValidateQueueSize(256),
@@ -260,6 +286,20 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 	// Create a new PubSub service using the GossipSub router
 	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
+
+//func (n *p2pNetwork) msgId(pmsg *pubsub_pb.Message) string {
+//	if pmsg == nil || pmsg.Data == nil || pmsg.Topic == nil {
+//		msg := make([]byte, 20)
+//		copy(msg, "invalid")
+//		return string(msg)
+//	}
+//	// TODO: calculate a specific message id, currently hash(validator PK (topic) + msg data)
+//	data := bytes.Join([][]byte{[]byte(*pmsg.Topic), pmsg.Data[:]}, []byte{})
+//	h := sha256.Sum256(data[:])
+//	val := hex.EncodeToString(h[:20])
+//	n.logger.Debug("msg id", zap.String("val", val))
+//	return val
+//}
 
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
