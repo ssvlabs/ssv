@@ -8,9 +8,9 @@ import (
 	"sync"
 )
 
-var (
-	storagePrefix = []byte("exporter/")
-)
+func storagePrefix() []byte {
+	return []byte("exporter/")
+}
 
 // Storage represents the interface of exporter storage
 type Storage interface {
@@ -42,12 +42,12 @@ func NewExporterStorage(db basedb.IDb, logger *zap.Logger) Storage {
 
 // Clean clears all information
 func (es *exporterStorage) Clean() error {
-	return es.db.RemoveAllByCollection(storagePrefix)
+	return es.db.RemoveAllByCollection(storagePrefix())
 }
 
 // nextIndex returns the next index for operator
 func (es *exporterStorage) nextIndex(prefix []byte) (int64, error) {
-	n, err := es.db.CountByCollection(append(storagePrefix, prefix...))
+	n, err := es.db.CountByCollection(append(storagePrefix(), prefix...))
 	if err != nil {
 		return 0, err
 	}

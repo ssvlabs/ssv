@@ -16,6 +16,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p"
 	p2pHost "github.com/libp2p/go-libp2p-core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -138,7 +139,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
-
+	n.host.Network().Notify(n.notifiee())
 	ps, err := n.setupGossipPubsub(cfg)
 	if err != nil {
 		n.logger.Error("failed to start pubsub", zap.Error(err))
@@ -191,6 +192,41 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.watchPeers()
 
 	return n, nil
+}
+
+func (n *p2pNetwork) notifiee() *libp2pnetwork.NotifyBundle {
+	return &libp2pnetwork.NotifyBundle{
+		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+			logger := n.logger
+			if conn != nil {
+				if conn.RemoteMultiaddr() != nil {
+					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
+				}
+				if len(conn.RemotePeer()) > 0 {
+					logger = logger.With(zap.String("peerID", conn.RemotePeer().String()))
+				}
+				logger.Debug("connected peer")
+			}
+		},
+		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+			logger := n.logger
+			if conn != nil {
+				if conn.RemoteMultiaddr() != nil {
+					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
+				}
+				if len(conn.RemotePeer()) > 0 {
+					logger = logger.With(zap.String("peerID", conn.RemotePeer().String()))
+				}
+				logger.Debug("disconnected peer")
+			}
+		},
+		//ClosedStreamF: func(n network.Network, stream network.Stream) {
+		//
+		//},
+		//OpenedStreamF: func(n network.Network, stream network.Stream) {
+		//
+		//},
+	}
 }
 
 func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {

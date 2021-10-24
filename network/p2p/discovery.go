@@ -39,7 +39,7 @@ import (
 )
 
 const (
-	maxPeers = 100
+	maxPeers = 1000
 	udp4     = "udp4"
 	udp6     = "udp6"
 	tcp      = "tcp"
@@ -382,18 +382,21 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 		//log.Print("-----TEST same id error ---") TODO need to add log with trace level
 		return nil
 	}
+	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
+
 	if n.peers.IsBad(info.ID) {
+		n.logger.Warn("bad peer", zap.String("peerID", info.ID.String()))
 		return errors.New("refused to connect to bad peer")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if err := n.host.Connect(ctx, info); err != nil {
-		//s.Peers().Scorers().BadResponsesScorer().Increment(info.ID)
-		//log.Printf("TEST peer %v connect error ------------ %v", info, err) TODO need to add log with trace level
+		n.logger.Warn("failed to connect to peer", zap.String("peerID", info.ID.String()), zap.Error(err))
 		return err
 	}
-	//log.Print("Connected to peer!!!!  ", info) TODO need to add log with trace level
+	n.logger.Debug("connected to peer", zap.String("peerID", info.ID.String()))
+
 	return nil
 }
 
@@ -410,7 +413,7 @@ func (n *p2pNetwork) listenForNewNodes() {
 		if n.isPeerAtLimit(false /* inbound */) {
 			// Pause the main loop for a period to stop looking
 			// for new peers.
-			//log.Trace("Not looking for peers, at peer limit")
+			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
 			continue
 		}
