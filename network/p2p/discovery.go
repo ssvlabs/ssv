@@ -22,7 +22,6 @@ import (
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/prysmaticlabs/prysm/shared/featureconfig"
 	"github.com/prysmaticlabs/prysm/shared/fileutil"
 	"github.com/prysmaticlabs/prysm/shared/iputils"
 	"go.opencensus.io/trace"
@@ -388,7 +387,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 		n.logger.Warn("bad peer", zap.String("peerID", info.ID.String()))
 		return errors.New("refused to connect to bad peer")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	if err := n.host.Connect(ctx, info); err != nil {
@@ -578,18 +577,15 @@ func setPubSubParameters() {
 		pubsub.GossipSubDlo = 6
 		pubsub.GossipSubD = 8
 		pubsub.GossipSubHeartbeatInterval = heartBeatInterval
-		pubsub.GossipSubHistoryLength = 6
-		pubsub.GossipSubHistoryGossip = 3
+		//pubsub.GossipSubHistoryLength = 6
+		pubsub.GossipSubHistoryGossip = 6
 		pubsub.TimeCacheDuration = 550 * heartBeatInterval
 
 		// Set a larger gossip history to ensure that slower
 		// messages have a longer time to be propagated. This
 		// comes with the tradeoff of larger memory usage and
 		// size of the seen message cache.
-		if featureconfig.Get().EnableLargerGossipHistory {
-			pubsub.GossipSubHistoryLength = 12
-			pubsub.GossipSubHistoryLength = 5
-		}
+		pubsub.GossipSubHistoryLength = 12
 	})
 }
 
