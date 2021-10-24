@@ -10,5 +10,5 @@ func (gc *goClient) AddShare(shareKey *bls.SecretKey) error {
 }
 
 func (gc *goClient) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
-	return gc.SignIBFTMessage(message, pk)
+	return gc.keyManager.SignIBFTMessage(message, pk)
 }

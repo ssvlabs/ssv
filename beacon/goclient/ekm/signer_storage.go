@@ -136,9 +136,7 @@ func (s *signerStorage) DeleteAccount(accountID uuid.UUID) error {
 	defer s.lock.Unlock()
 
 	key := fmt.Sprintf(accountsPath, accountID.String())
-	s.db.Set(s.objPrefix(accountsPrefix), []byte(key), nil)
-
-	return nil
+	return s.db.Set(s.objPrefix(accountsPrefix), []byte(key), nil)
 }
 
 // OpenAccount returns nil,nil if no account was found
@@ -160,7 +158,7 @@ func (s *signerStorage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount,
 }
 
 func (s *signerStorage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
-	if byts == nil || len(byts) == 0 {
+	if len(byts) == 0 {
 		return nil, errors.New("failed to open wallet")
 	}
 

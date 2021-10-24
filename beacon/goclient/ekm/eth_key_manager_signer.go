@@ -58,7 +58,8 @@ type ethKeyManagerSigner struct {
 	signingUtils beacon.SigningUtil
 }
 
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, network core.Network) (*ethKeyManagerSigner, error) {
+// NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, network core.Network) (beacon.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)

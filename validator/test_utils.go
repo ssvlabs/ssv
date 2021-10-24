@@ -164,10 +164,10 @@ func (b *testBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 	panic("implement me")
 }
 
-func (m *testBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+func (b *testBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
 	panic("implement")
 }
-func (m *testBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+func (b *testBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
 	panic("implement")
 }
 
