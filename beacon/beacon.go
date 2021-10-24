@@ -24,6 +24,7 @@ type Options struct {
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
 	KeyManager
+	SigningUtil
 
 	// ExtendIndexMap extanding the pubkeys map of the client (in order to prevent redundant call to fetch pubkeys from node)
 	ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey)
@@ -57,4 +58,10 @@ type Signer interface {
 	SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error)
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
+}
+
+// SigningUtil is an interface for beacon node signing specific methods
+type SigningUtil interface {
+	GetDomain(data *spec.AttestationData) ([]byte, error)
+	ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error)
 }

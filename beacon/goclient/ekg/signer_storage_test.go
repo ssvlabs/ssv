@@ -1,4 +1,4 @@
-package goclient
+package ekg
 
 import (
 	"encoding/hex"

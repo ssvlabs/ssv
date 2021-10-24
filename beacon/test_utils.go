@@ -74,6 +74,13 @@ func (m *mockBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 	return nil, nil
 }
 
+func (m *mockBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+	panic("implement")
+}
+func (m *mockBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+	panic("implement")
+}
+
 // NewMockValidatorMetadataStorage creates a new mock implementation of ValidatorMetadataStorage
 func NewMockValidatorMetadataStorage() ValidatorMetadataStorage {
 	return &mockValidatorMetadataStorage{

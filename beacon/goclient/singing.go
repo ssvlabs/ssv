@@ -12,11 +12,11 @@ import (
 
 // getSigningRoot returns signing root
 func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
-	domain, err := gc.getDomain(data)
+	domain, err := gc.GetDomain(data)
 	if err != nil {
 		return [32]byte{}, err
 	}
-	root, err := gc.computeSigningRoot(data, domain[:])
+	root, err := gc.ComputeSigningRoot(data, domain[:])
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -24,7 +24,7 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 }
 
 // getSigningRoot returns signing root
-func (gc *goClient) getDomain(data *spec.AttestationData) ([]byte, error) {
+func (gc *goClient) GetDomain(data *spec.AttestationData) ([]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
 	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
 	if err != nil {
@@ -66,7 +66,7 @@ func (gc *goClient) getDomainData(domainType *spec.DomainType, epoch spec.Epoch)
 	return nil, errors.New("client does not support DomainProvider")
 }
 
-// computeSigningRoot computes the root of the object by calculating the hash tree root of the signing data with the given domain.
+// ComputeSigningRoot computes the root of the object by calculating the hash tree root of the signing data with the given domain.
 // Spec pseudocode definition:
 //	def compute_signing_root(ssz_object: SSZObject, domain: Domain) -> Root:
 //    """
@@ -76,7 +76,7 @@ func (gc *goClient) getDomainData(domainType *spec.DomainType, epoch spec.Epoch)
 //        object_root=hash_tree_root(ssz_object),
 //        domain=domain,
 //    ))
-func (gc *goClient) computeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+func (gc *goClient) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
 	if object == nil {
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
 	}

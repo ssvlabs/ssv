@@ -164,6 +164,13 @@ func (b *testBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 	panic("implement me")
 }
 
+func (m *testBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+	panic("implement")
+}
+func (m *testBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+	panic("implement")
+}
+
 func testingValidator(t *testing.T, decided bool, signaturesCount int, identifier []byte) *Validator {
 	threshold.Init()
 

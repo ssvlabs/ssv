@@ -9,8 +9,8 @@ import (
 	"github.com/attestantio/go-eth2-client/auto"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
-	signer2 "github.com/bloxapp/eth2-key-manager/signer"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/goclient/ekg"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,8 +54,7 @@ type goClient struct {
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
-	wallet         core.Wallet
-	signer         signer2.ValidatorSigner
+	keyManager     beacon.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -79,15 +78,6 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger = logger.With(zap.String("name", autoClient.Name()), zap.String("address", autoClient.Address()))
 	logger.Info("successfully connected to beacon client")
 
-	signerWallet, storage, err := openOrCreateWallet(opt.DB, core.NetworkFromString(opt.Network))
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create signer wallet")
-	}
-	signer, err := newBeaconSigner(signerWallet, storage, core.PraterNetwork)
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create signer")
-	}
-
 	_client := &goClient{
 		ctx:            opt.Context,
 		logger:         logger,
@@ -95,8 +85,11 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 		client:         autoClient,
 		indicesMapLock: sync.Mutex{},
 		graffiti:       opt.Graffiti,
-		wallet:         signerWallet,
-		signer:         signer,
+	}
+
+	_client.keyManager, err = ekg.NewETHKeyManagerSigner(opt.DB, _client, core.PraterNetwork)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
 
 	return _client, nil

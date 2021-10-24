@@ -1,4 +1,4 @@
-package goclient
+package ekg
 
 import (
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -17,18 +17,11 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testBeaconSigner(t *testing.T) beacon.Beacon {
+func testKeyManager(t *testing.T) beacon.KeyManager {
 	threshold.Init()
 
-	signerWallet, storage, err := openOrCreateWallet(getStorage(t), core.PraterNetwork)
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, core.PraterNetwork)
 	require.NoError(t, err)
-	signer, err := newBeaconSigner(signerWallet, storage, core.PraterNetwork)
-	require.NoError(t, err)
-
-	ret := &goClient{
-		wallet: signerWallet,
-		signer: signer,
-	}
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -36,14 +29,14 @@ func testBeaconSigner(t *testing.T) beacon.Beacon {
 	sk2 := &bls.SecretKey{}
 	require.NoError(t, sk2.SetHexString(sk2Str))
 
-	require.NoError(t, ret.AddShare(sk1))
-	require.NoError(t, ret.AddShare(sk2))
+	require.NoError(t, km.AddShare(sk1))
+	require.NoError(t, km.AddShare(sk2))
 
-	return ret
+	return km
 }
 
-func TestGoClient_SignIBFTMessage(t *testing.T) {
-	gocli := testBeaconSigner(t)
+func TestSignIBFTMessage(t *testing.T) {
+	km := testKeyManager(t)
 
 	t.Run("pk 1", func(t *testing.T) {
 		pk := &bls.PublicKey{}
@@ -58,7 +51,7 @@ func TestGoClient_SignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := gocli.SignIBFTMessage(msg, pk.Serialize())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
@@ -85,7 +78,7 @@ func TestGoClient_SignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := gocli.SignIBFTMessage(msg, pk.Serialize())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
