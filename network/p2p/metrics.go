@@ -81,5 +81,9 @@ func reportPeerIdentity(n *p2pNetwork, pid string) {
 }
 
 func reportLastMsg(pid string) {
-	metricsPeerLastMsg.WithLabelValues(pid).Set(float64(time.Now().Unix()))
+	metricsPeerLastMsg.WithLabelValues(pid).Set(float64(timestamp()))
+}
+
+func timestamp() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
 }

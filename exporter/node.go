@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -301,6 +302,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	decidedReader := exp.getDecidedReader(validatorShare)
 
 	// start network reader

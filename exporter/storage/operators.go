@@ -33,7 +33,7 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 	es.operatorsLock.RLock()
 	defer es.operatorsLock.RUnlock()
 
-	objs, err := es.db.GetAllByCollection(append(storagePrefix, operatorsPrefix...))
+	objs, err := es.db.GetAllByCollection(append(storagePrefix(), operatorsPrefix...))
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,12 @@ func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*Opera
 	es.operatorsLock.RLock()
 	defer es.operatorsLock.RUnlock()
 
-	obj, found, err := es.db.Get(storagePrefix, operatorKey(operatorPubKey))
+	return es.getOperatorInformation(operatorPubKey)
+}
+
+// GetOperatorInformation returns information of the given operator by public key
+func (es *exporterStorage) getOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
+	obj, found, err := es.db.Get(storagePrefix(), operatorKey(operatorPubKey))
 	if !found {
 		return nil, found, nil
 	}
@@ -68,7 +73,10 @@ func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*Opera
 
 // SaveOperatorInformation saves operator information by its public key
 func (es *exporterStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
-	info, found, err := es.GetOperatorInformation(operatorInformation.PublicKey)
+	es.operatorsLock.Lock()
+	defer es.operatorsLock.Unlock()
+
+	info, found, err := es.getOperatorInformation(operatorInformation.PublicKey)
 	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
@@ -79,8 +87,6 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 		// TODO: update operator information (i.e. change name)
 		return nil
 	}
-	es.operatorsLock.Lock()
-	defer es.operatorsLock.Unlock()
 
 	operatorInformation.Index, err = es.nextIndex(operatorsPrefix)
 	if err != nil {
@@ -90,7 +96,7 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
 	}
-	return es.db.Set(storagePrefix, operatorKey(operatorInformation.PublicKey), raw)
+	return es.db.Set(storagePrefix(), operatorKey(operatorInformation.PublicKey), raw)
 }
 
 func operatorKey(pubKey string) []byte {
