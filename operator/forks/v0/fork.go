@@ -18,10 +18,12 @@ type ForkV0 struct {
 // New returns a new ForkV0 instance
 func New() *ForkV0 {
 	return &ForkV0{
-		ibftFork: ibftControllerForkV0.New(),
+		ibftFork:    ibftControllerForkV0.New(),
+		networkFork: networkForkV0.New(),
 	}
 }
 
+// SlotTick implementation
 func (v0 *ForkV0) SlotTick(slot uint64) {
 	v0.ibftFork.SlotTick(slot)
 	v0.networkFork.SlotTick(slot)

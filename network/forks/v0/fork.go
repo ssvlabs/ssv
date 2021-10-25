@@ -8,3 +8,8 @@ type ForkV0 struct {
 func New() *ForkV0 {
 	return &ForkV0{}
 }
+
+// SlotTick implementation
+func (v0 *ForkV0) SlotTick(slot uint64) {
+
+}
