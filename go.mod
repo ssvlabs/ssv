@@ -20,12 +20,12 @@ require (
 	github.com/herumi/bls-eth-go-binary v0.0.0-20210102080045-a126987eca2b
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/ipfs/go-ipfs-addr v0.0.1
-	github.com/libp2p/go-libp2p v0.12.1-0.20201208224947-3155ff3089c0
-	github.com/libp2p/go-libp2p-core v0.7.0
-	github.com/libp2p/go-libp2p-noise v0.1.2
-	github.com/libp2p/go-libp2p-pubsub v0.4.0
-	github.com/libp2p/go-tcp-transport v0.2.1
-	github.com/multiformats/go-multiaddr v0.3.1
+	github.com/libp2p/go-libp2p v0.14.4
+	github.com/libp2p/go-libp2p-core v0.8.6
+	github.com/libp2p/go-libp2p-noise v0.2.0
+	github.com/libp2p/go-libp2p-pubsub v0.5.0
+	github.com/libp2p/go-tcp-transport v0.2.8
+	github.com/multiformats/go-multiaddr v0.3.3
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.0.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -41,9 +41,9 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/stretchr/testify v1.7.0
 	github.com/wealdtech/go-eth2-util v1.6.2
-	go.opencensus.io v0.22.5
+	go.opencensus.io v0.23.0
 	go.uber.org/zap v1.16.0
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/grpc v1.37.0
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect
 )

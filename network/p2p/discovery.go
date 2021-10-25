@@ -17,7 +17,6 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	noise "github.com/libp2p/go-libp2p-noise"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
@@ -28,7 +27,6 @@ import (
 	"net"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -569,25 +567,25 @@ func convertToInterfacePrivkey(privkey *ecdsa.PrivateKey) crypto.PrivKey {
 
 // To avoid data race conditions we only set params once as they are global.
 // A race condition can happen if we try and run 2 peers on the same machine.
-var setParamsOnce sync.Once
-
-func setPubSubParameters() {
-	setParamsOnce.Do(func() {
-		heartBeatInterval := 700 * time.Millisecond
-		pubsub.GossipSubDlo = 6
-		pubsub.GossipSubD = 8
-		pubsub.GossipSubHeartbeatInterval = heartBeatInterval
-		//pubsub.GossipSubHistoryLength = 6
-		pubsub.GossipSubHistoryGossip = 6
-		pubsub.TimeCacheDuration = 550 * heartBeatInterval
-
-		// Set a larger gossip history to ensure that slower
-		// messages have a longer time to be propagated. This
-		// comes with the tradeoff of larger memory usage and
-		// size of the seen message cache.
-		pubsub.GossipSubHistoryLength = 12
-	})
-}
+//var setParamsOnce sync.Once
+//
+//func setPubSubParameters() {
+//	setParamsOnce.Do(func() {
+//		heartBeatInterval := 700 * time.Millisecond
+//		pubsub.GossipSubDlo = 6
+//		pubsub.GossipSubD = 8
+//		pubsub.GossipSubHeartbeatInterval = heartBeatInterval
+//		//pubsub.GossipSubHistoryLength = 6
+//		pubsub.GossipSubHistoryGossip = 6
+//		pubsub.TimeCacheDuration = 550 * heartBeatInterval
+//
+//		// Set a larger gossip history to ensure that slower
+//		// messages have a longer time to be propagated. This
+//		// comes with the tradeoff of larger memory usage and
+//		// size of the seen message cache.
+//		pubsub.GossipSubHistoryLength = 12
+//	})
+//}
 
 func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, ma.Multiaddr, error) {
 	multiAddr, err := convertToSingleMultiAddr(node)

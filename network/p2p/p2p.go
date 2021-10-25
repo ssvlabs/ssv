@@ -127,7 +127,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		//host.RemoveStreamHandler(identify.IDDelta)
 		ua := n.getUserAgent()
 		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
-		ids = identify.NewIDService(host, identify.UserAgent(ua))
+		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed to create p2p ID Service")
+		}
 		n.host = host
 	} else {
 		logger.Error("Unsupported discovery flag")
@@ -139,7 +142,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
 	n.host.Network().Notify(n.notifiee(cfg.TryReconnect))
-	ps, err := n.setupGossipPubsub(cfg)
+	ps, err := n.newGossipPubsub(cfg)
 	if err != nil {
 		n.logger.Error("failed to start pubsub", zap.Error(err))
 		return nil, errors.Wrap(err, "failed to start pubsub")
@@ -252,41 +255,6 @@ func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
 		logger.Debug("managed to reconnect with peer")
 		return true, false
 	}, 8*time.Second, limit)
-}
-
-func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
-	// Gossipsub registration is done before we add in any new peers
-	// due to libp2p's gossipsub implementation not taking into
-	// account previously added peers when creating the gossipsub
-	// object.
-	psOpts := []pubsub.Option{
-		//pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
-		//pubsub.WithNoAuthor(),
-		//pubsub.WithMessageIdFn(n.msgId),
-		//pubsub.WithSubscriptionFilter(s),
-		pubsub.WithPeerOutboundQueueSize(256),
-		pubsub.WithValidateQueueSize(256),
-		pubsub.WithFloodPublish(true),
-	}
-	exporterPeerID, err := peerFromString(cfg.ExporterPeerID)
-	if err != nil {
-		n.logger.Error("could not parse peer id", zap.Error(err))
-	} else {
-		pubsub.WithDirectPeers([]peer.AddrInfo{{ID: exporterPeerID}})
-	}
-	if len(cfg.PubSubTraceOut) > 0 {
-		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not create pubsub tracer")
-		}
-		n.logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
-		psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
-	}
-
-	setPubSubParameters()
-
-	// Create a new PubSub service using the GossipSub router
-	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
 }
 
 //func (n *p2pNetwork) msgId(pmsg *pubsub_pb.Message) string {
