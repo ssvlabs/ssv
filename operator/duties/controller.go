@@ -21,6 +21,8 @@ type dutyExecutor interface {
 // DutyController interface for dispatching duties execution according to slot ticker
 type DutyController interface {
 	Start()
+	// CurrentEpochChan will trigger every slot
+	CurrentSlotChan() <-chan uint64
 }
 
 // ControllerOptions holds the needed dependencies
@@ -45,6 +47,9 @@ type dutyController struct {
 	validatorController validator.IController
 	genesisEpoch        uint64
 	dutyLimit           uint64
+
+	// chan
+	currentSlotC chan uint64
 }
 
 var secPerSlot int64 = 12
@@ -76,6 +81,13 @@ func (dc *dutyController) Start() {
 	dc.listenToTicker(slotTicker.C())
 }
 
+func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
+	if dc.currentSlotC == nil {
+		dc.currentSlotC = make(chan uint64)
+	}
+	return dc.currentSlotC
+}
+
 // ExecuteDuty tries to execute the given duty
 func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 	if dc.executor != nil {
@@ -99,6 +111,10 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 // listenToTicker loop over the given slot channel
 func (dc *dutyController) listenToTicker(slots <-chan uint64) {
 	for currentSlot := range slots {
+		// notify current slot to channel
+		go dc.notifyCurrentSlot(currentSlot)
+
+		// execute duties
 		dc.logger.Debug("slot ticker", zap.Uint64("slot", currentSlot))
 		duties, err := dc.fetcher.GetDuties(currentSlot)
 		if err != nil {
@@ -107,6 +123,12 @@ func (dc *dutyController) listenToTicker(slots <-chan uint64) {
 		for i := range duties {
 			go dc.onDuty(&duties[i])
 		}
+	}
+}
+
+func (dc *dutyController) notifyCurrentSlot(slot uint64) {
+	if dc.currentSlotC != nil {
+		dc.currentSlotC <- slot
 	}
 }
 
