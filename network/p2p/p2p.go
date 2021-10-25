@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/multiformats/go-multiaddr"
 	"net"
 	"strings"
 	"sync"
@@ -17,12 +16,10 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p"
 	p2pHost "github.com/libp2p/go-libp2p-core/host"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"go.uber.org/zap"
 
@@ -91,57 +88,28 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		reportLastMsg:      cfg.ReportLastMsg,
 	}
 
-	var _ipAddr net.IP
-	var ids *identify.IDService
-
-	if cfg.DiscoveryType == "mdns" { // use mdns discovery
-		// Create a new libp2p Host that listens on a random TCP port
-		host, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create a new P2P host")
-		}
-		n.host = host
-		n.cfg.HostID = host.ID()
-	} else if cfg.DiscoveryType == "discv5" {
-		dv5Nodes := n.parseBootStrapAddrs(TransformEnr(n.cfg.Enr))
-		n.cfg.Discv5BootStrapAddr = dv5Nodes
-
-		_ipAddr = n.ipAddr()
-		//_ipAddr = net.ParseIP("127.0.0.1")
-		logger.Info("Ip Address", zap.Any("ip", _ipAddr))
-
-		if cfg.NetworkPrivateKey != nil {
-			n.privKey = cfg.NetworkPrivateKey
-		} else {
-			privKey, err := privKey()
-			if err != nil {
-				return nil, errors.Wrap(err, "Failed to generate p2p private key")
-			}
-			n.privKey = privKey
-		}
-		opts := n.buildOptions(_ipAddr, n.privKey)
-		host, err := libp2p.New(ctx, opts...)
-		if err != nil {
-			return nil, errors.Wrap(err, "Failed to create p2p host")
-		}
-		//host.RemoveStreamHandler(identify.IDDelta)
-		ua := n.getUserAgent()
-		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
-		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
-		if err != nil {
-			return nil, errors.Wrap(err, "Failed to create p2p ID Service")
-		}
-		n.host = host
-	} else {
-		logger.Error("Unsupported discovery flag")
-		return nil, errors.New("Unsupported discovery flag")
+	if err := n.withNetworkKey(cfg.NetworkPrivateKey); err != nil {
+		return nil, errors.Wrap(err, "Failed to generate p2p private key")
 	}
 
-	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
+	opts, err := n.buildOptions(cfg)
+	if err != nil {
+		logger.Fatal("could not build libp2p options", zap.Error(err))
+	}
+	host, err := libp2p.New(ctx, opts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create p2p host")
+	}
+	n.host = host
+	n.cfg.HostID = host.ID()
+
+	if len(cfg.Enr) > 0 {
+		n.cfg.Discv5BootStrapAddr = n.parseBootStrapAddrs(TransformEnr(n.cfg.Enr))
+	}
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
 	n.logger.Info("listening on port", zap.String("port", n.host.Addrs()[0].String()))
-	n.host.Network().Notify(n.notifiee(cfg.TryReconnect))
+	n.host.Network().Notify(n.networkNotifiee(cfg.TryReconnect))
 	ps, err := n.newGossipPubsub(cfg)
 	if err != nil {
 		n.logger.Error("failed to start pubsub", zap.Error(err))
@@ -149,37 +117,23 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.pubsub = ps
 
+	var ids *identify.IDService
+
 	if cfg.DiscoveryType == "mdns" { // use mdns discovery {
 		// Setup Local mDNS discovery
-		if err := setupDiscovery(ctx, logger, n.host); err != nil {
+		if err := setupMdnsDiscovery(ctx, logger, n.host); err != nil {
 			return nil, errors.Wrap(err, "failed to setup discovery")
 		}
 	} else if cfg.DiscoveryType == "discv5" {
-		n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
-			PeerLimit: maxPeers,
-			ScorerParams: &scorers.Config{
-				BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
-					Threshold:     5,
-					DecayInterval: time.Hour,
-				},
-			},
-		})
-
-		listener, err := n.startDiscoveryV5(_ipAddr, n.privKey)
+		//host.RemoveStreamHandler(identify.IDDelta)
+		ids, err = identify.NewIDService(host, identify.UserAgent(n.getUserAgent()))
 		if err != nil {
-			n.logger.Error("Failed to start discovery", zap.Error(err))
+			return nil, errors.Wrap(err, "Failed to create p2p ID Service")
+		}
+		if err := setupDiscV5(ctx, n); err != nil {
+			logger.Error("could not setup discv5", zap.Error(err))
 			return nil, err
 		}
-		n.dv5Listener = listener
-
-		err = n.connectToBootnodes()
-		if err != nil {
-			n.logger.Error("Could not add bootnode to the exclusion list", zap.Error(err))
-			return nil, err
-		}
-
-		go n.listenForNewNodes()
-
 		if n.cfg.HostAddress != "" {
 			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
 			if err := checkAddress(a); err != nil {
@@ -189,6 +143,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			}
 		}
 	}
+	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
+
 	n.handleStream()
 
 	n.watchPeers()
@@ -196,47 +152,17 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) notifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
-	return &libp2pnetwork.NotifyBundle{
-		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			logger := n.logger
-			if conn != nil {
-				if conn.RemoteMultiaddr() != nil {
-					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
-				}
-				if len(conn.RemotePeer()) > 0 {
-					logger = logger.With(zap.String("peerID", conn.RemotePeer().String()))
-				}
-				logger.Debug("connected peer")
-			}
-		},
-		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			logger := n.logger
-			if conn != nil {
-				var ai peer.AddrInfo
-				if conn.RemoteMultiaddr() != nil {
-					ma := conn.RemoteMultiaddr()
-					logger = logger.With(zap.String("multiaddr", ma.String()))
-					ai.Addrs = []multiaddr.Multiaddr{ma}
-				}
-				if len(conn.RemotePeer()) > 0 {
-					p := conn.RemotePeer()
-					logger = logger.With(zap.String("peerID", p.String()))
-					ai.ID = p
-				}
-				logger.Debug("disconnected peer")
-				if reconnect {
-					go n.reconnect(logger, ai)
-				}
-			}
-		},
-		//ClosedStreamF: func(n network.Network, stream network.Stream) {
-		//
-		//},
-		//OpenedStreamF: func(n network.Network, stream network.Stream) {
-		//
-		//},
+func (n *p2pNetwork) withNetworkKey(priv *ecdsa.PrivateKey) error {
+	if priv != nil {
+		n.privKey = priv
+	} else {
+		privKey, err := privKey()
+		if err != nil {
+			return errors.Wrap(err, "Failed to generate p2p private key")
+		}
+		n.privKey = privKey
 	}
+	return nil
 }
 
 // reconnect tries to connect to a lost connection
@@ -256,20 +182,6 @@ func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
 		return true, false
 	}, 8*time.Second, limit)
 }
-
-//func (n *p2pNetwork) msgId(pmsg *pubsub_pb.Message) string {
-//	if pmsg == nil || pmsg.Data == nil || pmsg.Topic == nil {
-//		msg := make([]byte, 20)
-//		copy(msg, "invalid")
-//		return string(msg)
-//	}
-//	// TODO: calculate a specific message id, currently hash(validator PK (topic) + msg data)
-//	data := bytes.Join([][]byte{[]byte(*pmsg.Topic), pmsg.Data[:]}, []byte{})
-//	h := sha256.Sum256(data[:])
-//	val := hex.EncodeToString(h[:20])
-//	n.logger.Debug("msg id", zap.String("val", val))
-//	return val
-//}
 
 func (n *p2pNetwork) watchPeers() {
 	runutil.RunEvery(n.ctx, 1*time.Minute, func() {

@@ -3,30 +3,17 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"github.com/bloxapp/ssv/utils/commons"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	iaddr "github.com/ipfs/go-ipfs-addr"
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	noise "github.com/libp2p/go-libp2p-noise"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
-	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/prysmaticlabs/prysm/shared/fileutil"
-	"github.com/prysmaticlabs/prysm/shared/iputils"
+	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
+	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.opencensus.io/trace"
 	"net"
-	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -69,9 +56,9 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	}
 }
 
-// setupDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
+// setupMdnsDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
-func setupDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) error {
+func setupMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) error {
 	disc, err := mdnsDiscover.NewMdnsService(ctx, host, DiscoveryInterval, DiscoveryServiceTag)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new mDNS service")
@@ -85,153 +72,73 @@ func setupDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) err
 	return nil
 }
 
-func (n *p2pNetwork) parseBootStrapAddrs(addrs []string) (discv5Nodes []string) {
-	discv5Nodes, _ = parseGenericAddrs(n.logger, addrs)
-	if len(discv5Nodes) == 0 {
-		n.logger.Error("No bootstrap addresses supplied")
-	}
-	return discv5Nodes
-}
+func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
+	n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
+		PeerLimit: maxPeers,
+		ScorerParams: &scorers.Config{
+			BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
+				Threshold:     5,
+				DecayInterval: time.Hour,
+			},
+		},
+	})
 
-func parseGenericAddrs(logger *zap.Logger, addrs []string) (enodeString, multiAddrString []string) {
-	for _, addr := range addrs {
-		if addr == "" {
-			// Ignore empty entries
-			continue
-		}
-		_, err := enode.Parse(enode.ValidSchemes, addr)
-		if err == nil {
-			enodeString = append(enodeString, addr)
-			continue
-		}
-		_, err = multiAddrFromString(addr)
-		if err == nil {
-			multiAddrString = append(multiAddrString, addr)
-			continue
-		}
-		logger.Error("Invalid address error", zap.String("address", addr), zap.Error(err))
-	}
-	return enodeString, multiAddrString
-}
-
-func multiAddrFromString(address string) (ma.Multiaddr, error) {
-	addr, err := iaddr.ParseString(address)
+	listener, err := n.startDiscoveryV5(n.ipAddr(), n.privKey)
 	if err != nil {
-		return nil, err
+		return errors.Wrap(err, "failed to start discovery")
 	}
-	return addr.Multiaddr(), nil
+	n.dv5Listener = listener
+
+	err = n.connectToBootnodes()
+	if err != nil {
+		return errors.Wrap(err, "could not add bootnode to the exclusion list")
+	}
+	go n.listenForNewNodes()
+
+	return nil
 }
 
-// Retrieves an external ipv4 address and converts into a libp2p formatted value.
-func (n *p2pNetwork) ipAddr() net.IP {
-	ip, err := iputils.ExternalIP()
-	if err != nil {
-		n.logger.Fatal("Could not get IPv4 address", zap.Error(err))
+func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
+	return &libp2pnetwork.NotifyBundle{
+		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+			logger := n.logger
+			if conn != nil {
+				if conn.RemoteMultiaddr() != nil {
+					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
+				}
+				if len(conn.RemotePeer()) > 0 {
+					logger = logger.With(zap.String("peerID", conn.RemotePeer().String()))
+				}
+				logger.Debug("connected peer")
+			}
+		},
+		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+			logger := n.logger
+			if conn != nil {
+				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{}}
+				if conn.RemoteMultiaddr() != nil {
+					addr := conn.RemoteMultiaddr()
+					logger = logger.With(zap.String("multiaddr", addr.String()))
+					ai.Addrs = []ma.Multiaddr{addr}
+				}
+				if len(conn.RemotePeer()) > 0 {
+					p := conn.RemotePeer()
+					logger = logger.With(zap.String("peerID", p.String()))
+					ai.ID = p
+				}
+				logger.Debug("disconnected peer")
+				if reconnect {
+					go n.reconnect(logger, ai)
+				}
+			}
+		},
+		//ClosedStreamF: func(n network.Network, stream network.Stream) {
+		//
+		//},
+		//OpenedStreamF: func(n network.Network, stream network.Stream) {
+		//
+		//},
 	}
-	return net.ParseIP(ip)
-}
-
-// Determines a private key for p2p networking from the p2p service's
-// configuration struct. If no key is found, it generates a new one.
-func privKey() (*ecdsa.PrivateKey, error) {
-	defaultKeyPath := defaultDataDir()
-
-	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	rawbytes, err := priv.Raw()
-	if err != nil {
-		return nil, err
-	}
-	dst := make([]byte, hex.EncodedLen(len(rawbytes)))
-	hex.Encode(dst, rawbytes)
-	if err := fileutil.WriteFile(defaultKeyPath, dst); err != nil {
-		return nil, err
-	}
-	convertedKey := convertFromInterfacePrivKey(priv)
-	return convertedKey, nil
-}
-
-// DefaultDataDir is the default data directory to use for the databases and other
-// persistence requirements.
-
-// buildOptions for the libp2p host.
-func (n *p2pNetwork) buildOptions(ip net.IP, priKey *ecdsa.PrivateKey) []libp2p.Option {
-	//cfg := s.cfg
-	listen, err := multiAddressBuilder(ip.String(), uint(n.cfg.TCPPort))
-	if err != nil {
-		n.logger.Fatal("Failed to p2p listen", zap.Error(err))
-	}
-	//if cfg.LocalIP != "" {
-	//	if net.ParseIP(cfg.LocalIP) == nil {
-	//		log.Fatalf("Invalid Local ip provided: %s", cfg.LocalIP)
-	//	}
-	//	listen, err = multiAddressBuilder(cfg.LocalIP, cfg.TCPPort)
-	//	if err != nil {
-	//		log.Fatalf("Failed to p2p listen: %v", err)
-	//	}
-	//}
-	ua := n.getUserAgent()
-	n.logger.Info("Libp2p User Agent", zap.String("value", ua))
-	options := []libp2p.Option{
-		privKeyOption(priKey),
-		libp2p.ListenAddrs(listen),
-		libp2p.UserAgent(ua),
-		// TODO
-		//libp2p.ConnectionGater(&prysmP2pService.Service{}),
-		libp2p.Transport(libp2ptcp.NewTCPTransport),
-	}
-
-	options = append(options, libp2p.Security(noise.ID, noise.New))
-
-	//if cfg.EnableUPnP {
-	//	options = append(options, libp2p.NATPortMap()) // Allow to use UPnP
-	//}
-	//if cfg.RelayNodeAddr != "" {
-	//	options = append(options, libp2p.AddrsFactory(withRelayAddrs(cfg.RelayNodeAddr)))
-	//} else {
-	// Disable relay if it has not been set.
-	options = append(options, libp2p.DisableRelay())
-	//}
-	//if cfg.HostAddress != "" {  TODO check if needed
-	//	options = append(options, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-	//		external, err := multiAddressBuilder(cfg.HostAddress, cfg.TCPPort)
-	//		if err != nil {
-	//			log.WithError(err).Error("Unable to create external multiaddress")
-	//		} else {
-	//			addrs = append(addrs, external)
-	//		}
-	//		return addrs
-	//	}))
-	//}
-	//if cfg.HostDNS != "" {  TODO check if needed
-	//	options = append(options, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-	//		external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", cfg.HostDNS, cfg.TCPPort))
-	//		if err != nil {
-	//			log.WithError(err).Error("Unable to create external multiaddress")
-	//		} else {
-	//			addrs = append(addrs, external)
-	//		}
-	//		return addrs
-	//	}))
-	//}
-	// Disable Ping Service.
-	options = append(options, libp2p.Ping(false))
-	return options
-}
-
-func (n *p2pNetwork) getUserAgent() string {
-	ua := commons.GetBuildData()
-	if n.operatorPrivKey != nil {
-		operatorPubKey, err := rsaencryption.ExtractPublicKey(n.operatorPrivKey)
-		if err != nil || len(operatorPubKey) == 0 {
-			n.logger.Error("could not extract operator public key", zap.Error(err))
-		}
-		h := sha256.Sum256([]byte(operatorPubKey))
-		ua = fmt.Sprintf("%s:%x", ua, h)
-	}
-	return ua
 }
 
 func (n *p2pNetwork) startDiscoveryV5(addr net.IP, privKey *ecdsa.PrivateKey) (*discover.UDPv5, error) {
@@ -400,14 +307,14 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 // listen for new nodes watches for new nodes in the network and adds them to the peerstore.
 func (n *p2pNetwork) listenForNewNodes() {
 	iterator := n.dv5Listener.RandomNodes()
-	//iterator = enode.Filter(iterator, s.filterPeer)
+	//iterator = enode.Filter(iterator, n.filterPeer)
 	defer iterator.Close()
 	for {
 		// Exit if service's context is canceled
 		if n.ctx.Err() != nil {
 			break
 		}
-		if n.isPeerAtLimit(false /* inbound */) {
+		if n.isPeerAtLimit() {
 			// Pause the main loop for a period to stop looking
 			// for new peers.
 			n.logger.Debug("at peer limit")
@@ -433,22 +340,65 @@ func (n *p2pNetwork) listenForNewNodes() {
 	}
 }
 
+// filterPeer validates each node that we retrieve from our dht. We
+// try to ascertain that the peer can be a valid protocol peer.
+// Validity Conditions:
+// 1) The local node is still actively looking for peers to
+//    connect to.
+// 2) Peer has a valid IP and TCP port set in their enr.
+// 3) Peer hasn't been marked as 'bad'
+// 4) Peer is not currently active or connected.
+// 5) Peer is ready to receive incoming connections.
+// --6) Peer's fork digest in their ENR matches that of
+// 	  our localnodes.
+//func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
+//	// Ignore nil or nodes with no ip address stored
+//	if node == nil || node.IP() == nil {
+//		return false
+//	}
+//	// do not dial nodes with their tcp ports not set
+//	if err := node.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
+//		if !enr.IsNotFound(err) {
+//			n.logger.Debug("could not retrieve tcp port", zap.Error(err))
+//		}
+//		return false
+//	}
+//	peerData, multiAddr, err := convertToAddrInfo(node)
+//	if err != nil {
+//		n.logger.Debug("could not convert to peer data", zap.Error(err))
+//		return false
+//	}
+//	if n.peers.IsBad(peerData.ID) {
+//		return false
+//	}
+//	if n.peers.IsActive(peerData.ID) {
+//		return false
+//	}
+//	if n.host.Network().Connectedness(peerData.ID) == libp2pnetwork.Connected {
+//		return false
+//	}
+//	if !n.peers.IsReadyToDial(peerData.ID) {
+//		return false
+//	}
+//	nodeENR := node.Record()
+//	// Decide whether or not to connect to peer that does not
+//	// match the proper fork ENR data with our local node.
+//	//if s.genesisValidatorsRoot != nil {
+//	//	if err := s.compareForkENR(nodeENR); err != nil {
+//	//		log.WithError(err).Trace("Fork ENR mismatches between peer and local node")
+//	//		return false
+//	//	}
+//	//}
+//	// Add peer to peer handler.
+//	n.peers.Add(nodeENR, peerData.ID, multiAddr, libp2pnetwork.DirUnknown)
+//	return true
+//}
+
 // This checks our set max peers in our config, and
 // determines whether our currently connected and
 // active peers are above our set max peer limit.
-func (n *p2pNetwork) isPeerAtLimit(inbound bool) bool {
+func (n *p2pNetwork) isPeerAtLimit() bool {
 	numOfConns := len(n.host.Network().Peers())
-	// If we are measuring the limit for inbound peers
-	// we apply the high watermark buffer.
-	//if inbound {
-	//	maxPeers += highWatermarkBuffer
-	//	maxInbound := s.peers.InboundLimit() + highWatermarkBuffer
-	//	currInbound := len(s.peers.InboundConnected())
-	//	// Exit early if we are at the inbound limit.
-	//	if currInbound >= maxInbound {
-	//		return true
-	//	}
-	//}
 	activePeers := len(n.peers.Active())
 	return activePeers >= maxPeers || numOfConns >= maxPeers
 }
@@ -485,138 +435,10 @@ func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort 
 
 // Initializes a bitvector of attestation subnets beacon nodes is subscribed to
 // and creates a new ENR entry with its default value.
+// TODO: check for find peers
 func intializeAttSubnets(node *enode.LocalNode) *enode.LocalNode {
 	bitV := bitfield.NewBitvector64()
 	entry := enr.WithEntry("attnets", bitV.Bytes())
 	node.Set(entry)
 	return node
-}
-
-func convertToMultiAddr(logger *zap.Logger, nodes []*enode.Node) []ma.Multiaddr {
-	var multiAddrs []ma.Multiaddr
-	for _, node := range nodes {
-		// ignore nodes with no ip address stored
-		if node.IP() == nil {
-			logger.Debug("ignore nodes with no ip address stored", zap.String("enr", node.String()))
-			continue
-		}
-		multiAddr, err := convertToSingleMultiAddr(node)
-		if err != nil {
-			logger.Debug("Could not convert to multiAddr", zap.Error(err))
-			continue
-		}
-		multiAddrs = append(multiAddrs, multiAddr)
-	}
-	return multiAddrs
-}
-
-func convertToSingleMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
-	pubkey := node.Pubkey()
-	assertedKey := convertToInterfacePubkey(pubkey)
-	id, err := peer.IDFromPublicKey(assertedKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get peer id")
-	}
-	return multiAddressBuilderWithID(node.IP().String(), tcp, uint(node.TCP()), id)
-}
-
-func convertToInterfacePubkey(pubkey *ecdsa.PublicKey) crypto.PubKey {
-	typeAssertedKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(pubkey))
-	return typeAssertedKey
-}
-
-func multiAddressBuilderWithID(ipAddr, protocol string, port uint, id peer.ID) (ma.Multiaddr, error) {
-	parsedIP := net.ParseIP(ipAddr)
-	if parsedIP.To4() == nil && parsedIP.To16() == nil {
-		return nil, errors.Errorf("invalid ip address provided: %s", ipAddr)
-	}
-	if id.String() == "" {
-		return nil, errors.New("empty peer id given")
-	}
-	if parsedIP.To4() != nil {
-		return ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/%s/%d/p2p/%s", ipAddr, protocol, port, id.String()))
-	}
-	return ma.NewMultiaddr(fmt.Sprintf("/ip6/%s/%s/%d/p2p/%s", ipAddr, protocol, port, id.String()))
-}
-
-func multiAddressBuilder(ipAddr string, tcpPort uint) (ma.Multiaddr, error) {
-	parsedIP := net.ParseIP(ipAddr)
-	if parsedIP.To4() == nil && parsedIP.To16() == nil {
-		return nil, errors.Errorf("invalid ip address provided: %s", ipAddr)
-	}
-	if parsedIP.To4() != nil {
-		return ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", ipAddr, tcpPort))
-	}
-	return ma.NewMultiaddr(fmt.Sprintf("/ip6/%s/tcp/%d", ipAddr, tcpPort))
-}
-
-// Adds a private key to the libp2p option if the option was provided.
-// If the private key file is missing or cannot be read, or if the
-// private key contents cannot be marshaled, an exception is thrown.
-func privKeyOption(privkey *ecdsa.PrivateKey) libp2p.Option {
-	return func(cfg *libp2p.Config) error {
-		//log.Debug("ECDSA private key generated")
-		return cfg.Apply(libp2p.Identity(convertToInterfacePrivkey(privkey)))
-	}
-}
-
-func convertToInterfacePrivkey(privkey *ecdsa.PrivateKey) crypto.PrivKey {
-	typeAssertedKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privkey))
-	return typeAssertedKey
-}
-
-// To avoid data race conditions we only set params once as they are global.
-// A race condition can happen if we try and run 2 peers on the same machine.
-//var setParamsOnce sync.Once
-//
-//func setPubSubParameters() {
-//	setParamsOnce.Do(func() {
-//		heartBeatInterval := 700 * time.Millisecond
-//		pubsub.GossipSubDlo = 6
-//		pubsub.GossipSubD = 8
-//		pubsub.GossipSubHeartbeatInterval = heartBeatInterval
-//		//pubsub.GossipSubHistoryLength = 6
-//		pubsub.GossipSubHistoryGossip = 6
-//		pubsub.TimeCacheDuration = 550 * heartBeatInterval
-//
-//		// Set a larger gossip history to ensure that slower
-//		// messages have a longer time to be propagated. This
-//		// comes with the tradeoff of larger memory usage and
-//		// size of the seen message cache.
-//		pubsub.GossipSubHistoryLength = 12
-//	})
-//}
-
-func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, ma.Multiaddr, error) {
-	multiAddr, err := convertToSingleMultiAddr(node)
-	if err != nil {
-		return nil, nil, err
-	}
-	info, err := peer.AddrInfoFromP2pAddr(multiAddr)
-	if err != nil {
-		return nil, nil, err
-	}
-	return info, multiAddr, nil
-}
-
-func defaultDataDir() string {
-	// Try to place the data folder in the user's home dir
-	home := fileutil.HomeDir()
-	if home != "" {
-		if runtime.GOOS == "darwin" {
-			return filepath.Join(home, "Library", "Eth2")
-		} else if runtime.GOOS == "windows" {
-			return filepath.Join(home, "AppData", "Local", "Eth2")
-		} else {
-			return filepath.Join(home, ".eth2")
-		}
-	}
-	// As we cannot guess a stable location, return empty and handle later
-	return ""
-}
-
-func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
-	typeAssertedKey := (*ecdsa.PrivateKey)(privkey.(*crypto.Secp256k1PrivateKey))
-	typeAssertedKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
-	return typeAssertedKey
 }

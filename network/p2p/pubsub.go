@@ -89,3 +89,17 @@ func pubsubGossipParam() pubsub.GossipSubParams {
 func setGlobalPubSubParameters() {
 	pubsub.TimeCacheDuration = 550 * gossipSubHeartbeatInterval
 }
+
+//func (n *p2pNetwork) msgId(pmsg *pubsub_pb.Message) string {
+//	if pmsg == nil || pmsg.Data == nil || pmsg.Topic == nil {
+//		msg := make([]byte, 20)
+//		copy(msg, "invalid")
+//		return string(msg)
+//	}
+//	// TODO: calculate a specific message id, currently hash(validator PK (topic) + msg data)
+//	data := bytes.Join([][]byte{[]byte(*pmsg.Topic), pmsg.Data[:]}, []byte{})
+//	h := sha256.Sum256(data[:])
+//	val := hex.EncodeToString(h[:20])
+//	n.logger.Debug("msg id", zap.String("val", val))
+//	return val
+//}
