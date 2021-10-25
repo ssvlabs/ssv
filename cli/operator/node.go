@@ -17,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator"
-	"github.com/go-errors/errors"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -193,7 +192,7 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 // once done - create empty file.txt representing migration already been made
 func e2kmMigration(logger *zap.Logger) error {
 	e2kmMigrationFilePath := "./e2km/migration.txt"
-	if _, err := os.Stat(e2kmMigrationFilePath); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(e2kmMigrationFilePath); os.IsNotExist(err) {
 		logger.Info("Applying e2km migration...")
 		cfg.ETH1Options.CleanRegistryData = true
 		if _, err := os.Create(e2kmMigrationFilePath); err != nil {
