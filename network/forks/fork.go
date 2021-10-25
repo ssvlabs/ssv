@@ -6,6 +6,11 @@ import "github.com/bloxapp/ssv/network"
 type Fork interface {
 	encoding
 	SlotTick(slot uint64)
+	pubSubMapping
+}
+
+type pubSubMapping interface {
+	ValidatorTopicID(pk []byte) string
 }
 
 type encoding interface {

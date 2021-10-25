@@ -4,6 +4,7 @@ import (
 	ibftControllerFork "github.com/bloxapp/ssv/ibft/controller/forks"
 	ibftControllerForkV0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	networkForks "github.com/bloxapp/ssv/network/forks"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	storageForks "github.com/bloxapp/ssv/storage/forks"
 )
 
