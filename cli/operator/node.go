@@ -70,7 +70,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO remove once all operators updated to vXXX
-		if err := e2kmMigration(); err != nil {
+		if err := e2kmMigration(Logger); err != nil {
 			log.Fatal("Failed to create e2km migration file", zap.Error(err))
 		}
 
@@ -191,9 +191,10 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 // is so, skip
 // if not - set CleanRegistryData flag to true in order to resync eth1 data from scratch and save secret shares with the new e2km format
 // once done - create empty file.txt representing migration already been made
-func e2kmMigration() error {
+func e2kmMigration(logger *zap.Logger) error {
 	e2kmMigrationFilePath := "./e2km/migration.txt"
 	if _, err := os.Stat(e2kmMigrationFilePath); errors.Is(err, os.ErrNotExist) {
+		logger.Info("Applying e2km migration...")
 		cfg.ETH1Options.CleanRegistryData = true
 		if _, err := os.Create(e2kmMigrationFilePath); err != nil {
 			return err
