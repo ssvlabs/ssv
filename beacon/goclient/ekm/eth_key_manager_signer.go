@@ -18,39 +18,6 @@ import (
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 )
 
-// zeroSlotAttestation is a place holder attestation data representing all zero values
-var zeroSlotAttestation = &eth.AttestationData{
-	Slot:            0,
-	CommitteeIndex:  0,
-	BeaconBlockRoot: make([]byte, 32),
-	Source: &eth.Checkpoint{
-		Epoch: 0,
-		Root:  make([]byte, 32),
-	},
-	Target: &eth.Checkpoint{
-		Epoch: 0,
-		Root:  make([]byte, 32),
-	},
-}
-
-// specAttDataToPrysmAttData a simple func converting between data types
-func specAttDataToPrysmAttData(data *spec.AttestationData) *eth.AttestationData {
-	// TODO - adopt github.com/attestantio/go-eth2-client in eth2-key-manager
-	return &eth.AttestationData{
-		Slot:            types.Slot(data.Slot),
-		CommitteeIndex:  types.CommitteeIndex(data.Index),
-		BeaconBlockRoot: data.BeaconBlockRoot[:],
-		Source: &eth.Checkpoint{
-			Epoch: types.Epoch(data.Source.Epoch),
-			Root:  data.Source.Root[:],
-		},
-		Target: &eth.Checkpoint{
-			Epoch: types.Epoch(data.Target.Epoch),
-			Root:  data.Target.Root[:],
-		},
-	}
-}
-
 type ethKeyManagerSigner struct {
 	wallet       core.Wallet
 	signer       signer.ValidatorSigner
@@ -165,4 +132,37 @@ func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not save new account")
 	}
 	return nil
+}
+
+// zeroSlotAttestation is a place holder attestation data representing all zero values
+var zeroSlotAttestation = &eth.AttestationData{
+	Slot:            0,
+	CommitteeIndex:  0,
+	BeaconBlockRoot: make([]byte, 32),
+	Source: &eth.Checkpoint{
+		Epoch: 0,
+		Root:  make([]byte, 32),
+	},
+	Target: &eth.Checkpoint{
+		Epoch: 0,
+		Root:  make([]byte, 32),
+	},
+}
+
+// specAttDataToPrysmAttData a simple func converting between data types
+func specAttDataToPrysmAttData(data *spec.AttestationData) *eth.AttestationData {
+	// TODO - adopt github.com/attestantio/go-eth2-client in eth2-key-manager
+	return &eth.AttestationData{
+		Slot:            types.Slot(data.Slot),
+		CommitteeIndex:  types.CommitteeIndex(data.Index),
+		BeaconBlockRoot: data.BeaconBlockRoot[:],
+		Source: &eth.Checkpoint{
+			Epoch: types.Epoch(data.Source.Epoch),
+			Root:  data.Source.Root[:],
+		},
+		Target: &eth.Checkpoint{
+			Epoch: types.Epoch(data.Target.Epoch),
+			Root:  data.Target.Root[:],
+		},
+	}
 }
