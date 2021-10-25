@@ -21,6 +21,10 @@ const (
 
 	// heartbeat interval
 	gossipSubHeartbeatInterval = 700 * time.Millisecond // frequency of heartbeat, milliseconds
+
+	// pubsubQueueSize is the size that we assign to our validation queue and outbound message queue for
+	// gossipsub.
+	pubsubQueueSize = 600
 )
 
 func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
@@ -33,8 +37,8 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		//pubsub.WithNoAuthor(),
 		//pubsub.WithMessageIdFn(n.msgId),
 		//pubsub.WithSubscriptionFilter(s),
-		pubsub.WithPeerOutboundQueueSize(256),
-		pubsub.WithValidateQueueSize(256),
+		pubsub.WithPeerOutboundQueueSize(pubsubQueueSize),
+		pubsub.WithValidateQueueSize(pubsubQueueSize),
 		pubsub.WithFloodPublish(true),
 		pubsub.WithGossipSubParams(pubsubGossipParam()),
 	}
