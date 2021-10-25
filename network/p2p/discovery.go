@@ -292,6 +292,10 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 		n.logger.Warn("bad peer", zap.String("peerID", info.ID.String()))
 		return errors.New("refused to connect to bad peer")
 	}
+	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
+		n.logger.Debug("peer is already connected", zap.String("peerID", info.ID.String()))
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
