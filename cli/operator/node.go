@@ -17,11 +17,13 @@ import (
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator"
+	"github.com/go-errors/errors"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"os"
 )
 
 type config struct {
@@ -65,6 +67,11 @@ var StartNodeCmd = &cobra.Command{
 		})
 		if errLogLevel != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
+		}
+
+		// TODO remove once all operators updated to vXXX
+		if err := e2kmMigration(); err != nil {
+			log.Fatal("Failed to create e2km migration file", zap.Error(err))
 		}
 
 		// TODO - change via command line?
@@ -178,4 +185,19 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))
 	}
+}
+
+// e2kmMigration checks if e2km migration file exist
+// is so, skip
+// if not - set CleanRegistryData flag to true in order to resync eth1 data from scratch and save secret shares with the new e2km format
+// once done - create empty file.txt representing migration already been made
+func e2kmMigration() error {
+	e2kmMigrationFilePath := "./e2km/migration.txt"
+	if _, err := os.Stat(e2kmMigrationFilePath); errors.Is(err, os.ErrNotExist) {
+		cfg.ETH1Options.CleanRegistryData = true
+		if _, err := os.Create(e2kmMigrationFilePath); err != nil {
+			return err
+		}
+	}
+	return nil
 }

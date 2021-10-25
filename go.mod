@@ -8,6 +8,7 @@ require (
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.9.25
 	github.com/ferranbt/fastssz v0.0.0-20210905181407-59cf6761a7d5
+	github.com/go-errors/errors v1.0.1
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/google/uuid v1.2.0
