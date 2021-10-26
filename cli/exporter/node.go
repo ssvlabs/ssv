@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -81,6 +82,8 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
 		cfg.P2pNetworkConfig.ReportLastMsg = true
+		// TODO add fork interface for exporter or use the same forks as in operator
+		cfg.P2pNetworkConfig.Fork = networkForkV0.New()
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))

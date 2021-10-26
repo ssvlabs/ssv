@@ -1,25 +1,20 @@
 package p2p
 
 import (
-	"encoding/json"
 	"github.com/bloxapp/ssv/network"
 	core "github.com/libp2p/go-libp2p-core"
 	"go.uber.org/zap"
 	"io/ioutil"
 )
 
-func readMessageData(stream network.SyncStream) (*network.Message, error) {
-	data := &network.Message{}
+func (n *p2pNetwork) readMessageData(stream network.SyncStream) (*network.Message, error) {
+	//data := &network.Message{}
 	buf, err := ioutil.ReadAll(stream)
 	if err != nil {
 		return nil, err
 	}
 
-	// unmarshal
-	if err := json.Unmarshal(buf, data); err != nil {
-		return nil, err
-	}
-	return data, nil
+	return n.fork.DecodeNetworkMsg(buf)
 }
 
 // SyncStream is a wrapper struct for the core.Stream interface to match the network.SyncStream interface
@@ -56,7 +51,7 @@ func (s *SyncStream) RemotePeer() string {
 func (n *p2pNetwork) handleStream() {
 	n.host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
 		netSyncStream := &SyncStream{stream: stream}
-		cm, err := readMessageData(netSyncStream)
+		cm, err := n.readMessageData(netSyncStream)
 		if err != nil {
 			n.logger.Error("could not read and parse stream", zap.Error(err))
 			return

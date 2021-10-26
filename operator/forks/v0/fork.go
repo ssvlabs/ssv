@@ -4,6 +4,7 @@ import (
 	ibftControllerFork "github.com/bloxapp/ssv/ibft/controller/forks"
 	ibftControllerForkV0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	networkForks "github.com/bloxapp/ssv/network/forks"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	storageForks "github.com/bloxapp/ssv/storage/forks"
 )
 
@@ -23,7 +24,7 @@ func (v0 *ForkV0) IBFTControllerFork() ibftControllerFork.Fork {
 
 // NetworkFork returns network fork
 func (v0 *ForkV0) NetworkFork() networkForks.Fork {
-	return nil
+	return networkForkV0.New()
 }
 
 // StorageFork returns storage fork
