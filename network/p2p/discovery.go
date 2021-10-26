@@ -3,9 +3,12 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/sha256"
+	"fmt"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
@@ -439,10 +442,22 @@ func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort 
 
 // Initializes a bitvector of attestation subnets beacon nodes is subscribed to
 // and creates a new ENR entry with its default value.
-// TODO: check for find peers
 func intializeAttSubnets(node *enode.LocalNode) *enode.LocalNode {
 	bitV := bitfield.NewBitvector64()
 	entry := enr.WithEntry("attnets", bitV.Bytes())
 	node.Set(entry)
 	return node
+}
+
+// addOperatorPubKeyEntry adds 'pk' entry to the node.
+// pk entry contains the sha256 (hex encoded) of the operator public key
+func addOperatorPubKeyEntry(node *enode.LocalNode, pubkey *bls.PublicKey) (*enode.LocalNode, error) {
+	pkHash := []byte(fmt.Sprintf("%x", sha256.Sum256([]byte(pubkey.SerializeToHexStr()))))
+	bitlist, err := bitfield.NewBitlist64FromBytes(64, pkHash)
+	if err != nil {
+		return node, err
+	}
+	entry := enr.WithEntry("pk", bitlist.Bytes())
+	node.Set(entry)
+	return node, nil
 }
