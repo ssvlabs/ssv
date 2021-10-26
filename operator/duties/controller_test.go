@@ -5,6 +5,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"sync"
@@ -19,14 +20,14 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 		logger: zap.L(), ctx: context.Background(), ethNetwork: core.PraterNetwork,
 		executor: execWithWaitGroup(t, &wg), fetcher: &f, genesisEpoch: 0, dutyLimit: 32,
 	}
-	cn := make(chan uint64)
+	cn := make(chan types.Slot)
 
 	secPerSlot = 2
 	defer func() {
 		secPerSlot = 12
 	}()
-	currentSlot := uint64(ctrl.getCurrentSlot())
-	duties := map[uint64][]beacon.Duty{}
+	currentSlot := types.Slot(ctrl.getCurrentSlot())
+	duties := map[types.Slot][]beacon.Duty{}
 	duties[currentSlot] = []beacon.Duty{
 		{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}},
 	}
@@ -92,9 +93,9 @@ func execWithWaitGroup(t *testing.T, wg *sync.WaitGroup) dutyExecutor {
 }
 
 type fetcherMock struct {
-	results map[uint64][]beacon.Duty
+	results map[types.Slot][]beacon.Duty
 }
 
 func (f *fetcherMock) GetDuties(slot uint64) ([]beacon.Duty, error) {
-	return f.results[slot], nil
+	return f.results[types.Slot(slot)], nil
 }

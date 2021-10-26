@@ -2,7 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
-	"errors"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 
@@ -41,7 +42,8 @@ type InstanceOptions struct {
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
-	Fork forks.Fork
+	Fork   forks.Fork
+	Signer beacon.Signer
 }
 
 // Instance defines the instance attributes
@@ -55,6 +57,7 @@ type Instance struct {
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
+	signer         beacon.Signer
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue
@@ -114,6 +117,7 @@ func NewInstance(opts *InstanceOptions) ibft.Instance {
 		Logger: opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
 			zap.Uint64("seq_num", opts.SeqNumber),
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
+		signer: opts.Signer,
 
 		MsgQueue:            opts.Queue,
 		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
@@ -300,14 +304,19 @@ func (i *Instance) GetStageChan() chan proto.RoundState {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
-	sig, err := msg.Sign(i.ValidatorShare.ShareKey)
+	pk, err := i.ValidatorShare.OperatorPubKey()
+	if err != nil {
+		return errors.Wrap(err, "could not find operator pk for signing msg")
+	}
+
+	sigByts, err := i.signer.SignIBFTMessage(msg, pk.Serialize())
 	if err != nil {
 		return err
 	}
 
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
-		Signature: sig.Serialize(),
+		Signature: sigByts,
 		SignerIds: []uint64{i.ValidatorShare.NodeID},
 	}
 
