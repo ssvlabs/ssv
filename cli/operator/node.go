@@ -192,7 +192,7 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 // if not - set CleanRegistryData flag to true in order to resync eth1 data from scratch and save secret shares with the new e2km format
 // once done - create empty file.txt representing migration already been made
 func e2kmMigration(logger *zap.Logger) error {
-	e2kmMigrationFilePath := "./e2km"
+	e2kmMigrationFilePath := "./data/e2km"
 	e2kmMigrationFileName := "migration.txt"
 	fullPath := filepath.Join(e2kmMigrationFilePath, e2kmMigrationFileName)
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
