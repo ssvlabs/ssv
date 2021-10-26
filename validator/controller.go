@@ -304,6 +304,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.
 	if err := c.keyManager.AddShare(shareSecret); err != nil {
 		return errors.Wrap(err, "failed to save new share secret to key manager")
 	}
+	logger.Info("share was added successfully to key manager")
 
 	// save validator data
 	if err := c.collection.SaveValidatorShare(share); err != nil {
