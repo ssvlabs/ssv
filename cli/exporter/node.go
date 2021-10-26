@@ -20,6 +20,7 @@ import (
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -75,6 +76,16 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
+
+		// TODO remove once all operators updated to vXXX
+		ok, err := migrationutils.E2kmMigration(Logger)
+		if err != nil {
+			log.Fatal("Failed to create e2km migration file", zap.Error(err))
+		}
+		if ok {
+			cfg.ETH1Options.CleanRegistryData = true
+		}
+
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
