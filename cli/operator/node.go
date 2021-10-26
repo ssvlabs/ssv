@@ -22,6 +22,8 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 )
 
 type config struct {
@@ -67,6 +69,11 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
+		// TODO remove once all operators updated to vXXX
+		if err := e2kmMigration(Logger); err != nil {
+			log.Fatal("Failed to create e2km migration file", zap.Error(err))
+		}
+
 		// TODO - change via command line?
 		fork := v0.New()
 
@@ -82,7 +89,8 @@ var StartNodeCmd = &cobra.Command{
 		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
-		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
+		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+		cfg.ETH2Options.DB = db
 		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
@@ -121,6 +129,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
+		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
@@ -176,4 +185,25 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))
 	}
+}
+
+// e2kmMigration checks if e2km migration file exist
+// is so, skip
+// if not - set CleanRegistryData flag to true in order to resync eth1 data from scratch and save secret shares with the new e2km format
+// once done - create empty file.txt representing migration already been made
+func e2kmMigration(logger *zap.Logger) error {
+	e2kmMigrationFilePath := "./data/e2km"
+	e2kmMigrationFileName := "migration.txt"
+	fullPath := filepath.Join(e2kmMigrationFilePath, e2kmMigrationFileName)
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		logger.Info("Applying e2km migration...")
+		cfg.ETH1Options.CleanRegistryData = true
+		if err := os.MkdirAll(e2kmMigrationFilePath, 0700); err != nil {
+			return err
+		}
+		if _, err := os.Create(fullPath); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -36,6 +36,7 @@ type Options struct {
 	ETHNetwork                 *core.Network
 	DB                         basedb.IDb
 	Fork                       forks.Fork
+	Signer                     beacon.Signer
 }
 
 // Validator struct that manages all ibft wrappers
@@ -52,6 +53,7 @@ type Validator struct {
 	valueCheck                 *valcheck.SlashingProtection
 	startOnce                  sync.Once
 	fork                       forks.Fork
+	signer                     beacon.Signer
 }
 
 // New Validator creation
@@ -61,7 +63,7 @@ func New(opt Options) *Validator {
 
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.RoleType]ibft.Controller)
-	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
@@ -85,6 +87,7 @@ func New(opt Options) *Validator {
 		valueCheck:                 valcheck.New(),
 		startOnce:                  sync.Once{},
 		fork:                       opt.Fork,
+		signer:                     opt.Signer,
 	}
 }
 
@@ -147,11 +150,22 @@ func setupIbftController(
 	msgQueue *msgqueue.MessageQueue,
 	share *storage.Share,
 	fork forks.Fork,
+	signer beacon.Signer,
 ) ibft.Controller {
 
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
-	return controller2.New(role, identifier, logger, &ibftStorage, network, msgQueue, proto.DefaultConsensusParams(), share, fork.IBFTControllerFork())
+	return controller2.New(
+		role,
+		identifier,
+		logger,
+		&ibftStorage,
+		network,
+		msgQueue,
+		proto.DefaultConsensusParams(),
+		share,
+		fork.IBFTControllerFork(),
+		signer)
 }
 
 // oneOfIBFTIdentifiers will return true if provided identifier matches one of the iBFT instances.

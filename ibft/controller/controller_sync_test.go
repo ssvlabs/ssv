@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
@@ -23,6 +24,25 @@ import (
 	"testing"
 	"time"
 )
+
+type testSigner struct {
+}
+
+func newTestSigner() beacon.KeyManager {
+	return &testSigner{}
+}
+
+func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	return nil, nil, nil
+}
 
 type testingFork struct {
 	controller *Controller
@@ -118,12 +138,19 @@ func populatedStorage(t *testing.T, sks map[uint64]*bls.SecretKey, highestSeq in
 	return &storage
 }
 
-func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftStorage collections.Iibft, sks map[uint64]*bls.SecretKey, nodes map[uint64]*proto.Node) ibft.Controller {
+func populatedIbft(
+	nodeID uint64,
+	identifier []byte,
+	network *local.Local,
+	ibftStorage collections.Iibft,
+	sks map[uint64]*bls.SecretKey,
+	nodes map[uint64]*proto.Node,
+	signer beacon.Signer,
+) ibft.Controller {
 	queue := msgqueue.New()
 	share := &storage.Share{
 		NodeID:    nodeID,
 		PublicKey: validatorPK(sks),
-		ShareKey:  sks[nodeID],
 		Committee: nodes,
 	}
 	ret := New(
@@ -135,7 +162,8 @@ func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftS
 		queue,
 		proto.DefaultConsensusParams(),
 		share,
-		nil)
+		nil,
+		signer)
 	ret.(*Controller).setFork(testFork(ret.(*Controller)))
 	ret.(*Controller).initFinished = true // as if they are already synced
 	ret.(*Controller).listenToNetworkMessages()
@@ -147,6 +175,7 @@ func populatedIbft(nodeID uint64, identifier []byte, network *local.Local, ibftS
 
 func TestSyncFromScratch(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
+	signer := newTestSigner()
 	network := local.NewLocalNetwork()
 	db, err := kv.New(basedb.Options{
 		Type:   "badger-memory",
@@ -156,9 +185,9 @@ func TestSyncFromScratch(t *testing.T) {
 	require.NoError(t, err)
 	identifier := []byte("lambda_11")
 	s1 := collections.NewIbft(db, zap.L(), "attestation")
-	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes, signer)
 
-	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes, signer)
 
 	require.NoError(t, i1.(*Controller).SyncIBFT())
 	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -169,13 +198,14 @@ func TestSyncFromScratch(t *testing.T) {
 
 func TestSyncFromMiddle(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
+	signer := newTestSigner()
 	network := local.NewLocalNetwork()
 
 	identifier := []byte("lambda_11")
 	s1 := populatedStorage(t, sks, 4)
-	i1 := populatedIbft(1, identifier, network, s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, signer)
 
-	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes, signer)
 
 	// test before sync
 	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -194,13 +224,14 @@ func TestSyncFromMiddle(t *testing.T) {
 
 func TestConcurrentSync(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
+	signer := newTestSigner()
 	network := local.NewLocalNetwork()
 
 	identifier := []byte("lambda_11")
 	s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
-	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes, signer)
 
-	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes, signer)
 
 	// first sync
 	wg := sync.WaitGroup{}
@@ -223,13 +254,14 @@ func TestConcurrentSync(t *testing.T) {
 
 func TestSyncFromScratch100Sequences(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
+	signer := newTestSigner()
 	network := local.NewLocalNetwork()
 
 	identifier := []byte("lambda_11")
 	s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
-	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+	i1 := populatedIbft(1, identifier, network, &s1, sks, nodes, signer)
 
-	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes)
+	_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes, signer)
 
 	require.NoError(t, i1.(*Controller).SyncIBFT())
 	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -241,15 +273,16 @@ func TestSyncFromScratch100Sequences(t *testing.T) {
 func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 	t.Run("scenario 1", func(t *testing.T) {
 		sks, nodes := GenerateNodes(4)
+		signer := newTestSigner()
 		network := local.NewLocalNetwork()
 
 		identifier := []byte("lambda_11")
 		s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
-		i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+		i1 := populatedIbft(1, identifier, network, &s1, sks, nodes, signer)
 
-		_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes)
-		_ = populatedIbft(3, identifier, network, populatedStorage(t, sks, 105), sks, nodes)
-		_ = populatedIbft(4, identifier, network, populatedStorage(t, sks, 89), sks, nodes)
+		_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 100), sks, nodes, signer)
+		_ = populatedIbft(3, identifier, network, populatedStorage(t, sks, 105), sks, nodes, signer)
+		_ = populatedIbft(4, identifier, network, populatedStorage(t, sks, 89), sks, nodes, signer)
 
 		// test before sync
 		_, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
@@ -267,15 +300,16 @@ func TestSyncFromScratch100SequencesWithDifferentPeers(t *testing.T) {
 
 	t.Run("scenario 2", func(t *testing.T) {
 		sks, nodes := GenerateNodes(4)
+		signer := newTestSigner()
 		network := local.NewLocalNetwork()
 
 		identifier := []byte("lambda_11")
 		s1 := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
-		i1 := populatedIbft(1, identifier, network, &s1, sks, nodes)
+		i1 := populatedIbft(1, identifier, network, &s1, sks, nodes, signer)
 
-		_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes)
-		_ = populatedIbft(3, identifier, network, populatedStorage(t, sks, 20), sks, nodes)
-		_ = populatedIbft(4, identifier, network, populatedStorage(t, sks, 89), sks, nodes)
+		_ = populatedIbft(2, identifier, network, populatedStorage(t, sks, 10), sks, nodes, signer)
+		_ = populatedIbft(3, identifier, network, populatedStorage(t, sks, 20), sks, nodes, signer)
+		_ = populatedIbft(4, identifier, network, populatedStorage(t, sks, 89), sks, nodes, signer)
 
 		// test before sync
 		_, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)

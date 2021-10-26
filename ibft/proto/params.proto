@@ -14,5 +14,4 @@ message InstanceConfig{
 message Node{
   uint64 ibft_id  = 1;
   bytes pk        = 2 [(gogoproto.nullable) = false];
-  bytes sk        = 3;
 }

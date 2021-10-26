@@ -2,6 +2,8 @@ package beacon
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
@@ -16,10 +18,13 @@ type Options struct {
 	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
+	DB             basedb.IDb
 }
 
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
+	KeyManager
+	SigningUtil
 
 	// ExtendIndexMap extanding the pubkeys map of the client (in order to prevent redundant call to fetch pubkeys from node)
 	ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey)
@@ -33,12 +38,30 @@ type Beacon interface {
 	// GetAttestationData returns attestation data by the given slot and committee index
 	GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error)
 
-	// SignAttestation signs the given attestation
-	SignAttestation(data *spec.AttestationData, duty *Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error)
-
 	// SubmitAttestation submit the attestation to the node
 	SubmitAttestation(attestation *spec.Attestation) error
 
 	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
 	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
+}
+
+// KeyManager is an interface responsible for all key manager functions
+type KeyManager interface {
+	Signer
+	// AddShare saves a share key
+	AddShare(shareKey *bls.SecretKey) error
+}
+
+// Signer is an interface responsible for all signing operations
+type Signer interface {
+	// SignIBFTMessage signs a network iBFT msg
+	SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error)
+	// SignAttestation signs the given attestation
+	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
+}
+
+// SigningUtil is an interface for beacon node signing specific methods
+type SigningUtil interface {
+	GetDomain(data *spec.AttestationData) ([]byte, error)
+	ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error)
 }
