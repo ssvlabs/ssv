@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/prysmaticlabs/prysm/async"
 	"net"
 	"strings"
 	"sync"
@@ -21,7 +22,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
-	"github.com/prysmaticlabs/prysm/shared/runutil"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -125,7 +125,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		//host.RemoveStreamHandler(identify.IDDelta)
 		ua := n.getUserAgent()
 		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
-		ids = identify.NewIDService(host, identify.UserAgent(ua))
+		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
+		if err != nil {
+			return nil, errors.Wrap(err, "Failed to create id service")
+		}
 		n.host = host
 	} else {
 		logger.Error("Unsupported discovery flag")
@@ -262,7 +265,7 @@ func (n *p2pNetwork) setupGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 }
 
 func (n *p2pNetwork) watchPeers() {
-	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+	async.RunEvery(n.ctx, 1*time.Minute, func() {
 		// index all peers and report
 		go func() {
 			n.peersIndex.Run()

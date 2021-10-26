@@ -14,7 +14,7 @@ import (
 )
 
 func TestValidatorSerializer(t *testing.T) {
-	validatorShare := generateRandomValidatorShare()
+	validatorShare, _ := generateRandomValidatorShare()
 	b, err := validatorShare.Serialize()
 	require.NoError(t, err)
 
@@ -26,8 +26,6 @@ func TestValidatorSerializer(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, v.PublicKey)
 	require.Equal(t, v.PublicKey.SerializeToHexStr(), validatorShare.PublicKey.SerializeToHexStr())
-	require.NotNil(t, v.ShareKey)
-	require.Equal(t, v.ShareKey.SerializeToHexStr(), validatorShare.ShareKey.SerializeToHexStr())
 	require.NotNil(t, v.Committee)
 	require.NotNil(t, v.NodeID)
 }
@@ -48,10 +46,10 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 		Logger: options.Logger,
 	})
 
-	validatorShare := generateRandomValidatorShare()
+	validatorShare, _ := generateRandomValidatorShare()
 	require.NoError(t, collection.SaveValidatorShare(validatorShare))
 
-	validatorShare2 := generateRandomValidatorShare()
+	validatorShare2, _ := generateRandomValidatorShare()
 	require.NoError(t, collection.SaveValidatorShare(validatorShare2))
 
 	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
@@ -64,7 +62,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.EqualValues(t, len(validators), 2)
 }
 
-func generateRandomValidatorShare() *Share {
+func generateRandomValidatorShare() (*Share, *bls.SecretKey) {
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -73,7 +71,6 @@ func generateRandomValidatorShare() *Share {
 		1: {
 			IbftId: 1,
 			Pk:     fixtures.RefSplitSharesPubKeys[0],
-			Sk:     sk.Serialize(),
 		},
 		2: {
 			IbftId: 2,
@@ -92,7 +89,6 @@ func generateRandomValidatorShare() *Share {
 	return &Share{
 		NodeID:    1,
 		PublicKey: sk.GetPublicKey(),
-		ShareKey:  &sk,
 		Committee: ibftCommittee,
-	}
+	}, &sk
 }

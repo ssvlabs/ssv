@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
+	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 	"time"
 )
@@ -64,7 +65,7 @@ type dutyFetcher struct {
 func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
 	var duties []beacon.Duty
 
-	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
+	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
 	epoch := spec.Epoch(esEpoch)
 	logger := df.logger.With(zap.Uint64("slot", slot), zap.Uint64("epoch", uint64(epoch)))
 	start := time.Now()
@@ -118,7 +119,7 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*beacon.Duty, error) {
 	if indices := df.indicesFetcher.GetValidatorsIndices(); len(indices) > 0 {
 		df.logger.Debug("got indices for existing validators",
 			zap.Int("count", len(indices)), zap.Any("indices", indices))
-		esEpoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
+		esEpoch := df.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
 		epoch := spec.Epoch(esEpoch)
 		results, err := df.beaconClient.GetDuties(epoch, indices)
 		return results, err
