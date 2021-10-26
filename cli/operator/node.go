@@ -16,14 +16,13 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 )
 
 type config struct {
@@ -70,8 +69,12 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO remove once all operators updated to vXXX
-		if err := e2kmMigration(Logger); err != nil {
+		ok, err := migrationutils.E2kmMigration(Logger)
+		if err != nil {
 			log.Fatal("Failed to create e2km migration file", zap.Error(err))
+		}
+		if ok {
+			cfg.ETH1Options.CleanRegistryData = true
 		}
 
 		// TODO - change via command line?
@@ -185,25 +188,4 @@ func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))
 	}
-}
-
-// e2kmMigration checks if e2km migration file exist
-// is so, skip
-// if not - set CleanRegistryData flag to true in order to resync eth1 data from scratch and save secret shares with the new e2km format
-// once done - create empty file.txt representing migration already been made
-func e2kmMigration(logger *zap.Logger) error {
-	e2kmMigrationFilePath := "./data/e2km"
-	e2kmMigrationFileName := "migration.txt"
-	fullPath := filepath.Join(e2kmMigrationFilePath, e2kmMigrationFileName)
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		logger.Info("Applying e2km migration...")
-		cfg.ETH1Options.CleanRegistryData = true
-		if err := os.MkdirAll(e2kmMigrationFilePath, 0700); err != nil {
-			return err
-		}
-		if _, err := os.Create(fullPath); err != nil {
-			return err
-		}
-	}
-	return nil
 }
