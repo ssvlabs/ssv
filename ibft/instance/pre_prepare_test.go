@@ -34,7 +34,6 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 		},
 		ValueCheck: bytesval.NewNotEqualBytes(value),
 		Logger:     zaptest.NewLogger(t),
@@ -115,7 +114,6 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 		},
 		ValueCheck: bytesval.NewNotEqualBytes(value),
 		Logger:     zaptest.NewLogger(t),
@@ -183,13 +181,13 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 		ValueCheck:     bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:         zaptest.NewLogger(t),
 		network:        local.NewLocalNetwork(),
 		LeaderSelector: leader,
+		signer:         newTestSigner(),
 	}
 
 	// test happy flow
@@ -219,7 +217,6 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  secretKeys[1],
 		},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),

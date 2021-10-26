@@ -13,8 +13,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/shared/fileutil"
-	"github.com/prysmaticlabs/prysm/shared/iputils"
+	"github.com/prysmaticlabs/prysm/io/file"
+	"github.com/prysmaticlabs/prysm/network"
 	"go.uber.org/zap"
 	"net"
 	"path/filepath"
@@ -60,7 +60,7 @@ func multiAddrFromString(address string) (ma.Multiaddr, error) {
 
 // Retrieves an external ipv4 address and converts into a libp2p formatted value.
 func (n *p2pNetwork) ipAddr() net.IP {
-	ip, err := iputils.ExternalIP()
+	ip, err := network.ExternalIP()
 	if err != nil {
 		n.logger.Fatal("Could not get IPv4 address", zap.Error(err))
 	}
@@ -82,7 +82,7 @@ func privKey() (*ecdsa.PrivateKey, error) {
 	}
 	dst := make([]byte, hex.EncodedLen(len(rawbytes)))
 	hex.Encode(dst, rawbytes)
-	if err := fileutil.WriteFile(defaultKeyPath, dst); err != nil {
+	if err := file.WriteFile(defaultKeyPath, dst); err != nil {
 		return nil, err
 	}
 	convertedKey := convertFromInterfacePrivKey(priv)
@@ -182,7 +182,7 @@ func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, ma.Multiaddr, error) {
 // defaultDataDir is the default data directory
 func defaultDataDir() string {
 	// Try to place the data folder in the user's home dir
-	home := fileutil.HomeDir()
+	home := file.HomeDir()
 	if home != "" {
 		if runtime.GOOS == "darwin" {
 			return filepath.Join(home, "Library", "Eth2")

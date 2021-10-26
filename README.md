@@ -77,6 +77,7 @@ included in our repository in the `LICENSE` file.
 [X] SSV specific iBFT implementor\
 [X] Port POC code to Golang\
 [ ] Externalize remote signer\
+[X] Slashing protection
 [X] Multi BN implementation support
 [X] Networking and discovery\
 [X] db, persistence and recovery (Sync)\
@@ -91,7 +92,8 @@ included in our repository in the `LICENSE` file.
 [X] Phase 1 testing\
 [X] Full iBFT spec\
 [ ] Audit\
-[ ] Grafana node dashboard
+[X] Grafana node dashboard\
+[\\] Network refactoring
 
 ** X=done, \\=WIP
 

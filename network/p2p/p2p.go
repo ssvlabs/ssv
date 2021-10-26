@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/prysmaticlabs/prysm/async"
 	"net"
 	"strings"
 	"sync"
@@ -20,7 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
-	"github.com/prysmaticlabs/prysm/shared/runutil"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -186,7 +187,7 @@ func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
 }
 
 func (n *p2pNetwork) watchPeers() {
-	runutil.RunEvery(n.ctx, 1*time.Minute, func() {
+	async.RunEvery(n.ctx, 1*time.Minute, func() {
 		// index all peers and report
 		go func() {
 			n.peersIndex.Run()

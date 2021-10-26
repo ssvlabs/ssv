@@ -116,7 +116,8 @@ var StartExporterNodeCmd = &cobra.Command{
 		// TODO Not refactored yet Start
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
-		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
+		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+		cfg.ETH2Options.DB = db
 		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err))

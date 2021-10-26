@@ -80,5 +80,6 @@ func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartIn
 		SeqNumber:       opts.SeqNumber,
 		Fork:            i.fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
+		Signer:          i.signer,
 	}, nil
 }

@@ -10,11 +10,11 @@ import (
 func TestShareOptionsToShare(t *testing.T) {
 	threshold.Init()
 
-	origShare := generateRandomValidatorShare()
+	origShare, sk := generateRandomValidatorShare()
 
 	shareOpts := ShareOptions{
-		ShareKey:  origShare.ShareKey.SerializeToHexStr(),
-		PublicKey: origShare.ShareKey.GetPublicKey().SerializeToHexStr(),
+		ShareKey:  sk.SerializeToHexStr(),
+		PublicKey: sk.GetPublicKey().SerializeToHexStr(),
 		NodeID:    1,
 		Committee: map[string]int{},
 	}
@@ -27,10 +27,7 @@ func TestShareOptionsToShare(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, share)
 		require.Equal(t, len(share.Committee), 4)
-		require.True(t, len(share.Committee[1].Sk) > 0)
-		require.True(t, len(share.Committee[2].Sk) == 0)
 		require.Equal(t, share.PublicKey.GetHexString(), origShare.PublicKey.GetHexString())
-		require.Equal(t, share.ShareKey.GetHexString(), origShare.ShareKey.GetHexString())
 	})
 
 	t.Run("empty ShareOptions", func(t *testing.T) {
@@ -42,8 +39,8 @@ func TestShareOptionsToShare(t *testing.T) {
 
 	t.Run("ShareOptions w/o committee", func(t *testing.T) {
 		emptyShareOpts := ShareOptions{
-			ShareKey:  origShare.ShareKey.SerializeToHexStr(),
-			PublicKey: origShare.ShareKey.GetPublicKey().SerializeToHexStr(),
+			ShareKey:  sk.SerializeToHexStr(),
+			PublicKey: sk.GetPublicKey().SerializeToHexStr(),
 			NodeID:    1,
 		}
 		share, err := emptyShareOpts.ToShare()

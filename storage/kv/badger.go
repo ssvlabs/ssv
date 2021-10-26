@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/shared/runutil"
+	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"time"
 )
@@ -45,7 +45,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	}
 
 	if options.Reporting && options.Ctx != nil {
-		runutil.RunEvery(options.Ctx, 1*time.Minute, _db.report)
+		async.RunEvery(options.Ctx, 1*time.Minute, _db.report)
 	}
 
 	options.Logger.Info("Badger db initialized")

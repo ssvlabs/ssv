@@ -28,34 +28,38 @@ func updateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 }
 
 // createShareWithOperatorKey creates a new share object from event
-func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, error) {
+func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, *bls.SecretKey, error) {
 	operatorPrivKey, found, err := shareEncryptionKeyProvider()
 	if !found {
-		return nil, errors.New("could not find operator private key")
+		return nil, nil, errors.New("could not find operator private key")
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "get operator private key")
+		return nil, nil, errors.Wrap(err, "get operator private key")
 	}
 	operatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not extract operator public key")
+		return nil, nil, errors.Wrap(err, "could not extract operator public key")
 	}
-	validatorShare, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
+	validatorShare, share, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create share from event")
+		return nil, nil, errors.Wrap(err, "could not create share from event")
 	}
-	return validatorShare, nil
+	if share == nil {
+		return nil, nil, errors.New("could not decode share key from validator added event")
+	}
+	return validatorShare, share, nil
 }
 
-// ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share
-func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, error) {
+// ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share.
+// share could return nil in case operator key is not present/ different
+func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, *bls.SecretKey, error) {
 	validatorShare := validatorstorage.Share{}
 
 	validatorShare.PublicKey = &bls.PublicKey{}
 	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize share public key")
+		return nil, nil, errors.Wrap(err, "failed to deserialize share public key")
 	}
-	validatorShare.ShareKey = &bls.SecretKey{}
+	var shareKey *bls.SecretKey
 
 	ibftCommittee := map[uint64]*proto.Node{}
 	for i := range validatorAddedEvent.OessList {
@@ -69,13 +73,13 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 			ibftCommittee[nodeID].Pk = oess.SharedPublicKey
 			validatorShare.NodeID = nodeID
 
-			if err := validatorShare.ShareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
-				return nil, errors.Wrap(err, "failed to deserialize share private key")
+			shareKey = &bls.SecretKey{}
+			if err := shareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
+				return nil, nil, errors.Wrap(err, "failed to deserialize share private key")
 			}
-			ibftCommittee[nodeID].Sk = validatorShare.ShareKey.Serialize()
 		}
 	}
 	validatorShare.Committee = ibftCommittee
 
-	return &validatorShare, nil
+	return &validatorShare, shareKey, nil
 }

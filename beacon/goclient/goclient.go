@@ -10,12 +10,13 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/goclient/ekm"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prysmaticlabs/prysm/shared/slotutil"
-	"github.com/prysmaticlabs/prysm/shared/timeutils"
+	prysmTime "github.com/prysmaticlabs/prysm/time"
+	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 	"log"
@@ -53,6 +54,7 @@ type goClient struct {
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
+	keyManager     beacon.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -82,7 +84,12 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 		network:        core.NetworkFromString(opt.Network),
 		client:         autoClient,
 		indicesMapLock: sync.Mutex{},
-		graffiti:       []byte("BloxStaking"),
+		graffiti:       opt.Graffiti,
+	}
+
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, core.PraterNetwork)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
 
 	return _client, nil
@@ -156,10 +163,10 @@ func (gc *goClient) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spe
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
-	delay := slotutil.DivideSlotBy(3 /* a third of the slot duration */)
+	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := timeutils.Until(finalTime)
+	wait := prysmTime.Until(finalTime)
 	if wait <= 0 {
 		return
 	}

@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"github.com/bloxapp/ssv/fixtures"
+	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 func TestP2PNetworker(t *testing.T) {
 	logger := zaptest.NewLogger(t)
+	threshold.Init()
 
 	peer1, err := New(context.Background(), logger, &Config{
 		DiscoveryType: "mdns",
