@@ -122,7 +122,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	var ids *identify.IDService
 
-	if cfg.DiscoveryType == "mdns" { // use mdns discovery {
+	if cfg.DiscoveryType == "mdns" {
 		// Setup Local mDNS discovery
 		if err := setupMdnsDiscovery(ctx, logger, n.host); err != nil {
 			return nil, errors.Wrap(err, "failed to setup discovery")
@@ -137,14 +137,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			logger.Error("could not setup discv5", zap.Error(err))
 			return nil, err
 		}
-		if n.cfg.HostAddress != "" {
-			a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
-			if err := checkAddress(a); err != nil {
-				n.logger.Debug("failed to check address", zap.String("addr", a), zap.String("err", err.Error()))
-			} else {
-				n.logger.Debug("address was checked successfully", zap.String("addr", a))
-			}
-		}
+		_ = n.verifyHostAddress()
 	}
 	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
 
@@ -388,8 +381,21 @@ func unwrapTopicName(topicName string) string {
 	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
 }
 
+// MaxBatch returns the max batch response size
 func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
+}
+
+func (n *p2pNetwork) verifyHostAddress() error {
+	if n.cfg.HostAddress != "" {
+		a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
+		if err := checkAddress(a); err != nil {
+			n.logger.Debug("failed to check address", zap.String("addr", a), zap.String("err", err.Error()))
+			return err
+		}
+		n.logger.Debug("address was checked successfully", zap.String("addr", a))
+	}
+	return nil
 }
 
 // checkAddress checks that some address is accessible
