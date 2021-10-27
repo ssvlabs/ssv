@@ -3,6 +3,7 @@ package p2p
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
@@ -65,6 +66,13 @@ func (n *p2pNetwork) ipAddr() net.IP {
 		n.logger.Fatal("Could not get IPv4 address", zap.Error(err))
 	}
 	return net.ParseIP(ip)
+}
+
+func udpVersionFromIP(ipAddr net.IP) string {
+	if ipAddr.To4() != nil {
+		return udp4
+	}
+	return udp6
 }
 
 // Determines a private key for p2p networking from the p2p service's
@@ -194,4 +202,23 @@ func defaultDataDir() string {
 	}
 	// As we cannot guess a stable location, return empty and handle later
 	return ""
+}
+
+func pubKeyHash(pubkeyHex string) string {
+	if len(pubkeyHex) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(pubkeyHex)))
+}
+
+func parseDiscV5Addrs(enrs []string) ([]*enode.Node, error) {
+	var nodes []*enode.Node
+	for _, addr := range enrs {
+		node, err := enode.Parse(enode.ValidSchemes, addr)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not bootstrap addr")
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/prysmaticlabs/prysm/async"
@@ -55,7 +56,7 @@ type p2pNetwork struct {
 	ctx             context.Context
 	cfg             *Config
 	listenersLock   sync.Locker
-	dv5Listener     iListener
+	dv5Listener     discv5Listener
 	listeners       []listener
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey
@@ -408,4 +409,17 @@ func checkAddress(addr string) error {
 		return errors.Wrap(err, "could not close connection")
 	}
 	return nil
+}
+
+// listen for new nodes watches for new nodes in the network and adds them to the peerstore.
+func (n *p2pNetwork) getOperatorPubKey() (string, error) {
+	if n.operatorPrivKey != nil {
+		operatorPubKey, err := rsaencryption.ExtractPublicKey(n.operatorPrivKey)
+		if err != nil || len(operatorPubKey) == 0 {
+			n.logger.Error("could not extract operator public key", zap.Error(err))
+			return "", errors.Wrap(err, "could not extract operator public key")
+		}
+		return operatorPubKey, nil
+	}
+	return "", nil
 }

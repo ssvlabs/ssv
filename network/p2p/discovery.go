@@ -3,9 +3,6 @@ package p2p
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/sha256"
-	"fmt"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -13,7 +10,6 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.opencensus.io/trace"
@@ -37,17 +33,6 @@ const (
 type discoveryNotifee struct {
 	host   host.Host
 	logger *zap.Logger
-}
-
-type iListener interface {
-	Self() *enode.Node
-	Close()
-	Lookup(enode.ID) []*enode.Node
-	Resolve(*enode.Node) *enode.Node
-	RandomNodes() enode.Iterator
-	Ping(*enode.Node) error
-	RequestENR(*enode.Node) (*enode.Node, error)
-	LocalNode() *enode.LocalNode
 }
 
 // HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
@@ -87,17 +72,19 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 		},
 	})
 
-	listener, err := n.startDiscoveryV5(n.ipAddr(), n.privKey)
+	listener, err := n.createDiscV5Listener()
 	if err != nil {
-		return errors.Wrap(err, "failed to start discovery")
+		return errors.Wrap(err, "failed to create discv5 listener")
 	}
+	record := listener.Self()
+	n.logger.Info("ENR", zap.String("enr", record.String()))
 	n.dv5Listener = listener
 
 	err = n.connectToBootnodes()
 	if err != nil {
 		return errors.Wrap(err, "could not add bootnode to the exclusion list")
 	}
-	go n.listenForNewNodes()
+	go n.iteratePeers(n.dv5Listener.RandomNodes())
 
 	return nil
 }
@@ -145,16 +132,6 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 	}
 }
 
-func (n *p2pNetwork) startDiscoveryV5(addr net.IP, privKey *ecdsa.PrivateKey) (*discover.UDPv5, error) {
-	listener, err := n.createListener(addr, privKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create listener")
-	}
-	record := listener.Self()
-	n.logger.Info("ENR", zap.String("enr", record.String()))
-	return listener, nil
-}
-
 func (n *p2pNetwork) connectToBootnodes() error {
 	nodes := make([]*enode.Node, 0, len(n.cfg.Discv5BootStrapAddr))
 	for _, addr := range n.cfg.Discv5BootStrapAddr {
@@ -178,7 +155,7 @@ func (n *p2pNetwork) connectToBootnodes() error {
 	return nil
 }
 
-func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*discover.UDPv5, error) {
+func (n *p2pNetwork) listenUDP(ipAddr net.IP) (*net.UDPConn, error) {
 	// BindIP is used to specify the ip
 	// on which we will bind our listener on
 	// by default we will listen to all interfaces.
@@ -211,51 +188,27 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 	if err != nil {
 		return nil, errors.Wrap(err, "could not listen to UDP")
 	}
+	return conn, nil
+}
 
-	localNode, err := createLocalNode(
-		privKey,
-		ipAddr,
-		n.cfg.UDPPort,
-		n.cfg.TCPPort,
-	)
+func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, error) {
+	privKey := n.privKey
+	ipAddr := n.ipAddr()
+	conn, err := n.listenUDP(ipAddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create Local node")
+		return nil, errors.Wrap(err, "could not listen to UDP")
 	}
-	if n.cfg.HostAddress != "" {
-		hostIP := net.ParseIP(n.cfg.HostAddress)
-		if hostIP.To4() == nil && hostIP.To16() == nil {
-			n.logger.Error("Invalid host address given", zap.String("hostIp", hostIP.String()))
-		} else {
-			n.logger.Info("using external IP", zap.String("IP from config", n.cfg.HostAddress), zap.String("IP", hostIP.String()))
-			localNode.SetFallbackIP(hostIP)
-			localNode.SetStaticIP(hostIP)
-		}
+	localNode, err := n.createExtendedLocalNode()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create local node")
 	}
-	if n.cfg.HostDNS != "" {
-		_host := n.cfg.HostDNS
-		ips, err := net.LookupIP(_host)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not resolve host address")
-		}
-		if len(ips) > 0 {
-			// Use first IP returned from the
-			// resolver.
-			firstIP := ips[0]
-			n.logger.Info("using DNS IP", zap.String("DNS", n.cfg.HostDNS), zap.String("IP", firstIP.String()))
-			localNode.SetFallbackIP(firstIP)
-		}
-	}
-
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
 	}
-	dv5Cfg.Bootnodes = []*enode.Node{}
-	for _, addr := range n.cfg.Discv5BootStrapAddr {
-		bootNode, err := enode.Parse(enode.ValidSchemes, addr)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not bootstrap addr")
-		}
-		dv5Cfg.Bootnodes = append(dv5Cfg.Bootnodes, bootNode)
+
+	dv5Cfg.Bootnodes, err = parseDiscV5Addrs(n.cfg.Discv5BootStrapAddr)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read bootstrap addresses")
 	}
 
 	listener, err := discover.ListenV5(conn, localNode, dv5Cfg)
@@ -287,7 +240,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	defer span.End()
 
 	if info.ID == n.host.ID() {
-		//log.Print("-----TEST same id error ---") TODO need to add log with trace level
+		n.logger.Debug("could not connect to current/self peer")
 		return nil
 	}
 	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
@@ -312,10 +265,56 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	return nil
 }
 
-// listen for new nodes watches for new nodes in the network and adds them to the peerstore.
-func (n *p2pNetwork) listenForNewNodes() {
-	n.iteratePeers(n.dv5Listener.RandomNodes())
+// This checks our set max peers in our config, and
+// determines whether our currently connected and
+// active peers are above our set max peer limit.
+func (n *p2pNetwork) isPeerAtLimit() bool {
+	numOfConns := len(n.host.Network().Peers())
+	activePeers := len(n.peers.Active())
+	return activePeers >= maxPeers || numOfConns >= maxPeers
 }
+
+// FindPeers finds new peers  watches for new nodes in the network and adds them to the peerstore.
+func (n *p2pNetwork) FindPeers(pubkeys ...*bls.PublicKey) {
+	iterator := n.dv5Listener.RandomNodes()
+	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, pubkeys...))
+	n.iteratePeers(iterator)
+}
+
+// iteratePeers accepts some iterator and loop it for new peers
+func (n *p2pNetwork) iteratePeers(iterator enode.Iterator) {
+	defer iterator.Close()
+	for {
+		// Exit if service's context is canceled
+		if n.ctx.Err() != nil {
+			break
+		}
+		if n.isPeerAtLimit() {
+			// Pause the main loop for a period to stop looking
+			// for new peers.
+			n.logger.Debug("at peer limit")
+			time.Sleep(6 * time.Second)
+			continue
+		}
+		exists := iterator.Next()
+		if !exists {
+			break
+		}
+		node := iterator.Node()
+		peerInfo, _, err := convertToAddrInfo(node)
+		if err != nil {
+			n.logger.Debug("could not convert to peer info", zap.String("err", err.Error()))
+			continue
+		}
+		go func(info *peer.AddrInfo) {
+			if err := n.connectWithPeer(n.ctx, *info); err != nil {
+				//n.logger.Debug("could not connect with peer", zap.String("err", err.Error()))
+			}
+		}(peerInfo)
+	}
+}
+
+type peerFilter func(node *enode.Node) bool
 
 // filterPeer validates each node that we retrieve from our dht. We
 // try to ascertain that the peer can be a valid protocol peer.
@@ -371,90 +370,11 @@ func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 	return true
 }
 
-// This checks our set max peers in our config, and
-// determines whether our currently connected and
-// active peers are above our set max peer limit.
-func (n *p2pNetwork) isPeerAtLimit() bool {
-	numOfConns := len(n.host.Network().Peers())
-	activePeers := len(n.peers.Active())
-	return activePeers >= maxPeers || numOfConns >= maxPeers
-}
-
-func udpVersionFromIP(ipAddr net.IP) string {
-	if ipAddr.To4() != nil {
-		return udp4
-	}
-	return udp6
-}
-
-func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort int) (*enode.LocalNode, error) {
-	db, err := enode.OpenDB("")
-	if err != nil {
-		return nil, errors.Wrap(err, "could not open node's peer database")
-	}
-	localNode := enode.NewLocalNode(db, privKey)
-
-	ipEntry := enr.IP(ipAddr)
-	udpEntry := enr.UDP(udpPort)
-	tcpEntry := enr.TCP(tcpPort)
-	localNode.Set(ipEntry)
-	localNode.Set(udpEntry)
-	localNode.Set(tcpEntry)
-	localNode.SetFallbackIP(ipAddr)
-	localNode.SetFallbackUDP(udpPort)
-
-	//localNode, err = addForkEntry(localNode, s.genesisTime, s.genesisValidatorsRoot)
-	//if err != nil {
-	//	return nil, errors.Wrap(err, "could not add eth2 fork version entry to enr")
-	//}
-	return intializeAttSubnets(localNode), nil
-}
-
-// Initializes a bitvector of attestation subnets beacon nodes is subscribed to
-// and creates a new ENR entry with its default value.
-func intializeAttSubnets(node *enode.LocalNode) *enode.LocalNode {
-	bitV := bitfield.NewBitvector64()
-	entry := enr.WithEntry("attnets", bitV.Bytes())
-	node.Set(entry)
-	return node
-}
-
-// addOperatorPubKeyEntry adds 'pk' entry to the node.
-// pk entry contains the sha256 (hex encoded) of the operator public key
-func addOperatorPubKeyEntry(node *enode.LocalNode, pubkey *bls.PublicKey) (*enode.LocalNode, error) {
-	pkHash := []byte(pubKeyHash(pubkey))
-	bitL, err := bitfield.NewBitlist64FromBytes(64, pkHash)
-	if err != nil {
-		return node, err
-	}
-	entry := enr.WithEntry("pk", bitL.ToBitlist())
-	node.Set(entry)
-	return node, nil
-}
-
-// Parses the attestation subnets ENR entry in a node and extracts its value
-// as a bitvector for further manipulation.
-func extractOperatorPubKeyEntry(record *enr.Record) ([]byte, error) {
-	bitL := bitfield.NewBitlist(64)
-	entry := enr.WithEntry("pk", &bitL)
-	err := record.Load(entry)
-	if err != nil {
-		return nil, err
-	}
-	return bitL.Bytes(), nil
-}
-
-func pubKeyHash(pubkey *bls.PublicKey) string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(pubkey.SerializeToHexStr())))
-}
-
-type peerFilter func(node *enode.Node) bool
-
-// filterPeerByOperatorPubKey filters peers specifically for a particular operators
-func filterPeerByOperatorPubKey(baseFilter peerFilter, pubkeys ...*bls.PublicKey) func(node *enode.Node) bool {
+// filterPeerByOperatorsPubKey filters peers specifically for a particular operators
+func filterPeerByOperatorsPubKey(baseFilter peerFilter, pubkeys ...*bls.PublicKey) func(node *enode.Node) bool {
 	var pks [][]byte
 	for _, pubkey := range pubkeys {
-		pks = append(pks, []byte(pubKeyHash(pubkey)))
+		pks = append(pks, []byte(pubKeyHash(pubkey.SerializeToHexStr())))
 	}
 	return func(node *enode.Node) bool {
 		if baseFilter != nil && !baseFilter(node) {
@@ -465,51 +385,12 @@ func filterPeerByOperatorPubKey(baseFilter peerFilter, pubkeys ...*bls.PublicKey
 			return false
 		}
 		pkEntryVal := pkEntry[:8]
+		// lookup the public key from record with all given public keys
 		for _, pk := range pks {
 			if bytes.Index(pk, pkEntryVal) == 0 {
 				return true
 			}
 		}
 		return false
-	}
-}
-
-// FindPeers finds new peers  watches for new nodes in the network and adds them to the peerstore.
-func (n *p2pNetwork) FindPeers(pubkeys ...*bls.PublicKey) {
-	iterator := n.dv5Listener.RandomNodes()
-	iterator = enode.Filter(iterator, filterPeerByOperatorPubKey(n.filterPeer, pubkeys...))
-	n.iteratePeers(iterator)
-}
-
-// iteratePeers accepts some iterator and loop it for new peers
-func (n *p2pNetwork) iteratePeers(iterator enode.Iterator) {
-	defer iterator.Close()
-	for {
-		// Exit if service's context is canceled
-		if n.ctx.Err() != nil {
-			break
-		}
-		if n.isPeerAtLimit() {
-			// Pause the main loop for a period to stop looking
-			// for new peers.
-			n.logger.Debug("at peer limit")
-			time.Sleep(6 * time.Second)
-			continue
-		}
-		exists := iterator.Next()
-		if !exists {
-			break
-		}
-		node := iterator.Node()
-		peerInfo, _, err := convertToAddrInfo(node)
-		if err != nil {
-			n.logger.Debug("could not convert to peer info", zap.String("err", err.Error()))
-			continue
-		}
-		go func(info *peer.AddrInfo) {
-			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				n.logger.Debug("could not connect with peer", zap.String("err", err.Error()))
-			}
-		}(peerInfo)
 	}
 }
