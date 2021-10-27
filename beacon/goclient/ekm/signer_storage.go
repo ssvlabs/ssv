@@ -88,7 +88,6 @@ func (s *signerStorage) OpenWallet() (core.Wallet, error) {
 		return nil, errors.Wrap(err, "failed to unmarshal HD Wallet object")
 	}
 	ret.SetContext(&core.WalletContext{Storage: s})
-
 	return ret, nil
 }
 
@@ -159,7 +158,7 @@ func (s *signerStorage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount,
 
 func (s *signerStorage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
 	if len(byts) == 0 {
-		return nil, errors.New("failed to open wallet")
+		return nil, errors.New("bytes are empty")
 	}
 
 	// decode

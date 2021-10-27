@@ -31,23 +31,30 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, netw
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)
-	vault, err := eth2keymanager.NewKeyVault(options)
-	if err != nil {
+
+	wallet, err := signerStore.OpenWallet()
+	if err != nil && err.Error() != "could not find wallet" {
 		return nil, err
 	}
-	wallet, err := vault.Wallet()
-	if err != nil {
-		return nil, err
+	if wallet == nil {
+		vault, err := eth2keymanager.NewKeyVault(options)
+		if err != nil {
+			return nil, err
+		}
+		wallet, err = vault.Wallet()
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	signer, err := newBeaconSigner(wallet, signerStore, network)
+	beaconSigner, err := newBeaconSigner(wallet, signerStore, network)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create signer")
 	}
 
 	return &ethKeyManagerSigner{
 		wallet:       wallet,
-		signer:       signer,
+		signer:       beaconSigner,
 		storage:      signerStore,
 		signingUtils: signingUtils,
 	}, nil
@@ -60,14 +67,13 @@ func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network core.
 
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	acc, err := km.wallet.AccountByPublicKey(shareKey.GetPublicKey().SerializeToHexStr())
-	if err.Error() != "account not found" {
+	if err != nil && err.Error() != "account not found" {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
 		if err := km.storage.SaveHighestAttestation(shareKey.GetPublicKey().Serialize(), zeroSlotAttestation); err != nil {
 			return errors.Wrap(err, "could not save zero highest attestation")
 		}
-
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
