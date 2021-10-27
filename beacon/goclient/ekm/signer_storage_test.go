@@ -97,7 +97,7 @@ func TestDeleteAccount(t *testing.T) {
 
 	require.NoError(t, storage.DeleteAccount(accts[0].ID()))
 	acc, err := storage.OpenAccount(accts[0].ID())
-	require.EqualError(t, err, "failed to open wallet")
+	require.EqualError(t, err, "could not find account")
 	require.Nil(t, acc)
 }
 

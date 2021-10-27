@@ -135,7 +135,7 @@ func (s *signerStorage) DeleteAccount(accountID uuid.UUID) error {
 	defer s.lock.Unlock()
 
 	key := fmt.Sprintf(accountsPath, accountID.String())
-	return s.db.Set(s.objPrefix(accountsPrefix), []byte(key), nil)
+	return s.db.Delete(s.objPrefix(accountsPrefix), []byte(key))
 }
 
 // OpenAccount returns nil,nil if no account was found

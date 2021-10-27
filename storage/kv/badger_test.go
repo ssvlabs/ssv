@@ -68,6 +68,11 @@ func TestBadgerEndToEnd(t *testing.T) {
 
 	db.(*BadgerDb).report()
 
+	require.NoError(t, db.Delete(toSave[0].prefix, toSave[0].key))
+	obj, found, err = db.Get(toSave[0].prefix, toSave[0].key)
+	require.NoError(t, err)
+	require.False(t, found)
+
 	require.NoError(t, db.RemoveAllByCollection([]byte("prefix1")))
 	require.NoError(t, db.RemoveAllByCollection([]byte("prefix2")))
 }
