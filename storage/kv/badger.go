@@ -84,6 +84,13 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	}, found, err
 }
 
+// Delete key in specific prefix
+func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
+	return b.db.Update(func(txn *badger.Txn) error {
+		return txn.Delete(append(prefix, key...))
+	})
+}
+
 // GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
 func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
 	var res []basedb.Obj
