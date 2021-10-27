@@ -38,8 +38,8 @@ type SyncStream interface {
 	RemotePeer() string
 }
 
-// OperatorsDiscovery is the network interface for discovery
-type OperatorsDiscovery interface {
+// OperatorsDiscoverer is the network interface for discovery
+type OperatorsDiscoverer interface {
 	FindPeers(ctx context.Context, operatorsPubKeys ...[]byte)
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)
@@ -107,5 +107,5 @@ type Network interface {
 
 	Syncer
 
-	OperatorsDiscovery
+	OperatorsDiscoverer
 }

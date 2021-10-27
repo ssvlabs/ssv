@@ -14,7 +14,7 @@ import (
 type WaitMinPeersCtx struct {
 	Ctx       context.Context
 	Logger    *zap.Logger
-	Net       network.OperatorsDiscovery
+	Net       network.OperatorsDiscoverer
 	Operators validatorstorage.OperatorsPubKeys
 }
 
@@ -66,7 +66,7 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 }
 
 // haveMinPeers checks that there are at least <count> connected peers
-func haveMinPeers(logger *zap.Logger, net network.OperatorsDiscovery, validatorPk []byte, count int) (bool, int) {
+func haveMinPeers(logger *zap.Logger, net network.OperatorsDiscoverer, validatorPk []byte, count int) (bool, int) {
 	peers, err := net.AllPeers(validatorPk)
 	if err != nil {
 		logger.Error("failed fetching peers", zap.Error(err))
