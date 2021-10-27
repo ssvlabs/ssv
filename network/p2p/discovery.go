@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/sha256"
@@ -313,38 +314,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 // listen for new nodes watches for new nodes in the network and adds them to the peerstore.
 func (n *p2pNetwork) listenForNewNodes() {
-	iterator := n.dv5Listener.RandomNodes()
-	//iterator = enode.Filter(iterator, n.filterPeer)
-	defer iterator.Close()
-	for {
-		// Exit if service's context is canceled
-		if n.ctx.Err() != nil {
-			break
-		}
-		if n.isPeerAtLimit() {
-			// Pause the main loop for a period to stop looking
-			// for new peers.
-			n.logger.Debug("at peer limit")
-			time.Sleep(6 * time.Second)
-			continue
-		}
-		exists := iterator.Next()
-		if !exists {
-			break
-		}
-		node := iterator.Node()
-		peerInfo, _, err := convertToAddrInfo(node)
-		if err != nil {
-			//log.WithError(err).Error("Could not convert to peer info")
-			continue
-		}
-		go func(info *peer.AddrInfo) {
-			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				//log.WithError(err).Tracef("Could not connect with peer %s", info.String())
-				//log.Print(err) TODO need to add log with trace level
-			}
-		}(peerInfo)
-	}
+	n.iteratePeers(n.dv5Listener.RandomNodes())
 }
 
 // filterPeer validates each node that we retrieve from our dht. We
@@ -358,48 +328,48 @@ func (n *p2pNetwork) listenForNewNodes() {
 // 5) Peer is ready to receive incoming connections.
 // --6) Peer's fork digest in their ENR matches that of
 // 	  our localnodes.
-//func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
-//	// Ignore nil or nodes with no ip address stored
-//	if node == nil || node.IP() == nil {
-//		return false
-//	}
-//	// do not dial nodes with their tcp ports not set
-//	if err := node.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
-//		if !enr.IsNotFound(err) {
-//			n.logger.Debug("could not retrieve tcp port", zap.Error(err))
-//		}
-//		return false
-//	}
-//	peerData, multiAddr, err := convertToAddrInfo(node)
-//	if err != nil {
-//		n.logger.Debug("could not convert to peer data", zap.Error(err))
-//		return false
-//	}
-//	if n.peers.IsBad(peerData.ID) {
-//		return false
-//	}
-//	if n.peers.IsActive(peerData.ID) {
-//		return false
-//	}
-//	if n.host.Network().Connectedness(peerData.ID) == libp2pnetwork.Connected {
-//		return false
-//	}
-//	if !n.peers.IsReadyToDial(peerData.ID) {
-//		return false
-//	}
-//	nodeENR := node.Record()
-//	// Decide whether or not to connect to peer that does not
-//	// match the proper fork ENR data with our local node.
-//	//if s.genesisValidatorsRoot != nil {
-//	//	if err := s.compareForkENR(nodeENR); err != nil {
-//	//		log.WithError(err).Trace("Fork ENR mismatches between peer and local node")
-//	//		return false
-//	//	}
-//	//}
-//	// Add peer to peer handler.
-//	n.peers.Add(nodeENR, peerData.ID, multiAddr, libp2pnetwork.DirUnknown)
-//	return true
-//}
+func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
+	// Ignore nil or nodes with no ip address stored
+	if node == nil || node.IP() == nil {
+		return false
+	}
+	// do not dial nodes with their tcp ports not set
+	if err := node.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
+		if !enr.IsNotFound(err) {
+			n.logger.Debug("could not retrieve tcp port", zap.Error(err))
+		}
+		return false
+	}
+	peerData, multiAddr, err := convertToAddrInfo(node)
+	if err != nil {
+		n.logger.Debug("could not convert to peer data", zap.Error(err))
+		return false
+	}
+	if n.peers.IsBad(peerData.ID) {
+		return false
+	}
+	if n.peers.IsActive(peerData.ID) {
+		return false
+	}
+	if n.host.Network().Connectedness(peerData.ID) == libp2pnetwork.Connected {
+		return false
+	}
+	if !n.peers.IsReadyToDial(peerData.ID) {
+		return false
+	}
+	nodeENR := node.Record()
+	// Decide whether or not to connect to peer that does not
+	// match the proper fork ENR data with our local node.
+	//if s.genesisValidatorsRoot != nil {
+	//	if err := s.compareForkENR(nodeENR); err != nil {
+	//		log.WithError(err).Trace("Fork ENR mismatches between peer and local node")
+	//		return false
+	//	}
+	//}
+	// Add peer to peer handler.
+	n.peers.Add(nodeENR, peerData.ID, multiAddr, libp2pnetwork.DirUnknown)
+	return true
+}
 
 // This checks our set max peers in our config, and
 // determines whether our currently connected and
@@ -452,12 +422,94 @@ func intializeAttSubnets(node *enode.LocalNode) *enode.LocalNode {
 // addOperatorPubKeyEntry adds 'pk' entry to the node.
 // pk entry contains the sha256 (hex encoded) of the operator public key
 func addOperatorPubKeyEntry(node *enode.LocalNode, pubkey *bls.PublicKey) (*enode.LocalNode, error) {
-	pkHash := []byte(fmt.Sprintf("%x", sha256.Sum256([]byte(pubkey.SerializeToHexStr()))))
-	bitlist, err := bitfield.NewBitlist64FromBytes(64, pkHash)
+	pkHash := []byte(pubKeyHash(pubkey))
+	bitL, err := bitfield.NewBitlist64FromBytes(64, pkHash)
 	if err != nil {
 		return node, err
 	}
-	entry := enr.WithEntry("pk", bitlist.Bytes())
+	entry := enr.WithEntry("pk", bitL.ToBitlist())
 	node.Set(entry)
 	return node, nil
+}
+
+// Parses the attestation subnets ENR entry in a node and extracts its value
+// as a bitvector for further manipulation.
+func extractOperatorPubKeyEntry(record *enr.Record) ([]byte, error) {
+	bitL := bitfield.NewBitlist(64)
+	entry := enr.WithEntry("pk", &bitL)
+	err := record.Load(entry)
+	if err != nil {
+		return nil, err
+	}
+	return bitL.Bytes(), nil
+}
+
+func pubKeyHash(pubkey *bls.PublicKey) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(pubkey.SerializeToHexStr())))
+}
+
+type peerFilter func(node *enode.Node) bool
+
+// filterPeerByOperatorPubKey filters peers specifically for a particular operators
+func filterPeerByOperatorPubKey(baseFilter peerFilter, pubkeys ...*bls.PublicKey) func(node *enode.Node) bool {
+	var pks [][]byte
+	for _, pubkey := range pubkeys {
+		pks = append(pks, []byte(pubKeyHash(pubkey)))
+	}
+	return func(node *enode.Node) bool {
+		if baseFilter != nil && !baseFilter(node) {
+			return false
+		}
+		pkEntry, err := extractOperatorPubKeyEntry(node.Record())
+		if err != nil {
+			return false
+		}
+		pkEntryVal := pkEntry[:8]
+		for _, pk := range pks {
+			if bytes.Index(pk, pkEntryVal) == 0 {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// FindPeers finds new peers  watches for new nodes in the network and adds them to the peerstore.
+func (n *p2pNetwork) FindPeers(pubkeys ...*bls.PublicKey) {
+	iterator := n.dv5Listener.RandomNodes()
+	iterator = enode.Filter(iterator, filterPeerByOperatorPubKey(n.filterPeer, pubkeys...))
+	n.iteratePeers(iterator)
+}
+
+// iteratePeers accepts some iterator and loop it for new peers
+func (n *p2pNetwork) iteratePeers(iterator enode.Iterator) {
+	defer iterator.Close()
+	for {
+		// Exit if service's context is canceled
+		if n.ctx.Err() != nil {
+			break
+		}
+		if n.isPeerAtLimit() {
+			// Pause the main loop for a period to stop looking
+			// for new peers.
+			n.logger.Debug("at peer limit")
+			time.Sleep(6 * time.Second)
+			continue
+		}
+		exists := iterator.Next()
+		if !exists {
+			break
+		}
+		node := iterator.Node()
+		peerInfo, _, err := convertToAddrInfo(node)
+		if err != nil {
+			n.logger.Debug("could not convert to peer info", zap.String("err", err.Error()))
+			continue
+		}
+		go func(info *peer.AddrInfo) {
+			if err := n.connectWithPeer(n.ctx, *info); err != nil {
+				n.logger.Debug("could not connect with peer", zap.String("err", err.Error()))
+			}
+		}(peerInfo)
+	}
 }
