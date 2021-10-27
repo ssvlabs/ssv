@@ -28,7 +28,7 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 	findPeers := func() error {
 		c, cancel := context.WithTimeout(ctx.Ctx, 60*time.Second)
 		defer cancel()
-		ctx.Net.(network.NetworkDiscovery).FindPeers(c, ctx.Operators...)
+		ctx.Net.(network.OperatorsDiscovery).FindPeers(c, ctx.Operators...)
 		return nil
 	}
 
