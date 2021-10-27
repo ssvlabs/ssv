@@ -14,6 +14,7 @@ import (
 // PubKeys defines the type for public keys object representation
 type PubKeys []*bls.PublicKey
 
+// OperatorsPubKeys represents a list of operators public keys
 type OperatorsPubKeys [][]byte
 
 // Aggregate iterates over public keys and adds them to the bls PublicKey

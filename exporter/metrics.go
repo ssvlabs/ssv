@@ -23,7 +23,7 @@ func init() {
 	}
 }
 
-func reportOperatorIndex(logger *zap.Logger, op *storage.OperatorInformation) {
+func reportOperatorIndex(logger *zap.Logger, op storage.OperatorInformation) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
 	metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
 	logger.Debug("report operator", zap.String("pkHash", pkHash),

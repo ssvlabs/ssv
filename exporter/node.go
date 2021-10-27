@@ -352,6 +352,6 @@ func (exp *exporter) reportOperators() {
 	}
 	exp.logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for _, op := range operators {
-		reportOperatorIndex(exp.logger, &op)
+		reportOperatorIndex(exp.logger, op)
 	}
 }
