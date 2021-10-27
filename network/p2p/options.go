@@ -29,11 +29,11 @@ func (n *p2pNetwork) buildOptions(cfg *Config) ([]libp2p.Option, error) {
 		if err != nil {
 			return options, errors.Wrap(err, "failed to build multi address")
 		}
-		//listenZero, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", n.cfg.TCPPort))
-		//if err != nil {
-		//	return options, errors.Wrap(err, "failed to build multi address")
-		//}
-		options = append(options, libp2p.ListenAddrs(listen /*, listenZero*/))
+		listenZero, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", n.cfg.TCPPort))
+		if err != nil {
+			return options, errors.Wrap(err, "failed to build multi address")
+		}
+		options = append(options, libp2p.ListenAddrs(listen, listenZero))
 		ua := n.getUserAgent()
 		n.logger.Info("Libp2p User Agent", zap.String("value", ua))
 		options = append(options, libp2p.UserAgent(ua))
