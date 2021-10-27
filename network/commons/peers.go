@@ -14,21 +14,21 @@ import (
 type WaitMinPeersCtx struct {
 	Ctx       context.Context
 	Logger    *zap.Logger
-	Net       network.Network
+	Net       network.OperatorsDiscovery
 	Operators validatorstorage.OperatorsPubKeys
 }
 
 // WaitForMinPeers waits until min peers joined the validator's topic
 func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, limit time.Duration, stopAtLimit bool) error {
 	interval := start
-	q := tasks.NewExecutionQueue(10 * time.Millisecond)
+	q := tasks.NewExecutionQueue(1 * time.Millisecond)
 	go q.Start()
 	defer q.Stop()
 
 	findPeers := func() error {
 		c, cancel := context.WithTimeout(ctx.Ctx, 60*time.Second)
 		defer cancel()
-		ctx.Net.(network.OperatorsDiscovery).FindPeers(c, ctx.Operators...)
+		ctx.Net.FindPeers(c, ctx.Operators...)
 		return nil
 	}
 
@@ -66,7 +66,7 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 }
 
 // haveMinPeers checks that there are at least <count> connected peers
-func haveMinPeers(logger *zap.Logger, net network.Network, validatorPk []byte, count int) (bool, int) {
+func haveMinPeers(logger *zap.Logger, net network.OperatorsDiscovery, validatorPk []byte, count int) (bool, int) {
 	peers, err := net.AllPeers(validatorPk)
 	if err != nil {
 		logger.Error("failed fetching peers", zap.Error(err))

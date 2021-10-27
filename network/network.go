@@ -41,6 +41,8 @@ type SyncStream interface {
 // OperatorsDiscovery is the network interface for discovery
 type OperatorsDiscovery interface {
 	FindPeers(ctx context.Context, operatorsPubKeys ...[]byte)
+	// AllPeers returns all connected peers for a validator PK
+	AllPeers(validatorPk []byte) ([]string, error)
 }
 
 // Reader is the interface for reading messages from the network
@@ -104,4 +106,6 @@ type Network interface {
 	Broadcaster
 
 	Syncer
+
+	OperatorsDiscovery
 }

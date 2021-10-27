@@ -2,6 +2,7 @@ package sync
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -294,6 +295,10 @@ func (n *TestNetwork) BroadcastMainTopic(msg *proto.SignedMessage) error {
 // SubscribeToMainTopic implementation
 func (n *TestNetwork) SubscribeToMainTopic() error {
 	return nil
+}
+
+// FindPeers implementation
+func (n *TestNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) {
 }
 
 // TestStream struct

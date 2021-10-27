@@ -85,9 +85,8 @@ func (eq *executionQueue) Start() {
 func (eq *executionQueue) QueueDistinct(fn Fn, id string) {
 	if _, exist := eq.visited.Load(id); !exist {
 		eq.Queue(func() error {
-			err := fn()
-			eq.visited.Delete(id)
-			return err
+			defer eq.visited.Delete(id)
+			return fn()
 		})
 		eq.visited.Store(id, true)
 	}

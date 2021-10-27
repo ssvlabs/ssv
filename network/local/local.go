@@ -1,6 +1,7 @@
 package local
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/bloxapp/ssv/network"
@@ -206,4 +207,8 @@ func (n *Local) BroadcastMainTopic(msg *proto.SignedMessage) error {
 // SubscribeToMainTopic implementation
 func (n *Local) SubscribeToMainTopic() error {
 	return nil
+}
+
+// FindPeers implementation
+func (n *Local) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) {
 }
