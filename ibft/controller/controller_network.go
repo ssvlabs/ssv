@@ -27,9 +27,10 @@ func (i *Controller) waitForMinPeerOnInit(minPeerCount int) {
 // it runs in an exponent interval: 1s > 2s > 4s > ... 64s > 1s > 2s > ...
 func (i *Controller) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 	ctx := commons.WaitMinPeersCtx{
-		Ctx:    context.Background(),
-		Logger: i.logger,
-		Net:    i.network,
+		Ctx:       context.Background(),
+		Logger:    i.logger,
+		Net:       i.network,
+		Operators: i.ValidatorShare.OperatorsPubKeys,
 	}
 	return commons.WaitForMinPeers(ctx, i.ValidatorShare.PublicKey.Serialize(), minPeerCount,
 		waitMinPeersIntervalStart, waitMinPeersIntervalEnd, stopAtLimit)

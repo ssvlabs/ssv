@@ -62,6 +62,7 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 	var shareKey *bls.SecretKey
 
 	ibftCommittee := map[uint64]*proto.Node{}
+	operatorsPubKeys := make(validatorstorage.OperatorsPubKeys, 0)
 	for i := range validatorAddedEvent.OessList {
 		oess := validatorAddedEvent.OessList[i]
 		nodeID := oess.Index.Uint64() + 1
@@ -69,6 +70,7 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 			IbftId: nodeID,
 			Pk:     oess.SharedPublicKey,
 		}
+		operatorsPubKeys = append(operatorsPubKeys, oess.OperatorPublicKey)
 		if strings.EqualFold(string(oess.OperatorPublicKey), operatorPubKey) {
 			ibftCommittee[nodeID].Pk = oess.SharedPublicKey
 			validatorShare.NodeID = nodeID
@@ -80,6 +82,7 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 		}
 	}
 	validatorShare.Committee = ibftCommittee
+	validatorShare.OperatorsPubKeys = operatorsPubKeys
 
 	return &validatorShare, shareKey, nil
 }

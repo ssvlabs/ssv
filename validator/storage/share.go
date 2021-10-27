@@ -14,6 +14,8 @@ import (
 // PubKeys defines the type for public keys object representation
 type PubKeys []*bls.PublicKey
 
+type OperatorsPubKeys [][]byte
+
 // Aggregate iterates over public keys and adds them to the bls PublicKey
 func (keys PubKeys) Aggregate() bls.PublicKey {
 	ret := bls.PublicKey{}
@@ -29,6 +31,8 @@ type Share struct {
 	PublicKey *bls.PublicKey
 	Committee map[uint64]*proto.Node
 	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
+	// OperatorsPubKeys holds a list of the responsible operators public keys
+	OperatorsPubKeys OperatorsPubKeys
 }
 
 //  serializedShare struct
@@ -37,6 +41,8 @@ type serializedShare struct {
 	ShareKey  []byte
 	Committee map[uint64]*proto.Node
 	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
+	// OperatorsPubKeys holds a list of the responsible operators public keys
+	OperatorsPubKeys OperatorsPubKeys
 }
 
 // CommitteeSize returns the IBFT committee size
@@ -107,9 +113,10 @@ func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
 // Serialize share to []byte
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
-		NodeID:    s.NodeID,
-		Committee: map[uint64]*proto.Node{},
-		Metadata:  s.Metadata,
+		NodeID:           s.NodeID,
+		Committee:        map[uint64]*proto.Node{},
+		Metadata:         s.Metadata,
+		OperatorsPubKeys: s.OperatorsPubKeys,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {
@@ -145,10 +152,11 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
 	return &Share{
-		NodeID:    value.NodeID,
-		PublicKey: pubKey,
-		Committee: value.Committee,
-		Metadata:  value.Metadata,
+		NodeID:           value.NodeID,
+		PublicKey:        pubKey,
+		Committee:        value.Committee,
+		Metadata:         value.Metadata,
+		OperatorsPubKeys: value.OperatorsPubKeys,
 	}, nil
 }
 

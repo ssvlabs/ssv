@@ -86,10 +86,10 @@ func Test_filterPeerByOperatorPubKey(t *testing.T) {
 	node2, err = withOperatorPubKeyEntry(node2, []byte(pubKeyHash(pubkey2.SerializeToHexStr())))
 	require.NoError(t, err)
 
-	filter := filterPeerByOperatorsPubKey(nil, pubkey)
+	filter := filterPeerByOperatorsPubKey(nil, []byte(pubKeyHash(pubkey.SerializeToHexStr())))
 	filter2 := filterPeerByOperatorsPubKey(func(node *enode.Node) bool {
 		return true
-	}, pubkey2)
+	}, []byte(pubKeyHash(pubkey2.SerializeToHexStr())))
 	require.True(t, filter(node.Node()))
 	require.False(t, filter(node2.Node()))
 	require.True(t, filter2(node2.Node()))

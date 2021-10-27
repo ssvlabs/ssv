@@ -3,6 +3,8 @@ package commons
 import (
 	"context"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils/tasks"
+	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
@@ -10,14 +12,26 @@ import (
 
 // WaitMinPeersCtx represents the context needed for WaitForMinPeers
 type WaitMinPeersCtx struct {
-	Ctx    context.Context
-	Logger *zap.Logger
-	Net    network.Network
+	Ctx       context.Context
+	Logger    *zap.Logger
+	Net       network.Network
+	Operators validatorstorage.OperatorsPubKeys
 }
 
 // WaitForMinPeers waits until min peers joined the validator's topic
 func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, limit time.Duration, stopAtLimit bool) error {
 	interval := start
+	q := tasks.NewExecutionQueue(10 * time.Millisecond)
+	go q.Start()
+	defer q.Stop()
+
+	findPeers := func() error {
+		c, cancel := context.WithTimeout(ctx.Ctx, 60*time.Second)
+		defer cancel()
+		ctx.Net.(network.NetworkDiscovery).FindPeers(c, ctx.Operators...)
+		return nil
+	}
+
 	for {
 		ok, n := haveMinPeers(ctx.Logger, ctx.Net, validatorPk, min)
 		if ok {
@@ -27,6 +41,10 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 		}
 		ctx.Logger.Info("waiting for min peers",
 			zap.Int("current peer count", n))
+
+		if len(ctx.Operators) > 0 {
+			q.QueueDistinct(findPeers, "find-peers")
+		}
 
 		time.Sleep(interval)
 

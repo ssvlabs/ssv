@@ -1,6 +1,7 @@
 package network
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"io"
@@ -35,6 +36,10 @@ type SyncStream interface {
 
 	// RemotePeer returns a string identifier of the remote peer connected to this stream
 	RemotePeer() string
+}
+
+type NetworkDiscovery interface {
+	FindPeers(ctx context.Context, operatorsPubKeys ...[]byte)
 }
 
 // Network represents the behavior of the network

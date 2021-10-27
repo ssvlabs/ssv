@@ -6,7 +6,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
@@ -84,7 +83,7 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 	if err != nil {
 		return errors.Wrap(err, "could not add bootnode to the exclusion list")
 	}
-	go n.iteratePeers(n.dv5Listener.RandomNodes())
+	go n.iteratePeers(n.ctx, n.dv5Listener.RandomNodes())
 
 	return nil
 }
@@ -274,21 +273,27 @@ func (n *p2pNetwork) isPeerAtLimit() bool {
 	return activePeers >= maxPeers || numOfConns >= maxPeers
 }
 
-// FindPeers finds new peers  watches for new nodes in the network and adds them to the peerstore.
-func (n *p2pNetwork) FindPeers(pubkeys ...*bls.PublicKey) {
+// FindPeers finds new peers watches for new nodes in the network and adds them to the peerstore.
+func (n *p2pNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) {
 	iterator := n.dv5Listener.RandomNodes()
-	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, pubkeys...))
-	n.iteratePeers(iterator)
+	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, operatorsPubKeys...))
+	n.iteratePeers(ctx, iterator)
 }
 
 // iteratePeers accepts some iterator and loop it for new peers
-func (n *p2pNetwork) iteratePeers(iterator enode.Iterator) {
+func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator) {
 	defer iterator.Close()
 	for {
-		// Exit if service's context is canceled
-		if n.ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+
+			return
+		default:
 		}
+		// Exit if service's context is canceled
+		//if n.ctx.Err() != nil {
+		//	break
+		//}
 		if n.isPeerAtLimit() {
 			// Pause the main loop for a period to stop looking
 			// for new peers.
@@ -371,11 +376,7 @@ func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 }
 
 // filterPeerByOperatorsPubKey filters peers specifically for a particular operators
-func filterPeerByOperatorsPubKey(baseFilter peerFilter, pubkeys ...*bls.PublicKey) func(node *enode.Node) bool {
-	var pks [][]byte
-	for _, pubkey := range pubkeys {
-		pks = append(pks, []byte(pubKeyHash(pubkey.SerializeToHexStr())))
-	}
+func filterPeerByOperatorsPubKey(baseFilter peerFilter, pks ...[]byte) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		if baseFilter != nil && !baseFilter(node) {
 			return false
