@@ -92,6 +92,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 		return err
 	}
 	l.Debug("managed to save operator information", zap.Any("value", oi))
+	reportOperatorIndex(exp.logger, &oi)
 
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
