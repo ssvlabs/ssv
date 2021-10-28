@@ -368,16 +368,21 @@ func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 		n.logger.Debug("could not convert to peer data", zap.Error(err))
 		return false
 	}
+	logger := n.logger.With(zap.String("peer", peerData.String()))
 	if n.peers.IsBad(peerData.ID) {
+		logger.Debug("filtered bad peer")
 		return false
 	}
 	if n.peers.IsActive(peerData.ID) {
+		logger.Debug("filtered inactive peer")
 		return false
 	}
 	if n.host.Network().Connectedness(peerData.ID) == libp2pnetwork.Connected {
+		logger.Debug("filtered connected peer")
 		return false
 	}
 	if !n.peers.IsReadyToDial(peerData.ID) {
+		logger.Debug("filtered unreachable peer")
 		return false
 	}
 	nodeENR := node.Record()
