@@ -77,6 +77,11 @@ type p2pNetwork struct {
 	reportLastMsg bool
 }
 
+func init() {
+	// set the global libp2p timeout for dials (5s) to 15s
+	swarm.DialTimeoutLocal = transport.DialTimeout
+}
+
 // New is the constructor of p2pNetworker
 func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network, error) {
 	// init empty topics map
@@ -100,8 +105,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "Failed to generate p2p private key")
 	}
 
-	swarm.DialTimeoutLocal = transport.DialTimeout
-
 	opts, err := n.buildOptions(cfg)
 	if err != nil {
 		logger.Fatal("could not build libp2p options", zap.Error(err))
@@ -116,7 +119,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	if len(cfg.Enr) > 0 {
 		n.cfg.Discv5BootStrapAddr = TransformEnr(n.cfg.Enr)
 	} else {
-		n.logger.Error("no bootstrap addresses supplied")
+		n.logger.Warn("no bootstrap addresses supplied")
+		n.cfg.Discv5BootStrapAddr = []string{}
 	}
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
