@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/prysmaticlabs/prysm/async"
 	"net"
@@ -57,6 +58,7 @@ type p2pNetwork struct {
 	cfg             *Config
 	listenersLock   sync.Locker
 	dv5Listener     discv5Listener
+	eNode           *enode.LocalNode
 	listeners       []listener
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey

@@ -71,13 +71,14 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 		},
 	})
 
-	listener, err := n.createDiscV5Listener()
+	listener, localNode, err := n.createDiscV5Listener()
 	if err != nil {
 		return errors.Wrap(err, "failed to create discv5 listener")
 	}
 	record := listener.Self()
 	n.logger.Info("ENR", zap.String("enr", record.String()))
 	n.dv5Listener = listener
+	n.eNode = localNode
 
 	err = n.connectToBootnodes()
 	if err != nil {
@@ -88,6 +89,7 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 			return
 		}
 		n.logger.Debug("found peer in random search", zap.String("peer", info.String()))
+
 		// ignore error which is printed in connectWithPeer
 		_ = n.connectWithPeer(n.ctx, *info)
 	})
@@ -96,10 +98,11 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 }
 
 func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
-	logger := n.logger.With(zap.String("who", "networkNotifiee"))
+	_logger := n.logger.With(zap.String("who", "networkNotifiee"))
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			if conn != nil {
+				logger := _logger
 				if conn.RemoteMultiaddr() != nil {
 					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
 				}
@@ -111,6 +114,7 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			if conn != nil {
+				logger := _logger
 				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{}}
 				if conn.RemoteMultiaddr() != nil {
 					addr := conn.RemoteMultiaddr()
@@ -196,16 +200,16 @@ func (n *p2pNetwork) listenUDP(ipAddr net.IP) (*net.UDPConn, error) {
 	return conn, nil
 }
 
-func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, error) {
+func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, *enode.LocalNode, error) {
 	privKey := n.privKey
 	ipAddr := n.ipAddr()
 	conn, err := n.listenUDP(ipAddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not listen to UDP")
+		return nil, nil, errors.Wrap(err, "could not listen to UDP")
 	}
 	localNode, err := n.createExtendedLocalNode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create local node")
+		return nil, nil, errors.Wrap(err, "could not create local node")
 	}
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
@@ -213,14 +217,14 @@ func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, error) {
 
 	dv5Cfg.Bootnodes, err = parseDiscV5Addrs(n.cfg.Discv5BootStrapAddr)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not read bootstrap addresses")
+		return nil, nil, errors.Wrap(err, "could not read bootstrap addresses")
 	}
 
 	listener, err := discover.ListenV5(conn, localNode, dv5Cfg)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not listen to discV5")
+		return nil, nil, errors.Wrap(err, "could not listen to discV5")
 	}
-	return listener, nil
+	return listener, localNode, nil
 }
 
 func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
@@ -324,7 +328,12 @@ func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator, 
 			n.logger.Debug("could not convert to peer info", zap.String("err", err.Error()))
 			continue
 		}
-		n.logger.Debug("discovered new peer", zap.String("peer", peerInfo.String()))
+		//if err := n.eNode.Database().UpdateNode(node); err != nil {
+		//	n.logger.Debug("could not update peer in DB", zap.String("peer", peerInfo.String()),
+		//		zap.String("err", err.Error()))
+		//} else {
+		//	n.logger.Debug("enode updated", zap.String("peer", peerInfo.String()))
+		//}
 		go handler(peerInfo)
 	}
 }
