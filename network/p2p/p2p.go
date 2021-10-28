@@ -145,6 +145,13 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			return nil, err
 		}
 		_ = n.verifyHostAddress()
+		async.RunEvery(n.ctx, 10 * time.Minute, func() {
+			err = n.connectToBootnodes()
+			if err != nil {
+				n.logger.Debug("failed to connect to bootnodes", zap.Error(err))
+				//return errors.Wrap(err, "could not add bootnode to the exclusion list")
+			}
+		})
 	}
 	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
 

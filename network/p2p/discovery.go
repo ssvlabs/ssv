@@ -236,8 +236,14 @@ func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 	}
 	for _, info := range addrInfos {
 		// make each dial non-blocking
+		connectedness := n.host.Network().Connectedness(info.ID)
+		if connectedness == libp2pnetwork.Connected {
+			n.logger.Debug("bootnode already connected", zap.String("peer info", info.String()))
+			continue
+		}
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
+				n.logger.Debug("could not connect to bootnode", zap.String("err", err.Error()))
 				//log.Print("Could not connect with peer ", info.String(), err)
 				//log.WithError(err).Tracef("Could not connect with peer %s", info.String()) TODO need to add log with trace level
 			}
