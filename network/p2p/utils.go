@@ -20,6 +20,8 @@ import (
 	"net"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
 )
 
 // bootnodes returns []enode.Node of the configured bootnodes addresses
@@ -50,6 +52,19 @@ func (n *p2pNetwork) ipAddr() net.IP {
 		n.logger.Fatal("could not get IPv4 address", zap.Error(err))
 	}
 	return net.ParseIP(ip)
+}
+
+// verifyHostAddress verifies that the host address is reachable
+func (n *p2pNetwork) verifyHostAddress() error {
+	if n.cfg.HostAddress != "" {
+		a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
+		if err := checkAddress(a); err != nil {
+			n.logger.Debug("failed to check address", zap.String("addr", a), zap.String("err", err.Error()))
+			return err
+		}
+		n.logger.Debug("address was checked successfully", zap.String("addr", a))
+	}
+	return nil
 }
 
 // udpVersionFromIP returns the udp version
@@ -219,4 +234,26 @@ func parseENRs(enrs []string) ([]*enode.Node, error) {
 		nodes = append(nodes, node)
 	}
 	return nodes, nil
+}
+
+// checkAddress checks that some address is reachable
+func checkAddress(addr string) error {
+	conn, err := net.DialTimeout("tcp", addr, time.Second*10)
+	if err != nil {
+		return errors.Wrap(err, "IP address is not accessible")
+	}
+	if err := conn.Close(); err != nil {
+		return errors.Wrap(err, "could not close connection")
+	}
+	return nil
+}
+
+// getTopicName return formatted topic name
+func getTopicName(pk string) string {
+	return fmt.Sprintf("%s.%s", topicPrefix, pk)
+}
+
+// getTopicName return formatted topic name
+func unwrapTopicName(topicName string) string {
+	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
 }

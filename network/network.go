@@ -28,10 +28,7 @@ type SyncStream interface {
 	io.Closer
 
 	// CloseWrite closes the stream for writing but leaves it open for
-	// reading.
-	//
-	// CloseWrite does not free the stream, users must still call Close or
-	// Reset.
+	// reading. Does not free the stream, a call to Close() might be needed
 	CloseWrite() error
 
 	// RemotePeer returns a string identifier of the remote peer connected to this stream
@@ -40,6 +37,7 @@ type SyncStream interface {
 
 // OperatorsDiscoverer is the network interface for discovery
 type OperatorsDiscoverer interface {
+	// FindPeers finds peers of the given operator public keys
 	FindPeers(ctx context.Context, operatorsPubKeys ...[]byte)
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)
@@ -63,7 +61,7 @@ type Reader interface {
 	SubscribeToMainTopic() error
 }
 
-// Broadcaster is the interface for sending messages in the network
+// Broadcaster is the interface for broadcasting messages in the network
 type Broadcaster interface {
 	// Broadcast propagates a signed message to all peers
 	Broadcast(topicName []byte, msg *proto.SignedMessage) error
@@ -77,8 +75,8 @@ type Broadcaster interface {
 	MaxBatch() uint64
 }
 
-// SyncerClient represents the needed functionality for reading sync messages
-type SyncerClient interface {
+// Syncer represents the needed functionality for performing sync
+type Syncer interface {
 	// GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
 	// If peer list is nil, broadcasts to all.
 	GetHighestDecidedInstance(peerStr string, msg *SyncMessage) (*SyncMessage, error)
@@ -86,12 +84,6 @@ type SyncerClient interface {
 	GetDecidedByRange(peerStr string, msg *SyncMessage) (*SyncMessage, error)
 	// GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
 	GetLastChangeRoundMsg(peerStr string, msg *SyncMessage) (*SyncMessage, error)
-}
-
-// Syncer represents the needed functionality for performing sync (read + write)
-type Syncer interface {
-	SyncerClient
-
 	// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 	RespondToHighestDecidedInstance(stream SyncStream, msg *SyncMessage) error
 	// RespondToGetDecidedByRange responds to a GetDecidedByRange
@@ -104,8 +96,6 @@ type Syncer interface {
 type Network interface {
 	Reader
 	Broadcaster
-
 	Syncer
-
 	OperatorsDiscoverer
 }

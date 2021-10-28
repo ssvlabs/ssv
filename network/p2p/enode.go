@@ -71,6 +71,7 @@ func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, *enode.LocalNode, 
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not create local node")
 	}
+
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
 	}
@@ -110,31 +111,38 @@ func (n *p2pNetwork) createExtendedLocalNode() (*enode.LocalNode, error) {
 			return nil, errors.Wrap(err, "could not create public key entry")
 		}
 	}
-	if len(n.cfg.HostAddress) > 0 {
-		hostIP := net.ParseIP(n.cfg.HostAddress)
-		if hostIP.To4() == nil && hostIP.To16() == nil {
-			n.logger.Error("Invalid host address given", zap.String("hostIp", hostIP.String()))
-		} else {
-			n.logger.Info("using external IP", zap.String("IP from config", n.cfg.HostAddress), zap.String("IP", hostIP.String()))
-			localNode.SetFallbackIP(hostIP)
-			localNode.SetStaticIP(hostIP)
-		}
-	}
-	if len(n.cfg.HostDNS) > 0 {
-		_host := n.cfg.HostDNS
-		ips, err := net.LookupIP(_host)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not resolve host address")
-		}
-		if len(ips) > 0 {
-			// Use first IP returned from the
-			// resolver.
-			firstIP := ips[0]
-			n.logger.Info("using DNS IP", zap.String("DNS", n.cfg.HostDNS), zap.String("IP", firstIP.String()))
-			localNode.SetFallbackIP(firstIP)
-		}
-	}
+	n.setNodeFallbackAddress(localNode, n.cfg.HostAddress)
+	n.setNodeFallbackDNS(localNode, n.cfg.HostDNS)
 	return localNode, nil
+}
+
+
+func (n *p2pNetwork) setNodeFallbackAddress(localNode *enode.LocalNode, addr string) {
+	if len(addr) == 0 {
+		return
+	}
+	hostIP := net.ParseIP(addr)
+	if hostIP.To4() == nil && hostIP.To16() == nil {
+		n.logger.Error("invalid host address", zap.String("addr", hostIP.String()))
+	} else {
+		localNode.SetFallbackIP(hostIP)
+		localNode.SetStaticIP(hostIP)
+	}
+}
+
+
+func (n *p2pNetwork) setNodeFallbackDNS(localNode *enode.LocalNode, host string) {
+	if len(host) == 0 {
+		return
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		n.logger.Error("could not resolve host dns", zap.String("addr", host))
+	} else if len(ips) > 0 {
+		// Use first IP returned from the resolver
+		firstIP := ips[0]
+		localNode.SetFallbackIP(firstIP)
+	}
 }
 
 // createBaseLocalNode creates a plain local node

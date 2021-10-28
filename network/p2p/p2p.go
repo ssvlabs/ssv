@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
-	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -13,8 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/transport"
 	swarm "github.com/libp2p/go-libp2p-swarm"
 	"github.com/prysmaticlabs/prysm/async"
-	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -395,44 +392,9 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 	return ret
 }
 
-// getTopicName return formatted topic name
-func getTopicName(pk string) string {
-	return fmt.Sprintf("%s.%s", topicPrefix, pk)
-}
-
-// getTopicName return formatted topic name
-func unwrapTopicName(topicName string) string {
-	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
-}
-
 // MaxBatch returns the max batch response size
 func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
-}
-
-// verifyHostAddress verifies that the host address is reachable
-func (n *p2pNetwork) verifyHostAddress() error {
-	if n.cfg.HostAddress != "" {
-		a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
-		if err := checkAddress(a); err != nil {
-			n.logger.Debug("failed to check address", zap.String("addr", a), zap.String("err", err.Error()))
-			return err
-		}
-		n.logger.Debug("address was checked successfully", zap.String("addr", a))
-	}
-	return nil
-}
-
-// checkAddress checks that some address is reachable
-func checkAddress(addr string) error {
-	conn, err := net.DialTimeout("tcp", addr, time.Second*10)
-	if err != nil {
-		return errors.Wrap(err, "IP address is not accessible")
-	}
-	if err := conn.Close(); err != nil {
-		return errors.Wrap(err, "could not close connection")
-	}
-	return nil
 }
 
 // listen for new nodes watches for new nodes in the network and adds them to the peerstore.
