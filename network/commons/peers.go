@@ -26,9 +26,11 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 	defer q.Stop()
 
 	findPeers := func() error {
-		c, cancel := context.WithTimeout(ctx.Ctx, 60*time.Second)
-		defer cancel()
-		ctx.Net.FindPeers(c, ctx.Operators...)
+		if len(ctx.Operators) > 0 {
+			c, cancel := context.WithTimeout(ctx.Ctx, 30*time.Second)
+			defer cancel()
+			ctx.Net.FindPeers(c, ctx.Operators...)
+		}
 		return nil
 	}
 
@@ -37,14 +39,17 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 		if ok {
 			ctx.Logger.Info("found enough peers",
 				zap.Int("current peer count", n))
+			if n == min {
+				// still calling find peers as the minimum is usually not sufficient
+				// (min - 1, but things won't start w/o additional peers)
+				q.QueueDistinct(findPeers, "find-peers")
+			}
 			break
 		}
 		ctx.Logger.Info("waiting for min peers",
 			zap.Int("current peer count", n))
 
-		if len(ctx.Operators) > 0 {
-			q.QueueDistinct(findPeers, "find-peers")
-		}
+		q.QueueDistinct(findPeers, "find-peers")
 
 		time.Sleep(interval)
 
