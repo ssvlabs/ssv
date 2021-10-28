@@ -84,7 +84,8 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 	if err != nil {
 		return errors.Wrap(err, "could not add bootnode to the exclusion list")
 	}
-	go n.iteratePeers(n.ctx, n.dv5Listener.RandomNodes(), func(info *peer.AddrInfo) {
+	iterator := enode.Filter(n.dv5Listener.RandomNodes(), n.filterPeer)
+	go n.iteratePeers(n.ctx, iterator, func(info *peer.AddrInfo) {
 		if info == nil {
 			return
 		}
@@ -356,19 +357,20 @@ func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 	if node == nil || node.IP() == nil {
 		return false
 	}
+	logger := n.logger.With(zap.String("who", "filterPeer"))
 	// do not dial nodes with their tcp ports not set
 	if err := node.Record().Load(enr.WithEntry("tcp", new(enr.TCP))); err != nil {
 		if !enr.IsNotFound(err) {
-			n.logger.Debug("could not retrieve tcp port", zap.Error(err))
+			logger.Debug("could not retrieve tcp port", zap.Error(err))
 		}
 		return false
 	}
 	peerData, multiAddr, err := convertToAddrInfo(node)
 	if err != nil {
-		n.logger.Debug("could not convert to peer data", zap.Error(err))
+		logger.Debug("could not convert to peer data", zap.Error(err))
 		return false
 	}
-	logger := n.logger.With(zap.String("peer", peerData.String()))
+	logger = logger.With(zap.String("peer", peerData.String()))
 	if n.peers.IsBad(peerData.ID) {
 		logger.Debug("filtered bad peer")
 		return false
