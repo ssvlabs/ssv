@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p"
 	noise "github.com/libp2p/go-libp2p-noise"
+	yamux "github.com/libp2p/go-libp2p-yamux"
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
@@ -38,12 +39,11 @@ func (n *p2pNetwork) buildOptions(cfg *Config) ([]libp2p.Option, error) {
 		n.logger.Info("Libp2p User Agent", zap.String("value", ua))
 		options = append(options, libp2p.UserAgent(ua))
 
-		options = append(options, libp2p.DefaultMuxers)
+		options = append(options, libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport))
 
 		options = append(options, libp2p.Security(noise.ID, noise.New))
 
 		options = append(options, libp2p.EnableNATService())
-
 
 		//if cfg.EnableUPnP {
 		//	options = append(options, libp2p.NATPortMap()) // Allow to use UPnP
