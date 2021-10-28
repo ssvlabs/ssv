@@ -165,6 +165,7 @@ func (n *p2pNetwork) withNetworkKey(priv *ecdsa.PrivateKey) error {
 // reconnect tries to connect to a lost connection
 func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
 	limit := 128 * time.Second
+	logger = logger.With(zap.String("who", "reconnect"))
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		if err := n.connectWithPeer(context.Background(), ai); err != nil {
 			// stop after reaching limit

@@ -96,9 +96,9 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 }
 
 func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
+	logger := n.logger.With(zap.String("who", "networkNotifiee"))
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			logger := n.logger
 			if conn != nil {
 				if conn.RemoteMultiaddr() != nil {
 					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
@@ -110,7 +110,6 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 			}
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			logger := n.logger
 			if conn != nil {
 				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{}}
 				if conn.RemoteMultiaddr() != nil {
