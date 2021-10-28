@@ -38,11 +38,12 @@ func (n *p2pNetwork) buildOptions(cfg *Config) ([]libp2p.Option, error) {
 		n.logger.Info("Libp2p User Agent", zap.String("value", ua))
 		options = append(options, libp2p.UserAgent(ua))
 
+		options = append(options, libp2p.DefaultMuxers)
+
 		options = append(options, libp2p.Security(noise.ID, noise.New))
 
 		options = append(options, libp2p.EnableNATService())
 
-		//options = append(options, libp2p.DefaultMuxers)
 
 		//if cfg.EnableUPnP {
 		//	options = append(options, libp2p.NATPortMap()) // Allow to use UPnP
