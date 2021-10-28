@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"crypto/ecdsa"
+	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
@@ -21,7 +22,72 @@ type discv5Listener interface {
 	LocalNode() *enode.LocalNode
 }
 
-// createExtendedLocalNode creates
+// listenUDP starts a UDP server
+func (n *p2pNetwork) listenUDP(ipAddr net.IP) (*net.UDPConn, error) {
+	// BindIP is used to specify the ip
+	// on which we will bind our listener on
+	// by default we will listen to all interfaces.
+	var bindIP net.IP
+	switch udpVersionFromIP(ipAddr) {
+	case udp4:
+		bindIP = net.IPv4zero
+	case udp6:
+		bindIP = net.IPv6zero
+	default:
+		return nil, errors.New("invalid ip provided")
+	}
+
+	//// If Local ip is specified then use that instead.
+	//if s.cfg.LocalIP != "" {
+	//	ipAddr = net.ParseIP(s.cfg.LocalIP)
+	//	if ipAddr == nil {
+	//		return nil, errors.New("invalid Local ip provided")
+	//	}
+	//	bindIP = ipAddr
+	//}
+	udpAddr := &net.UDPAddr{
+		IP:   bindIP,
+		Port: n.cfg.UDPPort,
+	}
+	// Listen to all network interfaces
+	// for both ip protocols.
+	networkVersion := "udp"
+	conn, err := net.ListenUDP(networkVersion, udpAddr)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not listen to UDP")
+	}
+	return conn, nil
+}
+
+// createDiscV5Listener creates a new discv5 service
+func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, *enode.LocalNode, error) {
+	privKey := n.privKey
+	ipAddr := n.ipAddr()
+	conn, err := n.listenUDP(ipAddr)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not listen to UDP")
+	}
+	localNode, err := n.createExtendedLocalNode()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not create local node")
+	}
+	dv5Cfg := discover.Config{
+		PrivateKey: privKey,
+	}
+
+	dv5Cfg.Bootnodes, err = parseENRs(n.cfg.Discv5BootStrapAddr)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not read bootstrap addresses")
+	}
+
+	listener, err := discover.ListenV5(conn, localNode, dv5Cfg)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not listen to discV5")
+	}
+	return listener, localNode, nil
+}
+
+// createExtendedLocalNode creates an extended enode.LocalNode with all the needed entries to be part of its enr
 func (n *p2pNetwork) createExtendedLocalNode() (*enode.LocalNode, error) {
 	ipAddr := n.ipAddr()
 	privKey := n.privKey

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	iaddr "github.com/ipfs/go-ipfs-addr"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -22,52 +22,37 @@ import (
 	"runtime"
 )
 
-func (n *p2pNetwork) parseBootStrapAddrs(addrs []string) (discv5Nodes []string) {
-	discv5Nodes, _ = parseGenericAddrs(n.logger, addrs)
-	if len(discv5Nodes) == 0 {
-		n.logger.Error("No bootstrap addresses supplied")
-	}
-	return discv5Nodes
-}
-
-func parseGenericAddrs(logger *zap.Logger, addrs []string) (enodeString, multiAddrString []string) {
-	for _, addr := range addrs {
-		if addr == "" {
-			// Ignore empty entries
+// bootnodes returns []enode.Node of the configured bootnodes addresses
+func (n *p2pNetwork) bootnodes() ([]*enode.Node, error) {
+	nodes := make([]*enode.Node, 0, len(n.cfg.Discv5BootStrapAddr))
+	for _, addr := range n.cfg.Discv5BootStrapAddr {
+		bootNode, err := enode.Parse(enode.ValidSchemes, addr)
+		if err != nil {
+			return nil, err
+		}
+		// do not dial bootnodes with their tcp ports not set
+		if err := bootNode.Record().Load(enr.WithEntry(tcp, new(enr.TCP))); err != nil {
+			if !enr.IsNotFound(err) {
+				n.logger.Error("Could not retrieve tcp port", zap.Error(err))
+			}
+			n.logger.Error("Could not retrieve tcp port", zap.Error(err))
 			continue
 		}
-		_, err := enode.Parse(enode.ValidSchemes, addr)
-		if err == nil {
-			enodeString = append(enodeString, addr)
-			continue
-		}
-		_, err = multiAddrFromString(addr)
-		if err == nil {
-			multiAddrString = append(multiAddrString, addr)
-			continue
-		}
-		logger.Error("Invalid address error", zap.String("address", addr), zap.Error(err))
+		nodes = append(nodes, bootNode)
 	}
-	return enodeString, multiAddrString
+	return nodes, nil
 }
 
-func multiAddrFromString(address string) (ma.Multiaddr, error) {
-	addr, err := iaddr.ParseString(address)
-	if err != nil {
-		return nil, err
-	}
-	return addr.Multiaddr(), nil
-}
-
-// Retrieves an external ipv4 address and converts into a libp2p formatted value.
+// ipAddr retrieves the external ipv4 address and converts into a libp2p formatted value.
 func (n *p2pNetwork) ipAddr() net.IP {
 	ip, err := network.ExternalIP()
 	if err != nil {
-		n.logger.Fatal("Could not get IPv4 address", zap.Error(err))
+		n.logger.Fatal("could not get IPv4 address", zap.Error(err))
 	}
 	return net.ParseIP(ip)
 }
 
+// udpVersionFromIP returns the udp version
 func udpVersionFromIP(ipAddr net.IP) string {
 	if ipAddr.To4() != nil {
 		return udp4
@@ -75,8 +60,8 @@ func udpVersionFromIP(ipAddr net.IP) string {
 	return udp6
 }
 
-// Determines a private key for p2p networking from the p2p service's
-// configuration struct. If no key is found, it generates a new one.
+// privKey determines a private key for p2p networking
+// if no key is found, it generates a new one.
 func privKey() (*ecdsa.PrivateKey, error) {
 	defaultKeyPath := defaultDataDir()
 
@@ -97,6 +82,7 @@ func privKey() (*ecdsa.PrivateKey, error) {
 	return convertedKey, nil
 }
 
+// convertToMultiAddr takes enode slice and turns it into multiaddrs
 func convertToMultiAddr(logger *zap.Logger, nodes []*enode.Node) []ma.Multiaddr {
 	var multiAddrs []ma.Multiaddr
 	for _, node := range nodes {
@@ -115,6 +101,7 @@ func convertToMultiAddr(logger *zap.Logger, nodes []*enode.Node) []ma.Multiaddr 
 	return multiAddrs
 }
 
+// convertToSingleMultiAddr converts a single enode into a multiaddr
 func convertToSingleMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
 	pubkey := node.Pubkey()
 	assertedKey := convertToInterfacePubkey(pubkey)
@@ -125,6 +112,7 @@ func convertToSingleMultiAddr(node *enode.Node) (ma.Multiaddr, error) {
 	return multiAddressBuilderWithID(node.IP().String(), tcp, uint(node.TCP()), id)
 }
 
+// multiAddressBuilderWithID builds a multiaddr based on the given parameters
 func multiAddressBuilderWithID(ipAddr, protocol string, port uint, id peer.ID) (ma.Multiaddr, error) {
 	parsedIP := net.ParseIP(ipAddr)
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {
@@ -139,6 +127,7 @@ func multiAddressBuilderWithID(ipAddr, protocol string, port uint, id peer.ID) (
 	return ma.NewMultiaddr(fmt.Sprintf("/ip6/%s/%s/%d/p2p/%s", ipAddr, protocol, port, id.String()))
 }
 
+// multiAddressBuilder builds a multiaddr based on the given parameters (w/o ID)
 func multiAddressBuilder(ipAddr string, tcpPort uint) (ma.Multiaddr, error) {
 	parsedIP := net.ParseIP(ipAddr)
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {
@@ -159,22 +148,26 @@ func privKeyOption(privkey *ecdsa.PrivateKey) libp2p.Option {
 	}
 }
 
+// convertToInterfacePrivkey converts ecdsa to libp2p private key
 func convertToInterfacePrivkey(privkey *ecdsa.PrivateKey) crypto.PrivKey {
 	typeAssertedKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privkey))
 	return typeAssertedKey
 }
 
+// convertFromInterfacePrivKey converts libp2p to ecdsa private key
 func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
 	typeAssertedKey := (*ecdsa.PrivateKey)(privkey.(*crypto.Secp256k1PrivateKey))
 	typeAssertedKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
 	return typeAssertedKey
 }
 
+// convertToInterfacePubkey converts ecdsa to libp2p public key
 func convertToInterfacePubkey(pubkey *ecdsa.PublicKey) crypto.PubKey {
 	typeAssertedKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(pubkey))
 	return typeAssertedKey
 }
 
+// convertToAddrInfo
 func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, ma.Multiaddr, error) {
 	multiAddr, err := convertToSingleMultiAddr(node)
 	if err != nil {
@@ -204,6 +197,7 @@ func defaultDataDir() string {
 	return ""
 }
 
+// pubKeyHash returns sha256 (hex) of the given public key
 func pubKeyHash(pubkeyHex string) string {
 	if len(pubkeyHex) == 0 {
 		return ""
@@ -211,10 +205,14 @@ func pubKeyHash(pubkeyHex string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(pubkeyHex)))
 }
 
-func parseDiscV5Addrs(enrs []string) ([]*enode.Node, error) {
+// parseENRs parses the given ENRs
+func parseENRs(enrs []string) ([]*enode.Node, error) {
 	var nodes []*enode.Node
-	for _, addr := range enrs {
-		node, err := enode.Parse(enode.ValidSchemes, addr)
+	for _, enr := range enrs {
+		if enr == "" {
+			continue
+		}
+		node, err := enode.Parse(enode.ValidSchemes, enr)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not bootstrap addr")
 		}

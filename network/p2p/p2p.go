@@ -96,7 +96,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		fork:               cfg.Fork,
 	}
 
-	if err := n.withNetworkKey(cfg.NetworkPrivateKey); err != nil {
+	if err := n.setupNetworkKey(cfg.NetworkPrivateKey); err != nil {
 		return nil, errors.Wrap(err, "Failed to generate p2p private key")
 	}
 
@@ -114,7 +114,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.cfg.HostID = host.ID()
 
 	if len(cfg.Enr) > 0 {
-		n.cfg.Discv5BootStrapAddr = n.parseBootStrapAddrs(TransformEnr(n.cfg.Enr))
+		n.cfg.Discv5BootStrapAddr = TransformEnr(n.cfg.Enr)
+	} else {
+		n.logger.Error("no bootstrap addresses supplied")
 	}
 
 	n.logger = logger.With(zap.String("id", n.host.ID().String()))
@@ -145,7 +147,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 			return nil, err
 		}
 		_ = n.verifyHostAddress()
-		async.RunEvery(n.ctx, 10 * time.Minute, func() {
+		async.RunEvery(n.ctx, 10*time.Minute, func() {
 			err = n.connectToBootnodes()
 			if err != nil {
 				n.logger.Debug("failed to connect to bootnodes", zap.Error(err))
@@ -162,7 +164,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	return n, nil
 }
 
-func (n *p2pNetwork) withNetworkKey(priv *ecdsa.PrivateKey) error {
+// setupNetworkKey creates a private key if non configured
+func (n *p2pNetwork) setupNetworkKey(priv *ecdsa.PrivateKey) error {
 	if priv != nil {
 		n.privKey = priv
 	} else {
@@ -194,6 +197,7 @@ func (n *p2pNetwork) reconnect(logger *zap.Logger, ai peer.AddrInfo) {
 	}, 8*time.Second, limit)
 }
 
+// watchPeers reports and logs peers status
 func (n *p2pNetwork) watchPeers() {
 	async.RunEvery(n.ctx, 1*time.Minute, func() {
 		// index all peers and report
@@ -211,6 +215,7 @@ func (n *p2pNetwork) watchPeers() {
 	})
 }
 
+// SubscribeToValidatorNetwork subscribes to the validtor's topic
 func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	n.psTopicsLock.Lock()
 	defer n.psTopicsLock.Unlock()
@@ -401,6 +406,7 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
+// verifyHostAddress verifies that the host address is reachable
 func (n *p2pNetwork) verifyHostAddress() error {
 	if n.cfg.HostAddress != "" {
 		a := net.JoinHostPort(n.cfg.HostAddress, fmt.Sprintf("%d", n.cfg.TCPPort))
@@ -413,7 +419,7 @@ func (n *p2pNetwork) verifyHostAddress() error {
 	return nil
 }
 
-// checkAddress checks that some address is accessible
+// checkAddress checks that some address is reachable
 func checkAddress(addr string) error {
 	conn, err := net.DialTimeout("tcp", addr, time.Second*10)
 	if err != nil {

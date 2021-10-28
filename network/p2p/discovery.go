@@ -3,7 +3,6 @@ package p2p
 import (
 	"bytes"
 	"context"
-	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -12,7 +11,6 @@ import (
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.opencensus.io/trace"
-	"net"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -60,6 +58,7 @@ func setupMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host)
 	return nil
 }
 
+// setupDiscV5 create a discv5 service and starts it
 func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 	n.peers = peers.NewStatus(ctx, &peers.StatusConfig{
 		PeerLimit: maxPeers,
@@ -90,7 +89,6 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 			return
 		}
 		n.logger.Debug("found peer in random search", zap.String("peer", info.String()))
-
 		// ignore error which is printed in connectWithPeer
 		_ = n.connectWithPeer(n.ctx, *info)
 	})
@@ -98,12 +96,13 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 	return nil
 }
 
+// networkNotifiee notifies on network events
 func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
 	_logger := n.logger.With(zap.String("who", "networkNotifiee"))
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			if conn != nil {
-				logger := _logger
+				logger := _logger.With(zap.String("conn", conn.ID()))
 				if conn.RemoteMultiaddr() != nil {
 					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
 				}
@@ -115,7 +114,7 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			if conn != nil {
-				logger := _logger
+				logger := _logger.With(zap.String("conn", conn.ID()))
 				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{}}
 				if conn.RemoteMultiaddr() != nil {
 					addr := conn.RemoteMultiaddr()
@@ -133,102 +132,22 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 				}
 			}
 		},
-		//ClosedStreamF: func(n network.Network, stream network.Stream) {
-		//
-		//},
-		//OpenedStreamF: func(n network.Network, stream network.Stream) {
-		//
-		//},
 	}
 }
 
+// connectToBootnodes connects to all configured bootnodes
 func (n *p2pNetwork) connectToBootnodes() error {
-	nodes := make([]*enode.Node, 0, len(n.cfg.Discv5BootStrapAddr))
-	for _, addr := range n.cfg.Discv5BootStrapAddr {
-		bootNode, err := enode.Parse(enode.ValidSchemes, addr)
-		if err != nil {
-			return err
-		}
-		// do not dial bootnodes with their tcp ports not set
-		if err := bootNode.Record().Load(enr.WithEntry(tcp, new(enr.TCP))); err != nil {
-			if !enr.IsNotFound(err) {
-				n.logger.Error("Could not retrieve tcp port", zap.Error(err))
-			}
-
-			n.logger.Error("Could not retrieve tcp port", zap.Error(err))
-			continue
-		}
-		nodes = append(nodes, bootNode)
+	nodes, err := n.bootnodes()
+	if err != nil {
+		return err
 	}
 	multiAddresses := convertToMultiAddr(n.logger, nodes)
-	n.connectWithAllPeers(multiAddresses)
+	n.connectWithPeers(multiAddresses)
 	return nil
 }
 
-func (n *p2pNetwork) listenUDP(ipAddr net.IP) (*net.UDPConn, error) {
-	// BindIP is used to specify the ip
-	// on which we will bind our listener on
-	// by default we will listen to all interfaces.
-	var bindIP net.IP
-	switch udpVersionFromIP(ipAddr) {
-	case udp4:
-		bindIP = net.IPv4zero
-	case udp6:
-		bindIP = net.IPv6zero
-	default:
-		return nil, errors.New("invalid ip provided")
-	}
-
-	//// If Local ip is specified then use that instead.
-	//if s.cfg.LocalIP != "" {
-	//	ipAddr = net.ParseIP(s.cfg.LocalIP)
-	//	if ipAddr == nil {
-	//		return nil, errors.New("invalid Local ip provided")
-	//	}
-	//	bindIP = ipAddr
-	//}
-	udpAddr := &net.UDPAddr{
-		IP:   bindIP,
-		Port: n.cfg.UDPPort,
-	}
-	// Listen to all network interfaces
-	// for both ip protocols.
-	networkVersion := "udp"
-	conn, err := net.ListenUDP(networkVersion, udpAddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not listen to UDP")
-	}
-	return conn, nil
-}
-
-func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, *enode.LocalNode, error) {
-	privKey := n.privKey
-	ipAddr := n.ipAddr()
-	conn, err := n.listenUDP(ipAddr)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not listen to UDP")
-	}
-	localNode, err := n.createExtendedLocalNode()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not create local node")
-	}
-	dv5Cfg := discover.Config{
-		PrivateKey: privKey,
-	}
-
-	dv5Cfg.Bootnodes, err = parseDiscV5Addrs(n.cfg.Discv5BootStrapAddr)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not read bootstrap addresses")
-	}
-
-	listener, err := discover.ListenV5(conn, localNode, dv5Cfg)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not listen to discV5")
-	}
-	return listener, localNode, nil
-}
-
-func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
+// connectWithPeers connects with the given peers
+func (n *p2pNetwork) connectWithPeers(multiAddrs []ma.Multiaddr) {
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
 	if err != nil {
 		n.logger.Error("Could not convert to peer address info's from multiaddresses", zap.Error(err))
@@ -236,11 +155,6 @@ func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 	}
 	for _, info := range addrInfos {
 		// make each dial non-blocking
-		connectedness := n.host.Network().Connectedness(info.ID)
-		if connectedness == libp2pnetwork.Connected {
-			n.logger.Debug("bootnode already connected", zap.String("peer info", info.String()))
-			continue
-		}
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
 				n.logger.Debug("could not connect to bootnode", zap.String("err", err.Error()))
@@ -251,6 +165,7 @@ func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 	}
 }
 
+// connectWithPeer connects with the given peer
 func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) error {
 	ctx, span := trace.StartSpan(ctx, "p2p.connectWithPeer")
 	defer span.End()
@@ -282,9 +197,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	return nil
 }
 
-// This checks our set max peers in our config, and
-// determines whether our currently connected and
-// active peers are above our set max peer limit.
+// isPeerAtLimit determines whether the current peer count has reached the limit
 func (n *p2pNetwork) isPeerAtLimit() bool {
 	numOfConns := len(n.host.Network().Peers())
 	activePeers := len(n.peers.Active())
@@ -353,19 +266,14 @@ func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator, 
 	}
 }
 
+// peerFilter is an interface for discovery filter
 type peerFilter func(node *enode.Node) bool
 
-// filterPeer validates each node that we retrieve from our dht. We
-// try to ascertain that the peer can be a valid protocol peer.
-// Validity Conditions:
-// 1) The local node is still actively looking for peers to
-//    connect to.
-// 2) Peer has a valid IP and TCP port set in their enr.
-// 3) Peer hasn't been marked as 'bad'
-// 4) Peer is not currently active or connected.
-// 5) Peer is ready to receive incoming connections.
-// --6) Peer's fork digest in their ENR matches that of
-// 	  our localnodes.
+// filterPeer filters nodes based on the following rules
+// 	- peer has a valid IP and TCP port set in their enr
+//  - peer hasn't been marked as 'bad'
+//  - peer is not currently active or connected
+//  - peer is ready to receive incoming connections.
 func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 	// Ignore nil or nodes with no ip address stored
 	if node == nil || node.IP() == nil {
@@ -402,14 +310,9 @@ func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 		return false
 	}
 	nodeENR := node.Record()
-	// Decide whether or not to connect to peer that does not
-	// match the proper fork ENR data with our local node.
-	//if s.genesisValidatorsRoot != nil {
-	//	if err := s.compareForkENR(nodeENR); err != nil {
-	//		log.WithError(err).Trace("Fork ENR mismatches between peer and local node")
-	//		return false
-	//	}
-	//}
+
+	// TODO check regarding fork validation
+
 	// Add peer to peer handler.
 	n.peers.Add(nodeENR, peerData.ID, multiAddr, libp2pnetwork.DirUnknown)
 	return true
