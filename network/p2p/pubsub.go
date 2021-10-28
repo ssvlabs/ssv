@@ -42,12 +42,15 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		pubsub.WithFloodPublish(true),
 		pubsub.WithGossipSubParams(pubsubGossipParam()),
 	}
-	exporterPeerID, err := peerFromString(cfg.ExporterPeerID)
-	if err != nil {
-		n.logger.Error("could not parse peer id", zap.Error(err))
-	} else {
-		pubsub.WithDirectPeers([]peer.AddrInfo{{ID: exporterPeerID}})
+	if len(cfg.ExporterPeerID) > 0 {
+		exporterPeerID, err := peerFromString(cfg.ExporterPeerID)
+		if err != nil {
+			n.logger.Error("could not parse exporter peer id", zap.Error(err))
+		} else {
+			psOpts = append(psOpts, pubsub.WithDirectPeers([]peer.AddrInfo{{ID: exporterPeerID}}))
+		}
 	}
+
 	if len(cfg.PubSubTraceOut) > 0 {
 		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
 		if err != nil {
