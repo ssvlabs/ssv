@@ -96,7 +96,7 @@ func (r *decidedReader) Start() error {
 	}
 
 	r.logger.Debug("starting to read decided messages")
-	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 2); err != nil {
+	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
 	r.listenToNetwork(r.network.ReceivedDecidedChan())
