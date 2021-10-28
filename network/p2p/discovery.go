@@ -287,6 +287,14 @@ func (n *p2pNetwork) isPeerAtLimit() bool {
 
 // FindPeers finds new peers watches for new nodes in the network and adds them to the peerstore.
 func (n *p2pNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) {
+	if len(operatorsPubKeys) == 0 {
+		return
+	}
+	var pks []string
+	for _, opk := range operatorsPubKeys {
+		pks = append(pks, string(opk))
+	}
+	n.logger.Debug("finding peers", zap.Any("pks", pks))
 	iterator := n.dv5Listener.RandomNodes()
 	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, operatorsPubKeys...))
 	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo) {
