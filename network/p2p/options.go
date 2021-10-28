@@ -41,6 +41,9 @@ func (n *p2pNetwork) buildOptions(cfg *Config) ([]libp2p.Option, error) {
 		options = append(options, libp2p.Security(noise.ID, noise.New))
 
 		options = append(options, libp2p.EnableNATService())
+
+		//options = append(options, libp2p.DefaultMuxers)
+
 		//if cfg.EnableUPnP {
 		//	options = append(options, libp2p.NATPortMap()) // Allow to use UPnP
 		//}
