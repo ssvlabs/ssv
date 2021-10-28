@@ -316,9 +316,11 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 		}
 		return nil
 	}, 3); err != nil {
+		validator.ReportIBFTStatus(pubKey, false, true)
 		logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}
+	validator.ReportIBFTStatus(pubKey, true, false)
 	logger.Debug("sync is done, starting to read network messages")
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	return nil
