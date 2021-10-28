@@ -83,7 +83,14 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 	if err != nil {
 		return errors.Wrap(err, "could not add bootnode to the exclusion list")
 	}
-	go n.iteratePeers(n.ctx, n.dv5Listener.RandomNodes())
+	go n.iteratePeers(n.ctx, n.dv5Listener.RandomNodes(), func(info *peer.AddrInfo) {
+		if info == nil {
+			return
+		}
+		n.logger.Debug("found peer in random search", zap.String("peer", info.String()))
+		// ignore error which is printed in connectWithPeer
+		_ = n.connectWithPeer(n.ctx, *info)
+	})
 
 	return nil
 }
@@ -242,24 +249,25 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 		n.logger.Debug("could not connect to current/self peer")
 		return nil
 	}
-	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
+	logger := n.logger.With(zap.String("peer", info.String()))
+	logger.Debug("connecting to peer")
 
 	if n.peers.IsBad(info.ID) {
-		n.logger.Warn("bad peer", zap.String("peerID", info.ID.String()))
+		logger.Warn("bad peer")
 		return errors.New("refused to connect to bad peer")
 	}
 	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
-		n.logger.Debug("peer is already connected", zap.String("peerID", info.ID.String()))
+		logger.Debug("peer is already connected")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	if err := n.host.Connect(ctx, info); err != nil {
-		n.logger.Warn("failed to connect to peer", zap.String("peerID", info.ID.String()), zap.Error(err))
+		logger.Warn("could not connect to peer", zap.Error(err))
 		return err
 	}
-	n.logger.Debug("connected to peer", zap.String("peerID", info.ID.String()))
+	logger.Debug("connected to peer", zap.String("peer", info.String()))
 
 	return nil
 }
@@ -277,16 +285,22 @@ func (n *p2pNetwork) isPeerAtLimit() bool {
 func (n *p2pNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) {
 	iterator := n.dv5Listener.RandomNodes()
 	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, operatorsPubKeys...))
-	n.iteratePeers(ctx, iterator)
+	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo) {
+		if info == nil {
+			return
+		}
+		n.logger.Debug("found peer", zap.String("peer", info.String()))
+		// ignore error which is printed in connectWithPeer
+		_ = n.connectWithPeer(ctx, *info)
+	})
 }
 
 // iteratePeers accepts some iterator and loop it for new peers
-func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator) {
+func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator, handler func(info *peer.AddrInfo)) {
 	defer iterator.Close()
 	for {
 		select {
 		case <-ctx.Done():
-
 			return
 		default:
 		}
@@ -311,11 +325,8 @@ func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator) 
 			n.logger.Debug("could not convert to peer info", zap.String("err", err.Error()))
 			continue
 		}
-		go func(info *peer.AddrInfo) {
-			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				//n.logger.Debug("could not connect with peer", zap.String("err", err.Error()))
-			}
-		}(peerInfo)
+		n.logger.Debug("discovered new peer", zap.String("peer", peerInfo.String()))
+		go handler(peerInfo)
 	}
 }
 
