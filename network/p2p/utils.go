@@ -33,9 +33,9 @@ func (n *p2pNetwork) bootnodes() ([]*enode.Node, error) {
 		// do not dial bootnodes with their tcp ports not set
 		if err := bootNode.Record().Load(enr.WithEntry(tcp, new(enr.TCP))); err != nil {
 			if !enr.IsNotFound(err) {
-				n.logger.Error("Could not retrieve tcp port", zap.Error(err))
+				n.logger.Error("could not find tcp port record", zap.Error(err))
 			}
-			n.logger.Error("Could not retrieve tcp port", zap.Error(err))
+			n.logger.Error("could not retrieve tcp port record", zap.Error(err))
 			continue
 		}
 		nodes = append(nodes, bootNode)
