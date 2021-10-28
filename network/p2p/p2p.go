@@ -10,6 +10,8 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/transport"
+	swarm "github.com/libp2p/go-libp2p-swarm"
 	"github.com/prysmaticlabs/prysm/async"
 	"net"
 	"strings"
@@ -97,6 +99,8 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	if err := n.withNetworkKey(cfg.NetworkPrivateKey); err != nil {
 		return nil, errors.Wrap(err, "Failed to generate p2p private key")
 	}
+
+	swarm.DialTimeoutLocal = transport.DialTimeout
 
 	opts, err := n.buildOptions(cfg)
 	if err != nil {
