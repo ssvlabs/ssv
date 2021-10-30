@@ -18,16 +18,16 @@ type Config struct {
 	UDPPort          int           `yaml:"UdpPort" env:"UDP_PORT" env-default:"12000"`
 	HostAddress      string        `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
 	HostDNS          string        `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
-	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
+	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT" env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"50" env-description:"maximum number of returned objects in a batch"`
+	EnableUPnP       bool          `yaml:"EnableUPnP" env:"ENABLE_UPNP" env-description:"flag to turn on reconnections on failures"`
 	PubSubTraceOut   string        `yaml:"PubSubTraceOut" env:"PUBSUB_TRACE_OUT" env-description:"File path to hold collected pubsub traces"`
 	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
 
-	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
+	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID" env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf" env-description:"peer id of exporter"`
 
-	TryReconnect bool `yaml:"TryReconnect" env:"P2P_TRY_RECONNECT"  env-default:"false"  env-description:"flag to turn on reconnections on failures"`
-
-	Fork forks.Fork
+	TryReconnect bool `yaml:"TryReconnect" env:"P2P_TRY_RECONNECT" env-default:"false" env-description:"flag to turn on reconnections on failures"`
+	Fork         forks.Fork
 
 	// objects / instances
 	HostID              peer.ID

@@ -110,13 +110,23 @@ func (n *p2pNetwork) findNetworkPeers(timeout time.Duration) {
 	ctx, cancel := context.WithTimeout(n.ctx, timeout)
 	defer cancel()
 	iterator := enode.Filter(n.dv5Listener.RandomNodes(), n.filterPeer)
-	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo) {
+	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo, node *enode.Node) {
 		if info == nil {
 			return
 		}
 		logger.Debug("found peer in random search", zap.String("peer", info.String()))
-		// ignore error which is printed in connectWithPeer
-		_ = n.connectWithPeer(n.ctx, *info)
+		if err := n.connectWithPeer(ctx, *info); err != nil {
+			return
+		}
+		//if _, multiAddr, err := convertToAddrInfo(node); err == nil {
+		//	n.peers.Add(node.Record(), info.ID, multiAddr, libp2pnetwork.DirOutbound)
+		//}
+		//if err := n.eNode.Database().UpdateNode(node); err != nil {
+		//	n.logger.Debug("could not update peer in DB", zap.String("peer", info.String()),
+		//		zap.String("err", err.Error()))
+		//} else {
+		//	n.logger.Debug("enode updated", zap.String("peer", info.String()))
+		//}
 	})
 }
 
@@ -125,36 +135,42 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 	_logger := n.logger.With(zap.String("who", "networkNotifiee"))
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn != nil {
-				logger := _logger.With(zap.String("conn", conn.ID()))
-				if conn.RemoteMultiaddr() != nil {
-					logger = logger.With(zap.String("multiaddr", conn.RemoteMultiaddr().String()))
-				}
-				if len(conn.RemotePeer()) > 0 {
-					logger = logger.With(zap.String("peerID", conn.RemotePeer().String()))
-				}
-				logger.Debug("connected peer")
+			if conn == nil {
+				return
 			}
+			go func() {
+				n.peers.Add(new(enr.Record), conn.RemotePeer(), conn.RemoteMultiaddr(), conn.Stat().Direction)
+				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerConnecting)
+				logger := _logger.With(zap.String("conn", conn.ID()),
+					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
+					zap.String("peerID", conn.RemotePeer().String()))
+				// trying to open a stream
+				if s, err := conn.NewStream(context.Background()); err != nil {
+					n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerDisconnected)
+					logger.Warn("failed to open stream", zap.Error(err))
+					return
+				} else if err = s.Close(); err != nil {
+					logger.Warn("failed to close stream", zap.Error(err))
+				}
+				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerConnected)
+				logger.Debug("connected peer")
+			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn != nil {
-				logger := _logger.With(zap.String("conn", conn.ID()))
-				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{}}
-				if conn.RemoteMultiaddr() != nil {
-					addr := conn.RemoteMultiaddr()
-					logger = logger.With(zap.String("multiaddr", addr.String()))
-					ai.Addrs = []ma.Multiaddr{addr}
-				}
-				if len(conn.RemotePeer()) > 0 {
-					p := conn.RemotePeer()
-					logger = logger.With(zap.String("peerID", p.String()))
-					ai.ID = p
-				}
+			if conn == nil {
+				return
+			}
+			go func() {
+				logger := _logger.With(zap.String("conn", conn.ID()),
+					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
+					zap.String("peerID", conn.RemotePeer().String()))
+				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{conn.RemoteMultiaddr()}, ID: conn.RemotePeer()}
 				logger.Debug("disconnected peer")
+				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerDisconnected)
 				if reconnect {
 					go n.reconnect(logger, ai)
 				}
-			}
+			}()
 		},
 	}
 }
@@ -181,9 +197,8 @@ func (n *p2pNetwork) connectWithPeers(multiAddrs []ma.Multiaddr) {
 		// make each dial non-blocking
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
-				n.logger.Debug("could not connect to bootnode", zap.String("err", err.Error()))
-				//log.Print("Could not connect with peer ", info.String(), err)
-				//log.WithError(err).Tracef("Could not connect with peer %s", info.String()) TODO need to add log with trace level
+				//n.logger.Debug("could not connect to peer", zap.String("err", err.Error()))
+				return
 			}
 		}(info)
 	}
@@ -216,6 +231,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 		logger.Warn("could not connect to peer", zap.Error(err))
 		return err
 	}
+
 	logger.Debug("connected to peer", zap.String("peer", info.String()))
 
 	return nil
@@ -241,7 +257,7 @@ func (n *p2pNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) 
 	logger.Debug("finding operators...", zap.Any("pks", pks))
 	iterator := n.dv5Listener.RandomNodes()
 	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, operatorsPubKeys...))
-	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo) {
+	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo, node *enode.Node) {
 		if info == nil {
 			return
 		}
@@ -252,7 +268,7 @@ func (n *p2pNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) 
 }
 
 // iteratePeers accepts some iterator and loop it for new peers
-func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator, handler func(info *peer.AddrInfo)) {
+func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator, handler func(info *peer.AddrInfo, node *enode.Node)) {
 	defer iterator.Close()
 	for {
 		select {
@@ -281,13 +297,7 @@ func (n *p2pNetwork) iteratePeers(ctx context.Context, iterator enode.Iterator, 
 			n.logger.Debug("could not convert to peer info", zap.String("err", err.Error()))
 			continue
 		}
-		//if err := n.eNode.Database().UpdateNode(node); err != nil {
-		//	n.logger.Debug("could not update peer in DB", zap.String("peer", peerInfo.String()),
-		//		zap.String("err", err.Error()))
-		//} else {
-		//	n.logger.Debug("enode updated", zap.String("peer", peerInfo.String()))
-		//}
-		go handler(peerInfo)
+		go handler(peerInfo, node)
 	}
 }
 
@@ -340,6 +350,8 @@ func (n *p2pNetwork) filterPeer(node *enode.Node) bool {
 
 	// Add peer to peer handler.
 	n.peers.Add(nodeENR, peerData.ID, multiAddr, libp2pnetwork.DirUnknown)
+	logger.Debug("peer is valid")
+
 	return true
 }
 
