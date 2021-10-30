@@ -75,7 +75,6 @@ func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, *enode.LocalNode, 
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
 	}
-
 	dv5Cfg.Bootnodes, err = parseENRs(n.cfg.Discv5BootStrapAddr)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not read bootstrap addresses")
@@ -116,7 +115,6 @@ func (n *p2pNetwork) createExtendedLocalNode() (*enode.LocalNode, error) {
 	return localNode, nil
 }
 
-
 func (n *p2pNetwork) setNodeFallbackAddress(localNode *enode.LocalNode, addr string) {
 	if len(addr) == 0 {
 		return
@@ -129,7 +127,6 @@ func (n *p2pNetwork) setNodeFallbackAddress(localNode *enode.LocalNode, addr str
 		localNode.SetStaticIP(hostIP)
 	}
 }
-
 
 func (n *p2pNetwork) setNodeFallbackDNS(localNode *enode.LocalNode, host string) {
 	if len(host) == 0 {

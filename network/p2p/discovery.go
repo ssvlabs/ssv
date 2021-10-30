@@ -81,19 +81,43 @@ func setupDiscV5(ctx context.Context, n *p2pNetwork) error {
 
 	err = n.connectToBootnodes()
 	if err != nil {
-		return errors.Wrap(err, "could not add bootnode to the exclusion list")
+		return errors.Wrap(err, "could not connect to bootnodes")
 	}
+
+	return nil
+}
+
+// findNetworkPeersLoop will keep looking for peers in the network while the main context is not done
+func (n *p2pNetwork) findNetworkPeersLoop(interval time.Duration) {
+	for {
+		select {
+		case <-n.ctx.Done():
+			return
+		default:
+			n.findNetworkPeers(interval)
+		}
+	}
+}
+
+// findNetworkPeers finds peers in the network with the given timeout
+func (n *p2pNetwork) findNetworkPeers(timeout time.Duration) {
+	logger := n.logger.With(zap.String("who", "findNetworkPeers"))
+	logger.Debug("finding network peers...")
+	// first connecting to bootnodes
+	if err := n.connectToBootnodes(); err != nil {
+		logger.Error("could not connect to bootnodes", zap.Error(err))
+	}
+	ctx, cancel := context.WithTimeout(n.ctx, timeout)
+	defer cancel()
 	iterator := enode.Filter(n.dv5Listener.RandomNodes(), n.filterPeer)
-	go n.iteratePeers(n.ctx, iterator, func(info *peer.AddrInfo) {
+	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo) {
 		if info == nil {
 			return
 		}
-		n.logger.Debug("found peer in random search", zap.String("peer", info.String()))
+		logger.Debug("found peer in random search", zap.String("peer", info.String()))
 		// ignore error which is printed in connectWithPeer
 		_ = n.connectWithPeer(n.ctx, *info)
 	})
-
-	return nil
 }
 
 // networkNotifiee notifies on network events
@@ -209,18 +233,19 @@ func (n *p2pNetwork) FindPeers(ctx context.Context, operatorsPubKeys ...[]byte) 
 	if len(operatorsPubKeys) == 0 {
 		return
 	}
+	logger := n.logger.With(zap.String("who", "FindPeers"))
 	var pks []string
 	for _, opk := range operatorsPubKeys {
 		pks = append(pks, string(opk))
 	}
-	n.logger.Debug("finding peers", zap.Any("pks", pks))
+	logger.Debug("finding operators...", zap.Any("pks", pks))
 	iterator := n.dv5Listener.RandomNodes()
 	iterator = enode.Filter(iterator, filterPeerByOperatorsPubKey(n.filterPeer, operatorsPubKeys...))
 	n.iteratePeers(ctx, iterator, func(info *peer.AddrInfo) {
 		if info == nil {
 			return
 		}
-		n.logger.Debug("found peer", zap.String("peer", info.String()))
+		logger.Debug("found peer", zap.String("peer", info.String()))
 		// ignore error which is printed in connectWithPeer
 		_ = n.connectWithPeer(ctx, *info)
 	})
