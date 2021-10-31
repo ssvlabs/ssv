@@ -5,6 +5,10 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/bloxapp/ssv/utils"
+	"github.com/prysmaticlabs/prysm/beacon-chain/core/signing"
+	"github.com/prysmaticlabs/prysm/config/params"
+	"github.com/prysmaticlabs/prysm/network"
+	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"io"
 	"log"
 	"net"
@@ -12,14 +16,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
-	"github.com/prysmaticlabs/prysm/shared/iputils"
-	"github.com/prysmaticlabs/prysm/shared/params"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	pb "github.com/prysmaticlabs/prysm/proto/beacon/p2p/v1"
 	"go.uber.org/zap"
 )
 
@@ -86,7 +86,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 	cfg := discover.Config{
 		PrivateKey: privKey,
 	}
-	ipAddr, err := iputils.ExternalIP()
+	ipAddr, err := network.ExternalIP()
 	//ipAddr = "127.0.0.1"
 	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
@@ -183,12 +183,12 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	//	}
 	//	genRoot = bytesutil.ToBytes32(retRoot)
 	//}
-	digest, err := helpers.ComputeForkDigest(fVersion, genRoot[:])
+	digest, err := signing.ComputeForkDigest(fVersion, genRoot[:])
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not compute fork digest")
 	}
 
-	forkID := &pb.ENRForkID{
+	forkID := &eth.ENRForkID{
 		CurrentForkDigest: digest[:],
 		NextForkVersion:   fVersion,
 		NextForkEpoch:     params.BeaconConfig().FarFutureEpoch,

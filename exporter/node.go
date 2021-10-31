@@ -2,7 +2,6 @@ package exporter
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -317,9 +316,11 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 		}
 		return nil
 	}, 3); err != nil {
+		validator.ReportIBFTStatus(pubKey, false, true)
 		logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}
+	validator.ReportIBFTStatus(pubKey, true, false)
 	logger.Debug("sync is done, starting to read network messages")
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	return nil
@@ -352,10 +353,7 @@ func (exp *exporter) reportOperators() {
 		exp.logger.Error("could not get operators", zap.Error(err))
 	}
 	exp.logger.Debug("reporting operators", zap.Int("count", len(operators)))
-	for _, op := range operators {
-		pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
-		metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
-		exp.logger.Debug("report operator", zap.String("pkHash", pkHash),
-			zap.String("name", op.Name), zap.Int64("index", op.Index))
+	for i := range operators {
+		reportOperatorIndex(exp.logger, &operators[i])
 	}
 }

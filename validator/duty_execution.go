@@ -31,11 +31,11 @@ SigCollectionLoop:
 			break SigCollectionLoop
 		default:
 			if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier, seqNumber)); msg != nil {
-				if len(msg.SignedMessage.SignerIds) == 0 { // no signer, empty sig
-					v.logger.Error("missing signer id", zap.Any("msg", msg.SignedMessage))
+				if len(msg.SignedMessage.SignerIds) == 0 { // no KeyManager, empty sig
+					v.logger.Error("missing KeyManager id", zap.Any("msg", msg.SignedMessage))
 					continue SigCollectionLoop
 				}
-				if len(msg.SignedMessage.Signature) == 0 { // no signer, empty sig
+				if len(msg.SignedMessage.Signature) == 0 { // no KeyManager, empty sig
 					v.logger.Error("missing sig", zap.Any("msg", msg.SignedMessage))
 					continue SigCollectionLoop
 				}
@@ -69,9 +69,16 @@ SigCollectionLoop:
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (v *Validator) postConsensusDutyExecution(ctx context.Context, logger *zap.Logger, seqNumber uint64, decidedValue []byte, signaturesCount int, duty *beacon.Duty) error {
+func (v *Validator) postConsensusDutyExecution(
+	ctx context.Context,
+	logger *zap.Logger,
+	seqNumber uint64,
+	decidedValue []byte,
+	signaturesCount int,
+	duty *beacon.Duty,
+) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := v.signDuty(decidedValue, duty, v.Share.ShareKey)
+	sig, root, valueStruct, err := v.signDuty(decidedValue, duty)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}

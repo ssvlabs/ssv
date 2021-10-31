@@ -18,7 +18,6 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
-			ShareKey:  sks[1],
 		},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),

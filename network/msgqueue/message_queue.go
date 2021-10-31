@@ -2,8 +2,8 @@ package msgqueue
 
 import (
 	"github.com/bloxapp/ssv/network"
+	"github.com/google/uuid"
 	"github.com/patrickmn/go-cache"
-	"github.com/pborman/uuid"
 	"sync"
 	"time"
 )
@@ -62,7 +62,7 @@ func (q *MessageQueue) AddMessage(msg *network.Message) {
 
 	// add it to queue
 	msgContainer := messageContainer{
-		id:      uuid.New(),
+		id:      uuid.New().String(),
 		msg:     msg,
 		indexes: indexes,
 	}

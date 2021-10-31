@@ -3,6 +3,7 @@ package beacon
 import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"sync"
 )
@@ -53,7 +54,7 @@ func (m *mockBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return nil, nil
 }
 
-func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {
+func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 
@@ -63,6 +64,21 @@ func (m *mockBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 
 func (m *mockBeacon) SubscribeToCommitteeSubnet(subscription []*v1.BeaconCommitteeSubscription) error {
 	return nil
+}
+
+func (m *mockBeacon) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (m *mockBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	return nil, nil
+}
+
+func (m *mockBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+	panic("implement")
+}
+func (m *mockBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+	panic("implement")
 }
 
 // NewMockValidatorMetadataStorage creates a new mock implementation of ValidatorMetadataStorage

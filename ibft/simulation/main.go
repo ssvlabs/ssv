@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/controller"
@@ -59,6 +60,25 @@ func networking() network.Network {
 	return ret
 }
 
+type testSigner struct {
+}
+
+func newTestSigner() beacon.KeyManager {
+	return &testSigner{}
+}
+
+func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	return nil, nil, nil
+}
+
 func db() collections.Iibft {
 	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
@@ -95,7 +115,6 @@ func generateShares(cnt uint64) map[uint64]*validatorstorage.Share {
 		ret[i] = &validatorstorage.Share{
 			NodeID:    i,
 			PublicKey: publicKey(),
-			ShareKey:  sks[i],
 			Committee: nodes,
 		}
 	}
@@ -144,6 +163,7 @@ func main() {
 			},
 			shares[i],
 			v0.New(),
+			newTestSigner(),
 		)
 		nodes = append(nodes, node)
 	}

@@ -137,7 +137,7 @@ func (b *testBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return b.refAttestationData, nil
 }
 
-func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {
+func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	sig := spec.BLSSignature{}
 	copy(sig[:], refAttestationSplitSigs[0])
 	return &spec.Attestation{
@@ -156,6 +156,21 @@ func (b *testBeacon) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommit
 	panic("implement me")
 }
 
+func (b *testBeacon) AddShare(shareKey *bls.SecretKey) error {
+	panic("implement me")
+}
+
+func (b *testBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (b *testBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+	panic("implement")
+}
+func (b *testBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+	panic("implement")
+}
+
 func testingValidator(t *testing.T, decided bool, signaturesCount int, identifier []byte) *Validator {
 	threshold.Init()
 
@@ -167,6 +182,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
 	require.NoError(t, ret.ibfts[beacon.RoleTypeAttester].Init())
 	ret.valueCheck = valcheck.New()
+	ret.signer = ret.beacon
 
 	// nodes
 	ret.network = local.NewLocalNetwork()
@@ -179,7 +195,6 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret.Share = &storage.Share{
 		NodeID:    1,
 		PublicKey: pk,
-		ShareKey:  nil,
 		Committee: map[uint64]*proto.Node{
 			1: {
 				IbftId: 1,

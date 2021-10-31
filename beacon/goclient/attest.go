@@ -4,9 +4,7 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
 )
 
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
@@ -21,21 +19,8 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 	return nil, errors.New("client does not support AttestationDataProvider")
 }
 
-func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, shareKey *bls.SecretKey) (*spec.Attestation, []byte, error) {
-	sig, root, err := gc.signAtt(data, shareKey)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not sign attestation")
-	}
-
-	aggregationBitfield := bitfield.NewBitlist(duty.CommitteeLength)
-	aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
-	blsSig := spec.BLSSignature{}
-	copy(blsSig[:], sig)
-	return &spec.Attestation{
-		AggregationBits: aggregationBitfield,
-		Data:            data,
-		Signature:       blsSig,
-	}, root, nil
+func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	return gc.keyManager.SignAttestation(data, duty, pk)
 }
 
 // SubmitAttestation implements Beacon interface
@@ -53,14 +38,4 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 		return provider.SubmitAttestations(gc.ctx, []*spec.Attestation{attestation})
 	}
 	return nil
-}
-
-// signAtt returns the signature of an attestation data and its signing root.
-func (gc *goClient) signAtt(data *spec.AttestationData, shareKey *bls.SecretKey) ([]byte, []byte, error) {
-	root, err := gc.getSigningRoot(data)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get signing root")
-	}
-
-	return shareKey.SignByte(root[:]).Serialize(), root[:], nil
 }

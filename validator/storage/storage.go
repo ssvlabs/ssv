@@ -9,8 +9,6 @@ import (
 
 // ICollection interface for validator storage
 type ICollection interface {
-	LoadMultipleFromConfig(items []ShareOptions)
-	LoadFromConfig(options ShareOptions) (string, error)
 	SaveValidatorShare(share *Share) error
 	GetValidatorShare(key []byte) (*Share, bool, error)
 	GetAllValidatorsShare() ([]*Share, error)
@@ -43,39 +41,6 @@ func NewCollection(options CollectionOptions) ICollection {
 }
 func getCollectionPrefix() string {
 	return "share-"
-}
-
-// LoadMultipleFromConfig fetch multiple validators share from config and save it to db
-func (s *Collection) LoadMultipleFromConfig(items []ShareOptions) {
-	var addedValidators []string
-	if len(items) > 0 {
-		s.logger.Info("loading validators share from config", zap.Int("count", len(items)))
-		for _, opts := range items {
-			pubkey, err := s.LoadFromConfig(opts)
-			if err != nil {
-				s.logger.Error("failed to load validator share data from config", zap.Error(err))
-				continue
-			}
-			addedValidators = append(addedValidators, pubkey)
-		}
-		s.logger.Info("successfully loaded validators from config", zap.Strings("pubkeys", addedValidators))
-	}
-}
-
-// LoadFromConfig fetch validator share from config and save it to db
-func (s *Collection) LoadFromConfig(options ShareOptions) (string, error) {
-	if len(options.PublicKey) == 0 || len(options.ShareKey) == 0 || len(options.Committee) == 0 {
-		return "", errors.New("one or more fields are missing (PublicKey, ShareKey, Committee)")
-	}
-	share, err := options.ToShare()
-	if err != nil {
-		return "", errors.WithMessage(err, "failed to create share object")
-	} else if share != nil {
-		pubKey := share.ShareKey.SerializeToHexStr()
-		err := s.SaveValidatorShare(share)
-		return pubKey, err
-	}
-	return "", errors.New("returned nil share")
 }
 
 // SaveValidatorShare save validator share to db

@@ -8,7 +8,8 @@ import (
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/shared/slotutil"
+	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
 	"time"
 )
@@ -77,7 +78,7 @@ func (dc *dutyController) Start() {
 	dc.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("count", len(indices)))
 
 	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
-	slotTicker := slotutil.GetSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
+	slotTicker := slots.NewSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
 	dc.listenToTicker(slotTicker.C())
 }
 
@@ -109,7 +110,7 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 }
 
 // listenToTicker loop over the given slot channel
-func (dc *dutyController) listenToTicker(slots <-chan uint64) {
+func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
 	for currentSlot := range slots {
 		// notify current slot to channel
 		go dc.notifyCurrentSlot(currentSlot)

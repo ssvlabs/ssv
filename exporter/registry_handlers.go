@@ -44,7 +44,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	logger := exp.logger.With(zap.String("pubKey", pubKeyHex))
 	logger.Info("validator added event")
 	// save the share to be able to reuse IBFT functionality
-	validatorShare, err := validator.ShareFromValidatorAddedEvent(event, "")
+	validatorShare, _, err := validator.ShareFromValidatorAddedEvent(event, "")
 	if err != nil {
 		return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
 	}
@@ -92,6 +92,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 		return err
 	}
 	l.Debug("managed to save operator information", zap.Any("value", oi))
+	reportOperatorIndex(exp.logger, &oi)
 
 	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,

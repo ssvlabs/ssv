@@ -45,7 +45,7 @@ func (i *incomingMsgsReader) Start() error {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
-	if err := i.waitForMinPeers(i.publicKey, 2); err != nil {
+	if err := i.waitForMinPeers(i.publicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
 	i.listenToNetwork()
