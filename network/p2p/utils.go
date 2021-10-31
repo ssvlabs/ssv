@@ -72,8 +72,8 @@ func (n *p2pNetwork) verifyHostAddress() error {
 func (n *p2pNetwork) setupPrivateKey() (*ecdsa.PrivateKey, error) {
 	defaultKeyPath := filepath.Join(defaultDataDir(), "net_key")
 	var priv crypto.PrivKey
-	var err error
-	if fileExist(defaultKeyPath) {
+	_, err := os.Stat(defaultKeyPath)
+	if err == nil {
 		n.logger.Debug("network key exist, reading from file system")
 		priv, err = readPrivateKey(defaultKeyPath)
 		if err != nil {
@@ -94,17 +94,6 @@ func (n *p2pNetwork) setupPrivateKey() (*ecdsa.PrivateKey, error) {
 	}
 	convertedKey := convertFromInterfacePrivKey(priv)
 	return convertedKey, nil
-}
-
-func fileExist(filePath string) bool {
-	_, err := os.Stat(filePath)
-	if err != nil {
-		//if os.IsNotExist(err) {
-		//	return false
-		//}
-		return false
-	}
-	return true
 }
 
 func readPrivateKey(path string) (crypto.PrivKey, error) {
