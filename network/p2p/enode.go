@@ -124,7 +124,7 @@ func (n *p2pNetwork) setNodeFallbackAddress(localNode *enode.LocalNode, addr str
 		n.logger.Error("invalid host address", zap.String("addr", hostIP.String()))
 	} else {
 		localNode.SetFallbackIP(hostIP)
-		localNode.SetStaticIP(hostIP)
+		//localNode.SetStaticIP(hostIP)
 	}
 }
 
