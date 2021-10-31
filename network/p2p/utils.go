@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -18,6 +17,7 @@ import (
 	"github.com/prysmaticlabs/prysm/network"
 	"go.uber.org/zap"
 	"net"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -67,34 +67,72 @@ func (n *p2pNetwork) verifyHostAddress() error {
 	return nil
 }
 
+// setupPrivateKey determines a private key for p2p networking
+// if no key is found, it generates a new one.
+func (n *p2pNetwork) setupPrivateKey() (*ecdsa.PrivateKey, error) {
+	defaultKeyPath := filepath.Join(defaultDataDir(), "net_key")
+	var priv crypto.PrivKey
+	var err error
+	if fileExist(defaultKeyPath) {
+		n.logger.Debug("network key exist, reading from file system")
+		priv, err = readPrivateKey(defaultKeyPath)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not read private key")
+		}
+	} else {
+		n.logger.Debug("generating new network key")
+		priv, _, err = crypto.GenerateSecp256k1Key(rand.Reader)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not generate private key")
+		}
+		if err = savePrivateKey(defaultKeyPath, priv); err != nil {
+			return nil, errors.Wrap(err, "could not save new private key")
+		}
+		n.logger.Debug("new network key was saved", zap.String("path", defaultKeyPath))
+	}
+	convertedKey := convertFromInterfacePrivKey(priv)
+	return convertedKey, nil
+}
+
+func fileExist(filePath string) bool {
+	_, err := os.Stat(filePath)
+	if err != nil {
+		//if os.IsNotExist(err) {
+		//	return false
+		//}
+		return false
+	}
+	return true
+}
+
+func readPrivateKey(path string) (crypto.PrivKey, error) {
+	if file.FileExists(path) {
+		bytes, err := file.ReadFileAsBytes(path)
+		if err != nil {
+			return nil, err
+		}
+		return crypto.UnmarshalPrivateKey(bytes)
+	}
+	return nil, errors.New("key file does not exist")
+}
+
+func savePrivateKey(path string, priv crypto.PrivKey) error {
+	if err := file.MkdirAll(defaultDataDir()); err != nil {
+		return errors.Wrap(err, "could not create default data dir")
+	}
+	data, err := crypto.MarshalPrivateKey(priv)
+	if err != nil {
+		return err
+	}
+	return file.WriteFile(path, data)
+}
+
 // udpVersionFromIP returns the udp version
 func udpVersionFromIP(ipAddr net.IP) string {
 	if ipAddr.To4() != nil {
 		return udp4
 	}
 	return udp6
-}
-
-// privKey determines a private key for p2p networking
-// if no key is found, it generates a new one.
-func privKey() (*ecdsa.PrivateKey, error) {
-	defaultKeyPath := defaultDataDir()
-
-	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	rawbytes, err := priv.Raw()
-	if err != nil {
-		return nil, err
-	}
-	dst := make([]byte, hex.EncodedLen(len(rawbytes)))
-	hex.Encode(dst, rawbytes)
-	if err := file.WriteFile(defaultKeyPath, dst); err != nil {
-		return nil, err
-	}
-	convertedKey := convertFromInterfacePrivKey(priv)
-	return convertedKey, nil
 }
 
 // convertToMultiAddr takes enode slice and turns it into multiaddrs

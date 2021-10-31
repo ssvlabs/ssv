@@ -165,7 +165,7 @@ func (n *p2pNetwork) setupNetworkKey(priv *ecdsa.PrivateKey) error {
 	if priv != nil {
 		n.privKey = priv
 	} else {
-		privKey, err := privKey()
+		privKey, err := n.setupPrivateKey()
 		if err != nil {
 			return errors.Wrap(err, "Failed to generate p2p private key")
 		}
