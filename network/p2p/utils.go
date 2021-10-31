@@ -86,9 +86,11 @@ func (n *p2pNetwork) setupPrivateKey() (*ecdsa.PrivateKey, error) {
 			return nil, errors.Wrap(err, "could not generate private key")
 		}
 		if err = savePrivateKey(defaultKeyPath, priv); err != nil {
-			return nil, errors.Wrap(err, "could not save new private key")
+			//return nil, errors.Wrap(err, "could not save new network key")
+			n.logger.Error("could not save new network key", zap.Error(err))
+		} else {
+			n.logger.Debug("new network key was saved", zap.String("path", defaultKeyPath))
 		}
-		n.logger.Debug("new network key was saved", zap.String("path", defaultKeyPath))
 	}
 	convertedKey := convertFromInterfacePrivKey(priv)
 	return convertedKey, nil

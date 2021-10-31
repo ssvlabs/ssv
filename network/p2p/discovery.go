@@ -135,7 +135,7 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 	_logger := n.logger.With(zap.String("who", "networkNotifiee"))
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn == nil {
+			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
 			go func() {
