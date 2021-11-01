@@ -3,6 +3,7 @@ package p2p
 import (
 	"bytes"
 	"context"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -374,4 +375,30 @@ func filterPeerByOperatorsPubKey(baseFilter peerFilter, pks ...[]byte) func(node
 		}
 		return false
 	}
+}
+
+// dv5Logger implements log.Handler to track logs of discv5
+type dv5Logger struct {
+	logger *zap.Logger
+}
+
+// Log takes a record and uses the zap.Logger to print it
+func (dvl *dv5Logger) Log(r *log.Record) error {
+	logger := dvl.logger.With(zap.Any("context", r.Ctx))
+	switch r.Lvl {
+	case log.LvlTrace:
+		logger.Debug(r.Msg)
+	case log.LvlDebug:
+		logger.Debug(r.Msg)
+	case log.LvlInfo:
+		logger.Info(r.Msg)
+	case log.LvlWarn:
+		logger.Warn(r.Msg)
+	case log.LvlError:
+		logger.Error(r.Msg)
+	case log.LvlCrit:
+		logger.Fatal(r.Msg)
+	default:
+	}
+	return nil
 }
