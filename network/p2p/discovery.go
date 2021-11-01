@@ -178,7 +178,9 @@ func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle
 				n.peers.Add(new(enr.Record), conn.RemotePeer(), conn.RemoteMultiaddr(), conn.Stat().Direction)
 				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerConnecting)
 				// trying to open a stream
-				if s, err := conn.NewStream(); err != nil {
+				ctx, cancel := context.WithTimeout(n.ctx, 5 * time.Second)
+				defer cancel()
+				if s, err := conn.NewStream(ctx); err != nil {
 					n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerDisconnected)
 					logger.Warn("failed to open stream", zap.Error(err))
 					return
