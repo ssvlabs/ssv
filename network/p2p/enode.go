@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"crypto/ecdsa"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -72,8 +73,11 @@ func (n *p2pNetwork) createDiscV5Listener() (*discover.UDPv5, *enode.LocalNode, 
 		return nil, nil, errors.Wrap(err, "could not create local node")
 	}
 
+	logger := log.New()
+	logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
+		Log:        logger,
 	}
 	dv5Cfg.Bootnodes, err = parseENRs(n.cfg.Discv5BootStrapAddr)
 	if err != nil {
