@@ -384,19 +384,20 @@ type dv5Logger struct {
 
 // Log takes a record and uses the zap.Logger to print it
 func (dvl *dv5Logger) Log(r *log.Record) error {
+	logger := dvl.logger.With(zap.Any("context", r.Ctx))
 	switch r.Lvl {
 	case log.LvlTrace:
-		dvl.logger.Debug(r.Msg)
+		logger.Debug(r.Msg)
 	case log.LvlDebug:
-		dvl.logger.Debug(r.Msg)
+		logger.Debug(r.Msg)
 	case log.LvlInfo:
-		dvl.logger.Info(r.Msg)
+		logger.Info(r.Msg)
 	case log.LvlWarn:
-		dvl.logger.Warn(r.Msg)
+		logger.Warn(r.Msg)
 	case log.LvlError:
-		dvl.logger.Error(r.Msg)
+		logger.Error(r.Msg)
 	case log.LvlCrit:
-		dvl.logger.Error(r.Msg)
+		logger.Fatal(r.Msg)
 	default:
 	}
 	return nil
