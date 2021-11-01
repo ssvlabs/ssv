@@ -6,12 +6,14 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.opencensus.io/trace"
+	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/host"
@@ -134,43 +136,76 @@ func (n *p2pNetwork) findNetworkPeers(timeout time.Duration) {
 // networkNotifiee notifies on network events
 func (n *p2pNetwork) networkNotifiee(reconnect bool) *libp2pnetwork.NotifyBundle {
 	_logger := n.logger.With(zap.String("who", "networkNotifiee"))
+	// Peer map and lock to keep track of current connection attempts.
+	peerMap := make(map[peer.ID]bool)
+	peerLock := new(sync.Mutex)
+
+	// runs at the start of each connection attempt, to ensure
+	// that there aren't multiple inflight connection requests for the
+	// same peer at once.
+	peerHandshaking := func(id peer.ID) bool {
+		peerLock.Lock()
+		defer peerLock.Unlock()
+
+		if peerMap[id] {
+			return true
+		}
+		peerMap[id] = true
+		return false
+	}
+	peerFinished := func(id peer.ID) {
+		peerLock.Lock()
+		defer peerLock.Unlock()
+
+		delete(peerMap, id)
+	}
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
 			go func() {
-				n.peers.Add(new(enr.Record), conn.RemotePeer(), conn.RemoteMultiaddr(), conn.Stat().Direction)
-				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerConnecting)
-				logger := _logger.With(zap.String("conn", conn.ID()),
+				if peerHandshaking(conn.RemotePeer()) {
+					// skip if the peer is already being handled
+					return
+				}
+				defer peerFinished(conn.RemotePeer())
+				logger := _logger.With(zap.String("where", "DisconnectedF"),
+					zap.String("conn", conn.ID()),
 					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 					zap.String("peerID", conn.RemotePeer().String()))
+				// updating states
+				n.peers.Add(new(enr.Record), conn.RemotePeer(), conn.RemoteMultiaddr(), conn.Stat().Direction)
+				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerConnecting)
 				// trying to open a stream
-				if s, err := conn.NewStream(context.Background()); err != nil {
+				if s, err := conn.NewStream(); err != nil {
 					n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerDisconnected)
 					logger.Warn("failed to open stream", zap.Error(err))
 					return
 				} else if err = s.Close(); err != nil {
 					logger.Warn("failed to close stream", zap.Error(err))
 				}
+				// updates connection state if everything went fine
 				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerConnected)
 				logger.Debug("connected peer")
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn == nil {
+			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
 			go func() {
-				logger := _logger.With(zap.String("conn", conn.ID()),
+				logger := _logger.With(zap.String("where", "DisconnectedF"),
+					zap.String("conn", conn.ID()),
 					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 					zap.String("peerID", conn.RemotePeer().String()))
-				ai := peer.AddrInfo{Addrs: []ma.Multiaddr{conn.RemoteMultiaddr()}, ID: conn.RemotePeer()}
-				logger.Debug("disconnected peer")
-				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerDisconnected)
-				if reconnect {
-					go n.reconnect(logger, ai)
+				// skip if we are still connected to the peer
+				if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
+					return
 				}
+				// otherwise, mark peer as disconnected
+				n.peers.SetConnectionState(conn.RemotePeer(), peers.PeerDisconnected)
+				logger.Debug("disconnected peer")
 			}()
 		},
 	}
