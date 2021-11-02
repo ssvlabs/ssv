@@ -16,10 +16,12 @@ import (
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+	"sync"
 )
 
 type ethKeyManagerSigner struct {
 	wallet       core.Wallet
+	walletLock   *sync.RWMutex
 	signer       signer.ValidatorSigner
 	storage      *signerStorage
 	signingUtils beacon.SigningUtil
@@ -54,6 +56,7 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, netw
 
 	return &ethKeyManagerSigner{
 		wallet:       wallet,
+		walletLock:   &sync.RWMutex{},
 		signer:       beaconSigner,
 		storage:      signerStore,
 		signingUtils: signingUtils,
@@ -66,6 +69,9 @@ func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network core.
 }
 
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
+	km.walletLock.Lock()
+	defer km.walletLock.Unlock()
+
 	acc, err := km.wallet.AccountByPublicKey(shareKey.GetPublicKey().SerializeToHexStr())
 	if err != nil && err.Error() != "account not found" {
 		return errors.Wrap(err, "could not check share existence")
@@ -82,6 +88,9 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 }
 
 func (km *ethKeyManagerSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	km.walletLock.RLock()
+	defer km.walletLock.RUnlock()
+
 	root, err := message.SigningRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
