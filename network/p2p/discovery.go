@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -338,8 +339,11 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		}
 	}
 
+	logger := log.New()
+	logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
+		Log:        logger,
 	}
 	dv5Cfg.Bootnodes = []*enode.Node{}
 	for _, addr := range n.cfg.Discv5BootStrapAddr {
@@ -627,4 +631,30 @@ func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
 	typeAssertedKey := (*ecdsa.PrivateKey)(privkey.(*crypto.Secp256k1PrivateKey))
 	typeAssertedKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
 	return typeAssertedKey
+}
+
+// dv5Logger implements log.Handler to track logs of discv5
+type dv5Logger struct {
+	logger *zap.Logger
+}
+
+// Log takes a record and uses the zap.Logger to print it
+func (dvl *dv5Logger) Log(r *log.Record) error {
+	logger := dvl.logger.With(zap.Any("context", r.Ctx))
+	switch r.Lvl {
+	case log.LvlTrace:
+		logger.Debug(r.Msg)
+	case log.LvlDebug:
+		logger.Debug(r.Msg)
+	case log.LvlInfo:
+		logger.Info(r.Msg)
+	case log.LvlWarn:
+		logger.Warn(r.Msg)
+	case log.LvlError:
+		logger.Error(r.Msg)
+	case log.LvlCrit:
+		logger.Fatal(r.Msg)
+	default:
+	}
+	return nil
 }
