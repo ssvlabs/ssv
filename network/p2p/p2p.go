@@ -245,7 +245,7 @@ func propagateIBFTMessage(listeners []listener, msg *proto.SignedMessage) {
 
 func propagateSigMessage(listeners []listener, msg *proto.SignedMessage) {
 	for _, ls := range listeners {
-		if ls.msgCh != nil {
+		if ls.sigCh != nil {
 			ls.sigCh <- msg
 		}
 	}
@@ -253,7 +253,7 @@ func propagateSigMessage(listeners []listener, msg *proto.SignedMessage) {
 
 func propagateDecidedMessage(listeners []listener, msg *proto.SignedMessage) {
 	for _, ls := range listeners {
-		if ls.msgCh != nil {
+		if ls.decidedCh != nil {
 			ls.decidedCh <- msg
 		}
 	}
