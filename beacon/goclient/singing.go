@@ -2,7 +2,7 @@ package goclient
 
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -11,7 +11,7 @@ import (
 )
 
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
+func (gc *goClient) getSigningRoot(data *phase0spec.AttestationData) ([32]byte, error) {
 	domain, err := gc.GetDomain(data)
 	if err != nil {
 		return [32]byte{}, err
@@ -24,13 +24,13 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 }
 
 // getSigningRoot returns signing root
-func (gc *goClient) GetDomain(data *spec.AttestationData) ([]byte, error) {
+func (gc *goClient) GetDomain(data *phase0spec.AttestationData) ([]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
 	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
 	if err != nil {
 		return nil, err
 	}
-	domain, err := gc.getDomainData(domainType, spec.Epoch(epoch))
+	domain, err := gc.getDomainData(domainType, phase0spec.Epoch(epoch))
 	if err != nil {
 		return nil, err
 	}
@@ -38,24 +38,36 @@ func (gc *goClient) GetDomain(data *spec.AttestationData) ([]byte, error) {
 }
 
 // getDomainType returns domain type by role type
-func (gc *goClient) getDomainType(roleType beacon.RoleType) (*spec.DomainType, error) {
-	switch roleType {
-	case beacon.RoleTypeAttester:
-		if provider, isProvider := gc.client.(eth2client.BeaconAttesterDomainProvider); isProvider {
-			domainType, err := provider.BeaconAttesterDomain(gc.ctx)
-			if err != nil {
-				return nil, err
-			}
-			return &domainType, nil
+func (gc *goClient) getDomainType(roleType beacon.RoleType) (*phase0spec.DomainType, error) {
+	if provider, isProvider := gc.client.(eth2client.SpecProvider); isProvider {
+		spec, err := provider.Spec(gc.ctx)
+		if err != nil {
+			return nil, err
 		}
-		return nil, errors.New("client does not support BeaconAttesterDomainProvider")
-	default:
-		return nil, errors.New("role type domain is not implemented")
+		var val interface{}
+		var exists bool
+		switch roleType {
+		case beacon.RoleTypeAttester:
+			val, exists = spec["DOMAIN_BEACON_ATTESTER"]
+		case beacon.RoleTypeAggregator:
+			val, exists = spec["DOMAIN_AGGREGATE_AND_PROOF"]
+		case beacon.RoleTypeProposer:
+			val, exists = spec["DOMAIN_BEACON_PROPOSER"]
+		default:
+			return nil, errors.New("role type domain is not implemented")
+		}
+
+		if !exists{
+			return nil, errors.New("spec type is missing")
+		}
+		res := val.(phase0spec.DomainType)
+		return &res, nil
 	}
+	return nil, errors.New("client does not support BeaconAttesterDomainProvider")
 }
 
 // getDomainData return domain data by domain type
-func (gc *goClient) getDomainData(domainType *spec.DomainType, epoch spec.Epoch) (*spec.Domain, error) { // TODO need to add cache (?)
+func (gc *goClient) getDomainData(domainType *phase0spec.DomainType, epoch phase0spec.Epoch) (*phase0spec.Domain, error) { // TODO need to add cache (?)
 	if provider, isProvider := gc.client.(eth2client.DomainProvider); isProvider {
 		attestationData, err := provider.Domain(gc.ctx, *domainType, epoch)
 		if err != nil {
@@ -95,11 +107,11 @@ func (gc *goClient) signingData(rootFunc func() ([32]byte, error), domain []byte
 	if err != nil {
 		return [32]byte{}, err
 	}
-	root := spec.Root{}
+	root := phase0spec.Root{}
 	copy(root[:], objRoot[:])
-	_domain := spec.Domain{}
+	_domain := phase0spec.Domain{}
 	copy(_domain[:], domain)
-	container := &spec.SigningData{
+	container := &phase0spec.SigningData{
 		ObjectRoot: root,
 		Domain:     _domain,
 	}
