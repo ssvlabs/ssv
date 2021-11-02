@@ -47,8 +47,8 @@ func (s *SyncStream) RemotePeer() string {
 	return s.stream.Conn().RemotePeer().String()
 }
 
-// handleStream sets a stream handler for the host to process streamed messages
-func (n *p2pNetwork) handleStream() {
+// syncStreamHandler sets a stream handler for the host to process streamed messages
+func (n *p2pNetwork) syncStreamHandler() {
 	n.host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
 		netSyncStream := &SyncStream{stream: stream}
 		cm, err := n.readMessageData(netSyncStream)
