@@ -129,7 +129,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		n.logger.Debug("libp2p user agent", zap.String("ua", ua))
 		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
 		if err != nil {
-			return nil, errors.Wrap(err, "Failed to create id service")
+			return nil, errors.Wrap(err, "Failed to create ID service")
 		}
 		n.host = host
 	} else {

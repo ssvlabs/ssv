@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/eth2-types"
+	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-ssz"
 )
 

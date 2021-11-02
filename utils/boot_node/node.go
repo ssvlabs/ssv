@@ -14,12 +14,11 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
-
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
 )
 
