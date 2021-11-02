@@ -198,8 +198,6 @@ func (n *p2pNetwork) listenForNewNodes() {
 			break
 		}
 		if n.isPeerAtLimit() {
-			// Pause the main loop for a period to stop looking
-			// for new peers.
 			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
 			continue

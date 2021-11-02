@@ -84,7 +84,7 @@ func (n *p2pNetwork) configureAddrs() ([]libp2p.Option, error) {
 		n.logger.Fatal("could not get IPv4 address", zap.Error(err))
 	}
 	n.logger.Info("IP Address", zap.Any("ip", ip))
-	listen, err := multiAddressBuilder(ip.String(), uint(n.cfg.TCPPort))
+	listen, err := buildMultiAddress(ip.String(), uint(n.cfg.TCPPort))
 	if err != nil {
 		return opts, errors.Wrap(err, "failed to build multi address")
 	}
@@ -96,7 +96,7 @@ func (n *p2pNetwork) configureAddrs() ([]libp2p.Option, error) {
 	// AddrFactory for host address if provided
 	if n.cfg.HostAddress != "" {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
-			external, err := multiAddressBuilder(n.cfg.HostAddress, uint(n.cfg.TCPPort))
+			external, err := buildMultiAddress(n.cfg.HostAddress, uint(n.cfg.TCPPort))
 			if err != nil {
 				n.logger.Error("Unable to create external multiaddress", zap.Error(err))
 			} else {

@@ -98,6 +98,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		n.privKey = privKey
 	}
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
+	if len(n.cfg.BootnodesENRs) == 0 {
+		n.logger.Warn("missing valid bootnode ENR")
+	}
 
 	opts, err := n.buildOptions(cfg)
 	if err != nil {

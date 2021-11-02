@@ -104,7 +104,7 @@ func convertToMultiAddrSingle(node *enode.Node) (ma.Multiaddr, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get peer id")
 	}
-	return multiAddressBuilderWithID(node.IP().String(), tcp, uint(node.TCP()), id)
+	return buildMultiAddressBuilderWithID(node.IP().String(), tcp, uint(node.TCP()), id)
 }
 
 // convertToAddrInfo converts the given enode.Node object to peer.AddrInfo
@@ -120,7 +120,7 @@ func convertToAddrInfo(node *enode.Node) (*peer.AddrInfo, error) {
 	return info, nil
 }
 
-func multiAddressBuilderWithID(ipAddr, protocol string, port uint, id peer.ID) (ma.Multiaddr, error) {
+func buildMultiAddressBuilderWithID(ipAddr, protocol string, port uint, id peer.ID) (ma.Multiaddr, error) {
 	parsedIP := net.ParseIP(ipAddr)
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {
 		return nil, errors.Errorf("invalid ip address provided: %s", ipAddr)
@@ -134,7 +134,7 @@ func multiAddressBuilderWithID(ipAddr, protocol string, port uint, id peer.ID) (
 	return ma.NewMultiaddr(fmt.Sprintf("/ip6/%s/%s/%d/p2p/%s", ipAddr, protocol, port, id.String()))
 }
 
-func multiAddressBuilder(ipAddr string, tcpPort uint) (ma.Multiaddr, error) {
+func buildMultiAddress(ipAddr string, tcpPort uint) (ma.Multiaddr, error) {
 	parsedIP := net.ParseIP(ipAddr)
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {
 		return nil, errors.Errorf("invalid ip address provided: %s", ipAddr)
