@@ -57,7 +57,7 @@ func (gc *goClient) getDomainType(roleType beacon.RoleType) (*phase0spec.DomainT
 			return nil, errors.New("role type domain is not implemented")
 		}
 
-		if !exists{
+		if !exists {
 			return nil, errors.New("spec type is missing")
 		}
 		res := val.(phase0spec.DomainType)
