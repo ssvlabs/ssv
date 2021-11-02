@@ -10,32 +10,33 @@ import (
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	iaddr "github.com/ipfs/go-ipfs-addr"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	noise "github.com/libp2p/go-libp2p-noise"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/prysmaticlabs/prysm/config/features"
 	"github.com/prysmaticlabs/prysm/io/file"
 	"github.com/prysmaticlabs/prysm/network"
 	"go.opencensus.io/trace"
+	"go.uber.org/zap"
 	"net"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
-
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 const (
@@ -68,7 +69,7 @@ type iListener interface {
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	err := n.host.Connect(context.Background(), pi)
 	if err != nil {
-		n.logger.Error("error connecting to peer", zap.String("peer_id", pi.ID.Pretty()), zap.Error(err))
+		n.logger.Error("can't handle peer found connection", zap.String("peer_id", pi.ID.Pretty()), zap.Error(err))
 	}
 }
 
@@ -338,8 +339,11 @@ func (n *p2pNetwork) createListener(ipAddr net.IP, privKey *ecdsa.PrivateKey) (*
 		}
 	}
 
+	logger := log.New()
+	logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 	dv5Cfg := discover.Config{
 		PrivateKey: privKey,
+		Log:        logger,
 	}
 	dv5Cfg.Bootnodes = []*enode.Node{}
 	for _, addr := range n.cfg.Discv5BootStrapAddr {
@@ -367,8 +371,7 @@ func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) {
 		// make each dial non-blocking
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
-				//log.Print("Could not connect with peer ", info.String(), err)
-				//log.WithError(err).Tracef("Could not connect with peer %s", info.String()) TODO need to add log with trace level
+				n.logger.Debug("can't connect to peer (connect with all peers)", zap.String("peerID", info.ID.String()))
 			}
 		}(info)
 	}
@@ -385,15 +388,17 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
 
 	if n.peers.IsBad(info.ID) {
-		n.logger.Warn("bad peer", zap.String("peerID", info.ID.String()))
 		return errors.New("refused to connect to bad peer")
+	}
+	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
+		n.logger.Debug("skipped connected peer", zap.String("peer", info.String()))
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if err := n.host.Connect(ctx, info); err != nil {
-		n.logger.Warn("failed to connect to peer", zap.String("peerID", info.ID.String()), zap.Error(err))
-		return err
+		return errors.Wrap(err, "failed to connect to peer")
 	}
 	n.logger.Debug("connected to peer", zap.String("peerID", info.ID.String()))
 
@@ -402,9 +407,11 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 // listen for new nodes watches for new nodes in the network and adds them to the peerstore.
 func (n *p2pNetwork) listenForNewNodes() {
+	defer n.logger.Debug("listenForNewNodes done")
 	iterator := n.dv5Listener.RandomNodes()
 	//iterator = enode.Filter(iterator, s.filterPeer)
 	defer iterator.Close()
+	n.logger.Debug("starting to listen for new nodes")
 	for {
 		// Exit if service's context is canceled
 		if n.ctx.Err() != nil {
@@ -424,13 +431,12 @@ func (n *p2pNetwork) listenForNewNodes() {
 		node := iterator.Node()
 		peerInfo, _, err := convertToAddrInfo(node)
 		if err != nil {
-			//log.WithError(err).Error("Could not convert to peer info")
+			n.logger.Warn("could not convert node to peer info", zap.Error(err))
 			continue
 		}
 		go func(info *peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				//log.WithError(err).Tracef("Could not connect with peer %s", info.String())
-				//log.Print(err) TODO need to add log with trace level
+				n.logger.Debug("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
 			}
 		}(peerInfo)
 	}
@@ -625,4 +631,30 @@ func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
 	typeAssertedKey := (*ecdsa.PrivateKey)(privkey.(*crypto.Secp256k1PrivateKey))
 	typeAssertedKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
 	return typeAssertedKey
+}
+
+// dv5Logger implements log.Handler to track logs of discv5
+type dv5Logger struct {
+	logger *zap.Logger
+}
+
+// Log takes a record and uses the zap.Logger to print it
+func (dvl *dv5Logger) Log(r *log.Record) error {
+	logger := dvl.logger.With(zap.Any("context", r.Ctx))
+	switch r.Lvl {
+	case log.LvlTrace:
+		logger.Debug(r.Msg)
+	case log.LvlDebug:
+		logger.Debug(r.Msg)
+	case log.LvlInfo:
+		logger.Info(r.Msg)
+	case log.LvlWarn:
+		logger.Warn(r.Msg)
+	case log.LvlError:
+		logger.Error(r.Msg)
+	case log.LvlCrit:
+		logger.Fatal(r.Msg)
+	default:
+	}
+	return nil
 }

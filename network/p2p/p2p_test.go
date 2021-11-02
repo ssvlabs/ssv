@@ -15,6 +15,7 @@ import (
 )
 
 func TestP2PNetworker(t *testing.T) {
+	threshold.Init()
 	logger := zaptest.NewLogger(t)
 	threshold.Init()
 

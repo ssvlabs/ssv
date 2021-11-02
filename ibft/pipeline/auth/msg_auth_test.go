@@ -17,7 +17,7 @@ func _byteArray(input string) []byte {
 
 // GenerateNodes generates randomly nodes
 func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
-	_ = bls.Init(bls.BLS12_381)
+	threshold.Init()
 	nodes := make(map[uint64]*proto.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
@@ -35,7 +35,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, ids []uint64, sks []*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
-	bls.Init(bls.BLS12_381)
+	threshold.Init()
 
 	var agg *bls.Sign
 	for _, sk := range sks {
@@ -106,7 +106,7 @@ func TestAuthorizeMsg(t *testing.T) {
 			},
 			[]uint64{1},
 			[]*bls.SecretKey{sks[1]},
-			_byteArray("90d44ba2e926c07a71086d3edd04d433746a80335c828f415c0dcb505a1357a454e94338a2139b201d031e4aa6294f3110caa5f2f9ecdd3727fcc9b3ea733e1819993ba06d175cfc55525515d46ef035d1c8bf5c9dab7536b51d936708aeaa22"),
+			_byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776"),
 			"could not verify message signature",
 		},
 	}
