@@ -71,7 +71,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO remove once all operators updated to vXXX
-		ok, err := migrationutils.E2kmMigration(Logger)
+		ok, err := migrationutils.E2kmMigration(Logger, cfg.DBOptions.Path)
 		if err != nil {
 			log.Fatal("Failed to create e2km migration file", zap.Error(err))
 		}

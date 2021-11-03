@@ -78,7 +78,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.DBOptions.Ctx = cmd.Context()
 
 		// TODO remove once all operators updated to vXXX
-		ok, err := migrationutils.E2kmMigration(Logger)
+		ok, err := migrationutils.E2kmMigration(Logger, "")
 		if err != nil {
 			log.Fatal("Failed to create e2km migration file", zap.Error(err))
 		}
