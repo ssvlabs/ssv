@@ -18,6 +18,7 @@ type Options struct {
 type IDb interface {
 	Set(prefix []byte, key []byte, value []byte) error
 	Get(prefix []byte, key []byte) (Obj, bool, error)
+	Delete(prefix []byte, key []byte) error
 	GetAllByCollection(prefix []byte) ([]Obj, error)
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error

@@ -13,12 +13,14 @@ import (
 	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -74,6 +76,16 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
+
+		// TODO remove once all operators updated to vXXX
+		ok, err := migrationutils.E2kmMigration(Logger)
+		if err != nil {
+			log.Fatal("Failed to create e2km migration file", zap.Error(err))
+		}
+		if ok {
+			cfg.ETH1Options.CleanRegistryData = true
+		}
+
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
@@ -81,6 +93,8 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
 		cfg.P2pNetworkConfig.ReportLastMsg = true
+		// TODO add fork interface for exporter or use the same forks as in operator
+		cfg.P2pNetworkConfig.Fork = networkForkV0.New()
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
@@ -113,7 +127,8 @@ var StartExporterNodeCmd = &cobra.Command{
 		// TODO Not refactored yet Start
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
-		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
+		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+		cfg.ETH2Options.DB = db
 		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err))

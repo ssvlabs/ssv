@@ -70,7 +70,6 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 	require.NoError(t, cr.validatorStorage.SaveValidatorShare(&validatorstorage.Share{
 		NodeID:    1,
 		PublicKey: pk,
-		ShareKey:  sks[1],
 		Committee: committee,
 		Metadata:  nil,
 	}))

@@ -1,38 +1,40 @@
 package p2p
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"github.com/bloxapp/ssv/utils/commons"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"bytes"
+	"crypto/rand"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
-	"strings"
+
 	"testing"
 )
 
-func TestP2pNetwork_GetUserAgent(t *testing.T) {
-	commons.SetBuildData("ssvtest", "v0.x.x")
+func Test_ENR_OperatorPubKeyEntry(t *testing.T) {
+	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	require.NoError(t, err)
+	pk := convertFromInterfacePrivKey(priv)
+	ip, err := ipAddr()
+	pubkey := genPublicKey()
+	require.NoError(t, err)
+	node, err := createLocalNode(pk, ip, 12000, 13000)
+	require.NoError(t, err)
+	node, err = addOperatorPubKeyEntry(node, []byte(pubKeyHash(pubkey.SerializeToHexStr())))
+	require.NoError(t, err)
 
-	t.Run("with operator key", func(t *testing.T) {
-		_, skBytes, err := rsaencryption.GenerateKeys()
-		require.NoError(t, err)
-		require.NotNil(t, skBytes)
-		sk, err := rsaencryption.ConvertPemToPrivateKey(string(skBytes))
-		require.NoError(t, err)
-		require.NotNil(t, sk)
-		n := p2pNetwork{operatorPrivKey: sk}
-		ua := n.getUserAgent()
-		parts := strings.Split(ua, ":")
-		require.Equal(t, "ssvtest", parts[0])
-		require.Equal(t, "v0.x.x", parts[1])
-		pk, err := rsaencryption.ExtractPublicKey(sk)
-		require.NoError(t, err)
-		h := sha256.Sum256([]byte(pk))
-		require.Equal(t, hex.EncodeToString(h[:]), parts[2])
-	})
+	pkHashRecord, err := extractOperatorPubKeyEntry(node.Node().Record())
+	require.NoError(t, err)
+	pkHash := []byte(pubKeyHash(pubkey.SerializeToHexStr()))
+	bitL, err := bitfield.NewBitlist64FromBytes(64, pkHash)
+	require.NoError(t, err)
+	require.True(t, bytes.Equal(pkHashRecord, bitL.ToBitlist().Bytes()))
+}
 
-	t.Run("without operator key", func(t *testing.T) {
-		n := p2pNetwork{}
-		require.Equal(t, "ssvtest:v0.x.x", n.getUserAgent())
-	})
+func genPublicKey() *bls.PublicKey {
+	_ = bls.Init(bls.BLS12_381)
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	return sk.GetPublicKey()
 }

@@ -27,7 +27,6 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 type Share struct {
 	NodeID    uint64
 	PublicKey *bls.PublicKey
-	ShareKey  *bls.SecretKey
 	Committee map[uint64]*proto.Node
 	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
 }
@@ -55,6 +54,18 @@ func (s *Share) PartialThresholdSize() int {
 	return int(math.Ceil(float64(s.CommitteeSize()) * 1 / 3))
 }
 
+// OperatorPubKey returns the operator's public key based on the node id
+func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
+	if val, found := s.Committee[s.NodeID]; found {
+		pk := &bls.PublicKey{}
+		if err := pk.Deserialize(val.Pk); err != nil {
+			return nil, errors.Wrap(err, "failed to deserialize public key")
+		}
+		return pk, nil
+	}
+	return nil, errors.New("could not find operator id in committee map")
+}
+
 // PubKeysByID returns the public keys with the associated ids
 func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 	ret := make([]*bls.PublicKey, 0)
@@ -62,7 +73,7 @@ func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 		if val, ok := s.Committee[id]; ok {
 			pk := &bls.PublicKey{}
 			if err := pk.Deserialize(val.Pk); err != nil {
-				return ret, err
+				return ret, errors.Wrap(err, "failed to deserialize public key")
 			}
 			ret = append(ret, pk)
 		} else {
@@ -97,7 +108,6 @@ func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
 		NodeID:    s.NodeID,
-		ShareKey:  s.ShareKey.Serialize(),
 		Committee: map[uint64]*proto.Node{},
 		Metadata:  s.Metadata,
 	}
@@ -106,7 +116,6 @@ func (s *Share) Serialize() ([]byte, error) {
 		value.Committee[k] = &proto.Node{
 			IbftId: n.GetIbftId(),
 			Pk:     n.GetPk()[:],
-			Sk:     n.GetSk()[:],
 		}
 	}
 	var b bytes.Buffer
@@ -138,7 +147,6 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 	return &Share{
 		NodeID:    value.NodeID,
 		PublicKey: pubKey,
-		ShareKey:  shareSecret,
 		Committee: value.Committee,
 		Metadata:  value.Metadata,
 	}, nil

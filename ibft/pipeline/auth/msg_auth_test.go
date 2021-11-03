@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ func _byteArray(input string) []byte {
 
 // GenerateNodes generates randomly nodes
 func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
-	_ = bls.Init(bls.BLS12_381)
+	threshold.Init()
 	nodes := make(map[uint64]*proto.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
@@ -34,7 +35,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, ids []uint64, sks []*bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
-	bls.Init(bls.BLS12_381)
+	threshold.Init()
 
 	var agg *bls.Sign
 	for _, sk := range sks {
@@ -56,6 +57,7 @@ func SignMsg(t *testing.T, ids []uint64, sks []*bls.SecretKey, msg *proto.Messag
 }
 
 func TestAuthorizeMsg(t *testing.T) {
+	threshold.Init()
 	sks, committee := GenerateNodes(4)
 	tests := []struct {
 		name          string
@@ -104,7 +106,7 @@ func TestAuthorizeMsg(t *testing.T) {
 			},
 			[]uint64{1},
 			[]*bls.SecretKey{sks[1]},
-			_byteArray("83ffa7e8e65a99fdff0bff0384d4abeee3e79023faceb7973893c541bd6b67f068d10a9986c9dc55f58d421d5f78b83f144c3f191f51cb6d0d655fa87184693329ef885aea1e7070c5ce76500dc86ac16e322d4298386aa330b88d90c2c5121d"),
+			_byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776"),
 			"could not verify message signature",
 		},
 	}

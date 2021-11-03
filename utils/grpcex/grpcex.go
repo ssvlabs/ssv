@@ -8,7 +8,6 @@ import (
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/shared/grpcutils"
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 )
@@ -48,7 +47,7 @@ func constructDialOptions(
 		grpc_opentracing.UnaryClientInterceptor(),
 		grpc_prometheus.UnaryClientInterceptor,
 		grpc_retry.UnaryClientInterceptor(),
-		grpcutils.LogGRPCRequests,
+		//grpcutils.LogGRPCRequests,
 	}
 
 	dialOpts := []grpc.DialOption{
@@ -61,7 +60,7 @@ func constructDialOptions(
 		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}),
 		grpc.WithUnaryInterceptor(middleware.ChainUnaryClient(interceptors...)),
 		grpc.WithChainStreamInterceptor(
-			grpcutils.LogGRPCStream,
+			//grpcutils.LogGRPCStream,
 			grpc_opentracing.StreamClientInterceptor(),
 			grpc_prometheus.StreamClientInterceptor,
 			grpc_retry.StreamClientInterceptor(),

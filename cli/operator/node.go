@@ -14,8 +14,10 @@ import (
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -35,6 +37,7 @@ type config struct {
 	OperatorPrivateKey string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey  string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 }
 
 var cfg config
@@ -67,6 +70,15 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
+		// TODO remove once all operators updated to vXXX
+		ok, err := migrationutils.E2kmMigration(Logger)
+		if err != nil {
+			log.Fatal("Failed to create e2km migration file", zap.Error(err))
+		}
+		if ok {
+			cfg.ETH1Options.CleanRegistryData = true
+		}
+
 		// TODO - change via command line?
 		fork := v0.New()
 
@@ -82,7 +94,8 @@ var StartNodeCmd = &cobra.Command{
 		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
-		cfg.ETH2Options.Graffiti = []byte("BloxStaking")
+		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+		cfg.ETH2Options.DB = db
 		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
@@ -98,6 +111,7 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
@@ -121,6 +135,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
+		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 

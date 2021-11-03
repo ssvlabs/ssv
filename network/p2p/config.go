@@ -28,9 +28,9 @@ type Config struct {
 	Fork forks.Fork
 
 	// objects / instances
-	HostID              peer.ID
-	Topics              map[string]*pubsub.Topic
-	Discv5BootStrapAddr []string
+	HostID        peer.ID
+	Topics        map[string]*pubsub.Topic
+	BootnodesENRs []string
 
 	// NetworkPrivateKey is used for network identity
 	NetworkPrivateKey *ecdsa.PrivateKey
@@ -56,3 +56,18 @@ func TransformEnr(enr string) []string {
 		enr,
 	}
 }
+
+//
+//// setupNetworkKey creates a private key if non configured
+//func (n *p2pNetwork) setupNetworkKey(priv *ecdsa.PrivateKey) error {
+//	if priv != nil {
+//		n.privKey = priv
+//	} else {
+//		privKey, err := n.privateKey()
+//		if err != nil {
+//			return errors.Wrap(err, "Failed to generate p2p private key")
+//		}
+//		n.privKey = privKey
+//	}
+//	return nil
+//}
