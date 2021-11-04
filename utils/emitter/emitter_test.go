@@ -21,19 +21,19 @@ func TestNewEmitter(t *testing.T) {
 	e := NewEmitter()
 	var wg sync.WaitGroup
 
+	// checks that channel works
+	cn, deregister := e.Channel("inc")
 	wg.Add(1)
 	go func() {
-		cn, close := e.Channel("inc")
 		defer wg.Done()
 		for data := range cn {
 			parsed, ok := data.(testData)
 			require.True(t, ok)
-			require.True(t, parsed.i > 0)
-			close()
+			atomic.AddInt64(&i, parsed.i)
 		}
 	}()
 
-	_ = e.On("inc", func(data EventData) {
+	deregisterOn := e.On("inc", func(data EventData) {
 		if toAdd, ok := data.(testData); ok {
 			atomic.AddInt64(&i, toAdd.i)
 		}
@@ -41,26 +41,22 @@ func TestNewEmitter(t *testing.T) {
 			wg.Done()
 		}
 	})
-	deregister := e.On("inc", func(data EventData) {
-		if toAdd, ok := data.(testData); ok {
-			atomic.AddInt64(&i, toAdd.i)
-		}
-	})
+	defer deregisterOn()
 
 	wg.Add(1)
 	go func() {
 		e.Notify("inc", testData{i: int64(5)})
 		e.Notify("inc", testData{i: int64(3)})
+		// sleep before calling deregister as Notify works with goroutines
+		time.Sleep(10 * time.Millisecond)
 		deregister()
-		e.Notify("inc", testData{i: int64(2)})
-		e.Notify("inc", testData{i: int64(2)})
+		go e.Notify("inc", testData{i: int64(2)})
+		go e.Notify("inc", testData{i: int64(2)})
 	}()
 
 	wg.Wait()
 	require.Equal(t, int64(20), atomic.LoadInt64(&i))
-	e.(*emitter).mut.Lock()
-	require.Equal(t, 1, len(e.(*emitter).handlers["inc"]))
-	e.(*emitter).mut.Unlock()
+	require.Equal(t, 1, e.(*emitter).countHandlers("inc"))
 }
 
 func TestEmitter_Once(t *testing.T) {

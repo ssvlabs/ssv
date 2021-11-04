@@ -74,13 +74,13 @@ func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
 	}
 }
 
-// Once register once to event as a channel
+// Once will call handler only once
 func (e *emitter) Once(event string, handler EventHandler) {
 	var once sync.Once
 	var deregister DeregisterFunc
 	deregister = e.On(event, func(data EventData) {
 		once.Do(func() {
-			defer deregister()
+			go deregister()
 			handler(data)
 		})
 	})
@@ -132,4 +132,15 @@ func (e *emitter) Clear(event string) {
 	defer e.mut.Unlock()
 
 	delete(e.handlers, event)
+}
+
+// countHandlers returns the number of handlers active on the given event
+func (e *emitter) countHandlers(event string) int {
+	e.mut.Lock()
+	defer e.mut.Unlock()
+
+	if handlers, ok := e.handlers[event]; ok {
+		return len(handlers)
+	}
+	return 0
 }
