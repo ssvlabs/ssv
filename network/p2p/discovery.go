@@ -91,16 +91,16 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	defer span.End()
 
 	if info.ID == n.host.ID() {
-		//log.Print("-----TEST same id error ---") TODO need to add log with trace level
+		n.trace("skipped same peer")
 		return nil
 	}
-	n.logger.Debug("connecting to peer", zap.String("peerID", info.ID.String()))
+	n.trace("connecting to peer", zap.String("peerID", info.ID.String()))
 
 	if n.peers.IsBad(info.ID) {
 		return errors.New("refused to connect to bad peer")
 	}
 	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
-		n.logger.Debug("skipped connected peer", zap.String("peer", info.String()))
+		n.trace("skipped connected peer", zap.String("peer", info.String()))
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -109,7 +109,7 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	if err := n.host.Connect(ctx, info); err != nil {
 		return errors.Wrap(err, "failed to connect to peer")
 	}
-	n.logger.Debug("connected to peer", zap.String("peerID", info.ID.String()))
+	n.trace("connected to peer", zap.String("peerID", info.ID.String()))
 
 	return nil
 }

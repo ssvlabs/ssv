@@ -151,7 +151,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
-	_logger := n.logger.With(zap.String("who", "networkNotifiee"))
 	// TODO: add connection state
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -159,11 +158,10 @@ func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
 				return
 			}
 			go func() {
-				logger := _logger.With(zap.String("where", "DisconnectedF"),
+				n.trace("connected peer", zap.String("who", "networkNotifiee"),
 					zap.String("conn", conn.ID()),
 					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 					zap.String("peerID", conn.RemotePeer().String()))
-				logger.Debug("connected peer")
 				// TODO: add connection states management
 			}()
 		},
@@ -172,15 +170,14 @@ func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
 				return
 			}
 			go func() {
-				logger := _logger.With(zap.String("where", "DisconnectedF"),
-					zap.String("conn", conn.ID()),
-					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
-					zap.String("peerID", conn.RemotePeer().String()))
 				// skip if we are still connected to the peer
 				if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
 					return
 				}
-				logger.Debug("disconnected peer")
+				n.trace("disconnected peer", zap.String("who", "networkNotifiee"),
+					zap.String("conn", conn.ID()),
+					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
+					zap.String("peerID", conn.RemotePeer().String()))
 			}()
 		},
 	}
@@ -272,4 +269,10 @@ func (n *p2pNetwork) getOperatorPubKey() (string, error) {
 		return operatorPubKey, nil
 	}
 	return "", nil
+}
+
+func (n *p2pNetwork) trace(msg string, fields ...zap.Field) {
+	if n.cfg.NetworkTrace {
+		n.logger.Debug(msg, fields...)
+	}
 }
