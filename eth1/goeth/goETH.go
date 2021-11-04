@@ -70,7 +70,7 @@ type eth1Client struct {
 	contractABI          string
 	connectionTimeout    time.Duration
 
-	outSubject pubsub.Subject
+	emitter pubsub.Emitter
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -90,7 +90,6 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
 		connectionTimeout:          opts.ConnectionTimeout,
-		outSubject:                 pubsub.NewSubject(logger),
 	}
 
 	if err := ec.connect(); err != nil {
@@ -101,9 +100,9 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	return &ec, nil
 }
 
-// EventsSubject returns the events subject
-func (ec *eth1Client) EventsSubject() pubsub.Subscriber {
-	return ec.outSubject
+// EventEmitter returns the contract events emitter
+func (ec *eth1Client) EventEmitter() pubsub.EventSubscriber {
+	return ec.emitter
 }
 
 // Start streams events from the contract
@@ -188,7 +187,7 @@ func (ec *eth1Client) reconnect() {
 // fireEvent notifies observers about some contract event
 func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
 	e := eth1.Event{Log: log, Data: data}
-	ec.outSubject.Notify(e)
+	ec.emitter.Notify("in", e)
 }
 
 // streamSmartContractEvents sync events history of the given contract

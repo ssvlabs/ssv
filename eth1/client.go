@@ -24,6 +24,14 @@ type Event struct {
 	Data interface{}
 }
 
+// Copy implements pubsub.EventData interface
+func (e Event) Copy() interface{} {
+	return Event{
+		Log:  e.Log,
+		Data: e.Data,
+	}
+}
+
 // SyncEndedEvent meant to notify an observer that the sync is over
 type SyncEndedEvent struct {
 	// Success returns true if the sync went well (all events were parsed)
@@ -37,7 +45,7 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // Client represents the required interface for eth1 client
 type Client interface {
-	EventsSubject() pubsub.Subscriber
+	EventEmitter() pubsub.EventSubscriber
 	Start() error
 	Sync(fromBlock *big.Int) error
 }

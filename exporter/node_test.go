@@ -57,20 +57,17 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	exp, err := newMockExporter()
 	require.NoError(t, err)
 
-	sub := pubsub.NewSubject(zap.L())
-	cn, err := sub.Register("TestExporter_ListenToEth1Events")
-	require.NoError(t, err)
-	defer sub.Deregister("TestExporter_ListenToEth1Events")
+	em := pubsub.NewEmitter()
 
 	go func() {
-		errCn := exp.listenToEth1Events(cn)
+		errCn := exp.listenToEth1Events(em)
 		for err := range errCn {
 			require.NoError(t, err)
 		}
 	}()
 
 	var wg sync.WaitGroup
-	outSub := exp.ws.OutboundSubject().(pubsub.EventSubscriber)
+	outSub := exp.ws.OutboundEmitter().(pubsub.EventSubscriber)
 	go func() {
 		cnOut, done := outSub.Channel("out")
 		defer done()
@@ -101,10 +98,10 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	}()
 	// pushing 2 events and waits for handling
 	wg.Add(1)
-	sub.Notify(validatorAddedMockEvent(t))
+	em.Notify("in", validatorAddedMockEvent(t))
 
 	wg.Add(1)
-	sub.Notify(operatorAddedMockEvent(t))
+	em.Notify("in", operatorAddedMockEvent(t))
 
 	wg.Wait()
 

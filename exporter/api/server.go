@@ -11,7 +11,7 @@ import (
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
 	Start(addr string) error
-	OutboundSubject() pubsub.EventPublisher
+	OutboundEmitter() pubsub.EventPublisher
 	UseQueryHandler(handler QueryMessageHandler)
 }
 
@@ -60,7 +60,7 @@ func (ws *wsServer) Start(addr string) error {
 	return err
 }
 
-func (ws *wsServer) OutboundSubject() pubsub.EventPublisher {
+func (ws *wsServer) OutboundEmitter() pubsub.EventPublisher {
 	return ws.outbound
 }
 

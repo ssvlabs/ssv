@@ -61,7 +61,7 @@ func TestHandleStream(t *testing.T) {
 	conn2 := connectionMock{addr: ipAddr2}
 	go ws.handleStream(&conn2)
 
-	sub, ok := ws.OutboundSubject().(pubsub.EventSubscriber)
+	sub, ok := ws.OutboundEmitter().(pubsub.EventSubscriber)
 	require.True(t, ok)
 	// register a listener to count how many messages are passed on outbound subject
 	var outCnCount int64
@@ -119,16 +119,16 @@ func TestHandleStream(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		go ws.OutboundSubject().Notify("out", nm)
+		go ws.OutboundEmitter().Notify("out", nm)
 
 		nm.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
-		go ws.OutboundSubject().Notify("out", nm)
+		go ws.OutboundEmitter().Notify("out", nm)
 		nm.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
-		ws.OutboundSubject().Notify("out", nm)
+		ws.OutboundEmitter().Notify("out", nm)
 		// let the message propagate
 		time.Sleep(10 * time.Millisecond)
 	}()

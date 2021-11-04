@@ -8,15 +8,15 @@ import (
 
 // ClientMock implements eth1.Client interface
 type ClientMock struct {
-	Sub pubsub.Subject
+	Emitter pubsub.Emitter
 
 	SyncTimeout  time.Duration
 	SyncResponse error
 }
 
-// EventsSubject mocking subject
-func (ec *ClientMock) EventsSubject() pubsub.Subscriber {
-	return ec.Sub
+// EventEmitter returns the contract events emitter
+func (ec *ClientMock) EventEmitter() pubsub.EventSubscriber {
+	return ec.Emitter
 }
 
 // Start mocking client init

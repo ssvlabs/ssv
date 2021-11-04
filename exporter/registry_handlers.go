@@ -13,9 +13,11 @@ import (
 )
 
 // ListenToEth1Events register for eth1 events
-func (exp *exporter) listenToEth1Events(cn pubsub.SubjectChannel) chan error {
-	cnErr := make(chan error)
+func (exp *exporter) listenToEth1Events(emitter pubsub.EventSubscriber) chan error {
+	cn, done := emitter.Channel("in")
+	cnErr := make(chan error, 10)
 	go func() {
+		defer done()
 		for e := range cn {
 			if event, ok := e.(eth1.Event); ok {
 				if err := exp.handleEth1Event(event); err != nil {
@@ -64,7 +66,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 
 	// TODO: aggregate validators in sync scenario
 	// otherwise the network will be overloaded with multiple messages
-	go exp.ws.OutboundSubject().Notify("out", api.NetworkMessage{Msg: api.Message{
+	go exp.ws.OutboundEmitter().Notify("out", api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeValidator,
 		Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
 		Data:   []storage.ValidatorInformation{*vi},
@@ -94,7 +96,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	l.Debug("managed to save operator information", zap.Any("value", oi))
 	reportOperatorIndex(exp.logger, &oi)
 
-	exp.ws.OutboundSubject().Notify("out", api.NetworkMessage{Msg: api.Message{
+	exp.ws.OutboundEmitter().Notify("out", api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
 		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
 		Data:   []storage.OperatorInformation{oi},

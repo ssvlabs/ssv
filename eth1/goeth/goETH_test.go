@@ -28,10 +28,11 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	err = json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
 
-	cn, err := ec.EventsSubject().Register("ObserverForTest")
+	cn, done := ec.EventEmitter().Channel("in")
 	require.NoError(t, err)
 	var eventsWg sync.WaitGroup
 	go func() {
+		defer done()
 		for e := range cn {
 			event, ok := e.(eth1.Event)
 			require.True(t, ok)
@@ -68,7 +69,7 @@ func newEth1Client() *eth1Client {
 		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
 			return nil, true, nil
 		},
-		outSubject: pubsub.NewSubject(zap.L()),
+		emitter: pubsub.NewEmitter(),
 	}
 	return &ec
 }

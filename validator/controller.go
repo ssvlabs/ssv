@@ -44,7 +44,7 @@ type ControllerOptions struct {
 // IController represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type IController interface {
-	ListenToEth1Events(cn pubsub.SubjectChannel)
+	ListenToEth1Events(em pubsub.EventSubscriber)
 	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
@@ -107,7 +107,9 @@ func NewController(options ControllerOptions) IController {
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
-func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
+func (c *controller) ListenToEth1Events(em pubsub.EventSubscriber) {
+	cn, done := em.Channel("in")
+	defer done()
 	for e := range cn {
 		if event, ok := e.(eth1.Event); ok {
 			if err := c.ProcessEth1Event(event); err != nil {

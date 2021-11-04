@@ -48,11 +48,7 @@ func HexStringToSyncOffset(shex string) *SyncOffset {
 func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
-	cn, err := client.EventsSubject().Register("SyncEth1")
-	if err != nil {
-		return errors.Wrap(err, "failed to register on contract events subject")
-	}
-	defer client.EventsSubject().Deregister("SyncEth1")
+	cn, deregister := client.EventEmitter().Channel("in")
 
 	q := tasks.NewExecutionQueue(5 * time.Millisecond)
 	go q.Start()
@@ -63,6 +59,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	syncWg.Add(1)
 	go func() {
 		defer syncWg.Done()
+		defer deregister()
 		for e := range cn {
 			if event, ok := e.(Event); ok {
 				if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
@@ -79,8 +76,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 		}
 	}()
 	syncOffset = determineSyncOffset(logger, storage, syncOffset)
-	err = client.Sync(syncOffset)
-	if err != nil {
+	if err := client.Sync(syncOffset); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	// waiting for eth1 sync to finish
