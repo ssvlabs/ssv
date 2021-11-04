@@ -89,12 +89,13 @@ func (n *p2pNetwork) createListener(ipAddr net.IP) (*discover.UDPv5, error) {
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
 
-	// create config for discv5 listener
-	logger := log.New()
-	logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 	dv5Cfg := discover.Config{
 		PrivateKey: n.privKey,
-		Log:        logger,
+	}
+	if n.cfg.NetworkTrace {
+		logger := log.New()
+		logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
+		dv5Cfg.Log = logger
 	}
 	dv5Cfg.Bootnodes, err = parseENRs(n.cfg.BootnodesENRs, true)
 	if err != nil {
@@ -209,12 +210,12 @@ func (n *p2pNetwork) listenForNewNodes() {
 		node := iterator.Node()
 		peerInfo, err := convertToAddrInfo(node)
 		if err != nil {
-			n.logger.Warn("could not convert node to peer info", zap.Error(err))
+			n.trace("could not convert node to peer info", zap.Error(err))
 			continue
 		}
 		go func(info *peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				n.logger.Debug("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
+				n.trace("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
 			}
 		}(peerInfo)
 	}
