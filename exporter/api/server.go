@@ -113,12 +113,21 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, out <-chan pub
 	logger := ws.logger.
 		With(zap.String("cid", cid))
 
-	for m := range out {
-		nm, ok := m.(NetworkMessage)
-		if !ok {
-			logger.Warn("could not parse message")
-			continue
+	// messages cannot be sent on a different goroutine
+	// using a buffered channel for high workload
+	cn := make(chan NetworkMessage, 100)
+	go func() {
+		for m := range out {
+			nm, ok := m.(NetworkMessage)
+			if !ok {
+				logger.Warn("could not parse message")
+				continue
+			}
+			cn <- nm
 		}
+	}()
+
+	for nm := range cn {
 		logger.Debug("sending outbound",
 			zap.String("msg.type", string(nm.Msg.Type)), zap.Any("msg", nm.Msg))
 		err := tasks.Retry(func() error {
