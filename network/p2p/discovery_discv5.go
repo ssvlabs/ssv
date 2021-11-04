@@ -210,12 +210,12 @@ func (n *p2pNetwork) listenForNewNodes() {
 		node := iterator.Node()
 		peerInfo, err := convertToAddrInfo(node)
 		if err != nil {
-			n.logger.Warn("could not convert node to peer info", zap.Error(err))
+			n.trace("could not convert node to peer info", zap.Error(err))
 			continue
 		}
 		go func(info *peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				n.logger.Debug("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
+				n.trace("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
 			}
 		}(peerInfo)
 	}
