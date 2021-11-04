@@ -11,7 +11,7 @@ import (
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
 	Start(addr string) error
-	OutboundSubject() pubsub.Publisher
+	OutboundSubject() pubsub.EventPublisher
 	UseQueryHandler(handler QueryMessageHandler)
 }
 
@@ -19,7 +19,7 @@ type WebSocketServer interface {
 type wsServer struct {
 	logger *zap.Logger
 	// outbound is a subject for writing messages
-	outbound pubsub.Subject
+	outbound pubsub.Emitter
 
 	handler QueryMessageHandler
 
@@ -32,7 +32,7 @@ type wsServer struct {
 func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
 		logger.With(zap.String("component", "exporter/api/server")),
-		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/outbound-subject"))),
+		pubsub.NewEmitter(),
 		handler, adapter, mux,
 	}
 	return &ws
@@ -60,7 +60,7 @@ func (ws *wsServer) Start(addr string) error {
 	return err
 }
 
-func (ws *wsServer) OutboundSubject() pubsub.Publisher {
+func (ws *wsServer) OutboundSubject() pubsub.EventPublisher {
 	return ws.outbound
 }
 
@@ -86,6 +86,7 @@ func (ws *wsServer) handleQuery(conn Connection) {
 		} else {
 			nm = NetworkMessage{incoming, nil, conn}
 		}
+		// handler is processing the request
 		ws.handler(&nm)
 
 		err = tasks.Retry(func() error {
@@ -101,17 +102,14 @@ func (ws *wsServer) handleQuery(conn Connection) {
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleStream(conn Connection) {
 	cid := ConnectionID(conn)
-	out, err := ws.outbound.Register(cid)
-	if err != nil {
-		ws.logger.Error("could not register outbound subject",
-			zap.Error(err), zap.String("cid", cid))
-	}
-	defer ws.outbound.Deregister(cid)
+
+	out, done := ws.outbound.Channel("out")
+	defer done()
 
 	ws.processOutboundForConnection(conn, out, cid)
 }
 
-func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.SubjectChannel, cid string) {
+func (ws *wsServer) processOutboundForConnection(conn Connection, out <-chan pubsub.EventData, cid string) {
 	logger := ws.logger.
 		With(zap.String("cid", cid))
 

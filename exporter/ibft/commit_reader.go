@@ -22,7 +22,7 @@ type CommitReaderOptions struct {
 	Network          network.Network
 	ValidatorStorage validatorstorage.ICollection
 	IbftStorage      collections.Iibft
-	Out              pubsub.Publisher
+	Out              pubsub.EventPublisher
 }
 
 // commitReader responsible for reading all commit messages
@@ -32,7 +32,7 @@ type commitReader struct {
 	network          network.Network
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
-	out              pubsub.Publisher
+	out              pubsub.EventPublisher
 }
 
 // NewCommitReader creates new instance
@@ -100,7 +100,7 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	}
 	if updated {
 		logger.Debug("decided message was updated")
-		go cr.out.Notify(newDecidedNetworkMsg(msg, pkHex))
+		go cr.out.Notify("out", newDecidedNetworkMsg(msg, pkHex))
 	}
 	return nil
 }

@@ -64,7 +64,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 
 	// TODO: aggregate validators in sync scenario
 	// otherwise the network will be overloaded with multiple messages
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
+	go exp.ws.OutboundSubject().Notify("out", api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeValidator,
 		Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
 		Data:   []storage.ValidatorInformation{*vi},
@@ -94,7 +94,7 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	l.Debug("managed to save operator information", zap.Any("value", oi))
 	reportOperatorIndex(exp.logger, &oi)
 
-	exp.ws.OutboundSubject().Notify(api.NetworkMessage{Msg: api.Message{
+	exp.ws.OutboundSubject().Notify("out", api.NetworkMessage{Msg: api.Message{
 		Type:   api.TypeOperator,
 		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
 		Data:   []storage.OperatorInformation{oi},

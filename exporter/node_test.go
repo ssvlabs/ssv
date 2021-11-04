@@ -70,11 +70,10 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
-	outSub := exp.ws.OutboundSubject().(pubsub.Subject)
+	outSub := exp.ws.OutboundSubject().(pubsub.EventSubscriber)
 	go func() {
-		cnOut, err := outSub.Register("TestExporter_ListenToEth1Events_out_ws")
-		require.NoError(t, err)
-		defer sub.Deregister("TestExporter_ListenToEth1Events_out_ws")
+		cnOut, done := outSub.Channel("out")
+		defer done()
 
 		for m := range cnOut {
 			nm, ok := m.(api.NetworkMessage)

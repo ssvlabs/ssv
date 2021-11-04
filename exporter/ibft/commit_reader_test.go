@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestCommitReader_onMessage(t *testing.T) {
@@ -50,8 +51,8 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
 	reader := setupReaderForTest(t)
 	cr := reader.(*commitReader)
-	cn, err := cr.out.(pubsub.Subscriber).Register("test")
-	require.NoError(t, err)
+	cn, done := cr.out.(pubsub.EventSubscriber).Channel("out")
+	defer done()
 
 	var incoming []api.NetworkMessage
 	var mut sync.Mutex
@@ -180,6 +181,7 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 		})
 	}
 
+	time.Sleep(10 * time.Millisecond)
 	mut.Lock()
 	defer mut.Unlock()
 	require.Equal(t, 1, len(incoming))
@@ -205,7 +207,7 @@ func setupReaderForTest(t *testing.T) Reader {
 		Network:          nil,
 		ValidatorStorage: validatorStorage,
 		IbftStorage:      &ibftStorage,
-		Out:              pubsub.NewSubject(logger),
+		Out:              pubsub.NewEmitter(),
 	})
 
 	return cr

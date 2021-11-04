@@ -30,7 +30,7 @@ type DecidedReaderOptions struct {
 	Config         *proto.InstanceConfig
 	ValidatorShare *storage.Share
 
-	Out pubsub.Publisher
+	Out pubsub.EventPublisher
 }
 
 // decidedReader reads decided messages history
@@ -42,7 +42,7 @@ type decidedReader struct {
 	config         *proto.InstanceConfig
 	validatorShare *storage.Share
 
-	out pubsub.Publisher
+	out pubsub.EventPublisher
 
 	identifier []byte
 }
@@ -122,7 +122,7 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 			logger.Error("could not handle decided message")
 			continue
 		} else if saved {
-			go r.out.Notify(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
+			go r.out.Notify("out", newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 		}
 	}
 }

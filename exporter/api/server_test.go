@@ -61,26 +61,25 @@ func TestHandleStream(t *testing.T) {
 	conn2 := connectionMock{addr: ipAddr2}
 	go ws.handleStream(&conn2)
 
-	sub, ok := ws.OutboundSubject().(pubsub.Subject)
+	sub, ok := ws.OutboundSubject().(pubsub.EventSubscriber)
 	require.True(t, ok)
 	// register a listener to count how many messages are passed on outbound subject
 	var outCnCount int64
 	var wgCn sync.WaitGroup
 	wgCn.Add(3)
-	cn1, err := sub.Register("xxx-1")
-	require.NoError(t, err)
+	cn1, done1 := sub.Channel("out")
+	defer done1()
 	go func() {
 		for range cn1 {
 			atomic.AddInt64(&outCnCount, int64(1))
 			wgCn.Done()
 		}
 	}()
-	cn2, err := sub.Register("xxx-2")
-	require.NoError(t, err)
+	cn2, done2 := sub.Channel("out")
 	// registers a dummy listener that de-registers
 	go func() {
+		defer done2()
 		for range cn2 {
-			sub.Deregister("xxx-2")
 			return
 		}
 	}()
@@ -120,16 +119,16 @@ func TestHandleStream(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		go ws.OutboundSubject().Notify(nm)
+		go ws.OutboundSubject().Notify("out", nm)
 
 		nm.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
-		go ws.OutboundSubject().Notify(nm)
+		go ws.OutboundSubject().Notify("out", nm)
 		nm.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
-		ws.OutboundSubject().Notify(nm)
+		ws.OutboundSubject().Notify("out", nm)
 		// let the message propagate
 		time.Sleep(10 * time.Millisecond)
 	}()
