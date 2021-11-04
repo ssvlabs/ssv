@@ -27,17 +27,16 @@ func LoadABI(abiFilePath string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to open abi")
 	}
-	defer func() {
-		if err := jsonFile.Close(); err != nil {
-			logex.GetLogger().Warn("failed to close abi json", zap.Error(err))
-		}
-	}()
 
 	raw, err := ioutil.ReadAll(jsonFile)
 	if err != nil {
 		return errors.Wrap(err, "failed to read abi")
 	}
 	s := string(raw)
+
+	if err := jsonFile.Close(); err != nil {
+		logex.GetLogger().Warn("failed to close abi json", zap.Error(err))
+	}
 
 	// assert valid JSON
 	var obj []interface{}
