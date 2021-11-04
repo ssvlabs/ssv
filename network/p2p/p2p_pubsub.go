@@ -134,8 +134,9 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
 				return
 			}
-			// For debugging
-			n.logger.Debug("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
+			if n.cfg.NetworkTrace {
+				n.logger.Debug("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
+			}
 
 			cm, err := n.fork.DecodeNetworkMsg(msg.Data)
 			if err != nil {

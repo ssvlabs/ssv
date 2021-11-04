@@ -89,12 +89,13 @@ func (n *p2pNetwork) createListener(ipAddr net.IP) (*discover.UDPv5, error) {
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
 
-	// create config for discv5 listener
-	logger := log.New()
-	logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 	dv5Cfg := discover.Config{
 		PrivateKey: n.privKey,
-		Log:        logger,
+	}
+	if n.cfg.NetworkTrace {
+		logger := log.New()
+		logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
+		dv5Cfg.Log = logger
 	}
 	dv5Cfg.Bootnodes, err = parseENRs(n.cfg.BootnodesENRs, true)
 	if err != nil {

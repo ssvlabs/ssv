@@ -23,6 +23,8 @@ type Config struct {
 	PubSubTraceOut   string        `yaml:"PubSubTraceOut" env:"PUBSUB_TRACE_OUT" env-description:"File path to hold collected pubsub traces"`
 	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
 
+	NetworkTrace bool `yaml:"NetworkTrace" env:"NETWORK_TRACE" env-description:"A boolean flag to turn on network debugging"`
+
 	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
 
 	Fork forks.Fork
