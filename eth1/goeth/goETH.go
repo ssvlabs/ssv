@@ -90,6 +90,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
 		connectionTimeout:          opts.ConnectionTimeout,
+		emitter:                    pubsub.NewEmitter(),
 	}
 
 	if err := ec.connect(); err != nil {
