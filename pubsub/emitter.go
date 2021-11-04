@@ -57,9 +57,13 @@ type eventHandlers map[string]EventHandler
 
 // Channel register to event as a channel
 func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
+	var cnMut sync.Mutex
 	cn := make(chan EventData)
 	ctx, cancel := context.WithCancel(context.Background())
 	deregister := e.On(event, func(data EventData) {
+		cnMut.Lock()
+		defer cnMut.Unlock()
+
 		select {
 		case <-ctx.Done():
 			return
@@ -72,6 +76,8 @@ func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
 	})
 	return cn, func() {
 		cancel()
+		cnMut.Lock()
+		defer cnMut.Unlock()
 		deregister()
 		go close(cn)
 	}
