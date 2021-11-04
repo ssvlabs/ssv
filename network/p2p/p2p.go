@@ -223,6 +223,8 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 		n.logger.Debug("could not propagate nil message")
 		return
 	}
+	n.trace("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
+		zap.Any("msg", cm.SignedMessage))
 	switch cm.Type {
 	case network.NetworkMsg_IBFTType:
 		go propagateIBFTMessage(n.listeners, cm.SignedMessage)
