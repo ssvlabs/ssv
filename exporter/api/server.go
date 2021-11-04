@@ -120,7 +120,7 @@ func (ws *wsServer) processOutboundForConnection(conn Connection, out <-chan pub
 			continue
 		}
 		logger.Debug("sending outbound",
-			zap.String("msg.type", string(nm.Msg.Type)))
+			zap.String("msg.type", string(nm.Msg.Type)), zap.Any("msg", nm.Msg))
 		err := tasks.Retry(func() error {
 			return ws.adapter.Send(conn, &nm.Msg)
 		}, 3)
