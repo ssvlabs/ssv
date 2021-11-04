@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -57,13 +58,10 @@ type eventHandlers map[string]EventHandler
 
 // Channel register to event as a channel
 func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
-	var cnMut sync.Mutex
+	var on uint32
 	cn := make(chan EventData)
 	ctx, cancel := context.WithCancel(context.Background())
 	deregister := e.On(event, func(data EventData) {
-		cnMut.Lock()
-		defer cnMut.Unlock()
-
 		select {
 		case <-ctx.Done():
 			return
@@ -71,13 +69,14 @@ func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
 			if ctx.Err() != nil {
 				return
 			}
-			cn <- data
+			if atomic.LoadUint32(&on) == uint32(0) {
+				cn <- data
+			}
 		}
 	})
 	return cn, func() {
+		atomic.StoreUint32(&on, uint32(1))
 		cancel()
-		cnMut.Lock()
-		defer cnMut.Unlock()
 		deregister()
 		go close(cn)
 	}
