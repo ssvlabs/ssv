@@ -1,4 +1,4 @@
-package emitter
+package pubsub
 
 import (
 	"context"
@@ -64,6 +64,9 @@ func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
 		case <-ctx.Done():
 			return
 		default:
+			if ctx.Err() != nil {
+				return
+			}
 			cn <- data
 		}
 	})
@@ -122,7 +125,8 @@ func (e *emitter) Notify(event string, data EventData) {
 		return
 	}
 	for _, handler := range handlers {
-		go handler(data.Copy().(EventData))
+		edata := data.Copy().(EventData)
+		go handler(edata)
 	}
 }
 

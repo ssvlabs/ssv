@@ -1,4 +1,4 @@
-package emitter
+package pubsub
 
 import (
 	"github.com/stretchr/testify/require"
