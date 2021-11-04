@@ -32,6 +32,9 @@ func LoadABI(abiFilePath string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to read abi")
 	}
+	if err := jsonFile.Close(); err != nil {
+		logex.GetLogger().Warn("failed to close abi json", zap.Error(err))
+	}
 	s := string(raw)
 
 	if err := jsonFile.Close(); err != nil {
