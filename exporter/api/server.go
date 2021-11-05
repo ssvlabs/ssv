@@ -1,11 +1,14 @@
 package api
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
+	"sync"
+	"time"
 )
 
 // WebSocketServer is responsible for managing all
@@ -102,40 +105,79 @@ func (ws *wsServer) handleQuery(conn Connection) {
 // handleQuery receives query message and respond async
 func (ws *wsServer) handleStream(conn Connection) {
 	cid := ConnectionID(conn)
-
-	out, done := ws.outbound.Channel("out")
-	defer done()
-
-	ws.processOutboundForConnection(conn, out, cid)
-}
-
-func (ws *wsServer) processOutboundForConnection(conn Connection, out <-chan pubsub.EventData, cid string) {
 	logger := ws.logger.
 		With(zap.String("cid", cid))
+	// messages are being collected into a slice and picked up in another goroutine.
+	//
+	// the reason is that messages cannot be sent on a different goroutine,
+	// but we can't use the same goroutine to pick up messages and send requests
+	// as sending blocks the goroutine from picking up messages from the channel.
+	out, outDone := ws.outbound.Channel("out")
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	var mut sync.Mutex
+	running := true
+	var msgs []NetworkMessage
+	msgLimit := 1000
 
-	// messages cannot be sent on a different goroutine
-	// using a buffered channel for high workload
-	cn := make(chan NetworkMessage, 100)
 	go func() {
+		defer outDone()
+
 		for m := range out {
+			if ctx.Err() != nil {
+				return
+			}
 			nm, ok := m.(NetworkMessage)
 			if !ok {
 				logger.Warn("could not parse message")
 				continue
 			}
-			cn <- nm
+			mut.Lock()
+			if len(msgs) < msgLimit {
+				msgs = append(msgs, nm)
+				mut.Unlock()
+				reportStreamOutboundQueueCount(cid, true)
+				continue
+			}
+			running = false
+			mut.Unlock()
+			logger.Error("queue is full, stopped listen on outbound channel", zap.Any("msg", nm.Msg))
+			return
 		}
 	}()
 
-	for nm := range cn {
+	for {
+		mut.Lock()
+		if !running {
+			mut.Unlock()
+			return
+		}
+		if len(msgs) == 0 {
+			mut.Unlock()
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		nm := msgs[0]
+		msgs = msgs[1:]
+		mut.Unlock()
+		reportStreamOutboundQueueCount(cid, false)
 		logger.Debug("sending outbound",
 			zap.String("msg.type", string(nm.Msg.Type)), zap.Any("msg", nm.Msg))
-		err := tasks.Retry(func() error {
-			return ws.adapter.Send(conn, &nm.Msg)
-		}, 3)
+		err := ws.send(ctx, conn, nm.Msg)
+		reportStreamOutbound(cid, err)
 		if err != nil {
 			logger.Error("could not send message", zap.Error(err))
-			break
+			return
 		}
 	}
+}
+
+// send takes the given message and try (3 times) to send it
+// the whole operation will timeout after 3 sec
+func (ws *wsServer) send(ctx context.Context, conn Connection, msg Message) error {
+	sendCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
+	return tasks.RetryWithContext(sendCtx, func() error {
+		return ws.adapter.Send(conn, &msg)
+	}, 3)
 }

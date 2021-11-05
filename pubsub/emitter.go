@@ -40,6 +40,9 @@ type Emitter interface {
 	EventPublisher
 }
 
+// eventHandlers represents a map of event handlers, attached to some event
+type eventHandlers map[string]EventHandler
+
 // emitter implements Emitter
 type emitter struct {
 	handlers map[string]eventHandlers
@@ -54,11 +57,9 @@ func NewEmitter() Emitter {
 	}
 }
 
-type eventHandlers map[string]EventHandler
-
-// Channel register to event as a channel
+// Channel abstracts Emitter.On() to event as a channel, by listening on event and
 func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
-	var on uint32
+	running := uint32(1)
 	cn := make(chan EventData)
 	ctx, cancel := context.WithCancel(context.Background())
 	deregister := e.On(event, func(data EventData) {
@@ -69,13 +70,13 @@ func (e *emitter) Channel(event string) (<-chan EventData, DeregisterFunc) {
 			if ctx.Err() != nil {
 				return
 			}
-			if atomic.LoadUint32(&on) == uint32(0) {
+			if atomic.LoadUint32(&running) > uint32(0) {
 				cn <- data
 			}
 		}
 	})
 	return cn, func() {
-		atomic.StoreUint32(&on, uint32(1))
+		atomic.StoreUint32(&running, uint32(0))
 		cancel()
 		deregister()
 		go close(cn)
