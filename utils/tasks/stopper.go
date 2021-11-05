@@ -1,13 +1,9 @@
 package tasks
 
 import (
-	"crypto/rand"
-	"fmt"
 	"github.com/bloxapp/ssv/pubsub"
 	"go.uber.org/zap"
-	"math/big"
 	"sync"
-	"time"
 )
 
 // Stopper represents the object used to stop running functions
@@ -22,12 +18,12 @@ type Stopper interface {
 type stopper struct {
 	logger  *zap.Logger
 	stopped bool
-	sub     pubsub.Subject
+	emitter pubsub.Emitter
 	mut     sync.RWMutex
 }
 
 func newStopper(logger *zap.Logger) *stopper {
-	s := stopper{sub: pubsub.NewSubject(logger), logger: logger}
+	s := stopper{emitter: pubsub.NewEmitter(), logger: logger}
 	return &s
 }
 
@@ -39,12 +35,10 @@ func (s *stopper) IsStopped() bool {
 }
 
 func (s *stopper) Chan() chan bool {
-	cn, _ := s.sub.Register(chanID())
 	res := make(chan bool, 1)
-	go func() {
-		<-cn
+	s.emitter.Once("stop", func(data pubsub.EventData) {
 		res <- true
-	}()
+	})
 	return res
 }
 
@@ -53,16 +47,12 @@ func (s *stopper) stop() {
 	defer s.mut.Unlock()
 
 	s.stopped = true
-	s.sub.Notify(struct{}{})
+	s.emitter.Notify("stop", stoppedEvent{})
 }
 
-func chanID() string {
-	var i int64
-	r, err := rand.Int(rand.Reader, big.NewInt(2048))
-	if err != nil {
-		i = time.Now().UnixNano()
-	} else {
-		i = r.Int64()
-	}
-	return fmt.Sprintf("i-%d", i)
+type stoppedEvent struct{}
+
+// Copy implements pubsub.EventData
+func (se stoppedEvent) Copy() interface{} {
+	return se
 }
