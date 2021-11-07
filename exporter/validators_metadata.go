@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"time"
 )
@@ -42,7 +43,25 @@ func (exp *exporter) updateValidatorsMetadata(shares []*validatorstorage.Share, 
 		pks = append(pks, share.PublicKey.Serialize())
 	}
 	onUpdated := func(pk string, meta *beacon.ValidatorMetadata) {
+		logger := exp.logger.With(zap.String("pk", pk))
 		validator.ReportValidatorStatus(pk, meta, exp.logger)
+		pubKey := bls.PublicKey{}
+		if err := pubKey.DeserializeHexStr(pk); err != nil {
+			logger.Error("could not desrialize public key", zap.Error(err))
+			return
+		}
+		share, found, err := exp.validatorStorage.GetValidatorShare(pubKey.Serialize())
+		if err != nil {
+			logger.Error("could not get validator share", zap.Error(err))
+			return
+		}
+		if !found {
+			logger.Error("could not find validator share")
+			return
+		}
+		if err := exp.setup(share); err != nil {
+			logger.Error("could not setup validator share")
+		}
 	}
 	beacon.UpdateValidatorsMetadataBatch(pks, exp.metaDataReadersQueue, exp.storage, exp.beacon, onUpdated, batchSize)
 }

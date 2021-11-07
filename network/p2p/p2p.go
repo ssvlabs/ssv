@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
+	pubsub2 "github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/prysmaticlabs/prysm/async"
@@ -63,8 +64,9 @@ type p2pNetwork struct {
 	operatorPrivKey *rsa.PrivateKey
 	fork            forks.Fork
 
-	psSubscribedTopics map[string]bool
-	psTopicsLock       *sync.RWMutex
+	emitter      pubsub2.Emitter
+	psSubs       map[string]context.CancelFunc
+	psTopicsLock *sync.RWMutex
 
 	reportLastMsg bool
 }
@@ -77,15 +79,16 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	logger = logger.With(zap.String("component", "p2p"))
 
 	n := &p2pNetwork{
-		ctx:                ctx,
-		cfg:                cfg,
-		listenersLock:      &sync.Mutex{},
-		logger:             logger,
-		operatorPrivKey:    cfg.OperatorPrivateKey,
-		psSubscribedTopics: make(map[string]bool),
-		psTopicsLock:       &sync.RWMutex{},
-		reportLastMsg:      cfg.ReportLastMsg,
-		fork:               cfg.Fork,
+		ctx:             ctx,
+		cfg:             cfg,
+		listenersLock:   &sync.Mutex{},
+		logger:          logger,
+		operatorPrivKey: cfg.OperatorPrivateKey,
+		psSubs:          make(map[string]context.CancelFunc),
+		psTopicsLock:    &sync.RWMutex{},
+		reportLastMsg:   cfg.ReportLastMsg,
+		fork:            cfg.Fork,
+		emitter:         pubsub2.NewEmitter(),
 	}
 
 	if cfg.NetworkPrivateKey != nil {
@@ -225,6 +228,7 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 	}
 	n.trace("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
 		zap.Any("msg", cm.SignedMessage))
+
 	switch cm.Type {
 	case network.NetworkMsg_IBFTType:
 		go propagateIBFTMessage(n.listeners, cm.SignedMessage)

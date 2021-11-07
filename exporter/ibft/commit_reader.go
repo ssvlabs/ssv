@@ -3,7 +3,7 @@ package ibft
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon"
-	ibft2 "github.com/bloxapp/ssv/ibft/instance"
+	ibftinstance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -53,7 +53,7 @@ func (cr *commitReader) Start() error {
 	cr.logger.Debug("listening to network messages")
 	for msg := range msgCn {
 		if processed := cr.onMessage(msg); processed {
-			cr.logger.Debug("managed to process commit message",
+			cr.logger.Debug("got valid commit message",
 				zap.String("", string(msg.Message.Lambda)), zap.Uint64("seq", msg.Message.SeqNumber))
 		}
 	}
@@ -69,9 +69,11 @@ func (cr *commitReader) onMessage(msg *proto.SignedMessage) bool {
 	if msg.Message.Type != proto.RoundState_Commit {
 		return false
 	}
-	if err := cr.onCommitMessage(msg); err != nil {
-		cr.logger.Debug("could not handle commit message", zap.String("err", err.Error()))
-	}
+	go func() {
+		if err := cr.onCommitMessage(msg); err != nil {
+			cr.logger.Debug("could not handle commit message", zap.String("err", err.Error()))
+		}
+	}()
 	return true
 }
 
@@ -94,7 +96,7 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	if err := validateCommitMsg(msg, share); err != nil {
 		return errors.Wrap(err, "invalid commit message")
 	}
-	updated, err := ibft2.ProcessLateCommitMsg(msg, cr.ibftStorage, pkHex)
+	updated, err := ibftinstance.ProcessLateCommitMsg(msg, cr.ibftStorage, pkHex)
 	if err != nil {
 		return errors.Wrap(err, "failed to process late commit message")
 	}

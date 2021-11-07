@@ -34,14 +34,16 @@ func TestNewEmitter(t *testing.T) {
 	}()
 
 	deregisterOn := e.On("inc", func(data EventData) {
-		if toAdd, ok := data.(testData); ok {
-			atomic.AddInt64(&i, toAdd.i)
-		}
+		parsed, ok := data.(testData)
+		require.True(t, ok)
+		atomic.AddInt64(&i, parsed.i)
 		if atomic.LoadInt64(&i) >= int64(20) {
 			wg.Done()
 		}
 	})
 	defer deregisterOn()
+
+	require.Equal(t, 2, e.(*emitter).countHandlers("inc"))
 
 	wg.Add(1)
 	go func() {
@@ -64,14 +66,14 @@ func TestEmitter_Once(t *testing.T) {
 	e := NewEmitter()
 
 	e.Once("inc", func(data EventData) {
-		if toAdd, ok := data.(testData); ok {
-			atomic.AddInt64(&i, -toAdd.i)
-		}
+		parsed, ok := data.(testData)
+		require.True(t, ok)
+		atomic.AddInt64(&i, -parsed.i)
 	})
 	e.On("inc", func(data EventData) {
-		if toAdd, ok := data.(testData); ok {
-			atomic.AddInt64(&i, toAdd.i)
-		}
+		parsed, ok := data.(testData)
+		require.True(t, ok)
+		atomic.AddInt64(&i, parsed.i)
 	})
 
 	e.Notify("inc", testData{i: int64(5)})
@@ -81,7 +83,77 @@ func TestEmitter_Once(t *testing.T) {
 
 	require.Equal(t, int64(5), atomic.LoadInt64(&i))
 
-	e.(*emitter).mut.Lock()
-	require.Equal(t, 1, len(e.(*emitter).handlers["inc"]))
-	e.(*emitter).mut.Unlock()
+	require.Equal(t, 1, e.(*emitter).countHandlers("inc"))
 }
+
+//func TestEmitter_Stress(t *testing.T) {
+//	const n = 10000
+//	const nEvents = 100
+//	e := NewEmitter()
+//	var numbers [n]int64
+//
+//	register := func(i int) {
+//		numbers[i] = 0
+//		e.On("inc", func(data EventData) {
+//			parsed, ok := data.(testData)
+//			require.True(t, ok)
+//			atomic.AddInt64(&numbers[i], parsed.i)
+//		})
+//	}
+//	for i := 0; i < n; i++ {
+//		register(i)
+//	}
+//
+//	fmt.Println("registered")
+//
+//	var wg sync.WaitGroup
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		// using sleep to allow event processing
+//		for i := 0; i < nEvents; i++ {
+//			e.Notify("inc", testData{i: int64(1)})
+//			if i%10 == 0 {
+//				time.Sleep(25 * time.Millisecond)
+//			}
+//		}
+//		time.Sleep(5000 * time.Millisecond)
+//		e.Notify("end", testData{i: int64(nEvents)})
+//	}()
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		// using sleep to allow event processing
+//		time.Sleep(50 * time.Millisecond)
+//		for i := 0; i < nEvents; i++ {
+//			e.Notify("inc", testData{i: int64(1)})
+//			if i%5 == 0 {
+//				time.Sleep(20 * time.Millisecond)
+//			}
+//		}
+//		time.Sleep(2000 * time.Millisecond)
+//		e.Notify("end", testData{i: int64(nEvents)})
+//	}()
+//
+//	wg.Add(1)
+//	go func() {
+//		ended := int64(0)
+//		var deregister DeregisterFunc
+//		deregister = e.On("end", func(data EventData) {
+//			parsed, ok := data.(testData)
+//			require.True(t, ok)
+//			atomic.AddInt64(&ended, parsed.i)
+//			if atomic.LoadInt64(&ended) == int64(nEvents*2) {
+//				time.Sleep(1000 * time.Millisecond)
+//				wg.Done()
+//				go deregister()
+//			}
+//		})
+//	}()
+//
+//	wg.Wait()
+//
+//	for i := 0; i < n; i++ {
+//		require.Equal(t, int64(nEvents*2), numbers[i], "wrong value in index %d", i)
+//	}
+//}

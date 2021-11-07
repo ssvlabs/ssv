@@ -44,19 +44,28 @@ func (i *incomingMsgsReader) Start() error {
 	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
-
+	defer func() {
+		if err := i.network.UnSubscribeValidatorNetwork(i.publicKey); err != nil {
+			i.logger.Error("failed to unsubscribe topic", zap.Error(err))
+		}
+	}()
 	if err := i.waitForMinPeers(i.publicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	i.listenToNetwork()
+	//if net, ok := i.network.(network.NetworkWithEmitter); ok {
+	cn, done := i.network.ReceivedChannel(i.publicKey)
+	defer done()
+	i.listenToNetwork(cn)
+	//} else {
+	//	i.listenToNetwork(i.network.ReceivedDecidedChan())
+	//}
 	return nil
 }
 
-func (i *incomingMsgsReader) listenToNetwork() {
-	msgChan := i.network.ReceivedMsgChan()
+func (i *incomingMsgsReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
 	i.logger.Debug("listening to network messages")
-	for msg := range msgChan {
+	for msg := range cn {
 		if msg == nil || msg.Message == nil {
 			i.logger.Info("received invalid msg")
 			continue

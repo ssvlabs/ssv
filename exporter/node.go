@@ -297,31 +297,17 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
-	decidedReader := exp.getDecidedReader(validatorShare)
-
 	// start network reader
 	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
 	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
-
-	// sync decided
-	if err := tasks.Retry(func() error {
-		if err := decidedReader.Sync(); err != nil {
-			logger.Error("could not sync validator", zap.Error(err))
-			return err
-		}
-		return nil
-	}, 3); err != nil {
-		validator.ReportIBFTStatus(pubKey, false, true)
-		logger.Error("could not setup validator, sync failed", zap.Error(err))
-		return err
-	}
-	validator.ReportIBFTStatus(pubKey, true, false)
-	logger.Debug("sync is done, starting to read network messages")
+	// start decided reader
+	decidedReader := exp.getDecidedReader(validatorShare)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
+	logger.Debug("setup validator done")
 	return nil
 }
 
-func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ibft.SyncRead {
+func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ibft.Reader {
 	return ibft.NewDecidedReader(ibft.DecidedReaderOptions{
 		Logger:         exp.logger,
 		Storage:        exp.ibftStorage,

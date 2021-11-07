@@ -14,11 +14,12 @@ import (
 	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
 	"time"
 )
 
@@ -48,7 +49,7 @@ type decidedReader struct {
 }
 
 // newDecidedReader creates new instance of DecidedReader
-func newDecidedReader(opts DecidedReaderOptions) SyncRead {
+func newDecidedReader(opts DecidedReaderOptions) Reader {
 	r := decidedReader{
 		logger: opts.Logger.With(
 			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()),
@@ -64,19 +65,13 @@ func newDecidedReader(opts DecidedReaderOptions) SyncRead {
 	return &r
 }
 
-// Sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
-func (r *decidedReader) Sync() error {
+// sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
+func (r *decidedReader) sync() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	// wait for network setup (subscribe to topic)
-	var netWaitGroup sync.WaitGroup
-	netWaitGroup.Add(1)
-	go func() {
-		defer netWaitGroup.Done()
-		time.Sleep(1 * time.Second)
-	}()
-	netWaitGroup.Wait()
+	time.Sleep(1 * time.Second)
 
 	r.logger.Debug("syncing ibft data")
 	// creating HistorySync and starts it
@@ -94,12 +89,37 @@ func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
+	defer func() {
+		if err := r.network.UnSubscribeValidatorNetwork(r.validatorShare.PublicKey); err != nil {
+			r.logger.Error("failed to unsubscribe topic", zap.Error(err))
+		}
+	}()
 
-	r.logger.Debug("starting to read decided messages")
+	if err := tasks.Retry(func() error {
+		if err := r.sync(); err != nil {
+			r.logger.Error("could not sync validator", zap.Error(err))
+			return err
+		}
+		return nil
+	}, 3); err != nil {
+		validator.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), false, true)
+		r.logger.Error("could not setup validator, sync failed", zap.Error(err))
+		return err
+	}
+	validator.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), true, false)
+
+	r.logger.Debug("sync is done, starting to read network messages")
+
 	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	r.listenToNetwork(r.network.ReceivedDecidedChan())
+	//if r.useEmitter {
+	cn, done := r.network.ReceivedChannel(r.validatorShare.PublicKey)
+	defer done()
+	r.listenToNetwork(cn)
+	//} else {
+	//	r.listenToNetwork(r.network.ReceivedDecidedChan())
+	//}
 	return nil
 }
 
@@ -118,12 +138,14 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 			logger.Debug("received invalid sequence")
 			continue
 		}
-		if saved, err := r.handleNewDecidedMessage(msg); err != nil {
-			logger.Error("could not handle decided message")
-			continue
-		} else if saved {
-			go r.out.Notify("out", newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
-		}
+		go func(msg *proto.SignedMessage) {
+			defer logger.Debug("done with decided msg")
+			if saved, err := r.handleNewDecidedMessage(msg); err != nil && !saved {
+				logger.Error("could not handle decided message", zap.Error(err))
+			} else if err != nil {
+				logger.Error("could not check highest decided", zap.Error(err))
+			}
+		}(msg)
 	}
 }
 
@@ -139,6 +161,7 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool,
 	}
 	logger.Debug("decided saved")
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
+	go r.out.Notify("out", newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	return true, r.checkHighestDecided(msg)
 }
 
@@ -161,7 +184,7 @@ func (r *decidedReader) checkHighestDecided(msg *proto.SignedMessage) error {
 			return nil
 		}
 		if seq > highestSeqKnown+1 {
-			if err := r.Sync(); err != nil {
+			if err := r.sync(); err != nil {
 				logger.Debug("could not sync", zap.Uint64("seq", seq),
 					zap.Uint64("highestSeqKnown", highestSeqKnown))
 				return err

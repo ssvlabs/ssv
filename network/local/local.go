@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/pubsub"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"sync"
@@ -46,6 +47,11 @@ func (n *Local) CopyWithLocalNodeID(id peer.ID) *Local {
 		syncPeers:          n.syncPeers,
 		createChannelMutex: n.createChannelMutex,
 	}
+}
+
+// ReceivedChannel is a channel that forwards new propagated messages to a subscriber
+func (n *Local) ReceivedChannel(validatorPk *bls.PublicKey) (<-chan *proto.SignedMessage, pubsub.DeregisterFunc) {
+	return nil, nil
 }
 
 // ReceivedMsgChan implements network.Local interface
@@ -171,6 +177,11 @@ func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *netwo
 
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
 func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+	return nil
+}
+
+// UnSubscribeValidatorNetwork unsubscribes a validators topic
+func (n *Local) UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error {
 	return nil
 }
 
