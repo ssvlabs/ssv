@@ -182,6 +182,8 @@ spec:
             value: "true"
           - name: IBFT_SYNC_ENABLED
             value: "true"
+          - name: USE_NET_EMITTER
+            value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter
