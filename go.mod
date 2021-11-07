@@ -6,6 +6,7 @@ require (
 	github.com/attestantio/go-eth2-client v0.6.30
 	github.com/bloxapp/eth2-key-manager v1.1.3-0.20211102055147-c66d220973fd
 	github.com/dgraph-io/badger/v3 v3.2103.2
+	github.com/dgraph-io/ristretto v0.1.1-0.20211022170458-efb105d0ca5e
 	github.com/ethereum/go-ethereum v1.10.10
 	github.com/ferranbt/fastssz v0.0.0-20210905181407-59cf6761a7d5
 	github.com/gogo/protobuf v1.3.2
