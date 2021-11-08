@@ -12,13 +12,9 @@ func (n *p2pNetwork) syncStreamHandler() {
 		netSyncStream := NewSyncStream(stream)
 
 		// read msg
-		buf, timedout, err := netSyncStream.ReadWithTimeout(n.cfg.RequestTimeout)
+		buf, err := netSyncStream.ReadWithTimeout(n.cfg.RequestTimeout)
 		if err != nil {
 			n.logger.Error("could not read incoming sync stream", zap.Error(err))
-			return
-		}
-		if timedout {
-			n.logger.Error("timed out reading incoming sync stream", zap.Error(err))
 			return
 		}
 

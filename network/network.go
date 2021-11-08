@@ -27,8 +27,6 @@ type SyncChanObj struct {
 
 // SyncStream is a interface for all stream related functions for the sync process.
 type SyncStream interface {
-	io.Reader
-	io.Writer
 	io.Closer
 
 	// CloseWrite closes the stream for writing but leaves it open for
@@ -42,9 +40,12 @@ type SyncStream interface {
 	RemotePeer() string
 
 	// ReadWithTimeout will read bytes from stream and return the result, will return error if timeout or error.
-	// will return true if timeout
 	// does not close stream when returns
-	ReadWithTimeout(timeout time.Duration) ([]byte, bool, error)
+	ReadWithTimeout(timeout time.Duration) ([]byte, error)
+
+	// WriteWithTimeout will write bytes to stream, will return error if timeout or error.
+	// does not close stream when returns
+	WriteWithTimeout(data []byte, timeout time.Duration) error
 }
 
 // Network represents the behavior of the network

@@ -40,7 +40,7 @@ func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, ms
 		return nil, errors.Wrap(err, "failed to marshal message")
 	}
 
-	if _, err := stream.Write(msgBytes); err != nil {
+	if err := stream.WriteWithTimeout(msgBytes, n.cfg.RequestTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
 	}
 	if err := stream.CloseWrite(); err != nil {
@@ -64,12 +64,9 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMess
 		}
 	}()
 
-	resByts, timedout, err := stream.ReadWithTimeout(n.cfg.RequestTimeout)
+	resByts, err := stream.ReadWithTimeout(n.cfg.RequestTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read sync msg")
-	}
-	if timedout {
-		return nil, errors.New("sync response timeout")
 	}
 	resMsg, err := n.fork.DecodeNetworkMsg(resByts)
 	if err != nil {

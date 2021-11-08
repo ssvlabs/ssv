@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/pkg/errors"
+	"io/ioutil"
 	"time"
 )
 
@@ -16,15 +17,15 @@ func NewSyncStream(stream core.Stream) network.SyncStream {
 	return &syncStream{stream: stream}
 }
 
-// Read reads data to p
-func (s *syncStream) Read(p []byte) (n int, err error) {
-	return s.stream.Read(p)
-}
-
-// Write writes p to stream
-func (s *syncStream) Write(p []byte) (n int, err error) {
-	return s.stream.Write(p)
-}
+//// Read reads data to p
+//func (s *syncStream) Read(p []byte) (n int, err error) {
+//	return s.stream.Read(p)
+//}
+//
+//// Write writes p to stream
+//func (s *syncStream) Write(p []byte) (n int, err error) {
+//	return s.stream.Write(p)
+//}
 
 // Close closes the stream
 func (s *syncStream) Close() error {
@@ -42,19 +43,22 @@ func (s *syncStream) RemotePeer() string {
 }
 
 // ReadWithTimeout reads with timeout
-func (s *syncStream) ReadWithTimeout(timeout time.Duration) ([]byte, bool, error) {
+func (s *syncStream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
 	if err := s.stream.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, true, errors.Wrap(err, "times out reading sync stream")
+		return nil, errors.Wrap(err, "could not set read deadline")
+	}
+	return ioutil.ReadAll(s.stream)
+}
+
+// WriteWithTimeout reads with timeout
+func (s *syncStream) WriteWithTimeout(data []byte, timeout time.Duration) error {
+	if err := s.stream.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return errors.Wrap(err, "could not set read deadline")
 	}
 
-	buf := make([]byte, 0)
-	cnt, err := s.stream.Read(buf)
-	if cnt == 0 {
-
+	bytsWrote, err := s.stream.Write(data)
+	if bytsWrote != len(data) {
+		return errors.New("write to sync stream failed")
 	}
-	if err != nil {
-		return nil, false, errors.Wrap(err, "error reading sync stream")
-	}
-
-	return buf, false, nil
+	return err
 }

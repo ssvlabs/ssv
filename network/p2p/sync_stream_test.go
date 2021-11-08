@@ -52,8 +52,7 @@ func TestSyncStream_ReadWithTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 	s := NewSyncStream(testStreams(t, logger))
 
-	byts, timout, err := s.ReadWithTimeout(time.Second)
+	byts, err := s.ReadWithTimeout(time.Second)
 	require.NoError(t, err)
-	require.False(t, timout)
 	require.Len(t, byts, 10)
 }

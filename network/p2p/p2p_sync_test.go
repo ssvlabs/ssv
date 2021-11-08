@@ -41,24 +41,26 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12000,
-		TCPPort:          13000,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
+		DiscoveryType:     discoveryTypeMdns,
+		Enr:               "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		NetworkPrivateKey: testPrivKey(t),
+		UDPPort:           12000,
+		TCPPort:           13000,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
+		Fork:              testFork(),
 	})
 	require.NoError(t, err)
 
 	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12001,
-		TCPPort:          13001,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
+		DiscoveryType:     discoveryTypeMdns,
+		Enr:               "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		NetworkPrivateKey: testPrivKey(t),
+		UDPPort:           12001,
+		TCPPort:           13001,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
+		Fork:              testFork(),
 	})
 	require.NoError(t, err)
 
@@ -71,7 +73,7 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
 	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
 	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
-	require.EqualError(t, err, "sync response timeout")
+	require.EqualError(t, err, "could not read sync msg: i/o deadline reached")
 	time.Sleep(time.Millisecond * 100)
 	require.Nil(t, res)
 }
@@ -81,24 +83,26 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12000,
-		TCPPort:          13000,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
+		DiscoveryType:     discoveryTypeMdns,
+		Enr:               "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		NetworkPrivateKey: testPrivKey(t),
+		UDPPort:           12000,
+		TCPPort:           13000,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
+		Fork:              testFork(),
 	})
 	require.NoError(t, err)
 
 	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12001,
-		TCPPort:          13001,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
+		DiscoveryType:     discoveryTypeMdns,
+		Enr:               "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
+		NetworkPrivateKey: testPrivKey(t),
+		UDPPort:           12001,
+		TCPPort:           13001,
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 1,
+		Fork:              testFork(),
 	})
 	require.NoError(t, err)
 
@@ -139,6 +143,6 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 
 	// verify stream closed
 	require.NotNil(t, receivedStream)
-	_, err = receivedStream.Write([]byte{1})
-	require.EqualError(t, err, "stream closed")
+	err = receivedStream.WriteWithTimeout([]byte{1}, time.Second*10)
+	require.EqualError(t, err, "write to sync stream failed")
 }
