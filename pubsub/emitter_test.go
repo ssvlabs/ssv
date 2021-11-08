@@ -51,9 +51,11 @@ func TestNewEmitter(t *testing.T) {
 		e.Notify("inc", testData{i: int64(3)})
 		// sleep before calling deregister as Notify works with goroutines
 		time.Sleep(10 * time.Millisecond)
-		deregister()
-		go e.Notify("inc", testData{i: int64(2)})
-		go e.Notify("inc", testData{i: int64(2)})
+		go func() {
+			deregister()
+			go e.Notify("inc", testData{i: int64(2)})
+			go e.Notify("inc", testData{i: int64(2)})
+		}()
 	}()
 
 	wg.Wait()
