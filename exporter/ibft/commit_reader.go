@@ -8,11 +8,11 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 )
 
@@ -22,7 +22,7 @@ type CommitReaderOptions struct {
 	Network          network.Network
 	ValidatorStorage validatorstorage.ICollection
 	IbftStorage      collections.Iibft
-	Out              pubsub.EventPublisher
+	Out              *event.Feed
 }
 
 // commitReader responsible for reading all commit messages
@@ -32,7 +32,7 @@ type commitReader struct {
 	network          network.Network
 	validatorStorage validatorstorage.ICollection
 	ibftStorage      collections.Iibft
-	out              pubsub.EventPublisher
+	out              *event.Feed
 }
 
 // NewCommitReader creates new instance
@@ -102,7 +102,7 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	}
 	if updated {
 		logger.Debug("decided message was updated")
-		go cr.out.Notify("out", newDecidedNetworkMsg(msg, pkHex))
+		go cr.out.Send(newDecidedNetworkMsg(msg, pkHex))
 	}
 	return nil
 }

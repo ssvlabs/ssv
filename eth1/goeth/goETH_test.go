@@ -5,9 +5,9 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"strings"
@@ -28,14 +28,13 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	err = json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
 
-	cn, done := ec.EventEmitter().Channel("in")
+	cn := make(chan *eth1.Event)
+	sub := ec.EventsFeed().Subscribe(cn)
 	require.NoError(t, err)
 	var eventsWg sync.WaitGroup
 	go func() {
-		defer done()
-		for e := range cn {
-			event, ok := e.(eth1.Event)
-			require.True(t, ok)
+		defer sub.Unsubscribe()
+		for event := range cn {
 			if ethEvent, ok := event.Data.(eth1.OperatorAddedEvent); ok {
 				require.NotNil(t, ethEvent)
 				require.NotNil(t, ethEvent.PublicKey)
@@ -69,7 +68,7 @@ func newEth1Client() *eth1Client {
 		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
 			return nil, true, nil
 		},
-		emitter: pubsub.NewEmitter(),
+		eventsFeed: new(event.Feed),
 	}
 	return &ec
 }

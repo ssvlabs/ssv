@@ -24,7 +24,6 @@ type Config struct {
 	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
 
 	NetworkTrace bool `yaml:"NetworkTrace" env:"NETWORK_TRACE" env-description:"A boolean flag to turn on network debugging"`
-	UseEmitter   bool `yaml:"UseEmitter" env:"USE_NET_EMITTER" env-description:"A boolean flag to turn on emitter feature"`
 
 	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
 

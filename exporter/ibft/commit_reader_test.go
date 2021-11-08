@@ -5,13 +5,13 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
-	"github.com/bloxapp/ssv/pubsub"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"strings"
@@ -51,15 +51,14 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
 	reader := setupReaderForTest(t)
 	cr := reader.(*commitReader)
-	cn, done := cr.out.(pubsub.EventSubscriber).Channel("out")
-	defer done()
+	cn := make(chan *api.NetworkMessage)
+	sub := cr.out.Subscribe(cn)
+	defer sub.Unsubscribe()
 
-	var incoming []api.NetworkMessage
+	var incoming []*api.NetworkMessage
 	var mut sync.Mutex
 	go func() {
-		for outbound := range cn {
-			netMsg, ok := outbound.(api.NetworkMessage)
-			require.True(t, ok)
+		for netMsg := range cn {
 			mut.Lock()
 			incoming = append(incoming, netMsg)
 			mut.Unlock()
@@ -207,7 +206,7 @@ func setupReaderForTest(t *testing.T) Reader {
 		Network:          nil,
 		ValidatorStorage: validatorStorage,
 		IbftStorage:      &ibftStorage,
-		Out:              pubsub.NewEmitter(),
+		Out:              new(event.Feed),
 	})
 
 	return cr

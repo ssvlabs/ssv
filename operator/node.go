@@ -120,7 +120,7 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	n.logger.Info("manage to sync contract events")
 
 	// setup validator controller to listen to new events
-	go n.validatorsCtrl.ListenToEth1Events(n.eth1Client.EventEmitter())
+	go n.validatorsCtrl.ListenToEth1Events(n.eth1Client.EventsFeed())
 
 	// starts the eth1 events subscription
 	if err := n.eth1Client.Start(); err != nil {

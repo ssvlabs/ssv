@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
-	pubsub2 "github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/prysmaticlabs/prysm/async"
@@ -64,7 +63,6 @@ type p2pNetwork struct {
 	operatorPrivKey *rsa.PrivateKey
 	fork            forks.Fork
 
-	emitter      pubsub2.Emitter
 	psSubs       map[string]context.CancelFunc
 	psTopicsLock *sync.RWMutex
 
@@ -88,7 +86,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		psTopicsLock:    &sync.RWMutex{},
 		reportLastMsg:   cfg.ReportLastMsg,
 		fork:            cfg.Fork,
-		emitter:         pubsub2.NewEmitter(),
 	}
 
 	if cfg.NetworkPrivateKey != nil {
@@ -217,52 +214,6 @@ func (n *p2pNetwork) getUserAgent() string {
 		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey))
 	}
 	return ua
-}
-
-// propagateSignedMsg takes an incoming message (from validator's topic)
-// and propagates it to the corresponding internal listeners
-func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
-	if cm == nil || cm.SignedMessage == nil {
-		n.logger.Debug("could not propagate nil message")
-		return
-	}
-	n.trace("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
-		zap.Any("msg", cm.SignedMessage))
-
-	switch cm.Type {
-	case network.NetworkMsg_IBFTType:
-		go propagateIBFTMessage(n.listeners, cm.SignedMessage)
-	case network.NetworkMsg_SignatureType:
-		go propagateSigMessage(n.listeners, cm.SignedMessage)
-	case network.NetworkMsg_DecidedType:
-		go propagateDecidedMessage(n.listeners, cm.SignedMessage)
-	default:
-		n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
-	}
-}
-
-func propagateIBFTMessage(listeners []listener, msg *proto.SignedMessage) {
-	for _, ls := range listeners {
-		if ls.msgCh != nil {
-			ls.msgCh <- msg
-		}
-	}
-}
-
-func propagateSigMessage(listeners []listener, msg *proto.SignedMessage) {
-	for _, ls := range listeners {
-		if ls.sigCh != nil {
-			ls.sigCh <- msg
-		}
-	}
-}
-
-func propagateDecidedMessage(listeners []listener, msg *proto.SignedMessage) {
-	for _, ls := range listeners {
-		if ls.decidedCh != nil {
-			ls.decidedCh <- msg
-		}
-	}
 }
 
 func (n *p2pNetwork) getOperatorPubKey() (string, error) {

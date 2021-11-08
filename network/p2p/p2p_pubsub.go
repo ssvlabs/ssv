@@ -3,6 +3,8 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
@@ -163,10 +165,53 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 			if n.reportLastMsg && len(msg.ReceivedFrom) > 0 {
 				reportLastMsg(msg.ReceivedFrom.String())
 			}
-			if n.cfg.UseEmitter {
-				n.emitter.Notify(fmt.Sprintf("in:%s", unwrapTopicName(t)), wireMsg{cm.SignedMessage})
-			}
 			n.propagateSignedMsg(cm)
+		}
+	}
+}
+
+// propagateSignedMsg takes an incoming message (from validator's topic)
+// and propagates it to the corresponding internal listeners
+func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
+	if cm == nil || cm.SignedMessage == nil {
+		n.logger.Debug("could not propagate nil message")
+		return
+	}
+	n.trace("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
+		zap.Any("msg", cm.SignedMessage))
+
+	switch cm.Type {
+	case network.NetworkMsg_IBFTType:
+		go propagateIBFTMessage(n.listeners, cm.SignedMessage)
+	case network.NetworkMsg_SignatureType:
+		go propagateSigMessage(n.listeners, cm.SignedMessage)
+	case network.NetworkMsg_DecidedType:
+		go propagateDecidedMessage(n.listeners, cm.SignedMessage)
+	default:
+		n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
+	}
+}
+
+func propagateIBFTMessage(listeners []listener, msg *proto.SignedMessage) {
+	for _, ls := range listeners {
+		if ls.msgCh != nil {
+			ls.msgCh <- msg
+		}
+	}
+}
+
+func propagateSigMessage(listeners []listener, msg *proto.SignedMessage) {
+	for _, ls := range listeners {
+		if ls.sigCh != nil {
+			ls.sigCh <- msg
+		}
+	}
+}
+
+func propagateDecidedMessage(listeners []listener, msg *proto.SignedMessage) {
+	for _, ls := range listeners {
+		if ls.decidedCh != nil {
+			ls.decidedCh <- msg
 		}
 	}
 }

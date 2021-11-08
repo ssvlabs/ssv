@@ -2,7 +2,6 @@ package network
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"io"
 	"time"
@@ -47,8 +46,6 @@ type SyncStream interface {
 
 // Reader is the interface for reading messages from the network
 type Reader interface {
-	// ReceivedChannel is a channel that forwards new propagated messages to a subscriber
-	ReceivedChannel(validatorPk *bls.PublicKey) (<-chan *proto.SignedMessage, pubsub.DeregisterFunc)
 	// ReceivedMsgChan is a channel that forwards new propagated messages to a subscriber
 	ReceivedMsgChan() <-chan *proto.SignedMessage
 	// ReceivedSignatureChan returns the channel with signatures

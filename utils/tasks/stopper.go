@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"github.com/bloxapp/ssv/pubsub"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -16,18 +15,20 @@ type Stopper interface {
 type stopper struct {
 	logger  *zap.Logger
 	stopped bool
-	emitter pubsub.Emitter
-	mut     sync.RWMutex
+	mut     sync.Mutex
 }
 
 func newStopper(logger *zap.Logger) *stopper {
-	s := stopper{emitter: pubsub.NewEmitter(), logger: logger}
+	s := stopper{
+		logger: logger,
+		mut:    sync.Mutex{},
+	}
 	return &s
 }
 
 func (s *stopper) IsStopped() bool {
-	s.mut.RLock()
-	defer s.mut.RUnlock()
+	s.mut.Lock()
+	defer s.mut.Unlock()
 
 	return s.stopped
 }
@@ -37,12 +38,4 @@ func (s *stopper) stop() {
 	defer s.mut.Unlock()
 
 	s.stopped = true
-	s.emitter.Notify("stop", stoppedEvent{})
-}
-
-type stoppedEvent struct{}
-
-// Copy implements pubsub.EventData
-func (se stoppedEvent) Copy() interface{} {
-	return se
 }

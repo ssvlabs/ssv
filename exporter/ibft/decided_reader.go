@@ -11,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -19,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"time"
 )
@@ -31,7 +31,7 @@ type DecidedReaderOptions struct {
 	Config         *proto.InstanceConfig
 	ValidatorShare *storage.Share
 
-	Out pubsub.EventPublisher
+	Out *event.Feed
 }
 
 // decidedReader reads decided messages history
@@ -43,7 +43,7 @@ type decidedReader struct {
 	config         *proto.InstanceConfig
 	validatorShare *storage.Share
 
-	out pubsub.EventPublisher
+	out *event.Feed
 
 	identifier []byte
 }
@@ -113,13 +113,7 @@ func (r *decidedReader) Start() error {
 	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	//if r.useEmitter {
-	cn, done := r.network.ReceivedChannel(r.validatorShare.PublicKey)
-	defer done()
-	r.listenToNetwork(cn)
-	//} else {
-	//	r.listenToNetwork(r.network.ReceivedDecidedChan())
-	//}
+	r.listenToNetwork(r.network.ReceivedDecidedChan())
 	return nil
 }
 
@@ -161,7 +155,7 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool,
 	}
 	logger.Debug("decided saved")
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
-	go r.out.Notify("out", newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
+	go r.out.Send(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	return true, r.checkHighestDecided(msg)
 }
 
@@ -234,8 +228,8 @@ func validateMsg(msg *proto.SignedMessage, identifier string) error {
 	return p.Run(msg)
 }
 
-func newDecidedNetworkMsg(msg *proto.SignedMessage, pk string) api.NetworkMessage {
-	return api.NetworkMessage{Msg: api.Message{
+func newDecidedNetworkMsg(msg *proto.SignedMessage, pk string) *api.NetworkMessage {
+	return &api.NetworkMessage{Msg: api.Message{
 		Type: api.TypeDecided,
 		Filter: api.MessageFilter{
 			PublicKey: pk,

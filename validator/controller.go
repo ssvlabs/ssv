@@ -8,12 +8,12 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/forks"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"time"
 
@@ -44,7 +44,7 @@ type ControllerOptions struct {
 // IController represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type IController interface {
-	ListenToEth1Events(em pubsub.EventSubscriber)
+	ListenToEth1Events(feed *event.Feed)
 	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
@@ -107,14 +107,18 @@ func NewController(options ControllerOptions) IController {
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
-func (c *controller) ListenToEth1Events(em pubsub.EventSubscriber) {
-	cn, done := em.Channel("in")
-	defer done()
-	for e := range cn {
-		if event, ok := e.(eth1.Event); ok {
-			if err := c.ProcessEth1Event(event); err != nil {
+func (c *controller) ListenToEth1Events(feed *event.Feed) {
+	cn := make(chan *eth1.Event)
+	sub := feed.Subscribe(cn)
+	defer sub.Unsubscribe()
+	for {
+		select {
+		case event := <-cn:
+			if err := c.ProcessEth1Event(*event); err != nil {
 				c.logger.Error("could not process event", zap.Error(err))
 			}
+		case err := <-sub.Err():
+			c.logger.Error("event feed subscription error", zap.Error(err))
 		}
 	}
 }

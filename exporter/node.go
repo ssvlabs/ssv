@@ -113,7 +113,7 @@ func New(opts Options) Exporter {
 			Network:          opts.Network,
 			ValidatorStorage: validatorStorage,
 			IbftStorage:      &ibftStorage,
-			Out:              opts.WS.OutboundEmitter(),
+			Out:              opts.WS.OutboundFeed(),
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
@@ -231,7 +231,7 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	exp.logger.Info("managed to sync contract events")
 
 	// register for contract events that will arrive from eth1Client
-	errCn := exp.listenToEth1Events(exp.eth1Client.EventEmitter())
+	errCn := exp.listenToEth1Events(exp.eth1Client.EventsFeed())
 	go func() {
 		// log errors while processing events
 		for err := range errCn {
@@ -314,7 +314,7 @@ func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ib
 		Network:        exp.network,
 		Config:         proto.DefaultConsensusParams(),
 		ValidatorShare: validatorShare,
-		Out:            exp.ws.OutboundEmitter(),
+		Out:            exp.ws.OutboundFeed(),
 	})
 }
 

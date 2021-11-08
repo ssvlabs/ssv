@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -16,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"log"
 	"math/big"
@@ -70,7 +70,7 @@ type eth1Client struct {
 	contractABI          string
 	connectionTimeout    time.Duration
 
-	emitter pubsub.Emitter
+	eventsFeed *event.Feed
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -90,7 +90,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
 		connectionTimeout:          opts.ConnectionTimeout,
-		emitter:                    pubsub.NewEmitter(),
+		eventsFeed:                 new(event.Feed),
 	}
 
 	if err := ec.connect(); err != nil {
@@ -101,9 +101,9 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	return &ec, nil
 }
 
-// EventEmitter returns the contract events emitter
-func (ec *eth1Client) EventEmitter() pubsub.EventSubscriber {
-	return ec.emitter
+// EventsFeed returns the contract events feed
+func (ec *eth1Client) EventsFeed() *event.Feed {
+	return ec.eventsFeed
 }
 
 // Start streams events from the contract
@@ -188,7 +188,8 @@ func (ec *eth1Client) reconnect() {
 // fireEvent notifies observers about some contract event
 func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
 	e := eth1.Event{Log: log, Data: data}
-	ec.emitter.Notify("in", e)
+	n := ec.eventsFeed.Send(&e)
+	ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
 }
 
 // streamSmartContractEvents sync events history of the given contract

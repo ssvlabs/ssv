@@ -52,13 +52,7 @@ func (i *incomingMsgsReader) Start() error {
 	if err := i.waitForMinPeers(i.publicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	//if net, ok := i.network.(network.NetworkWithEmitter); ok {
-	cn, done := i.network.ReceivedChannel(i.publicKey)
-	defer done()
-	i.listenToNetwork(cn)
-	//} else {
-	//	i.listenToNetwork(i.network.ReceivedDecidedChan())
-	//}
+	i.listenToNetwork(i.network.ReceivedDecidedChan())
 	return nil
 }
 

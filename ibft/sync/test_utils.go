@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/pubsub"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -120,11 +119,6 @@ func NewTestNetwork(
 // Broadcast impl
 func (n *TestNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
 	return nil
-}
-
-// ReceivedChannel is a channel that forwards new propagated messages to a subscriber
-func (n *TestNetwork) ReceivedChannel(validatorPk *bls.PublicKey) (<-chan *proto.SignedMessage, pubsub.DeregisterFunc) {
-	return nil, nil
 }
 
 // ReceivedMsgChan impl

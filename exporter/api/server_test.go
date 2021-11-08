@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/exporter/storage"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -61,26 +60,30 @@ func TestHandleStream(t *testing.T) {
 	conn2 := connectionMock{addr: ipAddr2}
 	go ws.handleStream(&conn2)
 
-	sub, ok := ws.OutboundEmitter().(pubsub.EventSubscriber)
-	require.True(t, ok)
+	cn1 := make(chan *NetworkMessage)
+	sub1 := ws.out.Subscribe(cn1)
+	defer sub1.Unsubscribe()
 	// register a listener to count how many messages are passed on outbound subject
 	var outCnCount int64
 	var wgCn sync.WaitGroup
 	wgCn.Add(3)
-	cn1, done1 := sub.Channel("out")
-	defer done1()
 	go func() {
 		for range cn1 {
 			atomic.AddInt64(&outCnCount, int64(1))
 			wgCn.Done()
 		}
 	}()
-	cn2, done2 := sub.Channel("out")
+	cn2 := make(chan *NetworkMessage)
+	sub2 := ws.out.Subscribe(cn2)
 	// registers a dummy listener that de-registers
 	go func() {
-		defer done2()
+		defer sub2.Unsubscribe()
+		var count int
 		for range cn2 {
-			return
+			count++
+			if count == 2 {
+				return
+			}
 		}
 	}()
 	// expecting outbound messages
@@ -105,32 +108,23 @@ func TestHandleStream(t *testing.T) {
 	go func() {
 		// sleep so setup will be finished
 		time.Sleep(10 * time.Millisecond)
+		// let the messages propagate
+		defer time.Sleep(20 * time.Millisecond)
 
 		// sending 3 messages in the stream channel
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeValidator,
-				Filter: MessageFilter{From: 0},
-				Data: []storage.ValidatorInformation{
-					{PublicKey: "pubkey1"},
-					{PublicKey: "pubkey2"},
-				},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		go ws.OutboundEmitter().Notify("out", nm)
+		ws.out.Send(newTestMessage())
 
-		nm.Msg.Data = []storage.OperatorInformation{
+		nm2 := newTestMessage()
+		nm2.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
-		go ws.OutboundEmitter().Notify("out", nm)
-		nm.Msg.Data = []storage.ValidatorInformation{
+		ws.out.Send(nm2)
+
+		nm3 := newTestMessage()
+		nm3.Msg.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
-		ws.OutboundEmitter().Notify("out", nm)
-		// let the message propagate
-		time.Sleep(10 * time.Millisecond)
+		ws.out.Send(nm3)
 	}()
 
 	wg.Wait()
@@ -149,4 +143,19 @@ func (cm *connectionMock) Close() error {
 
 func (cm *connectionMock) LocalAddr() net.Addr {
 	return cm.addr
+}
+
+func newTestMessage() *NetworkMessage {
+	return &NetworkMessage{
+		Msg: Message{
+			Type:   TypeValidator,
+			Filter: MessageFilter{From: 0},
+			Data: []storage.ValidatorInformation{
+				{PublicKey: "pubkey1"},
+				{PublicKey: "pubkey2"},
+			},
+		},
+		Err:  nil,
+		Conn: nil,
+	}
 }

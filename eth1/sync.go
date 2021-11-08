@@ -48,30 +48,34 @@ func HexStringToSyncOffset(shex string) *SyncOffset {
 func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
-	cn, deregister := client.EventEmitter().Channel("in")
+	cn := make(chan *Event)
+	feed := client.EventsFeed()
+	sub := feed.Subscribe(cn)
 
 	q := tasks.NewExecutionQueue(5 * time.Millisecond)
-	go q.Start()
 	defer q.Stop()
+	go q.Start()
+	queue := func(e Event) {
+		q.Queue(func() error {
+			return handler(e)
+		})
+	}
 	// Stop once SyncEndedEvent arrives
 	var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
 	syncWg.Add(1)
 	go func() {
+		var ok bool
 		defer syncWg.Done()
-		defer deregister()
-		for e := range cn {
-			if event, ok := e.(Event); ok {
-				if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
-					return
-				}
-				logger.Debug("got new event from eth1 sync",
-					zap.Uint64("BlockNumber", event.Log.BlockNumber))
-				if handler != nil {
-					q.Queue(func() error {
-						return handler(event)
-					})
-				}
+		defer sub.Unsubscribe()
+		for event := range cn {
+			if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
+				return
+			}
+			logger.Debug("got new event from eth1 sync",
+				zap.Uint64("BlockNumber", event.Log.BlockNumber))
+			if handler != nil {
+				queue(*event)
 			}
 		}
 	}()

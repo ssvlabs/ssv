@@ -2,9 +2,9 @@ package api
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"net/http"
 	"sync"
@@ -14,29 +14,28 @@ import (
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
 	Start(addr string) error
-	OutboundEmitter() pubsub.EventPublisher
+	OutboundFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
 
 // wsServer is an implementation of WebSocketServer
 type wsServer struct {
 	logger *zap.Logger
-	// outbound is a subject for writing messages
-	outbound pubsub.Emitter
 
 	handler QueryMessageHandler
 
 	adapter WebSocketAdapter
 
 	router *http.ServeMux
+	// out is a subject for writing messages
+	out *event.Feed
 }
 
 // NewWsServer creates a new instance
 func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
 		logger.With(zap.String("component", "exporter/api/server")),
-		pubsub.NewEmitter(),
-		handler, adapter, mux,
+		handler, adapter, mux, new(event.Feed),
 	}
 	return &ws
 }
@@ -63,8 +62,8 @@ func (ws *wsServer) Start(addr string) error {
 	return err
 }
 
-func (ws *wsServer) OutboundEmitter() pubsub.EventPublisher {
-	return ws.outbound
+func (ws *wsServer) OutboundFeed() *event.Feed {
+	return ws.out
 }
 
 // handleQuery receives query message and respond async
@@ -112,7 +111,9 @@ func (ws *wsServer) handleStream(conn Connection) {
 	// the reason is that messages cannot be sent on a different goroutine,
 	// but we can't use the same goroutine to pick up messages and send requests
 	// as sending blocks the goroutine from picking up messages from the channel.
-	out, outDone := ws.outbound.Channel("out")
+	cn := make(chan *NetworkMessage)
+	sub := ws.out.Subscribe(cn)
+
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
 	var mut sync.Mutex
@@ -121,28 +122,27 @@ func (ws *wsServer) handleStream(conn Connection) {
 	msgLimit := 1000
 
 	go func() {
-		defer outDone()
+		defer sub.Unsubscribe()
 
-		for m := range out {
-			if ctx.Err() != nil {
+	outboundSubscriptionLoop:
+		for {
+			select {
+			case nm := <-cn:
+				mut.Lock()
+				if len(msgs) < msgLimit {
+					msgs = append(msgs, *nm)
+					mut.Unlock()
+					reportStreamOutboundQueueCount(cid, true)
+					continue outboundSubscriptionLoop
+				}
+				running = false
+				mut.Unlock()
+				logger.Error("queue is full, stopped listen on outbound channel", zap.Any("msg", nm.Msg))
+				return
+			case err := <-sub.Err():
+				logger.Debug("subscription error", zap.Error(err))
 				return
 			}
-			nm, ok := m.(NetworkMessage)
-			if !ok {
-				logger.Warn("could not parse message")
-				continue
-			}
-			mut.Lock()
-			if len(msgs) < msgLimit {
-				msgs = append(msgs, nm)
-				mut.Unlock()
-				reportStreamOutboundQueueCount(cid, true)
-				continue
-			}
-			running = false
-			mut.Unlock()
-			logger.Error("queue is full, stopped listen on outbound channel", zap.Any("msg", nm.Msg))
-			return
 		}
 	}()
 

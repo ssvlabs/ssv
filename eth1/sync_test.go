@@ -1,9 +1,9 @@
 package eth1
 
 import (
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -19,9 +19,9 @@ func TestSyncEth1(t *testing.T) {
 		// wait 5 ms and start to push events
 		time.Sleep(5 * time.Millisecond)
 		logs := []types.Log{{BlockNumber: rawOffset - 1}, {BlockNumber: rawOffset}}
-		eth1Client.Emitter.Notify("in", Event{Data: struct{}{}, Log: logs[0]})
-		eth1Client.Emitter.Notify("in", Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.Emitter.Notify("in", Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
+		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[1]})
+		eth1Client.Feed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.NoError(t, err)
@@ -36,9 +36,9 @@ func TestSyncEth1Error(t *testing.T) {
 	eth1Client.SyncResponse = errors.New("eth1-sync-test")
 	go func() {
 		logs := []types.Log{{}, {BlockNumber: DefaultSyncOffset().Uint64()}}
-		eth1Client.Emitter.Notify("in", Event{Data: struct{}{}, Log: logs[0]})
-		eth1Client.Emitter.Notify("in", Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.Emitter.Notify("in", Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
+		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[1]})
+		eth1Client.Feed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
@@ -51,10 +51,10 @@ func TestSyncEth1Error(t *testing.T) {
 func TestSyncEth1HandlerError(t *testing.T) {
 	logger, eth1Client, storage := setupStorageWithEth1ClientMock()
 	go func() {
-		logs := []types.Log{{}, {BlockNumber: DefaultSyncOffset().Uint64()}}
-		eth1Client.Emitter.Notify("in", Event{Data: struct{}{}, Log: logs[0]})
-		eth1Client.Emitter.Notify("in", Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.Emitter.Notify("in", Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
+		logs := []types.Log{{BlockNumber: DefaultSyncOffset().Uint64() - 1}, {BlockNumber: DefaultSyncOffset().Uint64()}}
+		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[0]})
+		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[1]})
+		eth1Client.Feed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) error {
 		return errors.New("test")
@@ -95,7 +95,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 func setupStorageWithEth1ClientMock() (*zap.Logger, *ClientMock, *syncStorageMock) {
 	logger := zap.L()
-	eth1Client := ClientMock{Emitter: pubsub.NewEmitter(), SyncTimeout: 50 * time.Millisecond}
+	eth1Client := ClientMock{Feed: new(event.Feed), SyncTimeout: 50 * time.Millisecond}
 	storage := syncStorageMock{[]byte{}}
 	return logger, &eth1Client, &storage
 }
