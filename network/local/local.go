@@ -122,7 +122,7 @@ func (n *Local) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessa
 			}
 		}()
 
-		ret := <-stream.ReceiveChan
+		ret := <-stream.(*Stream).ReceiveChan
 		return ret, nil
 	}
 	return nil, errors.New("could not find peer")
@@ -156,7 +156,7 @@ func (n *Local) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*ne
 			}
 		}()
 
-		ret := <-stream.ReceiveChan
+		ret := <-stream.(*Stream).ReceiveChan
 		return ret, nil
 	}
 	return nil, errors.New("could not find peer")

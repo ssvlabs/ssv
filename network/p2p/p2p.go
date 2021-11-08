@@ -91,7 +91,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	if cfg.NetworkPrivateKey != nil {
 		n.privKey = cfg.NetworkPrivateKey
 	} else {
-		privKey, err := privKey()
+		privKey, err := privKey(true)
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to generate p2p private key")
 		}
