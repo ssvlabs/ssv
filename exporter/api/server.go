@@ -7,12 +7,12 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"net/http"
-	"sync"
 	"time"
 )
 
-const (
+var (
 	msgQueueLimit = 100
+	sendTimeout   = 3 * time.Second
 )
 
 // WebSocketServer is responsible for managing all
@@ -110,6 +110,7 @@ func (ws *wsServer) handleStream(conn Connection) {
 	cid := ConnectionID(conn)
 	logger := ws.logger.
 		With(zap.String("cid", cid))
+	defer logger.Debug("stream handler done")
 	// messages are being collected into a slice and picked up in another goroutine.
 	//
 	// the reason is that messages cannot be sent on a different goroutine,
@@ -120,53 +121,39 @@ func (ws *wsServer) handleStream(conn Connection) {
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
-	var mut sync.Mutex
-	running := true
-	var msgs []NetworkMessage
+
+	q := newMsgQ()
 
 	go func() {
 		defer sub.Unsubscribe()
-		defer func() {
-			mut.Lock()
-			running = false
-			mut.Unlock()
-		}()
+		defer q.stop()
 
-	outboundSubscriptionLoop:
 		for {
 			select {
 			case nm := <-cn:
-				mut.Lock()
-				if len(msgs) < msgQueueLimit {
-					msgs = append(msgs, *nm)
-					mut.Unlock()
-					reportStreamOutboundQueueCount(cid, true)
-					continue outboundSubscriptionLoop
+				if !q.enqueue(nm) {
+					logger.Error("queue is full, closing connection", zap.Any("msg", nm.Msg))
+					return
 				}
-				mut.Unlock()
-				logger.Error("queue is full, stopped listen on outbound channel", zap.Any("msg", nm.Msg))
-				return
 			case err := <-sub.Err():
 				logger.Debug("subscription error", zap.Error(err))
+				return
+			case <-ctx.Done():
+				logger.Debug("context done")
 				return
 			}
 		}
 	}()
 
 	for {
-		mut.Lock()
+		nm, running := q.dequeue()
 		if !running {
-			mut.Unlock()
 			return
 		}
-		if len(msgs) == 0 {
-			mut.Unlock()
+		if nm == nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		nm := msgs[0]
-		msgs = msgs[1:]
-		mut.Unlock()
 		reportStreamOutboundQueueCount(cid, false)
 		logger.Debug("sending outbound",
 			zap.String("msg.type", string(nm.Msg.Type)), zap.Any("msg", nm.Msg))
@@ -182,8 +169,9 @@ func (ws *wsServer) handleStream(conn Connection) {
 // send takes the given message and try (3 times) to send it
 // the whole operation will timeout after 3 sec
 func (ws *wsServer) send(ctx context.Context, conn Connection, msg Message) error {
-	sendCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
+
 	return tasks.RetryWithContext(sendCtx, func() error {
 		return ws.adapter.Send(conn, &msg)
 	}, 3)

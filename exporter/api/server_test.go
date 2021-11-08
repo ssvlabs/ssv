@@ -44,6 +44,55 @@ func TestHandleQuery(t *testing.T) {
 	<-adapter.Out
 }
 
+func TestHandleStream_FullMessageQueue(t *testing.T) {
+	x := msgQueueLimit
+	msgQueueLimit = 2
+	defer func() {
+		msgQueueLimit = x
+	}()
+	var out uint32
+
+	logger := zaptest.NewLogger(t)
+	adapter := NewAdapterMock(logger).(*AdapterMock)
+	adapter.Out = make(chan Message) // set the channel to be non-buffered
+	ws := NewWsServer(logger, adapter, nil, nil).(*wsServer)
+	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
+	require.NoError(t, err)
+	conn := connectionMock{addr: ipAddr}
+	// expecting 2 outbound messages (the third exceeds queue limit)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ws.handleStream(&conn)
+	}()
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		// let the messages propagate
+		defer time.Sleep(20 * time.Millisecond)
+		//logger.Debug("sending message 1")
+		// sending 3 messages in the stream channel
+		ws.out.Send(newTestMessage())
+		ws.out.Send(newTestMessage())
+		time.AfterFunc(300*time.Millisecond, func() {
+			defer wg.Done()
+			<-adapter.Out
+			atomic.AddUint32(&out, uint32(1))
+			ws.out.Send(newTestMessage())
+			ws.out.Send(newTestMessage())
+			ws.out.Send(newTestMessage())
+			ws.out.Send(newTestMessage())
+			ws.out.Send(newTestMessage())
+			<-adapter.Out
+			atomic.AddUint32(&out, uint32(1))
+		})
+	}()
+
+	wg.Wait()
+	require.Equal(t, uint32(2), atomic.LoadUint32(&out))
+}
+
 func TestHandleStream(t *testing.T) {
 	msgCount := 3
 	logger := zaptest.NewLogger(t)
