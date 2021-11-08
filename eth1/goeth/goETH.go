@@ -188,8 +188,9 @@ func (ec *eth1Client) reconnect() {
 // fireEvent notifies observers about some contract event
 func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
 	e := eth1.Event{Log: log, Data: data}
-	n := ec.eventsFeed.Send(&e)
-	ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
+	_ = ec.eventsFeed.Send(&e)
+	// TODO: add trace
+	//ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
 }
 
 // streamSmartContractEvents sync events history of the given contract

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// // UnSubscribeValidatorNetwork unsubscribes a validators topic
+// UnSubscribeValidatorNetwork unsubscribes a validators topic
 func (n *p2pNetwork) UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error {
 	pubKey := validatorPk.SerializeToHexStr()
 
