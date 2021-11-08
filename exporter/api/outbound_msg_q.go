@@ -1,6 +1,12 @@
 package api
 
-import "sync"
+import (
+	"sync"
+)
+
+var (
+	msgQueueLimit = 100
+)
 
 type msgQueue struct {
 	mut     sync.Mutex

@@ -10,9 +10,8 @@ import (
 	"time"
 )
 
-var (
-	msgQueueLimit = 100
-	sendTimeout   = 3 * time.Second
+const (
+	sendTimeout = 3 * time.Second
 )
 
 // WebSocketServer is responsible for managing all
