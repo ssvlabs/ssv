@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/logex"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ func testPrivKey(t *testing.T) *ecdsa.PrivateKey {
 	return ret
 }
 
-func testStreams(t *testing.T, logger *zap.Logger) core.Stream {
+func testPeers(t *testing.T, logger *zap.Logger) (network.Network, network.Network) {
 	// create 2 peers
 	peer1, err := New(context.Background(), logger, &Config{
 		DiscoveryType:     discoveryTypeMdns,
@@ -43,16 +44,55 @@ func testStreams(t *testing.T, logger *zap.Logger) core.Stream {
 	})
 	require.NoError(t, err)
 
-	ret, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID())
-	require.NoError(t, err)
-	return ret
+	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
+
+	return peer1, peer2
 }
 
 func TestSyncStream_ReadWithTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
-	s := NewSyncStream(testStreams(t, logger))
-
-	byts, err := s.ReadWithTimeout(time.Second)
+	peer1, peer2 := testPeers(t, logger)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
 	require.NoError(t, err)
-	require.Len(t, byts, 10)
+
+	strm := NewSyncStream(s)
+
+	byts, err := strm.ReadWithTimeout(time.Second)
+	require.EqualError(t, err, "i/o deadline reached")
+	require.Len(t, byts, 0)
+}
+
+func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
+	logger := logex.Build("test", zap.DebugLevel, nil)
+	peer1, peer2 := testPeers(t, logger)
+
+	readByts := false
+	peer2.(*p2pNetwork).host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
+		netSyncStream := NewSyncStream(stream)
+
+		// read msg
+		buf, err := netSyncStream.ReadWithTimeout(time.Millisecond * 100)
+		require.NoError(t, err)
+
+		require.Len(t, buf, 10)
+		readByts = true
+	})
+
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
+	require.NoError(t, err)
+	strm := NewSyncStream(s)
+	err = strm.WriteWithTimeout(make([]byte, 10), time.Millisecond*100)
+	require.NoError(t, err)
+	require.NoError(t, strm.CloseWrite())
+
+	time.Sleep(time.Millisecond * 300)
+	require.True(t, readByts)
+}
+
+func TestSyncStream_WriteWithTimeout(t *testing.T) {
+	logger := logex.Build("test", zap.DebugLevel, nil)
+	peer1, peer2 := testPeers(t, logger)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
+	require.NoError(t, err)
+	require.EqualError(t, NewSyncStream(s).WriteWithTimeout(make([]byte, 100), time.Millisecond*-10), "i/o deadline reached")
 }

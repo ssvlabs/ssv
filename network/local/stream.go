@@ -2,6 +2,7 @@ package local
 
 import (
 	"github.com/bloxapp/ssv/network"
+	"time"
 )
 
 // Stream is used by local network
@@ -12,7 +13,7 @@ type Stream struct {
 }
 
 // NewLocalStream returs a stream instance
-func NewLocalStream(From string, To string) *Stream {
+func NewLocalStream(From string, To string) network.SyncStream {
 	return &Stream{
 		From:        From,
 		To:          To,
@@ -20,20 +21,10 @@ func NewLocalStream(From string, To string) *Stream {
 	}
 }
 
-// Read  implementation
-func (s *Stream) Read(p []byte) (n int, err error) {
-	panic("implement")
-}
-
 // WriteSynMsg implementation
 func (s *Stream) WriteSynMsg(msg *network.SyncMessage) (n int, err error) {
 	s.ReceiveChan <- msg
 	return 0, nil
-}
-
-// Write implementation
-func (s *Stream) Write(p []byte) (n int, err error) {
-	panic("implement")
 }
 
 // Close implementation
@@ -48,5 +39,13 @@ func (s *Stream) CloseWrite() error {
 
 // RemotePeer implementation
 func (s *Stream) RemotePeer() string {
+	panic("implement")
+}
+
+func (s *Stream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
+	panic("implement")
+}
+
+func (s *Stream) WriteWithTimeout(data []byte, timeout time.Duration) error {
 	panic("implement")
 }
