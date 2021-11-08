@@ -11,8 +11,6 @@ import (
 type Stopper interface {
 	// IsStopped returns true if the stopper already stopped
 	IsStopped() bool
-	// Chan returns a bool channel to be notified once stopped
-	Chan() chan bool
 }
 
 type stopper struct {
@@ -32,14 +30,6 @@ func (s *stopper) IsStopped() bool {
 	defer s.mut.RUnlock()
 
 	return s.stopped
-}
-
-func (s *stopper) Chan() chan bool {
-	res := make(chan bool, 1)
-	s.emitter.Once("stop", func(data pubsub.EventData) {
-		res <- true
-	})
-	return res
 }
 
 func (s *stopper) stop() {

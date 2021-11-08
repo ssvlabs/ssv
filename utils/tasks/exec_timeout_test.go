@@ -42,16 +42,13 @@ func TestExecWithTimeout(t *testing.T) {
 
 			stopped.Add(1)
 			fn := func(stopper Stopper) (interface{}, error) {
-				stop := stopper.Chan()
 				for {
-					select {
-					case <-stop:
+					if stopper.IsStopped() {
 						stopped.Done()
 						return true, nil
-					default:
-						atomic.AddUint32(&count, 1)
-						time.Sleep(2 * time.Millisecond)
 					}
+					atomic.AddUint32(&count, 1)
+					time.Sleep(2 * time.Millisecond)
 				}
 			}
 			completed, _, err := ExecWithTimeout(test.ctx, fn, test.t)
