@@ -89,11 +89,3 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 	time.Sleep(time.Millisecond * 300)
 	require.True(t, readByts.Get())
 }
-
-func TestSyncStream_WriteWithTimeout(t *testing.T) {
-	logger := logex.Build("test", zap.DebugLevel, nil)
-	peer1, peer2 := testPeers(t, logger)
-	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), highestDecidedStream)
-	require.NoError(t, err)
-	require.EqualError(t, NewSyncStream(s).WriteWithTimeout(make([]byte, 100), time.Millisecond*-100), "i/o deadline reached")
-}
