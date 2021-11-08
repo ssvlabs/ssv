@@ -1,0 +1,60 @@
+package p2p
+
+import (
+	"github.com/bloxapp/ssv/network"
+	core "github.com/libp2p/go-libp2p-core"
+	"github.com/pkg/errors"
+	"time"
+)
+
+// syncStream is a wrapper struct for the core.Stream interface to match the network.SyncStream interface
+type syncStream struct {
+	stream core.Stream
+}
+
+func NewSyncStream(stream core.Stream) network.SyncStream {
+	return &syncStream{stream: stream}
+}
+
+// Read reads data to p
+func (s *syncStream) Read(p []byte) (n int, err error) {
+	return s.stream.Read(p)
+}
+
+// Write writes p to stream
+func (s *syncStream) Write(p []byte) (n int, err error) {
+	return s.stream.Write(p)
+}
+
+// Close closes the stream
+func (s *syncStream) Close() error {
+	return s.stream.Close()
+}
+
+// CloseWrite closes write stream
+func (s *syncStream) CloseWrite() error {
+	return s.stream.CloseWrite()
+}
+
+// RemotePeer returns connected peer
+func (s *syncStream) RemotePeer() string {
+	return s.stream.Conn().RemotePeer().String()
+}
+
+// ReadWithTimeout reads with timeout
+func (s *syncStream) ReadWithTimeout(timeout time.Duration) ([]byte, bool, error) {
+	if err := s.stream.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, true, errors.Wrap(err, "times out reading sync stream")
+	}
+
+	buf := make([]byte, 0)
+	cnt, err := s.stream.Read(buf)
+	if cnt == 0 {
+
+	}
+	if err != nil {
+		return nil, false, errors.Wrap(err, "error reading sync stream")
+	}
+
+	return buf, false, nil
+}

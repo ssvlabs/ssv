@@ -4,6 +4,11 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"io"
+	"time"
+)
+
+const (
+	MaxSyncMsgSize = 2048 // in bytes
 )
 
 // Message is a container for network messages.
@@ -35,6 +40,11 @@ type SyncStream interface {
 
 	// RemotePeer returns a string identifier of the remote peer connected to this stream
 	RemotePeer() string
+
+	// ReadWithTimeout will read bytes from stream and return the result, will return error if timeout or error.
+	// will return true if timeout
+	// does not close stream when returns
+	ReadWithTimeout(timeout time.Duration) ([]byte, bool, error)
 }
 
 // Network represents the behavior of the network

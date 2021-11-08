@@ -17,22 +17,26 @@ import (
 // privKey determines a private key for p2p networking from the p2p service's
 // configuration struct. If no key is found, it generates a new one
 // TODO: private key is always generated instead of loaded from storage
-func privKey() (*ecdsa.PrivateKey, error) {
-	defaultKeyPath := defaultDataDir()
-
+func privKey(saveToFile bool) (*ecdsa.PrivateKey, error) {
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	rawbytes, err := priv.Raw()
-	if err != nil {
-		return nil, err
+
+	if saveToFile {
+		defaultKeyPath := defaultDataDir()
+
+		rawbytes, err := priv.Raw()
+		if err != nil {
+			return nil, err
+		}
+		dst := make([]byte, hex.EncodedLen(len(rawbytes)))
+		hex.Encode(dst, rawbytes)
+		if err := file.WriteFile(defaultKeyPath, dst); err != nil {
+			return nil, err
+		}
 	}
-	dst := make([]byte, hex.EncodedLen(len(rawbytes)))
-	hex.Encode(dst, rawbytes)
-	if err := file.WriteFile(defaultKeyPath, dst); err != nil {
-		return nil, err
-	}
+
 	convertedKey := convertFromInterfacePrivKey(priv)
 	return convertedKey, nil
 }
