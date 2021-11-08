@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"io"
+	"time"
 )
 
 // Message is a container for network messages.
@@ -22,8 +23,6 @@ type SyncChanObj struct {
 
 // SyncStream is a interface for all stream related functions for the sync process.
 type SyncStream interface {
-	io.Reader
-	io.Writer
 	io.Closer
 
 	// CloseWrite closes the stream for writing but leaves it open for
@@ -35,6 +34,14 @@ type SyncStream interface {
 
 	// RemotePeer returns a string identifier of the remote peer connected to this stream
 	RemotePeer() string
+
+	// ReadWithTimeout will read bytes from stream and return the result, will return error if timeout or error.
+	// does not close stream when returns
+	ReadWithTimeout(timeout time.Duration) ([]byte, error)
+
+	// WriteWithTimeout will write bytes to stream, will return error if timeout or error.
+	// does not close stream when returns
+	WriteWithTimeout(data []byte, timeout time.Duration) error
 }
 
 // Network represents the behavior of the network

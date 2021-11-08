@@ -148,7 +148,7 @@ func (s *signerStorage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount,
 	// get account bytes
 	obj, found, err := s.db.Get(s.objPrefix(accountsPrefix), []byte(key))
 	if !found {
-		return nil, errors.New("could not find account")
+		return nil, errors.New("account not found")
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open account")

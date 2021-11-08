@@ -23,14 +23,16 @@ type Config struct {
 	PubSubTraceOut   string        `yaml:"PubSubTraceOut" env:"PUBSUB_TRACE_OUT" env-description:"File path to hold collected pubsub traces"`
 	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
 
+	NetworkTrace bool `yaml:"NetworkTrace" env:"NETWORK_TRACE" env-description:"A boolean flag to turn on network debugging"`
+
 	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
 
 	Fork forks.Fork
 
 	// objects / instances
-	HostID              peer.ID
-	Topics              map[string]*pubsub.Topic
-	Discv5BootStrapAddr []string
+	HostID        peer.ID
+	Topics        map[string]*pubsub.Topic
+	BootnodesENRs []string
 
 	// NetworkPrivateKey is used for network identity
 	NetworkPrivateKey *ecdsa.PrivateKey
@@ -56,3 +58,18 @@ func TransformEnr(enr string) []string {
 		enr,
 	}
 }
+
+//
+//// setupNetworkKey creates a private key if non configured
+//func (n *p2pNetwork) setupNetworkKey(priv *ecdsa.PrivateKey) error {
+//	if priv != nil {
+//		n.privKey = priv
+//	} else {
+//		privKey, err := n.privateKey()
+//		if err != nil {
+//			return errors.Wrap(err, "Failed to generate p2p private key")
+//		}
+//		n.privKey = privKey
+//	}
+//	return nil
+//}

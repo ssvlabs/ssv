@@ -224,8 +224,7 @@ func (n *TestNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg 
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	_, err = stream.Write(msgBytes)
-	return err
+	return stream.WriteWithTimeout(msgBytes, time.Second*5)
 }
 
 // GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
@@ -262,8 +261,7 @@ func (n *TestNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	_, err = stream.Write(msgBytes)
-	return err
+	return stream.WriteWithTimeout(msgBytes, time.Second*5)
 }
 
 // ReceivedSyncMsgChan implementation
@@ -310,21 +308,6 @@ func NewTestStream(remotePeer string) *TestStream {
 	}
 }
 
-// Read implementation
-func (s *TestStream) Read(p []byte) (n int, err error) {
-	return 0, nil
-}
-
-// Write implementation
-func (s *TestStream) Write(p []byte) (n int, err error) {
-	go func() {
-		time.After(time.Millisecond * 100)
-		s.C <- p
-	}()
-
-	return 0, nil
-}
-
 // Close implementation
 func (s *TestStream) Close() error {
 	return nil
@@ -338,4 +321,20 @@ func (s *TestStream) CloseWrite() error {
 // RemotePeer implementation
 func (s *TestStream) RemotePeer() string {
 	return s.peer
+}
+
+// ReadWithTimeout will read bytes from stream and return the result, will return error if timeout or error.
+// does not close stream when returns
+func (s *TestStream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
+	return nil, nil
+}
+
+// WriteWithTimeout will write bytes to stream, will return error if timeout or error.
+// does not close stream when returns
+func (s *TestStream) WriteWithTimeout(data []byte, timeout time.Duration) error {
+	go func() {
+		time.After(time.Millisecond * 100)
+		s.C <- data
+	}()
+	return nil
 }

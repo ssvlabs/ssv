@@ -97,7 +97,7 @@ func TestDeleteAccount(t *testing.T) {
 
 	require.NoError(t, storage.DeleteAccount(accts[0].ID()))
 	acc, err := storage.OpenAccount(accts[0].ID())
-	require.EqualError(t, err, "could not find account")
+	require.EqualError(t, err, "account not found")
 	require.Nil(t, acc)
 }
 
