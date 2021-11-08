@@ -3,7 +3,7 @@ package threadsafe
 import "sync"
 
 var (
-	// Bytes returns a new SafeBytes instance
+	// Bool returns a new SafeBytes instance
 	Bool = NewSafeBool
 )
 
