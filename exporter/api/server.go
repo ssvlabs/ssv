@@ -134,6 +134,7 @@ func (ws *wsServer) handleStream(conn Connection) {
 					logger.Error("queue is full, closing connection", zap.Any("msg", nm.Msg))
 					return
 				}
+				reportStreamOutboundQueueCount(cid, true)
 			case err := <-sub.Err():
 				logger.Debug("subscription error", zap.Error(err))
 				return
