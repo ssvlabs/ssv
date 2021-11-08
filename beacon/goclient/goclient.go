@@ -6,7 +6,7 @@ import (
 	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/auto"
+	"github.com/attestantio/go-eth2-client/http"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -64,25 +64,26 @@ var _ metrics.HealthCheckAgent = &goClient{}
 func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
-	autoClient, err := auto.New(opt.Context,
+
+	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
-		auto.WithAddress(opt.BeaconNodeAddr),
+		http.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
-		auto.WithLogLevel(zerolog.DebugLevel),
-		auto.WithTimeout(time.Second*5),
+		http.WithLogLevel(zerolog.DebugLevel),
+		http.WithTimeout(time.Second*5),
 	)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create auto client")
+		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger = logger.With(zap.String("name", autoClient.Name()), zap.String("address", autoClient.Address()))
+	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
 	logger.Info("successfully connected to beacon client")
 
 	_client := &goClient{
 		ctx:            opt.Context,
 		logger:         logger,
 		network:        core.NetworkFromString(opt.Network),
-		client:         autoClient,
+		client:         httpClient,
 		indicesMapLock: sync.Mutex{},
 		graffiti:       opt.Graffiti,
 	}
