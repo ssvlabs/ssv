@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	msgQueueLimit = 100
+)
+
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
 	Start(addr string) error
@@ -119,23 +123,26 @@ func (ws *wsServer) handleStream(conn Connection) {
 	var mut sync.Mutex
 	running := true
 	var msgs []NetworkMessage
-	msgLimit := 1000
 
 	go func() {
 		defer sub.Unsubscribe()
+		defer func() {
+			mut.Lock()
+			running = false
+			mut.Unlock()
+		}()
 
 	outboundSubscriptionLoop:
 		for {
 			select {
 			case nm := <-cn:
 				mut.Lock()
-				if len(msgs) < msgLimit {
+				if len(msgs) < msgQueueLimit {
 					msgs = append(msgs, *nm)
 					mut.Unlock()
 					reportStreamOutboundQueueCount(cid, true)
 					continue outboundSubscriptionLoop
 				}
-				running = false
 				mut.Unlock()
 				logger.Error("queue is full, stopped listen on outbound channel", zap.Any("msg", nm.Msg))
 				return
