@@ -13,6 +13,7 @@ type syncStream struct {
 	stream core.Stream
 }
 
+// NewSyncStream returns a new instance of syncStream
 func NewSyncStream(stream core.Stream) network.SyncStream {
 	return &syncStream{stream: stream}
 }

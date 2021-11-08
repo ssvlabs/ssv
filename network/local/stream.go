@@ -42,10 +42,12 @@ func (s *Stream) RemotePeer() string {
 	panic("implement")
 }
 
+// ReadWithTimeout implementation
 func (s *Stream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
 	panic("implement")
 }
 
+// WriteWithTimeout implementation
 func (s *Stream) WriteWithTimeout(data []byte, timeout time.Duration) error {
 	panic("implement")
 }

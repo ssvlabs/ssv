@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-const (
-	MaxSyncMsgSize = 2048 // in bytes
-)
-
 // Message is a container for network messages.
 type Message struct {
 	SignedMessage *proto.SignedMessage
