@@ -54,9 +54,9 @@ type Reader interface {
 	ReceivedDecidedChan() <-chan *proto.SignedMessage
 	// ReceivedSyncMsgChan returns the channel for sync messages
 	ReceivedSyncMsgChan() <-chan *SyncChanObj
-	// SubscribeToValidatorNetwork subscribes and listens to validator network
+	// SubscribeToValidatorNetwork subscribes and listens to validator's network
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
-	// UnSubscribeValidatorNetwork unsubscribes a validators topic
+	// UnSubscribeValidatorNetwork unsubscribes from validator's network
 	UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)

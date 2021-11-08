@@ -20,15 +20,6 @@ type NetworkMessage struct {
 	Conn Connection
 }
 
-// Copy implements pubsub.EventData
-func (nm NetworkMessage) Copy() interface{} {
-	return NetworkMessage{
-		Msg:  nm.Msg,
-		Err:  nm.Err,
-		Conn: nm.Conn,
-	}
-}
-
 // QueryMessageHandler handles the given message
 type QueryMessageHandler func(nm *NetworkMessage)
 
