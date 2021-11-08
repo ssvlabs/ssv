@@ -2,8 +2,8 @@ package eth1
 
 import (
 	"crypto/rsa"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"math/big"
 	"time"
 )
@@ -37,7 +37,7 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // Client represents the required interface for eth1 client
 type Client interface {
-	EventsSubject() pubsub.Subscriber
+	EventsFeed() *event.Feed
 	Start() error
 	Sync(fromBlock *big.Int) error
 }

@@ -174,6 +174,11 @@ func (n *Local) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	return nil
 }
 
+// UnSubscribeValidatorNetwork unsubscribes a validators topic
+func (n *Local) UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error {
+	return nil
+}
+
 // AllPeers returns all connected peers for a validator PK
 func (n *Local) AllPeers(validatorPk []byte) ([]string, error) {
 	ret := make([]string, 0)

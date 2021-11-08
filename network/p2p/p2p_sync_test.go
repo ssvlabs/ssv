@@ -82,7 +82,8 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 		Type:           network.Sync_GetHighestType,
 	}
 
-	time.Sleep(time.Millisecond * 500) // important to let nodes reach each other
+	time.Sleep(time.Millisecond * 800) // sleep to let nodes reach each other
+
 	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
 	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
 	require.NoError(t, err)

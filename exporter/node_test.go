@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"strings"
@@ -57,28 +57,22 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	exp, err := newMockExporter()
 	require.NoError(t, err)
 
-	sub := pubsub.NewSubject(zap.L())
-	cn, err := sub.Register("TestExporter_ListenToEth1Events")
-	require.NoError(t, err)
-	defer sub.Deregister("TestExporter_ListenToEth1Events")
+	feed := new(event.Feed)
 
 	go func() {
-		errCn := exp.listenToEth1Events(cn)
+		errCn := exp.listenToEth1Events(feed)
 		for err := range errCn {
 			require.NoError(t, err)
 		}
 	}()
 
 	var wg sync.WaitGroup
-	outSub := exp.ws.OutboundSubject().(pubsub.Subject)
 	go func() {
-		cnOut, err := outSub.Register("TestExporter_ListenToEth1Events_out_ws")
-		require.NoError(t, err)
-		defer sub.Deregister("TestExporter_ListenToEth1Events_out_ws")
+		cnOut := make(chan *api.NetworkMessage)
+		sub := exp.ws.OutboundFeed().Subscribe(cnOut)
+		defer sub.Unsubscribe()
 
-		for m := range cnOut {
-			nm, ok := m.(api.NetworkMessage)
-			require.True(t, ok)
+		for nm := range cnOut {
 			raw, err := json.Marshal(nm.Msg)
 			require.NoError(t, err)
 			if nm.Msg.Type == api.TypeValidator {
@@ -102,10 +96,10 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	}()
 	// pushing 2 events and waits for handling
 	wg.Add(1)
-	sub.Notify(validatorAddedMockEvent(t))
+	feed.Send(validatorAddedMockEvent(t))
 
 	wg.Add(1)
-	sub.Notify(operatorAddedMockEvent(t))
+	feed.Send(operatorAddedMockEvent(t))
 
 	wg.Wait()
 
@@ -160,7 +154,7 @@ func TestToValidatorInformation(t *testing.T) {
 	require.True(t, strings.EqualFold(hex.EncodeToString(vae.PublicKey), vi.PublicKey))
 }
 
-func validatorAddedMockEvent(t *testing.T) eth1.Event {
+func validatorAddedMockEvent(t *testing.T) *eth1.Event {
 	rawValidatorAdded := `{
 "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
 "topics": [
@@ -183,10 +177,10 @@ func validatorAddedMockEvent(t *testing.T) eth1.Event {
 	parsed, _, err := eth1.ParseValidatorAddedEvent(zap.L(), nil, vLogValidatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
-	return eth1.Event{Log: types.Log{}, Data: *parsed}
+	return &eth1.Event{Log: types.Log{}, Data: *parsed}
 }
 
-func operatorAddedMockEvent(t *testing.T) eth1.Event {
+func operatorAddedMockEvent(t *testing.T) *eth1.Event {
 	rawOperatorAdded := `{
   "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
   "topics": [
@@ -209,5 +203,5 @@ func operatorAddedMockEvent(t *testing.T) eth1.Event {
 	parsed, _, err := eth1.ParseOperatorAddedEvent(zap.L(), nil, vLogOperatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
-	return eth1.Event{Log: types.Log{}, Data: *parsed}
+	return &eth1.Event{Log: types.Log{}, Data: *parsed}
 }

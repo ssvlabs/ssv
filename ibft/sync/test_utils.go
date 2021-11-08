@@ -274,6 +274,11 @@ func (n *TestNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) er
 	return nil
 }
 
+// UnSubscribeValidatorNetwork unsubscribes a validators topic
+func (n *TestNetwork) UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error {
+	return nil
+}
+
 // AllPeers returns all connected peers for a validator PK
 func (n *TestNetwork) AllPeers(validatorPk []byte) ([]string, error) {
 	return n.peers, nil

@@ -1,22 +1,22 @@
 package eth1
 
 import (
-	"github.com/bloxapp/ssv/pubsub"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"math/big"
 	"time"
 )
 
 // ClientMock implements eth1.Client interface
 type ClientMock struct {
-	Sub pubsub.Subject
+	Feed *event.Feed
 
 	SyncTimeout  time.Duration
 	SyncResponse error
 }
 
-// EventsSubject mocking subject
-func (ec *ClientMock) EventsSubject() pubsub.Subscriber {
-	return ec.Sub
+// EventsFeed returns the contract events feed
+func (ec *ClientMock) EventsFeed() *event.Feed {
+	return ec.Feed
 }
 
 // Start mocking client init

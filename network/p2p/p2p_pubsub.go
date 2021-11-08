@@ -1,13 +1,32 @@
 package p2p
 
 import (
+	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"strings"
 )
+
+// UnSubscribeValidatorNetwork unsubscribes a validators topic
+func (n *p2pNetwork) UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error {
+	pubKey := validatorPk.SerializeToHexStr()
+
+	n.psTopicsLock.Lock()
+	cancel, ok := n.psSubs[pubKey]
+	n.psTopicsLock.Unlock()
+
+	if ok {
+		cancel()
+	} else {
+		return errors.New("could not find active subscription")
+	}
+	return nil
+}
 
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
 func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
@@ -22,7 +41,7 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 		}
 	}
 
-	if !n.psSubscribedTopics[pubKey] {
+	if _, ok := n.psSubs[pubKey]; !ok {
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
 			if err != pubsub.ErrTopicClosed {
@@ -37,13 +56,18 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 				return errors.Wrap(err, "failed to subscribe on Topic")
 			}
 		}
-		n.psSubscribedTopics[pubKey] = true
+		ctx, cacnel := context.WithCancel(n.ctx)
+		n.psSubs[pubKey] = cacnel
 		go func() {
-			n.listen(sub)
+			topicName := sub.Topic()
+			n.listen(ctx, sub)
+			if err := n.closeTopic(topicName); err != nil {
+				n.logger.Error("failed to close topic", zap.String("topic", topicName), zap.Error(err))
+			}
 			// mark topic as not subscribed
 			n.psTopicsLock.Lock()
 			defer n.psTopicsLock.Unlock()
-			n.psSubscribedTopics[pubKey] = false
+			delete(n.psSubs, pubKey)
 		}()
 	}
 
@@ -117,17 +141,15 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 }
 
 // listen listens on the given subscription
-func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
+func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 	t := sub.Topic()
 	defer sub.Cancel()
 	n.logger.Info("start listen to topic", zap.String("topic", t))
 	for {
 		select {
-		case <-n.ctx.Done():
-			if err := n.closeTopic(t); err != nil {
-				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
-			}
-			n.logger.Info("closed topic", zap.String("topic", t))
+		case <-ctx.Done():
+			n.logger.Info("context is done, subscription will be cancelled", zap.String("topic", t))
+			return
 		default:
 			msg, err := sub.Next(n.ctx)
 			if err != nil {
@@ -135,7 +157,6 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				return
 			}
 			n.trace("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
-
 			cm, err := n.fork.DecodeNetworkMsg(msg.Data)
 			if err != nil {
 				n.logger.Error("failed to un-marshal message", zap.Error(err))
@@ -145,6 +166,52 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 				reportLastMsg(msg.ReceivedFrom.String())
 			}
 			n.propagateSignedMsg(cm)
+		}
+	}
+}
+
+// propagateSignedMsg takes an incoming message (from validator's topic)
+// and propagates it to the corresponding internal listeners
+func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
+	if cm == nil || cm.SignedMessage == nil {
+		n.logger.Debug("could not propagate nil message")
+		return
+	}
+	n.trace("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
+		zap.Any("msg", cm.SignedMessage))
+
+	switch cm.Type {
+	case network.NetworkMsg_IBFTType:
+		go propagateIBFTMessage(n.listeners, cm.SignedMessage)
+	case network.NetworkMsg_SignatureType:
+		go propagateSigMessage(n.listeners, cm.SignedMessage)
+	case network.NetworkMsg_DecidedType:
+		go propagateDecidedMessage(n.listeners, cm.SignedMessage)
+	default:
+		n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
+	}
+}
+
+func propagateIBFTMessage(listeners []listener, msg *proto.SignedMessage) {
+	for _, ls := range listeners {
+		if ls.msgCh != nil {
+			ls.msgCh <- msg
+		}
+	}
+}
+
+func propagateSigMessage(listeners []listener, msg *proto.SignedMessage) {
+	for _, ls := range listeners {
+		if ls.sigCh != nil {
+			ls.sigCh <- msg
+		}
+	}
+}
+
+func propagateDecidedMessage(listeners []listener, msg *proto.SignedMessage) {
+	for _, ls := range listeners {
+		if ls.decidedCh != nil {
+			ls.decidedCh <- msg
 		}
 	}
 }

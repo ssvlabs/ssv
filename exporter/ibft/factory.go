@@ -15,17 +15,6 @@ type Reader interface {
 	Start() error
 }
 
-// Syncer is an interface for syncing data
-type Syncer interface {
-	Sync() error
-}
-
-// SyncRead reads and sync data
-type SyncRead interface {
-	Reader
-	Syncer
-}
-
 // NewNetworkReader factory to create network readers
 func NewNetworkReader(o IncomingMsgsReaderOptions) Reader {
 	pk := o.PK.SerializeToHexStr()
@@ -39,7 +28,7 @@ func NewNetworkReader(o IncomingMsgsReaderOptions) Reader {
 }
 
 // NewDecidedReader factory to create decided readers
-func NewDecidedReader(o DecidedReaderOptions) SyncRead {
+func NewDecidedReader(o DecidedReaderOptions) Reader {
 	pk := o.ValidatorShare.PublicKey.SerializeToHexStr()
 	r, exist := decidedReaders.Load(pk)
 	if !exist {
