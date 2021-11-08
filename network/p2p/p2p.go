@@ -36,8 +36,13 @@ const (
 	MsgChanSize = 128
 
 	topicPrefix = "bloxstaking.ssv"
+)
 
-	syncStreamProtocol = "/sync/0.0.1"
+const (
+	baseSyncStream           = "/sync/"
+	highestDecidedStream     = baseSyncStream + "highest_decided"
+	decidedByRangeStream     = baseSyncStream + "decided_by_range"
+	lastChangeRoundMsgStream = baseSyncStream + "last_change_round"
 )
 
 type listener struct {
@@ -143,11 +148,17 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "failed to start discovery")
 	}
 
-	n.syncStreamHandler()
+	n.setStreamHandlers()
 
 	n.watchPeers()
 
 	return n, nil
+}
+
+func (n *p2pNetwork) setStreamHandlers() {
+	n.setHighestDecidedStreamHandler()
+	n.setDecidedByRangeStreamHandler()
+	n.setLastChangeRoundStreamHandler()
 }
 
 func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {

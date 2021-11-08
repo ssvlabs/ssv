@@ -53,7 +53,7 @@ func testPeers(t *testing.T, logger *zap.Logger) (network.Network, network.Netwo
 func TestSyncStream_ReadWithTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 	peer1, peer2 := testPeers(t, logger)
-	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), highestDecidedStream)
 	require.NoError(t, err)
 
 	strm := NewSyncStream(s)
@@ -68,7 +68,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 	peer1, peer2 := testPeers(t, logger)
 
 	readByts := threadsafe.Bool()
-	peer2.(*p2pNetwork).host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
+	peer2.(*p2pNetwork).host.SetStreamHandler(highestDecidedStream, func(stream core.Stream) {
 		netSyncStream := NewSyncStream(stream)
 
 		// read msg
@@ -79,7 +79,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 		readByts.Set(true)
 	})
 
-	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), highestDecidedStream)
 	require.NoError(t, err)
 	strm := NewSyncStream(s)
 	err = strm.WriteWithTimeout(make([]byte, 10), time.Millisecond*100)
@@ -93,7 +93,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 func TestSyncStream_WriteWithTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 	peer1, peer2 := testPeers(t, logger)
-	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), highestDecidedStream)
 	require.NoError(t, err)
-	require.EqualError(t, NewSyncStream(s).WriteWithTimeout(make([]byte, 100), time.Millisecond*-10), "i/o deadline reached")
+	require.EqualError(t, NewSyncStream(s).WriteWithTimeout(make([]byte, 100), time.Millisecond*-100), "i/o deadline reached")
 }

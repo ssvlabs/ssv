@@ -3,6 +3,7 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -18,13 +19,13 @@ func peerFromString(peerStr string) (peer.ID, error) {
 // BroadcastSyncMessage broadcasts a sync message to peers.
 // Peer list must not be nil or empty if stream is nil.
 // returns a stream closed for writing
-func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, msg *network.SyncMessage) (network.SyncStream, error) {
+func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, protocol protocol.ID, msg *network.SyncMessage) (network.SyncStream, error) {
 	if stream == nil {
 		if len(peer) == 0 {
 			return nil, errors.New("peer ID nil")
 		}
 
-		s, err := n.host.NewStream(n.ctx, peer, syncStreamProtocol)
+		s, err := n.host.NewStream(n.ctx, peer, protocol)
 		if err != nil {
 			return nil, err
 		}
@@ -50,9 +51,9 @@ func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, ms
 }
 
 // sendAndReadResponse sends a reques sync msg, waits to a response and parses it. Includes timeout as well
-func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, msg *network.SyncMessage) (*network.Message, error) {
+func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, protocol protocol.ID, msg *network.SyncMessage) (*network.Message, error) {
 	var err error
-	stream, err := n.sendSyncMessage(nil, peer, msg)
+	stream, err := n.sendSyncMessage(nil, peer, protocol, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not send sync msg")
 	}
@@ -90,7 +91,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Sync
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(peerID, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, highestDecidedStream, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Sync
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", msg)
+	_, err := n.sendSyncMessage(stream, "", highestDecidedStream, msg)
 	return err
 }
 
@@ -111,7 +112,7 @@ func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage)
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(peerID, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, decidedByRangeStream, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +121,7 @@ func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage)
 
 func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", msg)
+	_, err := n.sendSyncMessage(stream, "", decidedByRangeStream, msg)
 	return err
 }
 
@@ -131,7 +132,7 @@ func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMess
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(peerID, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, lastChangeRoundMsgStream, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
@@ -141,7 +142,7 @@ func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMess
 // RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
 func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", msg)
+	_, err := n.sendSyncMessage(stream, "", lastChangeRoundMsgStream, msg)
 	return err
 }
 

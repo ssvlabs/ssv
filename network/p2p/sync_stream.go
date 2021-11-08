@@ -46,7 +46,7 @@ func (s *syncStream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
 // WriteWithTimeout reads with timeout
 func (s *syncStream) WriteWithTimeout(data []byte, timeout time.Duration) error {
 	if err := s.stream.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return errors.Wrap(err, "could not set read deadline")
+		return errors.Wrap(err, "could not set write deadline")
 	}
 
 	bytsWrote, err := s.stream.Write(data)
