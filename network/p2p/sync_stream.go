@@ -5,50 +5,38 @@ import (
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/pkg/errors"
 	"io/ioutil"
-	"sync"
 	"time"
 )
 
 // syncStream is a wrapper struct for the core.Stream interface to match the network.SyncStream interface
 type syncStream struct {
-	stream     core.Stream
-	streamLock sync.Mutex
+	stream core.Stream
 }
 
 // NewSyncStream returns a new instance of syncStream
 func NewSyncStream(stream core.Stream) network.SyncStream {
 	return &syncStream{
-		stream:     stream,
-		streamLock: sync.Mutex{},
+		stream: stream,
 	}
 }
 
 // Close closes the stream
 func (s *syncStream) Close() error {
-	s.streamLock.Lock()
-	defer s.streamLock.Unlock()
 	return s.stream.Close()
 }
 
 // CloseWrite closes write stream
 func (s *syncStream) CloseWrite() error {
-	s.streamLock.Lock()
-	defer s.streamLock.Unlock()
 	return s.stream.CloseWrite()
 }
 
 // RemotePeer returns connected peer
 func (s *syncStream) RemotePeer() string {
-	s.streamLock.Lock()
-	defer s.streamLock.Unlock()
 	return s.stream.Conn().RemotePeer().String()
 }
 
 // ReadWithTimeout reads with timeout
 func (s *syncStream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
-	s.streamLock.Lock()
-	defer s.streamLock.Unlock()
-
 	if err := s.stream.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, errors.Wrap(err, "could not set read deadline")
 	}
@@ -57,9 +45,6 @@ func (s *syncStream) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
 
 // WriteWithTimeout reads with timeout
 func (s *syncStream) WriteWithTimeout(data []byte, timeout time.Duration) error {
-	s.streamLock.Lock()
-	defer s.streamLock.Unlock()
-
 	if err := s.stream.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
 		return errors.Wrap(err, "could not set read deadline")
 	}

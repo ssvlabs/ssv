@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -66,7 +67,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 	peer1, peer2 := testPeers(t, logger)
 
-	readByts := false
+	readByts := threadsafe.Bool()
 	peer2.(*p2pNetwork).host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
 		netSyncStream := NewSyncStream(stream)
 
@@ -75,7 +76,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, buf, 10)
-		readByts = true
+		readByts.Set(true)
 	})
 
 	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), syncStreamProtocol)
@@ -86,7 +87,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 	require.NoError(t, strm.CloseWrite())
 
 	time.Sleep(time.Millisecond * 300)
-	require.True(t, readByts)
+	require.True(t, readByts.Get())
 }
 
 func TestSyncStream_WriteWithTimeout(t *testing.T) {
