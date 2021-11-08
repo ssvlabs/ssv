@@ -42,7 +42,6 @@ func New(
 
 // Process takes a req and processes it
 func (s *ReqHandler) Process(msg *network.SyncChanObj) {
-	s.logger.Debug("Process", zap.Any("msg", msg))
 	switch msg.Msg.Type {
 	case network.Sync_GetHighestType:
 		s.handleGetHighestReq(msg)

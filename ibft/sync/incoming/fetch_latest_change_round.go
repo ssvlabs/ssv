@@ -9,7 +9,6 @@ import (
 )
 
 func (s *ReqHandler) handleGetLatestChangeRoundReq(msg *network.SyncChanObj) {
-	s.logger.Debug("handleGetLatestChangeRoundReq", zap.Any("lastChangeRoundMsg", s.lastChangeRoundMsg))
 	retMsg := &network.SyncMessage{
 		Lambda: s.identifier,
 		Type:   network.Sync_GetLatestChangeRound,

@@ -8,7 +8,6 @@ import (
 )
 
 func (n *p2pNetwork) preStreamHandler(stream core.Stream) (*network.Message, network.SyncStream, error) {
-	n.logger.Debug("syncStreamHandler start")
 	netSyncStream := NewSyncStream(stream)
 
 	// read msg
@@ -17,13 +16,10 @@ func (n *p2pNetwork) preStreamHandler(stream core.Stream) (*network.Message, net
 		return nil, nil, errors.Wrap(err, "could not read incoming sync stream")
 	}
 
-	n.logger.Debug("syncStreamHandler buf", zap.ByteString("buf", buf))
-
 	cm, err := n.fork.DecodeNetworkMsg(buf)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not parse stream")
 	}
-	n.logger.Debug("syncStreamHandler decoded", zap.Any("cm", cm))
 	return cm, netSyncStream, nil
 }
 
