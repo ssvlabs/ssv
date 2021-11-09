@@ -4,27 +4,29 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/attestantio/go-eth2-client/api/v1"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 	"sync"
 	"testing"
 )
 
-var once sync.Once
-
-func initBls() {
-	once.Do(func() {
-		bls.Init(bls.BLS12_381)
-	})
+func init() {
+	bls.Init(bls.BLS12_381)
+	logex.Build("test", zapcore.DebugLevel, nil)
 }
 
 func TestExporter_handleQueryRequests(t *testing.T) {
@@ -52,8 +54,6 @@ func TestExporter_handleQueryRequests(t *testing.T) {
 }
 
 func TestExporter_ListenToEth1Events(t *testing.T) {
-	initBls()
-
 	exp, err := newMockExporter()
 	require.NoError(t, err)
 
@@ -128,6 +128,7 @@ func newMockExporter() (*exporter, error) {
 
 	opts := Options{
 		Ctx:        context.Background(),
+		Beacon:     beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
 		Logger:     logger,
 		ETHNetwork: nil,
 		Eth1Client: nil,
@@ -143,7 +144,6 @@ func newMockExporter() (*exporter, error) {
 }
 
 func TestToValidatorInformation(t *testing.T) {
-	initBls()
 	e := validatorAddedMockEvent(t)
 	vae, ok := e.Data.(eth1.ValidatorAddedEvent)
 	require.True(t, ok)

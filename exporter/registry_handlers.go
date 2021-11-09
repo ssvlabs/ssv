@@ -54,6 +54,14 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	if err != nil {
 		return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
 	}
+	// add metadata
+	if updated, err := validator.UpdateShareMetadata(validatorShare, exp.beacon); err != nil {
+		logger.Warn("could not add validator metadata", zap.Error(err))
+	} else if !updated {
+		logger.Warn("could not find validator metadata")
+	} else {
+		logger.Debug("validator metadata was updated")
+	}
 	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
 		return errors.Wrap(err, "failed to save validator share")
 	}
@@ -63,6 +71,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	if err != nil {
 		return errors.Wrap(err, "could not create ValidatorInformation")
 	}
+	vi.Metadata = validatorShare.Metadata
 	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
 		return errors.Wrap(err, "failed to save validator information")
 	}
