@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-// updateShareMetadata will update the given share object w/o involving storage,
+// UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func updateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool, error) {
+func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beacon.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {

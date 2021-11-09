@@ -84,6 +84,11 @@ func (r *decidedReader) sync() error {
 	return err
 }
 
+// Share returns the reader's share
+func (r *decidedReader) Share() *storage.Share {
+	return r.validatorShare
+}
+
 // Start starts to listen to decided messages
 func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
