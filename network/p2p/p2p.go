@@ -40,6 +40,7 @@ const (
 
 const (
 	baseSyncStream           = "/sync/"
+	syncStreamProtocol       = baseSyncStream + "0.0.1" // DEPRECATED
 	highestDecidedStream     = baseSyncStream + "highest_decided/0.0.1"
 	decidedByRangeStream     = baseSyncStream + "decided_by_range/0.0.1"
 	lastChangeRoundMsgStream = baseSyncStream + "last_change_round/0.0.1"
@@ -156,6 +157,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 func (n *p2pNetwork) setStreamHandlers() {
+	n.syncStreamHandler()
 	n.setHighestDecidedStreamHandler()
 	n.setDecidedByRangeStreamHandler()
 	n.setLastChangeRoundStreamHandler()
