@@ -71,7 +71,6 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 	if err != nil {
 		return errors.Wrap(err, "could not create ValidatorInformation")
 	}
-	vi.Metadata = validatorShare.Metadata
 	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
 		return errors.Wrap(err, "failed to save validator information")
 	}

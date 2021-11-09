@@ -76,9 +76,6 @@ func (exp *exporter) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 	if err := exp.validatorStorage.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 		return errors.Wrap(err, "failed to update share")
 	}
-	if err := exp.storage.UpdateValidatorMetadata(pk, metadata); err != nil {
-		return errors.Wrap(err, "failed to update validator information")
-	}
 	if decidedReader := exp.getDecidedReader(pk); decidedReader != nil {
 		decidedReader.(ibft.ShareHolder).Share().Metadata = metadata
 	}
