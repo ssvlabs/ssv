@@ -25,7 +25,6 @@ import (
 )
 
 const (
-	mainQueueInterval            = 100 * time.Millisecond
 	readerQueuesInterval         = 10 * time.Millisecond
 	metaDataReaderQueuesInterval = 5 * time.Second
 	metaDataBatchSize            = 25
