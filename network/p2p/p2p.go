@@ -40,9 +40,9 @@ const (
 
 const (
 	baseSyncStream           = "/sync/"
-	highestDecidedStream     = baseSyncStream + "highest_decided"
-	decidedByRangeStream     = baseSyncStream + "decided_by_range"
-	lastChangeRoundMsgStream = baseSyncStream + "last_change_round"
+	highestDecidedStream     = baseSyncStream + "highest_decided/0.0.1"
+	decidedByRangeStream     = baseSyncStream + "decided_by_range/0.0.1"
+	lastChangeRoundMsgStream = baseSyncStream + "last_change_round/0.0.1"
 )
 
 type listener struct {
