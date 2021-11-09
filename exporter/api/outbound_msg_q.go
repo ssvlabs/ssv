@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	msgQueueLimit = 100
+	msgQueueLimit = 5000
 )
 
 type msgQueue struct {
