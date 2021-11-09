@@ -70,6 +70,9 @@ func (exp *exporter) updateValidatorsMetadata(shares []*validatorstorage.Share, 
 
 // UpdateValidatorMetadata updates all relevant components with the updated metadata
 func (exp *exporter) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+	if metadata == nil {
+		return errors.New("could not update empty metadata")
+	}
 	if err := exp.validatorStorage.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 		return errors.Wrap(err, "failed to update share")
 	}
@@ -79,5 +82,6 @@ func (exp *exporter) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 	if decidedReader := exp.getDecidedReader(pk); decidedReader != nil {
 		decidedReader.(ibft.ShareHolder).Share().Metadata = metadata
 	}
+	exp.logger.Debug("metadata was updated", zap.String("pk", pk), zap.Any("metadata", *metadata))
 	return nil
 }
