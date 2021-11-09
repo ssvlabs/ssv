@@ -77,7 +77,7 @@ func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 			}
 			ret = append(ret, pk)
 		} else {
-			return nil, errors.New("pk for id not found")
+			return nil, errors.Errorf("pk for id (%d) not found", id)
 		}
 	}
 	return ret, nil

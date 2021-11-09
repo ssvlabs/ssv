@@ -24,38 +24,55 @@ As most of that logic already exist in SSV, the exporter is just a new executabl
 
 <img src="../docs/resources/exporter-node-diagram.png" >
 
-The introduction of exporter requires to do some refactoring in the project structure as follows:
 
-<img src="../docs/resources/exporter-node-packages.png" >
-
-### Data Sources
+### Data Model
 
 The following information will be stored and served by exporter:
-* Operators 
-  * Name (`name: string`) --> contract event
-  * Public Key (`publicKey: string`) --> contract event
-  * Owner Address (`ownerAddress: string`) --> contract event
-  * Index (`index: uint`) --> a sequential index
-* Validators
-  * Public Key (`publicKey: string`) --> contract event
-  * Operators (`operators: []`) --> contract event
-    * Operator Public Key (`publicKey: string`)
-    * IBFT/Node ID (`nodeId: uint`)
-  * Index (`index: uint`) --> a sequential index
-* Duties
-  * Validator Public Key (`publicKey: string`)
-  * Epoch (`epoch: uint64`) --> calculated from Slot
-  * Slot (`slot: uint64`) --> part of the lambda
-  * Duty type / role (`slot: string`) --> part of the lambda
-  * Status (`status: bool`) - failed | success
-  * Operators --> signer_ids
+
+#### Operators 
+
+  ```json
+  {
+    "publicKey": "...",
+    "name": "myOperator",
+    "ownerAddress": "...",
+    "index": 0
+  }
+  ```
+
+#### Validators
+
+  ```json
+  {
+    "publicKey": "...",
+    "operators": [{ "publicKey": "...", "nodeId": 1 }],
+    "index": 2341
+  }
+  ```
+
+#### Decided Messages
+
+  ```json
+  {
+    "message": {
+      "type": 3,
+      "round": 1,
+      "lambda": "...",
+      "seq_number": 23,
+      "value": "..."
+    },
+    "signature": "...",
+    "signer_ids": [2, 1, 3]
+  }
+  ```
+
+### Data Sources
 
 #### Contract Data
 
 Events to listen:
 * `OperatorAdded`
 * `ValidatorAdded`
-* `OessAdded`
 
 #### Contract Sync
 
@@ -177,7 +194,7 @@ Exporter will produce the following response:
 
 In case of bad request or some internal error, the response will be of `type` "error".
 
-Some Examples:
+Some examples:
 
 - Bad input (corrupted JSON) produces:
   ```json
@@ -229,6 +246,8 @@ For example, exporter will push a message if a new validator was added to the ne
   ]
 }
 ```
+
+Besides new validators, it will also notify on new operators and decided messages.
 
 ## Usage
 

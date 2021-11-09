@@ -198,7 +198,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.Metadata = metadata
-		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
+		if err := c.collection.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 			return err
 		}
 		if err := c.startValidator(v); err != nil {
@@ -299,7 +299,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 // if the validator was persisted already, this function won't be called
 func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.SecretKey) error {
 	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
-	if updated, err := updateShareMetadata(share, c.beacon); err != nil {
+	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 		logger.Warn("could not add validator metadata", zap.Error(err))
 	} else if !updated {
 		logger.Warn("could not find validator metadata")
