@@ -103,6 +103,7 @@ func messageFields(msg *proto.SignedMessage) []zap.Field {
 		zap.Uint64("seq_num", msg.Message.SeqNumber),
 		zap.Uint64("round", msg.Message.Round),
 		zap.String("signers", msg.SignersIDString()),
+		zap.ByteString("sig", msg.Signature),
 		zap.String("identifier", string(msg.Message.Lambda)),
 	}
 }
