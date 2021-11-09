@@ -84,7 +84,6 @@ type exporter struct {
 	ibftSyncEnabled                 bool
 	validatorMetaDataUpdateInterval time.Duration
 
-	mainQueue            tasks.Queue
 	decidedReadersQueue  tasks.Queue
 	networkReadersQueue  tasks.Queue
 	metaDataReadersQueue tasks.Queue
@@ -108,7 +107,6 @@ func New(opts Options) Exporter {
 		network:              opts.Network,
 		eth1Client:           opts.Eth1Client,
 		beacon:               opts.Beacon,
-		mainQueue:            tasks.NewExecutionQueue(mainQueueInterval),
 		decidedReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		networkReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
@@ -158,7 +156,6 @@ func (exp *exporter) Start() error {
 	}
 	go exp.continuouslyUpdateValidatorMetaData()
 
-	go exp.mainQueue.Start()
 	go exp.decidedReadersQueue.Start()
 	go exp.networkReadersQueue.Start()
 
@@ -277,6 +274,7 @@ func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	return exp.ibftSyncEnabled
 }
 
+// triggerValidator starts the given validator
 func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if validatorPubKey == nil {
 		return errors.New("empty validator pubkey")
@@ -294,13 +292,10 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	}
 	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
-	exp.mainQueue.QueueDistinct(func() error {
-		return exp.setup(validatorShare)
-	}, fmt.Sprintf("ibft:setup/%s", pubkey))
-
-	return nil
+	return exp.setup(validatorShare)
 }
 
+// setup starts all validator readers
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
