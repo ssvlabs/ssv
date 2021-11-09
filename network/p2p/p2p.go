@@ -156,6 +156,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 func (n *p2pNetwork) setStreamHandlers() {
+	n.setLegacyStreamHandler() // TODO - remove in v0.1.6
 	n.setHighestDecidedStreamHandler()
 	n.setDecidedByRangeStreamHandler()
 	n.setLastChangeRoundStreamHandler()

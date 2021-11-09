@@ -34,6 +34,17 @@ func (n *p2pNetwork) setHighestDecidedStreamHandler() {
 	})
 }
 
+func (n *p2pNetwork) setLegacyStreamHandler() {
+	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
+		cm, s, err := n.preStreamHandler(stream)
+		if err != nil {
+			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+			return
+		}
+		n.propagateSyncMsg(cm, s)
+	})
+}
+
 func (n *p2pNetwork) setDecidedByRangeStreamHandler() {
 	n.host.SetStreamHandler(decidedByRangeStream, func(stream core.Stream) {
 		cm, s, err := n.preStreamHandler(stream)
