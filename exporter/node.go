@@ -306,16 +306,17 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	// start network reader
-	networkReader := exp.createNetworkReader(validatorShare.PublicKey)
+	networkReader := exp.getOrCreateNetworkReader(validatorShare.PublicKey)
 	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
 	// start decided reader
-	decidedReader := exp.createDecidedReader(validatorShare)
+	decidedReader := exp.getOrCreateDecidedReader(validatorShare)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	logger.Debug("setup validator done")
 	return nil
 }
 
-func (exp *exporter) createDecidedReader(validatorShare *validatorstorage.Share) ibft.Reader {
+// getOrCreateDecidedReader will create decided reader if not exist
+func (exp *exporter) getOrCreateDecidedReader(validatorShare *validatorstorage.Share) ibft.Reader {
 	exp.readersMut.Lock()
 	defer exp.readersMut.Unlock()
 
@@ -334,6 +335,7 @@ func (exp *exporter) createDecidedReader(validatorShare *validatorstorage.Share)
 	return exp.decidedReaders[pk]
 }
 
+// getDecidedReader returns decided reader for the given validator (if exist)
 func (exp *exporter) getDecidedReader(pk string) ibft.Reader {
 	exp.readersMut.RLock()
 	defer exp.readersMut.RUnlock()
@@ -341,7 +343,8 @@ func (exp *exporter) getDecidedReader(pk string) ibft.Reader {
 	return exp.decidedReaders[pk]
 }
 
-func (exp *exporter) createNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reader {
+// getOrCreateNetworkReader will create networkReader if not exist
+func (exp *exporter) getOrCreateNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reader {
 	exp.readersMut.Lock()
 	defer exp.readersMut.Unlock()
 
