@@ -91,7 +91,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Sync
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(peerID, highestDecidedStream, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, legacyMsgStream, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Sync
 // RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
 func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", highestDecidedStream, msg)
+	_, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
 	return err
 }
 
@@ -112,7 +112,7 @@ func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage)
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(peerID, decidedByRangeStream, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, legacyMsgStream, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage)
 
 func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", decidedByRangeStream, msg)
+	_, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
 	return err
 }
 
@@ -132,7 +132,7 @@ func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMess
 		return nil, err
 	}
 
-	res, err := n.sendAndReadSyncResponse(peerID, lastChangeRoundMsgStream, msg)
+	res, err := n.sendAndReadSyncResponse(peerID, legacyMsgStream, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMess
 // RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
 func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", lastChangeRoundMsgStream, msg)
+	_, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
 	return err
 }
 

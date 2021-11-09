@@ -39,10 +39,11 @@ const (
 )
 
 const (
-	baseSyncStream           = "/sync/"
-	highestDecidedStream     = baseSyncStream + "highest_decided"
-	decidedByRangeStream     = baseSyncStream + "decided_by_range"
-	lastChangeRoundMsgStream = baseSyncStream + "last_change_round"
+	//baseSyncStream           = "/sync/"
+	//highestDecidedStream     = baseSyncStream + "highest_decided"
+	//decidedByRangeStream     = baseSyncStream + "decided_by_range"
+	//lastChangeRoundMsgStream = baseSyncStream + "last_change_round"
+	legacyMsgStream = "/sync/0.0.1"
 )
 
 type listener struct {
@@ -157,9 +158,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 func (n *p2pNetwork) setStreamHandlers() {
 	n.setLegacyStreamHandler() // TODO - remove in v0.1.6
-	n.setHighestDecidedStreamHandler()
-	n.setDecidedByRangeStreamHandler()
-	n.setLastChangeRoundStreamHandler()
+	//n.setHighestDecidedStreamHandler()
+	//n.setDecidedByRangeStreamHandler()
+	//n.setLastChangeRoundStreamHandler()
 }
 
 func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
