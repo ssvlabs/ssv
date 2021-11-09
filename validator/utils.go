@@ -47,6 +47,9 @@ func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, sh
 	if share == nil {
 		return nil, nil, errors.New("could not decode share key from validator added event")
 	}
+	if !validatorShare.OperatorReady() {
+		return nil, nil, errors.New("operator share not ready")
+	}
 	return validatorShare, share, nil
 }
 

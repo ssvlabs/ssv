@@ -156,3 +156,8 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 func (s *Share) HasMetadata() bool {
 	return s.Metadata != nil
 }
+
+// OperatorReady returns true if all operator relevant data (node id, secret share, etc.) is present
+func (s *Share) OperatorReady() bool {
+	return s.NodeID != 0
+}
