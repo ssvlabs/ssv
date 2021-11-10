@@ -191,7 +191,7 @@ spec:
       volumes:
       - name: ssv-exporter
         persistentVolumeClaim:
-          claimName: ssv-exporter
+          claimName: ssv-exporter-2
       - name: ssv-exporter-cm
         configMap:
           name: ssv-exporter-cm
