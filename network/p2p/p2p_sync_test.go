@@ -35,6 +35,10 @@ func (v0 *testingFork) DecodeNetworkMsg(data []byte) (*network.Message, error) {
 	return ret, err
 }
 
+func (v0 *testingFork) SlotTick(slot uint64) {
+
+}
+
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 

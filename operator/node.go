@@ -104,8 +104,15 @@ func (n *operatorNode) Start() error {
 	}
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	n.dutyCtrl.Start()
+	go n.listenForCurrentSlot()
 
 	return nil
+}
+
+func (n *operatorNode) listenForCurrentSlot() {
+	for slot := range n.dutyCtrl.CurrentSlotChan() {
+		n.fork.SlotTick(slot)
+	}
 }
 
 // StartEth1 starts the eth1 events sync and streaming

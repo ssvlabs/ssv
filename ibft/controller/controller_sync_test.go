@@ -52,6 +52,10 @@ func testFork(controller *Controller) *testingFork {
 	return &testingFork{controller: controller}
 }
 
+func (v0 *testingFork) SlotTick(slot uint64) {
+
+}
+
 func (v0 *testingFork) Apply(controller ibft.Controller) {
 }
 
