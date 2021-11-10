@@ -22,7 +22,7 @@ type dutyExecutor interface {
 // DutyController interface for dispatching duties execution according to slot ticker
 type DutyController interface {
 	Start()
-	// CurrentEpochChan will trigger every slot
+	// CurrentSlotChan will trigger every slot
 	CurrentSlotChan() <-chan uint64
 }
 
