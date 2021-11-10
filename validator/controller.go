@@ -218,10 +218,11 @@ func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
+
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if !v.Share.HasMetadata() {
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
-		} else if !v.Share.Metadata.Exiting() { // eth-client throws error once trying to fetch duties for existed validator
+		} else if v.Share.Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
 			indices = append(indices, v.Share.Metadata.Index)
 		}
 		return nil
