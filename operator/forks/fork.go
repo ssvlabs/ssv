@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// NetworkV1ForkSlot - slot for the fork
 	NetworkV1ForkSlot = 1713026 // Approx. 16 Nov 2021 at Noon UTC
 )
 

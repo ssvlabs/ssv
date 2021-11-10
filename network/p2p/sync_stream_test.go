@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	core "github.com/libp2p/go-libp2p-core"
@@ -53,7 +54,7 @@ func testPeers(t *testing.T, logger *zap.Logger) (network.Network, network.Netwo
 func TestSyncStream_ReadWithTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 	peer1, peer2 := testPeers(t, logger)
-	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), legacyMsgStream)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), forks.LegacyMsgStream)
 	require.NoError(t, err)
 
 	strm := NewSyncStream(s)
@@ -68,7 +69,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 	peer1, peer2 := testPeers(t, logger)
 
 	readByts := threadsafe.Bool()
-	peer2.(*p2pNetwork).host.SetStreamHandler(legacyMsgStream, func(stream core.Stream) {
+	peer2.(*p2pNetwork).host.SetStreamHandler(forks.LegacyMsgStream, func(stream core.Stream) {
 		netSyncStream := NewSyncStream(stream)
 
 		// read msg
@@ -79,7 +80,7 @@ func TestSyncStream_ReadWithoutTimeout(t *testing.T) {
 		readByts.Set(true)
 	})
 
-	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), legacyMsgStream)
+	s, err := peer1.(*p2pNetwork).host.NewStream(context.Background(), peer2.(*p2pNetwork).host.ID(), forks.LegacyMsgStream)
 	require.NoError(t, err)
 	strm := NewSyncStream(s)
 	err = strm.WriteWithTimeout(make([]byte, 10), time.Millisecond*100)

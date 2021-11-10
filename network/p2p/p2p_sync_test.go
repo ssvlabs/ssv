@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
@@ -37,6 +38,16 @@ func (v0 *testingFork) DecodeNetworkMsg(data []byte) (*network.Message, error) {
 
 func (v0 *testingFork) SlotTick(slot uint64) {
 
+}
+
+func (v0 *testingFork) HighestDecidedStreamProtocol() string {
+	return forks.LegacyMsgStream
+}
+func (v0 *testingFork) DecidedByRangeStreamProtocol() string {
+	return forks.LegacyMsgStream
+}
+func (v0 *testingFork) LastChangeRoundStreamProtocol() string {
+	return forks.LegacyMsgStream
 }
 
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {

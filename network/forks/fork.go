@@ -3,11 +3,15 @@ package forks
 import "github.com/bloxapp/ssv/network"
 
 const (
-	baseSyncStream           = "/sync/"
-	HighestDecidedStream     = baseSyncStream + "highest_decided"
-	DecidedByRangeStream     = baseSyncStream + "decided_by_range"
+	baseSyncStream = "/sync/"
+	// HighestDecidedStream protocol endpoint
+	HighestDecidedStream = baseSyncStream + "highest_decided"
+	// DecidedByRangeStream protocol endpoint
+	DecidedByRangeStream = baseSyncStream + "decided_by_range"
+	// LastChangeRoundMsgStream protocol endpoint
 	LastChangeRoundMsgStream = baseSyncStream + "last_change_round"
-	LegacyMsgStream          = "/sync/0.0.1"
+	// LegacyMsgStream protocol endpoint
+	LegacyMsgStream = "/sync/0.0.1"
 )
 
 // Fork is an interface for network specific fork implementations
