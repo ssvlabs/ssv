@@ -4,7 +4,7 @@ import (
 	ibftControllerFork "github.com/bloxapp/ssv/ibft/controller/forks"
 	ibftControllerForkV0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	networkForks "github.com/bloxapp/ssv/network/forks"
-	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
+	networkForkV1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/operator/forks"
 	storageForks "github.com/bloxapp/ssv/storage/forks"
 )
@@ -20,7 +20,7 @@ type ForkV0 struct {
 func New() forks.Fork {
 	return &ForkV0{
 		ibftFork:    ibftControllerForkV0.New(),
-		networkFork: networkForkV0.New(),
+		networkFork: networkForkV1.New(forks.NetworkV1ForkSlot),
 	}
 }
 

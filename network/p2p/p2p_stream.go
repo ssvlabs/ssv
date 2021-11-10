@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/forks"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,8 +24,9 @@ func (n *p2pNetwork) preStreamHandler(stream core.Stream) (*network.Message, net
 	return cm, netSyncStream, nil
 }
 
+// TODO - remove in v0.1.6
 func (n *p2pNetwork) setLegacyStreamHandler() {
-	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
+	n.host.SetStreamHandler(forks.LegacyMsgStream, func(stream core.Stream) {
 		cm, s, err := n.preStreamHandler(stream)
 		if err != nil {
 			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
@@ -34,38 +36,38 @@ func (n *p2pNetwork) setLegacyStreamHandler() {
 	})
 }
 
-//func (n *p2pNetwork) setHighestDecidedStreamHandler() {
-//	n.host.SetStreamHandler(highestDecidedStream, func(stream core.Stream) {
-//		cm, s, err := n.preStreamHandler(stream)
-//		if err != nil {
-//			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
-//			return
-//		}
-//		n.propagateSyncMsg(cm, s)
-//	})
-//}
-//
-//func (n *p2pNetwork) setDecidedByRangeStreamHandler() {
-//	n.host.SetStreamHandler(decidedByRangeStream, func(stream core.Stream) {
-//		cm, s, err := n.preStreamHandler(stream)
-//		if err != nil {
-//			n.logger.Error("decided by range preStreamHandler failed", zap.Error(err))
-//			return
-//		}
-//		n.propagateSyncMsg(cm, s)
-//	})
-//}
-//
-//func (n *p2pNetwork) setLastChangeRoundStreamHandler() {
-//	n.host.SetStreamHandler(lastChangeRoundMsgStream, func(stream core.Stream) {
-//		cm, s, err := n.preStreamHandler(stream)
-//		if err != nil {
-//			n.logger.Error("last change round preStreamHandler failed", zap.Error(err))
-//			return
-//		}
-//		n.propagateSyncMsg(cm, s)
-//	})
-//}
+func (n *p2pNetwork) setHighestDecidedStreamHandler() {
+	n.host.SetStreamHandler(forks.HighestDecidedStream, func(stream core.Stream) {
+		cm, s, err := n.preStreamHandler(stream)
+		if err != nil {
+			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+			return
+		}
+		n.propagateSyncMsg(cm, s)
+	})
+}
+
+func (n *p2pNetwork) setDecidedByRangeStreamHandler() {
+	n.host.SetStreamHandler(forks.DecidedByRangeStream, func(stream core.Stream) {
+		cm, s, err := n.preStreamHandler(stream)
+		if err != nil {
+			n.logger.Error("decided by range preStreamHandler failed", zap.Error(err))
+			return
+		}
+		n.propagateSyncMsg(cm, s)
+	})
+}
+
+func (n *p2pNetwork) setLastChangeRoundStreamHandler() {
+	n.host.SetStreamHandler(forks.LastChangeRoundMsgStream, func(stream core.Stream) {
+		cm, s, err := n.preStreamHandler(stream)
+		if err != nil {
+			n.logger.Error("last change round preStreamHandler failed", zap.Error(err))
+			return
+		}
+		n.propagateSyncMsg(cm, s)
+	})
+}
 
 // propagateSyncMsg takes an incoming sync message and propagates it on the internal sync channel
 func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream network.SyncStream) {
