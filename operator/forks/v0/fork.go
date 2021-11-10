@@ -5,6 +5,7 @@ import (
 	ibftControllerForkV0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	networkForks "github.com/bloxapp/ssv/network/forks"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
+	"github.com/bloxapp/ssv/operator/forks"
 	storageForks "github.com/bloxapp/ssv/storage/forks"
 )
 
@@ -16,7 +17,7 @@ type ForkV0 struct {
 }
 
 // New returns a new ForkV0 instance
-func New() *ForkV0 {
+func New() forks.Fork {
 	return &ForkV0{
 		ibftFork:    ibftControllerForkV0.New(),
 		networkFork: networkForkV0.New(),

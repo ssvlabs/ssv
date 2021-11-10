@@ -3,6 +3,7 @@ package v0
 import (
 	"github.com/bloxapp/ssv/ibft"
 	ibftinstance "github.com/bloxapp/ssv/ibft/instance"
+	"github.com/bloxapp/ssv/ibft/instance/forks"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 )
 
@@ -12,7 +13,7 @@ type ForkV0 struct {
 }
 
 // New returns new ForkV0
-func New() *ForkV0 {
+func New() forks.Fork {
 	return &ForkV0{}
 }
 
