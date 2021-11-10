@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/operator/duties"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 )
@@ -32,7 +33,7 @@ func (d *testDutyCntrl) CurrentSlotChan() <-chan uint64 {
 func TestOperatorNode_listenToCurrentSlot(t *testing.T) {
 	node := &operatorNode{
 		dutyCtrl: NewTestDutyCntrl(),
-		fork:     v0.New(),
+		fork:     v0.New(zap.L()),
 	}
 
 	node.dutyCtrl.Start()

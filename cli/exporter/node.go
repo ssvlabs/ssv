@@ -95,7 +95,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
 		cfg.P2pNetworkConfig.ReportLastMsg = true
 		// TODO add fork interface for exporter or use the same forks as in operator
-		cfg.P2pNetworkConfig.Fork = networkForkV1.New(operatorFork.NetworkV1ForkSlot)
+		cfg.P2pNetworkConfig.Fork = networkForkV1.New(Logger, operatorFork.NetworkV1ForkSlot)
 		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))

@@ -7,6 +7,7 @@ import (
 	networkForkV1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	"go.uber.org/zap"
 )
 
 // ForkV0 is the genesis operator fork
@@ -15,14 +16,16 @@ type ForkV0 struct {
 	networkFork networkForks.Fork
 	//storageFork storageForks.Fork
 	currentSlot *threadsafe.SafeUint64
+	logger      *zap.Logger
 }
 
 // New returns a new ForkV0 instance
-func New() forks.Fork {
+func New(logger *zap.Logger) forks.Fork {
 	return &ForkV0{
 		ibftFork:    ibftControllerForkV0.New(),
-		networkFork: networkForkV1.New(forks.NetworkV1ForkSlot),
+		networkFork: networkForkV1.New(logger, forks.NetworkV1ForkSlot),
 		currentSlot: threadsafe.Uint64(0),
+		logger:      logger,
 	}
 }
 

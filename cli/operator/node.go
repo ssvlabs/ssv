@@ -80,7 +80,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO - change via command line?
-		fork := v0.New()
+		fork := v0.New(Logger)
 
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()

@@ -3,11 +3,12 @@ package v1
 import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 )
 
 func TestForkV1_RPC_Fork(t *testing.T) {
-	v1Fork := New(100)
+	v1Fork := New(zap.L(), 100)
 
 	t.Run("pre fork", func(t *testing.T) {
 		require.EqualValues(t, forks.LegacyMsgStream, v1Fork.HighestDecidedStreamProtocol())

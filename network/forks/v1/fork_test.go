@@ -2,11 +2,12 @@ package v1
 
 import (
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"testing"
 )
 
 func TestForkV1_SlotTick(t *testing.T) {
-	v1Fork := New(100)
+	v1Fork := New(zap.L(), 100)
 
 	t.Run("initial value", func(t *testing.T) {
 		require.Equal(t, uint64(0), v1Fork.(*ForkV1).currentSlot.Get())
