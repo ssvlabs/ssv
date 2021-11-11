@@ -34,11 +34,15 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	defer n.psTopicsLock.Unlock()
 
 	pubKey := validatorPk.SerializeToHexStr()
+	logger := n.logger.With(zap.String("who", "SubscribeToValidatorNetwork"), zap.String("pubKey", pubKey))
 
 	if _, ok := n.cfg.Topics[pubKey]; !ok {
 		if err := n.joinTopic(pubKey); err != nil {
 			return errors.Wrap(err, "failed to join to topic")
 		}
+		logger.Debug("joined topic")
+	} else {
+		logger.Debug("known topic")
 	}
 
 	if _, ok := n.psSubs[pubKey]; !ok {
@@ -56,19 +60,22 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 				return errors.Wrap(err, "failed to subscribe on Topic")
 			}
 		}
+		logger.Debug("subscribed to topic")
 		ctx, cacnel := context.WithCancel(n.ctx)
 		n.psSubs[pubKey] = cacnel
 		go func() {
 			topicName := sub.Topic()
 			n.listen(ctx, sub)
+			// close topic and mark it as not subscribed
+			n.psTopicsLock.Lock()
+			defer n.psTopicsLock.Unlock()
 			if err := n.closeTopic(topicName); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", topicName), zap.Error(err))
 			}
-			// mark topic as not subscribed
-			n.psTopicsLock.Lock()
-			defer n.psTopicsLock.Unlock()
 			delete(n.psSubs, pubKey)
 		}()
+	} else {
+		logger.Debug("subscription exist")
 	}
 
 	return nil
@@ -97,9 +104,6 @@ func (n *p2pNetwork) joinTopic(pubKey string) error {
 
 // closeTopic closes the given topic
 func (n *p2pNetwork) closeTopic(topicName string) error {
-	n.psTopicsLock.RLock()
-	defer n.psTopicsLock.RUnlock()
-
 	pk := unwrapTopicName(topicName)
 	if t, ok := n.cfg.Topics[pk]; ok {
 		delete(n.cfg.Topics, pk)
@@ -177,7 +181,7 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 		n.logger.Debug("could not propagate nil message")
 		return
 	}
-	n.trace("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
+	n.logger.Debug("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
 		zap.Any("msg", cm.SignedMessage))
 
 	switch cm.Type {
