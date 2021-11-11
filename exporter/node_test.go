@@ -123,8 +123,7 @@ func newMockExporter() (*exporter, error) {
 		return nil, err
 	}
 
-	adapter := api.NewAdapterMock(logger)
-	ws := api.NewWsServer(logger, adapter, nil, nil)
+	ws := api.NewWsServer(context.Background(), logger, nil, nil)
 
 	opts := Options{
 		Ctx:        context.Background(),

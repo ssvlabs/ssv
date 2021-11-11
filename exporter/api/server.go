@@ -31,19 +31,17 @@ type wsServer struct {
 
 	broadcaster Broadcaster
 
-	adapter WebSocketAdapter
-
 	router *http.ServeMux
 	// out is a subject for writing messages
 	out *event.Feed
 }
 
 // NewWsServer creates a new instance
-func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
+func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
+		ctx:         ctx,
 		logger:      logger.With(zap.String("component", "exporter/api/server")),
 		handler:     handler,
-		adapter:     adapter,
 		router:      mux,
 		broadcaster: newBroadcaster(logger),
 		out:         new(event.Feed),
@@ -150,6 +148,7 @@ func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 
 	if !ws.broadcaster.Register(c) {
 		logger.Warn("known connection")
+		return
 	}
 	defer ws.broadcaster.Deregister(c)
 
