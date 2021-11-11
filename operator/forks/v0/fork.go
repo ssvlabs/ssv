@@ -33,7 +33,7 @@ func (v0 *ForkV0) SlotTick(slot uint64) {
 	}
 }
 
-// IBFTControllerFork returns ibft controller fork
+// NewIBFTControllerFork returns ibft controller fork
 func (v0 *ForkV0) NewIBFTControllerFork() ibftControllerFork.Fork {
 	newFork := ibftControllerForkV0.New()
 	v0.ibftForks = append(v0.ibftForks, newFork)
