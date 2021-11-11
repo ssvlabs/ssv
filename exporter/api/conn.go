@@ -60,9 +60,10 @@ type conn struct {
 	send chan []byte
 }
 
-func newConn(ctx context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration) Conn {
+func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id string, writeTimeout time.Duration) Conn {
 	return &conn{
 		ctx:          ctx,
+		logger:       logger,
 		id:           id,
 		ws:           ws,
 		writeTimeout: writeTimeout,

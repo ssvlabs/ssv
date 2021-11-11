@@ -143,7 +143,7 @@ func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	defer logger.Debug("stream handler done")
 
 	ctx, cancel := context.WithCancel(ws.ctx)
-	c := newConn(ctx, wsc, cid, sendTimeout)
+	c := newConn(ctx, logger, wsc, cid, sendTimeout)
 	defer cancel()
 
 	if !ws.broadcaster.Register(c) {
