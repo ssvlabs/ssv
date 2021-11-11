@@ -5,11 +5,11 @@ import "github.com/bloxapp/ssv/network"
 const (
 	baseSyncStream = "/sync/"
 	// HighestDecidedStream protocol endpoint
-	HighestDecidedStream = baseSyncStream + "highest_decided"
+	HighestDecidedStream = baseSyncStream + "highest_decided/0.0.1"
 	// DecidedByRangeStream protocol endpoint
-	DecidedByRangeStream = baseSyncStream + "decided_by_range"
+	DecidedByRangeStream = baseSyncStream + "decided_by_range/0.0.1"
 	// LastChangeRoundMsgStream protocol endpoint
-	LastChangeRoundMsgStream = baseSyncStream + "last_change_round"
+	LastChangeRoundMsgStream = baseSyncStream + "last_change_round/0.0.1"
 	// LegacyMsgStream protocol endpoint
 	LegacyMsgStream = "/sync/0.0.1"
 )
