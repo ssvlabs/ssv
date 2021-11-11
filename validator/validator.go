@@ -164,7 +164,7 @@ func setupIbftController(
 		msgQueue,
 		proto.DefaultConsensusParams(),
 		share,
-		fork.IBFTControllerFork(),
+		fork.NewIBFTControllerFork(),
 		signer)
 }
 
