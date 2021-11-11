@@ -5,21 +5,18 @@ import (
 	"github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/controller/forks"
 	instanceFork "github.com/bloxapp/ssv/ibft/instance/forks"
-	v02 "github.com/bloxapp/ssv/ibft/instance/forks/v0"
+	instanceV0Fork "github.com/bloxapp/ssv/ibft/instance/forks/v0"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 )
 
 // ForkV0 is the genesis fork for controller
 type ForkV0 struct {
-	ctrl         *controller.Controller
-	instanceFork instanceFork.Fork
+	ctrl *controller.Controller
 }
 
 // New returns new ForkV0
 func New() forks.Fork {
-	return &ForkV0{
-		instanceFork: v02.New(),
-	}
+	return &ForkV0{}
 }
 
 // SlotTick implementation
@@ -34,7 +31,7 @@ func (v0 *ForkV0) Apply(ctrl ibft.Controller) {
 
 // InstanceFork returns instance fork
 func (v0 *ForkV0) InstanceFork() instanceFork.Fork {
-	return v0.instanceFork
+	return instanceV0Fork.New()
 }
 
 // ValidateDecidedMsg impl
