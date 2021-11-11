@@ -11,7 +11,7 @@ import (
 
 // ForkV0 is the genesis operator fork
 type ForkV0 struct {
-	ibftFork    ibftControllerFork.Fork
+	ibftForks   []ibftControllerFork.Fork
 	networkFork networkForks.Fork
 	storageFork storageForks.Fork
 }
@@ -19,21 +19,25 @@ type ForkV0 struct {
 // New returns a new ForkV0 instance
 func New() forks.Fork {
 	return &ForkV0{
-		ibftFork:    ibftControllerForkV0.New(),
+		ibftForks:   make([]ibftControllerFork.Fork, 0),
 		networkFork: networkForkV0.New(),
 	}
 }
 
 // SlotTick implementation
 func (v0 *ForkV0) SlotTick(slot uint64) {
-	v0.ibftFork.SlotTick(slot)
 	v0.networkFork.SlotTick(slot)
 	v0.storageFork.SlotTick(slot)
+	for _, f := range v0.ibftForks {
+		f.SlotTick(slot)
+	}
 }
 
 // IBFTControllerFork returns ibft controller fork
 func (v0 *ForkV0) IBFTControllerFork() ibftControllerFork.Fork {
-	return v0.ibftFork
+	newFork := ibftControllerForkV0.New()
+	v0.ibftForks = append(v0.ibftForks, newFork)
+	return newFork
 }
 
 // NetworkFork returns network fork
