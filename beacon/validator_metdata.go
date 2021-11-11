@@ -41,6 +41,11 @@ func (m *ValidatorMetadata) Activated() bool {
 	return m.Status.HasActivated() || m.Status.IsActive() || m.Status.IsAttesting()
 }
 
+// IsActive returns true if the validator is currently active. Cant be other state
+func (m *ValidatorMetadata) IsActive() bool {
+	return m.Status == v1.ValidatorStateActiveOngoing
+}
+
 // Exiting returns true if the validator is existing or exited
 func (m *ValidatorMetadata) Exiting() bool {
 	return m.Status.IsExited() || m.Status.HasExited()
