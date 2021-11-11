@@ -78,11 +78,11 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 
 	// TODO: aggregate validators in sync scenario
 	go func() {
-		n := exp.ws.OutboundFeed().Send(&api.NetworkMessage{Msg: api.Message{
+		n := exp.ws.BroadcastFeed().Send(api.Message{
 			Type:   api.TypeValidator,
 			Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
 			Data:   []storage.ValidatorInformation{*vi},
-		}, Conn: nil})
+		})
 		logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
 	}()
 
@@ -112,11 +112,11 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 	reportOperatorIndex(exp.logger, &oi)
 
 	go func() {
-		n := exp.ws.OutboundFeed().Send(&api.NetworkMessage{Msg: api.Message{
+		n := exp.ws.BroadcastFeed().Send(api.Message{
 			Type:   api.TypeOperator,
 			Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
 			Data:   []storage.OperatorInformation{oi},
-		}, Conn: nil})
+		})
 		logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
 	}()
 

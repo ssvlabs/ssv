@@ -10,7 +10,7 @@ import (
 // Connection is an interface to abstract the actual websocket connection implementation
 type Connection interface {
 	Close() error
-	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
 }
 
 // NetworkMessage wraps an actual message with more information
@@ -40,5 +40,5 @@ func ConnectionID(conn Connection) string {
 		return ""
 	}
 	return fmt.Sprintf("conn-%s-%d",
-		conn.LocalAddr().String(), time.Now().UnixNano())
+		conn.RemoteAddr().String(), time.Now().UnixNano())
 }

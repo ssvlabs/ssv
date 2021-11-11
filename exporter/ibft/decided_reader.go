@@ -160,7 +160,7 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool,
 	}
 	logger.Debug("decided saved")
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
-	go r.out.Send(newDecidedNetworkMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
+	go r.out.Send(newDecidedAPIMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	return true, r.checkHighestDecided(msg)
 }
 
@@ -233,13 +233,13 @@ func validateMsg(msg *proto.SignedMessage, identifier string) error {
 	return p.Run(msg)
 }
 
-func newDecidedNetworkMsg(msg *proto.SignedMessage, pk string) *api.NetworkMessage {
-	return &api.NetworkMessage{Msg: api.Message{
+func newDecidedAPIMsg(msg *proto.SignedMessage, pk string) api.Message {
+	return api.Message{
 		Type: api.TypeDecided,
 		Filter: api.MessageFilter{
 			PublicKey: pk,
 			From:      int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber),
 			Role: api.RoleAttester},
 		Data: []*proto.SignedMessage{msg},
-	}, Conn: nil}
+	}
 }

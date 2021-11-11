@@ -69,7 +69,7 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	var wg sync.WaitGroup
 	go func() {
 		cnOut := make(chan *api.NetworkMessage)
-		sub := exp.ws.OutboundFeed().Subscribe(cnOut)
+		sub := exp.ws.BroadcastFeed().Subscribe(cnOut)
 		defer sub.Unsubscribe()
 
 		for nm := range cnOut {

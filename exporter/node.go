@@ -118,7 +118,7 @@ func New(opts Options) Exporter {
 			Network:          opts.Network,
 			ValidatorStorage: validatorStorage,
 			IbftStorage:      &ibftStorage,
-			Out:              opts.WS.OutboundFeed(),
+			Out:              opts.WS.BroadcastFeed(),
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
@@ -298,6 +298,8 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	logger.Debug("setup validator")
+	defer logger.Debug("setup validator done")
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	// start network reader
 	networkReader := exp.getOrCreateNetworkReader(validatorShare.PublicKey)
@@ -305,7 +307,6 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	// start decided reader
 	decidedReader := exp.getOrCreateDecidedReader(validatorShare)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
-	logger.Debug("setup validator done")
 	return nil
 }
 
@@ -322,7 +323,7 @@ func (exp *exporter) getOrCreateDecidedReader(validatorShare *validatorstorage.S
 			Network:        exp.network,
 			Config:         proto.DefaultConsensusParams(),
 			ValidatorShare: validatorShare,
-			Out:            exp.ws.OutboundFeed(),
+			Out:            exp.ws.BroadcastFeed(),
 		})
 	}
 
