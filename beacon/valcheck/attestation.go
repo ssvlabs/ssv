@@ -2,15 +2,17 @@ package valcheck
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/pkg/errors"
 )
 
 // AttestationValueCheck checks for an Attestation type value
 type AttestationValueCheck struct {
+	signer beacon.Signer
 }
 
 // Check returns error if value is invalid
-func (v *AttestationValueCheck) Check(value []byte) error {
+func (v *AttestationValueCheck) Check(value []byte, pk []byte) error {
 	// try and parse to attestation data
 	inputValue := &spec.AttestationData{}
 	if err := inputValue.UnmarshalSSZ(value); err != nil {
@@ -21,6 +23,6 @@ func (v *AttestationValueCheck) Check(value []byte) error {
 		return errors.New("TEST - failed on slot 100")
 	}
 
-	// TODO - test for slashing protection
+	if v.signer
 	return nil
 }

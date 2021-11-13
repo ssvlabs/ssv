@@ -2,7 +2,6 @@ package ekm
 
 import (
 	"encoding/hex"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/signer"
@@ -13,18 +12,17 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	types "github.com/prysmaticlabs/eth2-types"
-	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"sync"
 )
 
 type ethKeyManagerSigner struct {
-	wallet       core.Wallet
-	walletLock   *sync.RWMutex
-	signer       signer.ValidatorSigner
-	storage      *signerStorage
-	signingUtils beacon.SigningUtil
+	wallet             core.Wallet
+	walletLock         *sync.RWMutex
+	signer             signer.ValidatorSigner
+	slashingProtection core.SlashingProtector
+	storage            *signerStorage
+	signingUtils       beacon.SigningUtil
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
@@ -49,23 +47,17 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, netw
 		}
 	}
 
-	beaconSigner, err := newBeaconSigner(wallet, signerStore, network)
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create signer")
-	}
+	slashingProtection := slashingprotection.NewNormalProtection(signerStore)
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtection, network)
 
 	return &ethKeyManagerSigner{
-		wallet:       wallet,
-		walletLock:   &sync.RWMutex{},
-		signer:       beaconSigner,
-		storage:      signerStore,
-		signingUtils: signingUtils,
+		wallet:             wallet,
+		walletLock:         &sync.RWMutex{},
+		signer:             beaconSigner,
+		slashingProtection: slashingProtection,
+		storage:            signerStore,
+		signingUtils:       signingUtils,
 	}, nil
-}
-
-func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network core.Network) (signer.ValidatorSigner, error) {
-	slashingProtection := slashingprotection.NewNormalProtection(store)
-	return signer.NewSimpleSigner(wallet, slashingProtection, network), nil
 }
 
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
@@ -109,34 +101,6 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *proto.Message, pk []byte
 	return sig, nil
 }
 
-func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	domain, err := km.signingUtils.GetDomain(data)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get domain for signing")
-	}
-	root, err := km.signingUtils.ComputeSigningRoot(data, domain[:])
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get root for signing")
-	}
-	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain, pk)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to sign attestation")
-	}
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not sign attestation")
-	}
-
-	aggregationBitfield := bitfield.NewBitlist(duty.CommitteeLength)
-	aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
-	blsSig := spec.BLSSignature{}
-	copy(blsSig[:], sig)
-	return &spec.Attestation{
-		AggregationBits: aggregationBitfield,
-		Data:            data,
-		Signature:       blsSig,
-	}, root[:], nil
-}
-
 func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
 	key, err := core.NewHDKeyFromPrivateKey(shareKey.Serialize(), "")
 	if err != nil {
@@ -162,22 +126,4 @@ var zeroSlotAttestation = &eth.AttestationData{
 		Epoch: 0,
 		Root:  make([]byte, 32),
 	},
-}
-
-// specAttDataToPrysmAttData a simple func converting between data types
-func specAttDataToPrysmAttData(data *spec.AttestationData) *eth.AttestationData {
-	// TODO - adopt github.com/attestantio/go-eth2-client in eth2-key-manager
-	return &eth.AttestationData{
-		Slot:            types.Slot(data.Slot),
-		CommitteeIndex:  types.CommitteeIndex(data.Index),
-		BeaconBlockRoot: data.BeaconBlockRoot[:],
-		Source: &eth.Checkpoint{
-			Epoch: types.Epoch(data.Source.Epoch),
-			Root:  data.Source.Root[:],
-		},
-		Target: &eth.Checkpoint{
-			Epoch: types.Epoch(data.Target.Epoch),
-			Root:  data.Target.Root[:],
-		},
-	}
 }

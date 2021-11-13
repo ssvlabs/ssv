@@ -168,10 +168,15 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return 0, nil, 0, errors.Errorf("unknown role: %s", duty.Type.String())
 	}
 
+	operatorPk, err := v.Share.OperatorPubKey()
+	if err != nil {
+		return 0, nil, 0, errors.Wrap(err, "could not find operator pk for value check")
+	}
+
 	// do a value check before instance starts to prevent a dead lock if all SSV instances start
 	// an iBFT instance with values which are invalid which will result in them getting "stuck"
 	// in infinite round changes
-	if err := valCheckInstance.Check(inputByts); err != nil {
+	if err := valCheckInstance.Check(inputByts, operatorPk.Serialize()); err != nil {
 		return 0, nil, 0, errors.Wrap(err, "input value failed pre-consensus check")
 	}
 

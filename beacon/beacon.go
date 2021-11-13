@@ -54,10 +54,15 @@ type KeyManager interface {
 
 // Signer is an interface responsible for all signing operations
 type Signer interface {
+	SlashingProtection
 	// SignIBFTMessage signs a network iBFT msg
 	SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error)
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
+}
+
+type SlashingProtection interface {
+	IsAttestationSlashable(data *spec.AttestationData, pk []byte) error
 }
 
 // SigningUtil is an interface for beacon node signing specific methods
