@@ -43,7 +43,6 @@ type Conn interface {
 	ReadLoop()
 	Close() error
 	RemoteAddr() net.Addr
-	//Active() bool
 }
 
 type conn struct {
@@ -53,8 +52,6 @@ type conn struct {
 	ws     *websocket.Conn
 
 	writeTimeout time.Duration
-
-	//active bool
 
 	read chan []byte
 	send chan []byte

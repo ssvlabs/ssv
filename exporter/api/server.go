@@ -107,6 +107,7 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	}
 	cid := ConnectionID(conn)
 	logger := ws.logger.With(zap.String("cid", cid))
+	logger.Debug("handles query requests")
 
 	for {
 		var incoming Message
