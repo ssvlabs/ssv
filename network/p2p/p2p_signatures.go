@@ -31,9 +31,5 @@ func (n *p2pNetwork) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func(
 		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
-	//n.listenersLock.Lock()
-	//n.listeners = append(n.listeners, ls)
-	//n.listenersLock.Unlock()
-
 	return ls.sigCh, n.registerListener(ls)
 }

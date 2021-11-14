@@ -34,9 +34,5 @@ func (n *p2pNetwork) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
 		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
-	//n.listenersLock.Lock()
-	//n.listeners = append(n.listeners, ls)
-	//n.listenersLock.Unlock()
-
 	return ls.msgCh, n.registerListener(ls)
 }

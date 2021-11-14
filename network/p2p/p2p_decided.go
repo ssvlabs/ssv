@@ -42,9 +42,5 @@ func (n *p2pNetwork) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func())
 		decidedCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
-	//n.listenersLock.Lock()
-	//n.listeners = append(n.listeners, ls)
-	//n.listenersLock.Unlock()
-
 	return ls.decidedCh, n.registerListener(ls)
 }

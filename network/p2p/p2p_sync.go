@@ -152,9 +152,5 @@ func (n *p2pNetwork) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func())
 		syncCh: make(chan *network.SyncChanObj, MsgChanSize),
 	}
 
-	//n.listenersLock.Lock()
-	//n.listeners = append(n.listeners, ls)
-	//n.listenersLock.Unlock()
-
 	return ls.syncCh, n.registerListener(ls)
 }
