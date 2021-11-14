@@ -47,12 +47,11 @@ const (
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx           context.Context
-	cfg           *Config
-	listenersLock sync.Locker
-	dv5Listener   discv5Listener
-	//listeners       []listener
-	listenersMap    map[string]listener
+	ctx             context.Context
+	cfg             *Config
+	listenersLock   sync.Locker
+	dv5Listener     discv5Listener
+	listeners       map[string]listener
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey
 	peers           *peers.Status
@@ -78,7 +77,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n := &p2pNetwork{
 		ctx:             ctx,
 		cfg:             cfg,
-		listenersMap:    map[string]listener{},
+		listeners:       map[string]listener{},
 		listenersLock:   &sync.Mutex{},
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,

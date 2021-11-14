@@ -20,13 +20,13 @@ func (n *p2pNetwork) registerListener(ls listener) func() {
 	n.listenersLock.Lock()
 	defer n.listenersLock.Unlock()
 
-	id := fmt.Sprintf("%d:%d", len(n.listenersMap), time.Now().UnixNano())
-	n.listenersMap[id] = ls
+	id := fmt.Sprintf("%d:%d", len(n.listeners), time.Now().UnixNano())
+	n.listeners[id] = ls
 
 	return func() {
 		n.listenersLock.Lock()
 		defer n.listenersLock.Unlock()
-		delete(n.listenersMap, id)
+		delete(n.listeners, id)
 	}
 }
 
@@ -59,7 +59,7 @@ func (n *p2pNetwork) getListeners() []listener {
 	n.listenersLock.Lock()
 	defer n.listenersLock.Unlock()
 	var listeners []listener
-	for _, ls := range n.listenersMap {
+	for _, ls := range n.listeners {
 		listeners = append(listeners, ls)
 	}
 	return listeners
