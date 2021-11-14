@@ -67,12 +67,6 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 
 // sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *decidedReader) sync() error {
-	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-		return errors.Wrap(err, "failed to subscribe topic")
-	}
-	// wait for network setup (subscribe to topic)
-	time.Sleep(1 * time.Second)
-
 	r.logger.Debug("syncing ibft data")
 	// creating HistorySync and starts it
 	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.identifier, r.network,
