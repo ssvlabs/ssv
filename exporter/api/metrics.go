@@ -6,10 +6,6 @@ import (
 )
 
 var (
-	metricStreamOutboundQueueCount = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:exporter:stream_outbound_q_count",
-		Help: "count the outbound messages on stream channel",
-	}, []string{"cid"})
 	metricStreamOutboundCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:exporter:stream_outbound",
 		Help: "count the outbound messages on stream channel",
@@ -25,13 +21,5 @@ func reportStreamOutbound(cid string, err error) {
 		metricStreamOutboundErrorsCount.WithLabelValues(cid).Inc()
 	} else {
 		metricStreamOutboundCount.WithLabelValues(cid).Inc()
-	}
-}
-
-func reportStreamOutboundQueueCount(cid string, inc bool) {
-	if inc {
-		metricStreamOutboundQueueCount.WithLabelValues(cid).Inc()
-	} else {
-		metricStreamOutboundQueueCount.WithLabelValues(cid).Dec()
 	}
 }

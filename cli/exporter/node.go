@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/api/adapters/gorilla"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
@@ -141,7 +140,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Network = network
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
-		exporterOptions.WS = api.NewWsServer(Logger, gorilla.NewGorillaAdapter(Logger), nil, http.NewServeMux())
+		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux())
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
