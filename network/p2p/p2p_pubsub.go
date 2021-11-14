@@ -61,8 +61,8 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 			}
 		}
 		logger.Debug("subscribed to topic")
-		ctx, cacnel := context.WithCancel(n.ctx)
-		n.psSubs[pubKey] = cacnel
+		ctx, cancel := context.WithCancel(n.ctx)
+		n.psSubs[pubKey] = cancel
 		go func() {
 			topicName := sub.Topic()
 			n.listen(ctx, sub)
@@ -72,7 +72,11 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 			if err := n.closeTopic(topicName); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", topicName), zap.Error(err))
 			}
-			delete(n.psSubs, pubKey)
+			// make sure the context is canceled once listen was done from some reason
+			if cancel, ok := n.psSubs[pubKey]; ok {
+				defer cancel()
+				delete(n.psSubs, pubKey)
+			}
 		}()
 	} else {
 		logger.Debug("subscription exist")
@@ -155,7 +159,7 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 			n.logger.Info("context is done, subscription will be cancelled", zap.String("topic", t))
 			return
 		default:
-			msg, err := sub.Next(n.ctx)
+			msg, err := sub.Next(ctx)
 			if err != nil {
 				n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
 				return
