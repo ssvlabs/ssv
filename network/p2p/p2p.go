@@ -78,6 +78,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n := &p2pNetwork{
 		ctx:             ctx,
 		cfg:             cfg,
+		listenersMap:    map[string]listener{},
 		listenersLock:   &sync.Mutex{},
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,
