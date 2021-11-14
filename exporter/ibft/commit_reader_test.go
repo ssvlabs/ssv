@@ -51,11 +51,11 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
 	reader := setupReaderForTest(t)
 	cr := reader.(*commitReader)
-	cn := make(chan *api.NetworkMessage)
+	cn := make(chan api.Message)
 	sub := cr.out.Subscribe(cn)
 	defer sub.Unsubscribe()
 
-	var incoming []*api.NetworkMessage
+	var incoming []api.Message
 	var mut sync.Mutex
 	go func() {
 		for netMsg := range cn {

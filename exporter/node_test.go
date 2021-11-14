@@ -68,14 +68,14 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 
 	var wg sync.WaitGroup
 	go func() {
-		cnOut := make(chan *api.NetworkMessage)
+		cnOut := make(chan api.Message)
 		sub := exp.ws.BroadcastFeed().Subscribe(cnOut)
 		defer sub.Unsubscribe()
 
-		for nm := range cnOut {
-			raw, err := json.Marshal(nm.Msg)
+		for msg := range cnOut {
+			raw, err := json.Marshal(msg)
 			require.NoError(t, err)
-			if nm.Msg.Type == api.TypeValidator {
+			if msg.Type == api.TypeValidator {
 				var validators api.ValidatorsMessage
 				err = json.Unmarshal(raw, &validators)
 				require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 					"eed3b5f6e7ced670ecb066c9704dc2fa93133792381c",
 					validators.Data[0].PublicKey)
 				wg.Done()
-			} else if nm.Msg.Type == api.TypeOperator {
+			} else if msg.Type == api.TypeOperator {
 				var operators api.OperatorsMessage
 				err = json.Unmarshal(raw, &operators)
 				require.NoError(t, err)
