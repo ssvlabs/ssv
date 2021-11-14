@@ -131,9 +131,10 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 		}
 		go func(msg *proto.SignedMessage) {
 			defer logger.Debug("done with decided msg")
-			if saved, err := r.handleNewDecidedMessage(msg); err != nil && !saved {
-				logger.Error("could not handle decided message", zap.Error(err))
-			} else if err != nil {
+			if saved, err := r.handleNewDecidedMessage(msg); err != nil {
+				if !saved {
+					logger.Error("could not handle decided message", zap.Error(err))
+				}
 				logger.Error("could not check highest decided", zap.Error(err))
 			}
 		}(msg)

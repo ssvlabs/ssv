@@ -26,6 +26,7 @@ func (n *p2pNetwork) registerListener(ls listener) func() {
 	return func() {
 		n.listenersLock.Lock()
 		defer n.listenersLock.Unlock()
+
 		delete(n.listeners, id)
 	}
 }
