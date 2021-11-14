@@ -23,6 +23,10 @@ func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beacon.Dut
 	return gc.keyManager.SignAttestation(data, duty, pk)
 }
 
+func (gc *goClient) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return gc.keyManager.IsAttestationSlashable(data, pk)
+}
+
 // SubmitAttestation implements Beacon interface
 func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 	if provider, isProvider := gc.client.(eth2client.AttestationsSubmitter); isProvider {

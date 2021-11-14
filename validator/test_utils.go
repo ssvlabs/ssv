@@ -147,6 +147,10 @@ func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	}, refSigRoot, nil
 }
 
+func (b *testBeacon) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return nil
+}
+
 func (b *testBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 	b.LastSubmittedAttestation = attestation
 	return nil
@@ -181,7 +185,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret.ibfts[beacon.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
 	require.NoError(t, ret.ibfts[beacon.RoleTypeAttester].Init())
-	ret.valueCheck = valcheck.New()
+	ret.valueCheck = valcheck.New(ret.beacon)
 	ret.signer = ret.beacon
 
 	// nodes

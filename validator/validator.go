@@ -84,7 +84,7 @@ func New(opt Options) *Validator {
 		ibfts:                      ibfts,
 		ethNetwork:                 opt.ETHNetwork,
 		beacon:                     opt.Beacon,
-		valueCheck:                 valcheck.New(),
+		valueCheck:                 valcheck.New(opt.Signer),
 		startOnce:                  sync.Once{},
 		fork:                       opt.Fork,
 		signer:                     opt.Signer,

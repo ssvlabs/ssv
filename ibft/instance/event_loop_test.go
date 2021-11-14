@@ -37,6 +37,10 @@ func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	return nil, nil, nil
 }
 
+func (s *testSigner) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return nil
+}
+
 func TestChangeRoundTimer(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{

@@ -60,3 +60,7 @@ func (km *testKM) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, er
 func (km *testKM) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
+
+func (km *testKM) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return nil
+}

@@ -58,6 +58,10 @@ func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *Duty, pk 
 	return nil, nil, nil
 }
 
+func (m *mockBeacon) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return nil
+}
+
 func (m *mockBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 	return nil
 }

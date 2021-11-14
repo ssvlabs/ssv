@@ -20,7 +20,7 @@ func NewNotEqualBytes(val []byte) valcheck.ValueCheck {
 }
 
 // Validate implements dataval.ValidatorStorage interface
-func (c *notEqualBytesValidation) Check(value []byte) error {
+func (c *notEqualBytesValidation) Check(value []byte, pk []byte) error {
 	if bytes.Equal(value, c.val) {
 		return errors.New("msg value is wrong")
 	}

@@ -23,6 +23,5 @@ func (v *AttestationValueCheck) Check(value []byte, pk []byte) error {
 		return errors.New("TEST - failed on slot 100")
 	}
 
-	if v.signer
-	return nil
+	return v.signer.IsAttestationSlashable(inputValue, pk)
 }

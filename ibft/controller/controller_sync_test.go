@@ -44,6 +44,10 @@ func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	return nil, nil, nil
 }
 
+func (s *testSigner) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return nil
+}
+
 type testingFork struct {
 	controller *Controller
 }

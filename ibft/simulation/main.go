@@ -43,7 +43,7 @@ type alwaysTrueValueCheck struct {
 }
 
 // Check impl
-func (i *alwaysTrueValueCheck) Check(value []byte) error {
+func (i *alwaysTrueValueCheck) Check(value []byte, pk []byte) error {
 	return nil
 }
 
@@ -77,6 +77,10 @@ func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 
 func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
+}
+
+func (s *testSigner) IsAttestationSlashable(data *spec.AttestationData, pk []byte) error {
+	return nil
 }
 
 func db() collections.Iibft {
