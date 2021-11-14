@@ -63,7 +63,8 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 	peer1, peer2 := testPeers(t, logger)
 
 	// set receivers
-	peer2Chan := peer2.ReceivedSyncMsgChan()
+	peer2Chan, done := peer2.ReceivedSyncMsgChan()
+	defer done()
 
 	var receivedStream network.SyncStream
 	go func() {

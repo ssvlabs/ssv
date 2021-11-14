@@ -122,8 +122,8 @@ func (n *TestNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) erro
 }
 
 // ReceivedMsgChan impl
-func (n *TestNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
-	return nil
+func (n *TestNetwork) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
+	return nil, func() {}
 }
 
 // BroadcastSignature impl
@@ -132,8 +132,8 @@ func (n *TestNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMess
 }
 
 // ReceivedSignatureChan impl
-func (n *TestNetwork) ReceivedSignatureChan() <-chan *proto.SignedMessage {
-	return nil
+func (n *TestNetwork) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
+	return nil, func() {}
 }
 
 // BroadcastDecided impl
@@ -142,8 +142,8 @@ func (n *TestNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessag
 }
 
 // ReceivedDecidedChan impl
-func (n *TestNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
-	return nil
+func (n *TestNetwork) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
+	return nil, func() {}
 }
 
 // GetHighestDecidedInstance impl
@@ -265,8 +265,8 @@ func (n *TestNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg
 }
 
 // ReceivedSyncMsgChan implementation
-func (n *TestNetwork) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
-	return nil
+func (n *TestNetwork) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
+	return nil, func() {}
 }
 
 // SubscribeToValidatorNetwork subscribing and listen to validator network

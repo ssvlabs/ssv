@@ -29,14 +29,14 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 }
 
 // ReceivedMsgChan return a channel with messages
-func (n *p2pNetwork) ReceivedMsgChan() <-chan *proto.SignedMessage {
+func (n *p2pNetwork) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listener{
 		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
-	n.listenersLock.Lock()
-	n.listeners = append(n.listeners, ls)
-	n.listenersLock.Unlock()
+	//n.listenersLock.Lock()
+	//n.listeners = append(n.listeners, ls)
+	//n.listenersLock.Unlock()
 
-	return ls.msgCh
+	return ls.msgCh, n.registerListener(ls)
 }

@@ -112,7 +112,9 @@ func (r *decidedReader) Start() error {
 	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	r.listenToNetwork(r.network.ReceivedDecidedChan())
+	cn, done := r.network.ReceivedDecidedChan()
+	defer done()
+	r.listenToNetwork(cn)
 	return nil
 }
 

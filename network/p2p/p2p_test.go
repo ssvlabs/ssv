@@ -40,8 +40,10 @@ func TestP2PNetworker(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	peer1Chan := peer1.ReceivedMsgChan()
-	peer2Chan := peer2.ReceivedMsgChan()
+	peer1Chan, done1 := peer1.ReceivedMsgChan()
+	defer done1()
+	peer2Chan, done2 := peer2.ReceivedMsgChan()
+	defer done2()
 
 	time.Sleep(time.Second)
 

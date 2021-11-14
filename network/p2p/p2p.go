@@ -21,7 +21,6 @@ import (
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 )
 
@@ -46,20 +45,14 @@ const (
 	legacyMsgStream = "/sync/0.0.1"
 )
 
-type listener struct {
-	msgCh     chan *proto.SignedMessage
-	sigCh     chan *proto.SignedMessage
-	decidedCh chan *proto.SignedMessage
-	syncCh    chan *network.SyncChanObj
-}
-
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
 	ctx             context.Context
 	cfg             *Config
 	listenersLock   sync.Locker
 	dv5Listener     discv5Listener
-	listeners       []listener
+	//listeners       []listener
+	listenersMap    map[string]listener
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey
 	peers           *peers.Status
