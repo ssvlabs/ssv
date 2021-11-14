@@ -108,8 +108,9 @@ func (r *decidedReader) Start() error {
 	validator.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), true, false)
 
 	r.logger.Debug("sync is done, starting to read network messages")
-
-	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 1); err != nil {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	if err := r.waitForMinPeers(ctx, r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
 	cn, done := r.network.ReceivedDecidedChan()
@@ -201,14 +202,12 @@ func (r *decidedReader) validateDecidedMsg(msg *proto.SignedMessage) error {
 }
 
 // waitForMinPeers will wait until enough peers joined the topic
-func (r *decidedReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
-	ctx := commons.WaitMinPeersCtx{
-		Ctx:    context.Background(),
+func (r *decidedReader) waitForMinPeers(ctx context.Context, pk *bls.PublicKey, minPeerCount int) error {
+	return commons.WaitForMinPeers(commons.WaitMinPeersCtx{
+		Ctx:    ctx,
 		Logger: r.logger,
 		Net:    r.network,
-	}
-	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
-		1*time.Second, 64*time.Second, false)
+	}, pk.Serialize(), minPeerCount, 1*time.Second, 64*time.Second, false)
 }
 
 func validateDecidedMsg(msg *proto.SignedMessage, share *storage.Share) error {

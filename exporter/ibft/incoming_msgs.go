@@ -49,7 +49,10 @@ func (i *incomingMsgsReader) Start() error {
 			i.logger.Error("failed to unsubscribe topic", zap.Error(err))
 		}
 	}()
-	if err := i.waitForMinPeers(i.publicKey, 1); err != nil {
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	if err := i.waitForMinPeers(ctx, i.publicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
 	cn, done := i.network.ReceivedMsgChan()
@@ -90,14 +93,12 @@ func (i *incomingMsgsReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 }
 
 // waitForMinPeers will wait until enough peers joined the topic
-func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
-	ctx := commons.WaitMinPeersCtx{
-		Ctx:    context.Background(),
+func (i *incomingMsgsReader) waitForMinPeers(ctx context.Context, pk *bls.PublicKey, minPeerCount int) error {
+	return commons.WaitForMinPeers(commons.WaitMinPeersCtx{
+		Ctx:    ctx,
 		Logger: i.logger,
 		Net:    i.network,
-	}
-	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
-		1*time.Second, 64*time.Second, false)
+	}, pk.Serialize(), minPeerCount, 1*time.Second, 64*time.Second, false)
 }
 
 func messageFields(msg *proto.SignedMessage) []zap.Field {
