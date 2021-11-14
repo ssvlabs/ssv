@@ -61,6 +61,7 @@ type Signer interface {
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }
 
+// SlashingProtection is an interface for all signing slashing protection
 type SlashingProtection interface {
 	IsAttestationSlashable(data *spec.AttestationData, pk []byte) error
 }
