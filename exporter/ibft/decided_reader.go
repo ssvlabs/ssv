@@ -88,11 +88,6 @@ func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
-	defer func() {
-		if err := r.network.UnSubscribeValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-			r.logger.Error("failed to unsubscribe topic", zap.Error(err))
-		}
-	}()
 
 	if err := tasks.Retry(func() error {
 		if err := r.sync(); err != nil {

@@ -44,11 +44,6 @@ func (i *incomingMsgsReader) Start() error {
 	if err := i.network.SubscribeToValidatorNetwork(i.publicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
-	defer func() {
-		if err := i.network.UnSubscribeValidatorNetwork(i.publicKey); err != nil {
-			i.logger.Error("failed to unsubscribe topic", zap.Error(err))
-		}
-	}()
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()

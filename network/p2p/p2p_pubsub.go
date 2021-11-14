@@ -10,22 +10,6 @@ import (
 	"strings"
 )
 
-// UnSubscribeValidatorNetwork unsubscribes a validators topic
-func (n *p2pNetwork) UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error {
-	pubKey := validatorPk.SerializeToHexStr()
-
-	n.psTopicsLock.Lock()
-	cancel, ok := n.psSubs[pubKey]
-	n.psTopicsLock.Unlock()
-
-	if ok {
-		cancel()
-	} else {
-		return errors.New("could not find active subscription")
-	}
-	return nil
-}
-
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
 func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	n.psTopicsLock.Lock()

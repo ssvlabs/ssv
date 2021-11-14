@@ -56,8 +56,6 @@ type Reader interface {
 	ReceivedSyncMsgChan() (<-chan *SyncChanObj, func())
 	// SubscribeToValidatorNetwork subscribes and listens to validator's network
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
-	// UnSubscribeValidatorNetwork unsubscribes from validator's network
-	UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)
 	// SubscribeToMainTopic subscribes to main topic
