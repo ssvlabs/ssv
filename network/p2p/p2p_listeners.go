@@ -15,6 +15,7 @@ type listener struct {
 	syncCh    chan *network.SyncChanObj
 }
 
+// registerListener registers the given listener
 func (n *p2pNetwork) registerListener(ls listener) func() {
 	n.listenersLock.Lock()
 	defer n.listenersLock.Unlock()
@@ -39,13 +40,7 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 	n.logger.Debug("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
 		zap.Any("msg", cm.SignedMessage))
 
-	// copy listeners with lock, to avoid data races
-	n.listenersLock.Lock()
-	var listeners []listener
-	for _, ls := range n.listenersMap {
-		listeners = append(listeners, ls)
-	}
-	n.listenersLock.Unlock()
+	listeners := n.getListeners()
 
 	switch cm.Type {
 	case network.NetworkMsg_IBFTType:
@@ -57,6 +52,17 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 	default:
 		n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
 	}
+}
+
+// getListeners copies listeners to avoid data races when iterating over listeners
+func (n *p2pNetwork) getListeners() []listener {
+	n.listenersLock.Lock()
+	defer n.listenersLock.Unlock()
+	var listeners []listener
+	for _, ls := range n.listenersMap {
+		listeners = append(listeners, ls)
+	}
+	return listeners
 }
 
 func propagateIBFTMessage(listeners []listener, msg *proto.SignedMessage) {

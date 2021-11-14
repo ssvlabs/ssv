@@ -47,10 +47,10 @@ const (
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx             context.Context
-	cfg             *Config
-	listenersLock   sync.Locker
-	dv5Listener     discv5Listener
+	ctx           context.Context
+	cfg           *Config
+	listenersLock sync.Locker
+	dv5Listener   discv5Listener
 	//listeners       []listener
 	listenersMap    map[string]listener
 	logger          *zap.Logger
