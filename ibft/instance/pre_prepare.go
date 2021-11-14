@@ -35,18 +35,13 @@ func (i *Instance) PrePrepareMsgPipelineV0() pipeline.Pipeline {
 }
 
 func (i *Instance) prePrepareMsgValidationPipeline() pipeline.Pipeline {
-	pk, _ := i.ValidatorShare.OperatorPubKey()
-	//if err != nil {
-	//	return errors.Wrap(err, "could not find operator pk for signing msg")
-	//}
-
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_PrePrepare),
 		auth.ValidateLambdas(i.State().Lambda.Get()),
 		auth.ValidateSequenceNumber(i.State().SeqNumber.Get()),
 		auth.AuthorizeMsg(i.ValidatorShare),
-		preprepare.ValidatePrePrepareMsg(i.ValueCheck, pk.Serialize(), i.RoundLeader),
+		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.ValidatorShare, i.RoundLeader),
 	)
 }
 

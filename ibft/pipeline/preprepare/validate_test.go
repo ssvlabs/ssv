@@ -1,6 +1,7 @@
 package preprepare
 
 import (
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 	"time"
@@ -43,8 +44,13 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *pr
 }
 
 func TestValidatePrePrepareValue(t *testing.T) {
-	sks, _ := GenerateNodes(4)
+	sks, nodes := GenerateNodes(4)
 	consensus := bytesval.NewEqualBytes([]byte(time.Now().Weekday().String()))
+	share := &storage.Share{
+		NodeID:    1,
+		PublicKey: sks[1].GetPublicKey(),
+		Committee: nodes,
+	}
 
 	tests := []struct {
 		name string
@@ -112,7 +118,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidatePrePrepareMsg(consensus, []byte{}, func(round uint64) uint64 {
+			err := ValidatePrePrepareMsg(consensus, share, func(round uint64) uint64 {
 				return 1
 			}).Run(test.msg)
 			if len(test.err) > 0 {

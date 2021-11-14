@@ -22,7 +22,6 @@ type testFork struct {
 }
 
 func (v0 *testFork) Apply(instance ibft.Instance) {
-
 }
 
 // PrePrepareMsgPipelineV0 is the full processing msg pipeline for a pre-prepare msg
