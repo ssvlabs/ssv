@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/pkg/errors"
+	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"net/http"
@@ -17,17 +17,19 @@ const (
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
 	Start(addr string) error
-	OutboundFeed() *event.Feed
+	BroadcastFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
 
 // wsServer is an implementation of WebSocketServer
 type wsServer struct {
+	ctx context.Context
+
 	logger *zap.Logger
 
 	handler QueryMessageHandler
 
-	adapter WebSocketAdapter
+	broadcaster Broadcaster
 
 	router *http.ServeMux
 	// out is a subject for writing messages
@@ -35,10 +37,14 @@ type wsServer struct {
 }
 
 // NewWsServer creates a new instance
-func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
+func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
-		logger.With(zap.String("component", "exporter/api/server")),
-		handler, adapter, mux, new(event.Feed),
+		ctx:         ctx,
+		logger:      logger.With(zap.String("component", "exporter/api/server")),
+		handler:     handler,
+		router:      mux,
+		broadcaster: newBroadcaster(logger),
+		out:         new(event.Feed),
 	}
 	return &ws
 }
@@ -47,13 +53,16 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 	ws.handler = handler
 }
 
+// Start starts the websocket server and the broadcaster
 func (ws *wsServer) Start(addr string) error {
-	if ws.adapter == nil {
-		return errors.New("websocket adapter is missing")
-	}
-	ws.adapter.RegisterHandler(ws.router, "/query", ws.handleQuery)
-	ws.adapter.RegisterHandler(ws.router, "/stream", ws.handleStream)
+	ws.RegisterHandler("/query", ws.handleQuery)
+	ws.RegisterHandler("/stream", ws.handleStream)
 
+	go func() {
+		if err := ws.broadcaster.FromFeed(ws.out); err != nil {
+			ws.logger.Debug("failed to pull messages from feed")
+		}
+	}()
 	ws.logger.Info("starting websocket server",
 		zap.String("addr", addr),
 		zap.Strings("endPoints", []string{"/query", "/stream"}))
@@ -65,24 +74,47 @@ func (ws *wsServer) Start(addr string) error {
 	return err
 }
 
-func (ws *wsServer) OutboundFeed() *event.Feed {
+// BroadcastFeed returns the feed for stream messages
+func (ws *wsServer) BroadcastFeed() *event.Feed {
 	return ws.out
 }
 
+// RegisterHandler registers an end point
+func (ws *wsServer) RegisterHandler(endPoint string, handler func(conn *websocket.Conn)) {
+	ws.router.HandleFunc(endPoint, func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, w.Header())
+		logger := ws.logger.With(zap.String("remote addr", conn.RemoteAddr().String()))
+		if err != nil {
+			ws.logger.Error("could not upgrade connection", zap.Error(err))
+			return
+		}
+		logger.Debug("new websocket connection")
+		defer func() {
+			logger.Debug("closing connection")
+			err := conn.Close()
+			if err != nil {
+				logger.Error("could not close connection", zap.Error(err))
+			}
+		}()
+		handler(conn)
+	})
+}
+
 // handleQuery receives query message and respond async
-func (ws *wsServer) handleQuery(conn Connection) {
+func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	if ws.handler == nil {
 		return
 	}
 	cid := ConnectionID(conn)
 	logger := ws.logger.With(zap.String("cid", cid))
+	logger.Debug("handles query requests")
 
 	for {
-		var nm NetworkMessage
 		var incoming Message
-		err := ws.adapter.Receive(conn, &incoming)
+		var nm NetworkMessage
+		err := conn.ReadJSON(&incoming)
 		if err != nil {
-			if ws.adapter.IsCloseError(err) { // stop on any close error
+			if isCloseError(err) {
 				logger.Debug("failed to read message as the connection was closed", zap.Error(err))
 				return
 			}
@@ -91,11 +123,11 @@ func (ws *wsServer) handleQuery(conn Connection) {
 		} else {
 			nm = NetworkMessage{incoming, nil, conn}
 		}
-		// handler is processing the request
+		// handler is processing the request and updates msg
 		ws.handler(&nm)
 
 		err = tasks.Retry(func() error {
-			return ws.adapter.Send(conn, &nm.Msg)
+			return conn.WriteJSON(&nm.Msg)
 		}, 3)
 		if err != nil {
 			logger.Error("could not send message", zap.Error(err))
@@ -105,74 +137,23 @@ func (ws *wsServer) handleQuery(conn Connection) {
 }
 
 // handleQuery receives query message and respond async
-func (ws *wsServer) handleStream(conn Connection) {
-	cid := ConnectionID(conn)
+func (ws *wsServer) handleStream(wsc *websocket.Conn) {
+	cid := ConnectionID(wsc)
 	logger := ws.logger.
 		With(zap.String("cid", cid))
 	defer logger.Debug("stream handler done")
-	// messages are being collected into a slice and picked up in another goroutine.
-	//
-	// the reason is that messages cannot be sent on a different goroutine,
-	// but we can't use the same goroutine to pick up messages and send requests
-	// as sending blocks the goroutine from picking up messages from the channel.
-	cn := make(chan *NetworkMessage)
-	sub := ws.out.Subscribe(cn)
 
-	ctx, cancelCtx := context.WithCancel(context.Background())
-	defer cancelCtx()
-
-	q := newMsgQ()
-
-	go func() {
-		defer sub.Unsubscribe()
-		defer q.stop()
-
-		for {
-			select {
-			case nm := <-cn:
-				if !q.enqueue(nm) {
-					logger.Error("queue is full, closing connection", zap.Any("msg", nm.Msg))
-					return
-				}
-				reportStreamOutboundQueueCount(cid, true)
-			case err := <-sub.Err():
-				logger.Debug("subscription error", zap.Error(err))
-				return
-			case <-ctx.Done():
-				logger.Debug("context done")
-				return
-			}
-		}
-	}()
-
-	for {
-		nm, running := q.dequeue()
-		if !running {
-			return
-		}
-		if nm == nil {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		reportStreamOutboundQueueCount(cid, false)
-		logger.Debug("sending outbound",
-			zap.String("msg.type", string(nm.Msg.Type)), zap.Any("msg", nm.Msg))
-		err := ws.send(ctx, conn, nm.Msg)
-		reportStreamOutbound(cid, err)
-		if err != nil {
-			logger.Error("could not send message", zap.Error(err))
-			return
-		}
-	}
-}
-
-// send takes the given message and try (3 times) to send it
-// the whole operation will timeout after 3 sec
-func (ws *wsServer) send(ctx context.Context, conn Connection, msg Message) error {
-	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
+	ctx, cancel := context.WithCancel(ws.ctx)
+	c := newConn(ctx, logger, wsc, cid, sendTimeout)
 	defer cancel()
 
-	return tasks.RetryWithContext(sendCtx, func() error {
-		return ws.adapter.Send(conn, &msg)
-	}, 3)
+	if !ws.broadcaster.Register(c) {
+		logger.Warn("known connection")
+		return
+	}
+	defer ws.broadcaster.Deregister(c)
+
+	go c.ReadLoop()
+
+	c.WriteLoop()
 }

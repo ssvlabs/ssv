@@ -102,7 +102,7 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	}
 	if updated {
 		logger.Debug("decided message was updated")
-		go cr.out.Send(newDecidedNetworkMsg(msg, pkHex))
+		go cr.out.Send(newDecidedAPIMsg(msg, pkHex))
 	}
 	return nil
 }
