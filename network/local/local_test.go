@@ -11,7 +11,10 @@ import (
 
 func TestMsgChan(t *testing.T) {
 	net := NewLocalNetwork()
-	c1, c2, c3, c4 := net.ReceivedMsgChan(), net.ReceivedMsgChan(), net.ReceivedMsgChan(), net.ReceivedMsgChan()
+	c1, _ := net.ReceivedMsgChan()
+	c2, _ := net.ReceivedMsgChan()
+	c3, _ := net.ReceivedMsgChan()
+	c4, _ := net.ReceivedMsgChan()
 
 	testMsg := &proto.SignedMessage{
 		Signature: []byte{1, 2, 3, 4},
@@ -42,8 +45,10 @@ func TestMsgChan(t *testing.T) {
 
 func TestSigChan(t *testing.T) {
 	net := NewLocalNetwork()
-	c1, c2, c3, c4 := net.ReceivedSignatureChan(), net.ReceivedSignatureChan(), net.ReceivedSignatureChan(), net.ReceivedSignatureChan()
-
+	c1, _ := net.ReceivedSignatureChan()
+	c2, _ := net.ReceivedSignatureChan()
+	c3, _ := net.ReceivedSignatureChan()
+	c4, _ := net.ReceivedSignatureChan()
 	testMsg := &proto.SignedMessage{
 		Signature: []byte{1, 2, 3, 4},
 		SignerIds: []uint64{1, 2, 3, 4},
@@ -73,7 +78,10 @@ func TestSigChan(t *testing.T) {
 
 func TestDecidedChan(t *testing.T) {
 	net := NewLocalNetwork()
-	c1, c2, c3, c4 := net.ReceivedDecidedChan(), net.ReceivedDecidedChan(), net.ReceivedDecidedChan(), net.ReceivedDecidedChan()
+	c1, _ := net.ReceivedDecidedChan()
+	c2, _ := net.ReceivedDecidedChan()
+	c3, _ := net.ReceivedDecidedChan()
+	c4, _ := net.ReceivedDecidedChan()
 
 	testMsg := &proto.SignedMessage{
 		Signature: []byte{1, 2, 3, 4},
@@ -104,7 +112,8 @@ func TestDecidedChan(t *testing.T) {
 
 func TestGetHighestDecided(t *testing.T) {
 	net := NewLocalNetwork()
-	_, c2 := net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan()
+	_, _ = net.ReceivedSyncMsgChan()
+	c2, _ := net.ReceivedSyncMsgChan()
 
 	go func() {
 		msg := <-c2
@@ -128,7 +137,8 @@ func TestGetHighestDecided(t *testing.T) {
 
 func TestGetDecidedByRange(t *testing.T) {
 	net := NewLocalNetwork()
-	_, c2 := net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan()
+	_, _ = net.ReceivedSyncMsgChan()
+	c2, _ := net.ReceivedSyncMsgChan()
 
 	go func() {
 		msg := <-c2
@@ -152,7 +162,11 @@ func TestGetDecidedByRange(t *testing.T) {
 
 func TestGetAllPeers(t *testing.T) {
 	net := NewLocalNetwork()
-	_, _, _, _ = net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan(), net.ReceivedSyncMsgChan()
+	_, _ = net.ReceivedSyncMsgChan()
+	_, _ = net.ReceivedSyncMsgChan()
+	_, _ = net.ReceivedSyncMsgChan()
+	_, _ = net.ReceivedSyncMsgChan()
+
 	res, err := net.AllPeers([]byte{})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"0", "1", "2", "3"}, res)

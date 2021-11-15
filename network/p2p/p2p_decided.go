@@ -37,14 +37,10 @@ func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage
 }
 
 // ReceivedDecidedChan returns the channel for decided messages
-func (n *p2pNetwork) ReceivedDecidedChan() <-chan *proto.SignedMessage {
+func (n *p2pNetwork) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listener{
 		decidedCh: make(chan *proto.SignedMessage, MsgChanSize),
 	}
 
-	n.listenersLock.Lock()
-	n.listeners = append(n.listeners, ls)
-	n.listenersLock.Unlock()
-
-	return ls.decidedCh
+	return ls.decidedCh, n.registerListener(ls)
 }

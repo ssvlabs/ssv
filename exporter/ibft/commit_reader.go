@@ -49,7 +49,8 @@ func NewCommitReader(opts CommitReaderOptions) Reader {
 
 // Start starts the reader
 func (cr *commitReader) Start() error {
-	msgCn := cr.network.ReceivedMsgChan()
+	msgCn, done := cr.network.ReceivedMsgChan()
+	defer done()
 	cr.logger.Debug("listening to network messages")
 	for msg := range msgCn {
 		if processed := cr.onMessage(msg); processed {

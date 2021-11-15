@@ -47,17 +47,15 @@ type SyncStream interface {
 // Reader is the interface for reading messages from the network
 type Reader interface {
 	// ReceivedMsgChan is a channel that forwards new propagated messages to a subscriber
-	ReceivedMsgChan() <-chan *proto.SignedMessage
+	ReceivedMsgChan() (<-chan *proto.SignedMessage, func())
 	// ReceivedSignatureChan returns the channel with signatures
-	ReceivedSignatureChan() <-chan *proto.SignedMessage
+	ReceivedSignatureChan() (<-chan *proto.SignedMessage, func())
 	// ReceivedDecidedChan returns the channel for decided messages
-	ReceivedDecidedChan() <-chan *proto.SignedMessage
+	ReceivedDecidedChan() (<-chan *proto.SignedMessage, func())
 	// ReceivedSyncMsgChan returns the channel for sync messages
-	ReceivedSyncMsgChan() <-chan *SyncChanObj
+	ReceivedSyncMsgChan() (<-chan *SyncChanObj, func())
 	// SubscribeToValidatorNetwork subscribes and listens to validator's network
 	SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error
-	// UnSubscribeValidatorNetwork unsubscribes from validator's network
-	UnSubscribeValidatorNetwork(validatorPk *bls.PublicKey) error
 	// AllPeers returns all connected peers for a validator PK
 	AllPeers(validatorPk []byte) ([]string, error)
 	// SubscribeToMainTopic subscribes to main topic

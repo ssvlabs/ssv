@@ -67,12 +67,6 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 
 // sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
 func (r *decidedReader) sync() error {
-	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-		return errors.Wrap(err, "failed to subscribe topic")
-	}
-	// wait for network setup (subscribe to topic)
-	time.Sleep(1 * time.Second)
-
 	r.logger.Debug("syncing ibft data")
 	// creating HistorySync and starts it
 	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.identifier, r.network,
@@ -94,11 +88,6 @@ func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
-	defer func() {
-		if err := r.network.UnSubscribeValidatorNetwork(r.validatorShare.PublicKey); err != nil {
-			r.logger.Error("failed to unsubscribe topic", zap.Error(err))
-		}
-	}()
 
 	if err := tasks.Retry(func() error {
 		if err := r.sync(); err != nil {
@@ -114,11 +103,14 @@ func (r *decidedReader) Start() error {
 	validator.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), true, false)
 
 	r.logger.Debug("sync is done, starting to read network messages")
-
-	if err := r.waitForMinPeers(r.validatorShare.PublicKey, 1); err != nil {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	if err := r.waitForMinPeers(ctx, r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	r.listenToNetwork(r.network.ReceivedDecidedChan())
+	cn, done := r.network.ReceivedDecidedChan()
+	defer done()
+	r.listenToNetwork(cn)
 	return nil
 }
 
@@ -139,9 +131,10 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 		}
 		go func(msg *proto.SignedMessage) {
 			defer logger.Debug("done with decided msg")
-			if saved, err := r.handleNewDecidedMessage(msg); err != nil && !saved {
-				logger.Error("could not handle decided message", zap.Error(err))
-			} else if err != nil {
+			if saved, err := r.handleNewDecidedMessage(msg); err != nil {
+				if !saved {
+					logger.Error("could not handle decided message", zap.Error(err))
+				}
 				logger.Error("could not check highest decided", zap.Error(err))
 			}
 		}(msg)
@@ -205,14 +198,12 @@ func (r *decidedReader) validateDecidedMsg(msg *proto.SignedMessage) error {
 }
 
 // waitForMinPeers will wait until enough peers joined the topic
-func (r *decidedReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
-	ctx := commons.WaitMinPeersCtx{
-		Ctx:    context.Background(),
+func (r *decidedReader) waitForMinPeers(ctx context.Context, pk *bls.PublicKey, minPeerCount int) error {
+	return commons.WaitForMinPeers(commons.WaitMinPeersCtx{
+		Ctx:    ctx,
 		Logger: r.logger,
 		Net:    r.network,
-	}
-	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
-		1*time.Second, 64*time.Second, false)
+	}, pk.Serialize(), minPeerCount, 1*time.Second, 64*time.Second, false)
 }
 
 func validateDecidedMsg(msg *proto.SignedMessage, share *storage.Share) error {
