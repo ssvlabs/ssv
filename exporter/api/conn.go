@@ -103,13 +103,8 @@ func (c *conn) WriteLoop() {
 	}()
 	for {
 		select {
-		case message /*, ok*/ := <-c.send:
+		case message := <-c.send:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(pongWait))
-			/*if !ok {
-				c.logger.Debug("send channel was closed, sending close message")
-				c.ws.WriteMessage(websocket.CloseMessage, []byte{})
-				return
-			}*/
 			w, err := c.ws.NextWriter(websocket.TextMessage)
 			if err != nil {
 				c.logger.Error("could not read ws message", zap.Error(err))
@@ -117,17 +112,11 @@ func (c *conn) WriteLoop() {
 			}
 			if _, err = w.Write(message); err != nil {
 				c.logger.Error("could not write ws message", zap.Error(err))
-				reportStreamOutbound(c.ID(), err)
+				reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 				return
 			}
-			// write queued messages
-			//n := len(c.send)
-			//for i := 0; i < n; i++ {
-			//	w.Write(newline)
-			//	w.Write(<-c.send)
-			//}
 			err = w.Close()
-			reportStreamOutbound(c.ID(), err)
+			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
 				c.logger.Error("could not close writer", zap.Error(err))
 				return
