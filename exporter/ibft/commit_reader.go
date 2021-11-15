@@ -101,9 +101,9 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to process late commit message")
 	}
-	if updated {
+	if updated != nil {
 		logger.Debug("decided message was updated")
-		go cr.out.Send(newDecidedAPIMsg(msg, pkHex))
+		go cr.out.Send(newDecidedAPIMsg(updated, pkHex))
 	}
 	return nil
 }

@@ -212,13 +212,13 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	tests := []struct {
 		name        string
 		expectedErr string
-		updated     bool
+		updated     interface{}
 		msg         *proto.SignedMessage
 	}{
 		{
 			"valid",
 			"",
-			true,
+			struct{}{},
 			SignMsg(t, 4, sks[4], &proto.Message{
 				Type:   proto.RoundState_Commit,
 				Round:  3,
@@ -229,7 +229,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 		{
 			"invalid",
 			"could not aggregate commit message",
-			false,
+			nil,
 			func() *proto.SignedMessage {
 				msg := SignMsg(t, 4, sks[4], &proto.Message{
 					Type:   proto.RoundState_Commit,
@@ -244,7 +244,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 		{
 			"not found",
 			"",
-			false,
+			nil,
 			SignMsg(t, 4, sks[4], &proto.Message{
 				Type:   proto.RoundState_Commit,
 				Round:  3,
@@ -263,7 +263,11 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
-			require.Equal(t, test.updated, updated)
+			if test.updated != nil {
+				require.NotNil(t, updated)
+			} else {
+				require.Nil(t, updated)
+			}
 		})
 	}
 }

@@ -132,7 +132,7 @@ func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 					i.ValidatorShare.PublicKey.SerializeToHexStr())
 				if err != nil {
 					logger.Error("failed to process late commit message", zap.Error(err))
-				} else if updated {
+				} else if updated != nil {
 					logger.Debug("decided message was updated")
 				}
 			} else {

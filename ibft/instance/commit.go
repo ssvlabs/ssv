@@ -14,28 +14,28 @@ import (
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, pubkey string) (bool, error) {
+func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, pubkey string) (*proto.SignedMessage, error) {
 	// find stored decided
 	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
-		return false, errors.Wrap(err, "could not fetch decided for late commit")
+		return nil, errors.Wrap(err, "could not fetch decided for late commit")
 	}
 	if !found {
-		return false, nil
+		return nil, nil
 	}
 	// aggregate message with stored decided
 	if err := decidedMsg.Aggregate(msg); err != nil {
 		if err == proto.ErrDuplicateMsgSigner {
-			return false, nil
+			return nil, nil
 		}
-		return false, errors.Wrap(err, "could not aggregate commit message")
+		return nil, errors.Wrap(err, "could not aggregate commit message")
 	}
 	// save to storage
 	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
-		return false, errors.Wrap(err, "could not save aggregated decided message")
+		return nil, errors.Wrap(err, "could not save aggregated decided message")
 	}
 	ibft.ReportDecided(pubkey, msg)
-	return true, nil
+	return decidedMsg, nil
 }
 
 // CommitMsgPipeline - the main commit msg pipeline
