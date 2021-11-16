@@ -7,6 +7,7 @@ import (
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/operator/forks"
 	storageForks "github.com/bloxapp/ssv/storage/forks"
+	storageForksV0 "github.com/bloxapp/ssv/storage/forks/v0"
 )
 
 // ForkV0 is the genesis operator fork
@@ -21,6 +22,7 @@ func New() forks.Fork {
 	return &ForkV0{
 		ibftForks:   make([]ibftControllerFork.Fork, 0),
 		networkFork: networkForkV0.New(),
+		storageFork: storageForksV0.New(),
 	}
 }
 

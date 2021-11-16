@@ -109,6 +109,15 @@ func TestNonExistingWallet(t *testing.T) {
 	require.Nil(t, w)
 }
 
+func TestNonExistingAccount(t *testing.T) {
+	wallet, storage := testWallet(t)
+	defer storage.db.Close()
+
+	account, err := wallet.AccountByID(uuid.New())
+	require.EqualError(t, err, "account not found")
+	require.Nil(t, account)
+}
+
 func TestWalletStorage(t *testing.T) {
 	tests := []struct {
 		name       string
