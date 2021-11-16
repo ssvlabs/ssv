@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -15,6 +16,9 @@ import (
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
 func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, share *storage.Share) (*proto.SignedMessage, error) {
+	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
+		zap.Uint64("seq", msg.Message.SeqNumber), zap.String("identifier", string(msg.Message.Lambda)),
+		zap.Uint64s("signers", msg.SignerIds))
 	// find stored decided
 	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
@@ -22,15 +26,18 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 	}
 	if !found {
 		// decided message does not exist
+		logger.Debug("could not find decided")
 		return nil, nil
 	}
 	if len(decidedMsg.SignerIds) == share.CommitteeSize() {
 		// msg was signed by the entire committee
+		logger.Debug("msg was signed by the entire committee")
 		return nil, nil
 	}
 	// aggregate message with stored decided
 	if err := decidedMsg.Aggregate(msg); err != nil {
 		if err == proto.ErrDuplicateMsgSigner {
+			logger.Debug("duplicated signer")
 			return nil, nil
 		}
 		return nil, errors.Wrap(err, "could not aggregate commit message")
