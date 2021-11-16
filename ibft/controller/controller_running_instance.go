@@ -48,7 +48,8 @@ instanceLoop:
 			err = e
 			break instanceLoop
 		}
-		if exit { // exited with no error means instance decided
+		if exit {
+			// exited with no error means instance decided
 			// fetch decided msg and return
 			retMsg, found, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
 			if !found {
@@ -70,9 +71,21 @@ instanceLoop:
 			break instanceLoop
 		}
 	}
+	// saves state
+	identifier, seq := i.currentInstance.State().Lambda.Get(), i.currentInstance.State().SeqNumber.Get()
 	// when main instance loop breaks, nil current instance
 	i.currentInstance = nil
 	i.logger.Debug("iBFT instance result loop stopped")
+
+	// if instance was decided -> wait for late commit messages
+	// this will also pick up orphan commit messages that
+	// were not included in the decided message when quorum was achieved
+	if retRes.Decided {
+		go i.listenToLateCommitMsgs(identifier, seq)
+	} else {
+		i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(identifier, seq))
+	}
+
 	return retRes, err
 }
 
@@ -98,7 +111,6 @@ func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 			return true, errors.Wrap(err, "could not broadcast decided message")
 		}
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
-		go i.listenToLateCommitMsgs(i.currentInstance)
 		return false, nil
 	case proto.RoundState_Stopped:
 		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State().SeqNumber.Get()))
@@ -107,10 +119,10 @@ func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 	return false, nil
 }
 
-// listenToLateCommitMsgs handles late arrivals of commit messages as the ibft instance terminates after a quorum
-// is reached which doesn't guarantee that late commit msgs will be aggregated into the stored decided msg.
-func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
-	idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State().Lambda.Get(), runningInstance.State().SeqNumber.Get())
+// listenToLateCommitMsgs handles late arrivals of commit messages and pick up orphan commit messages that
+// were not included in the decided message when quorum was achieved
+func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
+	idxKey := msgqueue.IBFTMessageIndexKey(identifier, seq)
 	defer i.msgQueue.PurgeIndexedMessages(idxKey)
 
 	f := func(stopper tasks.Stopper) (interface{}, error) {
@@ -125,9 +137,8 @@ func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 					continue
 				}
 				logger := i.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
-					zap.String("identifier", string(netMsg.SignedMessage.Message.Lambda)),
 					zap.Uint64s("signers", netMsg.SignedMessage.SignerIds))
-				if err := runningInstance.CommitMsgValidationPipeline().Run(netMsg.SignedMessage); err != nil {
+				if err := instance.CommitMsgValidationPipelineV0(identifier, seq, i.ValidatorShare).Run(netMsg.SignedMessage); err != nil {
 					i.logger.Error("received invalid late commit message", zap.Error(err))
 					continue
 				}
@@ -145,9 +156,9 @@ func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 		return nil, nil
 	}
 
-	i.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", runningInstance.State().SeqNumber.Get()))
+	i.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", seq))
 	_, _, _ = tasks.ExecWithTimeout(context.Background(), f, time.Minute*6)
-	i.logger.Debug("stopped listening to late commit msgs")
+	i.logger.Debug("stopped listening to late commit msgs", zap.Uint64("seq_number", seq))
 }
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
