@@ -110,13 +110,15 @@ func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 // listenToLateCommitMsgs handles late arrivals of commit messages as the ibft instance terminates after a quorum
 // is reached which doesn't guarantee that late commit msgs will be aggregated into the stored decided msg.
 func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
+	idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State().Lambda.Get(), runningInstance.State().SeqNumber.Get())
+	defer i.msgQueue.PurgeIndexedMessages(idxKey)
+
 	f := func(stopper tasks.Stopper) (interface{}, error) {
 	loop:
 		for {
 			if stopper.IsStopped() {
 				break loop
 			}
-			idxKey := msgqueue.IBFTMessageIndexKey(runningInstance.State().Lambda.Get(), runningInstance.State().SeqNumber.Get())
 			if netMsg := i.msgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
 				if netMsg.SignedMessage.Message == nil || netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
 					// not a commit message -> skip
