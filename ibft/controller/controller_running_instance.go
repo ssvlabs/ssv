@@ -148,6 +148,12 @@ func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
 					logger.Error("failed to process late commit message", zap.Error(err))
 				} else if updated != nil {
 					logger.Debug("decided message was updated", zap.Uint64s("updated signers", updated.SignerIds))
+					if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), updated); err != nil {
+						logger.Error("could not broadcast decided message", zap.Error(err))
+					}
+					logger.Debug("updated decided was broadcasted")
+					ibft.ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
+					break loop
 				}
 			} else {
 				time.Sleep(time.Millisecond * 100)
