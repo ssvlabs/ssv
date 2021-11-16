@@ -125,7 +125,8 @@ func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 					continue
 				}
 				logger := i.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
-					zap.String("identifier", string(netMsg.SignedMessage.Message.Lambda)))
+					zap.String("identifier", string(netMsg.SignedMessage.Message.Lambda)),
+					zap.Uint64s("signers", netMsg.SignedMessage.SignerIds))
 				if err := runningInstance.CommitMsgValidationPipeline().Run(netMsg.SignedMessage); err != nil {
 					i.logger.Error("received invalid late commit message", zap.Error(err))
 					continue
@@ -135,7 +136,7 @@ func (i *Controller) listenToLateCommitMsgs(runningInstance ibft.Instance) {
 				if err != nil {
 					logger.Error("failed to process late commit message", zap.Error(err))
 				} else if updated != nil {
-					logger.Debug("decided message was updated")
+					logger.Debug("decided message was updated", zap.Uint64s("updated signers", updated.SignerIds))
 				}
 			} else {
 				time.Sleep(time.Millisecond * 100)
