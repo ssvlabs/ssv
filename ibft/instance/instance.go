@@ -283,9 +283,7 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 
 	// Delete all queue messages when decided, we do not need them anymore.
 	if stage == proto.RoundState_Stopped {
-		for j := uint64(1); j <= i.State().Round.Get(); j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State().Lambda.Get(), i.State().SeqNumber.Get()))
-		}
+		i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State().Lambda.Get(), i.State().SeqNumber.Get()))
 	}
 
 	// blocking send to channel
