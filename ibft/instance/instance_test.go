@@ -99,14 +99,12 @@ func TestInstanceStop(t *testing.T) {
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
-	time.Sleep(time.Millisecond * 200)
+	time.Sleep(time.Millisecond * 400)
 
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
 	require.EqualValues(t, proto.RoundState_Stopped, instance.State().Stage.Get())
-	require.EqualValues(t, 1, instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State().Lambda.Get(), msg.Message.SeqNumber)))
-	netMsg := instance.MsgQueue.PopMessage(msgqueue.IBFTMessageIndexKey(instance.State().Lambda.Get(), msg.Message.SeqNumber))
-	require.EqualValues(t, []uint64{3}, netMsg.SignedMessage.SignerIds)
+	require.True(t, 3 <= instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State().Lambda.Get(), msg.Message.SeqNumber)))
 }
 
 func TestInit(t *testing.T) {

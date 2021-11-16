@@ -6,9 +6,11 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 	"testing"
 
@@ -17,6 +19,10 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func init() {
+	logex.Build("test", zapcore.DebugLevel, nil)
+}
 
 func newInMemDb() basedb.IDb {
 	db, _ := kv.New(basedb.Options{
@@ -199,22 +205,23 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	db := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 
-	var sigs []*proto.SignedMessage
-	for i := 1; i < 4; i++ {
-		sigs = append(sigs, SignMsg(t, uint64(i), sks[uint64(i)], &proto.Message{
-			Type:   proto.RoundState_Commit,
-			Round:  3,
-			Lambda: []byte("Lambda_ATTESTER"),
-			Value:  []byte("value"),
-		}))
-	}
-	decided, err := proto.AggregateMessages(sigs)
-	require.NoError(t, err)
-
 	share := storage.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
 	share.Committee = make(map[uint64]*proto.Node, 4)
 	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String())
+
+	var sigs []*proto.SignedMessage
+	for i := 1; i < 4; i++ {
+		sigs = append(sigs, SignMsg(t, uint64(i), sks[uint64(i)], &proto.Message{
+			SeqNumber: uint64(2),
+			Type:      proto.RoundState_Commit,
+			Round:     3,
+			Lambda:    []byte(identifier),
+			Value:     []byte("value"),
+		}))
+	}
+	decided, err := proto.AggregateMessages(sigs)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name        string
@@ -227,10 +234,11 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			"",
 			struct{}{},
 			SignMsg(t, 4, sks[4], &proto.Message{
-				Type:   proto.RoundState_Commit,
-				Round:  3,
-				Lambda: []byte(identifier),
-				Value:  []byte("value"),
+				SeqNumber: uint64(2),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				Lambda:    []byte(identifier),
+				Value:     []byte("value"),
 			}),
 		},
 		{
@@ -239,10 +247,11 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			nil,
 			func() *proto.SignedMessage {
 				msg := SignMsg(t, 4, sks[4], &proto.Message{
-					Type:   proto.RoundState_Commit,
-					Round:  3,
-					Lambda: []byte(identifier),
-					Value:  []byte("value"),
+					SeqNumber: uint64(2),
+					Type:      proto.RoundState_Commit,
+					Round:     3,
+					Lambda:    []byte(identifier),
+					Value:     []byte("value"),
 				})
 				msg.Signature = []byte("dummy")
 				return msg
@@ -253,10 +262,11 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			"",
 			nil,
 			SignMsg(t, 4, sks[4], &proto.Message{
-				Type:   proto.RoundState_Commit,
-				Round:  3,
-				Lambda: []byte("xxx_ATTESTER"),
-				Value:  []byte("value"),
+				SeqNumber: uint64(2),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				Lambda:    []byte("xxx_ATTESTER"),
+				Value:     []byte("value"),
 			}),
 		},
 	}
