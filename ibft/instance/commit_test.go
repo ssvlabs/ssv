@@ -1,9 +1,11 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
@@ -195,7 +197,7 @@ func TestCommitPipeline(t *testing.T) {
 
 func TestProcessLateCommitMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
-	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
+	db := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 
 	var sigs []*proto.SignedMessage
 	for i := 1; i < 4; i++ {
@@ -208,6 +210,11 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	}
 	decided, err := proto.AggregateMessages(sigs)
 	require.NoError(t, err)
+
+	share := storage.Share{}
+	share.PublicKey = sks[1].GetPublicKey()
+	share.Committee = make(map[uint64]*proto.Node, 4)
+	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String())
 
 	tests := []struct {
 		name        string
@@ -222,7 +229,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			SignMsg(t, 4, sks[4], &proto.Message{
 				Type:   proto.RoundState_Commit,
 				Round:  3,
-				Lambda: []byte("Lambda_ATTESTER"),
+				Lambda: []byte(identifier),
 				Value:  []byte("value"),
 			}),
 		},
@@ -234,7 +241,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				msg := SignMsg(t, 4, sks[4], &proto.Message{
 					Type:   proto.RoundState_Commit,
 					Round:  3,
-					Lambda: []byte("Lambda_ATTESTER"),
+					Lambda: []byte(identifier),
 					Value:  []byte("value"),
 				})
 				msg.Signature = []byte("dummy")
@@ -255,8 +262,8 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			require.NoError(t, storage.SaveDecided(decided))
-			updated, err := ProcessLateCommitMsg(test.msg, &storage, "Lambda")
+			require.NoError(t, db.SaveDecided(decided))
+			updated, err := ProcessLateCommitMsg(test.msg, &db, &share)
 			if len(test.expectedErr) > 0 {
 				require.NotNil(t, err)
 				require.True(t, strings.Contains(err.Error(), test.expectedErr))
