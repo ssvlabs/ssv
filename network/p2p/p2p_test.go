@@ -86,6 +86,6 @@ func TestP2pNetwork_GetUserAgent(t *testing.T) {
 
 	t.Run("without operator key", func(t *testing.T) {
 		n := p2pNetwork{}
-		require.Equal(t, "ssvtest:v0.x.x", n.getUserAgent())
+		require.Equal(t, "ssvtest:v0.x.x:unknown", n.getUserAgent())
 	})
 }

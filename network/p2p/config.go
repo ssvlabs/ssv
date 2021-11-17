@@ -54,6 +54,7 @@ const (
 	Exporter
 )
 
+// FromString convert string to NodeType. If not exist, return Unknown
 func (nt NodeType) FromString(nodeType string) NodeType {
 	switch nodeType {
 	case "operator":

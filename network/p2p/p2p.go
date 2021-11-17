@@ -221,10 +221,8 @@ func (n *p2pNetwork) getUserAgent() string {
 			n.logger.Error("could not extract operator public key", zap.Error(err))
 		}
 		ua = fmt.Sprintf("%s:%s:%s", ua, n.nodeType.String(), pubKeyHash(operatorPubKey)) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
-	} else {
-		ua = fmt.Sprintf("%s:%s", ua, n.nodeType.String()) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
 	}
-	return ua
+	return fmt.Sprintf("%s:%s", ua, n.nodeType.String()) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
 }
 
 func (n *p2pNetwork) getOperatorPubKey() (string, error) {
