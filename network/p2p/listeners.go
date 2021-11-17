@@ -1,11 +1,12 @@
 package p2p
 
 import (
+	"crypto/rand"
 	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"go.uber.org/zap"
-	"math/rand"
+	"math/big"
 	"time"
 )
 
@@ -18,10 +19,15 @@ type listener struct {
 
 // registerListener registers the given listener
 func (n *p2pNetwork) registerListener(ls listener) func() {
+	r, err := rand.Int(rand.Reader, new(big.Int).SetInt64(int64(1000000)))
+	if err != nil {
+		n.logger.Error("could not create random number for listener")
+	}
+
 	n.listenersLock.Lock()
 	defer n.listenersLock.Unlock()
 
-	id := fmt.Sprintf("%d:%d:%d", len(n.listeners), time.Now().UnixNano(), rand.Intn(100000))
+	id := fmt.Sprintf("%d:%d:%d", len(n.listeners), time.Now().UnixNano(), r.Int64())
 	n.listeners[id] = ls
 
 	return func() {
