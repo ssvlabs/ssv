@@ -13,7 +13,7 @@ func TestListeners(t *testing.T) {
 	n := p2pNetwork{
 		logger:        zaptest.NewLogger(t),
 		listeners:     map[string]listener{},
-		listenersLock: &sync.Mutex{},
+		listenersLock: &sync.RWMutex{},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
