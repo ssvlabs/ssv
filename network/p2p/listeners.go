@@ -38,8 +38,6 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 		n.logger.Debug("could not propagate nil message")
 		return
 	}
-	n.logger.Debug("propagating msg to internal listeners", zap.String("type", cm.Type.String()),
-		zap.Any("msg", cm.SignedMessage))
 
 	listeners := n.getListeners()
 

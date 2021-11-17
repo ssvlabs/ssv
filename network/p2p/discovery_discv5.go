@@ -124,6 +124,7 @@ func (n *p2pNetwork) createExtendedLocalNode(ipAddr net.IP) (*enode.LocalNode, e
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
+
 	if len(operatorPubKey) > 0 {
 		localNode, err = addOperatorPubKeyEntry(localNode, []byte(pubKeyHash(operatorPubKey)))
 		if err != nil {
@@ -253,6 +254,7 @@ func (dvl *dv5Logger) Log(r *log.Record) error {
 	}
 	return nil
 }
+
 
 // addOperatorPubKeyEntry adds public key entry ('pk') to the node.
 // contains the sha256 (hex encoded) of the operator public key

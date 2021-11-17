@@ -14,11 +14,11 @@ eth1:
 
 p2p:
   # replace with your ip
-  HostAddress: example.ip
-  TcpPort:
-  UdpPort:
+#  HostAddress: example.ip
+#  TcpPort:
+#  UdpPort:
   # mdns for local network setup
-  DiscoveryType: mdns
+#  DiscoveryType: mdns
 
 ssv:
   GenesisEpoch:
