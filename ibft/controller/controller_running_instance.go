@@ -71,22 +71,25 @@ instanceLoop:
 			break instanceLoop
 		}
 	}
-	// saves state
-	identifier, seq := i.currentInstance.State().Lambda.Get(), i.currentInstance.State().SeqNumber.Get()
+	// saves state as instance will be cleared
+	seq := i.currentInstance.State().SeqNumber.Get()
 	// when main instance loop breaks, nil current instance
 	i.currentInstance = nil
 	i.logger.Debug("iBFT instance result loop stopped")
 
-	// if instance was decided -> wait for late commit messages
-	// this will also pick up orphan commit messages that
-	// were not included in the decided message when quorum was achieved
-	if retRes.Decided {
-		go i.listenToLateCommitMsgs(identifier, seq)
-	} else {
-		i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(identifier, seq))
-	}
+	i.afterInstance(seq, retRes)
 
 	return retRes, err
+}
+
+// afterInstance is triggered after the instance was finished
+func (i *Controller) afterInstance(seq uint64, res *ibft.InstanceResult) {
+	// if instance was decided -> wait for late commit messages
+	if res.Decided {
+		go i.listenToLateCommitMsgs(i.Identifier[:], seq)
+	} else {
+		i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.Identifier[:], seq))
+	}
 }
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
