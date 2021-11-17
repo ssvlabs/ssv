@@ -40,7 +40,7 @@ type Config struct {
 	OperatorPrivateKey *rsa.PrivateKey
 	// ReportLastMsg whether to report last msg metric
 	ReportLastMsg bool
-	// NodeType added to ENR in order to differentiate exporters peers from others
+	// NodeType differentiate exporters peers from others
 	NodeType NodeType
 }
 
