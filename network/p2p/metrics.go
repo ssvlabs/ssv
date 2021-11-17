@@ -80,7 +80,7 @@ func reportPeerIdentity(n *p2pNetwork, pid string) {
 			metricsPeersIdentity.WithLabelValues(uaParts[3], uaParts[1], pid, uaParts[2]).Set(1)
 			return
 		}
-		metricsPeersIdentity.WithLabelValues(uaParts[3], uaParts[1], pid).Set(1)
+		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1], pid).Set(1)
 	}
 }
 
