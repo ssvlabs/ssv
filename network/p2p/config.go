@@ -54,6 +54,18 @@ const (
 	Exporter
 )
 
+func (nt NodeType) FromString(nodeType string) NodeType {
+	switch nodeType {
+	case "operator":
+		return Operator
+	case "exporter":
+		return Exporter
+	case "unknown":
+		return Unknown
+	}
+	return nt
+}
+
 func (nt NodeType) String() string {
 	switch nt {
 	case Operator:

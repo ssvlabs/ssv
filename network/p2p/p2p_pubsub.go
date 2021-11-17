@@ -165,14 +165,15 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 // checks if peer support nodeType in userAgent. if not, use peer. (backwards compatibility)
 func validateNodeType(peerData func(pid string, key string) string, p peer.ID) bool {
 	nodeType := getNodeType(peerData, p)
+
 	return nodeType != Exporter.String()
 }
 
 func getNodeType(peerData func(pid string, key string) string, p peer.ID) string {
 	ua := peerData(p.String(), UserAgentKey)
 	uaParts := strings.Split(ua, ":")
-	if len(uaParts) > 3 {
-		return uaParts[2]
+	if len(uaParts) > 2 {
+		return Unknown.FromString(uaParts[2]).String()
 	}
 	return Unknown.String()
 }
