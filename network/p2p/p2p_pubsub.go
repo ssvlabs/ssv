@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -120,9 +121,9 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 	skippedPeers := map[string]bool{
 		n.cfg.ExporterPeerID: true,
 	}
-
 	for _, p := range topic.ListPeers() {
-		if s := peerToString(p); !skippedPeers[s] {
+		isValidNodeType := validateNodeType(n.peersIndex.GetPeerData, p)
+		if s := peerToString(p); !skippedPeers[s] && isValidNodeType {
 			ret = append(ret, peerToString(p))
 		}
 	}
@@ -158,6 +159,22 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 			n.propagateSignedMsg(cm)
 		}
 	}
+}
+
+// validateNodeType return if peer nodeType is valid.
+// checks if peer support nodeType in userAgent. if not, use peer. (backwards compatibility)
+func validateNodeType(peerData func(pid string, key string) string, p peer.ID) bool {
+	nodeType := getNodeType(peerData, p)
+	return nodeType != Exporter.String()
+}
+
+func getNodeType(peerData func(pid string, key string) string, p peer.ID) string {
+	ua := peerData(p.String(), UserAgentKey)
+	uaParts := strings.Split(ua, ":")
+	if len(uaParts) > 3 {
+		return uaParts[2]
+	}
+	return Unknown.String()
 }
 
 // getTopicName return formatted topic name

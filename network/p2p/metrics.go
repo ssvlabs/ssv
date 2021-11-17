@@ -23,7 +23,7 @@ var (
 	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
-	}, []string{"pubKey", "v", "pid"})
+	}, []string{"pubKey", "v", "pid", "type"})
 	metricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:peer_last_msg",
 		Help: "Timestamps of last messages",
@@ -76,7 +76,11 @@ func reportPeerIdentity(n *p2pNetwork, pid string) {
 	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua))
 	uaParts := strings.Split(ua, ":")
 	if len(uaParts) > 2 {
-		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1], pid).Set(1)
+		if len(uaParts) > 3 { // In order to support backwards compatibility. where older version have only 2 fields
+			metricsPeersIdentity.WithLabelValues(uaParts[3], uaParts[1], pid, uaParts[2]).Set(1)
+			return
+		}
+		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1], pid, Unknown.String()).Set(1)
 	}
 }
 

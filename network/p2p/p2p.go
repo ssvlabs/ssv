@@ -65,6 +65,7 @@ type p2pNetwork struct {
 	psTopicsLock *sync.RWMutex
 
 	reportLastMsg bool
+	nodeType      NodeType
 }
 
 // New is the constructor of p2pNetworker
@@ -85,6 +86,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		psTopicsLock:    &sync.RWMutex{},
 		reportLastMsg:   cfg.ReportLastMsg,
 		fork:            cfg.Fork,
+		nodeType:        cfg.NodeType,
 	}
 
 	if cfg.NetworkPrivateKey != nil {
@@ -210,6 +212,7 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
+// getUserAgent returns ua built upon - (nodeType, nodeVersion and operatorKey)
 func (n *p2pNetwork) getUserAgent() string {
 	ua := commons.GetBuildData()
 	if n.operatorPrivKey != nil {
@@ -217,7 +220,7 @@ func (n *p2pNetwork) getUserAgent() string {
 		if err != nil || len(operatorPubKey) == 0 {
 			n.logger.Error("could not extract operator public key", zap.Error(err))
 		}
-		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey))
+		ua = fmt.Sprintf("%s:%s:%s", ua, n.nodeType.String(), pubKeyHash(operatorPubKey)) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
 	}
 	return ua
 }
