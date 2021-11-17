@@ -135,12 +135,13 @@ func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
 				break loop
 			}
 			if netMsg := i.msgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
-				if netMsg.SignedMessage.Message == nil || netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
+				if netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
 					// not a commit message -> skip
 					continue
 				}
 				logger := i.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
 					zap.Uint64s("signers", netMsg.SignedMessage.SignerIds))
+				// TODO: need to use the fork
 				if err := instance.CommitMsgValidationPipelineV0(identifier, seq, i.ValidatorShare).Run(netMsg.SignedMessage); err != nil {
 					i.logger.Error("received invalid late commit message", zap.Error(err))
 					continue
