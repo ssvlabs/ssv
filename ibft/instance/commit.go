@@ -5,8 +5,9 @@ import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
-
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
@@ -14,27 +15,37 @@ import (
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, pubkey string) (*proto.SignedMessage, error) {
+func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, share *storage.Share) (*proto.SignedMessage, error) {
+	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
+		zap.Uint64("seq", msg.Message.SeqNumber), zap.String("identifier", string(msg.Message.Lambda)),
+		zap.Uint64s("signers", msg.SignerIds))
 	// find stored decided
 	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not fetch decided for late commit")
+		return nil, errors.Wrap(err, "could not read decided for late commit")
 	}
 	if !found {
+		// decided message does not exist
+		logger.Debug("could not find decided")
+		return nil, nil
+	}
+	if len(decidedMsg.SignerIds) == share.CommitteeSize() {
+		// msg was signed by the entire committee
+		logger.Debug("msg was signed by the entire committee")
 		return nil, nil
 	}
 	// aggregate message with stored decided
 	if err := decidedMsg.Aggregate(msg); err != nil {
 		if err == proto.ErrDuplicateMsgSigner {
+			logger.Debug("duplicated signer")
 			return nil, nil
 		}
 		return nil, errors.Wrap(err, "could not aggregate commit message")
 	}
-	// save to storage
 	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
 		return nil, errors.Wrap(err, "could not save aggregated decided message")
 	}
-	ibft.ReportDecided(pubkey, msg)
+	ibft.ReportDecided(share.PublicKey.SerializeToHexStr(), msg)
 	return decidedMsg, nil
 }
 
@@ -65,12 +76,17 @@ func (i *Instance) CommitMsgValidationPipeline() pipeline.Pipeline {
 
 // CommitMsgValidationPipelineV0 is version 0
 func (i *Instance) CommitMsgValidationPipelineV0() pipeline.Pipeline {
+	return CommitMsgValidationPipelineV0(i.State().Lambda.Get(), i.State().SeqNumber.Get(), i.ValidatorShare)
+}
+
+// CommitMsgValidationPipelineV0 is version 0 of commit message validation
+func CommitMsgValidationPipelineV0(identifier []byte, seq uint64, share *storage.Share) pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(i.State().Lambda.Get()),
-		auth.ValidateSequenceNumber(i.State().SeqNumber.Get()),
-		auth.AuthorizeMsg(i.ValidatorShare),
+		auth.ValidateLambdas(identifier),
+		auth.ValidateSequenceNumber(seq),
+		auth.AuthorizeMsg(share),
 	)
 }
 
@@ -107,7 +123,6 @@ func (i *Instance) uponCommitMsg() pipeline.Pipeline {
 				i.Logger.Info("commit iBFT instance",
 					zap.String("Lambda", hex.EncodeToString(i.State().Lambda.Get())), zap.Uint64("round", i.State().Round.Get()),
 					zap.Int("got_votes", len(sigs)))
-
 				aggMsg, err := proto.AggregateMessages(sigs)
 				if err != nil {
 					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err))

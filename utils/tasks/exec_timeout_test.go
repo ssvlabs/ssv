@@ -13,7 +13,7 @@ import (
 
 func TestExecWithTimeout(t *testing.T) {
 	logex.Build("test", zap.DebugLevel, nil)
-	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 7*time.Millisecond)
+	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 10*time.Millisecond)
 	defer cancel()
 	tests := []struct {
 		name          string
@@ -24,13 +24,13 @@ func TestExecWithTimeout(t *testing.T) {
 		{
 			"Cancelled_context",
 			ctxWithTimeout,
-			12 * time.Millisecond,
+			20 * time.Millisecond,
 			3,
 		},
 		{
 			"Long_function",
 			context.TODO(),
-			7 * time.Millisecond,
+			8 * time.Millisecond,
 			3,
 		},
 	}

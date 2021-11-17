@@ -144,7 +144,7 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 // handleNewDecidedMessage saves an incoming (valid) decided message
 func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool, error) {
 	logger := r.logger.With(messageFields(msg)...)
-	if decided, found, _ := r.storage.GetDecided(r.identifier, msg.Message.SeqNumber); found && decided != nil {
+	if known, _ := r.checkDecided(msg); known {
 		logger.Debug("received known sequence")
 		return false, nil
 	}
@@ -155,6 +155,22 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool,
 	ibft.ReportDecided(r.validatorShare.PublicKey.SerializeToHexStr(), msg)
 	go r.out.Send(newDecidedAPIMsg(msg, r.validatorShare.PublicKey.SerializeToHexStr()))
 	return true, r.checkHighestDecided(msg)
+}
+
+// checkDecided check if the new decided message is a duplicate or should override existing message ()
+func (r *decidedReader) checkDecided(msg *proto.SignedMessage) (bool, error) {
+	decided, found, err := r.storage.GetDecided(r.identifier, msg.Message.SeqNumber)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, nil
+	}
+	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
+	if len(msg.SignerIds) > len(decided.SignerIds) {
+		return false, nil
+	}
+	return true, nil
 }
 
 // checkHighestDecided check if highest decided should be updated

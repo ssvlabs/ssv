@@ -2,9 +2,7 @@ package ibft
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/beacon"
 	ibftinstance "github.com/bloxapp/ssv/ibft/instance"
-	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -94,10 +92,12 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 		logger.Debug("could not find share")
 		return nil
 	}
-	if err := validateCommitMsg(msg, share); err != nil {
+	// TODO: change to fork
+	err = ibftinstance.CommitMsgValidationPipelineV0(msg.Message.Lambda, msg.Message.SeqNumber, share).Run(msg)
+	if err != nil {
 		return errors.Wrap(err, "invalid commit message")
 	}
-	updated, err := ibftinstance.ProcessLateCommitMsg(msg, cr.ibftStorage, pkHex)
+	updated, err := ibftinstance.ProcessLateCommitMsg(msg, cr.ibftStorage, share)
 	if err != nil {
 		return errors.Wrap(err, "failed to process late commit message")
 	}
@@ -106,16 +106,4 @@ func (cr *commitReader) onCommitMessage(msg *proto.SignedMessage) error {
 		go cr.out.Send(newDecidedAPIMsg(updated, pkHex))
 	}
 	return nil
-}
-
-// validateCommitMsg validates commit message
-func validateCommitMsg(msg *proto.SignedMessage, share *validatorstorage.Share) error {
-	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String()))
-	p := pipeline.Combine(
-		auth.BasicMsgValidation(),
-		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(identifier),
-		auth.AuthorizeMsg(share),
-	)
-	return p.Run(msg)
 }

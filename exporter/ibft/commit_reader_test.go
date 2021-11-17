@@ -9,16 +9,22 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/logex"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func init() {
+	logex.Build("test", zapcore.DebugLevel, nil)
+}
 
 func TestCommitReader_onMessage(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
