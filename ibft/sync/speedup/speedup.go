@@ -79,6 +79,7 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 		}(p)
 	}
 	wg.Wait()
+	s.logger.Debug("got latest change round msg's from peers", zap.Any("count", len(res)))
 	return res, nil
 }
 
