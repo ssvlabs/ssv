@@ -169,9 +169,8 @@ func validateNodeType(peerData func(pid string, key string) string, p peer.ID) b
 	if len(uaParts) > 3 {
 		nodeType := uaParts[2]
 		return nodeType != Operator.String()
-	} else {
-		return true
 	}
+	return true
 }
 
 // getTopicName return formatted topic name

@@ -107,6 +107,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 			require.NoError(t, operatorStorage.SetupPrivateKey(test.passedKey))
 			sk, found, err := operatorStorage.GetPrivateKey()
+			require.NoError(t, err)
 			pk, err := rsaencryption.ExtractPublicKey(sk) // from storage
 			require.True(t, found)
 			require.NoError(t, err)

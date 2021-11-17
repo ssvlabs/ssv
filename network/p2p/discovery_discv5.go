@@ -255,7 +255,6 @@ func (dvl *dv5Logger) Log(r *log.Record) error {
 	return nil
 }
 
-
 // addOperatorPubKeyEntry adds public key entry ('pk') to the node.
 // contains the sha256 (hex encoded) of the operator public key
 func addOperatorPubKeyEntry(node *enode.LocalNode, pkHash []byte) (*enode.LocalNode, error) {

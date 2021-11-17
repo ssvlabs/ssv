@@ -47,6 +47,7 @@ type Config struct {
 // NodeType indicate node operation type. In purpose for distinguish between different types of peers
 type NodeType int64
 
+// NodeTypes are const types for NodeType
 const (
 	Unknown NodeType = iota
 	Operator

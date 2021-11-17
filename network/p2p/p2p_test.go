@@ -73,14 +73,15 @@ func TestP2pNetwork_GetUserAgent(t *testing.T) {
 		sk, err := rsaencryption.ConvertPemToPrivateKey(string(skBytes))
 		require.NoError(t, err)
 		require.NotNil(t, sk)
-		n := p2pNetwork{operatorPrivKey: sk}
+		n := p2pNetwork{operatorPrivKey: sk, nodeType: Operator}
 		ua := n.getUserAgent()
 		parts := strings.Split(ua, ":")
 		require.Equal(t, "ssvtest", parts[0])
 		require.Equal(t, "v0.x.x", parts[1])
 		pk, err := rsaencryption.ExtractPublicKey(sk)
 		require.NoError(t, err)
-		require.Equal(t, pubKeyHash(pk), parts[2])
+		require.Equal(t, pubKeyHash(pk), parts[3])
+		require.Equal(t, Operator.String(), parts[2])
 	})
 
 	t.Run("without operator key", func(t *testing.T) {
