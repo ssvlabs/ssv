@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"go.uber.org/zap"
 	"sync"
@@ -57,16 +58,16 @@ loop:
 			logger := i.Logger.With(zap.Uint64("round", i.State().Round.Get()))
 			logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
 			wg.Add(1)
-			if added := i.eventQueue.Add(func() {
+			if added := i.eventQueue.Add(eventqueue.NewEventWithCancel(func() {
+				defer wg.Done()
 				_, err := i.ProcessMessage()
 				if err != nil {
 					logger.Error("msg pipeline error", zap.Error(err))
 				}
-				wg.Done()
-			}); !added {
+			}, wg.Done)); !added {
 				logger.Debug("could not add ibft message to event queue")
-				time.Sleep(time.Millisecond * 100)
 				wg.Done()
+				time.Sleep(time.Millisecond * 100)
 			}
 			// If we added a task to the queue, wait for it to finish and then loop again to add more
 			wg.Wait()
@@ -83,12 +84,11 @@ loop:
 		if i.Stopped() {
 			break loop
 		}
-
 		res := <-i.roundTimer.ResultChan()
 		if res { // timed out
-			i.eventQueue.Add(func() {
+			i.eventQueue.Add(eventqueue.NewEvent(func() {
 				i.uponChangeRoundTrigger()
-			})
+			}))
 		} else { // stopped
 			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State().Round.Get()))
 		}
