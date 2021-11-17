@@ -59,10 +59,10 @@ func (s *Speedup) Start() ([]*proto.SignedMessage, error) {
 				Lambda: s.identifier,
 			})
 			if err != nil {
-				s.logger.Error("error fetching latest change round", zap.Error(err))
+				s.logger.Error("error fetching latest change round", zap.Error(err), zap.Any("peer", peer))
 			} else if err := s.lastMsgError(msg); err != nil {
 				if err.Error() != kv.EntryNotFoundError {
-					s.logger.Debug("could not fetch latest change round", zap.Error(err))
+					s.logger.Debug("could not fetch latest change round", zap.Error(err), zap.Any("peer", peer))
 				}
 			} else {
 				signedMsg := msg.SignedMessages[0]
