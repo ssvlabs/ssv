@@ -104,7 +104,6 @@ func TestInstanceStop(t *testing.T) {
 	// verify
 	require.True(t, instance.roundTimer.Stopped())
 	require.EqualValues(t, proto.RoundState_Stopped, instance.State().Stage.Get())
-	require.True(t, 3 <= instance.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(instance.State().Lambda.Get(), msg.Message.SeqNumber)))
 }
 
 func TestInit(t *testing.T) {
