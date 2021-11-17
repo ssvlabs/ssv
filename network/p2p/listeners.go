@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"go.uber.org/zap"
+	"math/rand"
 	"time"
 )
 
@@ -20,7 +21,7 @@ func (n *p2pNetwork) registerListener(ls listener) func() {
 	n.listenersLock.Lock()
 	defer n.listenersLock.Unlock()
 
-	id := fmt.Sprintf("%d:%d", len(n.listeners), time.Now().UnixNano())
+	id := fmt.Sprintf("%d:%d:%d", len(n.listeners), time.Now().UnixNano(), rand.Intn(100000))
 	n.listeners[id] = ls
 
 	return func() {
@@ -57,8 +58,9 @@ func (n *p2pNetwork) propagateSignedMsg(cm *network.Message) {
 
 // getListeners copies listeners to avoid data races when iterating over listeners
 func (n *p2pNetwork) getListeners() []listener {
-	n.listenersLock.Lock()
-	defer n.listenersLock.Unlock()
+	n.listenersLock.RLock()
+	defer n.listenersLock.RUnlock()
+
 	var listeners []listener
 	for _, ls := range n.listeners {
 		listeners = append(listeners, ls)
@@ -86,6 +88,17 @@ func propagateDecidedMessage(listeners []listener, msg *proto.SignedMessage) {
 	for _, ls := range listeners {
 		if ls.decidedCh != nil {
 			ls.decidedCh <- msg
+		}
+	}
+}
+
+func propagateSyncMessage(listeners []listener, cm *network.Message, netSyncStream network.SyncStream) {
+	for _, ls := range listeners {
+		if ls.syncCh != nil {
+			ls.syncCh <- &network.SyncChanObj{
+				Msg:    cm.SyncMessage,
+				Stream: netSyncStream,
+			}
 		}
 	}
 }
