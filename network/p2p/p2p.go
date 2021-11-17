@@ -49,7 +49,7 @@ const (
 type p2pNetwork struct {
 	ctx             context.Context
 	cfg             *Config
-	listenersLock   sync.Locker
+	listenersLock   *sync.RWMutex
 	dv5Listener     discv5Listener
 	listeners       map[string]listener
 	logger          *zap.Logger
@@ -79,7 +79,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		ctx:             ctx,
 		cfg:             cfg,
 		listeners:       map[string]listener{},
-		listenersLock:   &sync.Mutex{},
+		listenersLock:   &sync.RWMutex{},
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,
 		psSubs:          make(map[string]context.CancelFunc),

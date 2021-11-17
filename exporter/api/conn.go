@@ -34,7 +34,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Conn is an interface representing connection
+// Conn is a wrapper interface for websocket connections
 type Conn interface {
 	ID() string
 	ReadNext() []byte
@@ -69,32 +69,32 @@ func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id str
 	}
 }
 
+// ID returns the connection id
 func (c *conn) ID() string {
 	return c.id
 }
 
-//func (c *conn) Active() bool {
-//	return c.active
-//}
-
+// RemoteAddr returns the remote address of the socket
 func (c *conn) RemoteAddr() net.Addr {
 	return c.ws.RemoteAddr()
 }
 
+// Close closes the connection
 func (c *conn) Close() error {
 	return c.ws.Close()
 }
 
+// ReadNext reads the next message
 func (c *conn) ReadNext() []byte {
 	return <-c.read
 }
 
+// Send sends the given message
 func (c *conn) Send(msg []byte) {
-	//if len(c.send) < chanSize {
 	c.send <- msg
-	//}
 }
 
+// WriteLoop a loop to activate writes on the socket
 func (c *conn) WriteLoop() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
@@ -134,6 +134,7 @@ func (c *conn) WriteLoop() {
 	}
 }
 
+// ReadLoop is a loop to read messages from the socket
 func (c *conn) ReadLoop() {
 	defer func() {
 		_ = c.ws.Close()

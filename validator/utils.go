@@ -77,6 +77,9 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 			validatorShare.NodeID = nodeID
 
 			shareKey = &bls.SecretKey{}
+			if len(oess.EncryptedKey) == 0 {
+				return nil, nil, errors.New("share encrypted key invalid")
+			}
 			if err := shareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
 				return nil, nil, errors.Wrap(err, "failed to deserialize share private key")
 			}

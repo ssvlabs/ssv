@@ -136,7 +136,7 @@ func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	}
 }
 
-// handleQuery receives query message and respond async
+// handleStream registers the connection for broadcasting of stream messages
 func (ws *wsServer) handleStream(wsc *websocket.Conn) {
 	cid := ConnectionID(wsc)
 	logger := ws.logger.
