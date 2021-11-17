@@ -47,7 +47,7 @@ Deploy ssv exporter to blox-infra-stage cluster:
     - mv kubectl /usr/bin/
     - .k8/scripts/deploy-yamls-on-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION
   only:
-    - stage
+    - exporter-enr-tag
 
 Deploy ssv nodes to blox-infra-stage cluster:
   stage: deploy
