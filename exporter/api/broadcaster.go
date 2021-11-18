@@ -54,8 +54,6 @@ func (b *broadcaster) FromFeed(msgFeed *event.Feed) error {
 
 // Broadcast broadcasts a message to all available connections
 func (b *broadcaster) Broadcast(msg Message) error {
-	b.logger.Debug("broadcasting message", zap.Any("msg", msg))
-
 	data, err := json.Marshal(&msg)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal msg")
@@ -66,6 +64,8 @@ func (b *broadcaster) Broadcast(msg Message) error {
 	// lock is applied only when reading from the connections map
 	// therefore a new temp slice is created to hold all current connections and avoid concurrency issues
 	b.mut.Lock()
+	b.logger.Debug("broadcasting message", zap.Int("total connections", len(b.connections)),
+		zap.Any("msg", msg))
 	var conns []Conn
 	for _, c := range b.connections {
 		conns = append(conns, c)
