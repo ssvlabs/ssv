@@ -16,7 +16,7 @@ var (
 	pongWait = 60 * time.Second
 
 	// pingPeriod period to send ping messages. Must be less than pongWait.
-	pingPeriod = (pongWait * 5) / 10
+	pingPeriod = (pongWait * 8) / 10
 
 	// maxMessageSize max msg size allowed from peer.
 	maxMessageSize = int64(1024)
@@ -130,7 +130,7 @@ func (c *conn) WriteLoop() {
 		case <-ticker.C:
 			c.logger.Debug("sending ping message")
 			//_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
-			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
+			if err := c.write(websocket.PingMessage, []byte{0, 0, 0, 0}); err != nil {
 				c.logger.Error("could not send ping message", zap.Error(err))
 				return
 			}
