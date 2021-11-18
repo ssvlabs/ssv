@@ -153,6 +153,17 @@ func (c *conn) ReadLoop() {
 		_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
+	c.ws.SetPingHandler(func(message string) error {
+		c.logger.Debug("got ping message, trying to answer pong")
+		err := c.ws.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(c.writeTimeout))
+		c.logger.Debug("send pong result", zap.Error(err))
+		if err == websocket.ErrCloseSent {
+			return nil
+		} else if e, ok := err.(net.Error); ok && e.Temporary() {
+			return nil
+		}
+		return err
+	})
 	for {
 		if c.ctx.Err() != nil {
 			c.logger.Error("read loop stopped by context")
