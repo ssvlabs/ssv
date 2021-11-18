@@ -124,6 +124,7 @@ func (n *p2pNetwork) createExtendedLocalNode(ipAddr net.IP) (*enode.LocalNode, e
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create Local node")
 	}
+
 	if len(operatorPubKey) > 0 {
 		localNode, err = addOperatorPubKeyEntry(localNode, []byte(pubKeyHash(operatorPubKey)))
 		if err != nil {

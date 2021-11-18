@@ -4,13 +4,35 @@ import (
 	"sync"
 )
 
-// Event represent some function
-type Event func()
+// Event is a wrapper of function to execute in the event queue
+type Event struct {
+	exec   EventExec
+	cancel func()
+}
+
+// EventExec represents some function to execute
+type EventExec func()
+
+// NewEventWithCancel creates a new instance of Event with a cancel function
+func NewEventWithCancel(exec EventExec, cancel func()) Event {
+	return Event{
+		exec:   exec,
+		cancel: cancel,
+	}
+}
+
+// NewEvent creates a new instance of Event
+func NewEvent(exec EventExec) Event {
+	return Event{
+		exec:   exec,
+		cancel: nil,
+	}
+}
 
 // EventQueue is the interface for managing a queue of functions
 type EventQueue interface {
 	Add(Event) bool
-	Pop() Event
+	Pop() EventExec
 	ClearAndStop()
 }
 
@@ -30,7 +52,7 @@ func New() EventQueue {
 	return &q
 }
 
-// Add will add an an item to the queue, thread safe.
+// Add will add an item to the queue, thread safe.
 func (q *queue) Add(e Event) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -44,7 +66,7 @@ func (q *queue) Add(e Event) bool {
 }
 
 // Pop will return and delete an an item from the queue, thread safe.
-func (q *queue) Pop() Event {
+func (q *queue) Pop() EventExec {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -52,19 +74,43 @@ func (q *queue) Pop() Event {
 		return nil
 	}
 
-	if len(q.queue) > 0 {
-		ret := q.queue[0]
-		q.queue = q.queue[1:len(q.queue)]
-		return ret
+	if e := q.pop(); e != nil {
+		return e.exec
 	}
 	return nil
 }
 
-// ClearAndStop will clear the queue disable adding more items to it, thread safe.
+// ClearAndStop will clear the queue disable adding more items to it, thread safe
 func (q *queue) ClearAndStop() {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	q.stop = true
+
+	q.drain()
+
 	q.queue = make([]Event, 0)
+}
+
+// pop will return and delete an an item from the queue, NOT thread safe
+func (q *queue) pop() *Event {
+	if len(q.queue) > 0 {
+		ret := q.queue[0]
+		q.queue = q.queue[1:len(q.queue)]
+		return &ret
+	}
+	return nil
+}
+
+// drain will empty the queue
+func (q *queue) drain() {
+	for {
+		e := q.pop()
+		if e == nil {
+			break
+		}
+		if e.cancel != nil {
+			go e.cancel()
+		}
+	}
 }

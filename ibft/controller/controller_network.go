@@ -36,8 +36,9 @@ func (i *Controller) waitForMinPeers(minPeerCount int, stopAtLimit bool) error {
 }
 
 func (i *Controller) listenToNetworkMessages() {
-	msgChan := i.network.ReceivedMsgChan()
+	msgChan, done := i.network.ReceivedMsgChan()
 	go func() {
+		defer done()
 		for msg := range msgChan {
 			if msg.Message != nil && i.equalIdentifier(msg.Message.Lambda) {
 				i.msgQueue.AddMessage(&network.Message{
@@ -50,8 +51,9 @@ func (i *Controller) listenToNetworkMessages() {
 }
 
 func (i *Controller) listenToNetworkDecidedMessages() {
-	decidedChan := i.network.ReceivedDecidedChan()
+	decidedChan, done := i.network.ReceivedDecidedChan()
 	go func() {
+		defer done()
 		for msg := range decidedChan {
 			if msg.Message != nil && i.equalIdentifier(msg.Message.Lambda) {
 				i.msgQueue.AddMessage(&network.Message{
@@ -64,8 +66,9 @@ func (i *Controller) listenToNetworkDecidedMessages() {
 }
 
 func (i *Controller) listenToSyncMessages() {
-	syncChan := i.network.ReceivedSyncMsgChan()
+	syncChan, done := i.network.ReceivedSyncMsgChan()
 	go func() {
+		defer done()
 		for msg := range syncChan {
 			if msg.Msg != nil && i.equalIdentifier(msg.Msg.Lambda) {
 				i.msgQueue.AddMessage(&network.Message{

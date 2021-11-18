@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-// updateShareMetadata will update the given share object w/o involving storage,
+// UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func updateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool, error) {
+func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beacon.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {
@@ -47,6 +47,9 @@ func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, sh
 	if share == nil {
 		return nil, nil, errors.New("could not decode share key from validator added event")
 	}
+	if !validatorShare.OperatorReady() {
+		return nil, nil, errors.New("operator share not ready")
+	}
 	return validatorShare, share, nil
 }
 
@@ -74,6 +77,9 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 			validatorShare.NodeID = nodeID
 
 			shareKey = &bls.SecretKey{}
+			if len(oess.EncryptedKey) == 0 {
+				return nil, nil, errors.New("share encrypted key invalid")
+			}
 			if err := shareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
 				return nil, nil, errors.Wrap(err, "failed to deserialize share private key")
 			}

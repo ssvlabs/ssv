@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"context"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -22,23 +21,7 @@ func TestP2PNetworker(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	threshold.Init()
 
-	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType: discoveryTypeMdns,
-		Enr:           "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:       12000,
-		TCPPort:       13000,
-		Fork:          testFork(),
-	})
-	require.NoError(t, err)
-
-	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType: discoveryTypeMdns,
-		Enr:           "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:       12001,
-		TCPPort:       13001,
-		Fork:          testFork(),
-	})
-	require.NoError(t, err)
+	peer1, peer2 := testPeers(t, logger)
 
 	pk := &bls.PublicKey{}
 	require.NoError(t, pk.Deserialize(fixtures.RefPk))
@@ -57,12 +40,14 @@ func TestP2PNetworker(t *testing.T) {
 
 	time.Sleep(time.Second)
 
-	peer1Chan := peer1.ReceivedMsgChan()
-	peer2Chan := peer2.ReceivedMsgChan()
+	peer1Chan, done1 := peer1.ReceivedMsgChan()
+	defer done1()
+	peer2Chan, done2 := peer2.ReceivedMsgChan()
+	defer done2()
 
 	time.Sleep(time.Second)
 
-	err = peer1.Broadcast(pk.Serialize(), messageToBroadcast)
+	err := peer1.Broadcast(pk.Serialize(), messageToBroadcast)
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)
@@ -88,18 +73,19 @@ func TestP2pNetwork_GetUserAgent(t *testing.T) {
 		sk, err := rsaencryption.ConvertPemToPrivateKey(string(skBytes))
 		require.NoError(t, err)
 		require.NotNil(t, sk)
-		n := p2pNetwork{operatorPrivKey: sk}
+		n := p2pNetwork{operatorPrivKey: sk, nodeType: Operator}
 		ua := n.getUserAgent()
 		parts := strings.Split(ua, ":")
 		require.Equal(t, "ssvtest", parts[0])
 		require.Equal(t, "v0.x.x", parts[1])
 		pk, err := rsaencryption.ExtractPublicKey(sk)
 		require.NoError(t, err)
-		require.Equal(t, pubKeyHash(pk), parts[2])
+		require.Equal(t, pubKeyHash(pk), parts[3])
+		require.Equal(t, Operator.String(), parts[2])
 	})
 
 	t.Run("without operator key", func(t *testing.T) {
 		n := p2pNetwork{}
-		require.Equal(t, "ssvtest:v0.x.x", n.getUserAgent())
+		require.Equal(t, "ssvtest:v0.x.x:unknown", n.getUserAgent())
 	})
 }

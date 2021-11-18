@@ -20,11 +20,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
 const (
-	mainQueueInterval            = 100 * time.Millisecond
 	readerQueuesInterval         = 10 * time.Millisecond
 	metaDataReaderQueuesInterval = 5 * time.Second
 	metaDataBatchSize            = 25
@@ -75,11 +75,14 @@ type exporter struct {
 	ws           api.WebSocketServer
 	commitReader ibft.Reader
 
+	readersMut     sync.RWMutex
+	decidedReaders map[string]ibft.Reader
+	netReaders     map[string]ibft.Reader
+
 	wsAPIPort                       int
 	ibftSyncEnabled                 bool
 	validatorMetaDataUpdateInterval time.Duration
 
-	mainQueue            tasks.Queue
 	decidedReadersQueue  tasks.Queue
 	networkReadersQueue  tasks.Queue
 	metaDataReadersQueue tasks.Queue
@@ -103,17 +106,19 @@ func New(opts Options) Exporter {
 		network:              opts.Network,
 		eth1Client:           opts.Eth1Client,
 		beacon:               opts.Beacon,
-		mainQueue:            tasks.NewExecutionQueue(mainQueueInterval),
 		decidedReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		networkReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
 		ws:                   opts.WS,
+		readersMut:           sync.RWMutex{},
+		decidedReaders:       map[string]ibft.Reader{},
+		netReaders:           map[string]ibft.Reader{},
 		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
 			Logger:           opts.Logger,
 			Network:          opts.Network,
 			ValidatorStorage: validatorStorage,
 			IbftStorage:      &ibftStorage,
-			Out:              opts.WS.OutboundSubject(),
+			Out:              opts.WS.BroadcastFeed(),
 		}),
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
@@ -150,7 +155,6 @@ func (exp *exporter) Start() error {
 	}
 	go exp.continuouslyUpdateValidatorMetaData()
 
-	go exp.mainQueue.Start()
 	go exp.decidedReadersQueue.Start()
 	go exp.networkReadersQueue.Start()
 
@@ -231,11 +235,7 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 	exp.logger.Info("managed to sync contract events")
 
 	// register for contract events that will arrive from eth1Client
-	eth1EventChan, err := exp.eth1Client.EventsSubject().Register("Eth1ExporterObserver")
-	if err != nil {
-		return errors.Wrap(err, "could not register for eth1 events subject")
-	}
-	errCn := exp.listenToEth1Events(eth1EventChan)
+	errCn := exp.listenToEth1Events(exp.eth1Client.EventsFeed())
 	go func() {
 		// log errors while processing events
 		for err := range errCn {
@@ -243,8 +243,7 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 		}
 	}()
 	// start events stream
-	err = exp.eth1Client.Start()
-	if err != nil {
+	if err := exp.eth1Client.Start(); err != nil {
 		return errors.Wrap(err, "could not start eth1 client")
 	}
 	return nil
@@ -274,6 +273,7 @@ func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	return exp.ibftSyncEnabled
 }
 
+// triggerValidator starts the given validator
 func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	if validatorPubKey == nil {
 		return errors.New("empty validator pubkey")
@@ -291,59 +291,69 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 	}
 	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
-	exp.mainQueue.QueueDistinct(func() error {
-		return exp.setup(validatorShare)
-	}, fmt.Sprintf("ibft:setup/%s", pubkey))
-
-	return nil
+	return exp.setup(validatorShare)
 }
 
+// setup starts all validator readers
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	logger.Debug("setup validator")
+	defer logger.Debug("setup validator done")
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
-	decidedReader := exp.getDecidedReader(validatorShare)
-
 	// start network reader
-	networkReader := exp.getNetworkReader(validatorShare.PublicKey)
+	networkReader := exp.getOrCreateNetworkReader(validatorShare.PublicKey)
 	exp.networkReadersQueue.QueueDistinct(networkReader.Start, pubKey)
-
-	// sync decided
-	if err := tasks.Retry(func() error {
-		if err := decidedReader.Sync(); err != nil {
-			logger.Error("could not sync validator", zap.Error(err))
-			return err
-		}
-		return nil
-	}, 3); err != nil {
-		validator.ReportIBFTStatus(pubKey, false, true)
-		logger.Error("could not setup validator, sync failed", zap.Error(err))
-		return err
-	}
-	validator.ReportIBFTStatus(pubKey, true, false)
-	logger.Debug("sync is done, starting to read network messages")
+	// start decided reader
+	decidedReader := exp.getOrCreateDecidedReader(validatorShare)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
 	return nil
 }
 
-func (exp *exporter) getDecidedReader(validatorShare *validatorstorage.Share) ibft.SyncRead {
-	return ibft.NewDecidedReader(ibft.DecidedReaderOptions{
-		Logger:         exp.logger,
-		Storage:        exp.ibftStorage,
-		Network:        exp.network,
-		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: validatorShare,
-		Out:            exp.ws.OutboundSubject(),
-	})
+// getOrCreateDecidedReader will create decided reader if not exist
+func (exp *exporter) getOrCreateDecidedReader(validatorShare *validatorstorage.Share) ibft.Reader {
+	exp.readersMut.Lock()
+	defer exp.readersMut.Unlock()
+
+	pk := validatorShare.PublicKey.SerializeToHexStr()
+	if _, ok := exp.decidedReaders[pk]; !ok {
+		exp.decidedReaders[pk] = ibft.NewDecidedReader(ibft.DecidedReaderOptions{
+			Logger:         exp.logger,
+			Storage:        exp.ibftStorage,
+			Network:        exp.network,
+			Config:         proto.DefaultConsensusParams(),
+			ValidatorShare: validatorShare,
+			Out:            exp.ws.BroadcastFeed(),
+		})
+	}
+
+	return exp.decidedReaders[pk]
 }
 
-func (exp *exporter) getNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reader {
-	return ibft.NewNetworkReader(ibft.IncomingMsgsReaderOptions{
-		Logger:  exp.logger,
-		Network: exp.network,
-		Config:  proto.DefaultConsensusParams(),
-		PK:      validatorPubKey,
-	})
+// getDecidedReader returns decided reader for the given validator (if exist)
+func (exp *exporter) getDecidedReader(pk string) ibft.Reader {
+	exp.readersMut.RLock()
+	defer exp.readersMut.RUnlock()
+
+	return exp.decidedReaders[pk]
+}
+
+// getOrCreateNetworkReader will create networkReader if not exist
+func (exp *exporter) getOrCreateNetworkReader(validatorPubKey *bls.PublicKey) ibft.Reader {
+	exp.readersMut.Lock()
+	defer exp.readersMut.Unlock()
+
+	pk := validatorPubKey.SerializeToHexStr()
+	if _, ok := exp.netReaders[pk]; !ok {
+		exp.netReaders[pk] = ibft.NewNetworkReader(ibft.IncomingMsgsReaderOptions{
+			Logger:  exp.logger,
+			Network: exp.network,
+			Config:  proto.DefaultConsensusParams(),
+			PK:      validatorPubKey,
+		})
+	}
+
+	return exp.netReaders[pk]
 }
 
 func (exp *exporter) reportOperators() {

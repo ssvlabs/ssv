@@ -1,153 +1,137 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"github.com/bloxapp/ssv/exporter/storage"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"math/rand"
 	"net"
+	"net/http"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestHandleQuery(t *testing.T) {
-	logger := zap.L()
-	adapter := NewAdapterMock(logger).(*AdapterMock)
-
-	_, ipAddr, err := net.ParseCIDR("192.0.2.1/24")
-	require.NoError(t, err)
-	conn := connectionMock{addr: ipAddr}
-
-	ws := NewWsServer(logger, adapter, func(nm *NetworkMessage) {
-		require.Equal(t, &conn, nm.Conn)
+	logger := zaptest.NewLogger(t)
+	ctx := context.Background()
+	mux := http.NewServeMux()
+	ws := NewWsServer(ctx, logger, func(nm *NetworkMessage) {
 		nm.Msg.Data = []storage.OperatorInformation{
-			{PublicKey: "pubkey1"},
-			{PublicKey: "pubkey2"},
+			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
-	}, nil).(*wsServer)
-
+	}, mux).(*wsServer)
+	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
-		ws.handleQuery(&conn)
+		require.NoError(t, ws.Start(addr))
 	}()
 
+	var wg sync.WaitGroup
+	testCtx, cancelCtx := context.WithCancel(ctx)
+	client := NewWSClient(testCtx, logger)
+	wg.Add(1)
 	go func() {
-		time.Sleep(5 * time.Millisecond)
-		msg := Message{
-			Type:   TypeOperator,
-			Filter: MessageFilter{From: 1},
-		}
-		adapter.In <- msg
+		// sleep so setup will be finished
+		time.Sleep(100 * time.Millisecond)
+		go func() {
+			defer wg.Done()
+			defer cancelCtx()
+			time.Sleep(10 * time.Millisecond)
+			client.out <- Message{
+				Type:   TypeOperator,
+				Filter: MessageFilter{From: 1, To: 1},
+			}
+			time.Sleep(10 * time.Millisecond)
+			client.out <- Message{
+				Type:   TypeOperator,
+				Filter: MessageFilter{From: 2, To: 2},
+			}
+			time.Sleep(10 * time.Millisecond)
+		}()
+		require.NoError(t, client.StartQuery(addr, "/query"))
 	}()
 
-	<-adapter.Out
+	wg.Wait()
+
+	require.Equal(t, 2, client.MessageCount())
 }
 
 func TestHandleStream(t *testing.T) {
-	msgCount := 3
 	logger := zaptest.NewLogger(t)
-	adapter := NewAdapterMock(logger).(*AdapterMock)
-	ws := NewWsServer(logger, adapter, nil, nil).(*wsServer)
-
-	_, ipAddr, err := net.ParseCIDR("192.0.2.1/25")
-	require.NoError(t, err)
-	conn := connectionMock{addr: ipAddr}
-	go ws.handleStream(&conn)
-
-	_, ipAddr2, err := net.ParseCIDR("192.0.2.1/26")
-	require.NoError(t, err)
-	conn2 := connectionMock{addr: ipAddr2}
-	go ws.handleStream(&conn2)
-
-	sub, ok := ws.OutboundSubject().(pubsub.Subject)
-	require.True(t, ok)
-	// register a listener to count how many messages are passed on outbound subject
-	var outCnCount int64
-	var wgCn sync.WaitGroup
-	wgCn.Add(3)
-	cn1, err := sub.Register("xxx-1")
-	require.NoError(t, err)
+	ctx := context.Background()
+	mux := http.NewServeMux()
+	ws := NewWsServer(ctx, logger, nil, mux).(*wsServer)
+	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
-		for range cn1 {
-			atomic.AddInt64(&outCnCount, int64(1))
-			wgCn.Done()
-		}
+		require.NoError(t, ws.Start(addr))
 	}()
-	cn2, err := sub.Register("xxx-2")
-	require.NoError(t, err)
-	// registers a dummy listener that de-registers
+
+	testCtx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
+	client := NewWSClient(testCtx, logger)
 	go func() {
-		for range cn2 {
-			sub.Deregister("xxx-2")
-			return
-		}
-	}()
-	// expecting outbound messages
-	var wg sync.WaitGroup
-	wg.Add(msgCount * 2)
-	go func() {
-		i := 0
-		for {
-			<-adapter.Out
-			i++
-			if i >= msgCount*2 {
-				if i > msgCount*2 {
-					t.Error("should not send too many requests")
-				}
-				wg.Done()
-				return
-			}
-			wg.Done()
-		}
+		// sleep so setup will be finished
+		time.Sleep(100 * time.Millisecond)
+		require.NoError(t, client.StartStream(addr, "/stream"))
 	}()
 
 	go func() {
 		// sleep so setup will be finished
-		time.Sleep(10 * time.Millisecond)
-
+		time.Sleep(200 * time.Millisecond)
 		// sending 3 messages in the stream channel
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeValidator,
-				Filter: MessageFilter{From: 0},
-				Data: []storage.ValidatorInformation{
-					{PublicKey: "pubkey1"},
-					{PublicKey: "pubkey2"},
-				},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		go ws.OutboundSubject().Notify(nm)
+		ws.out.Send(newTestMessage())
 
-		nm.Msg.Data = []storage.OperatorInformation{
+		msg2 := newTestMessage()
+		msg2.Data = []storage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
-		go ws.OutboundSubject().Notify(nm)
-		nm.Msg.Data = []storage.ValidatorInformation{
+		ws.out.Send(msg2)
+
+		msg3 := newTestMessage()
+		msg3.Type = TypeValidator
+		msg3.Data = []storage.ValidatorInformation{
 			{PublicKey: "pubkey3"},
 		}
-		ws.OutboundSubject().Notify(nm)
-		// let the message propagate
-		time.Sleep(10 * time.Millisecond)
+		ws.out.Send(msg3)
 	}()
 
-	wg.Wait()
-	wgCn.Wait()
-
-	require.Equal(t, int64(msgCount), atomic.LoadInt64(&outCnCount))
+	for {
+		if client.MessageCount() == 3 {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
-type connectionMock struct {
-	addr net.Addr
+func newTestMessage() Message {
+	return Message{
+		Type:   TypeValidator,
+		Filter: MessageFilter{From: 0},
+		Data: []storage.ValidatorInformation{
+			{PublicKey: "pubkey1"},
+			{PublicKey: "pubkey2"},
+		},
+	}
 }
 
-func (cm *connectionMock) Close() error {
+func getRandomPort(from, to int) int {
+	for {
+		port := rand.Intn(to-from) + from
+		if checkPort(port) == nil {
+			// port is taken
+			continue
+		}
+		return port
+	}
+}
+
+func checkPort(port int) error {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%d", port), 3*time.Second)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
 	return nil
-}
-
-func (cm *connectionMock) LocalAddr() net.Addr {
-	return cm.addr
 }

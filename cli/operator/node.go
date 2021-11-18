@@ -113,6 +113,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
 		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
+		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))

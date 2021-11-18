@@ -37,7 +37,7 @@ func (n *p2pNetwork) SubscribeToMainTopic() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to subscribe on Topic")
 	}
-	go n.listen(sub)
+	go n.listen(n.ctx, sub)
 
 	return nil
 }

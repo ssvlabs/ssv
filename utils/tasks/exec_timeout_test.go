@@ -13,7 +13,7 @@ import (
 
 func TestExecWithTimeout(t *testing.T) {
 	logex.Build("test", zap.DebugLevel, nil)
-	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 7*time.Millisecond)
+	ctxWithTimeout, cancel := context.WithTimeout(context.TODO(), 10*time.Millisecond)
 	defer cancel()
 	tests := []struct {
 		name          string
@@ -24,13 +24,13 @@ func TestExecWithTimeout(t *testing.T) {
 		{
 			"Cancelled_context",
 			ctxWithTimeout,
-			12 * time.Millisecond,
+			20 * time.Millisecond,
 			3,
 		},
 		{
 			"Long_function",
 			context.TODO(),
-			7 * time.Millisecond,
+			8 * time.Millisecond,
 			3,
 		},
 	}
@@ -42,16 +42,13 @@ func TestExecWithTimeout(t *testing.T) {
 
 			stopped.Add(1)
 			fn := func(stopper Stopper) (interface{}, error) {
-				stop := stopper.Chan()
 				for {
-					select {
-					case <-stop:
+					if stopper.IsStopped() {
 						stopped.Done()
 						return true, nil
-					default:
-						atomic.AddUint32(&count, 1)
-						time.Sleep(2 * time.Millisecond)
 					}
+					atomic.AddUint32(&count, 1)
+					time.Sleep(2 * time.Millisecond)
 				}
 			}
 			completed, _, err := ExecWithTimeout(test.ctx, fn, test.t)

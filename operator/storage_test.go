@@ -5,9 +5,11 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"testing"
 )
 
@@ -76,7 +78,7 @@ func TestSetupPrivateKey(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			options := basedb.Options{
 				Type:   "badger-memory",
-				Logger: zap.L(),
+				Logger: logex.Build("test", zapcore.DebugLevel, nil),
 				Path:   "",
 			}
 
@@ -93,22 +95,38 @@ func TestSetupPrivateKey(t *testing.T) {
 				existKeyByte, err := base64.StdEncoding.DecodeString(test.existKey) // passing keys format should be in base64
 				require.NoError(t, err)
 				require.NoError(t, operatorStorage.savePrivateKey(string(existKeyByte)))
+				sk, found, err := operatorStorage.GetPrivateKey()
+				require.True(t, found)
+				require.NoError(t, err)
+				require.NotNil(t, sk)
+
+				existKeyByte, err = base64.StdEncoding.DecodeString(test.existKey)
+				require.NoError(t, err)
+				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
+
 			require.NoError(t, operatorStorage.SetupPrivateKey(test.passedKey))
 			sk, found, err := operatorStorage.GetPrivateKey()
-			require.True(t, true, found)
+			require.NoError(t, err)
+			pk, err := rsaencryption.ExtractPublicKey(sk) // from storage
+			require.True(t, found)
 			require.NoError(t, err)
 			require.NotNil(t, sk)
 			if test.existKey == "" && test.passedKey == "" { // new key generated
-				pk, err := rsaencryption.ExtractPublicKey(sk)
 				require.NoError(t, err)
 				require.GreaterOrEqual(t, len(pk), 600)
+				return
 			}
-			if test.passedKey != "" { // passed key set
-				passedKeyByte, err := base64.StdEncoding.DecodeString(test.passedKey)
+			if test.existKey != "" && test.passedKey == "" { // exist and not passed in env
+				existKeyByte, err := base64.StdEncoding.DecodeString(test.existKey)
 				require.NoError(t, err)
-				require.Equal(t, string(passedKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
+				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
+				return
 			}
+			// not exist && passed and exist && passed
+			passedKeyByte, err := base64.StdEncoding.DecodeString(test.passedKey)
+			require.NoError(t, err)
+			require.Equal(t, string(passedKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 		})
 	}
 }

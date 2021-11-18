@@ -8,6 +8,7 @@ import (
 
 // Fork holds all fork related implementations for the controller
 type Fork interface {
+	SlotTick(slot uint64)
 	Apply(controller ibft.Controller)
 	InstanceFork() forks.Fork
 	ValidateDecidedMsg() pipeline.Pipeline

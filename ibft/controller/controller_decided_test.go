@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
@@ -12,15 +13,31 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync"
 	"testing"
 	"time"
 )
 
 type testStorage struct {
 	highestDecided *proto.SignedMessage
+	msgs           map[string]*proto.SignedMessage
+	lock           sync.Mutex
+}
+
+func newTestStorage(highestDecided *proto.SignedMessage) *testStorage {
+	return &testStorage{
+		highestDecided: highestDecided,
+		msgs:           map[string]*proto.SignedMessage{},
+		lock:           sync.Mutex{},
+	}
+}
+
+func msgKey(identifier []byte, seqNumber uint64) string {
+	return fmt.Sprintf("%s_%d", string(identifier), seqNumber)
 }
 
 // SaveCurrentInstance implementation
@@ -34,13 +51,23 @@ func (s *testStorage) GetCurrentInstance(identifier []byte) (*proto.State, bool,
 }
 
 // SaveDecided implementation
-func (s *testStorage) SaveDecided(_ *proto.SignedMessage) error {
+func (s *testStorage) SaveDecided(msg *proto.SignedMessage) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	k := msgKey(msg.Message.Lambda, msg.Message.SeqNumber)
+	s.msgs[k] = msg
 	return nil
 }
 
 // GetDecided implementation
 func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, bool, error) {
-	return nil, false, nil
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	k := msgKey(identifier, seqNumber)
+	msg, ok := s.msgs[k]
+	return msg, ok, nil
 }
 
 // SaveHighestDecidedInstance implementation
@@ -165,7 +192,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ibft := Controller{
 				currentInstance: test.currentInstance,
-				ibftStorage:     &testStorage{highestDecided: test.highestDecided},
+				ibftStorage:     newTestStorage(test.highestDecided),
 			}
 			res, err := ibft.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
@@ -422,4 +449,49 @@ func TestValidateDecidedMsg(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestController_checkDecidedMessageSigners(t *testing.T) {
+	secretKeys, nodes := GenerateNodes(4)
+	skQuorum := map[uint64]*bls.SecretKey{}
+	for i, sk := range secretKeys {
+		skQuorum[i] = sk
+	}
+	delete(skQuorum, uint64(4))
+	identifier := []byte("lambda_2")
+
+	incompleteDecided := aggregateSign(t, skQuorum, &proto.Message{
+		Type:      proto.RoundState_Commit,
+		Lambda:    identifier[:],
+		SeqNumber: 2,
+	})
+	completeDecided := aggregateSign(t, secretKeys, &proto.Message{
+		Type:      proto.RoundState_Commit,
+		Lambda:    identifier[:],
+		SeqNumber: 2,
+	})
+
+	share := &storage.Share{
+		NodeID:    1,
+		PublicKey: validatorPK(secretKeys),
+		Committee: nodes,
+	}
+
+	ctrl := Controller{
+		ValidatorShare: share,
+		currentInstance: instance.NewInstanceWithState(&proto.State{
+			Lambda:    threadsafe.BytesS(string(identifier)),
+			SeqNumber: threadsafe.Uint64(2),
+		}),
+		ibftStorage: newTestStorage(nil),
+	}
+	require.NoError(t, ctrl.ibftStorage.SaveDecided(incompleteDecided))
+	// check message with similar number of signers
+	shouldIgnore, err := ctrl.checkDecidedMessageSigners(incompleteDecided)
+	require.NoError(t, err)
+	require.True(t, shouldIgnore)
+	// check message with more signers
+	shouldIgnore, err = ctrl.checkDecidedMessageSigners(completeDecided)
+	require.NoError(t, err)
+	require.False(t, shouldIgnore)
 }

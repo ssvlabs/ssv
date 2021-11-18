@@ -119,7 +119,8 @@ func (v *Validator) Start() error {
 }
 
 func (v *Validator) listenToSignatureMessages() {
-	sigChan := v.network.ReceivedSignatureChan()
+	sigChan, done := v.network.ReceivedSignatureChan()
+	defer done()
 	for sigMsg := range sigChan {
 		if sigMsg == nil {
 			v.logger.Debug("got nil message")
@@ -164,7 +165,7 @@ func setupIbftController(
 		msgQueue,
 		proto.DefaultConsensusParams(),
 		share,
-		fork.IBFTControllerFork(),
+		fork.NewIBFTControllerFork(),
 		signer)
 }
 

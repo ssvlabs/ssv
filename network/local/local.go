@@ -49,21 +49,21 @@ func (n *Local) CopyWithLocalNodeID(id peer.ID) *Local {
 }
 
 // ReceivedMsgChan implements network.Local interface
-func (n *Local) ReceivedMsgChan() <-chan *proto.SignedMessage {
+func (n *Local) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
 	n.createChannelMutex.Lock()
 	defer n.createChannelMutex.Unlock()
 	c := make(chan *proto.SignedMessage)
 	n.msgC = append(n.msgC, c)
-	return c
+	return c, func() {}
 }
 
 // ReceivedSignatureChan returns the channel with signatures
-func (n *Local) ReceivedSignatureChan() <-chan *proto.SignedMessage {
+func (n *Local) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
 	n.createChannelMutex.Lock()
 	defer n.createChannelMutex.Unlock()
 	c := make(chan *proto.SignedMessage)
 	n.sigC = append(n.sigC, c)
-	return c
+	return c, func() {}
 }
 
 // Broadcast implements network.Local interface
@@ -102,12 +102,12 @@ func (n *Local) BroadcastDecided(topicName []byte, msg *proto.SignedMessage) err
 }
 
 // ReceivedDecidedChan returns the channel for decided messages
-func (n *Local) ReceivedDecidedChan() <-chan *proto.SignedMessage {
+func (n *Local) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
 	n.createChannelMutex.Lock()
 	defer n.createChannelMutex.Unlock()
 	c := make(chan *proto.SignedMessage)
 	n.decidedC = append(n.decidedC, c)
-	return c
+	return c, func() {}
 }
 
 // GetHighestDecidedInstance sends a highest decided request to peers and returns answers.
@@ -122,7 +122,7 @@ func (n *Local) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessa
 			}
 		}()
 
-		ret := <-stream.ReceiveChan
+		ret := <-stream.(*Stream).ReceiveChan
 		return ret, nil
 	}
 	return nil, errors.New("could not find peer")
@@ -136,13 +136,13 @@ func (n *Local) RespondToHighestDecidedInstance(stream network.SyncStream, msg *
 }
 
 // ReceivedSyncMsgChan returns the channel for sync messages
-func (n *Local) ReceivedSyncMsgChan() <-chan *network.SyncChanObj {
+func (n *Local) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
 	n.createChannelMutex.Lock()
 	defer n.createChannelMutex.Unlock()
 	c := make(chan *network.SyncChanObj)
 	n.syncC = append(n.syncC, c)
 	n.syncPeers[fmt.Sprintf("%d", len(n.syncPeers))] = c
-	return c
+	return c, func() {}
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
@@ -156,7 +156,7 @@ func (n *Local) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*ne
 			}
 		}()
 
-		ret := <-stream.ReceiveChan
+		ret := <-stream.(*Stream).ReceiveChan
 		return ret, nil
 	}
 	return nil, errors.New("could not find peer")

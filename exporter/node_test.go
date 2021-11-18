@@ -4,27 +4,29 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/attestantio/go-eth2-client/api/v1"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 	"sync"
 	"testing"
 )
 
-var once sync.Once
-
-func initBls() {
-	once.Do(func() {
-		bls.Init(bls.BLS12_381)
-	})
+func init() {
+	bls.Init(bls.BLS12_381)
+	logex.Build("test", zapcore.DebugLevel, nil)
 }
 
 func TestExporter_handleQueryRequests(t *testing.T) {
@@ -52,36 +54,28 @@ func TestExporter_handleQueryRequests(t *testing.T) {
 }
 
 func TestExporter_ListenToEth1Events(t *testing.T) {
-	initBls()
-
 	exp, err := newMockExporter()
 	require.NoError(t, err)
 
-	sub := pubsub.NewSubject(zap.L())
-	cn, err := sub.Register("TestExporter_ListenToEth1Events")
-	require.NoError(t, err)
-	defer sub.Deregister("TestExporter_ListenToEth1Events")
+	feed := new(event.Feed)
 
 	go func() {
-		errCn := exp.listenToEth1Events(cn)
+		errCn := exp.listenToEth1Events(feed)
 		for err := range errCn {
 			require.NoError(t, err)
 		}
 	}()
 
 	var wg sync.WaitGroup
-	outSub := exp.ws.OutboundSubject().(pubsub.Subject)
 	go func() {
-		cnOut, err := outSub.Register("TestExporter_ListenToEth1Events_out_ws")
-		require.NoError(t, err)
-		defer sub.Deregister("TestExporter_ListenToEth1Events_out_ws")
+		cnOut := make(chan api.Message)
+		sub := exp.ws.BroadcastFeed().Subscribe(cnOut)
+		defer sub.Unsubscribe()
 
-		for m := range cnOut {
-			nm, ok := m.(api.NetworkMessage)
-			require.True(t, ok)
-			raw, err := json.Marshal(nm.Msg)
+		for msg := range cnOut {
+			raw, err := json.Marshal(msg)
 			require.NoError(t, err)
-			if nm.Msg.Type == api.TypeValidator {
+			if msg.Type == api.TypeValidator {
 				var validators api.ValidatorsMessage
 				err = json.Unmarshal(raw, &validators)
 				require.NoError(t, err)
@@ -90,7 +84,7 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 					"eed3b5f6e7ced670ecb066c9704dc2fa93133792381c",
 					validators.Data[0].PublicKey)
 				wg.Done()
-			} else if nm.Msg.Type == api.TypeOperator {
+			} else if msg.Type == api.TypeOperator {
 				var operators api.OperatorsMessage
 				err = json.Unmarshal(raw, &operators)
 				require.NoError(t, err)
@@ -102,10 +96,10 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	}()
 	// pushing 2 events and waits for handling
 	wg.Add(1)
-	sub.Notify(validatorAddedMockEvent(t))
+	feed.Send(validatorAddedMockEvent(t))
 
 	wg.Add(1)
-	sub.Notify(operatorAddedMockEvent(t))
+	feed.Send(operatorAddedMockEvent(t))
 
 	wg.Wait()
 
@@ -129,11 +123,11 @@ func newMockExporter() (*exporter, error) {
 		return nil, err
 	}
 
-	adapter := api.NewAdapterMock(logger)
-	ws := api.NewWsServer(logger, adapter, nil, nil)
+	ws := api.NewWsServer(context.Background(), logger, nil, nil)
 
 	opts := Options{
 		Ctx:        context.Background(),
+		Beacon:     beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
 		Logger:     logger,
 		ETHNetwork: nil,
 		Eth1Client: nil,
@@ -149,7 +143,6 @@ func newMockExporter() (*exporter, error) {
 }
 
 func TestToValidatorInformation(t *testing.T) {
-	initBls()
 	e := validatorAddedMockEvent(t)
 	vae, ok := e.Data.(eth1.ValidatorAddedEvent)
 	require.True(t, ok)
@@ -160,7 +153,7 @@ func TestToValidatorInformation(t *testing.T) {
 	require.True(t, strings.EqualFold(hex.EncodeToString(vae.PublicKey), vi.PublicKey))
 }
 
-func validatorAddedMockEvent(t *testing.T) eth1.Event {
+func validatorAddedMockEvent(t *testing.T) *eth1.Event {
 	rawValidatorAdded := `{
 "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
 "topics": [
@@ -183,10 +176,10 @@ func validatorAddedMockEvent(t *testing.T) eth1.Event {
 	parsed, _, err := eth1.ParseValidatorAddedEvent(zap.L(), nil, vLogValidatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
-	return eth1.Event{Log: types.Log{}, Data: *parsed}
+	return &eth1.Event{Log: types.Log{}, Data: *parsed}
 }
 
-func operatorAddedMockEvent(t *testing.T) eth1.Event {
+func operatorAddedMockEvent(t *testing.T) *eth1.Event {
 	rawOperatorAdded := `{
   "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
   "topics": [
@@ -209,5 +202,5 @@ func operatorAddedMockEvent(t *testing.T) eth1.Event {
 	parsed, _, err := eth1.ParseOperatorAddedEvent(zap.L(), nil, vLogOperatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
-	return eth1.Event{Log: types.Log{}, Data: *parsed}
+	return &eth1.Event{Log: types.Log{}, Data: *parsed}
 }

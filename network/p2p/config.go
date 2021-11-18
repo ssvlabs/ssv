@@ -40,6 +40,41 @@ type Config struct {
 	OperatorPrivateKey *rsa.PrivateKey
 	// ReportLastMsg whether to report last msg metric
 	ReportLastMsg bool
+	// NodeType differentiate exporters peers from others
+	NodeType NodeType
+}
+
+// NodeType indicate node operation type. In purpose for distinguish between different types of peers
+type NodeType int64
+
+// NodeTypes are const types for NodeType
+const (
+	Unknown NodeType = iota
+	Operator
+	Exporter
+)
+
+// FromString convert string to NodeType. If not exist, return Unknown
+func (nt NodeType) FromString(nodeType string) NodeType {
+	switch nodeType {
+	case "operator":
+		return Operator
+	case "exporter":
+		return Exporter
+	case "unknown":
+		return Unknown
+	}
+	return nt
+}
+
+func (nt NodeType) String() string {
+	switch nt {
+	case Operator:
+		return "operator"
+	case Exporter:
+		return "exporter"
+	}
+	return "unknown"
 }
 
 // TransformEnr converts defaults enr value and convert it to slice

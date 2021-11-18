@@ -1,12 +1,16 @@
 package ibft
 
 import (
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"strings"
 	"testing"
 
@@ -15,6 +19,10 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
+
+func init() {
+	logex.Build("test", zapcore.DebugLevel, nil)
+}
 
 func newInMemDb() basedb.IDb {
 	db, _ := kv.New(basedb.Options{
@@ -195,15 +203,21 @@ func TestCommitPipeline(t *testing.T) {
 
 func TestProcessLateCommitMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
-	storage := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
+	db := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
+
+	share := storage.Share{}
+	share.PublicKey = sks[1].GetPublicKey()
+	share.Committee = make(map[uint64]*proto.Node, 4)
+	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String())
 
 	var sigs []*proto.SignedMessage
 	for i := 1; i < 4; i++ {
 		sigs = append(sigs, SignMsg(t, uint64(i), sks[uint64(i)], &proto.Message{
-			Type:   proto.RoundState_Commit,
-			Round:  3,
-			Lambda: []byte("Lambda_ATTESTER"),
-			Value:  []byte("value"),
+			SeqNumber: uint64(2),
+			Type:      proto.RoundState_Commit,
+			Round:     3,
+			Lambda:    []byte(identifier),
+			Value:     []byte("value"),
 		}))
 	}
 	decided, err := proto.AggregateMessages(sigs)
@@ -212,30 +226,32 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	tests := []struct {
 		name        string
 		expectedErr string
-		updated     bool
+		updated     interface{}
 		msg         *proto.SignedMessage
 	}{
 		{
 			"valid",
 			"",
-			true,
+			struct{}{},
 			SignMsg(t, 4, sks[4], &proto.Message{
-				Type:   proto.RoundState_Commit,
-				Round:  3,
-				Lambda: []byte("Lambda_ATTESTER"),
-				Value:  []byte("value"),
+				SeqNumber: uint64(2),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				Lambda:    []byte(identifier),
+				Value:     []byte("value"),
 			}),
 		},
 		{
 			"invalid",
 			"could not aggregate commit message",
-			false,
+			nil,
 			func() *proto.SignedMessage {
 				msg := SignMsg(t, 4, sks[4], &proto.Message{
-					Type:   proto.RoundState_Commit,
-					Round:  3,
-					Lambda: []byte("Lambda_ATTESTER"),
-					Value:  []byte("value"),
+					SeqNumber: uint64(2),
+					Type:      proto.RoundState_Commit,
+					Round:     3,
+					Lambda:    []byte(identifier),
+					Value:     []byte("value"),
 				})
 				msg.Signature = []byte("dummy")
 				return msg
@@ -244,26 +260,31 @@ func TestProcessLateCommitMsg(t *testing.T) {
 		{
 			"not found",
 			"",
-			false,
+			nil,
 			SignMsg(t, 4, sks[4], &proto.Message{
-				Type:   proto.RoundState_Commit,
-				Round:  3,
-				Lambda: []byte("xxx_ATTESTER"),
-				Value:  []byte("value"),
+				SeqNumber: uint64(2),
+				Type:      proto.RoundState_Commit,
+				Round:     3,
+				Lambda:    []byte("xxx_ATTESTER"),
+				Value:     []byte("value"),
 			}),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			require.NoError(t, storage.SaveDecided(decided))
-			updated, err := ProcessLateCommitMsg(test.msg, &storage, "Lambda")
+			require.NoError(t, db.SaveDecided(decided))
+			updated, err := ProcessLateCommitMsg(test.msg, &db, &share)
 			if len(test.expectedErr) > 0 {
 				require.NotNil(t, err)
 				require.True(t, strings.Contains(err.Error(), test.expectedErr))
 			} else {
 				require.NoError(t, err)
 			}
-			require.Equal(t, test.updated, updated)
+			if test.updated != nil {
+				require.NotNil(t, updated)
+			} else {
+				require.Nil(t, updated)
+			}
 		})
 	}
 }

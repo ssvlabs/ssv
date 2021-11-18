@@ -5,6 +5,7 @@ import "github.com/bloxapp/ssv/network"
 // Fork is an interface for network specific fork implementations
 type Fork interface {
 	encoding
+	SlotTick(slot uint64)
 	pubSubMapping
 }
 

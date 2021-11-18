@@ -8,12 +8,12 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/forks"
-	"github.com/bloxapp/ssv/pubsub"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"time"
 
@@ -44,7 +44,7 @@ type ControllerOptions struct {
 // IController represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type IController interface {
-	ListenToEth1Events(cn pubsub.SubjectChannel)
+	ListenToEth1Events(feed *event.Feed)
 	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
@@ -107,12 +107,18 @@ func NewController(options ControllerOptions) IController {
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
-func (c *controller) ListenToEth1Events(cn pubsub.SubjectChannel) {
-	for e := range cn {
-		if event, ok := e.(eth1.Event); ok {
-			if err := c.ProcessEth1Event(event); err != nil {
+func (c *controller) ListenToEth1Events(feed *event.Feed) {
+	cn := make(chan *eth1.Event)
+	sub := feed.Subscribe(cn)
+	defer sub.Unsubscribe()
+	for {
+		select {
+		case event := <-cn:
+			if err := c.ProcessEth1Event(*event); err != nil {
 				c.logger.Error("could not process event", zap.Error(err))
 			}
+		case err := <-sub.Err():
+			c.logger.Error("event feed subscription error", zap.Error(err))
 		}
 	}
 }
@@ -192,7 +198,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.Metadata = metadata
-		if err := c.collection.SaveValidatorShare(v.Share); err != nil {
+		if err := c.collection.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 			return err
 		}
 		if err := c.startValidator(v); err != nil {
@@ -212,10 +218,11 @@ func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
 func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
+
 	err := c.validatorsMap.ForEach(func(v *Validator) error {
 		if !v.Share.HasMetadata() {
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
-		} else {
+		} else if v.Share.Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
 			indices = append(indices, v.Share.Metadata.Index)
 		}
 		return nil
@@ -293,7 +300,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 // if the validator was persisted already, this function won't be called
 func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.SecretKey) error {
 	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
-	if updated, err := updateShareMetadata(share, c.beacon); err != nil {
+	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 		logger.Warn("could not add validator metadata", zap.Error(err))
 	} else if !updated {
 		logger.Warn("could not find validator metadata")

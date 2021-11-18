@@ -45,6 +45,10 @@ func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 		}
 	}
 
+	if !i.ValidatorShare.OperatorReady() {
+		return errors.New("operator share not ready")
+	}
+
 	return nil
 }
 

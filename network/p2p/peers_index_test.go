@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync"
 	"testing"
 	"time"
 )
@@ -23,8 +24,9 @@ func TestNewPeersIndex(t *testing.T) {
 		ID:    host2.ID(),
 		Addrs: host2.Addrs(),
 	}))
-	// sleep to allow connection
-	time.Sleep(500 * time.Millisecond)
+
+	wait(1 * time.Second)
+
 	pi1.Run()
 	pi2.Run()
 
@@ -48,10 +50,23 @@ func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.H
 	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
 		libp2p.UserAgent(ua))
+	require.NoError(t, setupMdnsDiscovery(ctx, zap.L(), host))
 	require.NoError(t, err)
 	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
 	require.NoError(t, err)
 	pi := NewPeersIndex(host, ids, zap.L())
 
 	return host, pi
+}
+
+func wait(duration time.Duration) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// sleep to allow connection setup
+		time.Sleep(duration)
+
+	}()
+	wg.Wait()
 }

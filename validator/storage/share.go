@@ -77,7 +77,7 @@ func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 			}
 			ret = append(ret, pk)
 		} else {
-			return nil, errors.New("pk for id not found")
+			return nil, errors.Errorf("pk for id (%d) not found", id)
 		}
 	}
 	return ret, nil
@@ -155,4 +155,9 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 // HasMetadata returns true if the validator metadata was fetched
 func (s *Share) HasMetadata() bool {
 	return s.Metadata != nil
+}
+
+// OperatorReady returns true if all operator relevant data (node id, secret share, etc.) is present
+func (s *Share) OperatorReady() bool {
+	return s.NodeID != 0
 }

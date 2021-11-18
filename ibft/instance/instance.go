@@ -209,19 +209,19 @@ func (i *Instance) Start(inputValue []byte) error {
 
 // ForceDecide will attempt to decide the instance with provided decided signed msg.
 func (i *Instance) ForceDecide(msg *proto.SignedMessage) {
-	i.eventQueue.Add(func() {
+	i.eventQueue.Add(eventqueue.NewEvent(func() {
 		i.Logger.Info("trying to force instance decision.")
 		if err := i.DecidedMsgPipeline().Run(msg); err != nil {
 			i.Logger.Error("force decided pipeline error", zap.Error(err))
 		}
-	})
+	}))
 }
 
 // Stop will trigger a stopped for the entire instance
 func (i *Instance) Stop() {
 	// stop can be run just once
 	i.runStopOnce.Do(func() {
-		if added := i.eventQueue.Add(i.stop); !added {
+		if added := i.eventQueue.Add(eventqueue.NewEvent(i.stop)); !added {
 			i.Logger.Debug("could not add 'stop' to event queue")
 		}
 	})
@@ -280,13 +280,6 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(stage))
 
 	i.State().Stage.Set(int32(stage))
-
-	// Delete all queue messages when decided, we do not need them anymore.
-	if stage == proto.RoundState_Decided || stage == proto.RoundState_Stopped {
-		for j := uint64(1); j <= i.State().Round.Get(); j++ {
-			i.MsgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.State().Lambda.Get(), i.State().SeqNumber.Get()))
-		}
-	}
 
 	// blocking send to channel
 	if i.stageChangedChan != nil {

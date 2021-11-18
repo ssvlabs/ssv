@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/network"
@@ -36,31 +35,14 @@ func (v0 *testingFork) DecodeNetworkMsg(data []byte) (*network.Message, error) {
 	return ret, err
 }
 
+func (v0 *testingFork) SlotTick(slot uint64) {
+
+}
+
 func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 	logger := logex.Build("test", zap.DebugLevel, nil)
 
-	// create 2 peers
-	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12000,
-		TCPPort:          13000,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
-	})
-	require.NoError(t, err)
-
-	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12001,
-		TCPPort:          13001,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
-	})
-	require.NoError(t, err)
+	peer1, peer2 := testPeers(t, logger)
 
 	// broadcast msg
 	messageToBroadcast := &network.SyncMessage{
@@ -68,10 +50,9 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 		Type:           network.Sync_GetHighestType,
 	}
 
-	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
 	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
 	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
-	require.EqualError(t, err, "sync response timeout")
+	require.EqualError(t, err, "could not read sync msg: i/o deadline reached")
 	time.Sleep(time.Millisecond * 100)
 	require.Nil(t, res)
 }
@@ -79,31 +60,11 @@ func TestSyncMessageBroadcastingTimeout(t *testing.T) {
 func TestSyncMessageBroadcasting(t *testing.T) {
 	logger := logex.Build("test", zapcore.InfoLevel, nil)
 
-	// create 2 peers
-	peer1, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12000,
-		TCPPort:          13000,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
-	})
-	require.NoError(t, err)
-
-	peer2, err := New(context.Background(), logger, &Config{
-		DiscoveryType:    discoveryTypeMdns,
-		Enr:              "enr:-LK4QMIAfHA47rJnVBaGeoHwXOrXcCNvUaxFiDEE2VPCxQ40cu_k2hZsGP6sX9xIQgiVnI72uxBBN7pOQCo5d9izhkcBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQJu41tZ3K8fb60in7AarjEP_i2zv35My_XW_D_t6Y1fJ4N0Y3CCE4iDdWRwgg-g",
-		UDPPort:          12001,
-		TCPPort:          13001,
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 1,
-		Fork:             testFork(),
-	})
-	require.NoError(t, err)
+	peer1, peer2 := testPeers(t, logger)
 
 	// set receivers
-	peer2Chan := peer2.ReceivedSyncMsgChan()
+	peer2Chan, done := peer2.ReceivedSyncMsgChan()
+	defer done()
 
 	var receivedStream network.SyncStream
 	go func() {
@@ -126,7 +87,8 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 		Type:           network.Sync_GetHighestType,
 	}
 
-	time.Sleep(time.Millisecond * 500) // important to let nodes reach each other
+	time.Sleep(time.Millisecond * 800) // sleep to let nodes reach each other
+
 	peerID := peer.Encode(peer2.(*p2pNetwork).host.ID())
 	res, err := peer1.GetHighestDecidedInstance(peerID, messageToBroadcast)
 	require.NoError(t, err)
@@ -139,6 +101,6 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 
 	// verify stream closed
 	require.NotNil(t, receivedStream)
-	_, err = receivedStream.Write([]byte{1})
-	require.EqualError(t, err, "stream closed")
+	err = receivedStream.WriteWithTimeout([]byte{1}, time.Second*10)
+	require.EqualError(t, err, "writen bytes to sync stream doesnt match input data")
 }

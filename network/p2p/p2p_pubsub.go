@@ -1,8 +1,10 @@
 package p2p
 
 import (
+	"context"
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -15,14 +17,18 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	defer n.psTopicsLock.Unlock()
 
 	pubKey := validatorPk.SerializeToHexStr()
+	logger := n.logger.With(zap.String("who", "SubscribeToValidatorNetwork"), zap.String("pubKey", pubKey))
 
 	if _, ok := n.cfg.Topics[pubKey]; !ok {
 		if err := n.joinTopic(pubKey); err != nil {
 			return errors.Wrap(err, "failed to join to topic")
 		}
+		logger.Debug("joined topic")
+	} else {
+		logger.Debug("known topic")
 	}
 
-	if !n.psSubscribedTopics[pubKey] {
+	if _, ok := n.psSubs[pubKey]; !ok {
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
 			if err != pubsub.ErrTopicClosed {
@@ -37,14 +43,26 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 				return errors.Wrap(err, "failed to subscribe on Topic")
 			}
 		}
-		n.psSubscribedTopics[pubKey] = true
+		logger.Debug("subscribed to topic")
+		ctx, cancel := context.WithCancel(n.ctx)
+		n.psSubs[pubKey] = cancel
 		go func() {
-			n.listen(sub)
-			// mark topic as not subscribed
+			topicName := sub.Topic()
+			n.listen(ctx, sub)
+			// close topic and mark it as not subscribed
 			n.psTopicsLock.Lock()
 			defer n.psTopicsLock.Unlock()
-			n.psSubscribedTopics[pubKey] = false
+			if err := n.closeTopic(topicName); err != nil {
+				n.logger.Error("failed to close topic", zap.String("topic", topicName), zap.Error(err))
+			}
+			// make sure the context is canceled once listen was done from some reason
+			if cancel, ok := n.psSubs[pubKey]; ok {
+				defer cancel()
+				delete(n.psSubs, pubKey)
+			}
 		}()
+	} else {
+		logger.Debug("subscription exist")
 	}
 
 	return nil
@@ -73,9 +91,6 @@ func (n *p2pNetwork) joinTopic(pubKey string) error {
 
 // closeTopic closes the given topic
 func (n *p2pNetwork) closeTopic(topicName string) error {
-	n.psTopicsLock.RLock()
-	defer n.psTopicsLock.RUnlock()
-
 	pk := unwrapTopicName(topicName)
 	if t, ok := n.cfg.Topics[pk]; ok {
 		delete(n.cfg.Topics, pk)
@@ -106,9 +121,9 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 	skippedPeers := map[string]bool{
 		n.cfg.ExporterPeerID: true,
 	}
-
 	for _, p := range topic.ListPeers() {
-		if s := peerToString(p); !skippedPeers[s] {
+		isValidNodeType := validateNodeType(n.peersIndex.GetPeerData, p)
+		if s := peerToString(p); !skippedPeers[s] && isValidNodeType {
 			ret = append(ret, peerToString(p))
 		}
 	}
@@ -117,25 +132,22 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 }
 
 // listen listens on the given subscription
-func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
+func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 	t := sub.Topic()
 	defer sub.Cancel()
 	n.logger.Info("start listen to topic", zap.String("topic", t))
 	for {
 		select {
-		case <-n.ctx.Done():
-			if err := n.closeTopic(t); err != nil {
-				n.logger.Error("failed to close topic", zap.String("topic", t), zap.Error(err))
-			}
-			n.logger.Info("closed topic", zap.String("topic", t))
+		case <-ctx.Done():
+			n.logger.Info("context is done, subscription will be cancelled", zap.String("topic", t))
+			return
 		default:
-			msg, err := sub.Next(n.ctx)
+			msg, err := sub.Next(ctx)
 			if err != nil {
 				n.logger.Error("failed to get message from subscription Topics", zap.Error(err))
 				return
 			}
 			n.trace("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
-
 			cm, err := n.fork.DecodeNetworkMsg(msg.Data)
 			if err != nil {
 				n.logger.Error("failed to un-marshal message", zap.Error(err))
@@ -147,6 +159,23 @@ func (n *p2pNetwork) listen(sub *pubsub.Subscription) {
 			n.propagateSignedMsg(cm)
 		}
 	}
+}
+
+// validateNodeType return if peer nodeType is valid.
+// checks if peer support nodeType in userAgent. if not, use peer. (backwards compatibility)
+func validateNodeType(peerData func(pid string, key string) string, p peer.ID) bool {
+	nodeType := getNodeType(peerData, p)
+
+	return nodeType != Exporter.String()
+}
+
+func getNodeType(peerData func(pid string, key string) string, p peer.ID) string {
+	ua := peerData(p.String(), UserAgentKey)
+	uaParts := strings.Split(ua, ":")
+	if len(uaParts) > 2 {
+		return Unknown.FromString(uaParts[2]).String()
+	}
+	return Unknown.String()
 }
 
 // getTopicName return formatted topic name

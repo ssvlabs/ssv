@@ -1,39 +1,50 @@
 package api
 
 import (
-	"github.com/bloxapp/ssv/pubsub"
+	"context"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/pkg/errors"
+	"github.com/gorilla/websocket"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"net/http"
+	"time"
+)
+
+const (
+	sendTimeout = 3 * time.Second
 )
 
 // WebSocketServer is responsible for managing all
 type WebSocketServer interface {
 	Start(addr string) error
-	OutboundSubject() pubsub.Publisher
+	BroadcastFeed() *event.Feed
 	UseQueryHandler(handler QueryMessageHandler)
 }
 
 // wsServer is an implementation of WebSocketServer
 type wsServer struct {
+	ctx context.Context
+
 	logger *zap.Logger
-	// outbound is a subject for writing messages
-	outbound pubsub.Subject
 
 	handler QueryMessageHandler
 
-	adapter WebSocketAdapter
+	broadcaster Broadcaster
 
 	router *http.ServeMux
+	// out is a subject for writing messages
+	out *event.Feed
 }
 
 // NewWsServer creates a new instance
-func NewWsServer(logger *zap.Logger, adapter WebSocketAdapter, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
+func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux) WebSocketServer {
 	ws := wsServer{
-		logger.With(zap.String("component", "exporter/api/server")),
-		pubsub.NewSubject(logger.With(zap.String("component", "exporter/api/server/outbound-subject"))),
-		handler, adapter, mux,
+		ctx:         ctx,
+		logger:      logger.With(zap.String("component", "exporter/api/server")),
+		handler:     handler,
+		router:      mux,
+		broadcaster: newBroadcaster(logger),
+		out:         new(event.Feed),
 	}
 	return &ws
 }
@@ -42,13 +53,16 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 	ws.handler = handler
 }
 
+// Start starts the websocket server and the broadcaster
 func (ws *wsServer) Start(addr string) error {
-	if ws.adapter == nil {
-		return errors.New("websocket adapter is missing")
-	}
-	ws.adapter.RegisterHandler(ws.router, "/query", ws.handleQuery)
-	ws.adapter.RegisterHandler(ws.router, "/stream", ws.handleStream)
+	ws.RegisterHandler("/query", ws.handleQuery)
+	ws.RegisterHandler("/stream", ws.handleStream)
 
+	go func() {
+		if err := ws.broadcaster.FromFeed(ws.out); err != nil {
+			ws.logger.Debug("failed to pull messages from feed")
+		}
+	}()
 	ws.logger.Info("starting websocket server",
 		zap.String("addr", addr),
 		zap.Strings("endPoints", []string{"/query", "/stream"}))
@@ -60,24 +74,47 @@ func (ws *wsServer) Start(addr string) error {
 	return err
 }
 
-func (ws *wsServer) OutboundSubject() pubsub.Publisher {
-	return ws.outbound
+// BroadcastFeed returns the feed for stream messages
+func (ws *wsServer) BroadcastFeed() *event.Feed {
+	return ws.out
+}
+
+// RegisterHandler registers an end point
+func (ws *wsServer) RegisterHandler(endPoint string, handler func(conn *websocket.Conn)) {
+	ws.router.HandleFunc(endPoint, func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, w.Header())
+		logger := ws.logger.With(zap.String("remote addr", conn.RemoteAddr().String()))
+		if err != nil {
+			ws.logger.Error("could not upgrade connection", zap.Error(err))
+			return
+		}
+		logger.Debug("new websocket connection")
+		defer func() {
+			logger.Debug("closing connection")
+			err := conn.Close()
+			if err != nil {
+				logger.Error("could not close connection", zap.Error(err))
+			}
+		}()
+		handler(conn)
+	})
 }
 
 // handleQuery receives query message and respond async
-func (ws *wsServer) handleQuery(conn Connection) {
+func (ws *wsServer) handleQuery(conn *websocket.Conn) {
 	if ws.handler == nil {
 		return
 	}
 	cid := ConnectionID(conn)
 	logger := ws.logger.With(zap.String("cid", cid))
+	logger.Debug("handles query requests")
 
 	for {
-		var nm NetworkMessage
 		var incoming Message
-		err := ws.adapter.Receive(conn, &incoming)
+		var nm NetworkMessage
+		err := conn.ReadJSON(&incoming)
 		if err != nil {
-			if ws.adapter.IsCloseError(err) { // stop on any close error
+			if isCloseError(err) {
 				logger.Debug("failed to read message as the connection was closed", zap.Error(err))
 				return
 			}
@@ -86,10 +123,11 @@ func (ws *wsServer) handleQuery(conn Connection) {
 		} else {
 			nm = NetworkMessage{incoming, nil, conn}
 		}
+		// handler is processing the request and updates msg
 		ws.handler(&nm)
 
 		err = tasks.Retry(func() error {
-			return ws.adapter.Send(conn, &nm.Msg)
+			return conn.WriteJSON(&nm.Msg)
 		}, 3)
 		if err != nil {
 			logger.Error("could not send message", zap.Error(err))
@@ -98,37 +136,24 @@ func (ws *wsServer) handleQuery(conn Connection) {
 	}
 }
 
-// handleQuery receives query message and respond async
-func (ws *wsServer) handleStream(conn Connection) {
-	cid := ConnectionID(conn)
-	out, err := ws.outbound.Register(cid)
-	if err != nil {
-		ws.logger.Error("could not register outbound subject",
-			zap.Error(err), zap.String("cid", cid))
-	}
-	defer ws.outbound.Deregister(cid)
-
-	ws.processOutboundForConnection(conn, out, cid)
-}
-
-func (ws *wsServer) processOutboundForConnection(conn Connection, out pubsub.SubjectChannel, cid string) {
+// handleStream registers the connection for broadcasting of stream messages
+func (ws *wsServer) handleStream(wsc *websocket.Conn) {
+	cid := ConnectionID(wsc)
 	logger := ws.logger.
 		With(zap.String("cid", cid))
+	defer logger.Debug("stream handler done")
 
-	for m := range out {
-		nm, ok := m.(NetworkMessage)
-		if !ok {
-			logger.Warn("could not parse message")
-			continue
-		}
-		logger.Debug("sending outbound",
-			zap.String("msg.type", string(nm.Msg.Type)))
-		err := tasks.Retry(func() error {
-			return ws.adapter.Send(conn, &nm.Msg)
-		}, 3)
-		if err != nil {
-			logger.Error("could not send message", zap.Error(err))
-			break
-		}
+	ctx, cancel := context.WithCancel(ws.ctx)
+	c := newConn(ctx, logger, wsc, cid, sendTimeout)
+	defer cancel()
+
+	if !ws.broadcaster.Register(c) {
+		logger.Warn("known connection")
+		return
 	}
+	defer ws.broadcaster.Deregister(c)
+
+	go c.ReadLoop()
+
+	c.WriteLoop()
 }

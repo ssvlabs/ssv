@@ -75,15 +75,9 @@ func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage
 			})
 			if err != nil {
 				s.logger.Error("received error when fetching highest decided", zap.Error(err),
-					zap.String("identifier", hex.EncodeToString(s.identifier)))
+					zap.String("identifier", hex.EncodeToString(s.identifier)), zap.Any("peer", peer))
 				return
 			}
-			// backwards compatibility for version < v0.0.12, where EntryNotFoundError didn't exist
-			// TODO: can be removed once the release is deprecated
-			if len(res.SignedMessages) == 0 {
-				res.Error = kv.EntryNotFoundError
-			}
-
 			if len(res.Error) > 0 {
 				// assuming not found is a valid scenario (e.g. new validator)
 				// therefore we count the result now, and it will be identified afterwards in findHighestInstance()
@@ -93,7 +87,7 @@ func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage
 					lock.Unlock()
 				} else {
 					s.logger.Error("received error when fetching highest decided", zap.Error(err),
-						zap.String("identifier", hex.EncodeToString(s.identifier)))
+						zap.String("identifier", hex.EncodeToString(s.identifier)), zap.String("peer", peer))
 				}
 				return
 			}
@@ -115,6 +109,6 @@ func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage
 		}(i, p, &wg)
 	}
 	wg.Wait()
-
+	s.logger.Debug("got highest decided msg's from peers", zap.Any("count", len(results)))
 	return results
 }

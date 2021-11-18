@@ -3,65 +3,72 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/network"
 	core "github.com/libp2p/go-libp2p-core"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"io/ioutil"
 )
 
-func (n *p2pNetwork) readMessageData(stream network.SyncStream) (*network.Message, error) {
-	//data := &network.Message{}
-	buf, err := ioutil.ReadAll(stream)
+func (n *p2pNetwork) preStreamHandler(stream core.Stream) (*network.Message, network.SyncStream, error) {
+	netSyncStream := NewSyncStream(stream)
+
+	// read msg
+	buf, err := netSyncStream.ReadWithTimeout(n.cfg.RequestTimeout)
 	if err != nil {
-		return nil, err
+		return nil, nil, errors.Wrap(err, "could not read incoming sync stream")
 	}
 
-	return n.fork.DecodeNetworkMsg(buf)
+	cm, err := n.fork.DecodeNetworkMsg(buf)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not parse stream")
+	}
+	return cm, netSyncStream, nil
 }
 
-// SyncStream is a wrapper struct for the core.Stream interface to match the network.SyncStream interface
-type SyncStream struct {
-	stream core.Stream
-}
-
-// Read reads data to p
-func (s *SyncStream) Read(p []byte) (n int, err error) {
-	return s.stream.Read(p)
-}
-
-// Write writes p to stream
-func (s *SyncStream) Write(p []byte) (n int, err error) {
-	return s.stream.Write(p)
-}
-
-// Close closes the stream
-func (s *SyncStream) Close() error {
-	return s.stream.Close()
-}
-
-// CloseWrite closes write stream
-func (s *SyncStream) CloseWrite() error {
-	return s.stream.CloseWrite()
-}
-
-// RemotePeer returns connected peer
-func (s *SyncStream) RemotePeer() string {
-	return s.stream.Conn().RemotePeer().String()
-}
-
-// syncStreamHandler sets a stream handler for the host to process streamed messages
-func (n *p2pNetwork) syncStreamHandler() {
-	n.host.SetStreamHandler(syncStreamProtocol, func(stream core.Stream) {
-		netSyncStream := &SyncStream{stream: stream}
-		cm, err := n.readMessageData(netSyncStream)
+func (n *p2pNetwork) setLegacyStreamHandler() {
+	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
+		cm, s, err := n.preStreamHandler(stream)
 		if err != nil {
-			n.logger.Error("could not read and parse stream", zap.Error(err))
+			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
 			return
 		}
-		n.propagateSyncMsg(cm, netSyncStream)
+		n.propagateSyncMsg(cm, s)
 	})
 }
 
+//func (n *p2pNetwork) setHighestDecidedStreamHandler() {
+//	n.host.SetStreamHandler(highestDecidedStream, func(stream core.Stream) {
+//		cm, s, err := n.preStreamHandler(stream)
+//		if err != nil {
+//			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+//			return
+//		}
+//		n.propagateSyncMsg(cm, s)
+//	})
+//}
+//
+//func (n *p2pNetwork) setDecidedByRangeStreamHandler() {
+//	n.host.SetStreamHandler(decidedByRangeStream, func(stream core.Stream) {
+//		cm, s, err := n.preStreamHandler(stream)
+//		if err != nil {
+//			n.logger.Error("decided by range preStreamHandler failed", zap.Error(err))
+//			return
+//		}
+//		n.propagateSyncMsg(cm, s)
+//	})
+//}
+//
+//func (n *p2pNetwork) setLastChangeRoundStreamHandler() {
+//	n.host.SetStreamHandler(lastChangeRoundMsgStream, func(stream core.Stream) {
+//		cm, s, err := n.preStreamHandler(stream)
+//		if err != nil {
+//			n.logger.Error("last change round preStreamHandler failed", zap.Error(err))
+//			return
+//		}
+//		n.propagateSyncMsg(cm, s)
+//	})
+//}
+
 // propagateSyncMsg takes an incoming sync message and propagates it on the internal sync channel
-func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream *SyncStream) {
+func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream network.SyncStream) {
 	logger := n.logger.With(zap.String("func", "propagateSyncMsg"))
 	// TODO: find a better way to deal with nil message
 	// 	i.e. avoid sending nil messages in the network
@@ -69,18 +76,7 @@ func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream *SyncSt
 		logger.Debug("could not propagate nil message")
 		return
 	}
-	cm.SyncMessage.FromPeerID = netSyncStream.stream.Conn().RemotePeer().String()
-	for _, ls := range n.listeners {
-		go func(ls listener, nm network.Message) {
-			switch nm.Type {
-			case network.NetworkMsg_SyncType:
-				if ls.syncCh != nil {
-					ls.syncCh <- &network.SyncChanObj{
-						Msg:    nm.SyncMessage,
-						Stream: netSyncStream,
-					}
-				}
-			}
-		}(ls, *cm)
-	}
+	cm.SyncMessage.FromPeerID = netSyncStream.RemotePeer()
+	listeners := n.getListeners()
+	go propagateSyncMessage(listeners, cm, netSyncStream)
 }

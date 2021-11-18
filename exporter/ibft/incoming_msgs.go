@@ -45,18 +45,21 @@ func (i *incomingMsgsReader) Start() error {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
-	if err := i.waitForMinPeers(i.publicKey, 1); err != nil {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+	if err := i.waitForMinPeers(ctx, i.publicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	i.listenToNetwork()
+	cn, done := i.network.ReceivedMsgChan()
+	defer done()
+	i.listenToNetwork(cn)
 	return nil
 }
 
-func (i *incomingMsgsReader) listenToNetwork() {
-	msgChan := i.network.ReceivedMsgChan()
+func (i *incomingMsgsReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
 	i.logger.Debug("listening to network messages")
-	for msg := range msgChan {
+	for msg := range cn {
 		if msg == nil || msg.Message == nil {
 			i.logger.Info("received invalid msg")
 			continue
@@ -85,14 +88,12 @@ func (i *incomingMsgsReader) listenToNetwork() {
 }
 
 // waitForMinPeers will wait until enough peers joined the topic
-func (i *incomingMsgsReader) waitForMinPeers(pk *bls.PublicKey, minPeerCount int) error {
-	ctx := commons.WaitMinPeersCtx{
-		Ctx:    context.Background(),
+func (i *incomingMsgsReader) waitForMinPeers(ctx context.Context, pk *bls.PublicKey, minPeerCount int) error {
+	return commons.WaitForMinPeers(commons.WaitMinPeersCtx{
+		Ctx:    ctx,
 		Logger: i.logger,
 		Net:    i.network,
-	}
-	return commons.WaitForMinPeers(ctx, pk.Serialize(), minPeerCount,
-		1*time.Second, 64*time.Second, false)
+	}, pk.Serialize(), minPeerCount, 1*time.Second, 64*time.Second, false)
 }
 
 func messageFields(msg *proto.SignedMessage) []zap.Field {
@@ -100,6 +101,7 @@ func messageFields(msg *proto.SignedMessage) []zap.Field {
 		zap.Uint64("seq_num", msg.Message.SeqNumber),
 		zap.Uint64("round", msg.Message.Round),
 		zap.String("signers", msg.SignersIDString()),
+		zap.ByteString("sig", msg.Signature),
 		zap.String("identifier", string(msg.Message.Lambda)),
 	}
 }

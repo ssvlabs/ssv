@@ -8,7 +8,8 @@ import (
 
 // Fork holds fork specific implementations for the various operator node component
 type Fork interface {
-	IBFTControllerFork() ibftControllerFork.Fork
+	SlotTick(slot uint64)
+	NewIBFTControllerFork() ibftControllerFork.Fork
 	NetworkFork() networkForks.Fork
 	StorageFork() storageForks.Fork
 }

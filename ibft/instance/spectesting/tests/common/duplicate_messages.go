@@ -99,7 +99,6 @@ func (test *DuplicateMessages) Run(t *testing.T) {
 	// valid commit quorum
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
 	spectesting.RequireReturnedTrueNoError(t, test.instance.ProcessMessage)
-	spectesting.RequireReturnedFalseNoError(t, test.instance.ProcessMessage) // we purge all messages after decided was reached
 	quorum, _ = test.instance.CommitMessages.QuorumAchieved(1, test.inputValue)
 	require.True(t, quorum)
 
