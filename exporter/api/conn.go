@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 	"net"
@@ -60,7 +61,7 @@ type conn struct {
 func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id string, writeTimeout time.Duration) Conn {
 	return &conn{
 		ctx:          ctx,
-		logger:       logger,
+		logger:       logger.With(zap.String("who", "WSConn")),
 		id:           id,
 		ws:           ws,
 		writeTimeout: writeTimeout,
@@ -121,7 +122,13 @@ func (c *conn) WriteLoop() {
 				c.logger.Error("could not close writer", zap.Error(err))
 				return
 			}
+			var msg Message
+			if err := json.Unmarshal(message, &msg); err != nil {
+				c.logger.Error("could not parse msg", zap.Any("filter", msg.Filter), zap.Error(err))
+			}
+			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter))
 		case <-ticker.C:
+			c.logger.Debug("sending ping message")
 			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
 				c.logger.Error("could not send ping message", zap.Error(err))
 				return
@@ -141,7 +148,11 @@ func (c *conn) ReadLoop() {
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
 	_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	c.ws.SetPongHandler(func(string) error { _ = c.ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.ws.SetPongHandler(func(string) error {
+		c.logger.Debug("got pong message")
+		_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		if c.ctx.Err() != nil {
 			c.logger.Error("read loop stopped by context")
