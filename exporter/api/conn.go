@@ -129,15 +129,16 @@ func (c *conn) WriteLoop() {
 			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter))
 		case <-ticker.C:
 			c.logger.Debug("sending ping message")
-			//_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
-			if err := c.write(websocket.PingMessage, []byte{0, 0, 0, 0}); err != nil {
+			if err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout)); err != nil {
 				c.logger.Error("could not send ping message", zap.Error(err))
 				return
 			}
 		case <-c.ctx.Done():
 			c.logger.Debug("context done, sending close message")
-			_ = c.write(websocket.CloseMessage, []byte{})
-			return
+			if err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout)); err != nil {
+				c.logger.Error("could not send close message", zap.Error(err))
+				return
+			}
 		}
 	}
 }
