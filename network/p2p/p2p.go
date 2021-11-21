@@ -171,6 +171,9 @@ func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
 					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 					zap.String("peerID", conn.RemotePeer().String()))
 				// TODO: add connection states management
+				if err := n.peersIndex.indexPeerConnection(conn); err != nil {
+					n.logger.Warn("could not index peer", zap.String("peerID", conn.RemotePeer().String()))
+				}
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {

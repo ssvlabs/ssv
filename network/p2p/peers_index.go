@@ -23,6 +23,8 @@ type IndexData map[string]string
 type PeersIndex interface {
 	Run()
 	GetPeerData(pid, key string) string
+
+	indexPeerConnection(conn network.Conn) error
 }
 
 // peersIndex implements PeersIndex
