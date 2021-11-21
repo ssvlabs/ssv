@@ -9,14 +9,6 @@ import (
 )
 
 var (
-	metricsRunningIBFTsCount = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:validator:running_ibfts_count_all",
-		Help: "Count all running IBFTs",
-	})
-	metricsRunningIBFTs = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:running_ibfts_count",
-		Help: "Count running IBFTs by validator pub key",
-	}, []string{"pubKey"})
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_slot",
 		Help: "Current running slot",
@@ -28,46 +20,11 @@ var (
 )
 
 func init() {
-	if err := prometheus.Register(metricsRunningIBFTsCount); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRunningIBFTs); err != nil {
-		log.Println("could not register prometheus collector")
-	}
 	if err := prometheus.Register(metricsCurrentSlot); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsValidatorStatus); err != nil {
 		log.Println("could not register prometheus collector")
-	}
-}
-
-// reportDutyExecutionMetrics reports duty execution metrics, returns done function to be called once duty is done
-func (v *Validator) reportDutyExecutionMetrics(duty *beacon.Duty) func() {
-	// reporting metrics
-	metricsRunningIBFTsCount.Inc()
-
-	pubKey := v.Share.PublicKey.SerializeToHexStr()
-	metricsRunningIBFTs.WithLabelValues(pubKey).Set(float64(ibftRunning))
-
-	metricsCurrentSlot.WithLabelValues(pubKey).Set(float64(duty.Slot))
-
-	return func() {
-		metricsRunningIBFTsCount.Dec()
-		metricsRunningIBFTs.WithLabelValues(pubKey).Set(float64(ibftIdle))
-	}
-}
-
-// ReportIBFTStatus reports the current iBFT status
-func ReportIBFTStatus(pk string, finished, errorFound bool) {
-	if errorFound {
-		metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftErrored))
-	} else {
-		if finished {
-			metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitialized))
-		} else {
-			metricsRunningIBFTs.WithLabelValues(pk).Set(float64(ibftInitializing))
-		}
 	}
 }
 
@@ -103,7 +60,6 @@ func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *za
 }
 
 type validatorStatus int32
-type ibftStatus int32
 
 var (
 	validatorStatusInactive     validatorStatus = 0
@@ -116,12 +72,4 @@ var (
 	validatorStatusNotFound     validatorStatus = 7
 	validatorStatusPending      validatorStatus = 8
 	validatorStatusUnknown      validatorStatus = 9
-)
-
-var (
-	ibftIdle         ibftStatus = 0
-	ibftRunning      ibftStatus = 1
-	ibftInitializing ibftStatus = 2
-	ibftInitialized  ibftStatus = 3
-	ibftErrored      ibftStatus = 4
 )
