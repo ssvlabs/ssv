@@ -209,14 +209,23 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.D
 		zap.Uint64("slot", slot),
 		zap.String("duty_type", duty.Type.String()))
 
+	var execErr error
 	// reporting metrics
 	done := v.reportDutyExecutionMetrics(duty)
-	defer done()
+	defer func() {
+		done()
+		// report error status if some error was thrown as part of the execution
+		if execErr != nil {
+			ReportIBFTStatus(v.Share.PublicKey.SerializeToHexStr(), true, true)
+			return
+		}
+	}()
 
 	logger.Debug("executing duty...")
 	signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)
 	if err != nil {
 		logger.Error("could not come to consensus", zap.Error(err))
+		execErr = err
 		return
 	}
 
@@ -233,6 +242,7 @@ func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.D
 		duty,
 	); err != nil {
 		logger.Error("could not execute duty", zap.Error(err))
+		execErr = err
 		return
 	}
 }
