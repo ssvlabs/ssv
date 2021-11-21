@@ -213,7 +213,11 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
-// getUserAgent returns ua built upon - (nodeType, nodeVersion and operatorKey)
+// getUserAgent returns ua built upon:
+// - node version
+// - node type ('operator' | 'exporter')
+// - operator public key hash
+// TODO: will be changed once we have a proper authentication mechanism in place
 func (n *p2pNetwork) getUserAgent() string {
 	ua := commons.GetBuildData()
 	ua = fmt.Sprintf("%s:%s", ua, n.nodeType.String())
@@ -222,9 +226,9 @@ func (n *p2pNetwork) getUserAgent() string {
 		if err != nil || len(operatorPubKey) == 0 {
 			n.logger.Error("could not extract operator public key", zap.Error(err))
 		}
-		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey)) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
+		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey))
 	}
-	return  ua
+	return ua
 }
 
 func (n *p2pNetwork) getOperatorPubKey() (string, error) {
