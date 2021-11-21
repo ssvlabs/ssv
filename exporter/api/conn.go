@@ -151,20 +151,10 @@ func (c *conn) ReadLoop() {
 	c.ws.SetReadLimit(maxMessageSize)
 	_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
 	c.ws.SetPongHandler(func(string) error {
-		c.logger.Debug("got pong message")
+		// extend read limit on every pong message
+		// this will keep the connection alive from our POV
 		_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
-	})
-	c.ws.SetPingHandler(func(message string) error {
-		c.logger.Debug("got ping message, trying to answer pong")
-		err := c.ws.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(c.writeTimeout))
-		c.logger.Debug("send pong result", zap.Error(err))
-		if err == websocket.ErrCloseSent {
-			return nil
-		} else if e, ok := err.(net.Error); ok && e.Temporary() {
-			return nil
-		}
-		return err
 	})
 	for {
 		if c.ctx.Err() != nil {
@@ -185,9 +175,6 @@ func (c *conn) ReadLoop() {
 		if mt == websocket.TextMessage {
 			msg = bytes.TrimSpace(bytes.Replace(msg, newline, space, -1))
 			c.read <- msg
-		}
-		if mt == websocket.PongMessage {
-			c.logger.Debug("received pong msg")
 		}
 	}
 }
