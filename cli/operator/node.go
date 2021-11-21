@@ -111,7 +111,7 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
-		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
+		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
