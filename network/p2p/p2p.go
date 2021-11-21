@@ -172,7 +172,8 @@ func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
 					zap.String("peerID", conn.RemotePeer().String()))
 				// TODO: add connection states management
 				if err := n.peersIndex.indexPeerConnection(conn); err != nil {
-					n.logger.Warn("could not index peer", zap.String("peerID", conn.RemotePeer().String()))
+					n.logger.Debug("could not index peer", zap.String("who", "p2pNetwork.notifee"),
+						zap.String("peerID", conn.RemotePeer().String()), zap.Error(err))
 				}
 			}()
 		},
