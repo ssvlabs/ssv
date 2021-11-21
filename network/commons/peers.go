@@ -19,14 +19,14 @@ type WaitMinPeersCtx struct {
 func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, limit time.Duration, stopAtLimit bool) error {
 	interval := start
 	for {
-		ok, n := haveMinPeers(ctx.Logger, ctx.Net, validatorPk, min)
+		ok, peers := haveMinPeers(ctx.Logger, ctx.Net, validatorPk, min)
 		if ok {
 			ctx.Logger.Info("found enough peers",
-				zap.Int("current peer count", n))
+				zap.Int("current peer count", len(peers)), zap.Strings("peers", peers))
 			break
 		}
 		ctx.Logger.Info("waiting for min peers",
-			zap.Int("current peer count", n))
+			zap.Int("current peer count", len(peers)), zap.Strings("peers", peers))
 
 		time.Sleep(interval)
 
@@ -48,12 +48,11 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 }
 
 // haveMinPeers checks that there are at least <count> connected peers
-func haveMinPeers(logger *zap.Logger, net network.Network, validatorPk []byte, count int) (bool, int) {
+func haveMinPeers(logger *zap.Logger, net network.Network, validatorPk []byte, count int) (bool, []string) {
 	peers, err := net.AllPeers(validatorPk)
 	if err != nil {
 		logger.Error("failed fetching peers", zap.Error(err))
-		return false, 0
+		return false, []string{}
 	}
-	nPeers := len(peers)
-	return nPeers >= count, nPeers
+	return len(peers) >= count, peers
 }
