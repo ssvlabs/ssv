@@ -179,14 +179,6 @@ func (c *conn) ReadLoop() {
 	}
 }
 
-// write writes a message with the given message type and payload.
-func (c *conn) write(mt int, payload []byte) error {
-	if err := c.ws.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {
-		return err
-	}
-	return c.ws.WriteMessage(mt, payload)
-}
-
 func isCloseError(err error) bool {
 	_, ok := err.(*websocket.CloseError)
 	return ok
