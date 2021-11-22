@@ -90,7 +90,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger, cfg.NetworkPrivateKey)
+		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
 		if err != nil{
 			log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 		}
