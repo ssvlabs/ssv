@@ -14,7 +14,6 @@ import (
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/migrationutils"
@@ -111,7 +110,16 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
-		cfg.P2pNetworkConfig.NetworkPrivateKey = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
+
+		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
+		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
+			Logger.Fatal("failed to setup p2p private key", zap.Error(err))
+		}
+		p2pPrivKey, found, err := p2pStorage.GetPrivateKey()
+		if err != nil || !found {
+			Logger.Fatal("failed to get p2p private key", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)

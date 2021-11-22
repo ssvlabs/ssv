@@ -2,44 +2,12 @@ package p2p
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/prysmaticlabs/prysm/io/file"
-	"path/filepath"
-	"runtime"
 )
-
-// privKey determines a private key for p2p networking from the p2p service's
-// configuration struct. If no key is found, it generates a new one
-// TODO: private key is always generated instead of loaded from storage
-func privKey(saveToFile bool) (*ecdsa.PrivateKey, error) {
-	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
-	if saveToFile {
-		defaultKeyPath := defaultDataDir()
-
-		rawbytes, err := priv.Raw()
-		if err != nil {
-			return nil, err
-		}
-		dst := make([]byte, hex.EncodedLen(len(rawbytes)))
-		hex.Encode(dst, rawbytes)
-		if err := file.WriteFile(defaultKeyPath, dst); err != nil {
-			return nil, err
-		}
-	}
-
-	convertedKey := convertFromInterfacePrivKey(priv)
-	return convertedKey, nil
-}
 
 func convertToInterfacePubkey(pubkey *ecdsa.PublicKey) crypto.PubKey {
 	typeAssertedKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(pubkey))
@@ -65,22 +33,6 @@ func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
 	typeAssertedKey := (*ecdsa.PrivateKey)(privkey.(*crypto.Secp256k1PrivateKey))
 	typeAssertedKey.Curve = gcrypto.S256() // Temporary hack, so libp2p Secp256k1 is recognized as geth Secp256k1 in disc v5.1.
 	return typeAssertedKey
-}
-
-func defaultDataDir() string {
-	// Try to place the data folder in the user's home dir
-	home := file.HomeDir()
-	if home != "" {
-		if runtime.GOOS == "darwin" {
-			return filepath.Join(home, "Library", "Eth2")
-		} else if runtime.GOOS == "windows" {
-			return filepath.Join(home, "AppData", "Local", "Eth2")
-		} else {
-			return filepath.Join(home, ".eth2")
-		}
-	}
-	// As we cannot guess a stable location, return empty and handle later
-	return ""
 }
 
 // pubKeyHash returns sha256 (hex) of the given public key
