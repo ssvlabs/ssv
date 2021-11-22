@@ -35,7 +35,7 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) (*ecdsa.PrivateKey, 
 
 	interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privKey))
 	b, err := interfacePriv.Raw()
-	if err != nil{
+	if err != nil {
 		return nil, errors.WithMessage(err, "failed to convert private key to interface")
 	}
 	if privateKey != "" {

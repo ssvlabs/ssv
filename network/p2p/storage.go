@@ -58,15 +58,15 @@ func (s storage) SavePrivateKey(privateKey *ecdsa.PrivateKey) error {
 
 func (s storage) SetupPrivateKey(networkPrivateKey string) error {
 	existKey, found, err := s.GetPrivateKey()
-	if err != nil{
+	if err != nil {
 		return errors.WithMessage(err, "failed to get privateKey")
 	}
-	if networkPrivateKey == "" && found && existKey != nil{
+	if networkPrivateKey == "" && found && existKey != nil {
 		s.logger.Debug("using p2p network privateKey from storage")
 		return nil
 	}
 	privateKey, err := utils.ECDSAPrivateKey(s.logger.With(zap.String("who", "p2p storage")), networkPrivateKey)
-	if err != nil{
+	if err != nil {
 		return errors.WithMessage(err, "failed to generate private key")
 	}
 

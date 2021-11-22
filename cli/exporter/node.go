@@ -91,7 +91,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
-		if err != nil{
+		if err != nil {
 			log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 		}
 		cfg.P2pNetworkConfig.ReportLastMsg = true

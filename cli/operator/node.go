@@ -112,7 +112,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
 
 		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
-		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil{
+		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
 			Logger.Fatal("failed to setup p2p private key", zap.Error(err))
 		}
 		p2pPrivKey, found, err := p2pStorage.GetPrivateKey()

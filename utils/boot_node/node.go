@@ -82,7 +82,7 @@ func (h *handler) httpHandler(w http.ResponseWriter, _ *http.Request) {
 // Start implements Node interface
 func (n *bootNode) Start(ctx context.Context) error {
 	privKey, err := utils.ECDSAPrivateKey(n.logger.With(zap.String("who", "p2pNetworkPrivateKey")), n.privateKey)
-	if err != nil{
+	if err != nil {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
 	cfg := discover.Config{

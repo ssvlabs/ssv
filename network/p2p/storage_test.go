@@ -78,6 +78,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 				interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privKey))
 				b, err := interfacePriv.Raw()
+				require.NoError(t, err)
 				require.Equal(t, test.existKey, hex.EncodeToString(b))
 			}
 
