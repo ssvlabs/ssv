@@ -23,6 +23,7 @@ type IndexData map[string]string
 type PeersIndex interface {
 	Run()
 	GetPeerData(pid, key string) string
+	IndexPeer(conn network.Conn)
 }
 
 // peersIndex implements PeersIndex
@@ -51,11 +52,12 @@ func NewPeersIndex(host host.Host, ids *identify.IDService, logger *zap.Logger) 
 
 // Run tries to index data on all available peers
 func (pi *peersIndex) Run() {
+	pi.lock.Lock()
+	defer pi.lock.Unlock()
+
 	if pi.ids == nil {
 		return
 	}
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
 
 	conns := pi.host.Network().Conns()
 	for _, conn := range conns {
@@ -80,7 +82,23 @@ func (pi *peersIndex) GetPeerData(pid, key string) string {
 	return ""
 }
 
-// indexPeerConnection indexes the given peer / connection
+// IndexPeer indexes the given peer / connection
+func (pi *peersIndex) IndexPeer(conn network.Conn) {
+	pi.lock.RLock()
+	defer pi.lock.RUnlock()
+
+	if pi.ids == nil {
+		return
+	}
+
+	if err := pi.indexPeerConnection(conn); err != nil {
+		pi.logger.Debug("could not index connection", zap.Error(err),
+			zap.String("peerID", conn.RemotePeer().String()),
+			zap.String("multiaddr", conn.RemoteMultiaddr().String()))
+	}
+}
+
+// indexPeerConnection indexes (unsafe) the given peer / connection
 func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	pid := conn.RemotePeer()
 	pi.ids.IdentifyConn(conn)

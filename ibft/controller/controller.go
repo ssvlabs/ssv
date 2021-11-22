@@ -77,6 +77,7 @@ func New(
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *Controller) Init() error {
 	i.logger.Info("iBFT implementation init started")
+	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 	i.processDecidedQueueMessages()
 	i.processSyncQueueMessages()
 	i.listenToSyncMessages()
@@ -84,15 +85,17 @@ func (i *Controller) Init() error {
 	i.listenToNetworkDecidedMessages()
 	i.waitForMinPeerOnInit(1) // minimum of 2 validators (me + 1)
 	if err := i.SyncIBFT(); err != nil {
+		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 		return errors.Wrap(err, "could not sync history, stopping Controller init")
 	}
 	i.initFinished = true
+	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
 	i.logger.Info("iBFT implementation init finished")
 	return nil
 }
 
 // StartInstance - starts an ibft instance or returns error
-func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceResult, error) {
+func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (res *ibft.InstanceResult, err error) {
 	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
@@ -102,7 +105,19 @@ func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (*i
 		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
-	return i.startInstanceWithOptions(instanceOpts, opts.Value)
+	done := reportIBFTInstanceStart(i.ValidatorShare.PublicKey.SerializeToHexStr())
+
+	res, err = i.startInstanceWithOptions(instanceOpts, opts.Value)
+	defer func() {
+		done()
+		// report error status if the instance returned error
+		if err != nil {
+			ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, true)
+			return
+		}
+	}()
+
+	return res, err
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft"
+	ibftctl "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -14,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -88,7 +88,6 @@ func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
-
 	if err := tasks.Retry(func() error {
 		if err := r.sync(); err != nil {
 			r.logger.Error("could not sync validator", zap.Error(err))
@@ -96,11 +95,11 @@ func (r *decidedReader) Start() error {
 		}
 		return nil
 	}, 3); err != nil {
-		validator.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), false, true)
+		ibftctl.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), false, true)
 		r.logger.Error("could not setup validator, sync failed", zap.Error(err))
 		return err
 	}
-	validator.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), true, false)
+	ibftctl.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), true, false)
 
 	r.logger.Debug("sync is done, starting to read network messages")
 	ctx, cancelCtx := context.WithCancel(context.Background())
