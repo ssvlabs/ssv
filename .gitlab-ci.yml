@@ -38,7 +38,7 @@ Build stage Docker image:
 Deploy ssv exporter to blox-infra-stage cluster:
   stage: deploy
   tags:
-    - stage
+    - blox-infra-stage
   script:
     - apk add bash
     - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
