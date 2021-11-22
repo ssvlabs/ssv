@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	core "github.com/libp2p/go-libp2p-core"
@@ -14,7 +15,7 @@ import (
 )
 
 func testPrivKey(t *testing.T) *ecdsa.PrivateKey {
-	ret, err := privKey(false)
+	ret, err := utils.ECDSAPrivateKey(logex.Build("test", zap.InfoLevel, nil), "")
 	require.NoError(t, err)
 	return ret
 }
