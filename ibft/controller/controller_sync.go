@@ -1,14 +1,18 @@
 package controller
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"time"
 )
+
+const syncRetries = 3
 
 // processSyncQueueMessages is listen for all the ibft sync msg's and process them
 func (i *Controller) processSyncQueueMessages() {
@@ -52,11 +56,17 @@ func (i *Controller) SyncIBFT() error {
 		i.currentInstance.Stop()
 	}
 
-	// sync
-	s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
-	err := s.Start()
-	if err != nil {
-		return errors.Wrap(err, "history sync failed")
-	}
-	return nil
+	return i.syncIBFT()
+}
+
+func (i *Controller) syncIBFT() error {
+	// TODO: use controller context once added
+	return tasks.RetryWithContext(context.Background(), func() error {
+		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
+		err := s.Start()
+		if err != nil {
+			return errors.Wrap(err, "history sync failed")
+		}
+		return nil
+	}, syncRetries)
 }

@@ -171,6 +171,7 @@ func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
 					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 					zap.String("peerID", conn.RemotePeer().String()))
 				// TODO: add connection states management
+				n.peersIndex.IndexPeer(conn)
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -212,17 +213,22 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
-// getUserAgent returns ua built upon - (nodeType, nodeVersion and operatorKey)
+// getUserAgent returns ua built upon:
+// - node version
+// - node type ('operator' | 'exporter')
+// - operator public key hash
+// TODO: will be changed once we have a proper authentication mechanism in place
 func (n *p2pNetwork) getUserAgent() string {
 	ua := commons.GetBuildData()
+	ua = fmt.Sprintf("%s:%s", ua, n.nodeType.String())
 	if n.operatorPrivKey != nil {
 		operatorPubKey, err := rsaencryption.ExtractPublicKey(n.operatorPrivKey)
 		if err != nil || len(operatorPubKey) == 0 {
 			n.logger.Error("could not extract operator public key", zap.Error(err))
 		}
-		ua = fmt.Sprintf("%s:%s:%s", ua, n.nodeType.String(), pubKeyHash(operatorPubKey)) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
+		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey))
 	}
-	return fmt.Sprintf("%s:%s", ua, n.nodeType.String()) // TODO temp solution. need to move nodeType to enr. (also nodeVersion and pubkey?)
+	return ua
 }
 
 func (n *p2pNetwork) getOperatorPubKey() (string, error) {

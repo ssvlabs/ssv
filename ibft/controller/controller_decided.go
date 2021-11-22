@@ -54,27 +54,28 @@ func (i *Controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
 		i.logger.Error("received invalid decided message", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
 		return
 	}
+	logger := i.logger.With(zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("signer ids", msg.SignerIds))
 
-	i.logger.Debug("received valid decided msg", zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("signer ids", msg.SignerIds))
+	logger.Debug("received valid decided msg")
 
 	// if we already have this in storage, pass
 	known, err := i.decidedMsgKnown(msg)
 	if err != nil {
-		i.logger.Error("can't check if decided msg is known", zap.Error(err))
+		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return
 	}
 	if known {
 		// if decided is known, check for a more complete message (more signers)
 		if ignore, _ := i.checkDecidedMessageSigners(msg); !ignore {
 			if err := i.ibftStorage.SaveDecided(msg); err != nil {
-				i.logger.Error("can't update decided message", zap.Error(err))
+				logger.Error("can't update decided message", zap.Error(err))
 				return
 			}
-			i.logger.Debug("decided was updated")
+			logger.Debug("decided was updated")
 			ibft.ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 			return
 		}
-		i.logger.Debug("decided is known, skipped")
+		logger.Debug("decided is known, skipped")
 		return
 	}
 
@@ -88,13 +89,13 @@ func (i *Controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
 	// decided for later instances which require a full sync
 	shouldSync, err := i.decidedRequiresSync(msg)
 	if err != nil {
-		i.logger.Error("can't check decided msg", zap.Error(err))
+		logger.Error("can't check decided msg", zap.Error(err))
 		return
 	}
 	if shouldSync {
 		i.logger.Info("stopping current instance and syncing..")
 		if err := i.SyncIBFT(); err != nil {
-			i.logger.Error("failed sync after decided received", zap.Error(err))
+			logger.Error("failed sync after decided received", zap.Error(err))
 		}
 	}
 }

@@ -16,7 +16,7 @@ var (
 	pongWait = 60 * time.Second
 
 	// pingPeriod period to send ping messages. Must be less than pongWait.
-	pingPeriod = (pongWait * 9) / 10
+	pingPeriod = (pongWait * 8) / 10
 
 	// maxMessageSize max msg size allowed from peer.
 	maxMessageSize = int64(1024)
@@ -129,14 +129,16 @@ func (c *conn) WriteLoop() {
 			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter))
 		case <-ticker.C:
 			c.logger.Debug("sending ping message")
-			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
+			if err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout)); err != nil {
 				c.logger.Error("could not send ping message", zap.Error(err))
 				return
 			}
 		case <-c.ctx.Done():
 			c.logger.Debug("context done, sending close message")
-			_ = c.write(websocket.CloseMessage, []byte{})
-			return
+			if err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout)); err != nil {
+				c.logger.Error("could not send close message", zap.Error(err))
+				return
+			}
 		}
 	}
 }
@@ -149,7 +151,8 @@ func (c *conn) ReadLoop() {
 	c.ws.SetReadLimit(maxMessageSize)
 	_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
 	c.ws.SetPongHandler(func(string) error {
-		c.logger.Debug("got pong message")
+		// extend read limit on every pong message
+		// this will keep the connection alive from our POV
 		_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
@@ -174,14 +177,6 @@ func (c *conn) ReadLoop() {
 			c.read <- msg
 		}
 	}
-}
-
-// write writes a message with the given message type and payload.
-func (c *conn) write(mt int, payload []byte) error {
-	if err := c.ws.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {
-		return err
-	}
-	return c.ws.WriteMessage(mt, payload)
 }
 
 func isCloseError(err error) bool {

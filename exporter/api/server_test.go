@@ -16,7 +16,7 @@ import (
 
 func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	ctx := context.Background()
+	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, logger, func(nm *NetworkMessage) {
 		nm.Msg.Data = []storage.OperatorInformation{
@@ -24,20 +24,28 @@ func TestHandleQuery(t *testing.T) {
 		}
 	}, mux).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
-	go func() {
-		require.NoError(t, ws.Start(addr))
-	}()
-
 	var wg sync.WaitGroup
-	testCtx, cancelCtx := context.WithCancel(ctx)
-	client := NewWSClient(testCtx, logger)
 	wg.Add(1)
 	go func() {
-		// sleep so setup will be finished
-		time.Sleep(100 * time.Millisecond)
 		go func() {
+			// let the server start
+			time.Sleep(100 * time.Millisecond)
+			wg.Done()
+		}()
+		require.NoError(t, ws.Start(addr))
+	}()
+	wg.Wait()
+
+	clientCtx, cancelClientCtx := context.WithCancel(ctx)
+	client := NewWSClient(clientCtx, logger)
+	wg.Add(1)
+	go func() {
+		// sleep so client setup will be finished
+		time.Sleep(50 * time.Millisecond)
+		go func() {
+			// send 2 messages
 			defer wg.Done()
-			defer cancelCtx()
+			defer cancelClientCtx()
 			time.Sleep(10 * time.Millisecond)
 			client.out <- Message{
 				Type:   TypeOperator,
@@ -54,8 +62,10 @@ func TestHandleQuery(t *testing.T) {
 	}()
 
 	wg.Wait()
-
+	cancelServerCtx()
+	// make sure the connection got 2 responses
 	require.Equal(t, 2, client.MessageCount())
+	time.Sleep(10 * time.Millisecond)
 }
 
 func TestHandleStream(t *testing.T) {
