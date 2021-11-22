@@ -89,15 +89,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		nodeType:        cfg.NodeType,
 	}
 
-	if cfg.NetworkPrivateKey != nil {
-		n.privKey = cfg.NetworkPrivateKey
-	} else {
-		privKey, err := privKey(true)
-		if err != nil {
-			return nil, errors.Wrap(err, "Failed to generate p2p private key")
-		}
-		n.privKey = privKey
-	}
+	n.privKey = cfg.NetworkPrivateKey
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
 	if len(n.cfg.BootnodesENRs) == 0 {
 		n.logger.Warn("missing valid bootnode ENR")
