@@ -82,6 +82,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		listenersLock:   &sync.RWMutex{},
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,
+		privKey:         cfg.NetworkPrivateKey,
 		psSubs:          make(map[string]context.CancelFunc),
 		psTopicsLock:    &sync.RWMutex{},
 		reportLastMsg:   cfg.ReportLastMsg,
@@ -89,7 +90,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		nodeType:        cfg.NodeType,
 	}
 
-	n.privKey = cfg.NetworkPrivateKey
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
 	if len(n.cfg.BootnodesENRs) == 0 {
 		n.logger.Warn("missing valid bootnode ENR")
