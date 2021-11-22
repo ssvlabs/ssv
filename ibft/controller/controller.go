@@ -30,7 +30,8 @@ type Controller struct {
 	signer          beacon.Signer
 
 	// flags
-	initFinished bool
+	initFinished        bool
+	initNetworkFinished bool
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -62,7 +63,8 @@ func New(
 		signer:         signer,
 
 		// flags
-		initFinished: false,
+		initFinished:        false,
+		initNetworkFinished: false,
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
@@ -76,14 +78,13 @@ func New(
 
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *Controller) Init() error {
+	if i.initFinished {
+		i.logger.Debug("iBFT implementation was initialized already")
+		return nil
+	}
 	i.logger.Info("iBFT implementation init started")
-	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-	i.processDecidedQueueMessages()
-	i.processSyncQueueMessages()
-	i.listenToSyncMessages()
-	i.listenToNetworkMessages()
-	i.listenToNetworkDecidedMessages()
-	i.waitForMinPeerOnInit(1) // minimum of 2 validators (me + 1)
+	i.initNetwork()
+	// IBFT sync to make sure the operator is aligned for this validator
 	if err := i.SyncIBFT(); err != nil {
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 		return errors.Wrap(err, "could not sync history, stopping Controller init")
@@ -92,6 +93,22 @@ func (i *Controller) Init() error {
 	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
 	i.logger.Info("iBFT implementation init finished")
 	return nil
+}
+
+// initNetwork setup all the needed network listeners and message processing
+func (i *Controller) initNetwork() {
+	if i.initNetworkFinished {
+		i.logger.Debug("iBFT network was initialized already")
+		return
+	}
+	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+	i.processDecidedQueueMessages()
+	i.processSyncQueueMessages()
+	i.listenToSyncMessages()
+	i.listenToNetworkMessages()
+	i.listenToNetworkDecidedMessages()
+	i.initNetworkFinished = true
+	i.logger.Debug("iBFT network init finished")
 }
 
 // StartInstance - starts an ibft instance or returns error
