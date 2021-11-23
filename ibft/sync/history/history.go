@@ -84,3 +84,26 @@ func (s *Sync) Start() error {
 	s.logger.Info("finished syncing", zap.Uint64("highest seq", highestSaved.Message.SeqNumber), zap.String("duration", time.Since(start).String()))
 	return nil
 }
+
+// StartRange starts to sync old messages in a specific range
+func (s *Sync) StartRange(from, to uint64) error {
+	start := time.Now()
+	// fetch remote highest
+	remoteHighest, fromPeer, err := s.findHighestInstance()
+	if err != nil {
+		return errors.Wrap(err, "could not fetch highest instance during sync")
+	}
+	if remoteHighest == nil { // could not find highest, there isn't one
+		s.logger.Info("node is synced: could not find any peer with highest decided, assuming sequence number is 0", zap.String("duration", time.Since(start).String()))
+		return nil
+	}
+
+	// fetch, validate and save missing data
+	_, err = s.fetchValidateAndSaveInstances(fromPeer, from, to)
+	if err != nil {
+		return errors.Wrap(err, "could not fetch decided by range during sync")
+	}
+
+	s.logger.Info("finished syncing in range", zap.Uint64("from", from), zap.Uint64("to", to), zap.String("duration", time.Since(start).String()))
+	return nil
+}
