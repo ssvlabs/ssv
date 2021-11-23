@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/ibft/migration"
 	"github.com/bloxapp/ssv/ibft"
 	ibftctl "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/pipeline"
@@ -66,20 +65,10 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 	return &r
 }
 
-// NewHistorySync creates a new instance of history sync
-func (r *decidedReader) NewHistorySync() *history.Sync {
+// newHistorySync creates a new instance of history sync
+func (r *decidedReader) newHistorySync() *history.Sync {
 	return history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.identifier, r.network,
 		r.storage, r.validateDecidedMsg)
-}
-
-// IBFTStorage returns the underlying ibft collection
-func (r *decidedReader) IBFTStorage() collections.Iibft {
-	return r.storage
-}
-
-// Identifier returns the identifier related to this reader
-func (r *decidedReader) Identifier() []byte {
-	return r.identifier
 }
 
 // Share returns the reader's share
@@ -93,7 +82,7 @@ func (r *decidedReader) Start() error {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 	// call migration before starting the other stuff
-	if err := migration.GetMainMigrator().Migrate(r); err != nil {
+	if err := GetMainMigrator().Migrate(r); err != nil {
 		r.logger.Error("could not run migration", zap.Error(err))
 	}
 	if err := tasks.Retry(func() error {
@@ -125,7 +114,7 @@ func (r *decidedReader) Start() error {
 func (r *decidedReader) sync() error {
 	r.logger.Debug("syncing ibft data")
 	// creating HistorySync and starts it
-	hs := r.NewHistorySync()
+	hs := r.newHistorySync()
 	err := hs.Start()
 	if err != nil {
 		r.logger.Error("could not sync validator's data", zap.Error(err))

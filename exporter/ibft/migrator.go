@@ -1,36 +1,38 @@
-package migration
+package ibft
 
 import (
-	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/utils/logex"
 	"go.uber.org/zap"
 	"sync"
 )
 
+// Migrator is an interface for migrating messages
 type Migrator interface {
-	Migrate(r ibft.Reader) error
+	Migrate(r Reader) error
 }
 
-type MainMigrator struct {
+type mainMigrator struct {
 	migrators []Migrator
 }
 
-var mainMigrator MainMigrator
+var migrator mainMigrator
 
-var once sync.Once
+var migratorOnce sync.Once
 
+// GetMainMigrator returns the instance of migrator
 func GetMainMigrator() Migrator {
-	once.Do(func() {
+	migratorOnce.Do(func() {
 		logger := logex.GetLogger(zap.String("who", "migrateManager"))
 		migrators := []Migrator{&decidedGenesisMigrator{logger}}
-		mainMigrator = MainMigrator{
+		migrator = mainMigrator{
 			migrators: migrators,
 		}
 	})
-	return &mainMigrator
+	return &migrator
 }
 
-func (mm *MainMigrator) Migrate(r ibft.Reader) error {
+// Migrate applies the existing migrators on the given reader
+func (mm *mainMigrator) Migrate(r Reader) error {
 	for _, migrator := range mm.migrators {
 		if err := migrator.Migrate(r); err != nil {
 			return err
