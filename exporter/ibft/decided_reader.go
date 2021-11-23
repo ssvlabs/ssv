@@ -124,10 +124,6 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 			logger.Debug("received invalid decided message")
 			continue
 		}
-		if msg.Message.SeqNumber == 0 {
-			logger.Debug("received invalid sequence")
-			continue
-		}
 		go func(msg *proto.SignedMessage) {
 			defer logger.Debug("done with decided msg")
 			if saved, err := r.handleNewDecidedMessage(msg); err != nil {
