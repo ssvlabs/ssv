@@ -41,9 +41,9 @@ type ControllerOptions struct {
 	KeyManager                 beacon.KeyManager
 }
 
-// IController represent the validators controller,
+// Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
-type IController interface {
+type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
@@ -52,7 +52,7 @@ type IController interface {
 	UpdateValidatorMetaDataLoop()
 }
 
-// controller implements IController
+// controller implements Controller
 type controller struct {
 	context    context.Context
 	collection validatorstorage.ICollection
@@ -69,7 +69,7 @@ type controller struct {
 }
 
 // NewController creates a new validator controller instance
-func NewController(options ControllerOptions) IController {
+func NewController(options ControllerOptions) Controller {
 	collection := validatorstorage.NewCollection(validatorstorage.CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,

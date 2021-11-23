@@ -32,7 +32,7 @@ type ControllerOptions struct {
 	Ctx                 context.Context
 	BeaconClient        beacon.Beacon
 	EthNetwork          core.Network
-	ValidatorController validator.IController
+	ValidatorController validator.Controller
 	GenesisEpoch        uint64
 	DutyLimit           uint64
 }
@@ -45,7 +45,7 @@ type dutyController struct {
 	// executor enables to work with a custom execution
 	executor            dutyExecutor
 	fetcher             DutyFetcher
-	validatorController validator.IController
+	validatorController validator.Controller
 	genesisEpoch        uint64
 	dutyLimit           uint64
 
