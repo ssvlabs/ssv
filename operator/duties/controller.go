@@ -101,8 +101,15 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		logger.Info("starting duty processing start for slot")
-		go v.ExecuteDuty(dc.ctx, uint64(duty.Slot), duty)
+		go func() {
+			// force the validator to be started
+			if err := v.Start(); err != nil {
+				logger.Error("could not start validator", zap.Error(err))
+				return
+			}
+			logger.Info("starting duty processing")
+			v.ExecuteDuty(dc.ctx, uint64(duty.Slot), duty)
+		}()
 	} else {
 		logger.Warn("could not find validator")
 	}
