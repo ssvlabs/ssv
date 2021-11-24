@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// syncRetries is the number of reties to perform for history sync
 const syncRetries = 3
 
 // processSyncQueueMessages is listen for all the ibft sync msg's and process them
@@ -30,7 +31,7 @@ func (i *Controller) processSyncQueueMessages() {
 	i.logger.Info("sync messages queue started")
 }
 
-// ProcessSyncMessage - processes sync messages
+// ProcessSyncMessage processes sync messages
 func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)
@@ -43,6 +44,7 @@ func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 }
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
+// it will ensure that minimum peers are available on the validator's topic
 func (i *Controller) SyncIBFT() error {
 	if !i.syncingLock.TryAcquire(1) {
 		return errors.New("failed to start iBFT sync, already running")
@@ -59,6 +61,7 @@ func (i *Controller) SyncIBFT() error {
 	return i.syncIBFT()
 }
 
+// syncIBFT takes care of history sync by retrying sync, it is non thread-safe
 func (i *Controller) syncIBFT() error {
 	// TODO: use controller context once added
 	return tasks.RetryWithContext(context.Background(), func() error {

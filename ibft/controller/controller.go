@@ -85,6 +85,7 @@ func (i *Controller) Init() error {
 	i.logger.Info("iBFT implementation init started")
 	i.initNetwork()
 	// IBFT sync to make sure the operator is aligned for this validator
+	// if fails - controller needs to be initialized again, otherwise it will be unavailable
 	if err := i.SyncIBFT(); err != nil {
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 		return errors.Wrap(err, "could not sync history, stopping Controller init")
