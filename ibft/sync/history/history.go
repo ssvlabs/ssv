@@ -108,6 +108,9 @@ func (s *Sync) StartRange(from, to uint64) (int, error) {
 			zap.String("duration", time.Since(start).String()))
 		return n, nil
 	}
+	if remoteHighest.Message.SeqNumber < from {
+		return n, errors.New("range is out of decided sequence boundaries")
+	}
 	// fetch, validate and save missing data
 	_, n, err = s.fetchValidateAndSaveInstances(fromPeer, from, to)
 	if err != nil {

@@ -211,3 +211,94 @@ func TestSync(t *testing.T) {
 		})
 	}
 }
+
+func TestSync_StartRange(t *testing.T) {
+	sks, _ := sync.GenerateNodes(4)
+	decided0 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		Type:      proto.RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte("lambda"),
+		SeqNumber: 0,
+	})
+	decided1 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		Type:      proto.RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte("lambda"),
+		SeqNumber: 1,
+	})
+	decided2 := sync.MultiSignMsg(t, []uint64{1, 2, 3}, sks, &proto.Message{
+		Type:      proto.RoundState_Decided,
+		Round:     1,
+		Lambda:    []byte("lambda"),
+		SeqNumber: 2,
+	})
+
+	tests := []struct {
+		name          string
+		valdiatorPK   []byte
+		identifier    []byte
+		peers         []string
+		highestMap    map[string]*proto.SignedMessage
+		decidedArrMap map[string][]*proto.SignedMessage
+		errorMap      map[string]error
+		rangeFrom     uint64
+		rangeTo       uint64
+		expectedSaved int
+		expectedError string
+	}{
+		{
+			"sync decided in range",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided2,
+				"3": decided2,
+			},
+			map[string][]*proto.SignedMessage{
+				"2": {decided0, decided1, decided2},
+				"3": {decided0, decided1, decided2},
+			},
+			nil,
+			uint64(0),
+			uint64(1),
+			2,
+			"",
+		},
+		{
+			"sync decided out of range",
+			[]byte{1, 2, 3, 4},
+			[]byte("lambda"),
+			[]string{"2"},
+			map[string]*proto.SignedMessage{
+				"2": decided2,
+				"3": decided2,
+			},
+			map[string][]*proto.SignedMessage{
+				"2": {decided0, decided1, decided2},
+				"3": {decided0, decided1, decided2},
+			},
+			nil,
+			uint64(4),
+			uint64(8),
+			0,
+			"range is out of decided sequence boundaries",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			storage := sync.TestingIbftStorage(t)
+			s := New(zap.L(), test.valdiatorPK, 4, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil, nil), &storage, func(msg *proto.SignedMessage) error {
+				return nil
+			})
+			n, err := s.StartRange(test.rangeFrom, test.rangeTo)
+			if len(test.expectedError) > 0 {
+				require.EqualError(t, err, test.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, test.expectedSaved, n)
+		})
+	}
+}
