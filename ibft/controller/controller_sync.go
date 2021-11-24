@@ -58,14 +58,18 @@ func (i *Controller) SyncIBFT() error {
 		i.currentInstance.Stop()
 	}
 
-	return i.syncIBFT()
+	err := i.syncIBFT()
+	if err != nil {
+		return err
+	}
+	i.synced.Set(true)
+	return nil
 }
 
 // syncIBFT takes care of history sync by retrying sync, it is non thread-safe
 func (i *Controller) syncIBFT() error {
 	// TODO: use controller context once added
 	return tasks.RetryWithContext(context.Background(), func() error {
-		i.waitForMinPeerOnInit(1)
 		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.ValidatorShare.CommitteeSize(),
 			i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
 		err := s.Start()
