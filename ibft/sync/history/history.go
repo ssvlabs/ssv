@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// Syncer is the interface for history sync
+type Syncer interface {
+	Start() error
+	StartRange(from, to uint64) (int, error)
+}
+
 // Sync is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
 type Sync struct {
@@ -20,10 +26,11 @@ type Sync struct {
 	identifier          []byte
 	// paginationMaxSize is the max number of returned elements in a single response
 	paginationMaxSize uint64
+	committeeSize     int
 }
 
 // New returns a new instance of Sync
-func New(logger *zap.Logger, publicKey []byte, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
+func New(logger *zap.Logger, publicKey []byte, committeeSize int, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
 	return &Sync{
 		logger:              logger.With(zap.String("sync", "history")),
 		publicKey:           publicKey,
@@ -32,6 +39,7 @@ func New(logger *zap.Logger, publicKey []byte, identifier []byte, network networ
 		validateDecidedMsgF: validateDecidedMsgF,
 		ibftStorage:         ibftStorage,
 		paginationMaxSize:   network.MaxBatch(),
+		committeeSize:       committeeSize,
 	}
 }
 
@@ -69,7 +77,7 @@ func (s *Sync) Start() error {
 	}
 
 	// fetch, validate and save missing data
-	highestSaved, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
+	highestSaved, _, err := s.fetchValidateAndSaveInstances(fromPeer, syncStartSeqNumber, remoteHighest.Message.SeqNumber)
 	if err != nil {
 		return errors.Wrap(err, "could not fetch decided by range during sync")
 	}
@@ -86,24 +94,26 @@ func (s *Sync) Start() error {
 }
 
 // StartRange starts to sync old messages in a specific range
-func (s *Sync) StartRange(from, to uint64) error {
+// first it tries to find a synced peer and then ask a specific range of decided messages
+func (s *Sync) StartRange(from, to uint64) (int, error) {
+	var n int
 	start := time.Now()
 	// fetch remote highest
 	remoteHighest, fromPeer, err := s.findHighestInstance()
 	if err != nil {
-		return errors.Wrap(err, "could not fetch highest instance during sync")
+		return n, errors.Wrap(err, "could not fetch highest instance during sync")
 	}
 	if remoteHighest == nil { // could not find highest, there isn't one
-		s.logger.Info("node is synced: could not find any peer with highest decided, assuming sequence number is 0", zap.String("duration", time.Since(start).String()))
-		return nil
+		s.logger.Info("node is synced: could not find any peer with highest decided, assuming sequence number is 0",
+			zap.String("duration", time.Since(start).String()))
+		return n, nil
 	}
-
 	// fetch, validate and save missing data
-	_, err = s.fetchValidateAndSaveInstances(fromPeer, from, to)
+	_, n, err = s.fetchValidateAndSaveInstances(fromPeer, from, to)
 	if err != nil {
-		return errors.Wrap(err, "could not fetch decided by range during sync")
+		return n, errors.Wrap(err, "could not fetch decided by range during sync")
 	}
-
-	s.logger.Info("finished syncing in range", zap.Uint64("from", from), zap.Uint64("to", to), zap.String("duration", time.Since(start).String()))
-	return nil
+	s.logger.Info("finished syncing in range", zap.Uint64("from", from), zap.Uint64("to", to),
+		zap.String("duration", time.Since(start).String()), zap.Int("items", n))
+	return n, nil
 }

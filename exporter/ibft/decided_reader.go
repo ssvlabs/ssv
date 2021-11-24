@@ -66,9 +66,9 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 }
 
 // newHistorySync creates a new instance of history sync
-func (r *decidedReader) newHistorySync() *history.Sync {
-	return history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.identifier, r.network,
-		r.storage, r.validateDecidedMsg)
+func (r *decidedReader) newHistorySync() history.Syncer {
+	return history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.validatorShare.CommitteeSize(), r.identifier,
+		r.network, r.storage, r.validateDecidedMsg)
 }
 
 // Share returns the reader's share
