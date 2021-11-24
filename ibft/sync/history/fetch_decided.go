@@ -10,17 +10,17 @@ import (
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
 // Range is start to end seq including
-func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, err error) {
+func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, n int, err error) {
 	failCount := 0
 	start := startSeq
 	done := false
 	var latestError error
 	for {
 		if failCount == 5 {
-			return highestSaved, latestError
+			return highestSaved, n, latestError
 		}
 		if done {
-			return highestSaved, nil
+			return highestSaved, n, nil
 		}
 
 		// conform to max batch
@@ -70,8 +70,9 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 
 			// save
 			if err := s.ibftStorage.SaveDecided(msg); err != nil {
-				return highestSaved, err
+				return highestSaved, n, err
 			}
+			n++
 
 			// set highest
 			if highestSaved == nil || highestSaved.Message.SeqNumber < msg.Message.SeqNumber {

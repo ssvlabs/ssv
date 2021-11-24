@@ -62,7 +62,7 @@ func (i *Controller) SyncIBFT() error {
 func (i *Controller) syncIBFT() error {
 	// TODO: use controller context once added
 	return tasks.RetryWithContext(context.Background(), func() error {
-		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
+		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.ValidatorShare.CommitteeSize(), i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
 		err := s.Start()
 		if err != nil {
 			return errors.Wrap(err, "history sync failed")
