@@ -3,7 +3,7 @@ package history
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
-	sync2 "github.com/bloxapp/ssv/ibft/sync"
+	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
@@ -13,9 +13,8 @@ import (
 
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
 func (s *Sync) findHighestInstance() (*proto.SignedMessage, string, error) {
-	// pick up to 4 peers
-	// TODO - why 4? should be set as param?
-	usedPeers, err := sync2.GetPeers(s.network, s.publicKey, 4)
+	// pick up to committee peers
+	usedPeers, err := ibftsync.GetPeers(s.network, s.publicKey, s.committeeSize)
 	if err != nil {
 		return nil, "", err
 	}

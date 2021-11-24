@@ -65,17 +65,10 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 	return &r
 }
 
-// sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
-func (r *decidedReader) sync() error {
-	r.logger.Debug("syncing ibft data")
-	// creating HistorySync and starts it
-	hs := history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.identifier, r.network,
-		r.storage, r.validateDecidedMsg)
-	err := hs.Start()
-	if err != nil {
-		r.logger.Error("could not sync validator's data", zap.Error(err))
-	}
-	return err
+// newHistorySync creates a new instance of history sync
+func (r *decidedReader) newHistorySync() history.Syncer {
+	return history.New(r.logger, r.validatorShare.PublicKey.Serialize(), r.validatorShare.CommitteeSize(), r.identifier,
+		r.network, r.storage, r.validateDecidedMsg)
 }
 
 // Share returns the reader's share
@@ -87,6 +80,10 @@ func (r *decidedReader) Share() *storage.Share {
 func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
+	}
+	// call migration before starting the other stuff
+	if err := GetMainMigrator().Migrate(r); err != nil {
+		r.logger.Error("could not run migration", zap.Error(err))
 	}
 	if err := tasks.Retry(func() error {
 		if err := r.sync(); err != nil {
@@ -113,6 +110,18 @@ func (r *decidedReader) Start() error {
 	return nil
 }
 
+// sync starts to fetch best known decided message (highest sequence) from the network and sync to it.
+func (r *decidedReader) sync() error {
+	r.logger.Debug("syncing ibft data")
+	// creating HistorySync and starts it
+	hs := r.newHistorySync()
+	err := hs.Start()
+	if err != nil {
+		r.logger.Error("could not sync validator's data", zap.Error(err))
+	}
+	return err
+}
+
 func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 	r.logger.Debug("listening to decided messages")
 	for msg := range cn {
@@ -122,10 +131,6 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 		logger := r.logger.With(messageFields(msg)...)
 		if err := validateDecidedMsg(msg, r.validatorShare); err != nil {
 			logger.Debug("received invalid decided message")
-			continue
-		}
-		if msg.Message.SeqNumber == 0 {
-			logger.Debug("received invalid sequence")
 			continue
 		}
 		go func(msg *proto.SignedMessage) {
