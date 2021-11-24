@@ -77,15 +77,15 @@ instanceLoop:
 	i.currentInstance = nil
 	i.logger.Debug("iBFT instance result loop stopped")
 
-	i.afterInstance(seq, retRes)
+	i.afterInstance(seq, retRes, err)
 
 	return retRes, err
 }
 
 // afterInstance is triggered after the instance was finished
-func (i *Controller) afterInstance(seq uint64, res *ibft.InstanceResult) {
+func (i *Controller) afterInstance(seq uint64, res *ibft.InstanceResult, err error) {
 	// if instance was decided -> wait for late commit messages
-	if res.Decided {
+	if err != nil && res != nil && res.Decided {
 		go i.listenToLateCommitMsgs(i.Identifier[:], seq)
 	} else {
 		i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.Identifier[:], seq))
