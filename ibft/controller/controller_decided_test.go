@@ -299,7 +299,6 @@ func TestForceDecided(t *testing.T) {
 	identifier := []byte("lambda_11")
 	s1 := populatedStorage(t, sks, 3)
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
-
 	// test before sync
 	highest, found, err := i1.(*Controller).ibftStorage.GetHighestDecidedInstance(identifier)
 	require.True(t, found)

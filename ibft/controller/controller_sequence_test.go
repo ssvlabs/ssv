@@ -17,7 +17,9 @@ import (
 
 func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
-		Identifier: []byte("lambda_11"),
+		Identifier:   []byte("lambda_11"),
+		initFinished: threadsafe.NewSafeBool(),
+		initSynced:   threadsafe.NewSafeBool(),
 		//instances: make([]*Instance, 0),
 	}
 
@@ -34,6 +36,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		share           *validatorstorage.Share
 		storage         collections.Iibft
 		initFinished    bool
+		initSynced      bool
 		currentInstance ibft.Instance
 		expectedError   string
 	}{
@@ -48,6 +51,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
+			true,
 			true,
 			nil,
 			"",
@@ -64,6 +68,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			nil,
 			true,
+			true,
 			nil,
 			"",
 		},
@@ -77,8 +82,23 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			nil,
 			false,
+			false,
 			nil,
 			"iBFT hasn't initialized yet",
+		},
+		{
+			"didn't finish sync",
+			ibft.ControllerStartInstanceOptions{},
+			&validatorstorage.Share{
+				NodeID:    1,
+				PublicKey: validatorPK(sks),
+				Committee: nodes,
+			},
+			nil,
+			true,
+			false,
+			nil,
+			"iBFT is not synced",
 		},
 		{
 			"sequence skips",
@@ -91,6 +111,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
+			true,
 			true,
 			nil,
 			"instance seq invalid",
@@ -107,6 +128,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
+			true,
 			nil,
 			"instance seq invalid",
 		},
@@ -122,6 +144,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			},
 			populatedStorage(t, sks, 10),
 			true,
+			true,
 			instance.NewInstanceWithState(&proto.State{
 				SeqNumber: threadsafe.Uint64(10),
 			}),
@@ -133,6 +156,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
 			i.initFinished.Set(test.initFinished)
+			i.initSynced.Set(test.initSynced)
 			if test.currentInstance != nil {
 				i.currentInstance = test.currentInstance
 			}
