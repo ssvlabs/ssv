@@ -169,7 +169,7 @@ func populatedIbft(
 		nil,
 		signer)
 	ret.(*Controller).setFork(testFork(ret.(*Controller)))
-	ret.(*Controller).initFinished = true // as if they are already synced
+	ret.(*Controller).initFinished.Set(true) // as if they are already synced
 	ret.(*Controller).listenToNetworkMessages()
 	ret.(*Controller).listenToSyncMessages()
 	ret.(*Controller).processDecidedQueueMessages()

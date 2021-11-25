@@ -132,7 +132,7 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-			i.initFinished = test.initFinished
+			i.initFinished.Set(test.initFinished)
 			if test.currentInstance != nil {
 				i.currentInstance = test.currentInstance
 			}
