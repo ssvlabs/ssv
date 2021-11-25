@@ -79,20 +79,23 @@ func New(
 
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *Controller) Init() error {
-	if i.initFinished.Get() {
-		i.logger.Debug("iBFT implementation was initialized already")
+	if !i.initFinished.Get() {
+		i.logger.Info("iBFT implementation init started")
+		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+		i.processDecidedQueueMessages()
+		i.processSyncQueueMessages()
+		i.listenToSyncMessages()
+		i.listenToNetworkMessages()
+		i.listenToNetworkDecidedMessages()
+		defer i.initFinished.Set(true)
+		i.logger.Debug("iBFT network setup finished")
+	}
+
+	if i.synced.Get() {
+		// already synced
 		return nil
 	}
-	i.logger.Info("iBFT implementation init started")
-	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-	i.processDecidedQueueMessages()
-	i.processSyncQueueMessages()
-	i.listenToSyncMessages()
-	i.listenToNetworkMessages()
-	i.listenToNetworkDecidedMessages()
-	i.logger.Debug("iBFT network setup finished")
 	i.waitForMinPeerOnInit(1)
-	defer i.initFinished.Set(true)
 	// IBFT sync to make sure the operator is aligned for this validator
 	// if fails - controller needs to be initialized again, otherwise it will be unavailable
 	if err := i.SyncIBFT(); err != nil {
