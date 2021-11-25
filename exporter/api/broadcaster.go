@@ -12,21 +12,26 @@ import (
 type Broadcaster interface {
 	FromFeed(feed *event.Feed) error
 	Broadcast(msg Message) error
-	Register(conn Conn) bool
-	Deregister(conn Conn) bool
+	Register(conn broadcasted) bool
+	Deregister(conn broadcasted) bool
+}
+
+type broadcasted interface {
+	ID() string
+	Send([]byte)
 }
 
 type broadcaster struct {
 	logger      *zap.Logger
 	mut         sync.Mutex
-	connections map[string]Conn
+	connections map[string]broadcasted
 }
 
 func newBroadcaster(logger *zap.Logger) Broadcaster {
 	return &broadcaster{
 		logger:      logger.With(zap.String("component", "exporter/api/broadcaster")),
 		mut:         sync.Mutex{},
-		connections: map[string]Conn{},
+		connections: map[string]broadcasted{},
 	}
 }
 
@@ -66,7 +71,7 @@ func (b *broadcaster) Broadcast(msg Message) error {
 	b.mut.Lock()
 	b.logger.Debug("broadcasting message", zap.Int("total connections", len(b.connections)),
 		zap.Any("msg", msg))
-	var conns []Conn
+	var conns []broadcasted
 	for _, c := range b.connections {
 		conns = append(conns, c)
 	}
@@ -80,7 +85,7 @@ func (b *broadcaster) Broadcast(msg Message) error {
 }
 
 // Register registers a connection for broadcasting
-func (b *broadcaster) Register(conn Conn) bool {
+func (b *broadcaster) Register(conn broadcasted) bool {
 	b.mut.Lock()
 	defer b.mut.Unlock()
 
@@ -93,7 +98,7 @@ func (b *broadcaster) Register(conn Conn) bool {
 }
 
 // Deregister de-registers a connection for broadcasting
-func (b *broadcaster) Deregister(conn Conn) bool {
+func (b *broadcaster) Deregister(conn broadcasted) bool {
 	b.mut.Lock()
 	defer b.mut.Unlock()
 
