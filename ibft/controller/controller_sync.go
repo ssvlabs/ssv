@@ -70,6 +70,7 @@ func (i *Controller) SyncIBFT() error {
 func (i *Controller) syncIBFT() error {
 	// TODO: use controller context once added
 	return tasks.RetryWithContext(context.Background(), func() error {
+		i.waitForMinPeerOnInit(1)
 		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.ValidatorShare.CommitteeSize(),
 			i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
 		err := s.Start()

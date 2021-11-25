@@ -95,7 +95,6 @@ func (i *Controller) Init() error {
 		// already synced
 		return nil
 	}
-	i.waitForMinPeerOnInit(1)
 	// IBFT sync to make sure the operator is aligned for this validator
 	// if fails - controller needs to be initialized again, otherwise it will be unavailable
 	if err := i.SyncIBFT(); err != nil {
