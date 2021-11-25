@@ -92,11 +92,12 @@ func (i *Controller) Init() error {
 	i.listenToNetworkDecidedMessages()
 	i.logger.Debug("iBFT network setup finished")
 	i.waitForMinPeerOnInit(1)
-	i.initFinished.Set(true)
+	defer i.initFinished.Set(true)
 	// IBFT sync to make sure the operator is aligned for this validator
 	// if fails - controller needs to be initialized again, otherwise it will be unavailable
 	if err := i.SyncIBFT(); err != nil {
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
+		i.logger.Info("iBFT implementation init finished w/o sync")
 		return errors.Wrap(err, "could not sync history")
 	}
 	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
