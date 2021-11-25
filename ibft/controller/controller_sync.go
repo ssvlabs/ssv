@@ -62,7 +62,7 @@ func (i *Controller) SyncIBFT() error {
 	if err != nil {
 		return err
 	}
-	i.synced.Set(true)
+	i.initSynced.Set(true)
 	return nil
 }
 

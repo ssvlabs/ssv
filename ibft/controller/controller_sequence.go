@@ -18,7 +18,7 @@ func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 	if !i.initFinished.Get() {
 		return errors.New("iBFT hasn't initialized yet")
 	}
-	if !i.synced.Get() {
+	if !i.initSynced.Get() {
 		return errors.New("iBFT is not synced")
 	}
 	if i.currentInstance != nil {

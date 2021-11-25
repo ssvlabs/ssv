@@ -156,7 +156,7 @@ func (i *Controller) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
 // 		- AND msg is not for current instance
 func (i *Controller) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
 	// if IBFT sync failed to init, trigger it again
-	if !i.synced.Get() {
+	if !i.initSynced.Get() {
 		return true, nil
 	}
 	if i.decidedForCurrentInstance(msg) {

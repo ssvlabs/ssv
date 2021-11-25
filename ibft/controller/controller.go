@@ -32,7 +32,7 @@ type Controller struct {
 
 	// flags
 	initFinished *threadsafe.SafeBool
-	synced       *threadsafe.SafeBool
+	initSynced   *threadsafe.SafeBool
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -65,7 +65,7 @@ func New(
 
 		// flags
 		initFinished: threadsafe.NewSafeBool(),
-		synced:       threadsafe.NewSafeBool(),
+		initSynced:   threadsafe.NewSafeBool(),
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
@@ -91,7 +91,7 @@ func (i *Controller) Init() error {
 		i.logger.Debug("iBFT network setup finished")
 	}
 
-	if i.synced.Get() {
+	if i.initSynced.Get() {
 		// already synced
 		return nil
 	}

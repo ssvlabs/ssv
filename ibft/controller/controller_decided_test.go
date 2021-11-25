@@ -89,6 +89,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		msg             *proto.SignedMessage
 		expectedRes     bool
 		expectedErr     string
+		initSynced      bool
 	}{
 		{
 			"decided from future, requires sync.",
@@ -106,6 +107,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
+			true,
 		},
 		{
 			"decided from future, requires sync. current is nil",
@@ -120,6 +122,22 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
+			true,
+		},
+		{
+			"decided when init failed to sync",
+			nil,
+			SignMsg(t, 1, secretKeys[1], &proto.Message{
+				Type:      proto.RoundState_Commit,
+				SeqNumber: 1,
+			}),
+			SignMsg(t, 1, secretKeys[1], &proto.Message{
+				Type:      proto.RoundState_Commit,
+				SeqNumber: 1,
+			}),
+			true,
+			"",
+			false,
 		},
 		{
 			"decided from far future, requires sync.",
@@ -137,6 +155,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
+			true,
 		},
 		{
 			"decided from past, doesn't requires sync.",
@@ -154,6 +173,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
+			true,
 		},
 		{
 			"decided for current",
@@ -171,6 +191,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
+			true,
 		},
 		{
 			"decided for seq 0",
@@ -185,16 +206,19 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
+			true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := Controller{
+			ctrl := Controller{
 				currentInstance: test.currentInstance,
 				ibftStorage:     newTestStorage(test.highestDecided),
+				initSynced:      threadsafe.NewSafeBool(),
 			}
-			res, err := ibft.decidedRequiresSync(test.msg)
+			ctrl.initSynced.Set(test.initSynced)
+			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
 			if len(test.expectedErr) > 0 {
 				require.EqualError(t, err, test.expectedErr)
