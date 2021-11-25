@@ -12,6 +12,7 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync"
 	"testing"
 )
 
@@ -20,6 +21,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 		Identifier:   []byte("lambda_11"),
 		initFinished: threadsafe.NewSafeBool(),
 		initSynced:   threadsafe.NewSafeBool(),
+		initLock:     &sync.Mutex{},
 		//instances: make([]*Instance, 0),
 	}
 

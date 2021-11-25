@@ -37,6 +37,7 @@ type Controller struct {
 	// locks
 	currentInstanceLock sync.Locker
 	syncingLock         *semaphore.Weighted
+	initLock            sync.Locker
 }
 
 // New is the constructor of Controller
@@ -70,6 +71,7 @@ func New(
 		// locks
 		currentInstanceLock: &sync.Mutex{},
 		syncingLock:         semaphore.NewWeighted(1),
+		initLock:            &sync.Mutex{},
 	}
 
 	ret.setFork(fork)
@@ -79,6 +81,9 @@ func New(
 
 // Init sets all major processes of iBFT while blocking until completed.
 func (i *Controller) Init() error {
+	i.initLock.Lock()
+	defer i.initLock.Unlock()
+
 	if !i.initFinished.Get() {
 		i.logger.Info("iBFT implementation init started")
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
@@ -91,6 +96,15 @@ func (i *Controller) Init() error {
 		i.logger.Debug("iBFT network setup finished")
 	}
 
+	if err := i.initSync(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Init sets all major processes of iBFT while blocking until completed.
+func (i *Controller) initSync() error {
 	if i.initSynced.Get() {
 		// already synced
 		return nil
