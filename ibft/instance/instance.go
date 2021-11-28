@@ -86,6 +86,7 @@ type Instance struct {
 	processCommitQuorumOnce      sync.Once
 	stopLock                     sync.Mutex
 	lastChangeRoundMsgLock       sync.RWMutex
+	stageChanCloseChan           sync.Mutex
 }
 
 // NewInstanceWithState used for testing, not PROD!
@@ -137,6 +138,7 @@ func NewInstance(opts *InstanceOptions) ibft.Instance {
 		processCommitQuorumOnce:      sync.Once{},
 		stopLock:                     sync.Mutex{},
 		lastChangeRoundMsgLock:       sync.RWMutex{},
+		stageChanCloseChan:           sync.Mutex{},
 	}
 
 	ret.setFork(opts.Fork)
@@ -244,9 +246,11 @@ func (i *Instance) stop() {
 	// stop stage chan
 	i.Logger.Debug("STOPPING IBFTController -> passed stageLock")
 	if i.stageChangedChan != nil {
+		i.stageChanCloseChan.Lock() // in order to prevent from sending to a close chan
 		close(i.stageChangedChan)
 		i.Logger.Debug("STOPPING IBFTController -> closed stageChangedChan")
 		i.stageChangedChan = nil
+		i.stageChanCloseChan.Unlock()
 	}
 
 	i.Logger.Info("stopped iBFT instance")
@@ -282,6 +286,8 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 	i.State().Stage.Set(int32(stage))
 
 	// blocking send to channel
+	i.stageChanCloseChan.Lock()
+	defer i.stageChanCloseChan.Unlock()
 	if i.stageChangedChan != nil {
 		i.stageChangedChan <- stage
 	}
