@@ -11,11 +11,14 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"github.com/bloxapp/ssv/network"
+	networkForks "github.com/bloxapp/ssv/network/forks"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/logex"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -47,11 +50,17 @@ func (i *alwaysTrueValueCheck) Check(value []byte) error {
 	return nil
 }
 
-func networking() network.Network {
+func networking(fork networkForks.Fork) network.Network {
+	networkPrivateKey, err := utils.ECDSAPrivateKey(logger, "")
+	if err != nil {
+		logger.Fatal("failed to generate network key", zap.Error(err))
+	}
 	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
-		DiscoveryType:    "mdns",
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 5,
+		DiscoveryType:     "mdns",
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 5,
+		NetworkPrivateKey: networkPrivateKey,
+		Fork:              fork,
 	})
 	if err != nil {
 		logger.Fatal("failed to create db", zap.Error(err))
@@ -140,11 +149,10 @@ func main() {
 	pk := publicKey()
 	dbs := make([]collections.Iibft, 0)
 	logger.Info("pubkey", zap.String("pk", pkHex))
-
 	// generate iBFT nodes
 	nodes := make([]ibft.Controller, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		net := networking()
+		net := networking(networkForkV0.New())
 		if err := net.SubscribeToValidatorNetwork(pk); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
