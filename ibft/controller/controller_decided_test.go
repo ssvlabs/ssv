@@ -216,7 +216,6 @@ func TestDecidedRequiresSync(t *testing.T) {
 				currentInstance: test.currentInstance,
 				ibftStorage:     newTestStorage(test.highestDecided),
 				initSynced:      threadsafe.NewSafeBool(),
-				initLock:        &sync.Mutex{},
 			}
 			ctrl.initSynced.Set(test.initSynced)
 			res, err := ctrl.decidedRequiresSync(test.msg)

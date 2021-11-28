@@ -101,6 +101,10 @@ func (v *Validator) Start() error {
 	for _, ib := range v.ibfts {
 		go func(ib ibft.Controller) {
 			if err := ib.Init(); err != nil {
+				if err == ibftctrl.ErrAlreadyRunning {
+					v.logger.Debug("ibft init is already running")
+					return
+				}
 				v.logger.Error("could not initialize ibft instance", zap.Error(err))
 			}
 		}(ib)

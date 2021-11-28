@@ -47,7 +47,7 @@ func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 // it will ensure that minimum peers are available on the validator's topic
 func (i *Controller) SyncIBFT() error {
 	if !i.syncingLock.TryAcquire(1) {
-		return errors.New("failed to start iBFT sync, already running")
+		return ErrAlreadyRunning
 	}
 	defer i.syncingLock.Release(1)
 
@@ -67,6 +67,7 @@ func (i *Controller) SyncIBFT() error {
 }
 
 // syncIBFT takes care of history sync by retrying sync, it is non thread-safe
+// and shouldn't be called directly, use SyncIBFT
 func (i *Controller) syncIBFT() error {
 	// TODO: use controller context once added
 	return tasks.RetryWithContext(context.Background(), func() error {

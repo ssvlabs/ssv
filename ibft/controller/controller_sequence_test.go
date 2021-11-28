@@ -12,16 +12,14 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"sync"
 	"testing"
 )
 
 func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
 		Identifier:   []byte("lambda_11"),
-		initFinished: threadsafe.NewSafeBool(),
+		initHandlers: threadsafe.NewSafeBool(),
 		initSynced:   threadsafe.NewSafeBool(),
-		initLock:     &sync.Mutex{},
 		//instances: make([]*Instance, 0),
 	}
 
@@ -100,7 +98,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			true,
 			false,
 			nil,
-			"iBFT is not synced",
+			"iBFT hasn't initialized yet",
 		},
 		{
 			"sequence skips",
@@ -157,7 +155,7 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-			i.initFinished.Set(test.initFinished)
+			i.initHandlers.Set(test.initFinished)
 			i.initSynced.Set(test.initSynced)
 			if test.currentInstance != nil {
 				i.currentInstance = test.currentInstance
