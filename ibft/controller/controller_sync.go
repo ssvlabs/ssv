@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// syncRetries is the number of reties to perform for history sync
 const syncRetries = 3
 
 // processSyncQueueMessages is listen for all the ibft sync msg's and process them
@@ -30,7 +31,7 @@ func (i *Controller) processSyncQueueMessages() {
 	i.logger.Info("sync messages queue started")
 }
 
-// ProcessSyncMessage - processes sync messages
+// ProcessSyncMessage processes sync messages
 func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)
@@ -43,9 +44,10 @@ func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 }
 
 // SyncIBFT will fetch best known decided message (highest sequence) from the network and sync to it.
+// it will ensure that minimum peers are available on the validator's topic
 func (i *Controller) SyncIBFT() error {
 	if !i.syncingLock.TryAcquire(1) {
-		return errors.New("failed to start iBFT sync, already running")
+		return ErrAlreadyRunning
 	}
 	defer i.syncingLock.Release(1)
 
@@ -56,13 +58,22 @@ func (i *Controller) SyncIBFT() error {
 		i.currentInstance.Stop()
 	}
 
-	return i.syncIBFT()
+	err := i.syncIBFT()
+	if err != nil {
+		return err
+	}
+	i.initSynced.Set(true)
+	return nil
 }
 
+// syncIBFT takes care of history sync by retrying sync, it is non thread-safe
+// and shouldn't be called directly, use SyncIBFT
 func (i *Controller) syncIBFT() error {
 	// TODO: use controller context once added
 	return tasks.RetryWithContext(context.Background(), func() error {
-		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.ValidatorShare.CommitteeSize(), i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
+		i.waitForMinPeerOnInit(1)
+		s := history.New(i.logger, i.ValidatorShare.PublicKey.Serialize(), i.ValidatorShare.CommitteeSize(),
+			i.GetIdentifier(), i.network, i.ibftStorage, i.ValidateDecidedMsg)
 		err := s.Start()
 		if err != nil {
 			return errors.Wrap(err, "history sync failed")

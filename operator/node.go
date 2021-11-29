@@ -31,7 +31,7 @@ type Options struct {
 	Logger              *zap.Logger
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
-	ValidatorController validator.IController
+	ValidatorController validator.Controller
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
@@ -44,7 +44,7 @@ type Options struct {
 type operatorNode struct {
 	ethNetwork     core.Network
 	context        context.Context
-	validatorsCtrl validator.IController
+	validatorsCtrl validator.Controller
 	logger         *zap.Logger
 	beacon         beacon.Beacon
 	net            network.Network
