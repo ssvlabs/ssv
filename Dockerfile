@@ -11,6 +11,8 @@ RUN apt-get update                                                        && \
 RUN go version
 RUN python --version
 
+ARG APP_VERSION
+
 WORKDIR /go/src/github.com/bloxapp/ssv/
 COPY go.mod .
 COPY go.sum .
@@ -21,11 +23,13 @@ RUN go mod download
 #
 FROM preparer AS builder
 
+ARG APP_VERSION
 # Copy files and install app
 COPY . .
 
 RUN go get -d -v ./...
-RUN CGO_ENABLED=1 GOOS=linux go install -tags blst_enabled -ldflags "-X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)` -linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
+
+RUN CGO_ENABLED=1 GOOS=linux go install -tags blst_enabled -ldflags "-X main.Version=`if [ ! -z "${APP_VERSION}" ]; then echo $APP_VERSION; else git describe --tags $(git rev-list --tags --max-count=1); fi` -linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
 
 #
 # STEP 3: Prepare image to run the binary
