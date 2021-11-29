@@ -94,19 +94,18 @@ func (i *Controller) Init() error {
 		i.listenToNetworkMessages()
 		i.listenToNetworkDecidedMessages()
 		i.initHandlers.Set(true)
-		i.logger.Debug("iBFT handlers-setup finished")
+		i.logger.Debug("managed to setup iBFT handlers")
 	}
 
 	if !i.initSynced.Get() {
 		// IBFT sync to make sure the operator is aligned for this validator
-		// if fails - controller needs to be initialized again, otherwise it will be unavailable
 		if err := i.SyncIBFT(); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				i.logger.Debug("iBFT init is already running (syncing history)")
 				return nil
 			}
-			i.logger.Warn("iBFT implementation init failed to sync history")
+			i.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 			return errors.Wrap(err, "could not sync history")
 		}
