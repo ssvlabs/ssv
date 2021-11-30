@@ -2,6 +2,7 @@ package kv
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
@@ -107,6 +108,38 @@ func TestBadgerDb_GetAllByCollection(t *testing.T) {
 
 		getAllByCollectionTest(t, 100000, db)
 	})
+}
+
+func TestBadgerDb_GetMany(t *testing.T) {
+	options := basedb.Options{
+		Type:   "badger-memory",
+		Logger: zap.L(),
+		Path:   "",
+	}
+	db, err := New(options)
+	require.NoError(t, err)
+	defer db.Close()
+
+	prefix := []byte("prefix")
+	var i uint64
+	for i = 0; i < 100; i++ {
+		require.NoError(t, db.Set(prefix, uInt64ToByteSlice(i), uInt64ToByteSlice(i)))
+	}
+
+	results, err := db.GetMany(prefix, uInt64ToByteSlice(0), uInt64ToByteSlice(1),
+		uInt64ToByteSlice(5), uInt64ToByteSlice(10))
+	require.NoError(t, err)
+	require.Equal(t, 4, len(results))
+	require.Equal(t, uInt64ToByteSlice(0), results[0].Value)
+	require.Equal(t, uInt64ToByteSlice(1), results[1].Value)
+	require.Equal(t, uInt64ToByteSlice(5), results[2].Value)
+	require.Equal(t, uInt64ToByteSlice(10), results[3].Value)
+}
+
+func uInt64ToByteSlice(n uint64) []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, n)
+	return b
 }
 
 func getAllByCollectionTest(t *testing.T, n int, db basedb.IDb) {

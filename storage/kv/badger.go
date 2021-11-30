@@ -66,7 +66,7 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	err := b.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(append(prefix, key...))
 		if err != nil {
-			if err.Error() == "not found" || err.Error() == "Key not found" { // in order to couple the not found errors together
+			if isNotFoundError(err) { // in order to couple the not found errors together
 				return errors.New(EntryNotFoundError)
 			}
 			return err
@@ -82,6 +82,38 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		Key:   key,
 		Value: resValue,
 	}, found, err
+}
+
+// GetMany return values for the given keys
+func (b *BadgerDb) GetMany(prefix []byte, keys ...[]byte) ([]basedb.Obj, error) {
+	var results []basedb.Obj
+	if len(keys) == 0 {
+		return results, nil
+	}
+	err := b.db.View(func(txn *badger.Txn) error {
+		for _, k := range keys {
+			item, err := txn.Get(append(prefix, k...))
+			if err != nil {
+				if isNotFoundError(err) { // in order to couple the not found errors together
+					b.logger.Debug("item not found", zap.String("key", string(k)))
+					continue
+				}
+				b.logger.Warn("failed to get item", zap.String("key", string(k)))
+				return err
+			}
+			value, err := item.ValueCopy(nil)
+			if err != nil {
+				b.logger.Warn("failed to copy item value", zap.String("key", string(k)))
+				return err
+			}
+			results = append(results, basedb.Obj{
+				Key:   k,
+				Value: value,
+			})
+		}
+		return nil
+	})
+	return results, err
 }
 
 // Delete key in specific prefix
@@ -185,4 +217,8 @@ func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 	}
 
 	return keys
+}
+
+func isNotFoundError(err error) bool {
+	return err != nil && (err.Error() == "not found" || err.Error() == "Key not found")
 }
