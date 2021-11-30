@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/bloxapp/ssv/ibft"
 	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
+	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
@@ -14,6 +15,11 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/validator/storage"
+)
+
+var (
+	// ErrAlreadyRunning is used to express that some process is already running, e.g. sync
+	ErrAlreadyRunning = errors.New("already running")
 )
 
 // Controller implements Controller interface
@@ -30,7 +36,8 @@ type Controller struct {
 	signer          beacon.Signer
 
 	// flags
-	initFinished bool
+	initHandlers *threadsafe.SafeBool
+	initSynced   *threadsafe.SafeBool
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -62,7 +69,8 @@ func New(
 		signer:         signer,
 
 		// flags
-		initFinished: false,
+		initHandlers: threadsafe.NewSafeBool(),
+		initSynced:   threadsafe.NewSafeBool(),
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
@@ -75,23 +83,41 @@ func New(
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
+// if init fails to sync
 func (i *Controller) Init() error {
-	i.logger.Info("iBFT implementation init started")
-	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-	i.processDecidedQueueMessages()
-	i.processSyncQueueMessages()
-	i.listenToSyncMessages()
-	i.listenToNetworkMessages()
-	i.listenToNetworkDecidedMessages()
-	i.waitForMinPeerOnInit(1) // minimum of 2 validators (me + 1)
-	if err := i.SyncIBFT(); err != nil {
-		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-		return errors.Wrap(err, "could not sync history, stopping Controller init")
+	if !i.initHandlers.Get() {
+		i.logger.Info("iBFT implementation init started")
+		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+		i.processDecidedQueueMessages()
+		i.processSyncQueueMessages()
+		i.listenToSyncMessages()
+		i.listenToNetworkMessages()
+		i.listenToNetworkDecidedMessages()
+		i.initHandlers.Set(true)
+		i.logger.Debug("managed to setup iBFT handlers")
 	}
-	i.initFinished = true
-	ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-	i.logger.Info("iBFT implementation init finished")
+
+	if !i.initSynced.Get() {
+		// IBFT sync to make sure the operator is aligned for this validator
+		if err := i.SyncIBFT(); err != nil {
+			if err == ErrAlreadyRunning {
+				// don't fail if init is already running
+				i.logger.Debug("iBFT init is already running (syncing history)")
+				return nil
+			}
+			i.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
+			ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
+			return errors.Wrap(err, "could not sync history")
+		}
+		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
+		i.logger.Info("iBFT implementation init finished")
+	}
+
 	return nil
+}
+
+func (i *Controller) initialized() bool {
+	return i.initHandlers.Get() && i.initSynced.Get()
 }
 
 // StartInstance - starts an ibft instance or returns error

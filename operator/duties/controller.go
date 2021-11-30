@@ -32,7 +32,7 @@ type ControllerOptions struct {
 	Ctx                 context.Context
 	BeaconClient        beacon.Beacon
 	EthNetwork          core.Network
-	ValidatorController validator.IController
+	ValidatorController validator.Controller
 	GenesisEpoch        uint64
 	DutyLimit           uint64
 }
@@ -45,7 +45,7 @@ type dutyController struct {
 	// executor enables to work with a custom execution
 	executor            dutyExecutor
 	fetcher             DutyFetcher
-	validatorController validator.IController
+	validatorController validator.Controller
 	genesisEpoch        uint64
 	dutyLimit           uint64
 
@@ -101,8 +101,15 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		logger.Info("starting duty processing start for slot")
-		go v.ExecuteDuty(dc.ctx, uint64(duty.Slot), duty)
+		go func() {
+			// force the validator to be started (subscribed to validator's topic and synced)
+			if err := v.Start(); err != nil {
+				logger.Error("could not start validator", zap.Error(err))
+				return
+			}
+			logger.Info("starting duty processing")
+			v.ExecuteDuty(dc.ctx, uint64(duty.Slot), duty)
+		}()
 	} else {
 		logger.Warn("could not find validator")
 	}

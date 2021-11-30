@@ -7,7 +7,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/valcheck"
-	controller2 "github.com/bloxapp/ssv/ibft/controller"
+	ibftctrl "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -97,17 +97,21 @@ func (v *Validator) Start() error {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
+	// init all ibft controllers
+	for _, ib := range v.ibfts {
+		go func(ib ibft.Controller) {
+			if err := ib.Init(); err != nil {
+				if err == ibftctrl.ErrAlreadyRunning {
+					v.logger.Debug("ibft init is already running")
+					return
+				}
+				v.logger.Error("could not initialize ibft instance", zap.Error(err))
+			}
+		}(ib)
+	}
+
 	v.startOnce.Do(func() {
 		go v.listenToSignatureMessages()
-
-		for _, ib := range v.ibfts { // init all ibfts
-			go func(ib ibft.Controller) {
-				if err := ib.Init(); err != nil {
-					v.logger.Error("could not initialize ibft instance", zap.Error(err))
-				}
-			}(ib)
-		}
-
 		v.logger.Debug("validator started")
 	})
 
@@ -149,10 +153,9 @@ func setupIbftController(
 	fork forks.Fork,
 	signer beacon.Signer,
 ) ibft.Controller {
-
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
-	return controller2.New(
+	return ibftctrl.New(
 		role,
 		identifier,
 		logger,

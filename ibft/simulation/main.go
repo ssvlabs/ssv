@@ -11,14 +11,19 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"github.com/bloxapp/ssv/network"
+	networkForks "github.com/bloxapp/ssv/network/forks"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"time"
@@ -32,11 +37,9 @@ The scenario interface can be overriden with any writen scenario to manually tes
 */
 
 var (
-	nodeCount  = 4
-	identifier = []byte("ibft identifier")
-	logger     = logex.Build("simulator", zapcore.DebugLevel, nil)
-	pkHex      = "88ac8f147d1f25b37aa7fa52cde85d35ced016ae718d2b0ed80ca714a9f4a442bae659111d908e204a0545030c833d95"
-	scenario   = scenarios.NewChangeRoundSpeedup(logger, &alwaysTrueValueCheck{})
+	nodeCount = 4
+	logger    = logex.Build("simulator", zapcore.DebugLevel, nil)
+	scenario  = scenarios.NewRegularScenario(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct {
@@ -47,11 +50,17 @@ func (i *alwaysTrueValueCheck) Check(value []byte) error {
 	return nil
 }
 
-func networking() network.Network {
+func networking(fork networkForks.Fork) network.Network {
+	networkPrivateKey, err := utils.ECDSAPrivateKey(logger, "")
+	if err != nil {
+		logger.Fatal("failed to generate network key", zap.Error(err))
+	}
 	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
-		DiscoveryType:    "mdns",
-		MaxBatchResponse: 10,
-		RequestTimeout:   time.Second * 5,
+		DiscoveryType:     "mdns",
+		MaxBatchResponse:  10,
+		RequestTimeout:    time.Second * 5,
+		NetworkPrivateKey: networkPrivateKey,
+		Fork:              fork,
 	})
 	if err != nil {
 		logger.Fatal("failed to create db", zap.Error(err))
@@ -61,21 +70,36 @@ func networking() network.Network {
 }
 
 type testSigner struct {
+	keys map[string]*bls.SecretKey
 }
 
 func newTestSigner() beacon.KeyManager {
-	return &testSigner{}
+	return &testSigner{make(map[string]*bls.SecretKey)}
 }
 
-func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
+func (km *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	if km.getKey(shareKey.GetPublicKey()) == nil {
+		km.keys[shareKey.GetPublicKey().SerializeToHexStr()] = shareKey
+	}
 	return nil
 }
 
-func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
-	return nil, nil
+func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
+	return km.keys[key.SerializeToHexStr()]
 }
 
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
+		sig, err := message.Sign(key)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not sign ibft msg")
+		}
+		return sig.Serialize(), nil
+	}
+	return nil, errors.New("could not find key for pk")
+}
+
+func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 
@@ -94,7 +118,7 @@ func db() collections.Iibft {
 	return &ret
 }
 
-func generateShares(cnt uint64) map[uint64]*validatorstorage.Share {
+func generateShares(cnt uint64) (map[uint64]*validatorstorage.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
 	_ = bls.Init(bls.BLS12_381)
 	nodes := make(map[uint64]*proto.Node)
 	sks := make(map[uint64]*bls.SecretKey)
@@ -111,48 +135,38 @@ func generateShares(cnt uint64) map[uint64]*validatorstorage.Share {
 		sks[i] = sk
 	}
 
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
 	for i := uint64(1); i <= cnt; i++ {
 		ret[i] = &validatorstorage.Share{
 			NodeID:    i,
-			PublicKey: publicKey(),
+			PublicKey: sk.GetPublicKey(),
 			Committee: nodes,
 		}
 	}
 
-	return ret
-}
-
-func publicKey() *bls.PublicKey {
-	_ = bls.Init(bls.BLS12_381)
-	byts, err := hex.DecodeString(pkHex)
-	if err != nil {
-		logger.Fatal("failed to decode pk", zap.Error(err))
-	}
-	ret := &bls.PublicKey{}
-	if err := ret.Deserialize(byts); err != nil {
-		logger.Fatal("failed to deserialize pk", zap.Error(err))
-	}
-	return ret
+	return ret, sk, sks
 }
 
 func main() {
-	shares := generateShares(uint64(nodeCount))
-	pk := publicKey()
+	shares, shareSk, sks := generateShares(uint64(nodeCount))
+	identifier := format.IdentifierFormat(shareSk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())
 	dbs := make([]collections.Iibft, 0)
-	logger.Info("pubkey", zap.String("pk", pkHex))
-
+	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes
 	nodes := make([]ibft.Controller, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		net := networking()
-		if err := net.SubscribeToValidatorNetwork(pk); err != nil {
+		net := networking(networkForkV0.New())
+		dbs = append(dbs, db())
+		signer := newTestSigner()
+		_ = signer.AddShare(sks[i])
+		if err := net.SubscribeToValidatorNetwork(shareSk.GetPublicKey()); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
-		dbs = append(dbs, db())
-
 		node := controller.New(
 			beacon.RoleTypeAttester,
-			identifier,
+			[]byte(identifier),
 			logger.With(zap.Uint64("simulation_node_id", i)),
 			dbs[i-1],
 			net,
@@ -163,7 +177,7 @@ func main() {
 			},
 			shares[i],
 			v0.New(),
-			newTestSigner(),
+			signer,
 		)
 		nodes = append(nodes, node)
 	}

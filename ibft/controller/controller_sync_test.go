@@ -169,7 +169,8 @@ func populatedIbft(
 		nil,
 		signer)
 	ret.(*Controller).setFork(testFork(ret.(*Controller)))
-	ret.(*Controller).initFinished = true // as if they are already synced
+	ret.(*Controller).initHandlers.Set(true) // as if they are already synced
+	ret.(*Controller).initSynced.Set(true)   // as if they are already synced
 	ret.(*Controller).listenToNetworkMessages()
 	ret.(*Controller).listenToSyncMessages()
 	ret.(*Controller).processDecidedQueueMessages()
@@ -250,7 +251,7 @@ func TestConcurrentSync(t *testing.T) {
 	}()
 	go func() {
 		time.Sleep(time.Millisecond * 10)
-		require.EqualError(t, i1.(*Controller).SyncIBFT(), "failed to start iBFT sync, already running")
+		require.EqualError(t, i1.(*Controller).SyncIBFT(), ErrAlreadyRunning.Error())
 	}()
 
 	wg.Wait()
