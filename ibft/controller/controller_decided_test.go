@@ -70,6 +70,21 @@ func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.Si
 	return msg, ok, nil
 }
 
+// GetDecidedInRange implementation
+func (s *testStorage) GetDecidedInRange(identifier []byte, from uint64, to uint64) ([]*proto.SignedMessage, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	var msgs []*proto.SignedMessage
+	for i := from; i <= to; i++ {
+		k := msgKey(identifier, i)
+		if msg, ok := s.msgs[k]; ok {
+			msgs = append(msgs, msg)
+		}
+	}
+	return msgs, nil
+}
+
 // SaveHighestDecidedInstance implementation
 func (s *testStorage) SaveHighestDecidedInstance(_ *proto.SignedMessage) error {
 	return nil
