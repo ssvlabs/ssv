@@ -1,16 +1,19 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
+	"time"
 )
 
 // Handler handles incoming metrics requests
@@ -65,6 +68,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		mux.HandleFunc("/debug/pprof/profile", http_pprof.Profile)
 		mux.HandleFunc("/debug/pprof/symbol", http_pprof.Symbol)
 		mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
+		async.RunEvery(context.Background(), time.Minute*2, reportRuntimeStats)
 	}
 
 	mux.Handle("/metrics", promhttp.HandlerFor(
