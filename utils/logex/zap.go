@@ -55,7 +55,7 @@ func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger 
 	cfg := zap.Config{
 		Encoding:    ec.Format,
 		Level:       zap.NewAtomicLevelAt(level),
-		OutputPaths: []string{"stdout"},
+		OutputPaths: []string{"stdout", "./logfile.txt"},
 		EncoderConfig: zapcore.EncoderConfig{
 			MessageKey:  "message",
 			LevelKey:    "level",

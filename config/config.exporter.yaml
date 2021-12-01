@@ -1,5 +1,5 @@
 global:
-  LogLevel: info
+  LogLevel: debug
 
 db:
   Path: ./data/db/exporter
@@ -7,6 +7,11 @@ db:
 eth1:
   # ETH1 node WebSocket address
   ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
+  RegistryContractAddr: 0x46E039F5fEb38b05ca3C845a3492cD575125F220
+
+eth2:
+  BeaconNodeAddr: eth2-lh-prater-5052-ext.stage.bloxinfra.com:80
+  Network: prater
 
 p2p:
   # replace with your ip

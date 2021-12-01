@@ -332,6 +332,7 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	logger.Debug("got event logs")
 
 	for _, vLog := range logs {
+		ec.logger.Debug("TEST LOG", zap.Any("d", vLog))
 		err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
 			nSuccess--
