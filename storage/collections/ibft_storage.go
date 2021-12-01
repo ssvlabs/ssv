@@ -141,17 +141,17 @@ func (i *IbftStorage) GetDecidedInRange(identifier []byte, from uint64, to uint6
 	for seq := from; seq <= to; seq++ {
 		sequences = append(sequences, i.key("decided", uInt64ToByteSlice(seq)))
 	}
-	msgs := make([]*proto.SignedMessage, 0)
 	results, err := i.db.GetMany(prefix, sequences...)
 	if err != nil {
-		return msgs, err
+		return []*proto.SignedMessage{}, err
 	}
-	for _, res := range results {
+	msgs := make([]*proto.SignedMessage, len(results))
+	for i, res := range results {
 		msg := &proto.SignedMessage{}
 		if err := json.Unmarshal(res.Value, msg); err != nil {
-			return nil, errors.Wrap(err, "un-marshaling error")
+			return []*proto.SignedMessage{}, errors.Wrap(err, "un-marshaling error")
 		}
-		msgs = append(msgs, msg)
+		msgs[i] = msg
 	}
 	return msgs, nil
 }
