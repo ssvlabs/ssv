@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
@@ -89,10 +90,13 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 			}
 		}
 
+		t := time.Now()
 		if err := s.ibftStorage.SaveDecidedMessages(msgsToSave); err != nil {
 			return highestSaved, n, err
 		}
 		n += len(msgsToSave)
 		highestSaved = highest
+		s.logger.Debug("saved decided messages in range", zap.Int64("time(ts)", time.Now().Sub(t).Milliseconds()),
+			zap.Int("count", len(msgsToSave)))
 	}
 }
