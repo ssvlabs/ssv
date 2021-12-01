@@ -21,6 +21,8 @@ type Iibft interface {
 	GetCurrentInstance(identifier []byte) (*proto.State, bool, error)
 	// SaveDecided saves a signed message for an ibft instance with decided justification
 	SaveDecided(signedMsg *proto.SignedMessage) error
+	// SaveDecidedMessages saves the given decided messages
+	SaveDecidedMessages(msgs []*proto.SignedMessage) error
 	// GetDecided returns a signed message for an ibft instance which decided by identifier
 	GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, bool, error)
 	// GetDecidedInRange returns decided message in the given range
@@ -94,6 +96,25 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 		return errors.Wrap(err, "marshaling error")
 	}
 	return i.save(value, "decided", signedMsg.Message.Lambda, uInt64ToByteSlice(signedMsg.Message.SeqNumber))
+}
+
+// SaveDecidedMessages func implementation
+func (i *IbftStorage) SaveDecidedMessages(msgs []*proto.SignedMessage) error {
+	var keys [][]byte
+	var values [][]byte
+	for _, msg := range msgs {
+		if msg == nil || msg.Message == nil {
+			continue
+		}
+		k := i.key("decided", uInt64ToByteSlice(msg.Message.SeqNumber))
+		keys = append(keys, append(msg.Message.Lambda, k...))
+		value, err := json.Marshal(msg)
+		if err != nil {
+			return errors.Wrap(err, "marshaling error")
+		}
+		values = append(values, value)
+	}
+	return i.db.SetMany(i.prefix[:], keys, values)
 }
 
 // GetDecided returns a signed message for an ibft instance which decided by identifier

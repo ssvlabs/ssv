@@ -60,6 +60,21 @@ func (s *testStorage) SaveDecided(msg *proto.SignedMessage) error {
 	return nil
 }
 
+// SaveDecidedInRange func implementation
+func (s *testStorage) SaveDecidedMessages(msgs []*proto.SignedMessage) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	for _, msg := range msgs {
+		if msg == nil || msg.Message == nil {
+			continue
+		}
+		k := msgKey(msg.Message.Lambda, msg.Message.SeqNumber)
+		s.msgs[k] = msg
+	}
+	return nil
+}
+
 // GetDecided implementation
 func (s *testStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.SignedMessage, bool, error) {
 	s.lock.Lock()
