@@ -11,6 +11,7 @@ eth2:
 eth1:
   # ETH1 node WebSocket address
   ETH1Addr: example.url
+  RegistryContractAddr: 0xFdFf361eD2b094730fDD8FA9658B370cE6cd4b10
 
 p2p:
   # replace with your ip

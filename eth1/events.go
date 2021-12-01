@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io/ioutil"
-	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,26 +56,20 @@ func ContractABI() string {
 	return contractABI
 }
 
-// Oess struct stands for operator encrypted secret share
-type Oess struct {
-	Index             *big.Int
-	OperatorPublicKey []byte
-	SharedPublicKey   []byte
-	EncryptedKey      []byte
-}
-
 // ValidatorAddedEvent struct represents event received by the smart contract
 type ValidatorAddedEvent struct {
-	PublicKey    []byte
-	OwnerAddress common.Address
-	OessList     []Oess
+	PublicKey          []byte
+	OwnerAddress       common.Address
+	OperatorPublicKeys [][]byte
+	SharesPublicKeys   [][]byte
+	EncryptedKeys      [][]byte
 }
 
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
-	Name           string
-	PublicKey      []byte
-	OwnerAddress   common.Address
+	Name         string
+	PublicKey    []byte
+	OwnerAddress common.Address
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
@@ -86,17 +79,10 @@ func ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Private
 	if err != nil {
 		return nil, false, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
-	outAbi, err := getOutAbi()
-	if err != nil {
-		return nil, false, err
-	}
-	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
-	if err != nil {
-		return nil, false, err
-	}
-	operatorAddedEvent.PublicKey = []byte(pubKey)
+
+	hexPubkey := hex.EncodeToString(operatorAddedEvent.PublicKey)
 	logger.Debug("OperatorAdded Event",
-		zap.String("Operator PublicKey", pubKey),
+		zap.String("Operator PublicKey", hexPubkey),
 		zap.String("Payment Address", operatorAddedEvent.OwnerAddress.String()))
 	var nodeOperatorPubKey string
 	if operatorPrivateKey != nil {
@@ -105,7 +91,7 @@ func ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Private
 			return nil, false, errors.Wrap(err, "failed to extract public key")
 		}
 	}
-	isEventBelongsToOperator := strings.EqualFold(pubKey, nodeOperatorPubKey)
+	isEventBelongsToOperator := strings.EqualFold(hexPubkey, nodeOperatorPubKey)
 	return &operatorAddedEvent, isEventBelongsToOperator, nil
 }
 
@@ -123,19 +109,17 @@ func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Privat
 
 	var isEventBelongsToOperator bool
 
-	for i := range validatorAddedEvent.OessList {
-		validatorShare := &validatorAddedEvent.OessList[i]
-
+	for i, operatorPublicKey := range validatorAddedEvent.OperatorPublicKeys {
 		outAbi, err := getOutAbi()
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to define ABI")
 		}
-		operatorPublicKey, err := readOperatorPubKey(validatorShare.OperatorPublicKey, outAbi)
+		hexOperatorPublicKey, err := readOperatorPubKey(operatorPublicKey, outAbi)
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to unpack OperatorPublicKey")
 		}
 
-		validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
+		operatorPublicKey = []byte(hexOperatorPublicKey) // set for further use in code
 		if operatorPrivateKey == nil {
 			continue
 		}
@@ -143,8 +127,8 @@ func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Privat
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to extract public key")
 		}
-		if strings.EqualFold(operatorPublicKey, nodeOperatorPubKey) {
-			out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
+		if strings.EqualFold(hexOperatorPublicKey, nodeOperatorPubKey) {
+			out, err := outAbi.Unpack("method", validatorAddedEvent.EncryptedKeys[i])
 			if err != nil {
 				return nil, false, errors.Wrap(err, "failed to unpack EncryptedKey")
 			}
@@ -155,7 +139,7 @@ func ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.Privat
 				if err != nil {
 					return nil, false, errors.Wrap(err, "failed to decrypt share private key")
 				}
-				validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
+				validatorAddedEvent.EncryptedKeys[i] = []byte(decryptedSharePrivateKey)
 				isEventBelongsToOperator = true
 			}
 		}

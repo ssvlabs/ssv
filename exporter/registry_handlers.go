@@ -131,11 +131,10 @@ func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*stor
 	}
 
 	var operators []storage.OperatorNodeLink
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
+	for i, operatorPublicKey := range validatorAddedEvent.OperatorPublicKeys {
+		nodeID := uint64(i + 1)
 		operators = append(operators, storage.OperatorNodeLink{
-			ID: nodeID, PublicKey: string(oess.OperatorPublicKey),
+			ID: nodeID, PublicKey: string(operatorPublicKey),
 		})
 	}
 

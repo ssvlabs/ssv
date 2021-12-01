@@ -65,22 +65,21 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 	var shareKey *bls.SecretKey
 
 	ibftCommittee := map[uint64]*proto.Node{}
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
+	for i := range validatorAddedEvent.OperatorPublicKeys {
+		nodeID := uint64(i + 1)
 		ibftCommittee[nodeID] = &proto.Node{
 			IbftId: nodeID,
-			Pk:     oess.SharedPublicKey,
+			Pk:     validatorAddedEvent.SharesPublicKeys[i],
 		}
-		if strings.EqualFold(string(oess.OperatorPublicKey), operatorPubKey) {
-			ibftCommittee[nodeID].Pk = oess.SharedPublicKey
+		if strings.EqualFold(string(validatorAddedEvent.OperatorPublicKeys[i]), operatorPubKey) {
+			ibftCommittee[nodeID].Pk = validatorAddedEvent.SharesPublicKeys[i]
 			validatorShare.NodeID = nodeID
 
 			shareKey = &bls.SecretKey{}
-			if len(oess.EncryptedKey) == 0 {
+			if len(validatorAddedEvent.EncryptedKeys[i]) == 0 {
 				return nil, nil, errors.New("share encrypted key invalid")
 			}
-			if err := shareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
+			if err := shareKey.SetHexString(string(validatorAddedEvent.EncryptedKeys[i])); err != nil {
 				return nil, nil, errors.Wrap(err, "failed to deserialize share private key")
 			}
 		}
