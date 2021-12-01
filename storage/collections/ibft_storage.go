@@ -120,11 +120,11 @@ func (i *IbftStorage) GetDecidedInRange(identifier []byte, from uint64, to uint6
 	for seq := from; seq <= to; seq++ {
 		sequences = append(sequences, i.key("decided", uInt64ToByteSlice(seq)))
 	}
+	msgs := make([]*proto.SignedMessage, 0)
 	results, err := i.db.GetMany(prefix, sequences...)
 	if err != nil {
-		return nil, err
+		return msgs, err
 	}
-	var msgs []*proto.SignedMessage
 	for _, res := range results {
 		msg := &proto.SignedMessage{}
 		if err := json.Unmarshal(res.Value, msg); err != nil {
