@@ -32,29 +32,76 @@ func TestIbftStorage_LoadTesting(t *testing.T) {
 		fmt.Println("cleared all resources")
 	}(db)
 	storage := NewIbft(db, logger, "attestation")
-	n := 10000
-	msgs := make([]*proto.SignedMessage, 0)
-	for i := 0; i < n; i++ {
-		msgs = append(msgs, &proto.SignedMessage{
-			Message: &proto.Message{
-				Type:      proto.RoundState_Decided,
-				Round:     1,
-				Lambda:    []byte{1, 2, 3, 4},
-				SeqNumber: uint64(i),
+
+	tests := []struct {
+		name       string
+		write      func([]*proto.SignedMessage)
+		read       func([]byte, uint64)
+		n          uint64
+		identifier []byte
+		sleep      time.Duration
+	}{
+		{
+			"non-optimized",
+			func(msgs []*proto.SignedMessage) {
+				for _, msg := range msgs {
+					require.NoError(t, storage.SaveDecided(msg))
+				}
 			},
-			Signature: []byte{1, 2, 3, 4},
-			SignerIds: []uint64{1, 2, 3},
+			func(identifier []byte, n uint64) {
+				for i := uint64(0); i < n; i++ {
+					_, found, err := storage.GetDecided(identifier, i)
+					require.NoError(t, err)
+					require.True(t, found)
+				}
+			},
+			5000,
+			[]byte{2, 2, 2, 2},
+			time.Second * 2,
+		},
+		//{
+		//	"optimized",
+		//	func(msgs []*proto.SignedMessage) {
+		//		require.NoError(t, storage.SaveDecidedMessages(msgs))
+		//	},
+		//	func(identifier []byte, n uint64) {
+		//		inRange, err := storage.GetDecidedInRange(identifier, uint64(0), n-1)
+		//		require.NoError(t, err)
+		//		require.Equal(t, int(n), len(inRange))
+		//	},
+		//	5000,
+		//	[]byte{1, 1, 1, 1},
+		//	time.Second * 2,
+		//},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			<-time.After(test.sleep)
+			msgs := make([]*proto.SignedMessage, 0)
+			for i := uint64(0); i < test.n; i++ {
+				msgs = append(msgs, &proto.SignedMessage{
+					Message: &proto.Message{
+						Type:      proto.RoundState_Decided,
+						Round:     1,
+						Lambda:    test.identifier[:],
+						SeqNumber: i,
+					},
+					Signature: []byte{1, 2, 3, 4},
+					SignerIds: []uint64{1, 2, 3},
+				})
+			}
+			ts := time.Now()
+			test.write(msgs)
+			logger.Debug(fmt.Sprintf("[%s] time took to save %dms for %d items",
+				test.name, time.Since(ts).Milliseconds(), test.n))
+			<-time.After(test.sleep)
+			ts = time.Now()
+			test.read(test.identifier, test.n)
+			logger.Debug(fmt.Sprintf("[%s] time took to read %dms for %d items",
+				test.name, time.Since(ts).Milliseconds(), test.n))
 		})
 	}
-	ts := time.Now()
-	require.NoError(t, storage.SaveDecidedMessages(msgs))
-	fmt.Printf("time took to save %d", time.Now().Sub(ts).Milliseconds())
-	<-time.After(time.Second * 2)
-	ts = time.Now()
-	inRange, err := storage.GetDecidedInRange([]byte{1, 2, 3, 4}, uint64(0), uint64(n - 1))
-	require.NoError(t, err)
-	require.Equal(t, n, len(inRange))
-	fmt.Printf("time took to read %d", time.Now().Sub(ts).Milliseconds())
 }
 
 func TestIbftStorage_SaveDecidedMessages(t *testing.T) {

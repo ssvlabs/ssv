@@ -96,7 +96,7 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 		}
 		n += len(msgsToSave)
 		highestSaved = highest
-		s.logger.Debug("saved decided messages in range", zap.Int64("time(ts)", time.Now().Sub(t).Milliseconds()),
+		s.logger.Debug("saved decided messages in range", zap.Int64("time(ts)", time.Since(t).Milliseconds()),
 			zap.Int("count", len(msgsToSave)))
 	}
 }
