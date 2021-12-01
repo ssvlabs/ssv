@@ -41,38 +41,38 @@ func TestIbftStorage_LoadTesting(t *testing.T) {
 		identifier []byte
 		sleep      time.Duration
 	}{
-		{
-			"non-optimized",
-			func(msgs []*proto.SignedMessage) {
-				for _, msg := range msgs {
-					require.NoError(t, storage.SaveDecided(msg))
-				}
-			},
-			func(identifier []byte, n uint64) {
-				for i := uint64(0); i < n; i++ {
-					_, found, err := storage.GetDecided(identifier, i)
-					require.NoError(t, err)
-					require.True(t, found)
-				}
-			},
-			5000,
-			[]byte{2, 2, 2, 2},
-			time.Second * 2,
-		},
 		//{
-		//	"optimized",
+		//	"non-optimized",
 		//	func(msgs []*proto.SignedMessage) {
-		//		require.NoError(t, storage.SaveDecidedMessages(msgs))
+		//		for _, msg := range msgs {
+		//			require.NoError(t, storage.SaveDecided(msg))
+		//		}
 		//	},
 		//	func(identifier []byte, n uint64) {
-		//		inRange, err := storage.GetDecidedInRange(identifier, uint64(0), n-1)
-		//		require.NoError(t, err)
-		//		require.Equal(t, int(n), len(inRange))
+		//		for i := uint64(0); i < n; i++ {
+		//			_, found, err := storage.GetDecided(identifier, i)
+		//			require.NoError(t, err)
+		//			require.True(t, found)
+		//		}
 		//	},
 		//	5000,
-		//	[]byte{1, 1, 1, 1},
+		//	[]byte{2, 2, 2, 2},
 		//	time.Second * 2,
 		//},
+		{
+			"optimized",
+			func(msgs []*proto.SignedMessage) {
+				require.NoError(t, storage.SaveDecidedMessages(msgs))
+			},
+			func(identifier []byte, n uint64) {
+				inRange, err := storage.GetDecidedInRange(identifier, uint64(0), n-1)
+				require.NoError(t, err)
+				require.Equal(t, int(n), len(inRange))
+			},
+			5000,
+			[]byte{1, 1, 1, 1},
+			time.Second * 2,
+		},
 	}
 
 	for _, test := range tests {
