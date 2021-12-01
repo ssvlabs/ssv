@@ -27,6 +27,8 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 		if err != nil {
 			ret = make([]*proto.SignedMessage, 0)
 		}
+		s.logger.Debug("get decided in range:", zap.Uint64("from", startSeq), zap.Uint64("to", endSeq),
+			zap.String("identifier", string(s.identifier)), zap.Int("results count", len(ret)), zap.Error(err))
 		retMsg.SignedMessages = ret
 	}
 
