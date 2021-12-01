@@ -1,6 +1,7 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -134,6 +135,34 @@ func TestBadgerDb_GetMany(t *testing.T) {
 	require.Equal(t, uInt64ToByteSlice(1), results[1].Value)
 	require.Equal(t, uInt64ToByteSlice(5), results[2].Value)
 	require.Equal(t, uInt64ToByteSlice(10), results[3].Value)
+}
+
+func TestBadgerDb_SetMany(t *testing.T) {
+	options := basedb.Options{
+		Type:   "badger-memory",
+		Logger: zap.L(),
+		Path:   "",
+	}
+	db, err := New(options)
+	require.NoError(t, err)
+	defer db.Close()
+
+	prefix := []byte("prefix")
+	values := [][]byte{}
+	keys := [][]byte{}
+	var i uint64
+	for i = 0; i < 10; i++ {
+		keys = append(keys, uInt64ToByteSlice(i))
+		values = append(values, uInt64ToByteSlice(i))
+	}
+	require.NoError(t, db.SetMany(prefix, keys, values))
+
+	for i = 0; i < 10; i++ {
+		obj, found, err := db.Get(prefix, uInt64ToByteSlice(i))
+		require.NoError(t, err, "should find item %d", i)
+		require.True(t, found, "should find item %d", i)
+		require.True(t, bytes.Equal(obj.Value, values[i]), "item %d wrong value", i)
+	}
 }
 
 func uInt64ToByteSlice(n uint64) []byte {

@@ -60,6 +60,21 @@ func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 	})
 }
 
+// SetMany save many values with the given keys in a single badger transaction
+func (b *BadgerDb) SetMany(prefix []byte, keys [][]byte, values [][]byte) error {
+	if len(keys) != len(values) {
+		return errors.New("bad input, keys and values should have the same length")
+	}
+	return b.db.Update(func(txn *badger.Txn) error {
+		for i, key := range keys {
+			if err := txn.Set(append(prefix, key...), values[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // Get return value for specified key
 func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	var resValue []byte
