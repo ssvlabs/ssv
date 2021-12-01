@@ -65,14 +65,13 @@ func (b *BadgerDb) SetMany(prefix []byte, keys [][]byte, values [][]byte) error 
 	if len(keys) != len(values) {
 		return errors.New("bad input, keys and values should have the same length")
 	}
-	return b.db.Update(func(txn *badger.Txn) error {
-		for i, key := range keys {
-			if err := txn.Set(append(prefix, key...), values[i]); err != nil {
-				return err
-			}
+	wb := b.db.NewWriteBatch()
+	for i, key := range keys {
+		if err := wb.Set(append(prefix, key...), values[i]); err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	return wb.Flush()
 }
 
 // Get return value for specified key
