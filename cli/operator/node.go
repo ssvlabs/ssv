@@ -170,17 +170,17 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-
 		operatorNode = operator.New(cfg.SSVOptions)
+
+		if cfg.MetricsAPIPort > 0 {
+			go startMetricsHandler(Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
+		}
 
 		metrics.WaitUntilHealthy(Logger, cfg.SSVOptions.Eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
