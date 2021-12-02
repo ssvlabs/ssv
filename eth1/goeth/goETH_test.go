@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -18,7 +19,7 @@ import (
 
 func TestEth1Client_handleEvent(t *testing.T) {
 	ec := newEth1Client()
-	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI()))
+	contractAbi, err := abi.JSON(strings.NewReader(abiparser.ContractABI(false)))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	var vLogOperatorAdded types.Log

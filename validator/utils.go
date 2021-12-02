@@ -3,6 +3,7 @@ package validator
 import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
@@ -28,7 +29,7 @@ func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 }
 
 // createShareWithOperatorKey creates a new share object from event
-func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, *bls.SecretKey, error) {
+func createShareWithOperatorKey(validatorAddedEvent abiparser.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, *bls.SecretKey, error) {
 	operatorPrivKey, found, err := shareEncryptionKeyProvider()
 	if !found {
 		return nil, nil, errors.New("could not find operator private key")
@@ -55,7 +56,7 @@ func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, sh
 
 // ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share.
 // share could return nil in case operator key is not present/ different
-func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, *bls.SecretKey, error) {
+func ShareFromValidatorAddedEvent(validatorAddedEvent abiparser.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, *bls.SecretKey, error) {
 	validatorShare := validatorstorage.Share{}
 
 	validatorShare.PublicKey = &bls.PublicKey{}

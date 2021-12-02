@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"
@@ -55,6 +56,8 @@ type ClientOptions struct {
 	ContractABI                string
 	ConnectionTimeout          time.Duration
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+
+	UseNewContract bool // TODO once new smart contract is ready for production, can remove this flag
 }
 
 // eth1Client is the internal implementation of Client
@@ -71,6 +74,8 @@ type eth1Client struct {
 	connectionTimeout    time.Duration
 
 	eventsFeed *event.Feed
+
+	useNewContract bool // TODO once new smart contract is ready for production, can remove this flag
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -91,6 +96,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		contractABI:                opts.ContractABI,
 		connectionTimeout:          opts.ConnectionTimeout,
 		eventsFeed:                 new(event.Feed),
+		useNewContract:             opts.UseNewContract,
 	}
 
 	if err := ec.connect(); err != nil {
@@ -359,9 +365,11 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
 
+	abiParser := abiparser.NewParser(ec.logger, ec.useNewContract)
+
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
@@ -370,7 +378,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	case "ValidatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}

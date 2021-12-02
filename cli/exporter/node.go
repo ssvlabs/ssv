@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -103,10 +104,11 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		useV2Contract := len(cfg.ETH1Options.RegistryContractABI) == 0 && cfg.ETH1Options.RegistryContractAddr == "0xFdFf361eD2b094730fDD8FA9658B370cE6cd4b10" // TODO once new smart contract is ready for production, can remove this flag
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.Bool("v2", useV2Contract))
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
-			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+			if err = abiparser.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
 				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
 			}
 		}
@@ -114,7 +116,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Ctx:                  cmd.Context(),
 			Logger:               Logger,
 			NodeAddr:             cfg.ETH1Options.ETH1Addr,
-			ContractABI:          eth1.ContractABI(),
+			ContractABI:          abiparser.ContractABI(useV2Contract),
 			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
@@ -122,6 +124,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
 				return nil, true, nil
 			},
+			UseNewContract: useV2Contract,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))

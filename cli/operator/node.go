@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -148,10 +149,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
+		useV2Contract := cfg.ETH1Options.RegistryContractAddr == "0xFdFf361eD2b094730fDD8FA9658B370cE6cd4b10" // TODO once new smart contract is ready for production, can remove this flag
+
 		// create new eth1 client
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
-			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+			if err = abiparser.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
 				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
 			}
 		}
@@ -160,7 +163,7 @@ var StartNodeCmd = &cobra.Command{
 			Logger:                     Logger,
 			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
 			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
-			ContractABI:                eth1.ContractABI(),
+			ContractABI:                abiparser.ContractABI(useV2Contract),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
 		})
