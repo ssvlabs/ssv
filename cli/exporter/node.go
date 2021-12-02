@@ -104,8 +104,8 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		useV2Contract := len(cfg.ETH1Options.RegistryContractABI) == 0 && cfg.ETH1Options.RegistryContractAddr == "0xFdFf361eD2b094730fDD8FA9658B370cE6cd4b10" // TODO once new smart contract is ready for production, can remove this flag
-		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.Bool("v2", useV2Contract))
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abiVersion", cfg.ETH1Options.AbiVersion.String()))
+
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 			if err = abiparser.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -116,7 +116,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Ctx:                  cmd.Context(),
 			Logger:               Logger,
 			NodeAddr:             cfg.ETH1Options.ETH1Addr,
-			ContractABI:          abiparser.ContractABI(useV2Contract),
+			ContractABI:          abiparser.ContractABI(cfg.ETH1Options.AbiVersion),
 			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
@@ -124,7 +124,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
 				return nil, true, nil
 			},
-			UseNewContract: useV2Contract,
+			AbiVersion: cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))

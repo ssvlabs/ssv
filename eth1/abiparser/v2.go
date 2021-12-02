@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math/big"
 	"strings"
 )
 
@@ -38,7 +37,15 @@ func (v2 *v2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey 
 	if err != nil {
 		return nil, false, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
-
+	outAbi, err := getOutAbi()
+	if err != nil {
+		return nil, false, err
+	}
+	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
+	if err != nil {
+		return nil, false, err
+	}
+	operatorAddedEvent.PublicKey = []byte(pubKey)
 	hexPubkey := hex.EncodeToString(operatorAddedEvent.PublicKey)
 	logger.Debug("OperatorAdded Event",
 		zap.String("Operator PublicKey", hexPubkey),
@@ -78,7 +85,7 @@ func (v2 *v2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey
 			return nil, false, errors.Wrap(err, "failed to unpack OperatorPublicKey")
 		}
 
-		operatorPublicKey = []byte(hexOperatorPublicKey) // set for further use in code
+		validatorAddedEvent.OperatorPublicKeys[i] = []byte(hexOperatorPublicKey) // set for further use in code
 		if operatorPrivateKey == nil {
 			continue
 		}
@@ -105,47 +112,4 @@ func (v2 *v2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey
 	}
 
 	return &validatorAddedEvent, isEventBelongsToOperator, nil
-}
-
-type V2Adapter struct {
-	v2Abi *v2Abi
-}
-
-func (adapter V2Adapter) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*LegacyOperatorAddedEvent, bool, error) {
-	event, isEventBelongsToOperator, err := adapter.v2Abi.ParseOperatorAddedEvent(logger, operatorPrivateKey, data, contractAbi)
-	if event == nil {
-		return nil, isEventBelongsToOperator, err
-	}
-	return &LegacyOperatorAddedEvent{
-		Name:           event.Name,
-		PublicKey:      event.PublicKey,
-		PaymentAddress: event.OwnerAddress,
-		OwnerAddress:   event.OwnerAddress,
-	}, isEventBelongsToOperator, err
-}
-
-func (adapter V2Adapter) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*LegacyValidatorAddedEvent, bool, error) {
-	event, isEventBelongsToOperator, err := adapter.v2Abi.ParseValidatorAddedEvent(logger, operatorPrivateKey, data, contractAbi)
-	if event == nil {
-		return nil, isEventBelongsToOperator, err
-	}
-
-	toOess := func(e *ValidatorAddedEvent) []Oess {
-		var res []Oess
-		for i, publicKey := range e.OperatorPublicKeys {
-			res = append(res, Oess{
-				Index:             big.NewInt(int64(i) + 1),
-				OperatorPublicKey: publicKey,
-				SharedPublicKey:   e.SharesPublicKeys[i],
-				EncryptedKey:      e.EncryptedKeys[i],
-			})
-		}
-		return res
-	}
-
-	return &LegacyValidatorAddedEvent{
-		PublicKey:    event.PublicKey,
-		OwnerAddress: event.OwnerAddress,
-		OessList:     toOess(event),
-	}, isEventBelongsToOperator, err
 }

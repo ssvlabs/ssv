@@ -35,11 +35,57 @@ type LegacyOperatorAddedEvent struct {
 	OwnerAddress   common.Address
 }
 
-type V1Abi struct {
+// LegacyAdapter between legacy to v2 format
+type LegacyAdapter struct {
+	legacyAbi *LegacyAbi
+}
+
+// ParseOperatorAddedEvent parses LegacyOperatorAddedEvent to OperatorAddedEvent
+func (adapter LegacyAdapter) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
+	event, isEventBelongsToOperator, err := adapter.legacyAbi.ParseOperatorAddedEvent(logger, operatorPrivateKey, data, contractAbi)
+	if event == nil {
+		return nil, isEventBelongsToOperator, err
+	}
+	return &OperatorAddedEvent{
+		Name:         event.Name,
+		PublicKey:    event.PublicKey,
+		OwnerAddress: event.OwnerAddress,
+	}, isEventBelongsToOperator, err
+}
+
+// ParseValidatorAddedEvent parses LegacyValidatorAddedEvent to ValidatorAddedEvent
+func (adapter LegacyAdapter) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
+	event, isEventBelongsToOperator, err := adapter.legacyAbi.ParseValidatorAddedEvent(logger, operatorPrivateKey, data, contractAbi)
+	if event == nil {
+		return nil, isEventBelongsToOperator, err
+	}
+
+	unPackOess := func(oesses []Oess) ([][]byte, [][]byte, [][]byte) {
+		var operatorPublicKeys, sharesPublicKeys, encryptedKeys [][]byte
+		for _, oess := range oesses {
+			operatorPublicKeys = append(operatorPublicKeys, oess.OperatorPublicKey)
+			sharesPublicKeys = append(sharesPublicKeys, oess.SharedPublicKey)
+			encryptedKeys = append(encryptedKeys, oess.EncryptedKey)
+		}
+		return operatorPublicKeys, sharesPublicKeys, encryptedKeys
+	}
+
+	operatorPublicKeys, sharesPublicKeys, encryptedKeys := unPackOess(event.OessList)
+	return &ValidatorAddedEvent{
+		PublicKey:          event.PublicKey,
+		OwnerAddress:       event.OwnerAddress,
+		OperatorPublicKeys: operatorPublicKeys,
+		SharesPublicKeys:   sharesPublicKeys,
+		EncryptedKeys:      encryptedKeys,
+	}, isEventBelongsToOperator, err
+}
+
+// LegacyAbi parsing events from legacy abi contract
+type LegacyAbi struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (v1 V1Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*LegacyOperatorAddedEvent, bool, error) {
+func (l *LegacyAbi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*LegacyOperatorAddedEvent, bool, error) {
 	var operatorAddedEvent LegacyOperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
@@ -68,8 +114,8 @@ func (v1 V1Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *
 	return &operatorAddedEvent, isEventBelongsToOperator, nil
 }
 
-// OldParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v1 V1Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*LegacyValidatorAddedEvent, bool, error) {
+// ParseValidatorAddedEvent parses ValidatorAddedEvent
+func (l *LegacyAbi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*LegacyValidatorAddedEvent, bool, error) {
 	var validatorAddedEvent LegacyValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
 	if err != nil {

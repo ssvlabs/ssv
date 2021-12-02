@@ -41,9 +41,10 @@ func TestParseOperatorAddedEvent(t *testing.T) {
    "removed":false
 }`
 
+	logger := logex.Build("test", zap.DebugLevel, nil)
 	t.Run("legacy operator added", func(t *testing.T) {
-		legacyLogOperatorAdded, legacyContractAbi := unmarshalLog(t, OldRawOperatorAdded, false)
-		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), false)
+		legacyLogOperatorAdded, legacyContractAbi := unmarshalLog(t, OldRawOperatorAdded, Legacy)
+		abiParser := NewParser(logger, Legacy)
 		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(nil, legacyLogOperatorAdded.Data, legacyContractAbi)
 		require.NoError(t, err)
 		require.NotNil(t, legacyContractAbi)
@@ -53,14 +54,17 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 	})
 
 	t.Run("v2 operator added", func(t *testing.T) {
-		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, true)
-		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), true)
+		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V2)
+		abiParser := NewParser(logger, V2)
 		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(nil, LogOperatorAdded.Data, contractAbi)
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
 		require.False(t, isEventBelongsToOperator)
 		require.NotNil(t, parsed)
 		require.Equal(t, "asd1123", parsed.Name)
+		require.Equal(t, "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdlVmUjhIT2lsd3diZmV4OEpuYVMKb0hSVUVQdXZ5aTB4YTVLRFdTWTU4V2tmUzJ2NjdJVDMyR2RhcUQvaktnQ1pMbHI5NmdacmI0bG9KaU5USHhobgpFc01xME16S1FkZVRYSXJHdEU0WGdGQTk1UzBrdG5FWDliclIzNFREMklGSTJEaTg5OFV3a2pRN0dibjZsVEdnCkhoa2NibjVTSmdBRS8vR1RDMlRKbisxbkdXQkdRNjh5SVhpWWZOSHFIT0pzcGpJTmpJQlV6Q0NSZ3lLVHpKNGsKaHltU3pqOURpVlhKcjJKUVFuT0VuVVJLOGxzT3dpaUVDUEhUS2xPeERodTF5ZlM3ZVZMemVlVWsrZEVJUm1PKwoycE91SEpkWWZIb0VjaS92czdYengva3d0RHVHNFpRbFJKZkh1ZUlnMEJvU0F2OTNSdDhLSG1QRXl6aFFSRmNTCmx3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
+			string(parsed.PublicKey))
+		//require.Equal(t, "ec281dc273f8e649cfdd2d7e4555b37105d0892bac5270f308c5a721787eb197", parsed.OwnerAddress.Hex())
 	})
 }
 
@@ -93,35 +97,42 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 }`
 
 	t.Run("legacy validator added", func(t *testing.T) {
-		vLogValidatorAdded, contractAbi := unmarshalLog(t, legacyRawValidatorAdded, false)
-		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), false)
+		vLogValidatorAdded, contractAbi := unmarshalLog(t, legacyRawValidatorAdded, Legacy)
+		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), Legacy)
 		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
 		require.False(t, isEventBelongsToOperator)
 		require.NotNil(t, parsed)
-		require.Equal(t, "91db3a13ab428a6c9c20e7104488cb6961abeab60e56cf4ba199eed3b5f6e7ced670ecb066c9704dc2fa93133792381c",
-			hex.EncodeToString(parsed.PublicKey))
+		require.Equal(t, "91db3a13ab428a6c9c20e7104488cb6961abeab60e56cf4ba199eed3b5f6e7ced670ecb066c9704dc2fa93133792381c", hex.EncodeToString(parsed.PublicKey))
 	})
 
 	t.Run("v2 validator added", func(t *testing.T) {
-		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, true)
-		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), true)
+		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V2)
+		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), V2)
 		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
 		require.False(t, isEventBelongsToOperator)
 		require.NotNil(t, parsed)
-		require.Equal(t, "8095b9398e1a3a58bae632db4d9d981f10c69172911e4a4c04b4c9bfc64b13bd2eeb8f49e280db211186c3c7ca5f3233",
-			hex.EncodeToString(parsed.PublicKey))
+		require.Equal(t, "8095b9398e1a3a58bae632db4d9d981f10c69172911e4a4c04b4c9bfc64b13bd2eeb8f49e280db211186c3c7ca5f3233", hex.EncodeToString(parsed.PublicKey))
+		require.Equal(t, "4e409db090a71d14d32adbfbc0a22b1b06dde7de", hex.EncodeToString(parsed.OwnerAddress.Bytes()))
+		operators := []string{"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBMkNQRERVbHFWN25zOGFDNWZON3cKbUhiU0ZQRTI2ZVVCUU9qQlE3TDZLWlVsQ3FLN2FockNGNGJUa1ladUJWbUJ4bmszYnE2TXhSUk5EWVNJUlZHbgp4bWtobWFZVkVlZzlrcVJDaWYzdG1OWFpRM0lVWmthbWp1dHdDb3ZTeFBZNWVLcGFST3BDRXAvN05NTUR4cmhzCkZ0ZGw2OGI2aVF6TjluY08vYTF4eDRjeFB6aVE2emxsZ0JKMXA0R0lnVlRoWmozeHB1MlBPTWxkQWNvK09VaUYKU1cxUnZwZDhWcmVMZWhTbGptanVkSnFkYWFBM1J4ek5YdTZXS1M1eTk3RTNrYjlaekxqMHJGSUFwelQ5anJTOQpkT2FNT2xZZTFRdzIzQWVvNHRHbDhiZ3pYbmFJWSt6aFdnTFVKZDh0ZzN5bkM5WXdGWTZlYVhEamFTRWozUUZlCkN3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K", "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdTdyZjVDVzR4UHFMNDFyeG5PNXYKS3QzZHp2TTdmVEdZRFA5U0RkRnNjUWJYanhhTFphMGNvK3NOR0RxSlZZeVFUY3JtZ0szMGZLOHljRFB6UFJiaQpvTFp3SUxPN1ZKclhCeFdHc0sveG9CTGVFelJxUkMxclFPTDYzYVZ5TnFkWWs4eHVQNWtuK3g4NElKa2ExQ3lhClNyeGlEZnNPTGUyRzcyd0xjS3lqUklFdlBWM2dvSUUwbW1NdXlmbXlqQm5EaENqbVNVS1ZNbWQrNHFxSlcvcy8KdlFCeGNJcEFJMlBpM0t4ZnRtN1FsVWZ3K2NZcHJPYjlMRW5sb0ZnSThMT2UrU3FnRFRQVE5QOCttR0dRZ1VtMQppSUF3bnZucU9EaDhPRXEvK082RTRYRFJGb1Zqd3JVQzVKQmp1aTJrMTZRV2hEME16cThGWnVrZU9ubitKNE1NCnh3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K", "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdm1pWlFQbFBhTlBuTEpNTnRXN2cKQ3hvcWVYTVFRM2NiTW93SGZlNndnOWR2ZTVIanhIM25UNzkzdEZLaDJwdUUzSUUzRGVwRE1pVWl0ZmFEdG1BVgpoaklucWp3RjZpbkxPT0l5S2RhYW00TndBWjZRSitjdnJhL1dhc2ZvcmpKSWpTdGFRa0xCZmhuODdHSWQ5QXdhCm82WUVYUnNhMlA1VklNZVFET0Rsc3RIOUQ5bmJYdDAwS0JIdk9iMFBLaFJUUXRUYkdoSGRBTFI1aEJXeEVKYjgKRnB0ZTUzTk1yVGtwM0NqUjBWbTBpTWFMdGNxOWpGWTlaTnJ3RFJtenlkUUtMWit0KzRpMnZxbzBieC9RRW1HawovUjF1cFhJSkxGNWx4aW9RQjJrbkZrNzBFNXplV2RnL1dCK0xLSitFT3lwbm9qM1NhUnBpL3BJOVE2V25iQXJxCkFRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K", "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBMGVlbkhVcS9WVTBrK2N2V1FJWVgKb1B3c3lVeTFzaDFMamZkTkhyeW1aV0p5Zk00dEdudW41TzdEaXJuTjdEbFphbjRiS1FYTEh2MitYYU1sY3AvaApJTGVjczh6NW0rNVBmcEMraWI2M3QxY2ZjK3RsQ2M0Qm53eDBPYlBsS2lPQlA0R1BHUFA4bFlWNWtXVkI4NGJxCk5QS3RGc1hKYXIvUk5NUktTREV2MWxYTDZCWmtZdWxrVlpxS3lsMmdGa3FucDZlZ04xd1BXOGo3Z09jVWpLZ1IKV0RnM1o5ZXFQZ1E3Zk51T0xUK3FNY3k4VW1zNytCb3h5a3g2T1I4L3NMblJ4RUR3NUlreWlnYlJMS0ZpZnFkeAowbzBmUjN3M0syb1F0SE92U29HV1FNdEMweU94VzhEdEdTKzJQTEtMY01ncGpOeDQwSEcvZmp5M1VlVmVVOEpQCktRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"}
+		for i, pk := range parsed.OperatorPublicKeys {
+			require.Equal(t, operators[i], string(pk))
+		}
+		shares := []string{"80cfc6d3338484432d20deb9ac95583ae507bd2a12a1df1a57e490800784d163e5d61d165fc811d88ed31a01bc7fb82f", "81f08f30cfd8a9abfd88ac7a9f7980e98e7a05a59b941988d72a519cf039e2c51398e6280e435b667b1e7cfca6643cef", "b75818cb40c685043ff75a99ff25c5d92a18e77ee31ba463c2238d85e1c6f7c147f2c3a328a3042c5426664b8a951eea", "b819d24f5cfaf7aa4456ef929b82ef96766516a06bc30fadc5e405c7f3a4a8d2b685819ebfc103b9f59f99502dabe093"}
+		for i, pk := range parsed.SharesPublicKeys {
+			require.Equal(t, shares[i], hex.EncodeToString(pk))
+		}
 	})
 }
 
-func unmarshalLog(t *testing.T, rawOperatorAdded string, useV2Contract bool) (*types.Log, abi.ABI) {
+func unmarshalLog(t *testing.T, rawOperatorAdded string, abiVersion Version) (*types.Log, abi.ABI) {
 	var vLogOperatorAdded types.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(ContractABI(useV2Contract)))
+	contractAbi, err := abi.JSON(strings.NewReader(ContractABI(abiVersion)))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	return &vLogOperatorAdded, contractAbi
