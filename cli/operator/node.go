@@ -149,7 +149,8 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
-		useV2Contract := cfg.ETH1Options.RegistryContractAddr == "0xFdFf361eD2b094730fDD8FA9658B370cE6cd4b10" // TODO once new smart contract is ready for production, can remove this flag
+		useV2Contract := len(cfg.ETH1Options.RegistryContractABI) == 0 && cfg.ETH1Options.RegistryContractAddr == "0xFdFf361eD2b094730fDD8FA9658B370cE6cd4b10" // TODO once new smart contract is ready for production, can remove this flag
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.Bool("v2", useV2Contract))
 
 		// create new eth1 client
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
