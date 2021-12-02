@@ -152,14 +152,15 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode = exporter.New(*exporterOptions)
 
+		if cfg.MetricsAPIPort > 0 {
+			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort, cfg.EnableProfile)
+		}
+
 		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := exporterNode.Start(); err != nil {
 			Logger.Fatal("failed to start exporter", zap.Error(err))
