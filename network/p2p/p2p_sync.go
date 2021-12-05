@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
@@ -148,10 +149,7 @@ func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg 
 
 // ReceivedSyncMsgChan returns the channel for sync messages
 func (n *p2pNetwork) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
-	ls := &listener{
-		syncCh:  make(chan *network.SyncChanObj, MsgChanSize),
-		msgType: network.NetworkMsg_SyncType,
-	}
+	ls := listeners.NewListener(network.NetworkMsg_SyncType)
 
-	return ls.syncCh, n.listenersContainer.register(ls)
+	return ls.SyncChan(), n.listeners.Register(ls)
 }

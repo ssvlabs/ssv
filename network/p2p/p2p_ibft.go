@@ -3,6 +3,7 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -30,10 +31,7 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
-	ls := &listener{
-		msgCh:   make(chan *proto.SignedMessage, MsgChanSize),
-		msgType: network.NetworkMsg_IBFTType,
-	}
+	ls := listeners.NewListener(network.NetworkMsg_IBFTType)
 
-	return ls.msgCh, n.listenersContainer.register(ls)
+	return ls.MsgChan(), n.listeners.Register(ls)
 }

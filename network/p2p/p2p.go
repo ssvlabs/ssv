@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"fmt"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -47,18 +48,18 @@ const (
 
 // p2pNetwork implements network.Network interface using P2P
 type p2pNetwork struct {
-	ctx                context.Context
-	cfg                *Config
-	dv5Listener        discv5Listener
-	listenersContainer *listenersContainer
-	logger             *zap.Logger
-	privKey            *ecdsa.PrivateKey
-	peers              *peers.Status
-	host               p2pHost.Host
-	pubsub             *pubsub.PubSub
-	peersIndex         PeersIndex
-	operatorPrivKey    *rsa.PrivateKey
-	fork               forks.Fork
+	ctx             context.Context
+	cfg             *Config
+	dv5Listener     discv5Listener
+	listeners       listeners.Container
+	logger          *zap.Logger
+	privKey         *ecdsa.PrivateKey
+	peers           *peers.Status
+	host            p2pHost.Host
+	pubsub          *pubsub.PubSub
+	peersIndex      PeersIndex
+	operatorPrivKey *rsa.PrivateKey
+	fork            forks.Fork
 
 	psSubs       map[string]context.CancelFunc
 	psTopicsLock *sync.RWMutex
@@ -75,17 +76,17 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	logger = logger.With(zap.String("component", "p2p"))
 
 	n := &p2pNetwork{
-		ctx:                ctx,
-		cfg:                cfg,
-		listenersContainer: newListenersContainer(ctx, logger),
-		logger:             logger,
-		operatorPrivKey:    cfg.OperatorPrivateKey,
-		privKey:            cfg.NetworkPrivateKey,
-		psSubs:             make(map[string]context.CancelFunc),
-		psTopicsLock:       &sync.RWMutex{},
-		reportLastMsg:      cfg.ReportLastMsg,
-		fork:               cfg.Fork,
-		nodeType:           cfg.NodeType,
+		ctx:             ctx,
+		cfg:             cfg,
+		listeners:       listeners.NewListenersContainer(ctx, logger),
+		logger:          logger,
+		operatorPrivKey: cfg.OperatorPrivateKey,
+		privKey:         cfg.NetworkPrivateKey,
+		psSubs:          make(map[string]context.CancelFunc),
+		psTopicsLock:    &sync.RWMutex{},
+		reportLastMsg:   cfg.ReportLastMsg,
+		fork:            cfg.Fork,
+		nodeType:        cfg.NodeType,
 	}
 
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
@@ -126,8 +127,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "failed to start pubsub")
 	}
 	n.pubsub = ps
-
-	go n.listenersContainer.Start()
 
 	if err := n.setupDiscovery(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup discovery")

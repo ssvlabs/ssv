@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"go.uber.org/zap/zaptest"
 	"sync"
 	"testing"
@@ -17,7 +18,7 @@ func TestListeners(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	n.listenersContainer = newListenersContainer(ctx, logger)
+	n.listeners = listeners.NewListenersContainer(ctx, logger)
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()

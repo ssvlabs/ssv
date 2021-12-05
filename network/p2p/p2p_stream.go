@@ -77,6 +77,6 @@ func (n *p2pNetwork) propagateSyncMsg(cm *network.Message, netSyncStream network
 		return
 	}
 	cm.SyncMessage.FromPeerID = netSyncStream.RemotePeer()
-	ls := n.listenersContainer.getListeners(network.NetworkMsg_SyncType)
+	ls := n.listeners.GetListeners(network.NetworkMsg_SyncType)
 	go propagateSyncMessage(ls, cm, netSyncStream)
 }
