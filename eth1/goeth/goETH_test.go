@@ -20,19 +20,19 @@ import (
 func TestEth1Client_handleEvent(t *testing.T) {
 	tests := []struct {
 		name           string
-		version        abiparser.Version
+		version        eth1.Version
 		operatorAdded  string
 		validatorAdded string
 	}{
 		{
 			name:           "legacy abi contract",
-			version:        abiparser.Legacy,
+			version:        eth1.Legacy,
 			operatorAdded:  rawOperatorAdded,
 			validatorAdded: rawValidatorAdded,
 		},
 		{
 			name:           "v2 abi contract",
-			version:        abiparser.V2,
+			version:        eth1.V2,
 			operatorAdded:  v2RawOperatorAdded,
 			validatorAdded: v2RawValidatorAdded,
 		},
@@ -41,7 +41,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ec := newEth1Client(test.version)
-			contractAbi, err := abi.JSON(strings.NewReader(abiparser.ContractABI(test.version)))
+			contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI(test.version)))
 			require.NoError(t, err)
 			require.NotNil(t, contractAbi)
 			var vLogOperatorAdded types.Log
@@ -88,7 +88,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	}
 }
 
-func newEth1Client(abiVersion abiparser.Version) *eth1Client {
+func newEth1Client(abiVersion eth1.Version) *eth1Client {
 	ec := eth1Client{
 		ctx:    context.TODO(),
 		conn:   nil,

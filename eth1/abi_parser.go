@@ -1,8 +1,9 @@
-package abiparser
+package eth1
 
 import (
 	"crypto/rsa"
 	"encoding/json"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/pkg/errors"
@@ -48,27 +49,27 @@ func NewParser(logger *zap.Logger, version Version) AbiParser {
 	var parserVersion AbiVersion
 	switch version {
 	case Legacy:
-		parserVersion = LegacyAdapter{}
+		parserVersion = abiparser.LegacyAdapter{}
 	case V2:
-		parserVersion = &v2Abi{}
+		parserVersion = &abiparser.V2Abi{}
 	}
 	return AbiParser{Logger: logger, Version: parserVersion}
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (ap AbiParser) ParseOperatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
+func (ap AbiParser) ParseOperatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error) {
 	return ap.Version.ParseOperatorAddedEvent(ap.Logger, operatorPrivateKey, data, contractAbi)
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (ap AbiParser) ParseValidatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
+func (ap AbiParser) ParseValidatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error) {
 	return ap.Version.ParseValidatorAddedEvent(ap.Logger, operatorPrivateKey, data, contractAbi)
 }
 
 // AbiVersion serves as the parser client interface
 type AbiVersion interface {
-	ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error)
-	ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error)
+	ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error)
+	ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error)
 }
 
 // LoadABI enables to load a custom abi json

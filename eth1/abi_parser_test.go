@@ -1,4 +1,4 @@
-package abiparser
+package eth1
 
 import (
 	"encoding/hex"

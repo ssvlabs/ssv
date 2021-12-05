@@ -41,6 +41,3 @@ vendor/
 
 bin/
 /data/
-
-# zap logger output file
-logfile.txt

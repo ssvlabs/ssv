@@ -98,10 +98,10 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	t.Run("Legacy abi handling", func(t *testing.T) {
 		// pushing 2 events and waits for handling
 		wg.Add(1)
-		feed.Send(validatorAddedMockEvent(t, abiparser.Legacy))
+		feed.Send(validatorAddedMockEvent(t, eth1.Legacy))
 
 		wg.Add(1)
-		feed.Send(operatorAddedMockEvent(t, abiparser.Legacy))
+		feed.Send(operatorAddedMockEvent(t, eth1.Legacy))
 
 		wg.Wait()
 
@@ -117,10 +117,10 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 	t.Run("V2 abi handling", func(t *testing.T) {
 		// pushing 2 events and waits for handling
 		wg.Add(1)
-		feed.Send(validatorAddedMockEvent(t, abiparser.V2))
+		feed.Send(validatorAddedMockEvent(t, eth1.V2))
 
 		wg.Add(1)
-		feed.Send(operatorAddedMockEvent(t, abiparser.V2))
+		feed.Send(operatorAddedMockEvent(t, eth1.V2))
 
 		wg.Wait()
 
@@ -167,7 +167,7 @@ func newMockExporter() (*exporter, error) {
 
 func TestToValidatorInformation(t *testing.T) {
 	t.Run("legacy abi handling", func(t *testing.T) {
-		e := validatorAddedMockEvent(t, abiparser.Legacy)
+		e := validatorAddedMockEvent(t, eth1.Legacy)
 		vae, ok := e.Data.(abiparser.ValidatorAddedEvent)
 		require.True(t, ok)
 
@@ -178,7 +178,7 @@ func TestToValidatorInformation(t *testing.T) {
 	})
 
 	t.Run("V2 abi handling", func(t *testing.T) {
-		e := validatorAddedMockEvent(t, abiparser.V2)
+		e := validatorAddedMockEvent(t, eth1.V2)
 		vae, ok := e.Data.(abiparser.ValidatorAddedEvent)
 		require.True(t, ok)
 
@@ -189,10 +189,10 @@ func TestToValidatorInformation(t *testing.T) {
 	})
 }
 
-func validatorAddedMockEvent(t *testing.T, abiVersion abiparser.Version) *eth1.Event {
+func validatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	var rawValidatorAdded string
 	switch abiVersion {
-	case abiparser.V2:
+	case eth1.V2:
 		rawValidatorAdded = `{
    "address":"0xfdff361ed2b094730fdd8fa9658b370ce6cd4b10",
    "topics":[
@@ -224,21 +224,21 @@ func validatorAddedMockEvent(t *testing.T, abiVersion abiparser.Version) *eth1.E
 	var vLogValidatorAdded types.Log
 	err := json.Unmarshal([]byte(rawValidatorAdded), &vLogValidatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(abiparser.ContractABI(abiVersion)))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI(abiVersion)))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 
-	abiParser := abiparser.NewParser(logex.Build("test", zap.InfoLevel, nil), abiVersion)
+	abiParser := eth1.NewParser(logex.Build("test", zap.InfoLevel, nil), abiVersion)
 	parsed, _, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
 	return &eth1.Event{Log: types.Log{}, Data: *parsed}
 }
 
-func operatorAddedMockEvent(t *testing.T, abiVersion abiparser.Version) *eth1.Event {
+func operatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	var rawOperatorAdded string
 	switch abiVersion {
-	case abiparser.V2:
+	case eth1.V2:
 		rawOperatorAdded = `{
    "address":"0xfdff361ed2b094730fdd8fa9658b370ce6cd4b10",
    "topics":[
@@ -272,11 +272,11 @@ func operatorAddedMockEvent(t *testing.T, abiVersion abiparser.Version) *eth1.Ev
 	var vLogOperatorAdded types.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(abiparser.ContractABI(abiVersion)))
+	contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI(abiVersion)))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 
-	abiParser := abiparser.NewParser(logex.GetLogger(), abiVersion)
+	abiParser := eth1.NewParser(logex.GetLogger(), abiVersion)
 	parsed, _, err := abiParser.ParseOperatorAddedEvent(nil, vLogOperatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 

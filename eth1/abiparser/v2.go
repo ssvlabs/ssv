@@ -27,11 +27,11 @@ type OperatorAddedEvent struct {
 	OwnerAddress common.Address
 }
 
-type v2Abi struct {
+type V2Abi struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (v2 *v2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
+func (v2 *V2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
 	var operatorAddedEvent OperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
@@ -62,7 +62,7 @@ func (v2 *v2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey 
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v2 *v2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
+func (v2 *V2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
 	var validatorAddedEvent ValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
 	if err != nil {

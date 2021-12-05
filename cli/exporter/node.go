@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -108,7 +107,7 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
-			if err = abiparser.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
 				Logger.Fatal("failed to load ABI JSON", zap.Error(err))
 			}
 		}
@@ -116,7 +115,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Ctx:                  cmd.Context(),
 			Logger:               Logger,
 			NodeAddr:             cfg.ETH1Options.ETH1Addr,
-			ContractABI:          abiparser.ContractABI(cfg.ETH1Options.AbiVersion),
+			ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider

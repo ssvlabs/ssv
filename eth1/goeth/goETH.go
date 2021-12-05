@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/ethereum/go-ethereum"
@@ -57,7 +56,7 @@ type ClientOptions struct {
 	ConnectionTimeout          time.Duration
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
-	AbiVersion abiparser.Version
+	AbiVersion eth1.Version
 }
 
 // eth1Client is the internal implementation of Client
@@ -75,7 +74,7 @@ type eth1Client struct {
 
 	eventsFeed *event.Feed
 
-	abiVersion abiparser.Version
+	abiVersion eth1.Version
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -365,7 +364,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
 
-	abiParser := abiparser.NewParser(ec.logger, ec.abiVersion)
+	abiParser := eth1.NewParser(ec.logger, ec.abiVersion)
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
