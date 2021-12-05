@@ -11,9 +11,19 @@ import (
 	"go.uber.org/zap/zaptest"
 	"os"
 	"path"
+	"runtime"
 	"testing"
 	"time"
 )
+
+type loadTest struct {
+	name       string
+	write      func([]*proto.SignedMessage)
+	read       func([]byte, uint64)
+	n          uint64
+	identifier []byte
+	sleep      time.Duration
+}
 
 func TestIbftStorage_LoadTesting(t *testing.T) {
 	logger := zaptest.NewLogger(t)
@@ -33,14 +43,7 @@ func TestIbftStorage_LoadTesting(t *testing.T) {
 	}(db)
 	storage := NewIbft(db, logger, "attestation")
 
-	tests := []struct {
-		name       string
-		write      func([]*proto.SignedMessage)
-		read       func([]byte, uint64)
-		n          uint64
-		identifier []byte
-		sleep      time.Duration
-	}{
+	tests := []loadTest{
 		//{
 		//	"non-optimized",
 		//	func(msgs []*proto.SignedMessage) {
@@ -71,9 +74,41 @@ func TestIbftStorage_LoadTesting(t *testing.T) {
 			},
 			5000,
 			[]byte{1, 1, 1, 1},
-			time.Second * 2,
+			time.Second,
 		},
 	}
+
+	for i := 1; i < 2; i++ {
+		tests = append(tests, loadTest{
+			fmt.Sprintf("optimized %d", i),
+			func(msgs []*proto.SignedMessage) {
+				require.NoError(t, storage.SaveDecidedMessages(msgs))
+			},
+			func(identifier []byte, n uint64) {
+				inRange, err := storage.GetDecidedInRange(identifier, uint64(0), n-1)
+				require.NoError(t, err)
+				require.Equal(t, int(n), len(inRange))
+			},
+			5000,
+			[]byte(fmt.Sprintf("%d%d%d%d", i, i, i, i)),
+			time.Second,
+		})
+	}
+
+	//tests = append(tests, loadTest{
+	//	"optimized 10k",
+	//	func(msgs []*proto.SignedMessage) {
+	//		require.NoError(t, storage.SaveDecidedMessages(msgs))
+	//	},
+	//	func(identifier []byte, n uint64) {
+	//		inRange, err := storage.GetDecidedInRange(identifier, uint64(0), n-1)
+	//		require.NoError(t, err)
+	//		require.Equal(t, int(n), len(inRange))
+	//	},
+	//	10000,
+	//	[]byte{1, 0, 0, 0},
+	//	time.Second,
+	//})
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -91,17 +126,32 @@ func TestIbftStorage_LoadTesting(t *testing.T) {
 					SignerIds: []uint64{1, 2, 3},
 				})
 			}
+			reportRuntimeStats(logger)
 			ts := time.Now()
 			test.write(msgs)
 			logger.Debug(fmt.Sprintf("[%s] time took to save %dms for %d items",
 				test.name, time.Since(ts).Milliseconds(), test.n))
+			reportRuntimeStats(logger)
 			<-time.After(test.sleep)
+			reportRuntimeStats(logger)
 			ts = time.Now()
 			test.read(test.identifier, test.n)
 			logger.Debug(fmt.Sprintf("[%s] time took to read %dms for %d items",
 				test.name, time.Since(ts).Milliseconds(), test.n))
+			reportRuntimeStats(logger)
 		})
 	}
+}
+
+func reportRuntimeStats(logger *zap.Logger) {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	logger.With(zap.String("who", "reportRuntimeStats")).Debug("mem stats",
+		zap.Uint64("mem.Alloc", mem.Alloc),
+		zap.Uint64("mem.TotalAlloc", mem.TotalAlloc),
+		zap.Uint64("mem.HeapAlloc", mem.HeapAlloc),
+		zap.Uint32("mem.NumGC", mem.NumGC),
+	)
 }
 
 func TestIbftStorage_SaveDecidedMessages(t *testing.T) {
