@@ -148,9 +148,10 @@ func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg 
 
 // ReceivedSyncMsgChan returns the channel for sync messages
 func (n *p2pNetwork) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
-	ls := listener{
-		syncCh: make(chan *network.SyncChanObj, MsgChanSize),
+	ls := &listener{
+		syncCh:  make(chan *network.SyncChanObj, MsgChanSize),
+		msgType: network.NetworkMsg_SyncType,
 	}
 
-	return ls.syncCh, n.registerListener(ls)
+	return ls.syncCh, n.listenersContainer.register(ls)
 }

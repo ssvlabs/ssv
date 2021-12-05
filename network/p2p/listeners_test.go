@@ -10,14 +10,17 @@ import (
 )
 
 func TestListeners(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	n := p2pNetwork{
-		logger:        zaptest.NewLogger(t),
-		listeners:     map[string]listener{},
-		listenersLock: &sync.RWMutex{},
+		logger: logger,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	n.listenersContainer = newListenersContainer(ctx, logger)
+
+	testCtx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
 
 	var wg sync.WaitGroup
 
@@ -27,7 +30,7 @@ func TestListeners(t *testing.T) {
 	go func() {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-testCtx.Done():
 				return
 			case _, ok := <-ibftCn1:
 				if ok {

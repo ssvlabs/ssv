@@ -30,9 +30,10 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 
 // ReceivedMsgChan return a channel with messages
 func (n *p2pNetwork) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
-	ls := listener{
-		msgCh: make(chan *proto.SignedMessage, MsgChanSize),
+	ls := &listener{
+		msgCh:   make(chan *proto.SignedMessage, MsgChanSize),
+		msgType: network.NetworkMsg_IBFTType,
 	}
 
-	return ls.msgCh, n.registerListener(ls)
+	return ls.msgCh, n.listenersContainer.register(ls)
 }

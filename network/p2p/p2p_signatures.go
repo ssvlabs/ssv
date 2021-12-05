@@ -27,9 +27,10 @@ func (n *p2pNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMessa
 
 // ReceivedSignatureChan returns the channel with signatures
 func (n *p2pNetwork) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
-	ls := listener{
-		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
+	ls := &listener{
+		sigCh:   make(chan *proto.SignedMessage, MsgChanSize),
+		msgType: network.NetworkMsg_SignatureType,
 	}
 
-	return ls.sigCh, n.registerListener(ls)
+	return ls.sigCh, n.listenersContainer.register(ls)
 }
