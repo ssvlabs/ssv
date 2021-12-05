@@ -27,6 +27,7 @@ type OperatorAddedEvent struct {
 	OwnerAddress common.Address
 }
 
+// V2Abi parsing events from v2 abi contract
 type V2Abi struct {
 }
 
