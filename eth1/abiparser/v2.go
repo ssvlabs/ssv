@@ -23,8 +23,8 @@ type ValidatorAddedEvent struct {
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
 	Name         string
-	PublicKey    []byte
 	OwnerAddress common.Address
+	PublicKey    []byte
 }
 
 // V2Abi parsing events from v2 abi contract
