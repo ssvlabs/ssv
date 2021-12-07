@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 	"sync"
+	"time"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -42,6 +43,8 @@ type Controller struct {
 	// locks
 	currentInstanceLock sync.Locker
 	syncingLock         *semaphore.Weighted
+
+	syncBackoff time.Duration
 }
 
 // New is the constructor of Controller
@@ -56,6 +59,7 @@ func New(
 	ValidatorShare *storage.Share,
 	fork contollerforks.Fork,
 	signer beacon.Signer,
+	syncBackoff time.Duration,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &Controller{
@@ -75,6 +79,8 @@ func New(
 		// locks
 		currentInstanceLock: &sync.Mutex{},
 		syncingLock:         semaphore.NewWeighted(1),
+
+		syncBackoff: syncBackoff,
 	}
 
 	ret.setFork(fork)
