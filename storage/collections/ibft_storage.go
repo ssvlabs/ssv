@@ -135,25 +135,21 @@ func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.Si
 
 // GetDecidedInRange returns decided message in the given range
 func (i *IbftStorage) GetDecidedInRange(identifier []byte, from uint64, to uint64) ([]*proto.SignedMessage, error) {
-	prefix := append(i.prefix[:], identifier...)
-
-	var sequences [][]byte
+	ret := make([]*proto.SignedMessage, 0)
 	for seq := from; seq <= to; seq++ {
-		sequences = append(sequences, i.key("decided", uInt64ToByteSlice(seq)))
-	}
-	results, err := i.db.GetMany(prefix, sequences...)
-	if err != nil {
-		return []*proto.SignedMessage{}, err
-	}
-	msgs := make([]*proto.SignedMessage, len(results))
-	for i, res := range results {
-		msg := &proto.SignedMessage{}
-		if err := json.Unmarshal(res.Value, msg); err != nil {
-			return []*proto.SignedMessage{}, errors.Wrap(err, "un-marshaling error")
+		decidedMsg, found, err := i.GetDecided(identifier, seq)
+		logger := i.logger.With(zap.ByteString("identifier", identifier), zap.Uint64("sequence", seq))
+		if !found {
+			logger.Error("decided was not found")
+			continue
 		}
-		msgs[i] = msg
+		if err != nil {
+			logger.Error("failed to get decided", zap.Error(err))
+			continue
+		}
+		ret = append(ret, decidedMsg)
 	}
-	return msgs, nil
+	return ret, nil
 }
 
 // SaveHighestDecidedInstance saves a signed message for an ibft instance which is currently highest
