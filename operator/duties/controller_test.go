@@ -88,7 +88,7 @@ func (e *executorMock) ExecuteDuty(duty *beacon.Duty) error {
 	return nil
 }
 
-func execWithWaitGroup(t *testing.T, wg *sync.WaitGroup) dutyExecutor {
+func execWithWaitGroup(t *testing.T, wg *sync.WaitGroup) DutyExecutor {
 	return &executorMock{t, wg}
 }
 
