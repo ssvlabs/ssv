@@ -103,7 +103,8 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abiVersion", cfg.ETH1Options.AbiVersion.String()))
+
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -114,7 +115,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Ctx:                  cmd.Context(),
 			Logger:               Logger,
 			NodeAddr:             cfg.ETH1Options.ETH1Addr,
-			ContractABI:          eth1.ContractABI(),
+			ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
@@ -122,6 +123,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
 				return nil, true, nil
 			},
+			AbiVersion: cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))

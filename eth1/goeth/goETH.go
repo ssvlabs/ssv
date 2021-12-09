@@ -55,6 +55,8 @@ type ClientOptions struct {
 	ContractABI                string
 	ConnectionTimeout          time.Duration
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+
+	AbiVersion eth1.Version
 }
 
 // eth1Client is the internal implementation of Client
@@ -71,6 +73,8 @@ type eth1Client struct {
 	connectionTimeout    time.Duration
 
 	eventsFeed *event.Feed
+
+	abiVersion eth1.Version
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -91,6 +95,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		contractABI:                opts.ContractABI,
 		connectionTimeout:          opts.ConnectionTimeout,
 		eventsFeed:                 new(event.Feed),
+		abiVersion:                 opts.AbiVersion,
 	}
 
 	if err := ec.connect(); err != nil {
@@ -359,9 +364,11 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		return errors.Wrap(err, "failed to get operator private key")
 	}
 
+	abiParser := eth1.NewParser(ec.logger, ec.abiVersion)
+
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseOperatorAddedEvent(ec.logger, shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, vLog.Topics, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
@@ -370,7 +377,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	case "ValidatorAdded":
-		parsed, isEventBelongsToOperator, err := eth1.ParseValidatorAddedEvent(ec.logger, shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
@@ -383,7 +390,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	default:
-		ec.logger.Debug("unknown contract event was received")
+		ec.logger.Debug("unknown contract event was received", zap.String("hash", vLog.TxHash.Hex()), zap.String("eventName", eventName))
 	}
 	return nil
 }

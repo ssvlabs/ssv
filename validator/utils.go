@@ -3,6 +3,7 @@ package validator
 import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
@@ -28,7 +29,7 @@ func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 }
 
 // createShareWithOperatorKey creates a new share object from event
-func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, *bls.SecretKey, error) {
+func createShareWithOperatorKey(validatorAddedEvent abiparser.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, *bls.SecretKey, error) {
 	operatorPrivKey, found, err := shareEncryptionKeyProvider()
 	if !found {
 		return nil, nil, errors.New("could not find operator private key")
@@ -55,7 +56,7 @@ func createShareWithOperatorKey(validatorAddedEvent eth1.ValidatorAddedEvent, sh
 
 // ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share.
 // share could return nil in case operator key is not present/ different
-func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, *bls.SecretKey, error) {
+func ShareFromValidatorAddedEvent(validatorAddedEvent abiparser.ValidatorAddedEvent, operatorPubKey string) (*validatorstorage.Share, *bls.SecretKey, error) {
 	validatorShare := validatorstorage.Share{}
 
 	validatorShare.PublicKey = &bls.PublicKey{}
@@ -65,22 +66,21 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent, 
 	var shareKey *bls.SecretKey
 
 	ibftCommittee := map[uint64]*proto.Node{}
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
+	for i := range validatorAddedEvent.OperatorPublicKeys {
+		nodeID := uint64(i + 1)
 		ibftCommittee[nodeID] = &proto.Node{
 			IbftId: nodeID,
-			Pk:     oess.SharedPublicKey,
+			Pk:     validatorAddedEvent.SharesPublicKeys[i],
 		}
-		if strings.EqualFold(string(oess.OperatorPublicKey), operatorPubKey) {
-			ibftCommittee[nodeID].Pk = oess.SharedPublicKey
+		if strings.EqualFold(string(validatorAddedEvent.OperatorPublicKeys[i]), operatorPubKey) {
+			ibftCommittee[nodeID].Pk = validatorAddedEvent.SharesPublicKeys[i]
 			validatorShare.NodeID = nodeID
 
 			shareKey = &bls.SecretKey{}
-			if len(oess.EncryptedKey) == 0 {
+			if len(validatorAddedEvent.EncryptedKeys[i]) == 0 {
 				return nil, nil, errors.New("share encrypted key invalid")
 			}
-			if err := shareKey.SetHexString(string(oess.EncryptedKey)); err != nil {
+			if err := shareKey.SetHexString(string(validatorAddedEvent.EncryptedKeys[i])); err != nil {
 				return nil, nil, errors.Wrap(err, "failed to deserialize share private key")
 			}
 		}

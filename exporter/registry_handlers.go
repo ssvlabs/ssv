@@ -3,6 +3,7 @@ package exporter
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/validator"
@@ -36,16 +37,16 @@ func (exp *exporter) listenToEth1Events(eventsFeed *event.Feed) <-chan error {
 // ListenToEth1Events register for eth1 events
 func (exp *exporter) handleEth1Event(e eth1.Event) error {
 	var err error = nil
-	if validatorAddedEvent, ok := e.Data.(eth1.ValidatorAddedEvent); ok {
+	if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
 		err = exp.handleValidatorAddedEvent(validatorAddedEvent)
-	} else if opertaorAddedEvent, ok := e.Data.(eth1.OperatorAddedEvent); ok {
+	} else if opertaorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
 		err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
 	}
 	return err
 }
 
 // handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator
-func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) error {
+func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEvent) error {
 	pubKeyHex := hex.EncodeToString(event.PublicKey)
 	logger := exp.logger.With(zap.String("eventType", "ValidatorAdded"), zap.String("pubKey", pubKeyHex))
 	logger.Info("validator added event")
@@ -95,7 +96,7 @@ func (exp *exporter) handleValidatorAddedEvent(event eth1.ValidatorAddedEvent) e
 }
 
 // handleOperatorAddedEvent parses the given event and saves operator information
-func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) error {
+func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
 	logger := exp.logger.With(zap.String("eventType", "OperatorAdded"),
 		zap.String("pubKey", string(event.PublicKey)))
 	logger.Info("operator added event")
@@ -124,18 +125,17 @@ func (exp *exporter) handleOperatorAddedEvent(event eth1.OperatorAddedEvent) err
 }
 
 // toValidatorInformation converts raw event to ValidatorInformation
-func toValidatorInformation(validatorAddedEvent eth1.ValidatorAddedEvent) (*storage.ValidatorInformation, error) {
+func toValidatorInformation(validatorAddedEvent abiparser.ValidatorAddedEvent) (*storage.ValidatorInformation, error) {
 	pubKey := &bls.PublicKey{}
 	if err := pubKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
 		return nil, errors.Wrap(err, "failed to deserialize validator public key")
 	}
 
 	var operators []storage.OperatorNodeLink
-	for i := range validatorAddedEvent.OessList {
-		oess := validatorAddedEvent.OessList[i]
-		nodeID := oess.Index.Uint64() + 1
+	for i, operatorPublicKey := range validatorAddedEvent.OperatorPublicKeys {
+		nodeID := uint64(i + 1)
 		operators = append(operators, storage.OperatorNodeLink{
-			ID: nodeID, PublicKey: string(oess.OperatorPublicKey),
+			ID: nodeID, PublicKey: string(operatorPublicKey),
 		})
 	}
 

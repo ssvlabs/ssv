@@ -148,6 +148,8 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
+
 		// create new eth1 client
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
@@ -160,9 +162,10 @@ var StartNodeCmd = &cobra.Command{
 			Logger:                     Logger,
 			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
 			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
-			ContractABI:                eth1.ContractABI(),
+			ContractABI:                eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
+			AbiVersion:                 cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
