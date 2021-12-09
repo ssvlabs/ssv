@@ -61,13 +61,12 @@ func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 }
 
 // SetMany save many values with the given keys in a single badger transaction
-func (b *BadgerDb) SetMany(prefix []byte, keys [][]byte, values [][]byte) error {
-	if len(keys) != len(values) {
-		return errors.New("bad input, keys and values should have the same length")
-	}
+func (b *BadgerDb) SetMany(prefix []byte, n int, next func(int) basedb.Obj) error {
 	wb := b.db.NewWriteBatch()
-	for i, key := range keys {
-		if err := wb.Set(append(prefix, key...), values[i]); err != nil {
+	for i := 0; i < n; i++ {
+		item := next(i)
+		if err := wb.Set(append(prefix, item.Key...), item.Value); err != nil {
+			wb.Cancel()
 			return err
 		}
 	}
@@ -99,12 +98,12 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 }
 
 // GetMany return values for the given keys
-func (b *BadgerDb) GetMany(prefix []byte, keys ...[]byte) ([]basedb.Obj, error) {
-	var results []basedb.Obj
+func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
 	if len(keys) == 0 {
-		return results, nil
+		return nil
 	}
 	err := b.db.View(func(txn *badger.Txn) error {
+		var value, cp []byte
 		for _, k := range keys {
 			item, err := txn.Get(append(prefix, k...))
 			if err != nil {
@@ -115,19 +114,23 @@ func (b *BadgerDb) GetMany(prefix []byte, keys ...[]byte) ([]basedb.Obj, error) 
 				b.logger.Warn("failed to get item", zap.String("key", string(k)))
 				return err
 			}
-			value, err := item.ValueCopy(nil)
+			value, err = item.ValueCopy(value)
 			if err != nil {
 				b.logger.Warn("failed to copy item value", zap.String("key", string(k)))
 				return err
 			}
-			results = append(results, basedb.Obj{
+			cp = make([]byte, len(value))
+			copy(cp, value[:])
+			if err := iterator(basedb.Obj{
 				Key:   k,
-				Value: value,
-			})
+				Value: cp,
+			}); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
-	return results, err
+	return err
 }
 
 // Delete key in specific prefix

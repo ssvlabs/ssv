@@ -100,21 +100,17 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 
 // SaveDecidedMessages func implementation
 func (i *IbftStorage) SaveDecidedMessages(msgs []*proto.SignedMessage) error {
-	var keys [][]byte
-	var values [][]byte
-	for _, msg := range msgs {
-		if msg == nil || msg.Message == nil {
-			continue
-		}
-		k := i.key("decided", uInt64ToByteSlice(msg.Message.SeqNumber))
-		keys = append(keys, append(msg.Message.Lambda, k...))
+	var k, key []byte
+	return i.db.SetMany(i.prefix, len(msgs), func(j int) basedb.Obj {
+		msg := msgs[j]
+		k = i.key("decided", uInt64ToByteSlice(msg.Message.SeqNumber))
+		key = append(msg.Message.Lambda, k...)
 		value, err := json.Marshal(msg)
 		if err != nil {
-			return errors.Wrap(err, "marshaling error")
+			return basedb.Obj{}
 		}
-		values = append(values, value)
-	}
-	return i.db.SetMany(i.prefix[:], keys, values)
+		return basedb.Obj{Key: key, Value: value}
+	})
 }
 
 // GetDecided returns a signed message for an ibft instance which decided by identifier
@@ -135,21 +131,25 @@ func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.Si
 
 // GetDecidedInRange returns decided message in the given range
 func (i *IbftStorage) GetDecidedInRange(identifier []byte, from uint64, to uint64) ([]*proto.SignedMessage, error) {
-	ret := make([]*proto.SignedMessage, 0)
+	prefix := append(i.prefix[:], identifier...)
+
+	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
-		decidedMsg, found, err := i.GetDecided(identifier, seq)
-		logger := i.logger.With(zap.ByteString("identifier", identifier), zap.Uint64("sequence", seq))
-		if !found {
-			logger.Error("decided was not found")
-			continue
-		}
-		if err != nil {
-			logger.Error("failed to get decided", zap.Error(err))
-			continue
-		}
-		ret = append(ret, decidedMsg)
+		sequences = append(sequences, i.key("decided", uInt64ToByteSlice(seq)))
 	}
-	return ret, nil
+	msgs := make([]*proto.SignedMessage, 0)
+	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
+		msg := proto.SignedMessage{}
+		if err := json.Unmarshal(obj.Value, msg); err != nil {
+			return errors.Wrap(err, "un-marshaling error")
+		}
+		msgs = append(msgs, &msg)
+		return nil
+	})
+	if err != nil {
+		return []*proto.SignedMessage{}, err
+	}
+	return msgs, nil
 }
 
 // SaveHighestDecidedInstance saves a signed message for an ibft instance which is currently highest
@@ -213,8 +213,7 @@ func (i *IbftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 }
 
 func (i *IbftStorage) key(id string, params ...[]byte) []byte {
-	ret := make([]byte, 0)
-	ret = append(ret, []byte(id)...)
+	ret := []byte(id)
 	for _, p := range params {
 		ret = append(ret, p...)
 	}

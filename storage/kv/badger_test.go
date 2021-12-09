@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 )
@@ -124,23 +125,24 @@ func TestBadgerDb_GetMany(t *testing.T) {
 	prefix := []byte("prefix")
 	var i uint64
 	for i = 0; i < 100; i++ {
-		require.NoError(t, db.Set(prefix, uInt64ToByteSlice(i), uInt64ToByteSlice(i)))
+		require.NoError(t, db.Set(prefix, uInt64ToByteSlice(i+1), uInt64ToByteSlice(i+1)))
 	}
 
-	results, err := db.GetMany(prefix, uInt64ToByteSlice(0), uInt64ToByteSlice(1),
-		uInt64ToByteSlice(5), uInt64ToByteSlice(10))
+	results := make([]basedb.Obj, 0)
+	err = db.GetMany(prefix, [][]byte{uInt64ToByteSlice(1), uInt64ToByteSlice(2),
+		uInt64ToByteSlice(5), uInt64ToByteSlice(10)}, func(obj basedb.Obj) error {
+		require.True(t, bytes.Equal(obj.Key, obj.Value))
+		results = append(results, obj)
+		return nil
+	})
 	require.NoError(t, err)
 	require.Equal(t, 4, len(results))
-	require.Equal(t, uInt64ToByteSlice(0), results[0].Value)
-	require.Equal(t, uInt64ToByteSlice(1), results[1].Value)
-	require.Equal(t, uInt64ToByteSlice(5), results[2].Value)
-	require.Equal(t, uInt64ToByteSlice(10), results[3].Value)
 }
 
 func TestBadgerDb_SetMany(t *testing.T) {
 	options := basedb.Options{
 		Type:   "badger-memory",
-		Logger: zap.L(),
+		Logger: zaptest.NewLogger(t),
 		Path:   "",
 	}
 	db, err := New(options)
@@ -148,17 +150,17 @@ func TestBadgerDb_SetMany(t *testing.T) {
 	defer db.Close()
 
 	prefix := []byte("prefix")
-	values := [][]byte{}
-	keys := [][]byte{}
-	var i uint64
-	for i = 0; i < 10; i++ {
-		keys = append(keys, uInt64ToByteSlice(i))
-		values = append(values, uInt64ToByteSlice(i))
-	}
-	require.NoError(t, db.SetMany(prefix, keys, values))
+	var values [][]byte
+	err = db.SetMany(prefix, 10, func(i int) basedb.Obj {
+		seq := uint64(i + 1)
+		values = append(values, uInt64ToByteSlice(seq))
+		return basedb.Obj{Key: uInt64ToByteSlice(seq), Value: uInt64ToByteSlice(seq)}
+	})
+	require.NoError(t, err)
 
-	for i = 0; i < 10; i++ {
-		obj, found, err := db.Get(prefix, uInt64ToByteSlice(i))
+	for i := 0; i < 10; i++ {
+		seq := uint64(i + 1)
+		obj, found, err := db.Get(prefix, uInt64ToByteSlice(seq))
 		require.NoError(t, err, "should find item %d", i)
 		require.True(t, found, "should find item %d", i)
 		require.True(t, bytes.Equal(obj.Value, values[i]), "item %d wrong value", i)
