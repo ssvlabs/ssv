@@ -368,7 +368,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, vLog.Topics, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
@@ -390,7 +390,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			ec.fireEvent(vLog, *parsed)
 		}
 	default:
-		ec.logger.Debug("unknown contract event was received")
+		ec.logger.Debug("unknown contract event was received", zap.String("hash", vLog.TxHash.Hex()), zap.String("eventName", eventName))
 	}
 	return nil
 }

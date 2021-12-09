@@ -41,7 +41,7 @@ type LegacyAdapter struct {
 }
 
 // ParseOperatorAddedEvent parses LegacyOperatorAddedEvent to OperatorAddedEvent
-func (adapter LegacyAdapter) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
+func (adapter LegacyAdapter) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, topics []common.Hash, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
 	event, isEventBelongsToOperator, err := adapter.legacyAbi.ParseOperatorAddedEvent(logger, operatorPrivateKey, data, contractAbi)
 	if event == nil {
 		return nil, isEventBelongsToOperator, err

@@ -32,7 +32,7 @@ type V2Abi struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (v2 *V2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
+func (v2 *V2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, topics []common.Hash, contractAbi abi.ABI) (*OperatorAddedEvent, bool, error) {
 	var operatorAddedEvent OperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
@@ -47,6 +47,13 @@ func (v2 *V2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey 
 		return nil, false, err
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
+
+	if len(topics) > 1 {
+		operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	} else {
+		logger.Error("operator event missing topics. no owner address provided.")
+	}
+
 	hexPubkey := hex.EncodeToString(operatorAddedEvent.PublicKey)
 	logger.Debug("OperatorAdded Event",
 		zap.String("Operator PublicKey", hexPubkey),

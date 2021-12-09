@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io/ioutil"
@@ -57,8 +58,8 @@ func NewParser(logger *zap.Logger, version Version) AbiParser {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (ap AbiParser) ParseOperatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error) {
-	return ap.Version.ParseOperatorAddedEvent(ap.Logger, operatorPrivateKey, data, contractAbi)
+func (ap AbiParser) ParseOperatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error) {
+	return ap.Version.ParseOperatorAddedEvent(ap.Logger, operatorPrivateKey, data, topics, contractAbi)
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
@@ -68,7 +69,7 @@ func (ap AbiParser) ParseValidatorAddedEvent(operatorPrivateKey *rsa.PrivateKey,
 
 // AbiVersion serves as the parser client interface
 type AbiVersion interface {
-	ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error)
+	ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error)
 	ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error)
 }
 
