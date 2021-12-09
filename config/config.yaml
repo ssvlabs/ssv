@@ -1,11 +1,11 @@
 global:
-  LogLevel: info
+  LogLevel: debug
 
 db:
   Path: ./data/db
 
 eth2:
-  BeaconNodeAddr: example.url
+  BeaconNodeAddr: eth2-lh-prater-5052-ext.stage.bloxinfra.com:80
   Network: prater
 
 eth1:

@@ -9,9 +9,9 @@ RUN apt-get update && apt upgrade -y && \
   && rm -rf /var/lib/apt/lists/*
 
 RUN go version
-
+ENV GO111MODULE=on
 RUN go get github.com/go-delve/delve/cmd/dlv
-RUN go get -u github.com/cosmtrek/air
+RUN go get -u github.com/cosmtrek/air@v1.27.8
 
 WORKDIR /go/src/github.com/bloxapp/ssv/
 COPY go.mod .
