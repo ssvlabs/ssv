@@ -128,11 +128,13 @@ func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage)
 func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
 	s, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
-	if err != nil && s != nil {
-		if streamCloseErr := s.Close(); streamCloseErr != nil {
-			n.logger.Error("could not close stream after error", zap.Error(streamCloseErr))
-		} else {
-			n.logger.Debug("stream was closed after error")
+	if s != nil {
+		streamCloseErr := s.Close()
+		if streamCloseErr != nil {
+			n.logger.Error("could not close stream ", zap.Error(streamCloseErr))
+		}
+		if err == nil {
+			return streamCloseErr
 		}
 	}
 	return err
