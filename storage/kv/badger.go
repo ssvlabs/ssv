@@ -61,10 +61,14 @@ func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 }
 
 // SetMany save many values with the given keys in a single badger transaction
-func (b *BadgerDb) SetMany(prefix []byte, n int, next func(int) basedb.Obj) error {
+func (b *BadgerDb) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
 	wb := b.db.NewWriteBatch()
 	for i := 0; i < n; i++ {
-		item := next(i)
+		item, err := next(i)
+		if err != nil {
+			wb.Cancel()
+			return err
+		}
 		if err := wb.Set(append(prefix, item.Key...), item.Value); err != nil {
 			wb.Cancel()
 			return err

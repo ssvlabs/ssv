@@ -151,10 +151,10 @@ func TestBadgerDb_SetMany(t *testing.T) {
 
 	prefix := []byte("prefix")
 	var values [][]byte
-	err = db.SetMany(prefix, 10, func(i int) basedb.Obj {
+	err = db.SetMany(prefix, 10, func(i int) (basedb.Obj, error) {
 		seq := uint64(i + 1)
 		values = append(values, uInt64ToByteSlice(seq))
-		return basedb.Obj{Key: uInt64ToByteSlice(seq), Value: uInt64ToByteSlice(seq)}
+		return basedb.Obj{Key: uInt64ToByteSlice(seq), Value: uInt64ToByteSlice(seq)}, nil
 	})
 	require.NoError(t, err)
 

@@ -100,16 +100,15 @@ func (i *IbftStorage) SaveDecided(signedMsg *proto.SignedMessage) error {
 
 // SaveDecidedMessages func implementation
 func (i *IbftStorage) SaveDecidedMessages(msgs []*proto.SignedMessage) error {
-	var k, key []byte
-	return i.db.SetMany(i.prefix, len(msgs), func(j int) basedb.Obj {
+	return i.db.SetMany(i.prefix, len(msgs), func(j int) (basedb.Obj, error) {
 		msg := msgs[j]
-		k = i.key("decided", uInt64ToByteSlice(msg.Message.SeqNumber))
-		key = append(msg.Message.Lambda, k...)
+		k := i.key("decided", uInt64ToByteSlice(msg.Message.SeqNumber))
+		key := append(msg.Message.Lambda, k...)
 		value, err := json.Marshal(msg)
 		if err != nil {
-			return basedb.Obj{}
+			return basedb.Obj{}, err
 		}
-		return basedb.Obj{Key: key, Value: value}
+		return basedb.Obj{Key: key, Value: value}, nil
 	})
 }
 
@@ -140,7 +139,7 @@ func (i *IbftStorage) GetDecidedInRange(identifier []byte, from uint64, to uint6
 	msgs := make([]*proto.SignedMessage, 0)
 	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
 		msg := proto.SignedMessage{}
-		if err := json.Unmarshal(obj.Value, msg); err != nil {
+		if err := json.Unmarshal(obj.Value, &msg); err != nil {
 			return errors.Wrap(err, "un-marshaling error")
 		}
 		msgs = append(msgs, &msg)

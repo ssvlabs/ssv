@@ -17,7 +17,7 @@ type Options struct {
 // IDb interface for all db kind
 type IDb interface {
 	Set(prefix []byte, key []byte, value []byte) error
-	SetMany(prefix []byte, n int, next func(int) Obj) error
+	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
 	Get(prefix []byte, key []byte) (Obj, bool, error)
 	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
 	Delete(prefix []byte, key []byte) error
