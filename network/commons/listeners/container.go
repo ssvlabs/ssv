@@ -19,6 +19,7 @@ type Container interface {
 	GetListeners(msgType network.NetworkMsg) []*Listener
 }
 
+// listeners is the data structure where listeners are saved
 type listeners map[network.NetworkMsg][]*Listener
 
 type listenersContainer struct {
@@ -38,6 +39,7 @@ func NewListenersContainer(ctx context.Context, logger *zap.Logger) Container {
 	}
 }
 
+// Register registers a new listener and returns a function for de-registration
 func (lc *listenersContainer) Register(l *Listener) func() {
 	lc.addListener(l)
 
@@ -46,6 +48,7 @@ func (lc *listenersContainer) Register(l *Listener) func() {
 	}
 }
 
+// GetListeners returns listeners of the given msg type
 func (lc *listenersContainer) GetListeners(msgType network.NetworkMsg) []*Listener {
 	lc.lock.RLock()
 	defer lc.lock.RUnlock()
@@ -54,11 +57,13 @@ func (lc *listenersContainer) GetListeners(msgType network.NetworkMsg) []*Listen
 	if !ok {
 		return []*Listener{}
 	}
+	// copy to avoid data races
 	res := make([]*Listener, len(lss))
 	copy(res, lss)
 	return res
 }
 
+// addListener adds a new listener to its list
 func (lc *listenersContainer) addListener(l *Listener) {
 	r, err := rand.Int(rand.Reader, new(big.Int).SetInt64(int64(1000000)))
 	if err != nil {
@@ -79,6 +84,7 @@ func (lc *listenersContainer) addListener(l *Listener) {
 	lc.listeners[l.msgType] = lss
 }
 
+// removeListener removes a listener
 func (lc *listenersContainer) removeListener(msgType network.NetworkMsg, id string) {
 	lc.lock.Lock()
 	defer lc.lock.Unlock()
@@ -90,12 +96,6 @@ func (lc *listenersContainer) removeListener(msgType network.NetworkMsg, id stri
 	for i, l := range ls {
 		if l.id == id {
 			lc.listeners[msgType] = append(ls[:i], ls[i+1:]...)
-			// faster way of removing the item
-			// it will mess up the order of the slice
-			//ls[i] = ls[len(ls)-1]
-			//ls[len(ls)-1] = nil
-			//ls = ls[:len(ls)-1]
-			//lc.listeners[msgType] = ls
 			return
 		}
 	}
