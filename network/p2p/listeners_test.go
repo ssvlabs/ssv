@@ -4,20 +4,24 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"go.uber.org/zap/zaptest"
 	"sync"
 	"testing"
 )
 
 func TestListeners(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	n := p2pNetwork{
-		logger:        zaptest.NewLogger(t),
-		listeners:     map[string]listener{},
-		listenersLock: &sync.RWMutex{},
+		logger: logger,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	n.listeners = listeners.NewListenersContainer(ctx, logger)
+
+	testCtx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
 
 	var wg sync.WaitGroup
 
@@ -27,7 +31,7 @@ func TestListeners(t *testing.T) {
 	go func() {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-testCtx.Done():
 				return
 			case _, ok := <-ibftCn1:
 				if ok {

@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"fmt"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -49,9 +50,8 @@ const (
 type p2pNetwork struct {
 	ctx             context.Context
 	cfg             *Config
-	listenersLock   *sync.RWMutex
 	dv5Listener     discv5Listener
-	listeners       map[string]listener
+	listeners       listeners.Container
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey
 	peers           *peers.Status
@@ -78,8 +78,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n := &p2pNetwork{
 		ctx:             ctx,
 		cfg:             cfg,
-		listeners:       map[string]listener{},
-		listenersLock:   &sync.RWMutex{},
+		listeners:       listeners.NewListenersContainer(ctx, logger),
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,
 		privKey:         cfg.NetworkPrivateKey,
