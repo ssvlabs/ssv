@@ -51,10 +51,11 @@ func TestSyncEth1Error(t *testing.T) {
 func TestSyncEth1HandlerError(t *testing.T) {
 	logger, eth1Client, storage := setupStorageWithEth1ClientMock()
 	go func() {
+		<-time.After(time.Millisecond*25)
 		logs := []types.Log{{BlockNumber: DefaultSyncOffset().Uint64() - 1}, {BlockNumber: DefaultSyncOffset().Uint64()}}
 		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eth1Client.Feed.Send(&Event{Data: struct{}{}, Log: logs[1]})
-		eth1Client.Feed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
+		eth1Client.Feed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) error {
 		return errors.New("test")
