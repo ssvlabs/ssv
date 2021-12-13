@@ -14,15 +14,15 @@ import (
 	"time"
 )
 
-// dutyExecutor represents the component that executes duties
-type dutyExecutor interface {
+// DutyExecutor represents the component that executes duties
+type DutyExecutor interface {
 	ExecuteDuty(duty *beacon.Duty) error
 }
 
 // DutyController interface for dispatching duties execution according to slot ticker
 type DutyController interface {
 	Start()
-	// CurrentEpochChan will trigger every slot
+	// CurrentSlotChan will trigger every slot
 	CurrentSlotChan() <-chan uint64
 }
 
@@ -33,6 +33,7 @@ type ControllerOptions struct {
 	BeaconClient        beacon.Beacon
 	EthNetwork          core.Network
 	ValidatorController validator.Controller
+	Executor            DutyExecutor
 	GenesisEpoch        uint64
 	DutyLimit           uint64
 }
@@ -43,7 +44,7 @@ type dutyController struct {
 	ctx        context.Context
 	ethNetwork core.Network
 	// executor enables to work with a custom execution
-	executor            dutyExecutor
+	executor            DutyExecutor
 	fetcher             DutyFetcher
 	validatorController validator.Controller
 	genesisEpoch        uint64
@@ -66,7 +67,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		validatorController: opts.ValidatorController,
 		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
-		executor:            nil,
+		executor:            opts.Executor,
 	}
 	return &dc
 }
@@ -92,7 +93,7 @@ func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
 // ExecuteDuty tries to execute the given duty
 func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 	if dc.executor != nil {
-		// enables to work with a custom executor
+		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return dc.executor.ExecuteDuty(duty)
 	}
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
@@ -206,4 +207,21 @@ func (dc *dutyController) getCurrentSlot() int64 {
 // getEpochFirstSlot returns the beacon node first slot in epoch
 func (dc *dutyController) getEpochFirstSlot(epoch uint64) uint64 {
 	return epoch * 32
+}
+
+// NewReadOnlyExecutor creates a dummy executor that is used to run in read mode
+func NewReadOnlyExecutor(logger *zap.Logger) DutyExecutor {
+	return &readOnlyDutyExec{logger: logger}
+}
+
+type readOnlyDutyExec struct {
+	logger *zap.Logger
+}
+
+func (e *readOnlyDutyExec) ExecuteDuty(duty *beacon.Duty) error {
+	e.logger.Debug("skipping duty execution",
+		zap.Uint64("epoch", uint64(duty.Slot)/32),
+		zap.Uint64("slot", uint64(duty.Slot)),
+		zap.String("pubKey", hex.EncodeToString(duty.PubKey[:])))
+	return nil
 }
