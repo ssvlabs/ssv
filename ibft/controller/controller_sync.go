@@ -25,7 +25,7 @@ func (i *Controller) processSyncQueueMessages() {
 					Stream: syncMsg.Stream,
 				})
 			}
-			time.Sleep(i.syncBackoff)
+			time.Sleep(i.syncRateLimit)
 		}
 	}()
 	i.logger.Info("sync messages queue started")

@@ -44,7 +44,7 @@ type Controller struct {
 	currentInstanceLock sync.Locker
 	syncingLock         *semaphore.Weighted
 
-	syncBackoff time.Duration
+	syncRateLimit time.Duration
 }
 
 // New is the constructor of Controller
@@ -59,7 +59,7 @@ func New(
 	ValidatorShare *storage.Share,
 	fork contollerforks.Fork,
 	signer beacon.Signer,
-	syncBackoff time.Duration,
+	syncRateLimit time.Duration,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &Controller{
@@ -80,7 +80,7 @@ func New(
 		currentInstanceLock: &sync.Mutex{},
 		syncingLock:         semaphore.NewWeighted(1),
 
-		syncBackoff: syncBackoff,
+		syncRateLimit: syncRateLimit,
 	}
 
 	ret.setFork(fork)
