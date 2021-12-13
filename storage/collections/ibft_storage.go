@@ -130,7 +130,9 @@ func (i *IbftStorage) GetDecided(identifier []byte, seqNumber uint64) (*proto.Si
 
 // GetDecidedInRange returns decided message in the given range
 func (i *IbftStorage) GetDecidedInRange(identifier []byte, from uint64, to uint64) ([]*proto.SignedMessage, error) {
-	prefix := append(i.prefix[:], identifier...)
+	prefix := make([]byte, len(i.prefix))
+	copy(prefix, i.prefix)
+	prefix = append(prefix, identifier...)
 
 	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
