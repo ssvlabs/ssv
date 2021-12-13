@@ -1,11 +1,12 @@
 package local
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
 	"sync"
 
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -164,8 +165,16 @@ func (n *Local) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*ne
 
 // RespondToGetDecidedByRange responds to a GetDecidedByRange
 func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
+	rawMsg, err := json.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "could not parse msg")
+	}
+	var cp network.SyncMessage
+	if err := json.Unmarshal(rawMsg, &cp); err != nil {
+		return err
+	}
 	msg.FromPeerID = string(n.localPeerID)
-	_, _ = stream.(*Stream).WriteSynMsg(msg)
+	_, _ = stream.(*Stream).WriteSynMsg(&cp)
 	return nil
 }
 

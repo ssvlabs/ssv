@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
-	"github.com/bloxapp/ssv/ibft/sync/incoming"
 	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
 )
@@ -70,8 +69,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 		res.Data = []string{"internal error - could not find validator"}
 	} else {
 		identifier := fmt.Sprintf("%s_%s", v.PublicKey, string(nm.Msg.Filter.Role))
-		msgs, err := incoming.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From),
-			uint64(nm.Msg.Filter.To), logger, ibftStorage)
+		msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
 		if err != nil {
 			logger.Warn("failed to get decided messages", zap.Error(err))
 			res.Data = []string{"internal error - could not get decided messages"}

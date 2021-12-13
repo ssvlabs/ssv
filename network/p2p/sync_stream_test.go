@@ -46,7 +46,7 @@ func testPeers(t *testing.T, logger *zap.Logger) (network.Network, network.Netwo
 	})
 	require.NoError(t, err)
 
-	time.Sleep(time.Millisecond * 1500) // important to let nodes reach each other
+	<-time.After(time.Millisecond * 1500) // important to let nodes reach each other
 
 	return peer1, peer2
 }

@@ -64,7 +64,7 @@ loop:
 			}(nodes[i-1], i)
 		}
 		wg.Wait()
-		if seqNumber == 25 {
+		if seqNumber == 10 {
 			break loop
 		}
 		seqNumber++
@@ -91,9 +91,16 @@ loop:
 
 	nextSeq, err := nodes[3].NextSeqNumber()
 	if err != nil {
-		sf.logger.Error("node #4 could not get state")
+		sf.logger.Error("node #4 could not get state", zap.Error(err))
 	} else {
 		sf.logger.Info("node #4 synced", zap.Uint64("highest decided", nextSeq-1))
+	}
+
+	decides, err := dbs[3].GetDecidedInRange(msgs[1].Message.Lambda, uint64(0), uint64(10))
+	if err != nil {
+		sf.logger.Error("node #4 could not get decided in range", zap.Error(err))
+	} else {
+		sf.logger.Info("node #4 synced, found decided messages", zap.Int("count", len(decides)))
 	}
 }
 

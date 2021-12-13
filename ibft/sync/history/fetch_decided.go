@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
 
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
@@ -15,6 +16,7 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 	start := startSeq
 	done := false
 	var latestError error
+	var highest *proto.SignedMessage
 	for {
 		if failCount == 5 {
 			return highestSaved, n, latestError
@@ -47,10 +49,12 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 			foundSeqs[msg.Message.SeqNumber] = msg
 		}
 
-		s.logger.Info(fmt.Sprintf("fetching sequences %d - %d from peer", start, batchMaxSeq), zap.String("peer", fromPeer))
+		s.logger.Info(fmt.Sprintf("fetched sequences %d - %d from peer", start, batchMaxSeq),
+			zap.String("peer", fromPeer), zap.Int("count", len(res.SignedMessages)))
 
 		msgCount := len(res.SignedMessages)
-		// validate and save
+		msgsToSave := make([]*proto.SignedMessage, 0)
+		// validate
 		for i := start; i <= batchMaxSeq; i++ {
 			msg, found := foundSeqs[i]
 			if !found {
@@ -68,15 +72,11 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 				continue
 			}
 
-			// save
-			if err := s.ibftStorage.SaveDecided(msg); err != nil {
-				return highestSaved, n, err
-			}
-			n++
+			msgsToSave = append(msgsToSave, msg)
 
 			// set highest
-			if highestSaved == nil || highestSaved.Message.SeqNumber < msg.Message.SeqNumber {
-				highestSaved = msg
+			if highest == nil || highest.Message.SeqNumber < msg.Message.SeqNumber {
+				highest = msg
 			}
 
 			start = msg.Message.SeqNumber + 1
@@ -89,5 +89,14 @@ func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, e
 				break
 			}
 		}
+
+		t := time.Now()
+		if err := s.ibftStorage.SaveDecidedMessages(msgsToSave); err != nil {
+			return highestSaved, n, err
+		}
+		n += len(msgsToSave)
+		highestSaved = highest
+		s.logger.Debug("saved decided messages in range", zap.Int64("time(ts)", time.Since(t).Milliseconds()),
+			zap.Int("count", len(msgsToSave)))
 	}
 }
