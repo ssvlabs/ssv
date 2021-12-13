@@ -167,7 +167,8 @@ func populatedIbft(
 		proto.DefaultConsensusParams(),
 		share,
 		nil,
-		signer)
+		signer,
+		100*time.Millisecond)
 	ret.(*Controller).setFork(testFork(ret.(*Controller)))
 	ret.(*Controller).initHandlers.Set(true) // as if they are already synced
 	ret.(*Controller).initSynced.Set(true)   // as if they are already synced

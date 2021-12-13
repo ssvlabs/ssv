@@ -32,6 +32,7 @@ type ControllerOptions struct {
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
+	HistorySyncBackoff         time.Duration `yaml:"HistorySyncBackoff" env:"HISTORY_SYNC_BACKOFF" env-default:"200ms" env-description:"Interval for updating metadata"`
 	ETHNetwork                 *core.Network
 	Network                    network.Network
 	Beacon                     beacon.Beacon
@@ -94,6 +95,7 @@ func NewController(options ControllerOptions) Controller {
 			DB:                         options.DB,
 			Fork:                       options.Fork,
 			Signer:                     options.KeyManager,
+			SyncBackoff:                options.HistorySyncBackoff,
 		}),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
