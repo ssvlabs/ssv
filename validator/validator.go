@@ -37,7 +37,7 @@ type Options struct {
 	DB                         basedb.IDb
 	Fork                       forks.Fork
 	Signer                     beacon.Signer
-	SyncBackoff                time.Duration
+	SyncRateLimit              time.Duration
 }
 
 // Validator struct that manages all ibft wrappers
@@ -64,7 +64,7 @@ func New(opt Options) *Validator {
 
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.RoleType]ibft.Controller)
-	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer, opt.SyncBackoff)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer, opt.SyncRateLimit)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
@@ -153,7 +153,7 @@ func setupIbftController(
 	share *storage.Share,
 	fork forks.Fork,
 	signer beacon.Signer,
-	syncBackoff time.Duration,
+	syncRateLimit time.Duration,
 ) ibft.Controller {
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
@@ -168,7 +168,7 @@ func setupIbftController(
 		share,
 		fork.NewIBFTControllerFork(),
 		signer,
-		syncBackoff)
+		syncRateLimit)
 }
 
 // oneOfIBFTIdentifiers will return true if provided identifier matches one of the iBFT instances.
