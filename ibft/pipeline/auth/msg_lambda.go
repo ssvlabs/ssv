@@ -13,9 +13,7 @@ import (
 func ValidateLambdas(lambda []byte) pipeline.Pipeline {
 	return pipeline.WrapFunc("lambda", func(signedMessage *proto.SignedMessage) error {
 		if !bytes.Equal(signedMessage.Message.Lambda, lambda) {
-			err := errors.New(fmt.Sprintf("message Lambda (%s) does not equal expected Lambda (%s)", string(signedMessage.Message.Lambda), string(lambda)))
-			fmt.Printf(err.Error())
-			return err
+			return errors.New(fmt.Sprintf("message Lambda (%s) does not equal expected Lambda (%s)", string(signedMessage.Message.Lambda), string(lambda)))
 		}
 		return nil
 	})
