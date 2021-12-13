@@ -76,7 +76,7 @@ func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
 func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
-	logger := s.logger.With(zap.String("who", "operatorPrivateKey"))
+	logger := s.logger.With(zap.String("who", "operatorKeys"))
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
 		return errors.Wrap(err, "Failed to decode base64")
@@ -119,7 +119,7 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to extract operator public key")
 	}
-	logger.Info("setup operator privateKey is DONE!", zap.Any("key", operatorPublicKey))
+	logger.Info("setup operator privateKey is DONE!", zap.Any("public-key", operatorPublicKey))
 	return nil
 }
 
