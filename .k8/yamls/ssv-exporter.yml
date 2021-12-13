@@ -166,6 +166,7 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: abi_version
+                optional: true
           - name: NETWORK_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
