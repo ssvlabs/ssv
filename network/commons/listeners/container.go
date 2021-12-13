@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Container is an interface for of listeners container
+// Container is an interface for managing internal listeners
 type Container interface {
 	// Register registers a new listener and returns a function for de-registration
 	Register(l *Listener) func()

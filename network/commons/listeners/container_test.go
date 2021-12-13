@@ -22,6 +22,7 @@ func TestListenersContainer(t *testing.T) {
 
 	n := 100
 
+	// counting incoming IBFT messages (should get n messages)
 	var count int32
 	l := NewListener(network.NetworkMsg_IBFTType)
 	deregister := lsCont.Register(l)
@@ -47,6 +48,7 @@ func TestListenersContainer(t *testing.T) {
 		}
 	}
 
+	// sending n messages
 	go func() {
 		for i := 0; i < n; i++ {
 			go propagate(&proto.SignedMessage{
@@ -66,7 +68,7 @@ func TestListenersContainer(t *testing.T) {
 	wg.Wait()
 
 	require.Equal(t, int32(n-1), atomic.LoadInt32(&count))
-	// wait for de-registration
+	// wait for de-registration and ensure listener is not available afterwards
 	time.After(time.Millisecond * 100)
 	lss := lsCont.GetListeners(network.NetworkMsg_IBFTType)
 	require.Equal(t, 0, len(lss))
