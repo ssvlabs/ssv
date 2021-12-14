@@ -125,7 +125,7 @@ func (r *decidedReader) sync() error {
 func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 	r.logger.Debug("listening to decided messages")
 	for msg := range cn {
-		if err := validateMsg(msg, string(r.identifier)); err != nil {
+		if err := validateMsg(msg, r.identifier); err != nil {
 			continue
 		}
 		logger := r.logger.With(messageFields(msg)...)
@@ -236,10 +236,10 @@ func validateDecidedMsg(msg *proto.SignedMessage, share *storage.Share) error {
 	return p.Run(msg)
 }
 
-func validateMsg(msg *proto.SignedMessage, identifier string) error {
+func validateMsg(msg *proto.SignedMessage, identifier []byte) error {
 	p := pipeline.Combine(
 		auth.BasicMsgValidation(),
-		auth.ValidateLambdas([]byte(identifier)),
+		auth.ValidateLambdas(identifier),
 	)
 	return p.Run(msg)
 }
