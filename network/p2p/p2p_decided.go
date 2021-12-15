@@ -3,6 +3,7 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -38,9 +39,7 @@ func (n *p2pNetwork) BroadcastDecided(topicName []byte, msg *proto.SignedMessage
 
 // ReceivedDecidedChan returns the channel for decided messages
 func (n *p2pNetwork) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
-	ls := listener{
-		decidedCh: make(chan *proto.SignedMessage, MsgChanSize),
-	}
+	ls := listeners.NewListener(network.NetworkMsg_DecidedType)
 
-	return ls.decidedCh, n.registerListener(ls)
+	return ls.DecidedChan(), n.listeners.Register(ls)
 }

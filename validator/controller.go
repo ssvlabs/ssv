@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -31,6 +32,7 @@ type ControllerOptions struct {
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
+	HistorySyncRateLimit       time.Duration `yaml:"HistorySyncRateLimit" env:"HISTORY_SYNC_BACKOFF" env-default:"200ms" env-description:"Interval for updating metadata"`
 	ETHNetwork                 *core.Network
 	Network                    network.Network
 	Beacon                     beacon.Beacon
@@ -93,6 +95,7 @@ func NewController(options ControllerOptions) Controller {
 			DB:                         options.DB,
 			Fork:                       options.Fork,
 			Signer:                     options.KeyManager,
+			SyncRateLimit:              options.HistorySyncRateLimit,
 		}),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
@@ -125,7 +128,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // ProcessEth1Event handles a single event, will be called in both sync and stream events from registry contract
 func (c *controller) ProcessEth1Event(e eth1.Event) error {
-	if validatorAddedEvent, ok := e.Data.(eth1.ValidatorAddedEvent); ok {
+	if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
 		pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 		if err := c.handleValidatorAddedEvent(validatorAddedEvent); err != nil {
 			c.logger.Error("could not process validator",
@@ -237,7 +240,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 }
 
 // handleValidatorAddedEvent handles registry contract event for validator added
-func (c *controller) handleValidatorAddedEvent(validatorAddedEvent eth1.ValidatorAddedEvent) error {
+func (c *controller) handleValidatorAddedEvent(validatorAddedEvent abiparser.ValidatorAddedEvent) error {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey[:])
 	logger := c.logger.With(zap.String("pubKey", pubKey))
 	// if exist -> do nothing

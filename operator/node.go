@@ -32,6 +32,7 @@ type Options struct {
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
+	DutyExec            duties.DutyExecutor
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
@@ -74,6 +75,7 @@ func New(opts Options) Node {
 			ValidatorController: opts.ValidatorController,
 			GenesisEpoch:        opts.GenesisEpoch,
 			DutyLimit:           opts.DutyLimit,
+			Executor:            opts.DutyExec,
 		}),
 
 		fork: opts.Fork,

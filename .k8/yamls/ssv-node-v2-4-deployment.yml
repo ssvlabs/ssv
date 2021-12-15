@@ -115,6 +115,12 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: smart_contract_addr_key
+        - name: ABI_VERSION
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: abi_version
+              optional: true
         - name: LOG_LEVEL
           value: "debug"
         - name: DISCOVERY_TYPE_KEY

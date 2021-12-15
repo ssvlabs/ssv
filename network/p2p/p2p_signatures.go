@@ -3,6 +3,7 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -27,9 +28,7 @@ func (n *p2pNetwork) BroadcastSignature(topicName []byte, msg *proto.SignedMessa
 
 // ReceivedSignatureChan returns the channel with signatures
 func (n *p2pNetwork) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
-	ls := listener{
-		sigCh: make(chan *proto.SignedMessage, MsgChanSize),
-	}
+	ls := listeners.NewListener(network.NetworkMsg_SignatureType)
 
-	return ls.sigCh, n.registerListener(ls)
+	return ls.SigChan(), n.listeners.Register(ls)
 }

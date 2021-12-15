@@ -1,108 +1,19 @@
-package goeth
+package eth1
 
 import (
-	"context"
-	"crypto/rsa"
+	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 )
 
-func TestEth1Client_handleEvent(t *testing.T) {
-	tests := []struct {
-		name           string
-		version        eth1.Version
-		operatorAdded  string
-		validatorAdded string
-	}{
-		{
-			name:           "legacy abi contract",
-			version:        eth1.Legacy,
-			operatorAdded:  rawOperatorAdded,
-			validatorAdded: rawValidatorAdded,
-		},
-		{
-			name:           "v2 abi contract",
-			version:        eth1.V2,
-			operatorAdded:  v2RawOperatorAdded,
-			validatorAdded: v2RawValidatorAdded,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ec := newEth1Client(test.version)
-			contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI(test.version)))
-			require.NoError(t, err)
-			require.NotNil(t, contractAbi)
-			var vLogOperatorAdded types.Log
-			err = json.Unmarshal([]byte(test.operatorAdded), &vLogOperatorAdded)
-			require.NoError(t, err)
-			var vLogValidatorAdded types.Log
-			err = json.Unmarshal([]byte(test.validatorAdded), &vLogValidatorAdded)
-			require.NoError(t, err)
-
-			cn := make(chan *eth1.Event)
-			sub := ec.EventsFeed().Subscribe(cn)
-			require.NoError(t, err)
-			var eventsWg sync.WaitGroup
-			go func() {
-				defer sub.Unsubscribe()
-				for event := range cn {
-					if ethEvent, ok := event.Data.(abiparser.OperatorAddedEvent); ok {
-						require.NotNil(t, ethEvent)
-						require.NotNil(t, ethEvent.PublicKey)
-						eventsWg.Done()
-						continue
-					}
-					if ethEvent, ok := event.Data.(abiparser.ValidatorAddedEvent); ok {
-						require.NotNil(t, ethEvent)
-						require.NotNil(t, ethEvent.PublicKey)
-						eventsWg.Done()
-						continue
-					}
-					panic("event data type is not founded")
-				}
-			}()
-
-			eventsWg.Add(1)
-			err = ec.handleEvent(vLogOperatorAdded, contractAbi)
-			require.NoError(t, err)
-
-			time.Sleep(10 * time.Millisecond)
-			eventsWg.Add(1)
-			err = ec.handleEvent(vLogValidatorAdded, contractAbi)
-			require.NoError(t, err)
-
-			eventsWg.Wait()
-		})
-	}
-}
-
-func newEth1Client(abiVersion eth1.Version) *eth1Client {
-	ec := eth1Client{
-		ctx:    context.TODO(),
-		conn:   nil,
-		logger: zap.L(),
-		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
-			return nil, true, nil
-		},
-		eventsFeed: new(event.Feed),
-		abiVersion: abiVersion,
-	}
-	return &ec
-}
-
-var rawOperatorAdded = `{
+func TestParseOperatorAddedEvent(t *testing.T) {
+	OldRawOperatorAdded := `{
   "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
   "topics": [
 	"0x39b34f12d0a1eb39d220d2acd5e293c894753a36ac66da43b832c9f1fdb8254e"
@@ -115,8 +26,7 @@ var rawOperatorAdded = `{
   "logIndex": "0xf",
   "removed": false
 }`
-
-var v2RawOperatorAdded = `{
+	rawOperatorAdded := `{
    "address":"0xd594c1ef4845713e86658cb42227a811625a285b",
    "topics":[
       "0x39b34f12d0a1eb39d220d2acd5e293c894753a36ac66da43b832c9f1fdb8254e",
@@ -131,7 +41,36 @@ var v2RawOperatorAdded = `{
    "removed":false
 }`
 
-var rawValidatorAdded = `{
+	logger := logex.Build("test", zap.DebugLevel, nil)
+	t.Run("legacy operator added", func(t *testing.T) {
+		legacyLogOperatorAdded, legacyContractAbi := unmarshalLog(t, OldRawOperatorAdded, Legacy)
+		abiParser := NewParser(logger, Legacy)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(nil, legacyLogOperatorAdded.Data, nil, legacyContractAbi)
+		require.NoError(t, err)
+		require.NotNil(t, legacyContractAbi)
+		require.False(t, isEventBelongsToOperator)
+		require.NotNil(t, parsed)
+		require.Equal(t, "asdas", parsed.Name)
+		require.Equal(t, "0x67Ce5c69260bd819B4e0AD13f4b873074D479811", parsed.OwnerAddress.Hex())
+	})
+
+	t.Run("v2 operator added", func(t *testing.T) {
+		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V2)
+		abiParser := NewParser(logger, V2)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(nil, LogOperatorAdded.Data, LogOperatorAdded.Topics, contractAbi)
+		require.NoError(t, err)
+		require.NotNil(t, contractAbi)
+		require.False(t, isEventBelongsToOperator)
+		require.NotNil(t, parsed)
+		require.Equal(t, "TestOperator888", parsed.Name)
+		require.Equal(t, "LS0895649UdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBOHRXRG0xbTNtYW5Ra0xweVpLMzcKMGNHRGoydlBTWStRWVFBd3BWOXZpWThKVlgzT2J0VjNLL24xNy9peGZ2VEx5aGZKckgzYStpS1NIcDl5WEU4cQp6N2RhOTlaVzU4RzAyeDF0ZnpuV1REMmFpbklpMDAwdjQ5RjFTdzlYOUttQUg5VzNGdjBaREpadzZKVFd3R0ZiCmZiTmM2cGVvTG5ucnllWlVXb09ZQms0TVg2Um9QV2ZXNUJEaURaeHFqVjdvbFV3ZnFBMW5OeU96RXFCMEtkSW8KbExSZFA4ODZBNFJrZGpjUDc5aWdrM0RjVVdCMDhpZlM4SFlvS012ZUZrek0yR2dmOG5LRnFmSnFYNzlybFR4cApSTnlheUZOYXhZWEY4enBBMHlYRGFHQ0I1TitzZ1N2Yjg1WDAydWVCa1NadFFUMUMyTGMxWlZkbERFZVpGNFNlCkh3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
+			string(parsed.PublicKey))
+		require.Equal(t, "0xa5cfD290965372553Efd5fDaeB91C335207b76E2", parsed.OwnerAddress.Hex())
+	})
+}
+
+func TestParseValidatorAddedEvent(t *testing.T) {
+	legacyRawValidatorAdded := `{
   "address": "0x9573c41f0ed8b72f3bd6a9ba6e3e15426a0aa65b",
   "topics": [
 	"0x8674c0b4bd63a0814bf1ae6d64d71cf4886880a8bdbd3d7c1eca89a37d1e9271"
@@ -144,8 +83,7 @@ var rawValidatorAdded = `{
   "logIndex": "0x2",
   "removed": false
 }`
-
-var v2RawValidatorAdded = `{
+	rawValidatorAdded := `{
    "address":"0xd594c1ef4845713e86658cb42227a811625a285b",
    "topics":[
       "0x088097840a21a2c763dd9bd97cc2b0b27628bb6a42124a398260fac7f31ff571"
@@ -158,3 +96,45 @@ var v2RawValidatorAdded = `{
    "logIndex":"0x2",
    "removed":false
 }`
+
+	t.Run("legacy validator added", func(t *testing.T) {
+		vLogValidatorAdded, contractAbi := unmarshalLog(t, legacyRawValidatorAdded, Legacy)
+		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), Legacy)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
+		require.NoError(t, err)
+		require.NotNil(t, contractAbi)
+		require.False(t, isEventBelongsToOperator)
+		require.NotNil(t, parsed)
+		require.Equal(t, "91db3a13ab428a6c9c20e7104488cb6961abeab60e56cf4ba199eed3b5f6e7ced670ecb066c9704dc2fa93133792381c", hex.EncodeToString(parsed.PublicKey))
+	})
+
+	t.Run("v2 validator added", func(t *testing.T) {
+		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V2)
+		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), V2)
+		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
+		require.NoError(t, err)
+		require.NotNil(t, contractAbi)
+		require.False(t, isEventBelongsToOperator)
+		require.NotNil(t, parsed)
+		require.Equal(t, "8687eb8b88ff9c39e659c47b7bb76665fabfc4fc02c4246caca49700242fa9260a145969ede608b10c711ef2d57d0da1", hex.EncodeToString(parsed.PublicKey))
+		require.Equal(t, "0x4e409dB090a71D14d32AdBFbC0A22B1B06dde7dE", parsed.OwnerAddress.Hex())
+		operators := []string{"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjIKRGhUMk11dElmYUd0VmxMeDVWK2g4amwrdnlxT1YvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQegpRQzZ6MEE1b1I3enRuWHU2c0V3TkhJSFh3REFITHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkCkNFcUZKRmdNUFk3NlJQY0o2R2dkTWcrWVRRWVVFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkIKenBndTNzdHZIdHpRV1Z2eHJ0NTR0Rm9DMHRmWE1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RQphQkxoSlpFUXlpMklpUU02Ulg2a01vZGdGUmcvemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4CmJRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K", "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBb3pVaGFzSG9HeE1YS3pUbzgrSHcKWGV0enJtWENYOTdteXBpaHhjL2wxSEllSVVwV2V3NkFNMzlPd1JQZ2VVMFZ3QmQ2NHZhbzZsTTNaQWxTdVZlMgpablN0T01JckJTWGVsYkc0b1BrRG5xZkNNbGJma1RNRlhXVFowdE1IdGJwVkU3N2o0aEpxaUI3ZU13YitwNXUxClovNmVxWjZmRWRnODI5MzN3ZUhhVWNzd2ZJQmhYNlNaUjNlMkJvRUJ2bHljNE5ENEFoNVFaZjMrRWpxSit5dHYKc3hiRm5MNUpLWWhjSlc4YmtCdzNoM2VreUYyY2I2eUE3M3dsTzZhWklaRWJ4QkE0WDl4WjhMSFBaNHJYWG9GbwpoMVFCd1IxOUVhemF5b0h1TmJkWGpBbU9hc1ViT0ttNFJBdk9ya1FwZ1I4S0J4NGMzczk0OFlidTBJRktQb0NICkJ3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K", "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBcjZXc09kMzJZVStPeVowVVZtUlYKQkhEREtLM2U1OTRpUzV2dHRLMVJiMlVYd3YwNGZKcGd4L1NQWmlqUmE0eFdmc3ZsaTMxeHg1c2srMlh6OTJ1VQo5TlE4OGRlL0YxemJtanQwM25wWjhaS253cm1LOXZURE9PZFY4M1RiMUNYTzFhb3J2eVM1MERiZTlSbHE2SGNDCnVuTTRaQnk0SHdvZ2pBZjY2YTFCc085eGx2Rjc0UEgrRTJ0Q1k0ZVYwL1M4VFdHbjh4R0dITW5GT0l1UmRMUTAKemMvQ0pPVjBIK1daSEVEZTcyNU8wR1AwTXV0QmNHZWE1R3A4ckZwWHkvMDFBdmlXajBnMDdqMFR1M0hZN0dlSwovZVNTL1hWOGJURG44M0ZQbE54WHdyVml3czl0cGxzTFMxeUxSN0xxT2NYYVl4NHRLY3FrVTQ0UFhmem9UeC9BCmh3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K", "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVIzV0hmU1lhWlE0NjkxenR0aTYKZlBBcExqa29LcysrQS90QWdSVXdHbEhXYm5iNjJPVU4ra0tTUU53VWlNMFRwWGdOVHVSNGpjdWdKa1NTRlRSRAp5WEwvSXRpbzlFZHE3aEhRQ3BEQ0xCVFNYRlNtMjJrNlNRbllGeWs3UVNndnoyQW9mOXJ6YVdBQmVmUkZPdUs5CnFWT00rbzhnRnFwcXlQRnRJRy9CVS9Fb1l2M0FNU1A5UWJCTXRXSkIvcTd2QStZMUFrZEJiYUNuaGFkK1FUWGwKY1VkSzRabHZ1NVdFWkxLdC9OMlU1RGQwaFh4RXBuRlo3L01SNVRnRVl2NFl3aUpHeWNyRTFKWGVSU2MrM21DWQpKekVzYjJPWTBTZE83YjBMcWdqM2hVa0RtcEdVS2NoQlQyaGw0NWJ5ak4valZjUW1rb29lYUgzSCt2R2IvNzhVCkV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"}
+		for i, pk := range parsed.OperatorPublicKeys {
+			require.Equal(t, operators[i], string(pk))
+		}
+		shares := []string{"adb6d42245eaf4b00909679642964d6d5c12c4c550eaffcee499a12ea731c5f101f43a3880b9363daf873ae455fa7aa6", "b6de3081ad9a8becd37676827afb46386eeaa4cd7ebf8711a37505d3c5d3a7a3c1e167e3031e98094ed5262ec65ff205", "ad4754bd8ca755db23a0701d0dd5488403f9092912b09bcef95b8f70b380b528effd395fb3f06f92c515acf618f2cfa9", "97fceae9c1eeaeb5f9c8ebf875b7bc8248c514fe0c847cb2a15e662595ec6e214ebe3351f9b79629185008be0a1d1f50"}
+		for i, pk := range parsed.SharesPublicKeys {
+			require.Equal(t, shares[i], hex.EncodeToString(pk))
+		}
+	})
+}
+
+func unmarshalLog(t *testing.T, rawOperatorAdded string, abiVersion Version) (*types.Log, abi.ABI) {
+	var vLogOperatorAdded types.Log
+	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
+	require.NoError(t, err)
+	contractAbi, err := abi.JSON(strings.NewReader(ContractABI(abiVersion)))
+	require.NoError(t, err)
+	require.NotNil(t, contractAbi)
+	return &vLogOperatorAdded, contractAbi
+}

@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
@@ -38,14 +39,14 @@ func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, pr
 		Type:        network.NetworkMsg_SyncType,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal message")
+		return stream, errors.Wrap(err, "failed to marshal message")
 	}
 
 	if err := stream.WriteWithTimeout(msgBytes, n.cfg.RequestTimeout); err != nil {
-		return nil, errors.Wrap(err, "could not write to stream")
+		return stream, errors.Wrap(err, "could not write to stream")
 	}
 	if err := stream.CloseWrite(); err != nil {
-		return nil, errors.Wrap(err, "could not close write stream")
+		return stream, errors.Wrap(err, "could not close write stream")
 	}
 	return stream, nil
 }
@@ -55,6 +56,11 @@ func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, protocol protocol.ID,
 	var err error
 	stream, err := n.sendSyncMessage(nil, peer, protocol, msg)
 	if err != nil {
+		if stream != nil {
+			if streamCloseErr := stream.Close(); streamCloseErr != nil {
+				n.logger.Error("could not close stream after error", zap.Error(streamCloseErr))
+			}
+		}
 		return nil, errors.Wrap(err, "could not send sync msg")
 	}
 
@@ -121,7 +127,16 @@ func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage)
 
 func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
+	s, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
+	if s != nil {
+		streamCloseErr := s.Close()
+		if streamCloseErr != nil {
+			n.logger.Error("could not close stream ", zap.Error(streamCloseErr))
+		}
+		if err == nil {
+			return streamCloseErr
+		}
+	}
 	return err
 }
 
@@ -148,9 +163,7 @@ func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg 
 
 // ReceivedSyncMsgChan returns the channel for sync messages
 func (n *p2pNetwork) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
-	ls := listener{
-		syncCh: make(chan *network.SyncChanObj, MsgChanSize),
-	}
+	ls := listeners.NewListener(network.NetworkMsg_SyncType)
 
-	return ls.syncCh, n.registerListener(ls)
+	return ls.SyncChan(), n.listeners.Register(ls)
 }

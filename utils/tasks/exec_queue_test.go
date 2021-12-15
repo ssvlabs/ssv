@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"github.com/stretchr/testify/require"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,12 +43,15 @@ func TestExecQueue_Stop(t *testing.T) {
 
 	go q.Start()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	q.Queue(func() error {
+		defer wg.Done()
 		atomic.AddInt64(&i, 1)
 		return nil
 	})
 	require.Equal(t, 1, len(q.(*executionQueue).getWaiting()))
-	time.Sleep(2 * time.Millisecond)
+	wg.Wait()
 	require.Equal(t, 0, len(q.(*executionQueue).getWaiting()))
 
 	require.False(t, q.(*executionQueue).isStopped())

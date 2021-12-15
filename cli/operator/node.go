@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -11,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/operator/duties"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -37,6 +39,8 @@ type config struct {
 	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey  string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+
+	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
 }
 
 var cfg config
@@ -148,6 +152,8 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
+
 		// create new eth1 client
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
@@ -160,9 +166,10 @@ var StartNodeCmd = &cobra.Command{
 			Logger:                     Logger,
 			NodeAddr:                   cfg.ETH1Options.ETH1Addr,
 			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
-			ContractABI:                eth1.ContractABI(),
+			ContractABI:                eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
+			AbiVersion:                 cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
@@ -170,17 +177,20 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-
+		if cfg.ReadOnlyMode {
+			cfg.SSVOptions.DutyExec = duties.NewReadOnlyExecutor(Logger)
+		}
 		operatorNode = operator.New(cfg.SSVOptions)
+
+		if cfg.MetricsAPIPort > 0 {
+			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
+		}
 
 		metrics.WaitUntilHealthy(Logger, cfg.SSVOptions.Eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
@@ -192,9 +202,9 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func startMetricsHandler(logger *zap.Logger, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enableProf bool) {
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?

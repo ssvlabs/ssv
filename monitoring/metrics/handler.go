@@ -1,16 +1,19 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
+	"time"
 )
 
 // Handler handles incoming metrics requests
@@ -37,8 +40,9 @@ func init() {
 }
 
 // NewMetricsHandler creates a new instance
-func NewMetricsHandler(logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
+func NewMetricsHandler(ctx context.Context, logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
 	mh := metricsHandler{
+		ctx:           ctx,
 		logger:        logger.With(zap.String("component", "metrics/handler")),
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
@@ -47,6 +51,7 @@ func NewMetricsHandler(logger *zap.Logger, enableProf bool, healthChecker Health
 }
 
 type metricsHandler struct {
+	ctx           context.Context
 	logger        *zap.Logger
 	enableProf    bool
 	healthChecker HealthCheckAgent
@@ -106,4 +111,5 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 func (mh *metricsHandler) configureProfiling() {
 	runtime.SetBlockProfileRate(1000)
 	runtime.SetMutexProfileFraction(1)
+	async.RunEvery(mh.ctx, time.Minute*2, reportRuntimeStats)
 }

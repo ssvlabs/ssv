@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"context"
 	"crypto/rsa"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
@@ -11,7 +12,6 @@ import (
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/network"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
@@ -103,7 +103,8 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr))
+		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abiVersion", cfg.ETH1Options.AbiVersion.String()))
+
 		if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 			Logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 			if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -114,7 +115,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			Ctx:                  cmd.Context(),
 			Logger:               Logger,
 			NodeAddr:             cfg.ETH1Options.ETH1Addr,
-			ContractABI:          eth1.ContractABI(),
+			ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 			// using an empty private key provider
@@ -122,6 +123,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
 				return nil, true, nil
 			},
+			AbiVersion: cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
@@ -152,14 +154,15 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		exporterNode = exporter.New(*exporterOptions)
 
+		if cfg.MetricsAPIPort > 0 {
+			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
+		}
+
 		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
 		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 		if err := exporterNode.Start(); err != nil {
 			Logger.Fatal("failed to start exporter", zap.Error(err))
@@ -171,9 +174,9 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
 
-func startMetricsHandler(logger *zap.Logger, net network.Network, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enableProf bool) {
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, exporterNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, logger, enableProf, exporterNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info("starting metrics handler", zap.String("addr", addr))
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {

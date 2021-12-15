@@ -60,13 +60,30 @@ func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
 	})
 }
 
+// SetMany save many values with the given keys in a single badger transaction
+func (b *BadgerDb) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, error)) error {
+	wb := b.db.NewWriteBatch()
+	for i := 0; i < n; i++ {
+		item, err := next(i)
+		if err != nil {
+			wb.Cancel()
+			return err
+		}
+		if err := wb.Set(append(prefix, item.Key...), item.Value); err != nil {
+			wb.Cancel()
+			return err
+		}
+	}
+	return wb.Flush()
+}
+
 // Get return value for specified key
 func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 	var resValue []byte
 	err := b.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(append(prefix, key...))
 		if err != nil {
-			if err.Error() == "not found" || err.Error() == "Key not found" { // in order to couple the not found errors together
+			if isNotFoundError(err) { // in order to couple the not found errors together
 				return errors.New(EntryNotFoundError)
 			}
 			return err
@@ -82,6 +99,42 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 		Key:   key,
 		Value: resValue,
 	}, found, err
+}
+
+// GetMany return values for the given keys
+func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	err := b.db.View(func(txn *badger.Txn) error {
+		var value, cp []byte
+		for _, k := range keys {
+			item, err := txn.Get(append(prefix, k...))
+			if err != nil {
+				if isNotFoundError(err) { // in order to couple the not found errors together
+					b.logger.Debug("item not found", zap.String("key", string(k)))
+					continue
+				}
+				b.logger.Warn("failed to get item", zap.String("key", string(k)))
+				return err
+			}
+			value, err = item.ValueCopy(value)
+			if err != nil {
+				b.logger.Warn("failed to copy item value", zap.String("key", string(k)))
+				return err
+			}
+			cp = make([]byte, len(value))
+			copy(cp, value[:])
+			if err := iterator(basedb.Obj{
+				Key:   k,
+				Value: cp,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return err
 }
 
 // Delete key in specific prefix
@@ -185,4 +238,8 @@ func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 	}
 
 	return keys
+}
+
+func isNotFoundError(err error) bool {
+	return err != nil && (err.Error() == "not found" || err.Error() == "Key not found")
 }

@@ -161,6 +161,12 @@ spec:
               secretKeyRef:
                 key: smart_contract_addr_key
                 name: config-secrets
+          - name: ABI_VERSION
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: abi_version
+                optional: true
           - name: NETWORK_PRIVATE_KEY
             valueFrom:
               secretKeyRef:

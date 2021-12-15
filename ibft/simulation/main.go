@@ -178,6 +178,7 @@ func main() {
 			shares[i],
 			v0.New(),
 			signer,
+			time.Millisecond*200,
 		)
 		nodes = append(nodes, node)
 	}

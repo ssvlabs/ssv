@@ -3,9 +3,9 @@ package incoming
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
 
 func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
@@ -23,11 +23,14 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 		if endSeq-startSeq > s.paginationMaxSize {
 			endSeq = startSeq + s.paginationMaxSize
 		}
-
-		ret, err := GetDecidedInRange(s.identifier, startSeq, endSeq, s.logger, s.storage)
+		t := time.Now()
+		ret, err := s.storage.GetDecidedInRange(s.identifier, startSeq, endSeq)
 		if err != nil {
 			ret = make([]*proto.SignedMessage, 0)
 		}
+		s.logger.Debug("get decided in range", zap.Uint64("from", startSeq),
+			zap.Uint64("to", endSeq), zap.Int64("time(ts)", time.Since(t).Milliseconds()),
+			zap.String("identifier", string(s.identifier)), zap.Int("results count", len(ret)), zap.Error(err))
 		retMsg.SignedMessages = ret
 	}
 
@@ -47,24 +50,4 @@ func (s *ReqHandler) validateGetDecidedReq(msg *network.SyncChanObj) error {
 		return errors.New("sync msg invalid: param[0] should be <= param[1]")
 	}
 	return nil
-}
-
-// GetDecidedInRange returns decided messages of the validator (and role) for the given range
-func GetDecidedInRange(identifier []byte, start, end uint64, logger *zap.Logger, storage collections.Iibft) ([]*proto.SignedMessage, error) {
-	ret := make([]*proto.SignedMessage, 0)
-	for i := start; i <= end; i++ {
-		decidedMsg, found, err := storage.GetDecided(identifier, i)
-		logger = logger.With(zap.ByteString("identifier", identifier), zap.Uint64("sequence", i))
-		if !found {
-			logger.Error("decided was not found")
-			continue
-		}
-		if err != nil {
-			logger.Error("failed to get decided", zap.Error(err))
-			continue
-		}
-
-		ret = append(ret, decidedMsg)
-	}
-	return ret, nil
 }
