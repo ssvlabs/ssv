@@ -33,6 +33,10 @@ type commitReader struct {
 	out              *event.Feed
 }
 
+func (cr *commitReader) HandleMsg(msg *proto.SignedMessage) {
+	panic("implement me")
+}
+
 // NewCommitReader creates new instance
 func NewCommitReader(opts CommitReaderOptions) Reader {
 	r := &commitReader{

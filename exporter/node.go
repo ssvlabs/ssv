@@ -9,11 +9,13 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
@@ -173,6 +175,9 @@ func (exp *exporter) Start() error {
 	}()
 
 	go exp.startMainTopic()
+
+	go exp.startListenToNetwork()
+	go exp.startListenToDecided()
 
 	go exp.reportOperators()
 
@@ -366,4 +371,50 @@ func (exp *exporter) reportOperators() {
 	for i := range operators {
 		reportOperatorIndex(exp.logger, &operators[i])
 	}
+}
+
+func (exp *exporter) startListenToNetwork() {
+	cn, done := exp.network.ReceivedMsgChan()
+	defer done()
+
+	for msg := range cn {
+		if err := auth.BasicMsgValidation().Run(msg); err != nil{
+			continue
+		}
+		exp.readersMut.Lock()
+		publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
+		logger := exp.logger.With(zap.String("publicKey", publicKey), zap.String("role", role))
+		if reader, ok := exp.netReaders[publicKey]; ok {
+			logger.Debug("push network msg to reader")
+			reader.HandleMsg(msg)
+		} else {
+			logger.Warn("failed to find validator reader")
+		}
+		exp.readersMut.Unlock()
+	}
+
+	exp.logger.Debug("Done listening to network!")
+}
+
+func (exp *exporter) startListenToDecided() {
+	// recive all network msg's and point to right reader
+	cn, done := exp.network.ReceivedDecidedChan()
+	defer done()
+
+	for msg := range cn {
+		if err := auth.BasicMsgValidation().Run(msg); err != nil{
+			continue
+		}
+		exp.readersMut.Lock()
+		publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
+		logger := exp.logger.With(zap.String("publicKey", publicKey), zap.String("role", role))
+		if reader, ok := exp.decidedReaders[publicKey]; ok {
+			logger.Debug("push decided msg to reader")
+			reader.HandleMsg(msg)
+		} else {
+			logger.Warn("failed to find validator reader")
+		}
+		exp.readersMut.Unlock()
+	}
+	exp.logger.Debug("Done listening to decided!")
 }

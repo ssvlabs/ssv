@@ -104,9 +104,9 @@ func (r *decidedReader) Start() error {
 	if err := r.waitForMinPeers(ctx, r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	cn, done := r.network.ReceivedDecidedChan()
-	defer done()
-	r.listenToNetwork(cn)
+	//cn, done := r.network.ReceivedDecidedChan()
+	//defer done()
+	//r.listenToNetwork(cn)
 	return nil
 }
 
@@ -143,6 +143,26 @@ func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
 			}
 		}(msg)
 	}
+}
+
+func (r *decidedReader) HandleMsg(msg *proto.SignedMessage) {
+	if err := validateMsg(msg, r.identifier); err != nil {
+		return
+	}
+	logger := r.logger.With(messageFields(msg)...)
+	if err := validateDecidedMsg(msg, r.validatorShare); err != nil {
+		logger.Debug("received invalid decided message")
+		return
+	}
+	go func(msg *proto.SignedMessage) {
+		defer logger.Debug("done with decided msg")
+		if saved, err := r.handleNewDecidedMessage(msg); err != nil {
+			if !saved {
+				logger.Error("could not handle decided message", zap.Error(err))
+			}
+			logger.Error("could not check highest decided", zap.Error(err))
+		}
+	}(msg)
 }
 
 // handleNewDecidedMessage saves an incoming (valid) decided message
