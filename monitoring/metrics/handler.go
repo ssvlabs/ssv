@@ -40,8 +40,9 @@ func init() {
 }
 
 // NewMetricsHandler creates a new instance
-func NewMetricsHandler(logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
+func NewMetricsHandler(ctx context.Context, logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
 	mh := metricsHandler{
+		ctx:           ctx,
 		logger:        logger.With(zap.String("component", "metrics/handler")),
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
@@ -50,6 +51,7 @@ func NewMetricsHandler(logger *zap.Logger, enableProf bool, healthChecker Health
 }
 
 type metricsHandler struct {
+	ctx           context.Context
 	logger        *zap.Logger
 	enableProf    bool
 	healthChecker HealthCheckAgent
@@ -68,7 +70,6 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		mux.HandleFunc("/debug/pprof/profile", http_pprof.Profile)
 		mux.HandleFunc("/debug/pprof/symbol", http_pprof.Symbol)
 		mux.HandleFunc("/debug/pprof/trace", http_pprof.Trace)
-		async.RunEvery(context.Background(), time.Minute*2, reportRuntimeStats)
 	}
 
 	mux.Handle("/metrics", promhttp.HandlerFor(
@@ -110,4 +111,5 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 func (mh *metricsHandler) configureProfiling() {
 	runtime.SetBlockProfileRate(1000)
 	runtime.SetMutexProfileFraction(1)
+	async.RunEvery(mh.ctx, time.Minute*2, reportRuntimeStats)
 }

@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"context"
 	"crypto/rsa"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
@@ -11,7 +12,6 @@ import (
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/network"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/storage"
@@ -155,7 +155,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterNode = exporter.New(*exporterOptions)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(Logger, network, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
 		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
@@ -174,9 +174,9 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
 
-func startMetricsHandler(logger *zap.Logger, net network.Network, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enableProf bool) {
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(logger, enableProf, exporterNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, logger, enableProf, exporterNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	logger.Info("starting metrics handler", zap.String("addr", addr))
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
