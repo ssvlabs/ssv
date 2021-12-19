@@ -13,10 +13,10 @@ func TestShareOptionsToShare(t *testing.T) {
 	origShare, sk := generateRandomValidatorShare()
 
 	shareOpts := ShareOptions{
-		ShareKey:  sk.SerializeToHexStr(),
-		PublicKey: sk.GetPublicKey().SerializeToHexStr(),
-		NodeID:    1,
-		Committee: map[string]int{},
+		ShareKey:     sk.SerializeToHexStr(),
+		PublicKey:    sk.GetPublicKey().SerializeToHexStr(),
+		NodeID:       1,
+		Committee:    map[string]int{},
 		OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
 	}
 
