@@ -25,18 +25,20 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 
 // Share storage model
 type Share struct {
-	NodeID    uint64
-	PublicKey *bls.PublicKey
-	Committee map[uint64]*proto.Node
-	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
+	NodeID       uint64
+	PublicKey    *bls.PublicKey
+	Committee    map[uint64]*proto.Node
+	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
+	OwnerAddress string
 }
 
 //  serializedShare struct
 type serializedShare struct {
-	NodeID    uint64
-	ShareKey  []byte
-	Committee map[uint64]*proto.Node
-	Metadata  *beacon.ValidatorMetadata // pointer in order to support nil
+	NodeID       uint64
+	ShareKey     []byte
+	Committee    map[uint64]*proto.Node
+	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
+	OwnerAddress string
 }
 
 // CommitteeSize returns the IBFT committee size
@@ -107,9 +109,10 @@ func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
 // Serialize share to []byte
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
-		NodeID:    s.NodeID,
-		Committee: map[uint64]*proto.Node{},
-		Metadata:  s.Metadata,
+		NodeID:       s.NodeID,
+		Committee:    map[uint64]*proto.Node{},
+		Metadata:     s.Metadata,
+		OwnerAddress: s.OwnerAddress,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {

@@ -63,6 +63,7 @@ func ShareFromValidatorAddedEvent(validatorAddedEvent abiparser.ValidatorAddedEv
 	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to deserialize share public key")
 	}
+	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress.String()
 	var shareKey *bls.SecretKey
 
 	ibftCommittee := map[uint64]*proto.Node{}
