@@ -148,10 +148,11 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
 	return &Share{
-		NodeID:    value.NodeID,
-		PublicKey: pubKey,
-		Committee: value.Committee,
-		Metadata:  value.Metadata,
+		NodeID:       value.NodeID,
+		PublicKey:    pubKey,
+		Committee:    value.Committee,
+		Metadata:     value.Metadata,
+		OwnerAddress: value.OwnerAddress,
 	}, nil
 }
 
