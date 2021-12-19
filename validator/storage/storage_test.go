@@ -90,5 +90,6 @@ func generateRandomValidatorShare() (*Share, *bls.SecretKey) {
 		NodeID:    1,
 		PublicKey: sk.GetPublicKey(),
 		Committee: ibftCommittee,
+		OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
 	}, &sk
 }

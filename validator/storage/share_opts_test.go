@@ -17,6 +17,7 @@ func TestShareOptionsToShare(t *testing.T) {
 		PublicKey: sk.GetPublicKey().SerializeToHexStr(),
 		NodeID:    1,
 		Committee: map[string]int{},
+		OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
 	}
 
 	t.Run("valid ShareOptions", func(t *testing.T) {
@@ -28,6 +29,7 @@ func TestShareOptionsToShare(t *testing.T) {
 		require.NotNil(t, share)
 		require.Equal(t, len(share.Committee), 4)
 		require.Equal(t, share.PublicKey.GetHexString(), origShare.PublicKey.GetHexString())
+		require.Equal(t, share.OwnerAddress, origShare.OwnerAddress)
 	})
 
 	t.Run("empty ShareOptions", func(t *testing.T) {
