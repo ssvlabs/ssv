@@ -256,8 +256,7 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 
 // syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
-	ec.logger.Debug("syncing smart contract events",
-		zap.Uint64("fromBlock", fromBlock.Uint64()))
+	ec.logger.Debug("syncing smart contract events", zap.Uint64("fromBlock", fromBlock.Uint64()))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
