@@ -92,6 +92,10 @@ func (c *conn) ReadNext() []byte {
 
 // Send sends the given message
 func (c *conn) Send(msg []byte) {
+	if len(c.send) >= chanSize {
+		// don't send on full channel
+		return
+	}
 	c.send <- msg
 }
 

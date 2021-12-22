@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
@@ -9,6 +10,15 @@ import (
 	"testing"
 	"time"
 )
+
+func TestConn_Send_FullQueue(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	c := newConn(context.Background(), logger, nil, "test", 0)
+
+	for i := 0; i < chanSize+2; i++ {
+		c.Send([]byte(fmt.Sprintf("test-%d", i)))
+	}
+}
 
 func TestBroadcaster(t *testing.T) {
 	logger := zaptest.NewLogger(t)
