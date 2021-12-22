@@ -36,7 +36,7 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 
 	var operators []OperatorInformation
 	to = normalTo(to)
-	err := es.db.GetAll(append(storagePrefix(), validatorsPrefix()...), func(i int, obj basedb.Obj) error {
+	err := es.db.GetAll(append(storagePrefix(), operatorsPrefix...), func(i int, obj basedb.Obj) error {
 		var oi OperatorInformation
 		if err := json.Unmarshal(obj.Value, &oi); err != nil {
 			return err
