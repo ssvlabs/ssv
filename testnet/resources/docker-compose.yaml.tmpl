@@ -1,0 +1,71 @@
+version: '3.5'
+
+x-base:
+  &default-base
+  image: ssv-node:local
+  command: make BUILD_PATH=/go/bin/ssvnode start-node
+  networks:
+    - ssv-net
+  restart: always
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "500m"
+      max-file: 10
+
+services:
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.24.0
+    volumes:
+      - ./resources/prometheus/:/etc/prometheus/
+      - data_prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yaml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - 9090:9090
+    restart: always
+    networks:
+      - ssv-net
+
+  grafana:
+    image: grafana/grafana:8.0.0
+    container_name: grafana
+    networks:
+      - ssv-net
+    ports:
+      - "3000:3000"
+    volumes:
+      - data_grafana:/var/lib/grafana
+      - ./data/grafana:/etc/dashboards
+      - ./resources/grafana/:/grafana/provisioning/
+
+{{range .}}
+  ssv-node-v2-{{.}}:
+    <<: *default-base
+    hostname: ssv-node-v2-{{.}}
+    volumes:
+      - ./data/containers/ssv-node-v2-{{.}}:/go/src/github.com/bloxapp/ssv
+      - ./data/config/config.yaml:/go/src/github.com/bloxapp/ssv/config/config.yaml
+      - ./data/config/share{{.}}.yaml:/go/src/github.com/bloxapp/ssv/config/share{{.}}.yaml
+    environment:
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share{{.}}.yaml
+      METRICS_API_PORT: 1500{{.}}
+      ENABLE_PROFILE: true
+    ports:
+      - "1500{{.}}:1500{{.}}"
+{{end}}
+
+networks:
+  ssv-net:
+    driver: bridge
+    name: ssv-net
+
+volumes:
+  data_prometheus:
+  data_grafana:

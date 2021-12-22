@@ -1,0 +1,27 @@
+global:
+  LogLevel: debug
+  LogFormat: json
+  LogLevelFormat: lowercase
+
+db:
+  Reporting: true
+  Type: badger-db
+
+eth2:
+  BeaconNodeAddr:
+
+eth1:
+  ETH1Addr:
+  RegistryContractAddr:
+  ETH1SyncOffset: "49e08f"
+
+p2p:
+  DiscoveryType: mdns
+
+ssv:
+  GenesisEpoch:
+  DutyLimit: 32
+  ValidatorOptions:
+    SignatureCollectionTimeout: 5s
+
+EnableProfile: true

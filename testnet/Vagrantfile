@@ -1,0 +1,30 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "ubuntu/focal64"
+
+  config.disksize.size = '50GB'
+
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder "../", "/home/vagrant/ssv"
+  config.vm.synced_folder "../data/testnet", "/home/vagrant/testnet"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "8192"
+    vb.cpus = 4
+  end
+
+#   config.vm.network "forwarded_port", guest: 3000, host: 3000 # grafana
+#   config.vm.network "forwarded_port", guest: 8545, host: 8545 # eth1 node
+#   # beacon nodes
+#   config.vm.network "forwarded_port", guest: 8001, host: 8001
+#   config.vm.network "forwarded_port", guest: 8002, host: 8002
+#   config.vm.network "forwarded_port", guest: 8003, host: 8003
+#   config.vm.network "forwarded_port", guest: 8004, host: 8004
+
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+  /bin/sh /home/vagrant/ssv/testnet/scripts/ubuntu_setup.sh
+  SHELL
+end
