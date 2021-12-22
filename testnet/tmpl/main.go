@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"os"
 	"text/template"
 )
@@ -16,7 +17,7 @@ func main() {
 	args := os.Args[1:]
 
 	// read template file
-	tmplRaw, err := os.ReadFile(args[0])
+	tmplRaw, err := ioutil.ReadFile(args[0])
 	if err != nil {
 		panic(err)
 	}
