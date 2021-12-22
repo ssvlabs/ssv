@@ -108,3 +108,14 @@ MONITOR_NODES=prometheus grafana
 docker-monitor:
 	@echo $(MONITOR_NODES)
 	@docker-compose up --build $(MONITOR_NODES)
+
+.PHONY: local-testnet
+local-testnet:
+	@echo "Stating local testnet"
+	@mkdir -p ./data/testnet > /dev/null
+	@cd testnet && vagrant up && vagrant ssh
+
+.PHONY: local-testnet-down
+local-testnet-down:
+	@echo "Stopping local testnet"
+	@cd testnet && vagrant destroy -f
