@@ -4,14 +4,14 @@ LH_DATA_DIR="$SSV_TESTNET_DIR/.lighthouse/local-testnet"
 
 ## TODO: populate OPS_PUB_KEYS
 
-function download_ssv_web() {
+function install_ssv_web() {
   git clone https://github.com/bloxapp/ssv-web.git \
     && cd ssv-web && yarn && yarn build && yarn link
 }
 
 ## extract validators information and create ssv validators
 cd "$SSV_TESTNET_DIR" || exit 1
-cd ssv-web || download_ssv_web
+cd ssv-web || install_ssv_web
 cd "$LH_DATA_DIR" || exit 1
 mkdir -p txs > /dev/null
 NODES=$(ls | grep -E "node_")

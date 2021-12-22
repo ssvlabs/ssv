@@ -27,21 +27,20 @@ Start:
 $ make local-testnet-up
 ```
 
-Run the following scripts to start a network:
+Start a network (within the VM):
 
 ```shell
-cd ssv/testnet
-export $(grep -v '^#' ./scripts/.env | xargs)
-./scripts/lh_setup.sh
-./scripts/lh_start_testnet.sh
-./scripts/ssv_deploy_contracts.sh
-./scripts/ssv_create_operators.sh
-./scripts/ssv_setup_resources.sh
-./scripts/ssv_create_validators.sh
-./scripts/start_ssv.sh
+cd ssv/testnet/scripts && ./setup.sh
 ```
 
-Stop with
+Stop (within the VM):
+
+```shell
+cd $SSV_TESTNET_DIR && docker-compose down
+cd $SSV_DIR && ./testnet/scripts/lh_stop_testnet.sh
+```
+
+Destroy the entire VM with:
 
 ```shell
 $ make local-testnet-down

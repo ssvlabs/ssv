@@ -20,7 +20,7 @@ sudo apt-get update -y && sudo apt-get install yarn -y
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs --output rustup.sh \
     && chmod u+x ./rustup.sh \
     && ./rustup.sh -y
-source ,/.cargo/env
+#source ,/.cargo/env
 
 # docker
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg

@@ -109,8 +109,8 @@ docker-monitor:
 	@echo $(MONITOR_NODES)
 	@docker-compose up --build $(MONITOR_NODES)
 
-.PHONY: local-testnet
-local-testnet:
+.PHONY: local-testnet-up
+local-testnet-up:
 	@echo "Stating local testnet"
 	@mkdir -p ./data/testnet > /dev/null
 	@cd testnet && vagrant up && vagrant ssh
