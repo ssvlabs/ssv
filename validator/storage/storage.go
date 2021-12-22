@@ -93,20 +93,18 @@ func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	objs, err := s.db.GetAllByCollection(collectionPrefix())
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get val share")
-	}
 	var res []*Share
-	for _, obj := range objs {
+
+	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
 		val, err := (&Share{}).Deserialize(obj)
 		if err != nil {
-			return nil, errors.Wrap(err, "Failed to deserialize validator")
+			return errors.Wrap(err, "failed to deserialize validator")
 		}
 		res = append(res, val)
-	}
+		return nil
+	})
 
-	return res, nil
+	return res, err
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator

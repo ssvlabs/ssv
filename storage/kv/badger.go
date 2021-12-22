@@ -144,19 +144,36 @@ func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
 	})
 }
 
-// GetAllByCollection return all array of Obj for all keys under specified prefix(bucket)
-func (b *BadgerDb) GetAllByCollection(prefix []byte) ([]basedb.Obj, error) {
-	var res []basedb.Obj
-
+// GetAll returns all the items of a given collection
+func (b *BadgerDb) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	// we got issues when reading more than 100 items with iterator (items get mixed up)
 	// instead, the keys are first fetched using an iterator, and afterwards the values are fetched one by one
 	// to avoid issues
 	err := b.db.View(func(txn *badger.Txn) error {
 		rawKeys := b.listRawKeys(prefix, txn)
-		res = b.getAll(rawKeys, prefix, txn)
+		for i, k := range rawKeys {
+			trimmedResKey := bytes.TrimPrefix(k, prefix)
+			item, err := txn.Get(k)
+			if err != nil {
+				b.logger.Error("failed to get value", zap.Error(err),
+					zap.String("trimmedResKey", string(trimmedResKey)))
+				continue
+			}
+			val, err := item.ValueCopy(nil)
+			if err != nil {
+				b.logger.Error("failed to copy value", zap.Error(err))
+				continue
+			}
+			if err := handler(i, basedb.Obj{
+				Key:   trimmedResKey,
+				Value: val,
+			}); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
-	return res, err
+	return err
 }
 
 // CountByCollection return the object count for all keys under specified prefix(bucket)
@@ -197,32 +214,6 @@ func (b *BadgerDb) report() {
 	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
 		zap.String("BlockCacheMetrics", blockCache.String()),
 		zap.String("IndexCacheMetrics", indexCache.String()))
-}
-
-func (b *BadgerDb) getAll(rawKeys [][]byte, prefix []byte, txn *badger.Txn) []basedb.Obj {
-	var res []basedb.Obj
-
-	for _, k := range rawKeys {
-		trimmedResKey := bytes.TrimPrefix(k, prefix)
-		item, err := txn.Get(k)
-		if err != nil {
-			b.logger.Error("failed to get value", zap.Error(err),
-				zap.String("trimmedResKey", string(trimmedResKey)))
-			continue
-		}
-		val, err := item.ValueCopy(nil)
-		if err != nil {
-			b.logger.Error("failed to copy value", zap.Error(err))
-			continue
-		}
-		obj := basedb.Obj{
-			Key:   trimmedResKey,
-			Value: val,
-		}
-		res = append(res, obj)
-	}
-
-	return res
 }
 
 func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {

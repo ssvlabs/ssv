@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -37,19 +38,18 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 	es.validatorsLock.RLock()
 	defer es.validatorsLock.RUnlock()
 
-	objs, err := es.db.GetAllByCollection(append(storagePrefix(), validatorsPrefix()...))
-	if err != nil {
-		return nil, err
-	}
 	to = normalTo(to)
 	var validators []ValidatorInformation
-	for _, obj := range objs {
+	err := es.db.GetAll(append(storagePrefix(), validatorsPrefix()...), func(i int, obj basedb.Obj) error {
 		var vi ValidatorInformation
-		err = json.Unmarshal(obj.Value, &vi)
+		if err := json.Unmarshal(obj.Value, &vi); err != nil {
+			return err
+		}
 		if vi.Index >= from && vi.Index <= to {
 			validators = append(validators, vi)
 		}
-	}
+		return nil
+	})
 	return validators, err
 }
 
