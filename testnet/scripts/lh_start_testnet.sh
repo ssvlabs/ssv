@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-VALIDATOR=$SSV_VALIDATORS
 BEACON_NODES=4
 
 LH_DATA_DIR=~/testnet/.lighthouse/local-testnet
@@ -27,10 +26,10 @@ function prepareEnv() {
 
 cd "$LH_DIR/scripts/local_testnet" || exit 1
 
-prepareEnv "$VALIDATOR" "$BEACON_NODES" "$LH_DATA_DIR"
+prepareEnv "$SSV_VALIDATORS" "$BEACON_NODES" "$LH_DATA_DIR"
 
 printf "starting lighthouse testnet with: \n
   - %s beacon nodes\n
-  - %s deposited validators" $BEACON_NODES $VALIDATOR
+  - %s deposited validators\n" $BEACON_NODES "$SSV_VALIDATORS"
 
 ./start_local_testnet.sh
