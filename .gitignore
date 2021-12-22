@@ -42,3 +42,5 @@ vendor/
 
 bin/
 /data/
+
+.vagrant
