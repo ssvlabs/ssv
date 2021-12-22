@@ -115,6 +115,16 @@ local-testnet-up:
 	@mkdir -p ./data/testnet > /dev/null
 	@cd testnet && vagrant up && vagrant ssh
 
+.PHONY: local-testnet-resume
+local-testnet-down:
+	@echo "Stopping local testnet"
+	@cd testnet && vagrant resume && vagrant ssh
+
+.PHONY: local-testnet-stop
+local-testnet-down:
+	@echo "Stopping local testnet"
+	@cd testnet && vagrant suspend
+
 .PHONY: local-testnet-down
 local-testnet-down:
 	@echo "Stopping local testnet"
