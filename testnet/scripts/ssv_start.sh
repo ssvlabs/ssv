@@ -22,6 +22,7 @@ fi
 if [ -z "$(docker ps -a --format "{{.Names}}" | grep "ssv-node-v2")" ]; then
   mkdir -p "$SSV_TESTNET_DIR/data/containers" > /dev/null
   for ((i=1;i<=SSV_OPERATORS;i++)); do
+    mkdir -p "$SSV_TESTNET_DIR/data/containers/ssv-node-v2-$i" > /dev/null
     docker-compose up "ssv-node-v2-$i"
     sleep 2
   done
