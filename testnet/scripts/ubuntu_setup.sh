@@ -15,14 +15,15 @@ sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/
 curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ## yarn
-curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg
-echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update -y && sudo apt-get install yarn -y
+curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list \
+  && sudo apt-get update -y && sudo apt-get install yarn -y
 #sudo apt install openjdk-11-jre
 
 ## go
 curl https://dl.google.com/go/go1.15.15.linux-amd64.tar.gz --output go1.15.15.linux-amd64.tar.gz \
   && sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf go1.15.15.linux-amd64.tar.gz \
+  && rm go1.15.15.linux-amd64.tar.gz \
   && export PATH=$PATH:/usr/local/go/bin
 ## rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs --output rustup.sh \
