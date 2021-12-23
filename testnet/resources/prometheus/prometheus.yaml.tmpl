@@ -7,13 +7,13 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-    {{range .}}
+    {{-range .}}
         - ssv-node-v2-{{.}}:1500{{.}}
-    {{end}}
+    {{-end}}
   - job_name: ssv_health
     metrics_path: /health
     static_configs:
       - targets:
-    {{range .}}
+    {{- range .}}
         - ssv-node-v2-{{.}}:1500{{.}}
-    {{end}}
+    {{- end}}
