@@ -5,7 +5,11 @@ sudo apt-get update -y
 
 ## install deps
 DEBIAN_FRONTEND=noninteractive; sudo apt-get install -y \
-  git gcc g++ make cmake pkg-config curl gnupg ca-certificates
+  git gcc g++ make cmake pkg-config curl gnupg ca-certificates jq
+
+## yq
+sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+  && sudo chmod a+x /usr/local/bin/yq
 
 ## nodejs
 curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -
@@ -28,3 +32,5 @@ echo \
   "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
   $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 sudo apt-get -y update && sudo apt-get -y install docker-ce docker-ce-cli containerd.io
+## enable access as non-root
+sudo chmod 666 /var/run/docker.sock

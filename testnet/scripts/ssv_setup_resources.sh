@@ -7,9 +7,9 @@ mkdir -p "$SSV_TESTNET_DIR/resources/prometheus" > /dev/null
 
 # create resources from template
 cd "$SSV_DIR/testnet/scripts" || exit 1
-./tmpl-cli "$SSV_DIR/testnet/resources/docker-compose.yaml.tmpl" "$(yq eval '.nodes' operators.yaml -o=json -I=0)" \
+./tmpl-cli "$SSV_DIR/testnet/resources/docker-compose.yaml.tmpl" "$(yq e '.nodes' -o=j -I=0 "$SSV_TESTNET_DIR/operators.yaml")" \
   > "$SSV_TESTNET_DIR/docker-compose.yaml"
-./tmpl-cli "$SSV_DIR/testnet/prometheus/prometheus.yaml.tmpl" "$(yq eval '.nodes' operators.yaml -o=json -I=0)" \
+./tmpl-cli "$SSV_DIR/testnet/prometheus/prometheus.yaml.tmpl" "$(yq e '.nodes' -o=j -I=0 "$SSV_TESTNET_DIR/operators.yaml")" \
   > "$SSV_TESTNET_DIR/resources/prometheus/prometheus.yaml"
 
 ## copy grafana testnet config
