@@ -1,12 +1,12 @@
 package p2p
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
@@ -192,37 +192,41 @@ func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort 
 }
 
 // listenForNewNodes watches for new nodes in the network and connects to unknown peers.
-func (n *p2pNetwork) listenForNewNodes() {
+func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 	defer n.logger.Debug("done listening for new nodes")
 	iterator := n.dv5Listener.RandomNodes()
 	//iterator = enode.Filter(iterator, s.filterPeer)
 	defer iterator.Close()
+	nextNode := func() *enode.Node {
+		exists := iterator.Next()
+		if !exists {
+			return nil
+		}
+		return iterator.Node()
+	}
 	n.logger.Debug("starting to listen for new nodes")
 	for {
 		// Exit if service's context is canceled
-		if n.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			break
 		}
 		if n.isPeerAtLimit() {
+			if node := nextNode(); n.shouldForceConnection(node) {
+				n.logger.Debug("forced connection")
+				go n.onNodeDiscovered(node)
+				time.Sleep(1 * time.Second)
+				continue
+			}
 			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
 			continue
 		}
-		exists := iterator.Next()
-		if !exists {
-			break
-		}
-		node := iterator.Node()
-		peerInfo, err := convertToAddrInfo(node)
-		if err != nil {
-			n.trace("could not convert node to peer info", zap.Error(err))
+		node := nextNode()
+		if node == nil {
+			time.Sleep(1 * time.Second)
 			continue
 		}
-		go func(info *peer.AddrInfo) {
-			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				n.trace("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
-			}
-		}(peerInfo)
+		go n.onNodeDiscovered(node)
 	}
 }
 
@@ -231,6 +235,54 @@ func (n *p2pNetwork) isPeerAtLimit() bool {
 	numOfConns := len(n.host.Network().Peers())
 	activePeers := len(n.peers.Active())
 	return activePeers >= n.maxPeers || numOfConns >= n.maxPeers
+}
+
+// isPeerAtLimit checks for max peers
+func (n *p2pNetwork) shouldForceConnection(node *enode.Node) bool {
+	if node == nil {
+		return false
+	}
+	if n.lookupHandler == nil {
+		return false
+	}
+	info, err := convertToAddrInfo(node)
+	if err != nil {
+		n.trace("could not convert node to peer info", zap.Error(err))
+		return false
+	}
+	if n.host.ID().String() == info.ID.String() {
+		n.logger.Debug("peer should not connect to itself")
+		return false
+	}
+	ua, found := n.getUserAgentOfPeer(info.ID)
+	if !found {
+		n.logger.Debug("missing user agent for peer", zap.String("peer", info.ID.String()))
+		return false
+	}
+	if nodeType := ua.NodeType(); nodeType == Exporter.String() {
+		n.logger.Debug("found exporter peer")
+		return true
+	}
+	pk := ua.NodePubKeyHash()
+	if len(pk) == 0 {
+		n.logger.Debug("missing public key hash for peer", zap.String("peer", info.ID.String()))
+		return false
+	}
+	// lookup by pk hash
+	return n.lookupHandler(pk)
+}
+
+// onNodeDiscovered acts upon new node discovered
+func (n *p2pNetwork) onNodeDiscovered(node *enode.Node) {
+	info, err := convertToAddrInfo(node)
+	if err != nil {
+		n.logger.Debug("could not convert node to peer info", zap.Error(err))
+		return
+	}
+	n.logger.Debug("on node discovered", zap.String("enr", node.String()), zap.String("peer", info.ID.String()))
+	if err := n.connectWithPeer(n.ctx, *info); err != nil {
+		n.trace("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
+	}
 }
 
 // dv5Logger implements log.Handler to track logs of discv5
