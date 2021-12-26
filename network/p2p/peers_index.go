@@ -116,7 +116,7 @@ func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 		data = IndexData{}
 	}
 	if data[UserAgentKey] == av {
-		pi.logger.Debug("value was not changed, skipping", zap.String("peerID", pid.String()))
+		// value was not changed, skipping
 		return nil
 	}
 	data[UserAgentKey] = av
