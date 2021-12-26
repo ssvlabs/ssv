@@ -63,7 +63,19 @@ type p2pNetwork struct {
 	reportLastMsg bool
 	nodeType      NodeType
 
-	maxPeers int
+	lookupHandler LookupOperatorHandler
+	maxPeers      int
+}
+
+// LookupOperatorHandler is a function that checks if the given operator
+// has some shared validator with the running operator
+type LookupOperatorHandler func(string) bool
+
+// UseLookupOperatorHandler enables to inject some lookup handler
+func UseLookupOperatorHandler(n network.Network, fn LookupOperatorHandler) {
+	if net, ok := n.(*p2pNetwork); ok {
+		net.lookupHandler = fn
+	}
 }
 
 // New is the constructor of p2pNetworker

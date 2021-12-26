@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -111,6 +112,8 @@ func NewController(options ControllerOptions) Controller {
 	if err := ctrl.initShares(options); err != nil {
 		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
+
+	p2p.UseLookupOperatorHandler(options.Network, ctrl.validatorsMap.IsOperatorInCommittee)
 
 	return &ctrl
 }
