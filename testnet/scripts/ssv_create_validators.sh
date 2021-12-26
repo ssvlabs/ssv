@@ -33,8 +33,10 @@ for node in ./node_*; do
     ops=$(get_operators "$i")
 #    echo "ssv-cli --filePath=$PWD/$vks --password=$pass --operators=\"$ops\""
     touch "../txs/0x$pk"
-    ssv-cli --filePath="$PWD/$vks" --password="$pass" --operators="\"$ops\"" #> "../txs/0x$pk"
-    #echo "results: $(cat "../txs/0x$pk")"
+    ssv-cli --filePath="$PWD/$vks" --password="$pass" --operators="\"$ops\"" > "../txs/0x$pk"
+    tr -d '\\n' < "../txs/0x$pk" > tmp
+#    yq e '. += [{}]' -i "$SSV_TESTNET_DIR/validators.yaml"
+#    val=$(yq e -o=j '.[1]' tmp)
     ## TODO: call contract
     i=$((i+1))
   done
