@@ -7,7 +7,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -51,7 +50,7 @@ func reportAllConnections(n *p2pNetwork) {
 	for _, conn := range conns {
 		pid := conn.RemotePeer().String()
 		ids = append(ids, pid)
-		reportPeerIdentity(n, pid)
+		reportPeerIdentity(n, conn.RemotePeer())
 	}
 	var peersActiveDisv5 []peer.ID
 	if n.peers != nil {
@@ -71,16 +70,10 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
-func reportPeerIdentity(n *p2pNetwork, pid string) {
-	ua := n.peersIndex.GetPeerData(pid, UserAgentKey)
-	n.logger.Debug("peer identity", zap.String("peer", pid), zap.String("ua", ua))
-	uaParts := strings.Split(ua, ":")
-	if len(uaParts) > 2 {
-		if len(uaParts) > 3 { // In order to support backwards compatibility. where older version have only 2 fields
-			metricsPeersIdentity.WithLabelValues(uaParts[3], uaParts[1], pid, uaParts[2]).Set(1)
-			return
-		}
-		metricsPeersIdentity.WithLabelValues(uaParts[2], uaParts[1], pid, Unknown.String()).Set(1)
+func reportPeerIdentity(n *p2pNetwork, pid peer.ID) {
+	if ua, ok := n.getUserAgentOfPeer(pid); ok {
+		n.logger.Debug("peer identity", zap.String("peer", pid.String()), zap.String("ua", string(ua)))
+		metricsPeersIdentity.WithLabelValues(ua.NodePubKeyHash(), ua.NodeVersion(), pid.String(), ua.NodeType()).Set(1)
 	}
 }
 

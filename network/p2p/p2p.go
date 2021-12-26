@@ -109,15 +109,12 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	var ids *identify.IDService
 	// create ID service only for discv5
 	if cfg.DiscoveryType == discoveryTypeDiscv5 {
-		ua, err := GenerateUserAgent(n.operatorPrivKey, n.nodeType)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create user agent")
-		}
-		ids, err = identify.NewIDService(host, identify.UserAgent(string(ua)))
+		ua := n.getUserAgent()
+		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create ID service")
 		}
-		n.logger.Info("libp2p User Agent", zap.String("value", string(ua)))
+		n.logger.Info("libp2p User Agent", zap.String("value", ua))
 	}
 	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
 
