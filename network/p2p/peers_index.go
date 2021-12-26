@@ -40,7 +40,7 @@ type peersIndex struct {
 // NewPeersIndex creates a new instance
 func NewPeersIndex(host host.Host, ids *identify.IDService, logger *zap.Logger) PeersIndex {
 	pi := peersIndex{
-		logger: logger,
+		logger: logger.With(zap.String("who", "PeersIndex")),
 		host:   host,
 		ids:    ids,
 		index:  make(map[string]IndexData),
@@ -84,8 +84,8 @@ func (pi *peersIndex) GetPeerData(pid, key string) string {
 
 // IndexPeer indexes the given peer / connection
 func (pi *peersIndex) IndexPeer(conn network.Conn) {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	pi.lock.Lock()
+	defer pi.lock.Unlock()
 
 	if pi.ids == nil {
 		return
@@ -115,7 +115,13 @@ func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	if !found {
 		data = IndexData{}
 	}
-	data[UserAgentKey] = av
+	if data[UserAgentKey] == av {
+		pi.logger.Debug("value was not changed, skipping", zap.String("peerID", pid.String()))
+		return nil
+	}
 	pi.index[pid.String()] = data
+	pi.logger.Debug("indexed connection", zap.String("peerID", pid.String()),
+		zap.String("multiaddr", conn.RemoteMultiaddr().String()),
+		zap.String(UserAgentKey, av))
 	return nil
 }
