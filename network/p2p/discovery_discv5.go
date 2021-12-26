@@ -31,7 +31,7 @@ type discv5Listener interface {
 // setupDiscV5 creates all the required objects for discv5
 func (n *p2pNetwork) setupDiscV5() (*discover.UDPv5, error) {
 	n.peers = peers.NewStatus(n.ctx, &peers.StatusConfig{
-		PeerLimit: maxPeers,
+		PeerLimit: n.maxPeers,
 		ScorerParams: &scorers.Config{
 			BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
 				Threshold:     5,
@@ -226,7 +226,7 @@ func (n *p2pNetwork) listenForNewNodes() {
 func (n *p2pNetwork) isPeerAtLimit() bool {
 	numOfConns := len(n.host.Network().Peers())
 	activePeers := len(n.peers.Active())
-	return activePeers >= maxPeers || numOfConns >= maxPeers
+	return activePeers >= n.maxPeers || numOfConns >= n.maxPeers
 }
 
 // dv5Logger implements log.Handler to track logs of discv5

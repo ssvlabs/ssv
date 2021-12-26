@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	maxPeers = 1000
-	udp4     = "udp4"
-	udp6     = "udp6"
-	tcp      = "tcp"
+	udp4 = "udp4"
+	udp6 = "udp6"
+	tcp  = "tcp"
 
 	discoveryTypeMdns   = "mdns"
 	discoveryTypeDiscv5 = "discv5"
@@ -112,4 +111,10 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	n.trace("connected to peer", zap.String("peerID", info.ID.String()))
 
 	return nil
+}
+
+// getUserAgentOfPeer returns user agent of the given peer
+func (n *p2pNetwork) getUserAgentOfPeer(p peer.ID) (UserAgent, bool) {
+	uaRaw := n.peersIndex.GetPeerData(p.String(), UserAgentKey)
+	return NewUserAgent(uaRaw), len(uaRaw) > 0
 }
