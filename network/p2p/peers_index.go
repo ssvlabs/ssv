@@ -119,6 +119,7 @@ func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 		pi.logger.Debug("value was not changed, skipping", zap.String("peerID", pid.String()))
 		return nil
 	}
+	data[UserAgentKey] = av
 	pi.index[pid.String()] = data
 	pi.logger.Debug("indexed connection", zap.String("peerID", pid.String()),
 		zap.String("multiaddr", conn.RemoteMultiaddr().String()),
