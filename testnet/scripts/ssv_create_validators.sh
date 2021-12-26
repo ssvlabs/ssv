@@ -4,7 +4,8 @@ LH_DATA_DIR="$SSV_TESTNET_DIR/.lighthouse/local-testnet"
 
 function install_ssv_web() {
   git clone https://github.com/bloxapp/ssv-web.git \
-    && cd ssv-web && yarn && yarn build && yarn link
+    && cd ssv-web && git checkout stageV2
+  yarn && yarn build && yarn link
 }
 
 function get_operators() {
@@ -14,7 +15,8 @@ function get_operators() {
     ii=$((((x + i) % SSV_OPERATORS + 1) - 1))
     OPS_PUB_KEYS[i]=$(ii="$ii" yq e '.publicKeys.[env(ii)]' "$SSV_TESTNET_DIR/operators.yaml")
   done
-  echo "${OPS_PUB_KEYS[1]} ${OPS_PUB_KEYS[2]} ${OPS_PUB_KEYS[3]} ${OPS_PUB_KEYS[4]}"
+#  echo "[\"${OPS_PUB_KEYS[1]}\", \"${OPS_PUB_KEYS[2]}\", \"${OPS_PUB_KEYS[3]}\", \"${OPS_PUB_KEYS[4]}\"]"
+  echo "${OPS_PUB_KEYS[1]},${OPS_PUB_KEYS[2]},${OPS_PUB_KEYS[3]},${OPS_PUB_KEYS[4]}"
 }
 
 ## extract validators information and create ssv validators
@@ -29,9 +31,10 @@ for node in ./node_*; do
     pk=$(yq e ".pubkey" "$vks")
     pass=$(cat "./secrets/0x$pk")
     ops=$(get_operators "$i")
+#    echo "ssv-cli --filePath=$PWD/$vks --password=$pass --operators=\"$ops\""
     touch "../txs/0x$pk"
-    ssv-cli --filePath="$vks" --password="$pass" \
-      --operators="$ops" > "../txs/0x$pk"
+    ssv-cli --filePath="$PWD/$vks" --password="$pass" --operators="\"$ops\"" #> "../txs/0x$pk"
+    #echo "results: $(cat "../txs/0x$pk")"
     ## TODO: call contract
     i=$((i+1))
   done

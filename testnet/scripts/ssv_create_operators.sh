@@ -34,7 +34,7 @@ function create_operators() {
     val="$PUB" yq e '.publicKeys += [env(val)]' -i "$SSV_TESTNET_DIR/operators.yaml"
     val="$i" yq e '.nodes += [env(val)]' -i "$SSV_TESTNET_DIR/operators.yaml"
     PRIV="$(extract_privkey "tmp.log")"
-    val="./data/db-$i" yq e '.db.Path = env(val)' -n | tee "$SSV_TESTNET_DIR/data/config/share$i.yaml" \
+    val="./data/db-$i" yq e '.db.Path = env(val)' -n | tee "$SSV_TESTNET_DIR/data/config/share$i.yaml" > /dev/null \
       && val="1500$i" yq e '.MetricsAPIPort = env(val)' -i "$SSV_TESTNET_DIR/data/config/share$i.yaml" \
       && val="$PRIV" yq e '.OperatorPrivateKey = env(val)' -i "$SSV_TESTNET_DIR/data/config/share$i.yaml"
   done
