@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -164,11 +163,6 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 			n.propagateSignedMsg(cm)
 		}
 	}
-}
-
-func (n *p2pNetwork) getUserAgentOfPeer(p peer.ID) (UserAgent, bool) {
-	uaRaw := n.peersIndex.GetPeerData(p.String(), UserAgentKey)
-	return NewUserAgent(uaRaw), len(uaRaw) > 0
 }
 
 // validateNodeType return if peer nodeType is valid.
