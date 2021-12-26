@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -33,19 +34,19 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 	es.operatorsLock.RLock()
 	defer es.operatorsLock.RUnlock()
 
-	objs, err := es.db.GetAllByCollection(append(storagePrefix(), operatorsPrefix...))
-	if err != nil {
-		return nil, err
-	}
-	to = normalTo(to)
 	var operators []OperatorInformation
-	for _, obj := range objs {
+	to = normalTo(to)
+	err := es.db.GetAll(append(storagePrefix(), operatorsPrefix...), func(i int, obj basedb.Obj) error {
 		var oi OperatorInformation
-		err = json.Unmarshal(obj.Value, &oi)
+		if err := json.Unmarshal(obj.Value, &oi); err != nil {
+			return err
+		}
 		if oi.Index >= from && oi.Index <= to {
 			operators = append(operators, oi)
 		}
-	}
+		return nil
+	})
+
 	return operators, err
 }
 
