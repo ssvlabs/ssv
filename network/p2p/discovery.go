@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	maxPeers = 150
-	udp4     = "udp4"
-	udp6     = "udp6"
-	tcp      = "tcp"
+	udp4 = "udp4"
+	udp6 = "udp6"
+	tcp  = "tcp"
 
 	discoveryTypeMdns   = "mdns"
 	discoveryTypeDiscv5 = "discv5"

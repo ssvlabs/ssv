@@ -122,7 +122,12 @@ func (n *p2pNetwork) allPeersOfTopic(topic *pubsub.Topic) []string {
 		n.cfg.ExporterPeerID: true,
 	}
 	for _, p := range topic.ListPeers() {
-		isValidNodeType := validateNodeType(n.peersIndex.GetPeerData, p)
+		ua, found := n.getUserAgentOfPeer(p)
+		if !found {
+			n.logger.Debug("could not find user agent of peer", zap.String("peer", p.String()))
+			continue
+		}
+		isValidNodeType := validateNodeType(ua)
 		if s := peerToString(p); !skippedPeers[s] && isValidNodeType {
 			ret = append(ret, peerToString(p))
 		}
@@ -161,21 +166,15 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 	}
 }
 
-// validateNodeType return if peer nodeType is valid.
-// checks if peer support nodeType in userAgent. if not, use peer. (backwards compatibility)
-func validateNodeType(peerData func(pid string, key string) string, p peer.ID) bool {
-	nodeType := getNodeType(peerData, p)
-
-	return nodeType != Exporter.String()
+func (n *p2pNetwork) getUserAgentOfPeer(p peer.ID) (UserAgent, bool) {
+	uaRaw := n.peersIndex.GetPeerData(p.String(), UserAgentKey)
+	return NewUserAgent(uaRaw), len(uaRaw) > 0
 }
 
-func getNodeType(peerData func(pid string, key string) string, p peer.ID) string {
-	ua := peerData(p.String(), UserAgentKey)
-	uaParts := strings.Split(ua, ":")
-	if len(uaParts) > 2 {
-		return Unknown.FromString(uaParts[2]).String()
-	}
-	return Unknown.String()
+// validateNodeType return if peer nodeType is valid.
+// checks if peer support nodeType in UserAgent. if not, use peer. (backwards compatibility)
+func validateNodeType(ua UserAgent) bool {
+	return ua.NodeType() != Exporter.String()
 }
 
 // getTopicName return formatted topic name

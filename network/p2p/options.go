@@ -56,7 +56,11 @@ func (n *p2pNetwork) buildOptions(cfg *Config) ([]libp2p.Option, error) {
 	}
 	options = append(options, addrOpts...)
 
-	options = append(options, libp2p.UserAgent(n.getUserAgent()))
+	ua, err := GenerateUserAgent(n.operatorPrivKey, n.nodeType)
+	if err != nil {
+		return options, err
+	}
+	options = append(options, libp2p.UserAgent(string(ua)))
 
 	options = append(options, libp2p.Security(noise.ID, noise.New))
 
