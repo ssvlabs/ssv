@@ -28,14 +28,15 @@ func extractOperatorPubKeyHashEntry(record *enr.Record) (*PublicKeyHash, error) 
 // PublicKeyHash is the "pkh" key, which holds a public key hash
 type PublicKeyHash string
 
+// ENRKey implements enr.Entry, returns the entry key
 func (pkh PublicKeyHash) ENRKey() string { return "pkh" }
 
-// EncodeRLP implements rlp.Encoder.
+// EncodeRLP implements rlp.Encoder
 func (pkh PublicKeyHash) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, []byte(pkh))
 }
 
-// DecodeRLP implements rlp.Decoder.
+// DecodeRLP implements rlp.Decoder
 func (pkh *PublicKeyHash) DecodeRLP(s *rlp.Stream) error {
 	buf, err := s.Bytes()
 	if err != nil {
@@ -44,4 +45,3 @@ func (pkh *PublicKeyHash) DecodeRLP(s *rlp.Stream) error {
 	*pkh = PublicKeyHash(buf)
 	return nil
 }
-

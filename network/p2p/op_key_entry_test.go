@@ -38,4 +38,3 @@ func genPublicKey() *bls.PublicKey {
 
 	return sk.GetPublicKey()
 }
-
