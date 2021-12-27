@@ -297,7 +297,7 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 		n.logger.Debug("can't connect to node")
 		return
 	}
-	ctx, cancel := context.WithTimeout(n.ctx, time.Second*4)
+	ctx, cancel := context.WithTimeout(n.ctx, time.Second*5)
 	defer cancel()
 	if connected := n.waitUntilConnected(ctx, pi.ID); !connected {
 		n.logger.Debug("not connected")
@@ -317,10 +317,11 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 
 // waitUntilConnected blocks until the peer is connected or context cancelled/timed-out
 // TODO: 	implement using events (e.g. n.host.EventBus() or events.Feed own by peersIndex)
-// 			we should wait until indexed by network notifee
+// 			we should wait until indexed by network notifee, instead of sleeping
 func (n *p2pNetwork) waitUntilConnected(ctx context.Context, id peer.ID) bool {
 	for {
 		if n.host.Network().Connectedness(id) == network.Connected {
+			time.Sleep(time.Millisecond * 50) // give it enough time to get indexed by peersIndex
 			return true
 		}
 		if ctx.Err() != nil {
