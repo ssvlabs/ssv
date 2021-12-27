@@ -75,7 +75,7 @@ Build prod Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
   only:
-    - network-msg's-refactor
+    - main
 
 
 Deploy ssv exporter to blox-infra-prod cluster:
