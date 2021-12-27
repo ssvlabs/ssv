@@ -7,6 +7,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
@@ -206,16 +208,12 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 	}
 	n.logger.Debug("starting to listen for new nodes")
 	for {
-		// Exit if service's context is canceled
 		if ctx.Err() != nil {
 			break
 		}
 		if n.isPeerAtLimit() {
-			if node := nextNode(); n.shouldForceConnection(node) {
-				n.logger.Debug("forced connection")
-				go n.onNodeDiscovered(node)
-				time.Sleep(1 * time.Second)
-				continue
+			if node := nextNode(); node != nil {
+				go n.tryNode(node)
 			}
 			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
@@ -238,25 +236,17 @@ func (n *p2pNetwork) isPeerAtLimit() bool {
 }
 
 // isPeerAtLimit checks for max peers
-func (n *p2pNetwork) shouldForceConnection(node *enode.Node) bool {
-	if node == nil {
-		return false
-	}
+func (n *p2pNetwork) shouldConnect(id peer.ID) bool {
 	if n.lookupHandler == nil {
 		return false
 	}
-	info, err := convertToAddrInfo(node)
-	if err != nil {
-		n.trace("could not convert node to peer info", zap.Error(err))
-		return false
-	}
-	if n.host.ID().String() == info.ID.String() {
+	if n.host.ID().String() == id.String() {
 		n.logger.Debug("peer should not connect to itself")
 		return false
 	}
-	ua, found := n.getUserAgentOfPeer(info.ID)
+	ua, found := n.getUserAgentOfPeer(id)
 	if !found {
-		n.logger.Debug("missing user agent for peer", zap.String("peer", info.ID.String()))
+		n.logger.Debug("missing user agent for peer", zap.String("peer", id.String()))
 		return false
 	}
 	if nodeType := ua.NodeType(); nodeType == Exporter.String() {
@@ -265,7 +255,7 @@ func (n *p2pNetwork) shouldForceConnection(node *enode.Node) bool {
 	}
 	pk := ua.NodePubKeyHash()
 	if len(pk) == 0 {
-		n.logger.Debug("missing public key hash for peer", zap.String("peer", info.ID.String()))
+		n.logger.Debug("missing public key hash for peer", zap.String("peer", id.String()))
 		return false
 	}
 	// lookup by pk hash
@@ -274,14 +264,69 @@ func (n *p2pNetwork) shouldForceConnection(node *enode.Node) bool {
 
 // onNodeDiscovered acts upon new node discovered
 func (n *p2pNetwork) onNodeDiscovered(node *enode.Node) {
+	if info, err := n.connectNode(node); info == nil {
+		n.trace("invalid node", zap.String("enr", node.String()), zap.Error(err))
+	} else if err != nil {
+		n.trace("can't connect node", zap.String("enr", node.String()), zap.String("peerID", info.ID.String()), zap.Error(err))
+	} else {
+		n.logger.Debug("on node discovered", zap.String("enr", node.String()), zap.String("peer", info.ID.String()))
+	}
+}
+
+// connectNode tries to connect to the given node, returns whether the node is valid and error
+func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 	info, err := convertToAddrInfo(node)
 	if err != nil {
-		n.logger.Debug("could not convert node to peer info", zap.Error(err))
+		return nil, errors.Wrap(err, "could not convert node to peer info")
+	}
+	if n.host.Network().Connectedness(info.ID) == network.Connected {
+		return info, nil
+	}
+	if err := n.connectWithPeer(n.ctx, *info); err != nil {
+		return info, errors.Wrap(err, "could not connect with peer")
+	}
+	return info, nil
+}
+
+// tryNode tries to connect to the given node and disconnects if they don't share committees
+// TODO: A more correct solution is to use the ENR to store the value, and therefore identify operators w/o connection
+func (n *p2pNetwork) tryNode(node *enode.Node) {
+	// connects to the given node for accessing its user agent
+	pi, err := n.connectNode(node)
+	if err != nil {
+		n.logger.Debug("can't connect to node")
 		return
 	}
-	n.logger.Debug("on node discovered", zap.String("enr", node.String()), zap.String("peer", info.ID.String()))
-	if err := n.connectWithPeer(n.ctx, *info); err != nil {
-		n.trace("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
+	ctx, cancel := context.WithTimeout(n.ctx, time.Second*4)
+	defer cancel()
+	if connected := n.waitUntilConnected(ctx, pi.ID); !connected {
+		n.logger.Debug("not connected")
+		return
+	}
+	if n.shouldConnect(pi.ID) {
+		n.logger.Debug("forced connection")
+		return
+	}
+	// otherwise -> disconnect
+	if err = n.host.Network().ClosePeer(pi.ID); err != nil {
+		n.logger.Warn("can't close connection", zap.Error(err))
+		return
+	}
+	n.logger.Debug("closed connection as peer is irrelevant", zap.String("info", pi.String()))
+}
+
+// waitUntilConnected blocks until the peer is connected or context cancelled/timed-out
+// TODO: 	implement using events (e.g. n.host.EventBus() or events.Feed own by peersIndex)
+// 			we should wait until indexed by network notifee
+func (n *p2pNetwork) waitUntilConnected(ctx context.Context, id peer.ID) bool {
+	for {
+		if n.host.Network().Connectedness(id) == network.Connected {
+			return true
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+		time.Sleep(time.Millisecond * 500)
 	}
 }
 
