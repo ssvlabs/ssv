@@ -5,13 +5,12 @@ import (
 	"crypto/rand"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 
 	"testing"
 )
 
-func Test_ENR_OperatorPubKeyEntry(t *testing.T) {
+func Test_ENR_OperatorPubKeyHashEntry(t *testing.T) {
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
 	pk := convertFromInterfacePrivKey(priv)
@@ -20,15 +19,16 @@ func Test_ENR_OperatorPubKeyEntry(t *testing.T) {
 	require.NoError(t, err)
 	node, err := createLocalNode(pk, ip, 12000, 13000)
 	require.NoError(t, err)
-	node, err = addOperatorPubKeyEntry(node, []byte(pubKeyHash(pubkey.SerializeToHexStr())))
+
+	pkHash, err := extractOperatorPubKeyHashEntry(node.Node().Record())
+	require.NoError(t, err)
+	require.Nil(t, pkHash)
+	node, err = addOperatorPubKeyHashEntry(node, pubKeyHash(pubkey.SerializeToHexStr()))
 	require.NoError(t, err)
 
-	pkHashRecord, err := extractOperatorPubKeyEntry(node.Node().Record())
+	pkHash, err = extractOperatorPubKeyHashEntry(node.Node().Record())
 	require.NoError(t, err)
-	pkHash := []byte(pubKeyHash(pubkey.SerializeToHexStr()))
-	bitL, err := bitfield.NewBitlist64FromBytes(64, pkHash)
-	require.NoError(t, err)
-	require.True(t, bytes.Equal(pkHashRecord, bitL.ToBitlist().Bytes()))
+	require.True(t, bytes.Equal([]byte(*pkHash), []byte(pubKeyHash(pubkey.SerializeToHexStr()))))
 }
 
 func genPublicKey() *bls.PublicKey {
@@ -38,3 +38,4 @@ func genPublicKey() *bls.PublicKey {
 
 	return sk.GetPublicKey()
 }
+
