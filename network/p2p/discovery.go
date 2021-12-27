@@ -32,7 +32,7 @@ func (n *p2pNetwork) startDiscovery() error {
 	if err := n.connectToBootnodes(); err != nil {
 		return errors.Wrap(err, "could not connect to bootnodes")
 	}
-	go n.listenForNewNodes()
+	go n.listenForNewNodes(n.ctx)
 	return nil
 }
 
