@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -52,6 +53,7 @@ type Controller interface {
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
 	UpdateValidatorMetaDataLoop()
+	StartNetworkMediators()
 }
 
 // controller implements Controller
@@ -68,6 +70,8 @@ type controller struct {
 
 	metadataUpdateQueue    tasks.Queue
 	metadataUpdateInterval time.Duration
+
+	networkMediator controller2.Mediator
 }
 
 // NewController creates a new validator controller instance
@@ -100,6 +104,8 @@ func NewController(options ControllerOptions) Controller {
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
+
+		networkMediator: controller2.NewMediator(options.Logger),
 	}
 
 	if err := ctrl.initShares(options); err != nil {
@@ -180,6 +186,27 @@ func (c *controller) setupValidators(shares []*validatorstorage.Share) {
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
 
 	go c.updateValidatorsMetadata(fetchMetadata)
+}
+
+func (c *controller) StartNetworkMediators() {
+	msgChan, msgDone := c.validatorsMap.optsTemplate.Network.ReceivedMsgChan()
+	decidedChan, decidedDone := c.validatorsMap.optsTemplate.Network.ReceivedDecidedChan()
+	defer func() {
+		msgDone()
+		decidedDone()
+	}()
+
+	select {
+	case msg := <-msgChan:
+		c.networkMediator.Redirect(c.getReader, msg)
+	case decided := <-decidedChan:
+		c.networkMediator.Redirect(c.getReader, decided)
+	}
+	c.logger.Debug("mediator stopped listening to network")
+}
+
+func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {
+	return c.validatorsMap.GetValidator(publicKey)
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.

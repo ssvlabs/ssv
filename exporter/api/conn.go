@@ -150,7 +150,7 @@ func (c *conn) ReadLoop() {
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
 	err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	if err != nil{
+	if err != nil {
 		c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
 		return
 	}

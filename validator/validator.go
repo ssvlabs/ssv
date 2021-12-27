@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"context"
+	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -142,6 +143,33 @@ func (v *Validator) getSlotStartTime(slot uint64) time.Time {
 	timeSinceGenesisStart := slot * uint64(v.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(v.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
+}
+
+// GetMsgResolver returns proper handler for msg based on msg type
+func (v *Validator) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
+	switch networkMsg {
+	case network.NetworkMsg_IBFTType:
+		return v.listenToNetworkMessages
+	case network.NetworkMsg_DecidedType:
+		return v.listenToNetworkDecidedMessages
+	}
+	return func(msg *proto.SignedMessage) {
+		v.logger.Warn(fmt.Sprintf("handler type (%s) is not supported", networkMsg))
+	}
+}
+
+func (v *Validator) listenToNetworkMessages(msg *proto.SignedMessage) {
+	v.msgQueue.AddMessage(&network.Message{
+		SignedMessage: msg,
+		Type:          network.NetworkMsg_IBFTType,
+	})
+}
+
+func (v *Validator) listenToNetworkDecidedMessages(msg *proto.SignedMessage) {
+	v.msgQueue.AddMessage(&network.Message{
+		SignedMessage: msg,
+		Type:          network.NetworkMsg_DecidedType,
+	})
 }
 
 func setupIbftController(

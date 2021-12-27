@@ -9,13 +9,12 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/exporter/storage"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	ibftController "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
@@ -88,6 +87,8 @@ type exporter struct {
 	decidedReadersQueue  tasks.Queue
 	networkReadersQueue  tasks.Queue
 	metaDataReadersQueue tasks.Queue
+
+	networkMsgMediator ibftController.Mediator
 }
 
 // New creates a new Exporter instance
@@ -111,10 +112,13 @@ func New(opts Options) Exporter {
 		decidedReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		networkReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
-		ws:                   opts.WS,
-		readersMut:           sync.RWMutex{},
-		decidedReaders:       map[string]ibft.Reader{},
-		netReaders:           map[string]ibft.Reader{},
+
+		networkMsgMediator: ibftController.NewMediator(opts.Logger),
+
+		ws:             opts.WS,
+		readersMut:     sync.RWMutex{},
+		decidedReaders: map[string]ibft.Reader{},
+		netReaders:     map[string]ibft.Reader{},
 		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
 			Logger:           opts.Logger,
 			Network:          opts.Network,
@@ -176,8 +180,7 @@ func (exp *exporter) Start() error {
 
 	go exp.startMainTopic()
 
-	go exp.startListenToNetwork()
-	go exp.startListenToDecided()
+	go exp.startNetworkMediators()
 
 	go exp.reportOperators()
 
@@ -373,48 +376,29 @@ func (exp *exporter) reportOperators() {
 	}
 }
 
-func (exp *exporter) startListenToNetwork() {
-	cn, done := exp.network.ReceivedMsgChan()
-	defer done()
+func (exp *exporter) startNetworkMediators() {
+	msgChan, msgDone := exp.network.ReceivedMsgChan()
+	decidedChan, decidedDone := exp.network.ReceivedDecidedChan()
+	defer func() {
+		msgDone()
+		decidedDone()
+	}()
 
-	for msg := range cn {
-		if err := auth.BasicMsgValidation().Run(msg); err != nil{
-			continue
-		}
-		exp.readersMut.Lock()
-		publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
-		logger := exp.logger.With(zap.String("publicKey", publicKey), zap.String("role", role))
-		if reader, ok := exp.netReaders[publicKey]; ok {
-			logger.Debug("push network msg to reader")
-			reader.HandleMsg(msg)
-		} else {
-			logger.Warn("failed to find validator reader")
-		}
-		exp.readersMut.Unlock()
+	select {
+	case msg := <-msgChan:
+		exp.networkMsgMediator.Redirect(func(publicKey string) (ibftController.MediatorReader, bool) {
+			exp.readersMut.Lock()
+			defer exp.readersMut.Unlock()
+			reader, ok := exp.netReaders[publicKey]
+			return reader.(ibftController.MediatorReader), ok
+		}, msg)
+	case decided := <-decidedChan:
+		exp.networkMsgMediator.Redirect(func(publicKey string) (ibftController.MediatorReader, bool) {
+			exp.readersMut.Lock()
+			defer exp.readersMut.Unlock()
+			reader, ok := exp.decidedReaders[publicKey]
+			return reader.(ibftController.MediatorReader), ok
+		}, decided)
 	}
-
-	exp.logger.Debug("Done listening to network!")
-}
-
-func (exp *exporter) startListenToDecided() {
-	// recive all network msg's and point to right reader
-	cn, done := exp.network.ReceivedDecidedChan()
-	defer done()
-
-	for msg := range cn {
-		if err := auth.BasicMsgValidation().Run(msg); err != nil{
-			continue
-		}
-		exp.readersMut.Lock()
-		publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
-		logger := exp.logger.With(zap.String("publicKey", publicKey), zap.String("role", role))
-		if reader, ok := exp.decidedReaders[publicKey]; ok {
-			logger.Debug("push decided msg to reader")
-			reader.HandleMsg(msg)
-		} else {
-			logger.Warn("failed to find validator reader")
-		}
-		exp.readersMut.Unlock()
-	}
-	exp.logger.Debug("Done listening to decided!")
+	exp.logger.Debug("mediator stopped listening to network")
 }

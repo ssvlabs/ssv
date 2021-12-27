@@ -1,7 +1,6 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 )
@@ -22,7 +21,6 @@ type ShareHolder interface {
 // Reader is an interface for ibft in the context of an exporter
 type Reader interface {
 	Start() error
-	HandleMsg(msg *proto.SignedMessage)
 }
 
 // NewNetworkReader factory to create network readers

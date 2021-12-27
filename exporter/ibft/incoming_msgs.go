@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"context"
+	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -50,44 +51,20 @@ func (i *incomingMsgsReader) Start() error {
 	if err := i.waitForMinPeers(ctx, i.publicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	//cn, done := i.network.ReceivedMsgChan()
-	//defer done()
-	//i.listenToNetwork(cn)
 	return nil
 }
 
-func (i *incomingMsgsReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
-	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
-	i.logger.Debug("listening to network messages")
-	for msg := range cn {
-		if msg == nil || msg.Message == nil {
-			i.logger.Info("received invalid msg")
-			continue
-		}
-		// filtering irrelevant messages
-		// TODO: handle other types of roles
-		if identifier != string(msg.Message.Lambda) {
-			continue
-		}
-
-		fields := messageFields(msg)
-
-		switch msg.Message.Type {
-		case proto.RoundState_PrePrepare:
-			i.logger.Info("pre-prepare msg", fields...)
-		case proto.RoundState_Prepare:
-			i.logger.Info("prepare msg", fields...)
-		case proto.RoundState_Commit:
-			i.logger.Info("commit msg", fields...)
-		case proto.RoundState_ChangeRound:
-			i.logger.Info("change round msg", fields...)
-		default:
-			i.logger.Warn("undefined message type", zap.Any("msg", msg))
-		}
+func (i *incomingMsgsReader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
+	switch networkMsg {
+	case network.NetworkMsg_IBFTType:
+		return i.onMessage
+	}
+	return func(msg *proto.SignedMessage) {
+		i.logger.Warn(fmt.Sprintf("handler type (%s) is not supported", networkMsg))
 	}
 }
 
-func (i *incomingMsgsReader) HandleMsg(msg *proto.SignedMessage) {
+func (i *incomingMsgsReader) onMessage(msg *proto.SignedMessage) {
 	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
 	if msg == nil || msg.Message == nil {
 		i.logger.Info("received invalid msg")
