@@ -57,6 +57,7 @@ func (i *incomingMsgsReader) Start() error {
 func (i *incomingMsgsReader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
 	switch networkMsg {
 	case network.NetworkMsg_IBFTType:
+		i.logger.Debug("return network resolver")
 		return i.onMessage
 	}
 	return func(msg *proto.SignedMessage) {
@@ -66,6 +67,7 @@ func (i *incomingMsgsReader) GetMsgResolver(networkMsg network.NetworkMsg) func(
 
 func (i *incomingMsgsReader) onMessage(msg *proto.SignedMessage) {
 	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
+	i.logger.Debug("got network msg")
 	if msg == nil || msg.Message == nil {
 		i.logger.Info("received invalid msg")
 		return

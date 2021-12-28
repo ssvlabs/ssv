@@ -124,6 +124,7 @@ func (r *decidedReader) sync() error {
 func (r *decidedReader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
 	switch networkMsg {
 	case network.NetworkMsg_DecidedType:
+		r.logger.Debug("return decided resolver")
 		return r.onMessage
 	}
 	return func(msg *proto.SignedMessage) {
@@ -132,6 +133,7 @@ func (r *decidedReader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *
 }
 
 func (r *decidedReader) onMessage(msg *proto.SignedMessage) {
+	r.logger.Debug("got decided msg")
 	if err := validateMsg(msg, r.identifier); err != nil {
 		return
 	}
