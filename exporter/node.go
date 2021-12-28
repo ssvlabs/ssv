@@ -180,7 +180,7 @@ func (exp *exporter) Start() error {
 
 	go exp.startMainTopic()
 
-	go exp.startNetworkMediators()
+	exp.startNetworkMediators()
 
 	go exp.reportOperators()
 
@@ -379,10 +379,6 @@ func (exp *exporter) reportOperators() {
 func (exp *exporter) startNetworkMediators() {
 	msgChan, msgDone := exp.network.ReceivedMsgChan()
 	decidedChan, decidedDone := exp.network.ReceivedDecidedChan()
-	defer func() {
-		msgDone()
-		decidedDone()
-	}()
 
 	exp.networkMsgMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, func(publicKey string) (ibftController.MediatorReader, bool) {
 		exp.readersMut.Lock()
