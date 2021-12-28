@@ -384,22 +384,16 @@ func (exp *exporter) startNetworkMediators() {
 		decidedDone()
 	}()
 
-	select {
-	case msg := <-msgChan:
-		exp.networkMsgMediator.Redirect(func(publicKey string) (ibftController.MediatorReader, bool) {
-			exp.readersMut.Lock()
-			defer exp.readersMut.Unlock()
-			reader, ok := exp.netReaders[publicKey]
-			return reader.(ibftController.MediatorReader), ok
-		}, msg)
-	case decided := <-decidedChan:
-		exp.networkMsgMediator.Redirect(func(publicKey string) (ibftController.MediatorReader, bool) {
-			exp.readersMut.Lock()
-			defer exp.readersMut.Unlock()
-			reader, ok := exp.decidedReaders[publicKey]
-			return reader.(ibftController.MediatorReader), ok
-		}, decided)
-	default:
-	}
-	exp.logger.Debug("mediator stopped listening to network")
+	exp.networkMsgMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, func(publicKey string) (ibftController.MediatorReader, bool) {
+		exp.readersMut.Lock()
+		defer exp.readersMut.Unlock()
+		reader, ok := exp.netReaders[publicKey]
+		return reader.(ibftController.MediatorReader), ok
+	})
+	exp.networkMsgMediator.AddListener(network.NetworkMsg_DecidedType, decidedChan, decidedDone, func(publicKey string) (ibftController.MediatorReader, bool) {
+		exp.readersMut.Lock()
+		defer exp.readersMut.Unlock()
+		reader, ok := exp.decidedReaders[publicKey]
+		return reader.(ibftController.MediatorReader), ok
+	})
 }

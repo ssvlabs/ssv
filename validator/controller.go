@@ -191,20 +191,9 @@ func (c *controller) setupValidators(shares []*validatorstorage.Share) {
 func (c *controller) StartNetworkMediators() {
 	msgChan, msgDone := c.validatorsMap.optsTemplate.Network.ReceivedMsgChan()
 	decidedChan, decidedDone := c.validatorsMap.optsTemplate.Network.ReceivedDecidedChan()
-	defer func() {
-		msgDone()
-		decidedDone()
-	}()
 
-	select {
-	case msg := <-msgChan:
-		c.networkMediator.Redirect(c.getReader, msg)
-	case decided := <-decidedChan:
-		c.networkMediator.Redirect(c.getReader, decided)
-	default:
-
-	}
-	c.logger.Debug("mediator stopped listening to network")
+	c.networkMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, c.getReader)
+	c.networkMediator.AddListener(network.NetworkMsg_DecidedType, decidedChan, decidedDone, c.getReader)
 }
 
 func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {

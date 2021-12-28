@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
@@ -24,7 +25,9 @@ func init() {
 
 func (r reader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
 	return func(msg *proto.SignedMessage) {
-		if err := r.db.Set([]byte("test"), []byte("key"), []byte("val")); err != nil {
+		seq := make([]byte, 8)
+		binary.LittleEndian.PutUint64(seq, msg.Message.SeqNumber)
+		if err := r.db.Set([]byte("test"), seq, []byte("val")); err != nil {
 			panic(fmt.Errorf("faild to set value - %s", err))
 		}
 	}
@@ -38,34 +41,34 @@ func TestRedirect(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	msg := proto.SignedMessage{
-		Message: &proto.Message{
-			Type:                 0,
-			Round:                0,
-			Lambda:               nil,
-			SeqNumber:            0,
-			Value:                nil,
-			XXX_NoUnkeyedLiteral: struct{}{},
-			XXX_unrecognized:     nil,
-			XXX_sizecache:        0,
-		},
-		Signature:            nil,
-		SignerIds:            nil,
-		XXX_NoUnkeyedLiteral: struct{}{},
-		XXX_unrecognized:     nil,
-		XXX_sizecache:        0,
-	}
-
 	mediator := NewMediator(logex.GetLogger())
 	reader := &reader{db: db}
 
-	mediator.Redirect(func(publicKey string) (MediatorReader, bool) {
+	cn := make(chan *proto.SignedMessage)
+	mediator.AddListener(network.NetworkMsg_DecidedType, cn, func() {
+		close(cn)
+	}, func(publicKey string) (MediatorReader, bool) {
 		return reader, true
-	}, &msg)
+	})
 
-	time.Sleep(time.Second * 2)
-	obj, ok, err := db.Get([]byte("test"), []byte("key"))
+	for i := 1; i < 5; i++ {
+		cn <- &proto.SignedMessage{
+			Message: &proto.Message{
+				Type:      0,
+				Round:     0,
+				Lambda:    nil,
+				SeqNumber: uint64(i),
+				Value:     nil,
+			},
+			Signature: nil,
+			SignerIds: nil,
+		}
+	}
+
+	time.Sleep(time.Millisecond * 100)
+	objs, err := db.GetAllByCollection([]byte("test"))
 	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, []byte("val"), obj.Value)
+	require.Equal(t, 4, len(objs))
+	require.Equal(t, uint64(1), binary.LittleEndian.Uint64(objs[0].Key))
+	require.Equal(t, uint64(4), binary.LittleEndian.Uint64(objs[3].Key))
 }
