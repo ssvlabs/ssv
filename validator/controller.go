@@ -201,6 +201,8 @@ func (c *controller) StartNetworkMediators() {
 		c.networkMediator.Redirect(c.getReader, msg)
 	case decided := <-decidedChan:
 		c.networkMediator.Redirect(c.getReader, decided)
+	default:
+
 	}
 	c.logger.Debug("mediator stopped listening to network")
 }

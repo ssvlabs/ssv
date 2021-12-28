@@ -399,6 +399,7 @@ func (exp *exporter) startNetworkMediators() {
 			reader, ok := exp.decidedReaders[publicKey]
 			return reader.(ibftController.MediatorReader), ok
 		}, decided)
+	default:
 	}
 	exp.logger.Debug("mediator stopped listening to network")
 }

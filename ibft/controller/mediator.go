@@ -13,7 +13,23 @@ type MediatorReader interface {
 	GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage)
 }
 
-// Mediator between network and redirect the proper msg to the proper MediatorReader
+/* Mediator between network and redirect the proper msg to the proper MediatorReader
+implementation example -
+	networkMediator: NewMediator(options.Logger),
+	chan := make(chan int)
+	secChan := make(chan int)
+	select {
+	case msg := <-chan:
+		networkMediator.Redirect(func(publicKey string) (MediatorReader, bool) {
+			return reader.(ibftController.MediatorReader), ok
+		}, msg)
+	case msg := <-secChan:
+		networkMediator.Redirect(func(publicKey string) (MediatorReader, bool) {
+			return reader.(ibftController.MediatorReader), ok
+		}, msg)
+	default:
+	}
+*/
 type Mediator struct {
 	logger *zap.Logger
 }
