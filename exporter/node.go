@@ -383,13 +383,17 @@ func (exp *exporter) startNetworkMediators() {
 	exp.networkMsgMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, func(publicKey string) (ibftController.MediatorReader, bool) {
 		exp.readersMut.Lock()
 		defer exp.readersMut.Unlock()
-		reader, ok := exp.netReaders[publicKey]
-		return reader.(ibftController.MediatorReader), ok
+		if reader, ok := exp.netReaders[publicKey]; ok{
+			return reader.(ibftController.MediatorReader), ok
+		}
+		return nil, false
 	})
 	exp.networkMsgMediator.AddListener(network.NetworkMsg_DecidedType, decidedChan, decidedDone, func(publicKey string) (ibftController.MediatorReader, bool) {
 		exp.readersMut.Lock()
 		defer exp.readersMut.Unlock()
-		reader, ok := exp.decidedReaders[publicKey]
-		return reader.(ibftController.MediatorReader), ok
+		if reader, ok := exp.decidedReaders[publicKey]; ok{
+			return reader.(ibftController.MediatorReader), ok
+		}
+		return nil, false
 	})
 }
