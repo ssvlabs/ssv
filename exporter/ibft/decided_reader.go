@@ -2,6 +2,7 @@ package ibft
 
 import (
 	"context"
+	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft"
@@ -104,9 +105,6 @@ func (r *decidedReader) Start() error {
 	if err := r.waitForMinPeers(ctx, r.validatorShare.PublicKey, 1); err != nil {
 		return errors.Wrap(err, "could not wait for min peers")
 	}
-	cn, done := r.network.ReceivedDecidedChan()
-	defer done()
-	r.listenToNetwork(cn)
 	return nil
 }
 
@@ -122,27 +120,35 @@ func (r *decidedReader) sync() error {
 	return err
 }
 
-func (r *decidedReader) listenToNetwork(cn <-chan *proto.SignedMessage) {
-	r.logger.Debug("listening to decided messages")
-	for msg := range cn {
-		if err := validateMsg(msg, string(r.identifier)); err != nil {
-			continue
-		}
-		logger := r.logger.With(messageFields(msg)...)
-		if err := validateDecidedMsg(msg, r.validatorShare); err != nil {
-			logger.Debug("received invalid decided message")
-			continue
-		}
-		go func(msg *proto.SignedMessage) {
-			defer logger.Debug("done with decided msg")
-			if saved, err := r.handleNewDecidedMessage(msg); err != nil {
-				if !saved {
-					logger.Error("could not handle decided message", zap.Error(err))
-				}
-				logger.Error("could not check highest decided", zap.Error(err))
-			}
-		}(msg)
+// GetMsgResolver returns proper handler for msg based on msg type
+func (r *decidedReader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
+	switch networkMsg {
+	case network.NetworkMsg_DecidedType:
+		return r.onMessage
 	}
+	return func(msg *proto.SignedMessage) {
+		r.logger.Warn(fmt.Sprintf("handler type (%s) is not supported", networkMsg))
+	}
+}
+
+func (r *decidedReader) onMessage(msg *proto.SignedMessage) {
+	if err := validateMsg(msg, r.identifier); err != nil {
+		return
+	}
+	logger := r.logger.With(messageFields(msg)...)
+	if err := validateDecidedMsg(msg, r.validatorShare); err != nil {
+		logger.Debug("received invalid decided message")
+		return
+	}
+	go func(msg *proto.SignedMessage) {
+		defer logger.Debug("done with decided msg")
+		if saved, err := r.handleNewDecidedMessage(msg); err != nil {
+			if !saved {
+				logger.Error("could not handle decided message", zap.Error(err))
+			}
+			logger.Error("could not check highest decided", zap.Error(err))
+		}
+	}(msg)
 }
 
 // handleNewDecidedMessage saves an incoming (valid) decided message
@@ -236,10 +242,10 @@ func validateDecidedMsg(msg *proto.SignedMessage, share *storage.Share) error {
 	return p.Run(msg)
 }
 
-func validateMsg(msg *proto.SignedMessage, identifier string) error {
+func validateMsg(msg *proto.SignedMessage, identifier []byte) error {
 	p := pipeline.Combine(
 		auth.BasicMsgValidation(),
-		auth.ValidateLambdas([]byte(identifier)),
+		auth.ValidateLambdas(identifier),
 	)
 	return p.Run(msg)
 }

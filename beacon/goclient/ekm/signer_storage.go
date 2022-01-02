@@ -96,22 +96,18 @@ func (s *signerStorage) ListAccounts() ([]core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	objs, err := s.db.GetAllByCollection(s.objPrefix(accountsPrefix))
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get val share")
-	}
-
 	ret := make([]core.ValidatorAccount, 0)
-	for _, obj := range objs {
+
+	err := s.db.GetAll(s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		acc, err := s.decodeAccount(obj.Value)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to list accounts")
+			return errors.Wrap(err, "failed to list accounts")
 		}
-
 		ret = append(ret, acc)
-	}
+		return nil
+	})
 
-	return ret, nil
+	return ret, err
 }
 
 // SaveAccount saves the given account

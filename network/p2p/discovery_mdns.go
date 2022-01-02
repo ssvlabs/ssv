@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
-	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery"
+	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns_legacy"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )

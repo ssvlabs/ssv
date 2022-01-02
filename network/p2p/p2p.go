@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
-	"fmt"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -31,9 +30,6 @@ const (
 
 	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
 	DiscoveryServiceTag = "bloxstaking.ssv"
-
-	// MsgChanSize is the buffer size of the message channel
-	MsgChanSize = 128
 
 	topicPrefix = "bloxstaking.ssv"
 )
@@ -66,6 +62,8 @@ type p2pNetwork struct {
 
 	reportLastMsg bool
 	nodeType      NodeType
+
+	maxPeers int
 }
 
 // New is the constructor of p2pNetworker
@@ -87,6 +85,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		reportLastMsg:   cfg.ReportLastMsg,
 		fork:            cfg.Fork,
 		nodeType:        cfg.NodeType,
+		maxPeers:        cfg.MaxPeers,
 	}
 
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
@@ -113,7 +112,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		ua := n.getUserAgent()
 		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
 		if err != nil {
-			return nil, errors.Wrap(err, "Failed to create ID service")
+			return nil, errors.Wrap(err, "failed to create ID service")
 		}
 		n.logger.Info("libp2p User Agent", zap.String("value", ua))
 	}
@@ -210,16 +209,13 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 // - operator public key hash
 // TODO: will be changed once we have a proper authentication mechanism in place
 func (n *p2pNetwork) getUserAgent() string {
-	ua := commons.GetBuildData()
-	ua = fmt.Sprintf("%s:%s", ua, n.nodeType.String())
-	if n.operatorPrivKey != nil {
-		operatorPubKey, err := rsaencryption.ExtractPublicKey(n.operatorPrivKey)
-		if err != nil || len(operatorPubKey) == 0 {
-			n.logger.Error("could not extract operator public key", zap.Error(err))
-		}
-		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey))
+	ua, err := GenerateUserAgent(n.operatorPrivKey, n.nodeType)
+	if err != nil {
+		n.logger.Error("could not generate user agent", zap.Error(err))
+		bd := commons.GetBuildData()
+		ua = NewUserAgent(bd)
 	}
-	return ua
+	return string(ua)
 }
 
 func (n *p2pNetwork) getOperatorPubKey() (string, error) {
