@@ -50,7 +50,6 @@ func (i *Controller) listenToNetworkMessages() {
 	}()
 }
 
-
 func (i *Controller) listenToSyncMessages() {
 	syncChan, done := i.network.ReceivedSyncMsgChan()
 	go func() {
