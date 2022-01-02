@@ -45,7 +45,6 @@ func (m *Mediator) redirect(ibftType network.NetworkMsg, readerHandler func(publ
 	publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
 	logger := m.logger.With(zap.String("publicKey", publicKey), zap.String("role", role), zap.String("type", ibftType.String()))
 	if reader, ok := readerHandler(publicKey); ok {
-		logger.Debug("got mediator msg")
 		reader.GetMsgResolver(ibftType)(msg)
 	} else {
 		logger.Warn("failed to find validator reader")

@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"testing"
 	"time"
@@ -33,11 +32,11 @@ func (r reader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.Si
 	}
 }
 
-func TestRedirect(t *testing.T) {
+func TestMediator_AddListener(t *testing.T) {
 	db, err := kv.New(basedb.Options{
 		Type:   "badger-memory",
 		Path:   "",
-		Logger: zap.L(),
+		Logger: logex.GetLogger(),
 	})
 	require.NoError(t, err)
 
