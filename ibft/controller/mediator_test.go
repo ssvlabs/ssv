@@ -65,9 +65,11 @@ func TestMediator_AddListener(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 100)
-	objs, err := db.GetAllByCollection([]byte("test"))
-	require.NoError(t, err)
+	var objs []basedb.Obj
+	require.NoError(t, db.GetAll([]byte("test"), func(i int, obj basedb.Obj) error {
+		objs = append(objs, obj)
+		require.Equal(t, uint64(i+1), binary.LittleEndian.Uint64(obj.Key))
+		return nil
+	}))
 	require.Equal(t, 4, len(objs))
-	require.Equal(t, uint64(1), binary.LittleEndian.Uint64(objs[0].Key))
-	require.Equal(t, uint64(4), binary.LittleEndian.Uint64(objs[3].Key))
 }
