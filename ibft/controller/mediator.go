@@ -14,22 +14,6 @@ type MediatorReader interface {
 }
 
 // Mediator between network and redirect the proper msg to the proper MediatorReader
-/* implementation example -
-networkMediator: NewMediator(options.Logger),
-chan := make(chan int)
-secChan := make(chan int)
-select {
-case msg := <-chan:
-	networkMediator.redirect(func(publicKey string) (MediatorReader, bool) {
-		return reader.(ibftController.MediatorReader), ok
-	}, msg)
-case msg := <-secChan:
-	networkMediator.redirect(func(publicKey string) (MediatorReader, bool) {
-		return reader.(ibftController.MediatorReader), ok
-	}, msg)
-default:
-}
-*/
 type Mediator struct {
 	logger *zap.Logger
 }

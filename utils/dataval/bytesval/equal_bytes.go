@@ -19,7 +19,7 @@ func NewEqualBytes(val []byte) valcheck.ValueCheck {
 	}
 }
 
-// redirect implements dataval.ValidatorStorage interface
+// Validate implements dataval.ValidatorStorage interface
 func (c *bytesValidation) Check(value []byte) error {
 	if !bytes.Equal(value, c.val) {
 		return errors.New("msg value is wrong")

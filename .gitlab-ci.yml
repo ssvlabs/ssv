@@ -75,7 +75,7 @@ Build prod Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
   only:
-    - network-msg's-refactor
+    - main
 
 
 Deploy ssv exporter to blox-infra-prod cluster:
@@ -90,7 +90,7 @@ Deploy ssv exporter to blox-infra-prod cluster:
     - mv ./kubectl /usr/bin/kubectl
     - .k8/scripts/deploy-prod-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE
   only:
-    - network-msg's-refactor
+    - main
 
 Deploy ssv-nodes to blox-infra-prod cluster:
   stage: deploy

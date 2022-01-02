@@ -97,8 +97,6 @@ func (i *Controller) Init() error {
 		i.processDecidedQueueMessages()
 		i.processSyncQueueMessages()
 		i.listenToSyncMessages()
-		//i.listenToNetworkMessages()
-		//i.listenToNetworkDecidedMessages()
 		i.initHandlers.Set(true)
 		i.logger.Debug("managed to setup iBFT handlers")
 	}
