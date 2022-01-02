@@ -50,21 +50,6 @@ func (i *Controller) listenToNetworkMessages() {
 	}()
 }
 
-func (i *Controller) listenToNetworkDecidedMessages() {
-	decidedChan, done := i.network.ReceivedDecidedChan()
-	go func() {
-		defer done()
-		for msg := range decidedChan {
-			if msg.Message != nil && i.equalIdentifier(msg.Message.Lambda) {
-				i.msgQueue.AddMessage(&network.Message{
-					SignedMessage: msg,
-					Type:          network.NetworkMsg_DecidedType,
-				})
-			}
-		}
-	}()
-}
-
 func (i *Controller) listenToSyncMessages() {
 	syncChan, done := i.network.ReceivedSyncMsgChan()
 	go func() {

@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/exporter/storage"
+	ibftController "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
@@ -86,6 +87,8 @@ type exporter struct {
 	decidedReadersQueue  tasks.Queue
 	networkReadersQueue  tasks.Queue
 	metaDataReadersQueue tasks.Queue
+
+	networkMsgMediator ibftController.Mediator
 }
 
 // New creates a new Exporter instance
@@ -109,10 +112,13 @@ func New(opts Options) Exporter {
 		decidedReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		networkReadersQueue:  tasks.NewExecutionQueue(readerQueuesInterval),
 		metaDataReadersQueue: tasks.NewExecutionQueue(metaDataReaderQueuesInterval),
-		ws:                   opts.WS,
-		readersMut:           sync.RWMutex{},
-		decidedReaders:       map[string]ibft.Reader{},
-		netReaders:           map[string]ibft.Reader{},
+
+		networkMsgMediator: ibftController.NewMediator(opts.Logger),
+
+		ws:             opts.WS,
+		readersMut:     sync.RWMutex{},
+		decidedReaders: map[string]ibft.Reader{},
+		netReaders:     map[string]ibft.Reader{},
 		commitReader: ibft.NewCommitReader(ibft.CommitReaderOptions{
 			Logger:           opts.Logger,
 			Network:          opts.Network,
@@ -173,6 +179,8 @@ func (exp *exporter) Start() error {
 	}()
 
 	go exp.startMainTopic()
+
+	exp.startNetworkMediators()
 
 	go exp.reportOperators()
 
@@ -366,4 +374,26 @@ func (exp *exporter) reportOperators() {
 	for i := range operators {
 		reportOperatorIndex(exp.logger, &operators[i])
 	}
+}
+
+func (exp *exporter) startNetworkMediators() {
+	msgChan, msgDone := exp.network.ReceivedMsgChan()
+	decidedChan, decidedDone := exp.network.ReceivedDecidedChan()
+
+	exp.networkMsgMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, func(publicKey string) (ibftController.MediatorReader, bool) {
+		exp.readersMut.Lock()
+		defer exp.readersMut.Unlock()
+		if reader, ok := exp.netReaders[publicKey]; ok {
+			return reader.(ibftController.MediatorReader), ok
+		}
+		return nil, false
+	})
+	exp.networkMsgMediator.AddListener(network.NetworkMsg_DecidedType, decidedChan, decidedDone, func(publicKey string) (ibftController.MediatorReader, bool) {
+		exp.readersMut.Lock()
+		defer exp.readersMut.Unlock()
+		if reader, ok := exp.decidedReaders[publicKey]; ok {
+			return reader.(ibftController.MediatorReader), ok
+		}
+		return nil, false
+	})
 }

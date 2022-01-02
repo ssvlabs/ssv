@@ -153,11 +153,23 @@ func (c *conn) ReadLoop() {
 		_ = c.ws.Close()
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
-	_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
+	err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
+	if err != nil {
+		c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
+		return
+	}
 	c.ws.SetPongHandler(func(string) error {
 		// extend read limit on every pong message
 		// this will keep the connection alive from our POV
-		_ = c.ws.SetReadDeadline(time.Now().Add(pongWait))
+		c.logger.Debug("pong received")
+		err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
+		if err != nil {
+			c.logger.Error("pong handler - readDeadline", zap.Error(err))
+		}
+		return err
+	})
+	c.ws.SetPingHandler(func(string) error {
+		c.logger.Debug("ping received")
 		return nil
 	})
 	for {
