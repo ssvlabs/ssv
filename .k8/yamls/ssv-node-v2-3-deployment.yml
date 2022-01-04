@@ -44,6 +44,14 @@ spec:
         app: ssv-node-v2-3
     spec:
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-node        
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - podAffinityTerm:
@@ -176,4 +184,8 @@ spec:
 #      - name: ssv-nodes-health-check-cm
 #        configMap:
 #          name: ssv-nodes-health-check-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
       hostNetwork: true

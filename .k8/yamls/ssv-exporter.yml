@@ -81,6 +81,14 @@ spec:
         app: ssv-exporter
     spec:
       affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-node
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - podAffinityTerm:
@@ -201,4 +209,8 @@ spec:
       - name: ssv-exporter-cm
         configMap:
           name: ssv-exporter-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
       hostNetwork: true      
