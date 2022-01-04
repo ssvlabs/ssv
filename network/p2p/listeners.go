@@ -36,6 +36,7 @@ func propagateIBFTMessage(listeners []*listeners.Listener, msg *proto.SignedMess
 			cn <- msg
 		}
 	}
+	return
 }
 
 func propagateSigMessage(listeners []*listeners.Listener, msg *proto.SignedMessage) {
@@ -45,6 +46,7 @@ func propagateSigMessage(listeners []*listeners.Listener, msg *proto.SignedMessa
 			cn <- msg
 		}
 	}
+	return
 }
 
 func propagateDecidedMessage(listeners []*listeners.Listener, msg *proto.SignedMessage) {
@@ -54,6 +56,7 @@ func propagateDecidedMessage(listeners []*listeners.Listener, msg *proto.SignedM
 			cn <- msg
 		}
 	}
+	return
 }
 
 func propagateSyncMessage(listeners []*listeners.Listener, cm *network.Message, netSyncStream network.SyncStream) {
@@ -66,4 +69,5 @@ func propagateSyncMessage(listeners []*listeners.Listener, cm *network.Message, 
 			}
 		}
 	}
+	return
 }
