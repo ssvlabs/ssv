@@ -45,6 +45,6 @@ func (m *Mediator) redirect(ibftType network.NetworkMsg, readerHandler func(publ
 	publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
 	if reader, ok := readerHandler(publicKey); ok {
 		m.logger.Debug("redirect msg", zap.String("publicKey", publicKey), zap.String("role", role), zap.String("type", ibftType.String()))
-		reader.GetMsgResolver(ibftType)(msg)
+		err := reader.GetMsgResolver(ibftType)(msg)
 	}
 }
