@@ -10,6 +10,8 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 )
@@ -74,3 +76,29 @@ func TestMediator_AddListener(t *testing.T) {
 	require.Equal(t, 4, len(objs))
 }
 
+func TestNewMediator(t *testing.T) {
+	ch := make(chan int, 6000)
+
+	var wg sync.WaitGroup
+
+	go func() {
+		for i := range ch {
+			wg.Done()
+			fmt.Printf("index %d with goroutines: %d\n", i, runtime.NumGoroutine())
+			time.Sleep(time.Millisecond * 50)
+		}
+	}()
+
+	wg.Add(3000)
+
+	go func() {
+		for i := 1; i <= 3000; i++ {
+			go func(i int) {
+				ch <- i
+			}(i)
+		}
+	}()
+
+	wg.Wait()
+	fmt.Printf("#goroutines AT END: %d\n", runtime.NumGoroutine())
+}

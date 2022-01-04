@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/utils/format"
 	"go.uber.org/zap"
-	"time"
 )
 
 // MediatorReader is an interface for components that resolving network msg's
@@ -31,13 +30,7 @@ func (m *Mediator) AddListener(ibftType network.NetworkMsg, ch <-chan *proto.Sig
 	go func() {
 		defer done()
 		for msg := range ch {
-			logger := m.logger.With(zap.String("type", ibftType.String()))
-			start := time.Now()
-
-			m.redirect(ibftType, handler, msg)
-
-			elapsed := time.Since(start)
-			logger.Debug("mediator redirect stats", zap.Int64("duration", elapsed.Milliseconds()))
+			go m.redirect(ibftType, handler, msg)
 		}
 
 		m.logger.Debug("mediator stopped listening to network", zap.String("type", ibftType.String()))
