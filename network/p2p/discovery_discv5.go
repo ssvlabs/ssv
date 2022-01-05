@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.uber.org/zap"
@@ -126,7 +125,7 @@ func (n *p2pNetwork) createExtendedLocalNode(ipAddr net.IP) (*enode.LocalNode, e
 	}
 
 	if len(operatorPubKey) > 0 {
-		localNode, err = addOperatorPubKeyEntry(localNode, []byte(pubKeyHash(operatorPubKey)))
+		localNode, err = addOperatorPubKeyHashEntry(localNode, pubKeyHash(operatorPubKey))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create public key entry")
 		}
@@ -253,27 +252,4 @@ func (dvl *dv5Logger) Log(r *log.Record) error {
 	default:
 	}
 	return nil
-}
-
-// addOperatorPubKeyEntry adds public key entry ('pk') to the node.
-// contains the sha256 (hex encoded) of the operator public key
-func addOperatorPubKeyEntry(node *enode.LocalNode, pkHash []byte) (*enode.LocalNode, error) {
-	bitL, err := bitfield.NewBitlist64FromBytes(64, pkHash)
-	if err != nil {
-		return node, err
-	}
-	entry := enr.WithEntry("pk", bitL.ToBitlist())
-	node.Set(entry)
-	return node, nil
-}
-
-// extractOperatorPubKeyEntry extracts the value of public key entry ('pk')
-func extractOperatorPubKeyEntry(record *enr.Record) ([]byte, error) {
-	bitL := bitfield.NewBitlist(64)
-	entry := enr.WithEntry("pk", &bitL)
-	err := record.Load(entry)
-	if err != nil {
-		return nil, err
-	}
-	return bitL.Bytes(), nil
 }
