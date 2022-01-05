@@ -32,7 +32,7 @@ type discv5Listener interface {
 // setupDiscV5 creates all the required objects for discv5
 func (n *p2pNetwork) setupDiscV5() (*discover.UDPv5, error) {
 	n.peers = peers.NewStatus(n.ctx, &peers.StatusConfig{
-		PeerLimit: n.maxPeers,
+		PeerLimit: n.maxPeers * 2, // using a larger buffer to enable discovery of many nodes as possible
 		ScorerParams: &scorers.Config{
 			BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
 				Threshold:     5,
@@ -236,7 +236,7 @@ func (n *p2pNetwork) isPeerAtLimit() bool {
 }
 
 // isPeerAtLimit checks for max peers
-func (n *p2pNetwork) shouldConnect(id peer.ID) bool {
+func (n *p2pNetwork) shouldConnectByUserAgent(id peer.ID) bool {
 	if n.lookupHandler == nil {
 		return false
 	}
@@ -288,10 +288,31 @@ func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 	return info, nil
 }
 
-// tryNode tries to connect to the given node and disconnects if they don't share committees
-// TODO: A more correct solution is to use the ENR to store the value, and therefore identify operators w/o connection
+// tryNode tries to connect to the given node if they share committees
 func (n *p2pNetwork) tryNode(node *enode.Node) {
-	// connects to the given node for accessing its user agent
+	// trying to get the public key hash from the ENR, and thus identify operators w/o connection
+	pkh, err := extractOperatorPubKeyHashEntry(node.Record())
+	if err != nil {
+		n.logger.Warn("could not extract operator public key", zap.Error(err))
+	}
+	if pkh != nil {
+		n.logger.Debug("found public key hash entry", zap.String("pkh", string(*pkh)))
+		if n.lookupHandler != nil && n.lookupHandler(string(*pkh)) {
+			if _, err := n.connectNode(node); err != nil {
+				n.logger.Debug("can't connect to node")
+			}
+		}
+		return
+	}
+	// TODO: identify exporters by other means, as they don't have a public key hash entry
+
+	// if `pkh` was not found in the node's ENR -> try with the values from user agent
+	// TODO: remove once enough operators are on >=v0.1.9 where the ENR entry (`pkh`) was be added
+	n.tryNodeByUserAgent(node)
+}
+
+// tryNodeByUserAgent try to connect to the given node by its user agent
+func (n *p2pNetwork) tryNodeByUserAgent(node *enode.Node) {
 	pi, err := n.connectNode(node)
 	if err != nil {
 		n.logger.Debug("can't connect to node")
@@ -303,7 +324,7 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 		n.logger.Debug("not connected")
 		return
 	}
-	if n.shouldConnect(pi.ID) {
+	if n.shouldConnectByUserAgent(pi.ID) {
 		n.logger.Debug("forced connection")
 		return
 	}
