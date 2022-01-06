@@ -82,6 +82,7 @@ func New(opt Options) *Validator {
 	for _, h := range opsHashList {
 		opsHash.Store(h, true)
 	}
+	logger.Debug("new validator instance was created", zap.Strings("operators pubKeysHashes", opsHashList))
 
 	return &Validator{
 		ctx:                        opt.Context,

@@ -224,7 +224,15 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		go n.onNodeDiscovered(node)
+		go func(node *enode.Node) {
+			if info, err := n.connectNode(node); info == nil {
+				n.trace("invalid node", zap.String("enr", node.String()), zap.Error(err))
+			} else if err != nil {
+				n.trace("can't connect node", zap.String("enr", node.String()), zap.String("peerID", info.ID.String()), zap.Error(err))
+			} else {
+				n.trace("discovered node is now connected", zap.String("enr", node.String()), zap.String("peer", info.ID.String()))
+			}
+		}(node)
 	}
 }
 
@@ -241,36 +249,26 @@ func (n *p2pNetwork) shouldConnectByUserAgent(id peer.ID) bool {
 		return false
 	}
 	if n.host.ID().String() == id.String() {
-		n.logger.Debug("peer should not connect to itself")
+		n.trace("peer should not connect to itself")
 		return false
 	}
+	logger := n.logger.With(zap.String("peer", id.String()))
 	ua, found := n.getUserAgentOfPeer(id)
 	if !found {
-		n.logger.Debug("missing user agent for peer", zap.String("peer", id.String()))
+		logger.Warn("missing user agent for peer")
 		return false
 	}
 	if nodeType := ua.NodeType(); nodeType == Exporter.String() {
-		n.logger.Debug("found exporter peer")
+		logger.Debug("found exporter peer")
 		return true
 	}
 	pk := ua.NodePubKeyHash()
 	if len(pk) == 0 {
-		n.logger.Debug("missing public key hash for peer", zap.String("peer", id.String()))
+		logger.Debug("missing public key hash for peer")
 		return false
 	}
 	// lookup by pk hash
 	return n.lookupHandler(pk)
-}
-
-// onNodeDiscovered acts upon new node discovered
-func (n *p2pNetwork) onNodeDiscovered(node *enode.Node) {
-	if info, err := n.connectNode(node); info == nil {
-		n.trace("invalid node", zap.String("enr", node.String()), zap.Error(err))
-	} else if err != nil {
-		n.trace("can't connect node", zap.String("enr", node.String()), zap.String("peerID", info.ID.String()), zap.Error(err))
-	} else {
-		n.logger.Debug("on node discovered", zap.String("enr", node.String()), zap.String("peer", info.ID.String()))
-	}
 }
 
 // connectNode tries to connect to the given node, returns whether the node is valid and error
@@ -296,10 +294,14 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 		n.logger.Warn("could not extract operator public key", zap.Error(err))
 	}
 	if pkh != nil {
-		n.logger.Debug("found public key hash entry", zap.String("pkh", string(*pkh)))
-		if n.lookupHandler != nil && n.lookupHandler(string(*pkh)) {
-			if _, err := n.connectNode(node); err != nil {
-				n.logger.Debug("can't connect to node")
+		logger := n.logger.With(zap.String("pkh", string(*pkh)))
+		shouldConnect := n.lookupHandler != nil && n.lookupHandler(string(*pkh))
+		logger.Debug("found public key hash entry", zap.Bool("shouldConnect", shouldConnect))
+		if shouldConnect {
+			if info, err := n.connectNode(node); err != nil {
+				logger.Warn("can't connect to node")
+			} else if info != nil {
+				logger.Debug("forced connection by ENR", zap.String("info", info.ID.String()))
 			}
 		}
 		return
@@ -318,22 +320,23 @@ func (n *p2pNetwork) tryNodeByUserAgent(node *enode.Node) {
 		n.logger.Debug("can't connect to node")
 		return
 	}
+	logger := n.logger.With(zap.String("info", pi.String()))
 	ctx, cancel := context.WithTimeout(n.ctx, time.Second*5)
 	defer cancel()
 	if connected := n.waitUntilConnected(ctx, pi.ID); !connected {
-		n.logger.Debug("not connected")
+		logger.Warn("not connected")
 		return
 	}
 	if n.shouldConnectByUserAgent(pi.ID) {
-		n.logger.Debug("forced connection")
+		logger.Debug("forced connection by user agent")
 		return
 	}
 	// otherwise -> disconnect
 	if err = n.host.Network().ClosePeer(pi.ID); err != nil {
-		n.logger.Warn("can't close connection", zap.Error(err))
+		logger.Warn("can't close connection", zap.Error(err))
 		return
 	}
-	n.logger.Debug("closed connection as peer is irrelevant", zap.String("info", pi.String()))
+	logger.Debug("closed connection as peer is irrelevant")
 }
 
 // waitUntilConnected blocks until the peer is connected or context cancelled/timed-out
