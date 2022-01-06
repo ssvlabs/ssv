@@ -73,4 +73,3 @@ func TestMediator_AddListener(t *testing.T) {
 	}))
 	require.Equal(t, 4, len(objs))
 }
-
