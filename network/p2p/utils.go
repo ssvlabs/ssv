@@ -35,8 +35,8 @@ func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
 	return typeAssertedKey
 }
 
-// pubKeyHash returns sha256 (hex) of the given public key
-func pubKeyHash(pubkeyHex string) string {
+// operatorID returns sha256 (hex) of the given operator public key
+func operatorID(pubkeyHex string) string {
 	if len(pubkeyHex) == 0 {
 		return ""
 	}
