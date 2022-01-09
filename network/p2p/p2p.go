@@ -14,7 +14,6 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	p2pHost "github.com/libp2p/go-libp2p-core/host"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -130,7 +129,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	}
 	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
 
-	n.host.Network().Notify(n.notifee())
+	n.host.Network().Notify(n.notifier())
 
 	ps, err := n.newGossipPubsub(cfg)
 	if err != nil {
@@ -160,40 +159,6 @@ func (n *p2pNetwork) setStreamHandlers() {
 	//n.setLastChangeRoundStreamHandler()
 }
 
-func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
-	// TODO: add connection state
-	return &libp2pnetwork.NotifyBundle{
-		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn == nil || conn.RemoteMultiaddr() == nil {
-				return
-			}
-			go func() {
-				n.trace("connected peer", zap.String("who", "networkNotifiee"),
-					zap.String("conn", conn.ID()),
-					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
-					zap.String("peerID", conn.RemotePeer().String()))
-				// TODO: add connection states management
-				n.peersIndex.IndexPeer(conn)
-			}()
-		},
-		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn == nil || conn.RemoteMultiaddr() == nil {
-				return
-			}
-			go func() {
-				// skip if we are still connected to the peer
-				if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
-					return
-				}
-				n.trace("disconnected peer", zap.String("who", "networkNotifiee"),
-					zap.String("conn", conn.ID()),
-					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
-					zap.String("peerID", conn.RemotePeer().String()))
-			}()
-		},
-	}
-}
-
 func (n *p2pNetwork) watchPeers() {
 	async.RunEvery(n.ctx, 1*time.Minute, func() {
 		// index all peers and report
@@ -218,8 +183,7 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 // getUserAgent returns ua built upon:
 // - node version
 // - node type ('operator' | 'exporter')
-// - operator public key hash
-// TODO: will be changed once we have a proper authentication mechanism in place
+// - operator ID (TODO: remove from UserAgent)
 func (n *p2pNetwork) getUserAgent() string {
 	ua, err := GenerateUserAgent(n.operatorPrivKey, n.nodeType)
 	if err != nil {
