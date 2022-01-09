@@ -86,6 +86,21 @@ func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
 
+// IsOperatorInCommittee checks if the given operator exist in some validator's committee (for all validators)
+func (vm *validatorsMap) IsOperatorInCommittee(pkhash string) bool {
+	vm.lock.RLock()
+	defer vm.lock.RUnlock()
+
+	for pk, val := range vm.validatorsMap {
+		if val.IsOperatorInCommittee(pkhash) {
+			vm.logger.Debug("found operator in committee",
+				zap.String("operator pk hash", pkhash), zap.String("validator pk", pk))
+			return true
+		}
+	}
+	return false
+}
+
 func printShare(s *storage.Share, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
