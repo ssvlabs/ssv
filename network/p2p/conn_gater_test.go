@@ -13,11 +13,10 @@ import (
 
 func TestP2pNetwork_isRelevantPeer(t *testing.T) {
 	ctx := context.Background()
-	ua := "test:0.0.0:xxx"
 
-	host, pi := newHostWithPeersIndex(ctx, t, ua)
+	host, pi := newHostWithPeersIndex(ctx, t, testUA)
 
-	relevant := make(map[string]bool, 0)
+	relevant := make(map[string]bool)
 	lookupHandler := func(oid string) bool {
 		return relevant[oid]
 	}

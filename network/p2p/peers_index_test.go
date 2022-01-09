@@ -16,12 +16,15 @@ import (
 	"time"
 )
 
+const (
+	testUA = "test:0.0.0:xxx"
+)
+
 func TestNewPeersIndex(t *testing.T) {
 	ctx := context.Background()
-	ua := "test:0.0.0:xxx"
 
-	host1, pi1 := newHostWithPeersIndex(ctx, t, ua+"1")
-	host2, pi2 := newHostWithPeersIndex(ctx, t, ua+"2")
+	host1, pi1 := newHostWithPeersIndex(ctx, t, testUA+"1")
+	host2, pi2 := newHostWithPeersIndex(ctx, t, testUA+"2")
 
 	require.NoError(t, host1.Connect(context.TODO(), peer.AddrInfo{
 		ID:    host2.ID(),
@@ -52,12 +55,12 @@ func TestNewPeersIndex(t *testing.T) {
 		data, found, err := pi1.GetData(host2.ID(), UserAgentKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, ua+"2", data.(string))
+		require.Equal(t, testUA+"2", data.(string))
 		// get peer 1 data from peers index 2
 		data, found, err = pi2.GetData(host1.ID(), UserAgentKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, ua+"1", data.(string))
+		require.Equal(t, testUA+"1", data.(string))
 	})
 }
 
