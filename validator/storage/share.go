@@ -2,7 +2,9 @@ package storage
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/gob"
+	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -30,6 +32,7 @@ type Share struct {
 	Committee    map[uint64]*proto.Node
 	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
+	operators    [][]byte
 }
 
 //  serializedShare struct
@@ -39,6 +42,7 @@ type serializedShare struct {
 	Committee    map[uint64]*proto.Node
 	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
+	Operators    [][]byte
 }
 
 // CommitteeSize returns the IBFT committee size
@@ -113,6 +117,7 @@ func (s *Share) Serialize() ([]byte, error) {
 		Committee:    map[uint64]*proto.Node{},
 		Metadata:     s.Metadata,
 		OwnerAddress: s.OwnerAddress,
+		Operators:    s.operators,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {
@@ -153,6 +158,7 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		Committee:    value.Committee,
 		Metadata:     value.Metadata,
 		OwnerAddress: value.OwnerAddress,
+		operators:    value.Operators,
 	}, nil
 }
 
@@ -164,4 +170,20 @@ func (s *Share) HasMetadata() bool {
 // OperatorReady returns true if all operator relevant data (node id, secret share, etc.) is present
 func (s *Share) OperatorReady() bool {
 	return s.NodeID != 0
+}
+
+// SetOperators set operators public keys
+func (s *Share) SetOperators(ops [][]byte) {
+	s.operators = make([][]byte, len(ops))
+	copy(s.operators, ops[:])
+	s.operators = ops
+}
+
+// HashOperators hash all operators keys key
+func (s *Share) HashOperators() []string {
+	hashes := make([]string, len(s.operators))
+	for i, o := range s.operators {
+		hashes[i] = fmt.Sprintf("%x", sha256.Sum256(o))
+	}
+	return hashes
 }
