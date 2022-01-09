@@ -125,10 +125,15 @@ func (n *p2pNetwork) createExtendedLocalNode(ipAddr net.IP) (*enode.LocalNode, e
 	}
 
 	if len(operatorPubKey) > 0 {
-		localNode, err = addOperatorPubKeyHashEntry(localNode, pubKeyHash(operatorPubKey))
+		localNode, err = addOperatorIDEntry(localNode, operatorID(operatorPubKey))
 		if err != nil {
-			return nil, errors.Wrap(err, "could not create public key entry")
+			return nil, errors.Wrap(err, "could not create operator id entry")
 		}
+	}
+
+	localNode, err = addNodeTypeEntry(localNode, n.nodeType)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create node type entry")
 	}
 
 	// TODO: add fork entry once applicable
