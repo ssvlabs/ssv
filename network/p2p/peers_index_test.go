@@ -2,13 +2,16 @@ package p2p
 
 import (
 	"context"
+	"crypto/rand"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"sync"
+	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 )
@@ -25,25 +28,81 @@ func TestNewPeersIndex(t *testing.T) {
 		Addrs: host2.Addrs(),
 	}))
 
-	wait(1 * time.Second)
+	time.After(1 * time.Second)
 
 	pi1.Run()
 	pi2.Run()
 
 	t.Run("non exist peer", func(t *testing.T) {
-		require.Equal(t, "", pi1.GetPeerData("xxx", UserAgentKey))
+		ua, found, err := pi1.GetData("xxx", UserAgentKey)
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Equal(t, "", ua.(string))
 	})
 
 	t.Run("non exist property", func(t *testing.T) {
-		require.Equal(t, "", pi1.GetPeerData(host2.ID().String(), "xxx"))
+		data, found, err := pi1.GetData(host2.ID(), "xxx")
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Equal(t, "", data.(string))
 	})
 
 	t.Run("get other peers data", func(t *testing.T) {
 		// get peer 2 data from peers index 1
-		require.Equal(t, ua+"2", pi1.GetPeerData(host2.ID().String(), UserAgentKey))
+		data, found, err := pi1.GetData(host2.ID(), UserAgentKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, ua+"2", data.(string))
 		// get peer 1 data from peers index 2
-		require.Equal(t, ua+"1", pi2.GetPeerData(host1.ID().String(), UserAgentKey))
+		data, found, err = pi2.GetData(host1.ID(), UserAgentKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, ua+"1", data.(string))
 	})
+}
+
+func TestPeersIndex_IndexNode(t *testing.T) {
+	ctx := context.Background()
+	ua := "test:0.0.0:xxx"
+
+	_, pi := newHostWithPeersIndex(ctx, t, ua+"1")
+	node, pid, oid := newNode(t)
+	require.False(t, pi.Exist(pid, NodeRecordKey))
+	pi.IndexNode(node.Node())
+	raw, found, err := pi.GetData(pid, NodeRecordKey)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, raw)
+	n := new(enode.Node)
+	err = n.UnmarshalText(raw.([]byte))
+	require.NoError(t, err)
+	require.Equal(t, node.Node().String(), n.String())
+
+	oidFromIndex, found, err := pi.GetData(pid, OperatorIDKey)
+	require.Equal(t, oid, oidFromIndex.(string))
+	require.NoError(t, err)
+	require.True(t, found)
+	// check reindex
+	pi.IndexNode(node.Node())
+}
+
+func newNode(t *testing.T) (*enode.LocalNode, peer.ID, string) {
+	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	require.NoError(t, err)
+	pk := convertFromInterfacePrivKey(priv)
+	ip, err := ipAddr()
+	pubkey := genPublicKey()
+	require.NoError(t, err)
+	node, err := createLocalNode(pk, ip, 12000, 13000)
+	require.NoError(t, err)
+
+	oid := operatorID(pubkey.SerializeToHexStr())
+	node, err = addOperatorIDEntry(node, oid)
+	require.NoError(t, err)
+	pid, err := peer.IDFromPublicKey(priv.GetPublic())
+	require.NoError(t, err)
+
+	return node, pid, oid
 }
 
 func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.Host, PeersIndex) {
@@ -54,19 +113,7 @@ func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.H
 	require.NoError(t, err)
 	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
 	require.NoError(t, err)
-	pi := NewPeersIndex(host, ids, zap.L())
+	pi := NewPeersIndex(host, ids, zaptest.NewLogger(t).With(zap.String("ua", ua)))
 
 	return host, pi
-}
-
-func wait(duration time.Duration) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		// sleep to allow connection setup
-		time.Sleep(duration)
-
-	}()
-	wg.Wait()
 }

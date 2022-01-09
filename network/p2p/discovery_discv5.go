@@ -211,9 +211,9 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 		if ctx.Err() != nil {
 			break
 		}
-		if n.isPeerAtLimit() {
+		if n.isPeerAtLimit(network.DirOutbound) {
 			if node := nextNode(); node != nil {
-				go n.tryNode(node)
+				go n.tryDiscoveredNode(node)
 			}
 			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
@@ -237,38 +237,9 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 }
 
 // isPeerAtLimit checks for max peers
-func (n *p2pNetwork) isPeerAtLimit() bool {
+func (n *p2pNetwork) isPeerAtLimit(direction network.Direction) bool {
 	numOfConns := len(n.host.Network().Peers())
-	activePeers := len(n.peers.Active())
-	return activePeers >= n.maxPeers || numOfConns >= n.maxPeers
-}
-
-// isPeerAtLimit checks for max peers
-func (n *p2pNetwork) shouldConnectByUserAgent(id peer.ID) bool {
-	if n.lookupHandler == nil {
-		return false
-	}
-	if n.host.ID().String() == id.String() {
-		n.trace("peer should not connect to itself")
-		return false
-	}
-	logger := n.logger.With(zap.String("peer", id.String()))
-	ua, found := n.getUserAgentOfPeer(id)
-	if !found {
-		logger.Warn("missing user agent for peer")
-		return false
-	}
-	if nodeType := ua.NodeType(); nodeType == Exporter.String() {
-		logger.Debug("found exporter peer")
-		return true
-	}
-	pk := ua.NodePubKeyHash()
-	if len(pk) == 0 {
-		logger.Debug("missing public key hash for peer")
-		return false
-	}
-	// lookup by pk hash
-	return n.lookupHandler(pk)
+	return numOfConns >= n.maxPeers
 }
 
 // connectNode tries to connect to the given node, returns whether the node is valid and error
@@ -280,78 +251,45 @@ func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 	if n.host.Network().Connectedness(info.ID) == network.Connected {
 		return info, nil
 	}
+	n.peersIndex.IndexNode(node)
 	if err := n.connectWithPeer(n.ctx, *info); err != nil {
 		return info, errors.Wrap(err, "could not connect with peer")
 	}
 	return info, nil
 }
 
-// tryNode tries to connect to the given node if they share committees
-func (n *p2pNetwork) tryNode(node *enode.Node) {
-	// trying to get the public key hash from the ENR, and thus identify operators w/o connection
-	pkh, err := extractOperatorPubKeyHashEntry(node.Record())
+// tryDiscoveredNode tries to connect to the given node if they share committees
+func (n *p2pNetwork) tryDiscoveredNode(node *enode.Node) {
+	// trying to get the operator id from ENR
+	oid, err := extractOperatorIDEntry(node.Record())
 	if err != nil {
 		n.logger.Warn("could not extract operator public key", zap.Error(err))
 	}
-	if pkh != nil {
-		logger := n.logger.With(zap.String("pkh", string(*pkh)))
-		shouldConnect := n.lookupHandler != nil && n.lookupHandler(string(*pkh))
-		logger.Debug("found public key hash entry", zap.Bool("shouldConnect", shouldConnect))
-		if shouldConnect {
-			if info, err := n.connectNode(node); err != nil {
-				logger.Warn("can't connect to node")
-			} else if info != nil {
-				logger.Debug("forced connection by ENR", zap.String("info", info.ID.String()))
-			}
+	if oid == nil {
+		// if `oid` was not found in the node's ENR -> accept new node for now (should be filtered by gater in a later phase)
+		nodeType, err := extractNodeTypeEntry(node.Record())
+		if err != nil {
+			n.logger.Warn("could not extract operator public key", zap.Error(err))
+		}
+		// TODO: change to `nodeType != Exporter` once enough operators are on >=v0.1.9 where the ENR entry (`oid`) was be added, currently accepting old nodes
+		if nodeType == Operator {
+			n.logger.Debug("operator must have an id")
+			return
+		}
+		if _, err := n.connectNode(node); err != nil {
+			n.logger.Warn("can't connect to node")
 		}
 		return
 	}
-	// TODO: identify exporters by other means, as they don't have a public key hash entry
-
-	// if `pkh` was not found in the node's ENR -> try with the values from user agent
-	// TODO: remove once enough operators are on >=v0.1.9 where the ENR entry (`pkh`) was be added
-	n.tryNodeByUserAgent(node)
-}
-
-// tryNodeByUserAgent try to connect to the given node by its user agent
-func (n *p2pNetwork) tryNodeByUserAgent(node *enode.Node) {
-	pi, err := n.connectNode(node)
-	if err != nil {
-		n.logger.Debug("can't connect to node")
-		return
-	}
-	logger := n.logger.With(zap.String("info", pi.String()))
-	ctx, cancel := context.WithTimeout(n.ctx, time.Second*5)
-	defer cancel()
-	if connected := n.waitUntilConnected(ctx, pi.ID); !connected {
-		logger.Warn("not connected")
-		return
-	}
-	if n.shouldConnectByUserAgent(pi.ID) {
-		logger.Debug("forced connection by user agent")
-		return
-	}
-	// otherwise -> disconnect
-	if err = n.host.Network().ClosePeer(pi.ID); err != nil {
-		logger.Warn("can't close connection", zap.Error(err))
-		return
-	}
-	logger.Debug("closed connection as peer is irrelevant")
-}
-
-// waitUntilConnected blocks until the peer is connected or context cancelled/timed-out
-// TODO: 	implement using events (e.g. n.host.EventBus() or events.Feed own by peersIndex)
-// 			we should wait until indexed by network notifee, instead of sleeping
-func (n *p2pNetwork) waitUntilConnected(ctx context.Context, id peer.ID) bool {
-	for {
-		if n.host.Network().Connectedness(id) == network.Connected {
-			time.Sleep(time.Millisecond * 50) // give it enough time to get indexed by peersIndex
-			return true
+	logger := n.logger.With(zap.String("oid", string(*oid)))
+	shouldConnect := n.lookupHandler != nil && n.lookupHandler(string(*oid))
+	logger.Debug("found operator id entry", zap.Bool("shouldConnect", shouldConnect))
+	if shouldConnect {
+		if info, err := n.connectNode(node); err != nil {
+			logger.Warn("can't connect to node")
+		} else if info != nil {
+			logger.Debug("forced connection by ENR", zap.String("info", info.ID.String()))
 		}
-		if ctx.Err() != nil {
-			return false
-		}
-		time.Sleep(time.Millisecond * 500)
 	}
 }
 
