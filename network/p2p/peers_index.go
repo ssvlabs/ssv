@@ -130,6 +130,7 @@ func (pi *peersIndex) IndexNode(node *enode.Node) {
 		pi.logger.Warn("could not index node", zap.Error(err),
 			zap.String("enr", node.String()))
 	}
+	pi.logger.Debug("node was indexed")
 }
 
 //// Prune prunes the given peer from the index
@@ -162,12 +163,15 @@ func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	}
 	// if not visited yet by IDService -> do so now
 	if !pi.exist(peerID, UserAgentKey) {
+		pi.logger.Debug("visiting IDService", zap.String("pid", peerID.String()))
 		pi.ids.IdentifyConn(conn)
+		pi.logger.Debug("done IDService", zap.String("pid", peerID.String()))
 	}
 	ua, err := pi.getUserAgent(peerID)
 	if err != nil {
 		return err
 	}
+	pi.logger.Debug("got user agent", zap.String("ua", string(ua)), zap.String("pid", peerID.String()))
 	if oid := ua.OperatorID(); len(oid) > 0 {
 		pi.logger.Debug("operator id was extracted from UserAgent", zap.String("oid", oid))
 		if err := pi.host.Peerstore().Put(peerID, OperatorIDKey, oid); err != nil {
@@ -249,9 +253,12 @@ func (pi *peersIndex) getNodeType(id peer.ID) (NodeType, error) {
 }
 
 func (pi *peersIndex) getUserAgent(id peer.ID) (UserAgent, error) {
-	uaRaw, err := pi.host.Peerstore().Get(id, UserAgentKey)
+	uaRaw, found, err := pi.GetData(id, UserAgentKey)
 	if err != nil {
 		return NewUserAgent(""), errors.Wrap(err, "could not read user agent")
+	}
+	if !found {
+		return NewUserAgent(""), nil
 	}
 	ua, ok := uaRaw.(string)
 	if !ok {

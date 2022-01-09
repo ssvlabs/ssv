@@ -12,7 +12,7 @@ import (
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *p2pNetwork) InterceptPeerDial(id peer.ID) bool {
-	n.logger.Debug("conn_gater: InterceptPeerDial", zap.String("id", id.String()))
+	n.logger.Debug("conn_gater: InterceptPeerDial", zap.String("pid", id.String()))
 	return !n.isPeerBlacklisted(id)
 }
 
@@ -20,7 +20,7 @@ func (n *p2pNetwork) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *p2pNetwork) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
-	n.logger.Debug("conn_gater: InterceptAddrDial", zap.String("id", id.String()))
+	n.logger.Debug("conn_gater: InterceptAddrDial", zap.String("pid", id.String()))
 	return !n.isAddrBlacklisted(id, multiaddr)
 }
 
@@ -37,7 +37,7 @@ func (n *p2pNetwork) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bo
 // after a security handshake has taken place and we've authenticated the peer.
 //
 func (n *p2pNetwork) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	n.logger.Debug("conn_gater: InterceptSecured", zap.String("id", id.String()))
+	n.logger.Debug("conn_gater: InterceptSecured", zap.String("pid", id.String()))
 	return true
 }
 
@@ -48,15 +48,22 @@ func (n *p2pNetwork) InterceptSecured(direction libp2pnetwork.Direction, id peer
 // It checks whether we reached peers limit, if we do, accept connection only for relevant peers
 func (n *p2pNetwork) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.DisconnectReason) {
 	id := conn.RemotePeer()
-	n.logger.Debug("conn_gater: InterceptUpgraded", zap.String("id", id.String()))
-	if n.isPeerAtLimit(conn.Stat().Direction) {
+	n.logger.Debug("conn_gater: InterceptUpgraded", zap.String("pid", id.String()))
+	//if n.isPeerAtLimit(conn.Stat().Direction) {
+	if !n.peersIndex.Indexed(id) {
+		n.logger.Debug("conn_gater: not indexed", zap.String("pid", id.String()))
+		n.peersIndex.IndexConn(conn)
 		if !n.peersIndex.Indexed(id) {
-			n.peersIndex.IndexConn(conn)
+			n.logger.Warn("could not index connection", zap.String("pid", id.String()))
 		}
-		relevant := n.isRelevantPeer(id)
-		if relevant {
-			n.host.ConnManager().Protect(id, "ssv-peer")
-		}
+		n.logger.Debug("conn_gater: indexed", zap.String("pid", id.String()))
+	}
+	relevant := n.isRelevantPeer(id)
+	//if relevant {
+	//	n.host.ConnManager().Protect(id, "ssv-peer")
+	//}
+	n.logger.Debug("conn_gater: isRelevant", zap.Bool("relevant", relevant), zap.String("pid", id.String()))
+	if n.isPeerAtLimit(conn.Stat().Direction) {
 		return relevant, 0
 	}
 	return true, 0
