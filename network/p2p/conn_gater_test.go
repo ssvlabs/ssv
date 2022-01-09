@@ -23,19 +23,18 @@ func TestP2pNetwork_isRelevantPeer(t *testing.T) {
 	}
 
 	n := &p2pNetwork{
-		ctx: ctx,
-		logger: zaptest.NewLogger(t),
-		host: host,
-		peersIndex: pi,
+		ctx:           ctx,
+		logger:        zaptest.NewLogger(t),
+		host:          host,
+		peersIndex:    pi,
 		lookupHandler: lookupHandler,
 	}
 
 	t.Run("identify irrelevant operator", func(t *testing.T) {
 		node, info := createPeer(t, Operator)
 		pi.IndexNode(node)
-		relevant, indexed := n.isRelevantPeer(info.ID)
+		relevant := n.isRelevantPeer(info.ID)
 		require.False(t, relevant)
-		require.True(t, indexed)
 	})
 
 	t.Run("identify relevant operator", func(t *testing.T) {
@@ -44,24 +43,21 @@ func TestP2pNetwork_isRelevantPeer(t *testing.T) {
 		oid, err := extractOperatorIDEntry(node.Record())
 		require.NoError(t, err)
 		relevant[string(*oid)] = true
-		relevant, indexed := n.isRelevantPeer(info.ID)
+		relevant := n.isRelevantPeer(info.ID)
 		require.True(t, relevant)
-		require.True(t, indexed)
 	})
 
 	t.Run("identify exporter peer", func(t *testing.T) {
 		node, info := createPeer(t, Exporter)
 		pi.IndexNode(node)
-		relevant, indexed := n.isRelevantPeer(info.ID)
+		relevant := n.isRelevantPeer(info.ID)
 		require.True(t, relevant)
-		require.True(t, indexed)
 	})
 
 	t.Run("handle non-found peer", func(t *testing.T) {
 		_, info := createPeer(t, Operator)
-		relevant, indexed := n.isRelevantPeer(info.ID)
+		relevant := n.isRelevantPeer(info.ID)
 		require.False(t, relevant)
-		require.False(t, indexed)
 	})
 }
 

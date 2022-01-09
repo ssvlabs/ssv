@@ -67,8 +67,9 @@ func TestPeersIndex_IndexNode(t *testing.T) {
 
 	_, pi := newHostWithPeersIndex(ctx, t, ua+"1")
 	node, pid, oid := newNode(t)
-	require.False(t, pi.Exist(pid, NodeRecordKey))
+	require.False(t, pi.Indexed(pid))
 	pi.IndexNode(node.Node())
+	require.True(t, pi.Indexed(pid))
 	raw, found, err := pi.GetData(pid, NodeRecordKey)
 	require.NoError(t, err)
 	require.True(t, found)

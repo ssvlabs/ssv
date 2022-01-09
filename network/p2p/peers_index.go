@@ -42,8 +42,9 @@ type PeersIndex interface {
 	GetData(pid peer.ID, key string) (interface{}, bool, error)
 	IndexConn(conn network.Conn)
 	IndexNode(node *enode.Node)
-	Exist(id peer.ID, k string) bool
+	Indexed(id peer.ID) bool
 
+	exist(id peer.ID, k string) bool
 	getOperatorID(id peer.ID) (string, error)
 	getNodeType(id peer.ID) (NodeType, error)
 }
@@ -141,8 +142,13 @@ func (pi *peersIndex) IndexNode(node *enode.Node) {
 //	pi.data.Delete(peerIndexKey(pid, OperatorIDKey))
 //}
 
-// Exist checks if the given peer/key exist
-func (pi *peersIndex) Exist(id peer.ID, k string) bool {
+// Indexed checks if the given peer was indexed
+func (pi *peersIndex) Indexed(id peer.ID) bool {
+	return pi.exist(id, NodeTypeKey)
+}
+
+// exist checks if the given peer/key exist
+func (pi *peersIndex) exist(id peer.ID, k string) bool {
 	_, err := pi.host.Peerstore().Get(id, k)
 	return err == nil || err != peerstore.ErrNotFound
 }
@@ -150,12 +156,12 @@ func (pi *peersIndex) Exist(id peer.ID, k string) bool {
 // indexPeerConnection (unsafe) indexes the given peer / connection
 func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	peerID := conn.RemotePeer()
-	if pi.Exist(peerID, NodeTypeKey) {
+	if pi.Indexed(peerID) {
 		pi.logger.Debug("peer was already indexed", zap.String("pid", peerID.String()))
 		return nil
 	}
 	// if not visited yet by IDService -> do so now
-	if !pi.Exist(peerID, UserAgentKey) {
+	if !pi.exist(peerID, UserAgentKey) {
 		pi.ids.IdentifyConn(conn)
 	}
 	ua, err := pi.getUserAgent(peerID)
@@ -185,7 +191,7 @@ func (pi *peersIndex) indexNode(node *enode.Node) error {
 	if err != nil || info == nil {
 		return errors.Wrap(err, "could not convert node to peer info")
 	}
-	if pi.Exist(info.ID, NodeRecordKey) {
+	if pi.Indexed(info.ID) {
 		pi.logger.Debug("peer was already indexed", zap.String("pid", info.ID.String()))
 		return nil
 	}
