@@ -45,6 +45,7 @@ type PeersIndex interface {
 	Indexed(id peer.ID) bool
 
 	exist(id peer.ID, k string) bool
+	getUserAgent(id peer.ID) (UserAgent, error)
 	getOperatorID(id peer.ID) (string, error)
 	getNodeType(id peer.ID) (NodeType, error)
 }

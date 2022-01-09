@@ -104,6 +104,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		n.logger.Warn("missing valid bootnode ENR")
 	}
 
+	// create libp2p host
 	opts, err := n.buildOptions(cfg)
 	if err != nil {
 		logger.Fatal("could not build libp2p options", zap.Error(err))
@@ -117,7 +118,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger = logger.With(zap.String("id", n.cfg.HostID.String()))
 	n.logger.Info("listening on port", zap.String("addr", n.host.Addrs()[0].String()))
 
-	// create ID service only for discv5
+	// create ID service
 	ua := n.getUserAgent()
 	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
 	if err != nil {

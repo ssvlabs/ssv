@@ -112,17 +112,3 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 
 	return nil
 }
-
-// getUserAgentOfPeer returns user agent of the given peer
-func (n *p2pNetwork) getUserAgentOfPeer(p peer.ID) (UserAgent, bool) {
-	uaRaw, found, err := n.peersIndex.GetData(p, UserAgentKey)
-	if err != nil || !found {
-		return NewUserAgent(""), false
-	}
-	ua, ok := uaRaw.(string)
-	if !ok {
-		n.logger.Debug("could not cast ua to string")
-		return NewUserAgent(""), false
-	}
-	return NewUserAgent(ua), len(ua) > 0
-}
