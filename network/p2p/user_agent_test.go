@@ -48,7 +48,7 @@ func TestUserAgent(t *testing.T) {
 		require.Equal(t, "v0.x.x", ua.NodeVersion())
 	})
 
-	t.Run("get node pubKey hash", func(t *testing.T) {
+	t.Run("get operator id", func(t *testing.T) {
 		ua, err := GenerateUserAgent(sk, Operator)
 		require.NoError(t, err)
 		require.Equal(t, 64, len(ua.OperatorID()))

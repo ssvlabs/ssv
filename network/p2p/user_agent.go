@@ -16,7 +16,7 @@ func NewUserAgent(raw string) UserAgent {
 	return UserAgent(raw)
 }
 
-// GenerateUserAgent creates user agent string (<app-name>:<version>:<type>:<public-key-hash>)
+// GenerateUserAgent creates user agent string (<app-name>:<version>:<type>:<operator-id>)
 func GenerateUserAgent(sk *rsa.PrivateKey, ntype NodeType) (UserAgent, error) {
 	ua := commons.GetBuildData()
 	ua = fmt.Sprintf("%s:%s", ua, ntype.String())

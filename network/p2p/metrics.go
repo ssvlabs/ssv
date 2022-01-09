@@ -52,14 +52,8 @@ func reportAllConnections(n *p2pNetwork) {
 		ids = append(ids, pid)
 		reportPeerIdentity(n, conn.RemotePeer())
 	}
-	var peersActiveDisv5 []peer.ID
-	if n.peers != nil {
-		peersActiveDisv5 = n.peers.Active()
-	}
 	n.logger.Debug("connected peers status",
-		zap.Int("count", len(ids)),
-		zap.Any("ids", ids),
-		zap.Any("peersActiveDisv5", peersActiveDisv5))
+		zap.Int("count", len(ids)))
 	metricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
