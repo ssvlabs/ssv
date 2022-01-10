@@ -46,7 +46,6 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 			return
 		}
 		if !n.isRelevantPeer(id) {
-			logger.Warn("pruning irrelevant connection")
 			n.peersIndex.Prune(conn.RemotePeer())
 			if err := net.ClosePeer(conn.RemotePeer()); err != nil {
 				logger.Warn("could not close connection", zap.Error(err))
@@ -82,10 +81,9 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 }
 
 // isRelevantPeer checks if the current node should connect the given peer.
-// returns whether the peer is relevant and indexed.
 // a peer is relevant if it fullfils one of the following:
 // - it shares a committee with the current node
-// - it is an exporter node
+// - it is an exporter or bootnode (TODO: bootnode)
 func (n *p2pNetwork) isRelevantPeer(id peer.ID) bool {
 	logger := n.logger.With(zap.String("pid", id.String()))
 	//if !n.peersIndex.Indexed(id) {
@@ -98,7 +96,7 @@ func (n *p2pNetwork) isRelevantPeer(id peer.ID) bool {
 		return false
 	}
 	if len(oid) > 0 {
-		relevant := n.lookupHandler(oid)
+		relevant := n.lookupOperator(oid)
 		if !relevant {
 			logger.Debug("operator is not relevant", zap.String("oid", oid))
 		} else {

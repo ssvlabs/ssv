@@ -213,7 +213,7 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 		}
 		if n.isPeerAtLimit(network.DirOutbound) {
 			if node := nextNode(); node != nil {
-				go n.tryDiscoveredNode(node)
+				go n.tryNode(node)
 			}
 			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
@@ -258,8 +258,11 @@ func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 	return info, nil
 }
 
-// tryDiscoveredNode tries to connect to the given node if they share committees
-func (n *p2pNetwork) tryDiscoveredNode(node *enode.Node) {
+// tryNode tries to connect to the given node if relevant.
+// a node is relevant if it fullfils one of the following:
+// - it shares a committee with the current node
+// - it is an exporter or bootnode (TODO: bootnode)
+func (n *p2pNetwork) tryNode(node *enode.Node) {
 	// trying to get the operator id from ENR
 	oid, err := extractOperatorIDEntry(node.Record())
 	if err != nil {
@@ -272,18 +275,22 @@ func (n *p2pNetwork) tryDiscoveredNode(node *enode.Node) {
 			n.logger.Warn("could not extract operator public key", zap.Error(err))
 		}
 		// exit if operator node doesn't have an id
-		// TODO: change to look for exporter/bootnode, currently accepting unknown as well until most of the operators will upgrade >=v0.1.9
 		if nodeType == Operator {
 			n.logger.Debug("operator must have an id")
 			return
 		}
+		// TODO: unmark when: 1. bootnode enr will have a type; 2. most of the operators will upgrade >=v0.1.9
+		//if nodeType == Unknown {
+		//	n.logger.Debug("unknown peer")
+		//	return
+		//}
 		if _, err := n.connectNode(node); err != nil {
 			n.logger.Warn("can't connect to node", zap.Error(err))
 		}
 		return
 	}
 	logger := n.logger.With(zap.String("oid", string(*oid)))
-	shouldConnect := n.lookupHandler != nil && n.lookupHandler(string(*oid))
+	shouldConnect := n.lookupOperator != nil && n.lookupOperator(string(*oid))
 	logger.Debug("found operator id entry", zap.Bool("shouldConnect", shouldConnect))
 	if shouldConnect {
 		if info, err := n.connectNode(node); err != nil {

@@ -62,8 +62,8 @@ type p2pNetwork struct {
 	reportLastMsg bool
 	nodeType      NodeType
 
-	lookupHandler LookupOperatorHandler
-	maxPeers      int
+	lookupOperator LookupOperatorHandler
+	maxPeers       int
 }
 
 // LookupOperatorHandler is a function that checks if the given operator
@@ -73,7 +73,7 @@ type LookupOperatorHandler func(string) bool
 // UseLookupOperatorHandler enables to inject some lookup handler
 func UseLookupOperatorHandler(n network.Network, fn LookupOperatorHandler) {
 	if net, ok := n.(*p2pNetwork); ok {
-		net.lookupHandler = fn
+		net.lookupOperator = fn
 	}
 }
 
@@ -97,7 +97,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		fork:            cfg.Fork,
 		nodeType:        cfg.NodeType,
 		maxPeers:        cfg.MaxPeers,
-		lookupHandler: func(s string) bool {
+		lookupOperator: func(s string) bool {
 			return true
 		},
 	}

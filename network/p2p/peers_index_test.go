@@ -75,7 +75,7 @@ func TestPeersIndex_IndexNode(t *testing.T) {
 	ua := "test:0.0.0:xxx"
 
 	_, pi := newHostWithPeersIndex(ctx, t, ua+"1")
-	node, pid, oid := newNode(t)
+	node, pid, oid := newNode(t, Operator)
 	require.False(t, pi.Indexed(pid))
 	pi.IndexNode(node.Node())
 	require.True(t, pi.Indexed(pid))
@@ -96,7 +96,7 @@ func TestPeersIndex_IndexNode(t *testing.T) {
 	pi.IndexNode(node.Node())
 }
 
-func newNode(t *testing.T) (*enode.LocalNode, peer.ID, string) {
+func newNode(t *testing.T, nodeType NodeType) (*enode.LocalNode, peer.ID, string) {
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
 	pk := convertFromInterfacePrivKey(priv)
@@ -110,6 +110,9 @@ func newNode(t *testing.T) (*enode.LocalNode, peer.ID, string) {
 	node, err = addOperatorIDEntry(node, oid)
 	require.NoError(t, err)
 	pid, err := peer.IDFromPublicKey(priv.GetPublic())
+	require.NoError(t, err)
+
+	node, err = addNodeTypeEntry(node, nodeType)
 	require.NoError(t, err)
 
 	return node, pid, oid

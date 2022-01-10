@@ -22,11 +22,11 @@ func TestP2pNetwork_isRelevantPeer(t *testing.T) {
 	}
 
 	n := &p2pNetwork{
-		ctx:           ctx,
-		logger:        zaptest.NewLogger(t),
-		host:          host,
-		peersIndex:    pi,
-		lookupHandler: lookupHandler,
+		ctx:            ctx,
+		logger:         zaptest.NewLogger(t),
+		host:           host,
+		peersIndex:     pi,
+		lookupOperator: lookupHandler,
 	}
 
 	t.Run("identify irrelevant operator", func(t *testing.T) {
