@@ -39,6 +39,8 @@ type Options struct {
 	Fork                       forks.Fork
 	Signer                     beacon.Signer
 	SyncRateLimit              time.Duration
+	// operatorsIDs is a map holding all relevant operators, should be filled upon creation
+	operatorsIDs *sync.Map
 }
 
 // Validator struct that manages all ibft wrappers
@@ -56,7 +58,6 @@ type Validator struct {
 	startOnce                  sync.Once
 	fork                       forks.Fork
 	signer                     beacon.Signer
-	operatorsHash              *sync.Map
 }
 
 // New Validator creation
@@ -78,9 +79,8 @@ func New(opt Options) *Validator {
 	}
 
 	opsHashList := opt.Share.HashOperators()
-	opsHash := &sync.Map{}
 	for _, h := range opsHashList {
-		opsHash.Store(h, true)
+		opt.operatorsIDs.Store(h, true)
 	}
 	logger.Debug("new validator instance was created", zap.Strings("operators pubKeysHashes", opsHashList))
 
@@ -98,7 +98,6 @@ func New(opt Options) *Validator {
 		startOnce:                  sync.Once{},
 		fork:                       opt.Fork,
 		signer:                     opt.Signer,
-		operatorsHash:              opsHash,
 	}
 }
 
@@ -216,10 +215,4 @@ func (v *Validator) oneOfIBFTIdentifiers(toMatch []byte) bool {
 		}
 	}
 	return false
-}
-
-// IsOperatorInCommittee will return true if the given operator is in the validator's committee
-func (v *Validator) IsOperatorInCommittee(pkhash string) bool {
-	_, ok := v.operatorsHash.Load(pkhash)
-	return ok
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -73,6 +74,8 @@ type controller struct {
 	metadataUpdateInterval time.Duration
 
 	networkMediator controller2.Mediator
+	operatorsIDs    *sync.Map
+	network         network.Network
 }
 
 // NewController creates a new validator controller instance
@@ -82,6 +85,9 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
+	// lookup in a map that holds all relevant operators
+	operatorsIDs := &sync.Map{}
+
 	ctrl := controller{
 		collection:                 collection,
 		context:                    options.Context,
@@ -89,6 +95,7 @@ func NewController(options ControllerOptions) Controller {
 		beacon:                     options.Beacon,
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
 		keyManager:                 options.KeyManager,
+		network:                    options.Network,
 
 		validatorsMap: newValidatorsMap(options.Context, options.Logger, &Options{
 			Context:                    options.Context,
@@ -101,19 +108,19 @@ func NewController(options ControllerOptions) Controller {
 			Fork:                       options.Fork,
 			Signer:                     options.KeyManager,
 			SyncRateLimit:              options.HistorySyncRateLimit,
+			operatorsIDs:               operatorsIDs,
 		}),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 
 		networkMediator: controller2.NewMediator(options.Logger),
+		operatorsIDs:    operatorsIDs,
 	}
 
 	if err := ctrl.initShares(options); err != nil {
 		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
-
-	p2p.UseLookupOperatorHandler(options.Network, ctrl.validatorsMap.IsOperatorInCommittee)
 
 	return &ctrl
 }
@@ -159,6 +166,18 @@ func (c *controller) StartValidators() {
 		return
 	}
 	c.setupValidators(shares)
+	// inject handler for finding relevant operators
+	p2p.UseLookupOperatorHandler(c.network, func(oid string) bool {
+		_, ok := c.operatorsIDs.Load(oid)
+		return ok
+	})
+	// print current relevant operators (ids)
+	ids := []string{}
+	c.operatorsIDs.Range(func(key, value interface{}) bool {
+		ids = append(ids, key.(string))
+		return true
+	})
+	c.logger.Debug("relevant operators", zap.Int("len", len(ids)), zap.Strings("op_ids", ids))
 }
 
 // setupValidators setup and starts validators from the given shares
