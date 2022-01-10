@@ -97,6 +97,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		fork:            cfg.Fork,
 		nodeType:        cfg.NodeType,
 		maxPeers:        cfg.MaxPeers,
+		lookupHandler: func(s string) bool {
+			return true
+		},
 	}
 
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
@@ -125,9 +128,9 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "failed to create ID service")
 	}
 	n.logger.Info("libp2p User Agent", zap.String("value", ua))
-	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
+	n.peersIndex = NewPeersIndex(n.logger, n.host, ids)
 
-	n.host.Network().Notify(n.notifier())
+	n.host.Network().Notify(n.handleConnections())
 
 	ps, err := n.newGossipPubsub(cfg)
 	if err != nil {

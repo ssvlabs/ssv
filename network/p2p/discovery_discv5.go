@@ -266,18 +266,19 @@ func (n *p2pNetwork) tryDiscoveredNode(node *enode.Node) {
 		n.logger.Warn("could not extract operator public key", zap.Error(err))
 	}
 	if oid == nil {
-		// if `oid` was not found in the node's ENR -> accept new node for now (should be filtered by gater in a later phase)
+		// if `oid` was not found in the node's ENR -> try to read node type entry
 		nodeType, err := extractNodeTypeEntry(node.Record())
 		if err != nil {
 			n.logger.Warn("could not extract operator public key", zap.Error(err))
 		}
-		// TODO: change to `nodeType != Exporter` once enough operators are on >=v0.1.9 where the ENR entry (`oid`) was be added, currently accepting old nodes
+		// exit if operator node doesn't have an id
+		// TODO: change to look for exporter/bootnode, currently accepting unknown as well until most of the operators will upgrade >=v0.1.9
 		if nodeType == Operator {
 			n.logger.Debug("operator must have an id")
 			return
 		}
 		if _, err := n.connectNode(node); err != nil {
-			n.logger.Warn("can't connect to node")
+			n.logger.Warn("can't connect to node", zap.Error(err))
 		}
 		return
 	}

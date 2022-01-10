@@ -62,6 +62,12 @@ func TestNewPeersIndex(t *testing.T) {
 		require.True(t, found)
 		require.Equal(t, testUA+"1", data.(string))
 	})
+
+	t.Run("prune", func(t *testing.T) {
+		require.False(t, pi1.Pruned(host1.ID()))
+		pi1.Prune(host1.ID())
+		require.True(t, pi1.Pruned(host1.ID()))
+	})
 }
 
 func TestPeersIndex_IndexNode(t *testing.T) {
@@ -117,7 +123,7 @@ func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.H
 	require.NoError(t, err)
 	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
 	require.NoError(t, err)
-	pi := NewPeersIndex(host, ids, zaptest.NewLogger(t).With(zap.String("ua", ua)))
+	pi := NewPeersIndex(zaptest.NewLogger(t).With(zap.String("ua", ua)), host, ids)
 
 	return host, pi
 }

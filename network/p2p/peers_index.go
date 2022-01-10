@@ -7,9 +7,11 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
+	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
+	"time"
 )
 
 const (
@@ -43,6 +45,8 @@ type PeersIndex interface {
 	IndexConn(conn network.Conn)
 	IndexNode(node *enode.Node)
 	Indexed(id peer.ID) bool
+	Prune(id peer.ID)
+	Pruned(id peer.ID) bool
 
 	exist(id peer.ID, k string) bool
 	getUserAgent(id peer.ID) (UserAgent, error)
@@ -57,43 +61,44 @@ type peersIndex struct {
 	host host.Host
 	ids  *identify.IDService
 
-	lock *sync.RWMutex
+	lock        *sync.RWMutex
+	prunedPeers *cache.Cache
 }
 
 // NewPeersIndex creates a new instance
-func NewPeersIndex(host host.Host, ids *identify.IDService, logger *zap.Logger) PeersIndex {
+func NewPeersIndex(logger *zap.Logger, host host.Host, ids *identify.IDService) PeersIndex {
 	logger = logger.With(zap.String("who", "PeersIndex"))
 	pi := peersIndex{
-		logger: logger,
-		host:   host,
-		ids:    ids,
-		lock:   &sync.RWMutex{},
+		logger:      logger,
+		host:        host,
+		ids:         ids,
+		lock:        &sync.RWMutex{},
+		prunedPeers: cache.New(time.Minute*5, time.Minute*6),
 	}
-
 	return &pi
 }
 
 // Run tries to index data on all available peers
 func (pi *peersIndex) Run() {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
-
-	if pi.ids == nil {
-		return
-	}
-
-	conns := pi.host.Network().Conns()
-	for _, conn := range conns {
-		if err := pi.indexPeerConnection(conn); err != nil {
-			pi.logger.Warn("failed to report peer identity")
-		}
-	}
+	//pi.lock.Lock()
+	//defer pi.lock.Unlock()
+	//
+	//if pi.ids == nil {
+	//	return
+	//}
+	//
+	//conns := pi.host.Network().Conns()
+	//for _, conn := range conns {
+	//	if err := pi.indexPeerConnection(conn); err != nil {
+	//		pi.logger.Warn("failed to index connection", zap.Error(err))
+	//	}
+	//}
 }
 
 // GetData returns data of the given peer and key
 func (pi *peersIndex) GetData(pid peer.ID, key string) (interface{}, bool, error) {
-	pi.lock.RLock()
-	defer pi.lock.RUnlock()
+	//pi.lock.RLock()
+	//defer pi.lock.RUnlock()
 
 	data, err := pi.host.Peerstore().Get(pid, key)
 	if err != nil {
@@ -107,8 +112,9 @@ func (pi *peersIndex) GetData(pid peer.ID, key string) (interface{}, bool, error
 
 // IndexConn indexes the given peer / connection
 func (pi *peersIndex) IndexConn(conn network.Conn) {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	//pi.lock.RLock()
+	//defer pi.lock.RUnlock()
+	pid := conn.RemotePeer().String()
 
 	// skip if no id service was configured (user agent will be missing)
 	if pi.ids == nil {
@@ -117,32 +123,42 @@ func (pi *peersIndex) IndexConn(conn network.Conn) {
 
 	if err := pi.indexPeerConnection(conn); err != nil {
 		pi.logger.Warn("could not index connection", zap.Error(err),
-			zap.String("peerID", conn.RemotePeer().String()),
+			zap.String("peerID", pid),
 			zap.String("multiaddr", conn.RemoteMultiaddr().String()))
+		return
 	}
+	pi.logger.Debug("node was indexed", zap.String("peerID", pid))
 }
 
 // IndexNode indexes the given node
 func (pi *peersIndex) IndexNode(node *enode.Node) {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	//pi.lock.Lock()
+	//defer pi.lock.Unlock()
 
 	if err := pi.indexNode(node); err != nil {
 		pi.logger.Warn("could not index node", zap.Error(err),
 			zap.String("enr", node.String()))
+		return
 	}
-	pi.logger.Debug("node was indexed")
+	pi.logger.Debug("node was indexed", zap.String("enr", node.String()))
 }
 
-//// Prune prunes the given peer from the index
-//func (pi *peersIndex) Prune(pid string) {
-//	pi.lock.Lock()
-//	defer pi.lock.Unlock()
-//
-//	pi.data.Delete(peerIndexKey(pid, UserAgentKey))
-//	pi.data.Delete(peerIndexKey(pid, NodeRecordKey))
-//	pi.data.Delete(peerIndexKey(pid, OperatorIDKey))
-//}
+// Prune prunes the given peer
+func (pi *peersIndex) Prune(id peer.ID) {
+	pi.lock.Lock()
+	defer pi.lock.Unlock()
+
+	pi.prunedPeers.SetDefault(id.String(), true)
+}
+
+// Pruned returns whether the given peer was pruned
+func (pi *peersIndex) Pruned(id peer.ID) bool {
+	pi.lock.Lock()
+	defer pi.lock.Unlock()
+
+	_, exist := pi.prunedPeers.Get(id.String())
+	return exist
+}
 
 // Indexed checks if the given peer was indexed
 func (pi *peersIndex) Indexed(id peer.ID) bool {
@@ -158,19 +174,27 @@ func (pi *peersIndex) exist(id peer.ID, k string) bool {
 // indexPeerConnection (unsafe) indexes the given peer / connection
 func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	peerID := conn.RemotePeer()
+	pi.logger.Debug("start indexPeerConnection", zap.String("pid", peerID.String()))
+	defer pi.logger.Debug("done indexPeerConnection", zap.String("pid", peerID.String()))
 	if pi.Indexed(peerID) {
 		pi.logger.Debug("peer was already indexed", zap.String("pid", peerID.String()))
 		return nil
 	}
-	// if not visited yet by IDService -> do so now
+	// force identify protocol
 	if !pi.exist(peerID, UserAgentKey) {
-		pi.logger.Debug("visiting IDService", zap.String("pid", peerID.String()))
+		pi.logger.Debug("start identify", zap.String("pid", peerID.String()))
 		pi.ids.IdentifyConn(conn)
-		pi.logger.Debug("done IDService", zap.String("pid", peerID.String()))
+		pi.logger.Debug("done identify", zap.String("pid", peerID.String()))
 	}
 	ua, err := pi.getUserAgent(peerID)
 	if err != nil {
+		pi.logger.Warn("could not get user agent", zap.Error(err), zap.String("pid", peerID.String()))
 		return err
+	}
+	if len(string(ua)) == 0 {
+		pi.logger.Warn("could not find user agent", zap.String("pid", peerID.String()))
+		//return errors.New("could not find user agent")
+		return nil
 	}
 	pi.logger.Debug("got user agent", zap.String("ua", string(ua)), zap.String("pid", peerID.String()))
 	if oid := ua.OperatorID(); len(oid) > 0 {
@@ -179,7 +203,7 @@ func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 			return errors.Wrap(err, "could not save operator id")
 		}
 	}
-	if nodeType := ua.NodeType(); len(nodeType) > 0 {
+	if nodeType := ua.NodeType(); len(nodeType) > 0 && nodeType != Unknown.String() {
 		if err := pi.host.Peerstore().Put(peerID, NodeTypeKey, nodeType); err != nil {
 			return errors.Wrap(err, "could not save node type")
 		}
@@ -213,7 +237,7 @@ func (pi *peersIndex) indexNode(node *enode.Node) error {
 			return errors.Wrap(err, "could not store operator id in peerstore")
 		}
 	}
-	if nodeType, err := extractNodeTypeEntry(node.Record()); err == nil {
+	if nodeType, err := extractNodeTypeEntry(node.Record()); err == nil && nodeType != Unknown {
 		pi.logger.Debug("nodeType was extracted from ENR", zap.String("nodeType", nodeType.String()))
 		if err := pi.host.Peerstore().Put(info.ID, NodeTypeKey, nodeType.String()); err != nil {
 			return errors.Wrap(err, "could not store operator id in peerstore")
