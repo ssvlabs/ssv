@@ -80,19 +80,19 @@ func NewPeersIndex(logger *zap.Logger, host host.Host, ids *identify.IDService) 
 
 // Run tries to index data on all available peers
 func (pi *peersIndex) Run() {
-	//pi.lock.Lock()
-	//defer pi.lock.Unlock()
-	//
-	//if pi.ids == nil {
-	//	return
-	//}
-	//
-	//conns := pi.host.Network().Conns()
-	//for _, conn := range conns {
-	//	if err := pi.indexPeerConnection(conn); err != nil {
-	//		pi.logger.Warn("failed to index connection", zap.Error(err))
-	//	}
-	//}
+	pi.lock.Lock()
+	defer pi.lock.Unlock()
+
+	if pi.ids == nil {
+		return
+	}
+
+	conns := pi.host.Network().Conns()
+	for _, conn := range conns {
+		if err := pi.indexPeerConnection(conn); err != nil {
+			pi.logger.Warn("failed to index connection", zap.Error(err))
+		}
+	}
 }
 
 // GetData returns data of the given peer and key
@@ -174,8 +174,6 @@ func (pi *peersIndex) exist(id peer.ID, k string) bool {
 // indexPeerConnection (unsafe) indexes the given peer / connection
 func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	peerID := conn.RemotePeer()
-	pi.logger.Debug("start indexPeerConnection", zap.String("pid", peerID.String()))
-	defer pi.logger.Debug("done indexPeerConnection", zap.String("pid", peerID.String()))
 	if pi.Indexed(peerID) {
 		pi.logger.Debug("peer was already indexed", zap.String("pid", peerID.String()))
 		return nil

@@ -66,6 +66,8 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 
 func reportPeerIdentity(n *p2pNetwork, pid peer.ID) {
 	if ua, err := n.peersIndex.getUserAgent(pid); err != nil {
+		n.logger.Warn("could not report peer", zap.String("peer", pid.String()), zap.Error(err))
+	} else {
 		n.logger.Debug("peer identity", zap.String("peer", pid.String()), zap.String("ua", string(ua)))
 		metricsPeersIdentity.WithLabelValues(ua.OperatorID(), ua.NodeVersion(), pid.String(), ua.NodeType()).Set(1)
 	}

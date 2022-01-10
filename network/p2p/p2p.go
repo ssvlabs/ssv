@@ -161,12 +161,12 @@ func (n *p2pNetwork) setStreamHandlers() {
 }
 
 func (n *p2pNetwork) watchPeers() {
+	async.RunEvery(n.ctx, 5*time.Minute, func() {
+		n.peersIndex.Run()
+	})
+
 	async.RunEvery(n.ctx, 1*time.Minute, func() {
-		// index all peers and report
-		go func() {
-			n.peersIndex.Run()
-			reportAllConnections(n)
-		}()
+		go reportAllConnections(n)
 
 		// topics peers
 		n.psTopicsLock.RLock()
