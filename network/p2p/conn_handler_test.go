@@ -56,7 +56,8 @@ func TestP2pNetwork_isRelevantPeer(t *testing.T) {
 	t.Run("handle non-found peer", func(t *testing.T) {
 		_, info := createPeer(t, Operator)
 		relevant := n.isRelevantPeer(info.ID)
-		require.False(t, relevant)
+		// currently, accepting unknown peers, this should be changed in the future
+		require.True(t, relevant)
 	})
 }
 

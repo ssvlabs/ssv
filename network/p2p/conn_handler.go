@@ -60,8 +60,8 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 				return
 			}
 			n.trace("connected peer", zap.String("who", "networkNotifiee"),
-			//	zap.String("conn", conn.ID()),
-			//	zap.String("multiaddr", conn.RemoteMultiaddr().String()),
+				//	zap.String("conn", conn.ID()),
+				//	zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 				zap.String("peerID", conn.RemotePeer().String()))
 			go handleNewConnection(net, conn)
 		},
@@ -112,10 +112,14 @@ func (n *p2pNetwork) isRelevantPeer(id peer.ID) bool {
 		logger.Warn("could not read node type", zap.Error(err))
 		return false
 	}
-	// TODO: change to `nodeType != Exporter` once enough operators are on >=v0.1.9 where the ENR entry (`oid`) was be added, currently accepting old nodes
 	if nodeType == Operator {
 		n.logger.Debug("operator doesn't have an id")
 		return false
 	}
+	// TODO: unmark once bootnode enr will include a type as well
+	//if nodeType == Unknown {
+	//	n.logger.Debug("unknown peer")
+	//	return false
+	//}
 	return true
 }
