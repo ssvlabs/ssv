@@ -95,9 +95,9 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	}
 	n.trace("connecting to peer", zap.String("peerID", info.ID.String()))
 
-	if n.peers.IsBad(info.ID) {
-		return errors.New("refused to connect to bad peer")
-	}
+	//if n.peers.IsBad(info.ID) {
+	//	return errors.New("refused to connect to bad peer")
+	//}
 	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
 		n.trace("skipped connected peer", zap.String("peer", info.String()))
 		return nil
