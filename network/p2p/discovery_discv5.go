@@ -10,11 +10,14 @@ import (
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.uber.org/zap"
 	"net"
 	"time"
+)
+
+var (
+	// ErrPeerWasPruned is returned when a pruned peer is discovered
+	ErrPeerWasPruned = errors.New("peer was pruned")
 )
 
 // discv5Listener represents the discv5 interface
@@ -31,15 +34,6 @@ type discv5Listener interface {
 
 // setupDiscV5 creates all the required objects for discv5
 func (n *p2pNetwork) setupDiscV5() (*discover.UDPv5, error) {
-	n.peers = peers.NewStatus(n.ctx, &peers.StatusConfig{
-		PeerLimit: n.maxPeers * 2, // using a larger buffer to enable discovery of many nodes as possible
-		ScorerParams: &scorers.Config{
-			BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
-				Threshold:     5,
-				DecayInterval: time.Hour,
-			},
-		},
-	})
 	ip, err := ipAddr()
 	if err != nil {
 		return nil, err
@@ -93,7 +87,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP) (*discover.UDPv5, error) {
 	dv5Cfg := discover.Config{
 		PrivateKey: n.privKey,
 	}
-	if n.cfg.NetworkTrace {
+	if n.cfg.NetworkDiscoveryTrace {
 		logger := log.New()
 		logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 		dv5Cfg.Log = logger
@@ -226,11 +220,18 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 		}
 		go func(node *enode.Node) {
 			if info, err := n.connectNode(node); info == nil {
-				n.trace("invalid node", zap.String("enr", node.String()), zap.Error(err))
+				n.trace("WARNING: invalid node", zap.String("enr", node.String()), zap.Error(err))
 			} else if err != nil {
-				n.trace("can't connect node", zap.String("enr", node.String()), zap.String("peerID", info.ID.String()), zap.Error(err))
+				if err == ErrPeerWasPruned {
+					n.trace("peer was pruned", zap.String("enr", node.String()),
+						zap.String("peerID", info.ID.String()))
+					return
+				}
+				n.trace("WARNING: can't connect to node", zap.String("enr", node.String()),
+					zap.String("peerID", info.ID.String()), zap.Error(err))
 			} else {
-				n.trace("discovered node is now connected", zap.String("enr", node.String()), zap.String("peer", info.ID.String()))
+				n.trace("newly discovered node is connected", zap.String("enr", node.String()),
+					zap.String("peer", info.ID.String()))
 			}
 		}(node)
 	}
@@ -251,6 +252,9 @@ func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 	if n.host.Network().Connectedness(info.ID) == network.Connected {
 		return info, nil
 	}
+	if n.peersIndex.Pruned(info.ID) {
+		return info, ErrPeerWasPruned
+	}
 	n.peersIndex.IndexNode(node)
 	if err := n.connectWithPeer(n.ctx, *info); err != nil {
 		return info, errors.Wrap(err, "could not connect with peer")
@@ -263,20 +267,21 @@ func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 // - it shares a committee with the current node
 // - it is an exporter or bootnode (TODO: bootnode)
 func (n *p2pNetwork) tryNode(node *enode.Node) {
+	where := zap.String("where", "discovery:tryNode")
 	// trying to get the operator id from ENR
 	oid, err := extractOperatorIDEntry(node.Record())
 	if err != nil {
-		n.logger.Warn("could not extract operator public key", zap.Error(err))
+		n.trace("WARNING: could not extract operator id entry", where, zap.Error(err))
 	}
 	if oid == nil {
 		// if `oid` was not found in the node's ENR -> try to read node type entry
 		nodeType, err := extractNodeTypeEntry(node.Record())
 		if err != nil {
-			n.logger.Warn("could not extract operator public key", zap.Error(err))
+			n.trace("WARNING: could not extract node type entry", where, zap.Error(err))
 		}
 		// exit if operator node doesn't have an id
 		if nodeType == Operator {
-			n.logger.Debug("operator must have an id")
+			n.trace("WARNING: operator doesn't have an id, skipping", where)
 			return
 		}
 		// TODO: unmark when: 1. bootnode enr will have a type; 2. most of the operators will upgrade >=v0.1.9
@@ -284,19 +289,31 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 		//	n.logger.Debug("unknown peer")
 		//	return
 		//}
-		if _, err := n.connectNode(node); err != nil {
-			n.logger.Warn("can't connect to node", zap.Error(err))
+		if info, err := n.connectNode(node); err != nil {
+			if err == ErrPeerWasPruned {
+				n.trace("peer was pruned", where, zap.String("enr", node.String()),
+					zap.String("peerID", info.ID.String()))
+				return
+			}
+			n.trace("WARNING: can't connect to node", where, zap.Error(err))
+			return
 		}
+		n.logger.Debug("newly discovered node is connected", where)
 		return
 	}
-	logger := n.logger.With(zap.String("oid", string(*oid)))
+	fieldOid := zap.String("operatorID", string(*oid))
 	shouldConnect := n.lookupOperator != nil && n.lookupOperator(string(*oid))
-	logger.Debug("found operator id entry", zap.Bool("shouldConnect", shouldConnect))
+	n.trace("found operator id entry", where, fieldOid, zap.Bool("shouldConnect", shouldConnect))
 	if shouldConnect {
 		if info, err := n.connectNode(node); err != nil {
-			logger.Warn("can't connect to node")
+			if err == ErrPeerWasPruned {
+				n.trace("peer was pruned", where, fieldOid, zap.String("enr", node.String()),
+					zap.String("peerID", info.ID.String()))
+				return
+			}
+			n.trace("WARNING: can't connect to node", where, fieldOid)
 		} else if info != nil {
-			logger.Debug("forced connection by ENR", zap.String("info", info.ID.String()))
+			n.logger.Debug("newly discovered operator is connected", where, fieldOid, zap.String("pid", info.ID.String()))
 		}
 	}
 }

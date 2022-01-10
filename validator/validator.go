@@ -43,7 +43,8 @@ type Options struct {
 	operatorsIDs *sync.Map
 }
 
-// Validator struct that manages all ibft wrappers
+// Validator represents a running validator,
+// it holds the corresponding ibft controllers to trigger consensus layer (see ExecuteDuty())
 type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
@@ -60,7 +61,8 @@ type Validator struct {
 	signer                     beacon.Signer
 }
 
-// New Validator creation
+// New creates a new validator instance and the corresponding ibft controller
+// in addition, warms up beacon client and update operator ids owned by validator controller
 func New(opt Options) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", opt.Share.NodeID))
@@ -82,7 +84,7 @@ func New(opt Options) *Validator {
 	for _, h := range opsHashList {
 		opt.operatorsIDs.Store(h, true)
 	}
-	logger.Debug("new validator instance was created", zap.Strings("operators pubKeysHashes", opsHashList))
+	logger.Debug("new validator instance was created", zap.Strings("operators ids", opsHashList))
 
 	return &Validator{
 		ctx:                        opt.Context,

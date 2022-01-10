@@ -35,7 +35,8 @@ func (n *p2pNetwork) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bo
 //
 func (n *p2pNetwork) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
 	if pruned := n.peersIndex.Pruned(id); pruned {
-		n.logger.Debug("gater: peer was pruned", zap.String("pid", id.String()))
+		n.trace("rejecting pruned peer", zap.String("who", "conn_gater"),
+			zap.String("pid", id.String()))
 		return false
 	}
 	return true
