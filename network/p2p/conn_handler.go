@@ -2,20 +2,25 @@ package p2p
 
 import (
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
 	"sync"
 )
 
-func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
+// ConnectionFilter represents a function that filters connections.
+// returns whether to close the connection and if some error was thrown
+type ConnectionFilter func(conn libp2pnetwork.Conn) (bool, error)
+
+// handleConnections accepts filters to be called upon requests
+// configures a network notifications handler that indexes and filters all p2p connections
+func (n *p2pNetwork) handleConnections(filters ...ConnectionFilter) *libp2pnetwork.NotifyBundle {
 	who := zap.String("who", "conn_handler")
 	// TODO: add connection state management
 	pending := make(map[string]bool)
-	mut := sync.Mutex{}
+	pendingLock := sync.Mutex{}
 
 	addPending := func(pid string) bool {
-		mut.Lock()
-		defer mut.Unlock()
+		pendingLock.Lock()
+		defer pendingLock.Unlock()
 		if pending[pid] {
 			return false
 		}
@@ -24,8 +29,8 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 	}
 
 	removePending := func(pid string) {
-		mut.Lock()
-		defer mut.Unlock()
+		pendingLock.Lock()
+		defer pendingLock.Unlock()
 		delete(pending, pid)
 	}
 
@@ -44,13 +49,17 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 			// TODO: close connection in the future, currently might be an old peer or bootnode
 			return
 		}
-		if !n.isPeerAtLimit(conn.Stat().Direction) {
-			return
-		}
-		if relevant, oid := n.isRelevantPeer(id); !relevant {
-			n.peersIndex.Prune(id, oid)
-			if err := net.ClosePeer(id); err != nil {
-				n.trace("WARNING: could not close connection", fieldPid, zap.Error(err))
+		for _, f := range filters {
+			ok, err := f(conn)
+			if err != nil {
+				n.trace("WARNING: failed to run filter", fieldPid, zap.Error(err))
+				return
+			}
+			if !ok {
+				if err := net.ClosePeer(id); err != nil {
+					n.trace("WARNING: could not close connection", fieldPid, zap.Error(err))
+				}
+				return
 			}
 		}
 	}
@@ -80,61 +89,4 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 				zap.String("peerID", conn.RemotePeer().String()))
 		},
 	}
-}
-
-// NotifyOperatorID updates the network regarding new operators
-// TODO: find a better way to do this
-func (n *p2pNetwork) NotifyOperatorID(oid string) {
-	n.trace("notified on operator id", zap.String("oid", oid))
-	n.peersIndex.EvictPruned(oid)
-}
-
-// isPeerAtLimit checks for max peers
-func (n *p2pNetwork) isPeerAtLimit(direction libp2pnetwork.Direction) bool {
-	numOfConns := len(n.host.Network().Peers())
-	// TODO: add a buffer
-	return numOfConns >= n.maxPeers
-}
-
-// isRelevantPeer checks if the current node should connect the given peer and returns operator id if found.
-// a peer is relevant if it fullfils one of the following:
-// - it shares a committee with the current node
-// - it is an exporter or bootnode (TODO: bootnode)
-func (n *p2pNetwork) isRelevantPeer(id peer.ID) (bool, string) {
-	where := zap.String("where", "isRelevantPeer()")
-	fieldPid := zap.String("peerID", id.String())
-	//if !n.peersIndex.Indexed(id) {
-	//	logger.Debug("peer was not indexed yet")
-	//	return false
-	//}
-	oid, err := n.peersIndex.getOperatorID(id)
-	if err != nil {
-		n.trace("WARNING: could not read operator id", where, fieldPid, zap.Error(err))
-		return false, ""
-	}
-	if len(oid) > 0 {
-		relevant := n.lookupOperator(oid)
-		if !relevant {
-			n.trace("operator is not relevant", where, zap.String("oid", oid), fieldPid)
-		} else {
-			n.trace("operator is relevant", where, zap.String("oid", oid), fieldPid)
-		}
-		return relevant, oid
-	}
-	n.trace("could not find operator id, looking for node type", where, fieldPid)
-	nodeType, err := n.peersIndex.getNodeType(id)
-	if err != nil {
-		n.trace("WARNING: could not read node type", where, fieldPid, zap.Error(err))
-		return false, ""
-	}
-	if nodeType == Operator {
-		n.trace("WARNING: operator doesn't have an id", where, fieldPid)
-		return false, ""
-	}
-	// TODO: unmark once bootnode enr will include a type as well
-	//if nodeType == Unknown {
-	//	n.trace("WARNING: unknown peer", where, fieldPid)
-	//	return false, ""
-	//}
-	return true, ""
 }

@@ -128,7 +128,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger.Info("libp2p User Agent", zap.String("value", ua))
 	n.peersIndex = NewPeersIndex(n.logger, n.host, ids)
 
-	n.host.Network().Notify(n.handleConnections())
+	notifyHandler := n.handleConnections(
+		//n.filterOldVersion,
+		n.filterIrrelevant,
+	)
+	n.host.Network().Notify(notifyHandler)
 
 	ps, err := n.newGossipPubsub(cfg)
 	if err != nil {
@@ -177,6 +181,13 @@ func (n *p2pNetwork) watchPeers() {
 
 func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
+}
+
+// NotifyOperatorID updates the network regarding new operators
+// TODO: find a better way to do this
+func (n *p2pNetwork) NotifyOperatorID(oid string) {
+	n.trace("notified on operator id", zap.String("operatorID", oid))
+	n.peersIndex.EvictPruned(oid)
 }
 
 // getUserAgent returns ua built upon:
