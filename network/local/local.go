@@ -219,5 +219,4 @@ func (n *Local) SubscribeToMainTopic() error {
 
 // NotifyOperatorID implementation
 func (n *Local) NotifyOperatorID(oid string) {
-	return
 }
