@@ -63,10 +63,15 @@ func TestNewPeersIndex(t *testing.T) {
 		require.Equal(t, testUA+"1", data.(string))
 	})
 
-	t.Run("prune", func(t *testing.T) {
+	t.Run("pruning", func(t *testing.T) {
 		require.False(t, pi1.Pruned(host1.ID()))
-		pi1.Prune(host1.ID())
+		oid, err := pi2.getOperatorID(host1.ID())
+		require.NoError(t, err)
+		require.NotEmpty(t, oid)
+		pi1.Prune(host1.ID(), oid)
 		require.True(t, pi1.Pruned(host1.ID()))
+		pi1.EvictPruned(oid)
+		require.False(t, pi1.Pruned(host1.ID()))
 	})
 }
 

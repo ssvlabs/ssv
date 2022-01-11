@@ -45,7 +45,8 @@ type PeersIndex interface {
 	IndexConn(conn network.Conn)
 	IndexNode(node *enode.Node)
 	Indexed(id peer.ID) bool
-	Prune(id peer.ID)
+	EvictPruned(oid string)
+	Prune(id peer.ID, oid string)
 	Pruned(id peer.ID) bool
 
 	exist(id peer.ID, k string) bool
@@ -61,28 +62,30 @@ type peersIndex struct {
 	host host.Host
 	ids  *identify.IDService
 
-	lock        *sync.RWMutex
-	prunedPeers *cache.Cache
+	prunedLock      *sync.RWMutex
+	prunedPeers     *cache.Cache
+	prunedOperators map[string]string
 }
 
 // NewPeersIndex creates a new instance
 func NewPeersIndex(logger *zap.Logger, host host.Host, ids *identify.IDService) PeersIndex {
 	logger = logger.With(zap.String("who", "PeersIndex"))
 	pi := peersIndex{
-		logger:      logger,
-		host:        host,
-		ids:         ids,
-		lock:        &sync.RWMutex{},
-		prunedPeers: cache.New(time.Minute*5, time.Minute*6),
+		logger:          logger,
+		host:            host,
+		ids:             ids,
+		prunedLock:      &sync.RWMutex{},
+		prunedPeers:     cache.New(time.Minute*5, time.Minute*6),
+		prunedOperators: make(map[string]string),
 	}
+	// register on eviction of pruned peer
+	pi.prunedPeers.OnEvicted(pi.onPrunedPeerEvicted)
+
 	return &pi
 }
 
 // Run tries to index data on all available peers
 func (pi *peersIndex) Run() {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
-
 	if pi.ids == nil {
 		return
 	}
@@ -97,9 +100,6 @@ func (pi *peersIndex) Run() {
 
 // GetData returns data of the given peer and key
 func (pi *peersIndex) GetData(pid peer.ID, key string) (interface{}, bool, error) {
-	//pi.lock.RLock()
-	//defer pi.lock.RUnlock()
-
 	data, err := pi.host.Peerstore().Get(pid, key)
 	if err != nil {
 		if err == peerstore.ErrNotFound {
@@ -112,15 +112,11 @@ func (pi *peersIndex) GetData(pid peer.ID, key string) (interface{}, bool, error
 
 // IndexConn indexes the given peer / connection
 func (pi *peersIndex) IndexConn(conn network.Conn) {
-	//pi.lock.RLock()
-	//defer pi.lock.RUnlock()
 	pid := conn.RemotePeer().String()
-
 	// skip if no id service was configured (user agent will be missing)
 	if pi.ids == nil {
 		return
 	}
-
 	if err := pi.indexPeerConnection(conn); err != nil {
 		pi.logger.Warn("could not index connection", zap.Error(err),
 			zap.String("peerID", pid),
@@ -131,9 +127,6 @@ func (pi *peersIndex) IndexConn(conn network.Conn) {
 
 // IndexNode indexes the given node
 func (pi *peersIndex) IndexNode(node *enode.Node) {
-	//pi.lock.Lock()
-	//defer pi.lock.Unlock()
-
 	if err := pi.indexNode(node); err != nil {
 		pi.logger.Warn("could not index node", zap.Error(err),
 			zap.String("enr", node.String()))
@@ -141,18 +134,30 @@ func (pi *peersIndex) IndexNode(node *enode.Node) {
 	}
 }
 
-// Prune prunes the given peer
-func (pi *peersIndex) Prune(id peer.ID) {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+// EvictPruned removes the given operator from the pruned peers collection
+func (pi *peersIndex) EvictPruned(oid string) {
+	pi.prunedLock.Lock()
+	defer pi.prunedLock.Unlock()
 
-	pi.prunedPeers.SetDefault(id.String(), true)
+	if pid, ok := pi.prunedOperators[oid]; ok {
+		pi.prunedPeers.Delete(pid)
+	}
+}
+
+// Prune prunes the given peer
+func (pi *peersIndex) Prune(id peer.ID, oid string) {
+	pi.prunedLock.Lock()
+	defer pi.prunedLock.Unlock()
+
+	pid := id.String()
+	pi.prunedPeers.SetDefault(pid, oid)
+	pi.prunedOperators[oid] = pid
 }
 
 // Pruned returns whether the given peer was pruned
 func (pi *peersIndex) Pruned(id peer.ID) bool {
-	pi.lock.Lock()
-	defer pi.lock.Unlock()
+	pi.prunedLock.Lock()
+	defer pi.prunedLock.Unlock()
 
 	_, exist := pi.prunedPeers.Get(id.String())
 	return exist
@@ -288,4 +293,13 @@ func (pi *peersIndex) getUserAgent(id peer.ID) (UserAgent, error) {
 		return NewUserAgent(""), errors.Wrap(err, "could not parse user agent")
 	}
 	return NewUserAgent(ua), nil
+}
+
+func (pi *peersIndex) onPrunedPeerEvicted(s string, i interface{}) {
+	pi.prunedLock.Lock()
+	defer pi.prunedLock.Unlock()
+
+	if oid, ok := i.(string); ok {
+		delete(pi.prunedOperators, oid)
+	}
 }
