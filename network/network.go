@@ -100,4 +100,8 @@ type Network interface {
 	Reader
 	Broadcaster
 	Syncer
+
+	// NotifyOperatorID updates the network regarding new operators
+	// TODO: find a better way to do this
+	NotifyOperatorID(oid string)
 }

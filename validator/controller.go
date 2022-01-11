@@ -87,6 +87,11 @@ func NewController(options ControllerOptions) Controller {
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
+	notifyOperatorID := func(oid string) {
+		operatorsIDs.Store(oid, true)
+		// TODO: update network in a better way
+		options.Network.NotifyOperatorID(oid)
+	}
 
 	ctrl := controller{
 		collection:                 collection,
@@ -108,7 +113,7 @@ func NewController(options ControllerOptions) Controller {
 			Fork:                       options.Fork,
 			Signer:                     options.KeyManager,
 			SyncRateLimit:              options.HistorySyncRateLimit,
-			operatorsIDs:               operatorsIDs,
+			notifyOperatorID:           notifyOperatorID,
 		}),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),

@@ -39,8 +39,8 @@ type Options struct {
 	Fork                       forks.Fork
 	Signer                     beacon.Signer
 	SyncRateLimit              time.Duration
-	// operatorsIDs is a map holding all relevant operators, should be filled upon creation
-	operatorsIDs *sync.Map
+
+	notifyOperatorID func(string)
 }
 
 // Validator represents a running validator,
@@ -82,7 +82,9 @@ func New(opt Options) *Validator {
 
 	opsHashList := opt.Share.HashOperators()
 	for _, h := range opsHashList {
-		opt.operatorsIDs.Store(h, true)
+		if opt.notifyOperatorID != nil {
+			opt.notifyOperatorID(h)
+		}
 	}
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opsHashList))
 

@@ -82,6 +82,13 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 	}
 }
 
+// NotifyOperatorID updates the network regarding new operators
+// TODO: find a better way to do this
+func (n *p2pNetwork) NotifyOperatorID(oid string) {
+	n.trace("notified on operator id", zap.String("oid", oid))
+	n.peersIndex.EvictPruned(oid)
+}
+
 // isPeerAtLimit checks for max peers
 func (n *p2pNetwork) isPeerAtLimit(direction libp2pnetwork.Direction) bool {
 	numOfConns := len(n.host.Network().Peers())
