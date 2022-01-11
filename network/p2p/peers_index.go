@@ -127,7 +127,6 @@ func (pi *peersIndex) IndexConn(conn network.Conn) {
 			zap.String("multiaddr", conn.RemoteMultiaddr().String()))
 		return
 	}
-	pi.logger.Debug("node was indexed", zap.String("peerID", pid))
 }
 
 // IndexNode indexes the given node
@@ -140,7 +139,6 @@ func (pi *peersIndex) IndexNode(node *enode.Node) {
 			zap.String("enr", node.String()))
 		return
 	}
-	pi.logger.Debug("node was indexed", zap.String("enr", node.String()))
 }
 
 // Prune prunes the given peer
@@ -174,41 +172,42 @@ func (pi *peersIndex) exist(id peer.ID, k string) bool {
 // indexPeerConnection (unsafe) indexes the given peer / connection
 func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	peerID := conn.RemotePeer()
+	logger := pi.logger.With(zap.String("peerdID", peerID.String()))
 	if pi.Indexed(peerID) {
-		pi.logger.Debug("peer was already indexed", zap.String("pid", peerID.String()))
+		logger.Debug("peer was already indexed")
 		return nil
 	}
 	// force identify protocol
 	if !pi.exist(peerID, UserAgentKey) {
-		pi.logger.Debug("start identify", zap.String("pid", peerID.String()))
+		logger.Debug("start identify")
 		pi.ids.IdentifyConn(conn)
-		pi.logger.Debug("done identify", zap.String("pid", peerID.String()))
+		logger.Debug("done identify")
 	}
 	ua, err := pi.getUserAgent(peerID)
 	if err != nil {
-		pi.logger.Warn("could not get user agent", zap.Error(err), zap.String("pid", peerID.String()))
+		logger.Warn("could not get user agent", zap.Error(err))
 		return err
 	}
 	if len(string(ua)) == 0 {
-		pi.logger.Warn("could not find user agent", zap.String("pid", peerID.String()))
+		logger.Warn("could not find user agent")
 		//return errors.New("could not find user agent")
 		return nil
 	}
-	pi.logger.Debug("got user agent", zap.String("ua", string(ua)), zap.String("pid", peerID.String()))
+	logger.Debug("got user agent", zap.String("ua", string(ua)))
 	if oid := ua.OperatorID(); len(oid) > 0 {
-		pi.logger.Debug("operator id was extracted from UserAgent", zap.String("oid", oid))
+		logger.Debug("operator id was extracted from UserAgent", zap.String("oid", oid))
 		if err := pi.host.Peerstore().Put(peerID, OperatorIDKey, oid); err != nil {
 			return errors.Wrap(err, "could not save operator id")
 		}
 	}
 	if nodeType := ua.NodeType(); len(nodeType) > 0 && nodeType != Unknown.String() {
+		logger.Debug("node type was extracted from UserAgent", zap.String("nodeType", nodeType))
 		if err := pi.host.Peerstore().Put(peerID, NodeTypeKey, nodeType); err != nil {
 			return errors.Wrap(err, "could not save node type")
 		}
 	}
-	pi.logger.Debug("indexed connection", zap.String("peerID", peerID.String()),
-		zap.String("multiaddr", conn.RemoteMultiaddr().String()),
-		zap.String(UserAgentKey, string(ua)))
+	logger.Debug("indexed connection", zap.String("ua", string(ua)),
+		zap.String("multiaddr", conn.RemoteMultiaddr().String()))
 	return nil
 }
 
@@ -218,8 +217,9 @@ func (pi *peersIndex) indexNode(node *enode.Node) error {
 	if err != nil || info == nil {
 		return errors.Wrap(err, "could not convert node to peer info")
 	}
+	logger := pi.logger.With(zap.String("peerdID", info.ID.String()))
 	if pi.Indexed(info.ID) {
-		pi.logger.Debug("peer was already indexed", zap.String("pid", info.ID.String()))
+		logger.Debug("peer was already indexed")
 		return nil
 	}
 	raw, err := node.MarshalText()
@@ -230,18 +230,18 @@ func (pi *peersIndex) indexNode(node *enode.Node) error {
 		return errors.Wrap(err, "could not store node record in peerstore")
 	}
 	if oid, err := extractOperatorIDEntry(node.Record()); err == nil && oid != nil {
-		pi.logger.Debug("oid was extracted from ENR", zap.Any("oid", *oid))
+		logger.Debug("oid was extracted from ENR", zap.Any("oid", *oid))
 		if err := pi.host.Peerstore().Put(info.ID, OperatorIDKey, string(*oid)); err != nil {
 			return errors.Wrap(err, "could not store operator id in peerstore")
 		}
 	}
 	if nodeType, err := extractNodeTypeEntry(node.Record()); err == nil && nodeType != Unknown {
-		pi.logger.Debug("nodeType was extracted from ENR", zap.String("nodeType", nodeType.String()))
+		logger.Debug("nodeType was extracted from ENR", zap.String("nodeType", nodeType.String()))
 		if err := pi.host.Peerstore().Put(info.ID, NodeTypeKey, nodeType.String()); err != nil {
 			return errors.Wrap(err, "could not store operator id in peerstore")
 		}
 	}
-	pi.logger.Debug("indexed node", zap.String("enr", node.String()))
+	logger.Debug("indexed node", zap.String("enr", node.String()))
 	return nil
 }
 

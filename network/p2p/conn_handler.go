@@ -82,6 +82,13 @@ func (n *p2pNetwork) handleConnections() *libp2pnetwork.NotifyBundle {
 	}
 }
 
+// isPeerAtLimit checks for max peers
+func (n *p2pNetwork) isPeerAtLimit(direction libp2pnetwork.Direction) bool {
+	numOfConns := len(n.host.Network().Peers())
+	// TODO: add a buffer
+	return numOfConns >= n.maxPeers
+}
+
 // isRelevantPeer checks if the current node should connect the given peer.
 // a peer is relevant if it fullfils one of the following:
 // - it shares a committee with the current node

@@ -206,7 +206,7 @@ func (n *p2pNetwork) getOperatorPubKey() (string, error) {
 }
 
 func (n *p2pNetwork) trace(msg string, fields ...zap.Field) {
-	if n.cfg.NetworkTrace {
+	if n.cfg != nil && n.cfg.NetworkTrace {
 		n.logger.Debug(msg, fields...)
 	}
 }

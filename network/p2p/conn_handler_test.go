@@ -27,6 +27,7 @@ func TestP2pNetwork_isRelevantPeer(t *testing.T) {
 		host:           host,
 		peersIndex:     pi,
 		lookupOperator: lookupHandler,
+		cfg:            &Config{NetworkTrace: true},
 	}
 
 	t.Run("identify irrelevant operator", func(t *testing.T) {

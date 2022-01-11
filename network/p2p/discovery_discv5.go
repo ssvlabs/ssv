@@ -237,12 +237,6 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 	}
 }
 
-// isPeerAtLimit checks for max peers
-func (n *p2pNetwork) isPeerAtLimit(direction network.Direction) bool {
-	numOfConns := len(n.host.Network().Peers())
-	return numOfConns >= n.maxPeers
-}
-
 // connectNode tries to connect to the given node, returns whether the node is valid and error
 func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 	info, err := convertToAddrInfo(node)
