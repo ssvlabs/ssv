@@ -296,10 +296,12 @@ func (pi *peersIndex) getUserAgent(id peer.ID) (UserAgent, error) {
 }
 
 func (pi *peersIndex) onPrunedPeerEvicted(s string, i interface{}) {
-	pi.prunedLock.Lock()
-	defer pi.prunedLock.Unlock()
+	go func() {
+		pi.prunedLock.Lock()
+		defer pi.prunedLock.Unlock()
 
-	if oid, ok := i.(string); ok {
-		delete(pi.prunedOperators, oid)
-	}
+		if oid, ok := i.(string); ok {
+			delete(pi.prunedOperators, oid)
+		}
+	}()
 }

@@ -71,6 +71,7 @@ func TestNewPeersIndex(t *testing.T) {
 		pi1.Prune(host1.ID(), oid)
 		require.True(t, pi1.Pruned(host1.ID()))
 		pi1.EvictPruned(oid)
+		<-time.After(2 * time.Millisecond)
 		require.False(t, pi1.Pruned(host1.ID()))
 	})
 }
