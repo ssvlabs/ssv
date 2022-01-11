@@ -17,7 +17,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
@@ -49,7 +48,6 @@ type p2pNetwork struct {
 	listeners       listeners.Container
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey
-	peers           *peers.Status
 	host            p2pHost.Host
 	pubsub          *pubsub.PubSub
 	peersIndex      PeersIndex

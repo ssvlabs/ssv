@@ -9,7 +9,6 @@ import (
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/config/features"
 	"go.uber.org/zap"
 	"time"
 )
@@ -175,10 +174,11 @@ func pubsubGossipParam() pubsub.GossipSubParams {
 	// messages have a longer time to be propagated. This
 	// comes with the tradeoff of larger memory usage and
 	// size of the seen message cache.
-	if features.Get().EnableLargerGossipHistory {
-		gParams.HistoryLength = 12
-		gParams.HistoryGossip = 5
-	}
+	// TODO: enable after checking for optimal values
+	//if features.Get().EnableLargerGossipHistory {
+	//	gParams.HistoryLength = 12
+	//	gParams.HistoryGossip = 5
+	//}
 	return gParams
 }
 
