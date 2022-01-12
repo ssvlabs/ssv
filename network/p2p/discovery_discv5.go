@@ -230,7 +230,7 @@ func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 				n.trace("WARNING: can't connect to node", zap.String("enr", node.String()),
 					zap.String("peerID", info.ID.String()), zap.Error(err))
 			} else {
-				n.trace("newly discovered node is connected", zap.String("enr", node.String()),
+				n.trace("discovered node is connected", zap.String("enr", node.String()),
 					zap.String("peer", info.ID.String()))
 			}
 		}(node)
@@ -285,14 +285,14 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 		//}
 		if info, err := n.connectNode(node); err != nil {
 			if err == ErrPeerWasPruned {
-				n.trace("peer was pruned", where, zap.String("enr", node.String()),
+				n.trace("node was pruned", where, zap.String("enr", node.String()),
 					zap.String("peerID", info.ID.String()))
 				return
 			}
 			n.trace("WARNING: can't connect to node", where, zap.Error(err))
 			return
 		}
-		n.logger.Debug("newly discovered node is connected", where)
+		n.logger.Debug("discovered node is connected", where)
 		return
 	}
 	fieldOid := zap.String("operatorID", string(*oid))
@@ -301,13 +301,13 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 	if shouldConnect {
 		if info, err := n.connectNode(node); err != nil {
 			if err == ErrPeerWasPruned {
-				n.trace("peer was pruned", where, fieldOid, zap.String("enr", node.String()),
+				n.trace("operator was pruned", where, fieldOid, zap.String("enr", node.String()),
 					zap.String("peerID", info.ID.String()))
 				return
 			}
-			n.trace("WARNING: can't connect to node", where, fieldOid)
+			n.trace("WARNING: can't connect to operator", where, fieldOid)
 		} else if info != nil {
-			n.logger.Debug("newly discovered operator is connected", where, fieldOid, zap.String("pid", info.ID.String()))
+			n.logger.Debug("discovered operator is connected", where, fieldOid, zap.String("pid", info.ID.String()))
 		}
 	}
 }
