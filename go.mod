@@ -16,11 +16,11 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/herumi/bls-eth-go-binary v0.0.0-20210917013441-d37c07cfda4e
 	github.com/ilyakaznacheev/cleanenv v1.2.5
-	github.com/libp2p/go-libp2p v0.15.1
-	github.com/libp2p/go-libp2p-core v0.9.0
-	github.com/libp2p/go-libp2p-noise v0.2.2
+	github.com/libp2p/go-libp2p v0.16.0
+	github.com/libp2p/go-libp2p-core v0.11.0
+	github.com/libp2p/go-libp2p-noise v0.3.0
 	github.com/libp2p/go-libp2p-pubsub v0.5.6
-	github.com/libp2p/go-tcp-transport v0.2.8
+	github.com/libp2p/go-tcp-transport v0.4.0
 	github.com/multiformats/go-multiaddr v0.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
@@ -46,3 +46,7 @@ replace github.com/prysmaticlabs/prysm => github.com/prysmaticlabs/prysm v1.4.2-
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/attestantio/go-eth2-client v0.6.30 => github.com/bloxapp/go-eth2-client v0.8.0-1
+
+replace github.com/lucas-clemente/quic-go v0.23.0 => github.com/lucas-clemente/quic-go v0.22.1
+
+replace github.com/lucas-clemente/quic-go v0.24.0 => github.com/lucas-clemente/quic-go v0.22.1

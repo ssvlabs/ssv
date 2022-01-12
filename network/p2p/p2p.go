@@ -110,7 +110,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	if err != nil {
 		logger.Fatal("could not build libp2p options", zap.Error(err))
 	}
-	host, err := libp2p.New(ctx, opts...)
+	host, err := libp2p.New(opts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create p2p host")
 	}
