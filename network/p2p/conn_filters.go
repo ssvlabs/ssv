@@ -100,9 +100,9 @@ func (n *p2pNetwork) isRelevantPeer(id peer.ID) (bool, string) {
 	return true, ""
 }
 
-// isPeerAtLimit checks for max peers
+// isPeerAtLimit checks if we reached peers limit.
+// TODO: limit by inbound/outbound
 func (n *p2pNetwork) isPeerAtLimit(direction libp2pnetwork.Direction) bool {
 	numOfConns := len(n.host.Network().Peers())
-	// TODO: add a buffer
-	return numOfConns >= n.maxPeers
+	return numOfConns >= n.peersLimit
 }

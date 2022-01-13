@@ -30,9 +30,10 @@ const (
 	DiscoveryServiceTag = "bloxstaking.ssv"
 
 	topicPrefix = "bloxstaking.ssv"
-)
 
-const (
+	// minPeers is the min value for peers limit
+	minPeers = 10
+
 	//baseSyncStream           = "/sync/"
 	//highestDecidedStream     = baseSyncStream + "highest_decided"
 	//decidedByRangeStream     = baseSyncStream + "decided_by_range"
@@ -61,7 +62,7 @@ type p2pNetwork struct {
 	nodeType      NodeType
 
 	lookupOperator LookupOperatorHandler
-	maxPeers       int
+	peersLimit     int
 }
 
 // LookupOperatorHandler is a function that checks if the given operator
@@ -82,6 +83,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 
 	logger = logger.With(zap.String("component", "p2p"))
 
+	// ensuring min peers
+	if cfg.MaxPeers < minPeers {
+		cfg.MaxPeers = minPeers
+	}
+
 	n := &p2pNetwork{
 		ctx:             ctx,
 		cfg:             cfg,
@@ -94,7 +100,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		reportLastMsg:   cfg.ReportLastMsg,
 		fork:            cfg.Fork,
 		nodeType:        cfg.NodeType,
-		maxPeers:        cfg.MaxPeers,
+		peersLimit:      cfg.MaxPeers,
 		lookupOperator: func(s string) bool {
 			return true
 		},
