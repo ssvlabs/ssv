@@ -195,7 +195,10 @@ func (pi *peersIndex) indexPeerConnection(conn network.Conn) error {
 	}
 	if len(string(ua)) == 0 {
 		logger.Warn("could not find user agent")
-		//return errors.New("could not find user agent")
+		return nil
+	}
+	if ua.IsUnknown() {
+		logger.Warn("unknown peer", zap.String("ua", string(ua)))
 		return nil
 	}
 	logger.Debug("got user agent", zap.String("ua", string(ua)))

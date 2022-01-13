@@ -64,3 +64,13 @@ func (ua UserAgent) OperatorID() string {
 	}
 	return ""
 }
+
+// IsUnknown checks if the given user agent is not from a ssv node
+func (ua UserAgent) IsUnknown() bool {
+	uaStr := string(ua)
+	if len(uaStr) == 0 {
+		return false
+	}
+	uaParts := strings.Split(string(ua), ":")
+	return len(uaParts) <= 2
+}

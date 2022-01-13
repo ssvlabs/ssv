@@ -128,10 +128,15 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	n.logger.Info("libp2p User Agent", zap.String("value", ua))
 	n.peersIndex = NewPeersIndex(n.logger, n.host, ids)
 
-	notifyHandler := n.handleConnections(
+	// setting up connection handler and the corresponding filters
+	filters := []ConnectionFilter{
+		n.filterNonSsvNodes,
 		//n.filterOldVersion,
-		n.filterIrrelevant,
-	)
+	}
+	if cfg.DiscoveryType != discoveryTypeMdns {
+		filters = append(filters, n.filterIrrelevant)
+	}
+	notifyHandler := n.handleConnections(filters...)
 	n.host.Network().Notify(notifyHandler)
 
 	ps, err := n.newGossipPubsub(cfg)

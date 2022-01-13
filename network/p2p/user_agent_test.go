@@ -60,3 +60,8 @@ func TestUserAgent(t *testing.T) {
 		require.Equal(t, 0, len(ua.OperatorID()))
 	})
 }
+
+func TestUserAgent_IsUnknown(t *testing.T) {
+	require.False(t, UserAgent("SSV-Node:v0.x.x:exporter").IsUnknown())
+	require.True(t, UserAgent("Prysm/Unknown/Local build").IsUnknown())
+}

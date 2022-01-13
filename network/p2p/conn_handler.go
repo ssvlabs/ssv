@@ -44,11 +44,6 @@ func (n *p2pNetwork) handleConnections(filters ...ConnectionFilter) *libp2pnetwo
 		defer removePending(pid)
 		fieldPid := zap.String("peerID", pid)
 		n.peersIndex.IndexConn(conn)
-		if !n.peersIndex.Indexed(conn.RemotePeer()) {
-			n.trace("connection was not indexed", fieldPid)
-			// TODO: close connection in the future, currently might be an old peer or bootnode
-			return
-		}
 		for _, f := range filters {
 			ok, err := f(conn)
 			if err != nil {

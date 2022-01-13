@@ -12,8 +12,28 @@ func (n *p2pNetwork) filterIrrelevant(conn libp2pnetwork.Conn) (bool, error) {
 		return true, nil
 	}
 	id := conn.RemotePeer()
+	if !n.peersIndex.Indexed(conn.RemotePeer()) {
+		n.trace("connection was not indexed")
+		// TODO: filter out in the future, currently might be an old peer or bootnode
+		return true, nil
+	}
 	if relevant, oid := n.isRelevantPeer(id); !relevant {
 		n.peersIndex.Prune(id, oid)
+		return false, nil
+	}
+	return true, nil
+}
+
+// filterIrrelevant is a ConnectionFilter that filters non ssv nodes, based on User Agent
+func (n *p2pNetwork) filterNonSsvNodes(conn libp2pnetwork.Conn) (bool, error) {
+	id := conn.RemotePeer()
+	ua, err := n.peersIndex.getUserAgent(id)
+	if err != nil {
+		n.trace("WARNING: could not read user agent", zap.String("peerID", id.String()))
+		return true, nil
+	}
+	if ua.IsUnknown() {
+		n.trace("filtering unknown node", zap.String("ua", string(ua)))
 		return false, nil
 	}
 	return true, nil
