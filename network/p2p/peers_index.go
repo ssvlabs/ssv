@@ -60,7 +60,7 @@ type peersIndex struct {
 	logger *zap.Logger
 
 	host host.Host
-	ids  identify.IDService
+	ids  *identify.IDService
 
 	prunedLock      *sync.RWMutex
 	prunedPeers     *cache.Cache
@@ -68,7 +68,7 @@ type peersIndex struct {
 }
 
 // NewPeersIndex creates a new instance
-func NewPeersIndex(logger *zap.Logger, host host.Host, ids identify.IDService) PeersIndex {
+func NewPeersIndex(logger *zap.Logger, host host.Host, ids *identify.IDService) PeersIndex {
 	logger = logger.With(zap.String("who", "PeersIndex"))
 	pi := peersIndex{
 		logger:          logger,

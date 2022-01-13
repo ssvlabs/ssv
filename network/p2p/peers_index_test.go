@@ -125,7 +125,7 @@ func newNode(t *testing.T, nodeType NodeType) (*enode.LocalNode, peer.ID, string
 }
 
 func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.Host, PeersIndex) {
-	host, err := libp2p.New(
+	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
 		libp2p.UserAgent(ua))
 	require.NoError(t, setupMdnsDiscovery(ctx, zap.L(), host))
