@@ -257,32 +257,10 @@ func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
 }
 
 // tryNode tries to connect to the given node if relevant.
-// a node is relevant if it fullfils one of the following:
-// - it shares a committee with the current node
-// - it is an exporter or bootnode (TODO: bootnode)
 func (n *p2pNetwork) tryNode(node *enode.Node) {
 	where := zap.String("where", "discovery:tryNode")
-	// trying to get the operator id from ENR
-	oid, err := extractOperatorIDEntry(node.Record())
-	if err != nil {
-		n.trace("WARNING: could not extract operator id entry", where, zap.Error(err))
-	}
-	if oid == nil {
-		// if `oid` was not found in the node's ENR -> try to read node type entry
-		nodeType, err := extractNodeTypeEntry(node.Record())
-		if err != nil {
-			n.trace("WARNING: could not extract node type entry", where, zap.Error(err))
-		}
-		// exit if operator node doesn't have an id
-		if nodeType == Operator {
-			n.trace("WARNING: operator doesn't have an id, skipping", where)
-			return
-		}
-		// TODO: unmark when: 1. bootnode enr will have a type; 2. most of the operators will upgrade >=v0.1.9
-		//if nodeType == Unknown {
-		//	n.logger.Debug("unknown peer")
-		//	return
-		//}
+	shouldConnect := n.isRelevantNode(node)
+	if shouldConnect {
 		if info, err := n.connectNode(node); err != nil {
 			if err == ErrPeerWasPruned {
 				n.trace("node was pruned", where, zap.String("enr", node.String()),
@@ -293,23 +271,41 @@ func (n *p2pNetwork) tryNode(node *enode.Node) {
 			return
 		}
 		n.logger.Debug("discovered node is connected", where)
-		return
 	}
-	fieldOid := zap.String("operatorID", string(*oid))
-	shouldConnect := n.lookupOperator != nil && n.lookupOperator(string(*oid))
-	n.trace("found operator id entry", where, fieldOid, zap.Bool("shouldConnect", shouldConnect))
-	if shouldConnect {
-		if info, err := n.connectNode(node); err != nil {
-			if err == ErrPeerWasPruned {
-				n.trace("operator was pruned", where, fieldOid, zap.String("enr", node.String()),
-					zap.String("peerID", info.ID.String()))
-				return
-			}
-			n.trace("WARNING: can't connect to operator", where, fieldOid)
-		} else if info != nil {
-			n.logger.Debug("discovered operator is connected", where, fieldOid, zap.String("pid", info.ID.String()))
+}
+
+// isRelevantNode checks whether the given node if relevant by ENR entries.
+// a node is relevant if it fullfils one of the following:
+// - it shares a committee with the current node
+// - it is an exporter or bootnode (TODO: bootnode)
+func (n *p2pNetwork) isRelevantNode(node *enode.Node) bool {
+	where := zap.String("where", "discovery:isRelevantNode")
+	oid, err := extractOperatorIDEntry(node.Record())
+	if err != nil {
+		n.trace("WARNING: could not extract operator id entry", where, zap.Error(err))
+	}
+	if oid == nil {
+		// if operator id was not found in the node's ENR -> try to read node type entry
+		nodeType, err := extractNodeTypeEntry(node.Record())
+		if err != nil {
+			n.trace("WARNING: could not extract node type entry", where, zap.Error(err))
 		}
+		// exit if operator node doesn't have an id
+		if nodeType == Operator {
+			n.trace("WARNING: operator doesn't have an id, skipping", where)
+			return false
+		}
+		// TODO: unmark when: 1. bootnode enr will have a type; 2. most of the operators will upgrade >=v0.1.9
+		//if nodeType == Unknown {
+		//	n.logger.Debug("unknown peer")
+		//	return false
+		//}
+		return true
 	}
+	shouldConnect := n.lookupOperator != nil && n.lookupOperator(string(*oid))
+	n.trace("found operator id entry", where, zap.String("operatorID", string(*oid)),
+		zap.Bool("shouldConnect", shouldConnect))
+	return shouldConnect
 }
 
 // dv5Logger implements log.Handler to track logs of discv5

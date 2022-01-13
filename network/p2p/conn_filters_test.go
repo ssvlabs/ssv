@@ -78,7 +78,7 @@ func createPeer(t *testing.T, nodeType NodeType) (*enode.Node, *peer.AddrInfo) {
 
 	node, err = addNodeTypeEntry(node, nodeType)
 	require.NoError(t, err)
-	if nodeType != Exporter {
+	if nodeType == Operator {
 		node, err = addOperatorIDEntry(node, operatorID(pubkey.SerializeToHexStr()))
 		require.NoError(t, err)
 	}
