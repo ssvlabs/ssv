@@ -49,9 +49,10 @@ func (s *syncStream) WriteWithTimeout(data []byte, timeout time.Duration) error 
 		return errors.Wrap(err, "could not set write deadline")
 	}
 
+	n := len(data)
 	bytsWrote, err := s.stream.Write(data)
-	if bytsWrote != len(data) {
-		return errors.New("writen bytes to sync stream doesnt match input data")
+	if bytsWrote != n {
+		return errors.Errorf("written bytes (%d) to sync stream doesnt match input data (%d)", bytsWrote, n)
 	}
 	return err
 }

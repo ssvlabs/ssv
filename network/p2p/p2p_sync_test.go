@@ -102,5 +102,5 @@ func TestSyncMessageBroadcasting(t *testing.T) {
 	// verify stream closed
 	require.NotNil(t, receivedStream)
 	err = receivedStream.WriteWithTimeout([]byte{1}, time.Second*10)
-	require.EqualError(t, err, "writen bytes to sync stream doesnt match input data")
+	require.EqualError(t, err, "written bytes (0) to sync stream doesnt match input data (1)")
 }
