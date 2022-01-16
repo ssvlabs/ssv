@@ -21,6 +21,7 @@ var (
 )
 
 // StreamController simplifies the interaction with libp2p streams.
+// it wraps and keeps a reference to the opened stream, then takes care of reading/writing when needed.
 type StreamController interface {
 	// Request sends a message to the given stream and returns the response
 	Request(peerID peer.ID, protocol protocol.ID, msg *network.Message) (*network.Message, error)
