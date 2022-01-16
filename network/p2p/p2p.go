@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/network/p2p/streams"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/prysmaticlabs/prysm/async"
@@ -14,27 +15,20 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	p2pHost "github.com/libp2p/go-libp2p-core/host"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
 )
 
 const (
-	// DiscoveryInterval is how often we re-publish our mDNS records.
-	DiscoveryInterval = time.Second
-
-	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
-	DiscoveryServiceTag = "bloxstaking.ssv"
-
 	topicPrefix = "bloxstaking.ssv"
-)
 
-const (
+	// minPeers is the min value for peers limit
+	minPeers = 10
+
 	//baseSyncStream           = "/sync/"
 	//highestDecidedStream     = baseSyncStream + "highest_decided"
 	//decidedByRangeStream     = baseSyncStream + "decided_by_range"
@@ -50,12 +44,13 @@ type p2pNetwork struct {
 	listeners       listeners.Container
 	logger          *zap.Logger
 	privKey         *ecdsa.PrivateKey
-	peers           *peers.Status
 	host            p2pHost.Host
 	pubsub          *pubsub.PubSub
 	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
 	fork            forks.Fork
+
+	streamCtrl streams.StreamController
 
 	psSubs       map[string]context.CancelFunc
 	psTopicsLock *sync.RWMutex
@@ -63,7 +58,19 @@ type p2pNetwork struct {
 	reportLastMsg bool
 	nodeType      NodeType
 
-	maxPeers int
+	lookupOperator LookupOperatorHandler
+	peersLimit     int
+}
+
+// LookupOperatorHandler is a function that checks if the given operator
+// has some shared validator with the running operator
+type LookupOperatorHandler func(string) bool
+
+// UseLookupOperatorHandler enables to inject some lookup handler
+func UseLookupOperatorHandler(n network.Network, fn LookupOperatorHandler) {
+	if net, ok := n.(*p2pNetwork); ok {
+		net.lookupOperator = fn
+	}
 }
 
 // New is the constructor of p2pNetworker
@@ -72,6 +79,11 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 	cfg.Topics = make(map[string]*pubsub.Topic)
 
 	logger = logger.With(zap.String("component", "p2p"))
+
+	// ensuring min peers
+	if cfg.MaxPeers < minPeers {
+		cfg.MaxPeers = minPeers
+	}
 
 	n := &p2pNetwork{
 		ctx:             ctx,
@@ -85,7 +97,10 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		reportLastMsg:   cfg.ReportLastMsg,
 		fork:            cfg.Fork,
 		nodeType:        cfg.NodeType,
-		maxPeers:        cfg.MaxPeers,
+		peersLimit:      cfg.MaxPeers,
+		lookupOperator: func(s string) bool {
+			return true
+		},
 	}
 
 	n.cfg.BootnodesENRs = filterInvalidENRs(n.logger, TransformEnr(n.cfg.Enr))
@@ -93,6 +108,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		n.logger.Warn("missing valid bootnode ENR")
 	}
 
+	// create libp2p host
 	opts, err := n.buildOptions(cfg)
 	if err != nil {
 		logger.Fatal("could not build libp2p options", zap.Error(err))
@@ -102,23 +118,30 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "failed to create p2p host")
 	}
 	n.host = host
+	n.streamCtrl = streams.NewStreamController(ctx, logger, host, cfg.Fork, cfg.RequestTimeout)
 	n.cfg.HostID = host.ID()
 	n.logger = logger.With(zap.String("id", n.cfg.HostID.String()))
 	n.logger.Info("listening on port", zap.String("addr", n.host.Addrs()[0].String()))
 
-	var ids *identify.IDService
-	// create ID service only for discv5
-	if cfg.DiscoveryType == discoveryTypeDiscv5 {
-		ua := n.getUserAgent()
-		ids, err = identify.NewIDService(host, identify.UserAgent(ua))
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create ID service")
-		}
-		n.logger.Info("libp2p User Agent", zap.String("value", ua))
+	// create ID service
+	ua := n.getUserAgent()
+	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create ID service")
 	}
-	n.peersIndex = NewPeersIndex(n.host, ids, n.logger)
+	n.logger.Info("libp2p User Agent", zap.String("value", ua))
+	n.peersIndex = NewPeersIndex(n.logger, n.host, ids)
 
-	n.host.Network().Notify(n.notifee())
+	// setting up connection handler and the corresponding filters
+	filters := []ConnectionFilter{
+		n.filterNonSsvNodes,
+		//n.filterOldVersion,
+	}
+	if cfg.DiscoveryType != discoveryTypeMdns {
+		filters = append(filters, n.filterIrrelevant)
+	}
+	notifyHandler := n.handleConnections(filters...)
+	n.host.Network().Notify(notifyHandler)
 
 	ps, err := n.newGossipPubsub(cfg)
 	if err != nil {
@@ -142,53 +165,19 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 func (n *p2pNetwork) setStreamHandlers() {
-	n.setLegacyStreamHandler() // TODO - remove in v0.1.6
+	n.setLegacyStreamHandler()
 	//n.setHighestDecidedStreamHandler()
 	//n.setDecidedByRangeStreamHandler()
 	//n.setLastChangeRoundStreamHandler()
 }
 
-func (n *p2pNetwork) notifee() *libp2pnetwork.NotifyBundle {
-	// TODO: add connection state
-	return &libp2pnetwork.NotifyBundle{
-		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn == nil || conn.RemoteMultiaddr() == nil {
-				return
-			}
-			go func() {
-				n.trace("connected peer", zap.String("who", "networkNotifiee"),
-					zap.String("conn", conn.ID()),
-					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
-					zap.String("peerID", conn.RemotePeer().String()))
-				// TODO: add connection states management
-				n.peersIndex.IndexPeer(conn)
-			}()
-		},
-		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
-			if conn == nil || conn.RemoteMultiaddr() == nil {
-				return
-			}
-			go func() {
-				// skip if we are still connected to the peer
-				if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
-					return
-				}
-				n.trace("disconnected peer", zap.String("who", "networkNotifiee"),
-					zap.String("conn", conn.ID()),
-					zap.String("multiaddr", conn.RemoteMultiaddr().String()),
-					zap.String("peerID", conn.RemotePeer().String()))
-			}()
-		},
-	}
-}
-
 func (n *p2pNetwork) watchPeers() {
+	async.RunEvery(n.ctx, 5*time.Minute, func() {
+		n.peersIndex.Run()
+	})
+
 	async.RunEvery(n.ctx, 1*time.Minute, func() {
-		// index all peers and report
-		go func() {
-			n.peersIndex.Run()
-			reportAllConnections(n)
-		}()
+		go reportAllConnections(n)
 
 		// topics peers
 		n.psTopicsLock.RLock()
@@ -203,11 +192,16 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
+// NotifyOperatorID updates the network regarding new operators joining the network
+func (n *p2pNetwork) NotifyOperatorID(oid string) {
+	n.trace("notified on operator id", zap.String("operatorID", oid))
+	n.peersIndex.EvictPruned(oid)
+}
+
 // getUserAgent returns ua built upon:
 // - node version
 // - node type ('operator' | 'exporter')
-// - operator public key hash
-// TODO: will be changed once we have a proper authentication mechanism in place
+// - operator ID
 func (n *p2pNetwork) getUserAgent() string {
 	ua, err := GenerateUserAgent(n.operatorPrivKey, n.nodeType)
 	if err != nil {
@@ -231,7 +225,7 @@ func (n *p2pNetwork) getOperatorPubKey() (string, error) {
 }
 
 func (n *p2pNetwork) trace(msg string, fields ...zap.Field) {
-	if n.cfg.NetworkTrace {
+	if n.cfg != nil && n.cfg.NetworkTrace {
 		n.logger.Debug(msg, fields...)
 	}
 }

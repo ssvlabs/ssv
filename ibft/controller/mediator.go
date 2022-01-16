@@ -30,7 +30,7 @@ func (m *Mediator) AddListener(ibftType network.NetworkMsg, ch <-chan *proto.Sig
 	go func() {
 		defer done()
 		for msg := range ch {
-			m.redirect(ibftType, handler, msg)
+			go m.redirect(ibftType, handler, msg)
 		}
 
 		m.logger.Debug("mediator stopped listening to network", zap.String("type", ibftType.String()))
@@ -42,11 +42,8 @@ func (m *Mediator) redirect(ibftType network.NetworkMsg, readerHandler func(publ
 	if err := auth.BasicMsgValidation().Run(msg); err != nil {
 		return
 	}
-	publicKey, role := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
-	logger := m.logger.With(zap.String("publicKey", publicKey), zap.String("role", role), zap.String("type", ibftType.String()))
+	publicKey, _ := format.IdentifierUnformat(string(msg.Message.Lambda)) // TODO need to support multi role types
 	if reader, ok := readerHandler(publicKey); ok {
 		reader.GetMsgResolver(ibftType)(msg)
-	} else {
-		logger.Warn("failed to find validator reader")
 	}
 }

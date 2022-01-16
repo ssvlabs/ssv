@@ -7,6 +7,8 @@ import (
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
 )
 
 func convertToInterfacePubkey(pubkey *ecdsa.PublicKey) crypto.PubKey {
@@ -35,10 +37,21 @@ func convertFromInterfacePrivKey(privkey crypto.PrivKey) *ecdsa.PrivateKey {
 	return typeAssertedKey
 }
 
-// pubKeyHash returns sha256 (hex) of the given public key
-func pubKeyHash(pubkeyHex string) string {
+// operatorID returns sha256 (hex) of the given operator public key
+func operatorID(pubkeyHex string) string {
 	if len(pubkeyHex) == 0 {
 		return ""
 	}
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(pubkeyHex)))
+}
+
+func peerToString(peerID peer.ID) string {
+	return peer.Encode(peerID)
+}
+
+func peerFromString(peerStr string) (peer.ID, error) {
+	if len(peerStr) == 0 {
+		return "", errors.New("peer ID nil")
+	}
+	return peer.Decode(peerStr)
 }

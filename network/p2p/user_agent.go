@@ -16,7 +16,7 @@ func NewUserAgent(raw string) UserAgent {
 	return UserAgent(raw)
 }
 
-// GenerateUserAgent creates user agent string (<app-name>:<version>:<type>:<public-key-hash>)
+// GenerateUserAgent creates user agent string (<app-name>:<version>:<type>:<operator-id>)
 func GenerateUserAgent(sk *rsa.PrivateKey, ntype NodeType) (UserAgent, error) {
 	ua := commons.GetBuildData()
 	ua = fmt.Sprintf("%s:%s", ua, ntype.String())
@@ -25,7 +25,7 @@ func GenerateUserAgent(sk *rsa.PrivateKey, ntype NodeType) (UserAgent, error) {
 		if err != nil || len(operatorPubKey) == 0 {
 			return NewUserAgent(ua), err
 		}
-		ua = fmt.Sprintf("%s:%s", ua, pubKeyHash(operatorPubKey))
+		ua = fmt.Sprintf("%s:%s", ua, operatorID(operatorPubKey))
 	}
 	return NewUserAgent(ua), nil
 }
@@ -48,8 +48,10 @@ func (ua UserAgent) NodeType() string {
 	return Unknown.String()
 }
 
-// NodePubKeyHash returns public key hash or empty string if not available
-func (ua UserAgent) NodePubKeyHash() string {
+// OperatorID returns operator id or empty string if not available
+// TODO: this is kept for compatibility, should be removed in the future
+// 		 as UserAgent is not the correct place to save this value (changed to ENR)
+func (ua UserAgent) OperatorID() string {
 	uaParts := strings.Split(string(ua), ":")
 	n := len(uaParts)
 	if n > 2 {
@@ -61,4 +63,14 @@ func (ua UserAgent) NodePubKeyHash() string {
 		return uaParts[n-1]
 	}
 	return ""
+}
+
+// IsUnknown checks if the given user agent is not from a ssv node
+func (ua UserAgent) IsUnknown() bool {
+	uaStr := string(ua)
+	if len(uaStr) == 0 {
+		return false
+	}
+	uaParts := strings.Split(string(ua), ":")
+	return len(uaParts) <= 2
 }

@@ -11,14 +11,14 @@ import (
 type Message struct {
 	SignedMessage *proto.SignedMessage
 	SyncMessage   *SyncMessage
-	Stream        SyncStream
 	Type          NetworkMsg
+	StreamID      string
 }
 
 // SyncChanObj is a wrapper object for streaming of sync messages
 type SyncChanObj struct {
-	Msg    *SyncMessage
-	Stream SyncStream
+	Msg      *SyncMessage
+	StreamID string
 }
 
 // SyncStream is a interface for all stream related functions for the sync process.
@@ -42,6 +42,9 @@ type SyncStream interface {
 	// WriteWithTimeout will write bytes to stream, will return error if timeout or error.
 	// does not close stream when returns
 	WriteWithTimeout(data []byte, timeout time.Duration) error
+
+	// ID returns the id of the stream
+	ID() string
 }
 
 // Reader is the interface for reading messages from the network
@@ -87,12 +90,8 @@ type Syncer interface {
 	GetDecidedByRange(peerStr string, msg *SyncMessage) (*SyncMessage, error)
 	// GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
 	GetLastChangeRoundMsg(peerStr string, msg *SyncMessage) (*SyncMessage, error)
-	// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
-	RespondToHighestDecidedInstance(stream SyncStream, msg *SyncMessage) error
-	// RespondToGetDecidedByRange responds to a GetDecidedByRange
-	RespondToGetDecidedByRange(stream SyncStream, msg *SyncMessage) error
-	// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
-	RespondToLastChangeRoundMsg(stream SyncStream, msg *SyncMessage) error
+	// RespondSyncMsg responds to the stream with the given message
+	RespondSyncMsg(streamID string, msg *SyncMessage) error
 }
 
 // Network represents the behavior of the network
@@ -100,4 +99,8 @@ type Network interface {
 	Reader
 	Broadcaster
 	Syncer
+
+	// NotifyOperatorID updates the network regarding new operators joining the network
+	// TODO: find a better way to do this
+	NotifyOperatorID(oid string)
 }

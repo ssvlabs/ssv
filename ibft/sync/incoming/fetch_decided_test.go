@@ -136,16 +136,18 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 				require.NoError(t, ibftStorage.SaveDecided(d))
 			}
 
+			s := sync.NewTestStream("")
+
 			handler := ReqHandler{
 				paginationMaxSize: uint64(test.maxBatch),
 				identifier:        test.identifier,
-				network:           sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil, nil, nil, nil),
-				storage:           &ibftStorage,
-				logger:            zap.L(),
+				network: sync.NewTestNetwork(t, nil, test.maxBatch, nil, nil,
+					nil, nil, nil, func(streamID string) network.SyncStream {
+						return s
+					}),
+				storage: &ibftStorage,
+				logger:  zap.L(),
 			}
-
-			// stream
-			s := sync.NewTestStream("")
 
 			handler.handleGetDecidedReq(&network.SyncChanObj{
 				Msg: &network.SyncMessage{
@@ -156,7 +158,7 @@ func TestTestNetwork_GetDecidedByRange(t *testing.T) {
 					Type:           0,
 					Error:          "",
 				},
-				Stream: s,
+				StreamID: s.ID(),
 			})
 
 			byts := <-s.C

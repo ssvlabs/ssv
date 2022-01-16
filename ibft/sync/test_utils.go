@@ -3,6 +3,7 @@ package sync
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -13,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -92,6 +94,7 @@ type TestNetwork struct {
 	maxBatch               int
 	peers                  []string
 	retError               error
+	streamProvider         func(string) network.SyncStream
 }
 
 // NewTestNetwork returns a new test network instance
@@ -103,6 +106,7 @@ func NewTestNetwork(
 	decidedArr map[string][]*proto.SignedMessage,
 	lastMsgs map[string]*proto.SignedMessage,
 	retError error,
+	streamProvider func(string) network.SyncStream,
 ) *TestNetwork {
 	return &TestNetwork{
 		t:                      t,
@@ -113,6 +117,7 @@ func NewTestNetwork(
 		decidedArr:             decidedArr,
 		lastMsgs:               lastMsgs,
 		retError:               retError,
+		streamProvider:         streamProvider,
 	}
 }
 
@@ -177,9 +182,16 @@ func (n *TestNetwork) GetHighestDecidedInstance(peerStr string, msg *network.Syn
 	return nil, errors.New("could not find highest")
 }
 
-// RespondToHighestDecidedInstance implementation
-func (n *TestNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
-	return nil
+// RespondSyncMsg implementation
+func (n *TestNetwork) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
+	msgBytes, err := json.Marshal(network.Message{
+		SyncMessage: msg,
+		Type:        network.NetworkMsg_SyncType,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal message")
+	}
+	return n.streamProvider(streamID).WriteWithTimeout(msgBytes, time.Second*5)
 }
 
 // GetDecidedByRange implementation
@@ -215,18 +227,6 @@ func (n *TestNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage
 	return nil, errors.New("could not find highest")
 }
 
-// RespondToGetDecidedByRange responds to a GetDecidedByRange
-func (n *TestNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
-		SyncMessage: msg,
-		Type:        network.NetworkMsg_SyncType,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal message")
-	}
-	return stream.WriteWithTimeout(msgBytes, time.Second*5)
-}
-
 // GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
 func (n *TestNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	if last, found := n.lastMsgs[peerStr]; found {
@@ -250,18 +250,6 @@ func (n *TestNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMes
 		}, nil
 	}
 	return nil, errors.New("could not find highest")
-}
-
-// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
-func (n *TestNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
-	msgBytes, err := json.Marshal(network.Message{
-		SyncMessage: msg,
-		Type:        network.NetworkMsg_SyncType,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal message")
-	}
-	return stream.WriteWithTimeout(msgBytes, time.Second*5)
 }
 
 // ReceivedSyncMsgChan implementation
@@ -294,10 +282,17 @@ func (n *TestNetwork) SubscribeToMainTopic() error {
 	return nil
 }
 
+// NotifyOperatorID implementation
+func (n *TestNetwork) NotifyOperatorID(oid string) {
+}
+
+var testStreamCounter int64
+
 // TestStream struct
 type TestStream struct {
 	C    chan []byte
 	peer string
+	id   string
 }
 
 // NewTestStream returns a new instance of test stream
@@ -305,7 +300,13 @@ func NewTestStream(remotePeer string) *TestStream {
 	return &TestStream{
 		peer: remotePeer,
 		C:    make(chan []byte),
+		id:   fmt.Sprintf("id-%d", atomic.AddInt64(&testStreamCounter, 1)),
 	}
+}
+
+// ID implementation
+func (s *TestStream) ID() string {
+	return s.id
 }
 
 // Close implementation

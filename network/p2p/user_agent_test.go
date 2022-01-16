@@ -48,15 +48,20 @@ func TestUserAgent(t *testing.T) {
 		require.Equal(t, "v0.x.x", ua.NodeVersion())
 	})
 
-	t.Run("get node pubKey hash", func(t *testing.T) {
+	t.Run("get operator id", func(t *testing.T) {
 		ua, err := GenerateUserAgent(sk, Operator)
 		require.NoError(t, err)
-		require.Equal(t, 64, len(ua.NodePubKeyHash()))
+		require.Equal(t, 64, len(ua.OperatorID()))
 	})
 
 	t.Run("get node pubKey hash, no operator key", func(t *testing.T) {
 		ua, err := GenerateUserAgent(nil, Operator)
 		require.NoError(t, err)
-		require.Equal(t, 0, len(ua.NodePubKeyHash()))
+		require.Equal(t, 0, len(ua.OperatorID()))
 	})
+}
+
+func TestUserAgent_IsUnknown(t *testing.T) {
+	require.False(t, UserAgent("SSV-Node:v0.x.x:exporter").IsUnknown())
+	require.True(t, UserAgent("Prysm/Unknown/Local build").IsUnknown())
 }

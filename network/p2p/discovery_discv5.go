@@ -1,19 +1,23 @@
 package p2p
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers"
-	"github.com/prysmaticlabs/prysm/beacon-chain/p2p/peers/scorers"
 	"go.uber.org/zap"
 	"net"
 	"time"
+)
+
+var (
+	// ErrPeerWasPruned is returned when a pruned peer is discovered
+	ErrPeerWasPruned = errors.New("peer was pruned")
 )
 
 // discv5Listener represents the discv5 interface
@@ -30,15 +34,6 @@ type discv5Listener interface {
 
 // setupDiscV5 creates all the required objects for discv5
 func (n *p2pNetwork) setupDiscV5() (*discover.UDPv5, error) {
-	n.peers = peers.NewStatus(n.ctx, &peers.StatusConfig{
-		PeerLimit: n.maxPeers,
-		ScorerParams: &scorers.Config{
-			BadResponsesScorerConfig: &scorers.BadResponsesScorerConfig{
-				Threshold:     5,
-				DecayInterval: time.Hour,
-			},
-		},
-	})
 	ip, err := ipAddr()
 	if err != nil {
 		return nil, err
@@ -92,7 +87,7 @@ func (n *p2pNetwork) createListener(ipAddr net.IP) (*discover.UDPv5, error) {
 	dv5Cfg := discover.Config{
 		PrivateKey: n.privKey,
 	}
-	if n.cfg.NetworkTrace {
+	if n.cfg.NetworkDiscoveryTrace {
 		logger := log.New()
 		logger.SetHandler(&dv5Logger{n.logger.With(zap.String("who", "dv5Logger"))})
 		dv5Cfg.Log = logger
@@ -126,10 +121,15 @@ func (n *p2pNetwork) createExtendedLocalNode(ipAddr net.IP) (*enode.LocalNode, e
 	}
 
 	if len(operatorPubKey) > 0 {
-		localNode, err = addOperatorPubKeyEntry(localNode, []byte(pubKeyHash(operatorPubKey)))
+		localNode, err = addOperatorIDEntry(localNode, operatorID(operatorPubKey))
 		if err != nil {
-			return nil, errors.Wrap(err, "could not create public key entry")
+			return nil, errors.Wrap(err, "could not create operator id entry")
 		}
+	}
+
+	localNode, err = addNodeTypeEntry(localNode, n.nodeType)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create node type entry")
 	}
 
 	// TODO: add fork entry once applicable
@@ -188,45 +188,124 @@ func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort 
 }
 
 // listenForNewNodes watches for new nodes in the network and connects to unknown peers.
-func (n *p2pNetwork) listenForNewNodes() {
+func (n *p2pNetwork) listenForNewNodes(ctx context.Context) {
 	defer n.logger.Debug("done listening for new nodes")
 	iterator := n.dv5Listener.RandomNodes()
 	//iterator = enode.Filter(iterator, s.filterPeer)
 	defer iterator.Close()
+	nextNode := func() *enode.Node {
+		exists := iterator.Next()
+		if !exists {
+			return nil
+		}
+		return iterator.Node()
+	}
 	n.logger.Debug("starting to listen for new nodes")
 	for {
-		// Exit if service's context is canceled
-		if n.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			break
 		}
-		if n.isPeerAtLimit() {
+		if n.isPeerAtLimit(network.DirOutbound) {
+			if node := nextNode(); node != nil {
+				go n.tryNode(node)
+			}
 			n.logger.Debug("at peer limit")
 			time.Sleep(6 * time.Second)
 			continue
 		}
-		exists := iterator.Next()
-		if !exists {
-			break
-		}
-		node := iterator.Node()
-		peerInfo, err := convertToAddrInfo(node)
-		if err != nil {
-			n.trace("could not convert node to peer info", zap.Error(err))
+		node := nextNode()
+		if node == nil {
+			time.Sleep(1 * time.Second)
 			continue
 		}
-		go func(info *peer.AddrInfo) {
-			if err := n.connectWithPeer(n.ctx, *info); err != nil {
-				n.trace("can't connect with peer", zap.String("peerID", info.ID.String()), zap.Error(err))
+		go func(node *enode.Node) {
+			if info, err := n.connectNode(node); info == nil {
+				n.trace("WARNING: invalid node", zap.String("enr", node.String()), zap.Error(err))
+			} else if err != nil {
+				if err == ErrPeerWasPruned {
+					n.trace("peer was pruned", zap.String("enr", node.String()),
+						zap.String("peerID", info.ID.String()))
+					return
+				}
+				n.trace("WARNING: can't connect to node", zap.String("enr", node.String()),
+					zap.String("peerID", info.ID.String()), zap.Error(err))
+			} else {
+				n.trace("discovered node is connected", zap.String("enr", node.String()),
+					zap.String("peer", info.ID.String()))
 			}
-		}(peerInfo)
+		}(node)
 	}
 }
 
-// isPeerAtLimit checks for max peers
-func (n *p2pNetwork) isPeerAtLimit() bool {
-	numOfConns := len(n.host.Network().Peers())
-	activePeers := len(n.peers.Active())
-	return activePeers >= n.maxPeers || numOfConns >= n.maxPeers
+// connectNode tries to connect to the given node, returns whether the node is valid and error
+func (n *p2pNetwork) connectNode(node *enode.Node) (*peer.AddrInfo, error) {
+	info, err := convertToAddrInfo(node)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not convert node to peer info")
+	}
+	if n.host.Network().Connectedness(info.ID) == network.Connected {
+		return info, nil
+	}
+	if n.peersIndex.Pruned(info.ID) {
+		return info, ErrPeerWasPruned
+	}
+	n.peersIndex.IndexNode(node)
+	if err := n.connectWithPeer(n.ctx, *info); err != nil {
+		return info, errors.Wrap(err, "could not connect with peer")
+	}
+	return info, nil
+}
+
+// tryNode tries to connect to the given node if relevant.
+func (n *p2pNetwork) tryNode(node *enode.Node) {
+	where := zap.String("where", "discovery:tryNode")
+	shouldConnect := n.isRelevantNode(node)
+	if shouldConnect {
+		if info, err := n.connectNode(node); err != nil {
+			if err == ErrPeerWasPruned {
+				n.trace("node was pruned", where, zap.String("enr", node.String()),
+					zap.String("peerID", info.ID.String()))
+				return
+			}
+			n.trace("WARNING: can't connect to node", where, zap.Error(err))
+			return
+		}
+		n.logger.Debug("discovered node is connected", where)
+	}
+}
+
+// isRelevantNode checks whether the given node if relevant by ENR entries.
+// a node is relevant if it fullfils one of the following:
+// - it shares a committee with the current node
+// - it is an exporter or bootnode (TODO: bootnode)
+func (n *p2pNetwork) isRelevantNode(node *enode.Node) bool {
+	where := zap.String("where", "discovery:isRelevantNode")
+	oid, err := extractOperatorIDEntry(node.Record())
+	if err != nil {
+		n.trace("WARNING: could not extract operator id entry", where, zap.Error(err))
+	}
+	if oid == nil {
+		// if operator id was not found in the node's ENR -> try to read node type entry
+		nodeType, err := extractNodeTypeEntry(node.Record())
+		if err != nil {
+			n.trace("WARNING: could not extract node type entry", where, zap.Error(err))
+		}
+		// exit if operator node doesn't have an id
+		if nodeType == Operator {
+			n.trace("WARNING: operator doesn't have an id, skipping", where)
+			return false
+		}
+		// TODO: unmark when: 1. bootnode enr will have a type; 2. most of the operators will upgrade >=v0.1.9
+		//if nodeType == Unknown {
+		//	n.logger.Debug("unknown peer")
+		//	return false
+		//}
+		return true
+	}
+	shouldConnect := n.lookupOperator != nil && n.lookupOperator(string(*oid))
+	n.trace("found operator id entry", where, zap.String("operatorID", string(*oid)),
+		zap.Bool("shouldConnect", shouldConnect))
+	return shouldConnect
 }
 
 // dv5Logger implements log.Handler to track logs of discv5
@@ -253,27 +332,4 @@ func (dvl *dv5Logger) Log(r *log.Record) error {
 	default:
 	}
 	return nil
-}
-
-// addOperatorPubKeyEntry adds public key entry ('pk') to the node.
-// contains the sha256 (hex encoded) of the operator public key
-func addOperatorPubKeyEntry(node *enode.LocalNode, pkHash []byte) (*enode.LocalNode, error) {
-	bitL, err := bitfield.NewBitlist64FromBytes(64, pkHash)
-	if err != nil {
-		return node, err
-	}
-	entry := enr.WithEntry("pk", bitL.ToBitlist())
-	node.Set(entry)
-	return node, nil
-}
-
-// extractOperatorPubKeyEntry extracts the value of public key entry ('pk')
-func extractOperatorPubKeyEntry(record *enr.Record) ([]byte, error) {
-	bitL := bitfield.NewBitlist(64)
-	entry := enr.WithEntry("pk", &bitL)
-	err := record.Load(entry)
-	if err != nil {
-		return nil, err
-	}
-	return bitL.Bytes(), nil
 }

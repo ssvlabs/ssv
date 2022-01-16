@@ -119,11 +119,11 @@ func TestGetHighestDecided(t *testing.T) {
 		msg := <-c2
 		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.Lambda)
 		require.EqualValues(t, network.Sync_GetHighestType, msg.Msg.Type)
-		net.RespondToHighestDecidedInstance(msg.Stream, &network.SyncMessage{
+		require.NoError(t, net.RespondSyncMsg(msg.StreamID, &network.SyncMessage{
 			Lambda:     []byte{1, 1, 1, 1},
 			FromPeerID: "1",
 			Type:       network.Sync_GetHighestType,
-		})
+		}))
 	}()
 
 	res, err := net.GetHighestDecidedInstance("1", &network.SyncMessage{
@@ -144,11 +144,11 @@ func TestGetDecidedByRange(t *testing.T) {
 		msg := <-c2
 		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.Lambda)
 		require.EqualValues(t, network.Sync_GetHighestType, msg.Msg.Type)
-		net.RespondToGetDecidedByRange(msg.Stream, &network.SyncMessage{
+		require.NoError(t, net.RespondSyncMsg(msg.StreamID, &network.SyncMessage{
 			Lambda:     []byte{1, 1, 1, 1},
 			FromPeerID: "1",
 			Type:       network.Sync_GetHighestType,
-		})
+		}))
 	}()
 
 	res, err := net.GetDecidedByRange("1", &network.SyncMessage{

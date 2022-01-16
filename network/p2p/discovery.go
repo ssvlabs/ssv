@@ -3,9 +3,9 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network/p2p/discovery"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	"go.uber.org/zap"
@@ -32,14 +32,14 @@ func (n *p2pNetwork) startDiscovery() error {
 	if err := n.connectToBootnodes(); err != nil {
 		return errors.Wrap(err, "could not connect to bootnodes")
 	}
-	go n.listenForNewNodes()
+	go n.listenForNewNodes(n.ctx)
 	return nil
 }
 
 // setupDiscovery configure discovery service according to configured type
 func (n *p2pNetwork) setupDiscovery() error {
 	if n.cfg.DiscoveryType == discoveryTypeMdns {
-		return setupMdnsDiscovery(n.ctx, n.logger, n.host)
+		return discovery.SetupMdnsDiscovery(n.ctx, n.logger, n.host)
 	}
 
 	listener, err := n.setupDiscV5()
@@ -61,24 +61,21 @@ func (n *p2pNetwork) setupDiscovery() error {
 	return err
 }
 
+// connectToBootnodes connects to the configured bootnodes
 func (n *p2pNetwork) connectToBootnodes() error {
 	nodes, err := parseENRs(n.cfg.BootnodesENRs, true)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse bootnodes ENRs")
 	}
-	return n.connectWithAllPeers(convertToMultiAddr(n.logger, nodes))
-}
-
-func (n *p2pNetwork) connectWithAllPeers(multiAddrs []ma.Multiaddr) error {
+	multiAddrs := convertToMultiAddr(n.logger, nodes)
 	addrInfos, err := peer.AddrInfosFromP2pAddrs(multiAddrs...)
 	if err != nil {
 		return errors.Wrap(err, "could not convert multiaddrs to peers info")
 	}
 	for _, info := range addrInfos {
-		// make each dial non-blocking
 		go func(info peer.AddrInfo) {
 			if err := n.connectWithPeer(n.ctx, info); err != nil {
-				n.logger.Debug("can't connect to peer (connect with all peers)", zap.String("peerID", info.ID.String()))
+				n.logger.Warn("can't connect to bootnode", zap.String("peerID", info.ID.String()))
 			}
 		}(info)
 	}
@@ -90,16 +87,11 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	defer span.End()
 
 	if info.ID == n.host.ID() {
-		n.trace("skipped same peer")
 		return nil
 	}
 	n.trace("connecting to peer", zap.String("peerID", info.ID.String()))
 
-	if n.peers.IsBad(info.ID) {
-		return errors.New("refused to connect to bad peer")
-	}
 	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
-		n.trace("skipped connected peer", zap.String("peer", info.String()))
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -111,10 +103,4 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	n.trace("connected to peer", zap.String("peerID", info.ID.String()))
 
 	return nil
-}
-
-// getUserAgentOfPeer returns user agent of the given peer
-func (n *p2pNetwork) getUserAgentOfPeer(p peer.ID) (UserAgent, bool) {
-	uaRaw := n.peersIndex.GetPeerData(p.String(), UserAgentKey)
-	return NewUserAgent(uaRaw), len(uaRaw) > 0
 }

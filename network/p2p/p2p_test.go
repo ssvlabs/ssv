@@ -80,7 +80,7 @@ func TestP2pNetwork_GetUserAgent(t *testing.T) {
 		require.Equal(t, "v0.x.x", parts[1])
 		pk, err := rsaencryption.ExtractPublicKey(sk)
 		require.NoError(t, err)
-		require.Equal(t, pubKeyHash(pk), parts[3])
+		require.Equal(t, operatorID(pk), parts[3])
 		require.Equal(t, Operator.String(), parts[2])
 	})
 

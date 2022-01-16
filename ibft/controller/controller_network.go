@@ -58,7 +58,7 @@ func (i *Controller) listenToSyncMessages() {
 			if msg.Msg != nil && i.equalIdentifier(msg.Msg.Lambda) {
 				i.msgQueue.AddMessage(&network.Message{
 					SyncMessage: msg.Msg,
-					Stream:      msg.Stream,
+					StreamID:    msg.StreamID,
 					Type:        network.NetworkMsg_SyncType,
 				})
 			}

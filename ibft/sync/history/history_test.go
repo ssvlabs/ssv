@@ -3,6 +3,7 @@ package history
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/network"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"testing"
@@ -182,7 +183,10 @@ func TestSync(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			storage := sync.TestingIbftStorage(t)
-			s := New(zap.L(), test.valdiatorPK, 4, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil, nil), &storage, func(msg *proto.SignedMessage) error {
+			s := New(zap.L(), test.valdiatorPK, 4, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap,
+				test.errorMap, test.decidedArrMap, nil, nil, func(s string) network.SyncStream {
+					return nil
+				}), &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			err := s.Start()
@@ -289,7 +293,10 @@ func TestSync_StartRange(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			storage := sync.TestingIbftStorage(t)
-			s := New(zap.L(), test.valdiatorPK, 4, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap, test.decidedArrMap, nil, nil), &storage, func(msg *proto.SignedMessage) error {
+			s := New(zap.L(), test.valdiatorPK, 4, test.identifier, sync.NewTestNetwork(t, test.peers, 100, test.highestMap, test.errorMap,
+				test.decidedArrMap, nil, nil, func(s string) network.SyncStream {
+					return nil
+				}), &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})
 			n, err := s.StartRange(test.rangeFrom, test.rangeTo)
