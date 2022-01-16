@@ -107,8 +107,8 @@ func (n *streamCtrl) HandleStream(stream core.Stream) (*network.Message, network
 	if err != nil {
 		return nil, nil, err
 	}
-	n.add(s)
-	msg.StreamID = s.ID()
+	streamID := n.add(s)
+	msg.StreamID = streamID
 
 	return msg, s, nil
 }
@@ -171,14 +171,23 @@ func (n *streamCtrl) clean() {
 }
 
 // add adds the stream based on its id
-func (n *streamCtrl) add(stream network.SyncStream) {
+func (n *streamCtrl) add(stream network.SyncStream) string {
 	n.streamsLock.Lock()
 	defer n.streamsLock.Unlock()
 
-	n.streams[stream.ID()] = streamEntry{
+	streamID := stream.ID()
+	// core.Stream::ID() is mentioned to be unique (might repeat across restarts)
+	// therefore, it should be safe to override. keeping the log for now to watch this
+	if _, ok := n.streams[streamID]; ok {
+		n.logger.Warn("duplicated stream id", zap.String("streamID", streamID))
+	}
+
+	n.streams[streamID] = streamEntry{
 		s: stream,
 		t: time.Now(),
 	}
+
+	return streamID
 }
 
 // pop removes adn returns the stream with the given id
