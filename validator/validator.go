@@ -39,9 +39,12 @@ type Options struct {
 	Fork                       forks.Fork
 	Signer                     beacon.Signer
 	SyncRateLimit              time.Duration
+
+	notifyOperatorID func(string)
 }
 
-// Validator struct that manages all ibft wrappers
+// Validator represents a running validator,
+// it holds the corresponding ibft controllers to trigger consensus layer (see ExecuteDuty())
 type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
@@ -56,10 +59,10 @@ type Validator struct {
 	startOnce                  sync.Once
 	fork                       forks.Fork
 	signer                     beacon.Signer
-	operatorsHash              *sync.Map
 }
 
-// New Validator creation
+// New creates a new validator instance and the corresponding ibft controller
+// in addition, warms up beacon client and update operator ids owned by validator controller
 func New(opt Options) *Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", opt.Share.NodeID))
@@ -78,10 +81,12 @@ func New(opt Options) *Validator {
 	}
 
 	opsHashList := opt.Share.HashOperators()
-	opsHash := &sync.Map{}
 	for _, h := range opsHashList {
-		opsHash.Store(h, true)
+		if opt.notifyOperatorID != nil {
+			opt.notifyOperatorID(h)
+		}
 	}
+	logger.Debug("new validator instance was created", zap.Strings("operators ids", opsHashList))
 
 	return &Validator{
 		ctx:                        opt.Context,
@@ -97,7 +102,6 @@ func New(opt Options) *Validator {
 		startOnce:                  sync.Once{},
 		fork:                       opt.Fork,
 		signer:                     opt.Signer,
-		operatorsHash:              opsHash,
 	}
 }
 
@@ -215,10 +219,4 @@ func (v *Validator) oneOfIBFTIdentifiers(toMatch []byte) bool {
 		}
 	}
 	return false
-}
-
-// IsOperatorInCommittee will return true if the given operator is in the validator's committee
-func (v *Validator) IsOperatorInCommittee(pkhash string) bool {
-	_, ok := v.operatorsHash.Load(pkhash)
-	return ok
 }

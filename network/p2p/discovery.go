@@ -32,7 +32,7 @@ func (n *p2pNetwork) startDiscovery() error {
 	if err := n.connectToBootnodes(); err != nil {
 		return errors.Wrap(err, "could not connect to bootnodes")
 	}
-	go n.listenForNewNodes()
+	go n.listenForNewNodes(n.ctx)
 	return nil
 }
 
@@ -95,9 +95,9 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	}
 	n.trace("connecting to peer", zap.String("peerID", info.ID.String()))
 
-	if n.peers.IsBad(info.ID) {
-		return errors.New("refused to connect to bad peer")
-	}
+	//if n.peers.IsBad(info.ID) {
+	//	return errors.New("refused to connect to bad peer")
+	//}
 	if n.host.Network().Connectedness(info.ID) == libp2pnetwork.Connected {
 		n.trace("skipped connected peer", zap.String("peer", info.String()))
 		return nil
@@ -111,10 +111,4 @@ func (n *p2pNetwork) connectWithPeer(ctx context.Context, info peer.AddrInfo) er
 	n.trace("connected to peer", zap.String("peerID", info.ID.String()))
 
 	return nil
-}
-
-// getUserAgentOfPeer returns user agent of the given peer
-func (n *p2pNetwork) getUserAgentOfPeer(p peer.ID) (UserAgent, bool) {
-	uaRaw := n.peersIndex.GetPeerData(p.String(), UserAgentKey)
-	return NewUserAgent(uaRaw), len(uaRaw) > 0
 }

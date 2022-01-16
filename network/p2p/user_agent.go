@@ -16,7 +16,7 @@ func NewUserAgent(raw string) UserAgent {
 	return UserAgent(raw)
 }
 
-// GenerateUserAgent creates user agent string (<app-name>:<version>:<type>:<public-key-hash>)
+// GenerateUserAgent creates user agent string (<app-name>:<version>:<type>:<operator-id>)
 func GenerateUserAgent(sk *rsa.PrivateKey, ntype NodeType) (UserAgent, error) {
 	ua := commons.GetBuildData()
 	ua = fmt.Sprintf("%s:%s", ua, ntype.String())
@@ -63,4 +63,14 @@ func (ua UserAgent) OperatorID() string {
 		return uaParts[n-1]
 	}
 	return ""
+}
+
+// IsUnknown checks if the given user agent is not from a ssv node
+func (ua UserAgent) IsUnknown() bool {
+	uaStr := string(ua)
+	if len(uaStr) == 0 {
+		return false
+	}
+	uaParts := strings.Split(string(ua), ":")
+	return len(uaParts) <= 2
 }

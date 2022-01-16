@@ -294,6 +294,10 @@ func (n *TestNetwork) SubscribeToMainTopic() error {
 	return nil
 }
 
+// NotifyOperatorID implementation
+func (n *TestNetwork) NotifyOperatorID(oid string) {
+}
+
 // TestStream struct
 type TestStream struct {
 	C    chan []byte

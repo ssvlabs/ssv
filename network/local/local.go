@@ -216,3 +216,7 @@ func (n *Local) BroadcastMainTopic(msg *proto.SignedMessage) error {
 func (n *Local) SubscribeToMainTopic() error {
 	return nil
 }
+
+// NotifyOperatorID implementation
+func (n *Local) NotifyOperatorID(oid string) {
+}
