@@ -56,13 +56,13 @@ func propagateDecidedMessage(listeners []*listeners.Listener, msg *proto.SignedM
 	}
 }
 
-func propagateSyncMessage(listeners []*listeners.Listener, cm *network.Message, netSyncStream network.SyncStream) {
+func propagateSyncMessage(listeners []*listeners.Listener, cm *network.Message) {
 	for _, ls := range listeners {
 		cn := ls.SyncChan()
 		if cn != nil {
 			cn <- &network.SyncChanObj{
-				Msg:    cm.SyncMessage,
-				Stream: netSyncStream,
+				Msg:      cm.SyncMessage,
+				StreamID: cm.StreamID,
 			}
 		}
 	}

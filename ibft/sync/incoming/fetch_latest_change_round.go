@@ -20,7 +20,7 @@ func (s *ReqHandler) handleGetLatestChangeRoundReq(msg *network.SyncChanObj) {
 		retMsg.SignedMessages = []*proto.SignedMessage{s.lastChangeRoundMsg}
 	}
 
-	if err := s.network.RespondToLastChangeRoundMsg(msg.Stream, retMsg); err != nil {
+	if err := s.network.RespondSyncMsg(msg.StreamID, retMsg); err != nil {
 		s.logger.Error("failed to send current instance req", zap.Error(err))
 	}
 }

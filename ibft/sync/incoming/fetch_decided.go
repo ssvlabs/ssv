@@ -34,7 +34,7 @@ func (s *ReqHandler) handleGetDecidedReq(msg *network.SyncChanObj) {
 		retMsg.SignedMessages = ret
 	}
 
-	if err := s.network.RespondToGetDecidedByRange(msg.Stream, retMsg); err != nil {
+	if err := s.network.RespondSyncMsg(msg.StreamID, retMsg); err != nil {
 		s.logger.Error("failed to send get decided by range response", zap.Error(err))
 	}
 }

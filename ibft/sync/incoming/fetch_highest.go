@@ -15,7 +15,7 @@ func (s *ReqHandler) handleGetHighestReq(msg *network.SyncChanObj) {
 		s.logger.Error("failed to get highest decided from db", zap.String("fromPeer", msg.Msg.FromPeerID), zap.Error(err))
 	}
 
-	if err := s.network.RespondToHighestDecidedInstance(msg.Stream, res); err != nil {
+	if err := s.network.RespondSyncMsg(msg.StreamID, res); err != nil {
 		s.logger.Error("failed to send highest decided response", zap.Error(err))
 	}
 }

@@ -29,7 +29,7 @@ func (n *p2pNetwork) filterNonSsvNodes(conn libp2pnetwork.Conn) (bool, error) {
 	id := conn.RemotePeer()
 	ua, err := n.peersIndex.getUserAgent(id)
 	if err != nil {
-		n.trace("WARNING: could not read user agent", zap.String("peerID", id.String()))
+		n.trace("WARNING: could not read user agent", zap.String("peerID", id.String()), zap.Error(err))
 		return true, nil
 	}
 	if ua.IsUnknown() {
@@ -39,10 +39,9 @@ func (n *p2pNetwork) filterNonSsvNodes(conn libp2pnetwork.Conn) (bool, error) {
 	return true, nil
 }
 
+// TODO: unmark for version filtering
 //// filterOldVersion is a ConnectionFilter that filters peers with old version
-//	// TODO:
-//	// 1. import github.com/hashicorp/go-version
-//	// 2. var minSupportedVersion = version.NewVersion(<min version>)
+//// github.com/hashicorp/go-version is used to compare versions
 //func (n *p2pNetwork) filterOldVersion(conn libp2pnetwork.Conn) (bool, error) {
 //	id := conn.RemotePeer()
 //	ua, err := n.peersIndex.getUserAgent(id)

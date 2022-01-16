@@ -3,162 +3,118 @@ package p2p
 import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons/listeners"
-	"github.com/libp2p/go-libp2p-core/peer"
+	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-func peerToString(peerID peer.ID) string {
-	return peer.Encode(peerID)
-}
-
-func peerFromString(peerStr string) (peer.ID, error) {
-	return peer.Decode(peerStr)
-}
-
-// BroadcastSyncMessage broadcasts a sync message to peers.
-// Peer list must not be nil or empty if stream is nil.
-// returns a stream closed for writing
-func (n *p2pNetwork) sendSyncMessage(stream network.SyncStream, peer peer.ID, protocol protocol.ID, msg *network.SyncMessage) (network.SyncStream, error) {
-	if stream == nil {
-		if len(peer) == 0 {
-			return nil, errors.New("peer ID nil")
-		}
-
-		s, err := n.host.NewStream(n.ctx, peer, protocol)
-		if err != nil {
-			return nil, err
-		}
-		stream = NewSyncStream(s)
+// sendSyncRequest sends a sync request and returns the result
+func (n *p2pNetwork) sendSyncRequest(peerStr string, protocol protocol.ID, msg *network.SyncMessage) (*network.Message, error) {
+	peerID, err := peerFromString(peerStr)
+	if err != nil {
+		return nil, err
 	}
-
-	// message to bytes
-	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
+	res, err := n.streamCtrl.Request(peerID, protocol, &network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 	})
 	if err != nil {
-		return stream, errors.Wrap(err, "failed to marshal message")
+		return nil, errors.Wrap(err, "failed to make sync request")
 	}
-
-	if err := stream.WriteWithTimeout(msgBytes, n.cfg.RequestTimeout); err != nil {
-		return stream, errors.Wrap(err, "could not write to stream")
-	}
-	if err := stream.CloseWrite(); err != nil {
-		return stream, errors.Wrap(err, "could not close write stream")
-	}
-	return stream, nil
-}
-
-// sendAndReadResponse sends a reques sync msg, waits to a response and parses it. Includes timeout as well
-func (n *p2pNetwork) sendAndReadSyncResponse(peer peer.ID, protocol protocol.ID, msg *network.SyncMessage) (*network.Message, error) {
-	var err error
-	stream, err := n.sendSyncMessage(nil, peer, protocol, msg)
-	if err != nil {
-		if stream != nil {
-			if streamCloseErr := stream.Close(); streamCloseErr != nil {
-				n.logger.Error("could not close stream after error", zap.Error(streamCloseErr))
-			}
-		}
-		return nil, errors.Wrap(err, "could not send sync msg")
-	}
-
-	// close function for stream
-	defer func() {
-		if err := stream.Close(); err != nil {
-			n.logger.Error("could not close peer stream", zap.Error(err))
-		}
-	}()
-
-	resByts, err := stream.ReadWithTimeout(n.cfg.RequestTimeout)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not read sync msg")
-	}
-	resMsg, err := n.fork.DecodeNetworkMsg(resByts)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not decode stream sync msg")
-	}
-
-	//resMsg, ok := res.(network.Message)
-	if resMsg.SyncMessage == nil {
+	if res.SyncMessage == nil {
 		return nil, errors.New("no response for sync request")
 	}
 	n.logger.Debug("got sync response",
-		zap.String("FromPeerID", resMsg.SyncMessage.GetFromPeerID()))
-
-	return resMsg, nil
+		zap.String("FromPeerID", res.SyncMessage.GetFromPeerID()))
+	return res, nil
 }
+
+// RespondSyncMsg responds to the given stream
+func (n *p2pNetwork) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
+	msg.FromPeerID = n.host.ID().Pretty()
+	return n.streamCtrl.Respond(&network.Message{
+		SyncMessage: msg,
+		Type:        network.NetworkMsg_SyncType,
+		StreamID:    streamID,
+	})
+}
+
+func (n *p2pNetwork) setLegacyStreamHandler() {
+	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
+		cm, _, err := n.streamCtrl.HandleStream(stream)
+		if err != nil {
+			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+			return
+		}
+		if cm == nil {
+			n.logger.Debug("got nil sync message")
+			return
+		}
+		// adjusting message and propagating to other (internal) components
+		cm.SyncMessage.FromPeerID = stream.Conn().RemotePeer().String()
+		go propagateSyncMessage(n.listeners.GetListeners(network.NetworkMsg_SyncType), cm)
+	})
+}
+
+//func (n *p2pNetwork) setHighestDecidedStreamHandler() {
+//	n.host.SetStreamHandler(highestDecidedStream, func(stream core.Stream) {
+//		cm, s, err := n.preStreamHandler(stream)
+//		if err != nil {
+//			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+//			return
+//		}
+//		n.propagateSyncMsg(cm, s)
+//	})
+//}
+//
+//func (n *p2pNetwork) setDecidedByRangeStreamHandler() {
+//	n.host.SetStreamHandler(decidedByRangeStream, func(stream core.Stream) {
+//		cm, s, err := n.preStreamHandler(stream)
+//		if err != nil {
+//			n.logger.Error("decided by range preStreamHandler failed", zap.Error(err))
+//			return
+//		}
+//		n.propagateSyncMsg(cm, s)
+//	})
+//}
+//
+//func (n *p2pNetwork) setLastChangeRoundStreamHandler() {
+//	n.host.SetStreamHandler(lastChangeRoundMsgStream, func(stream core.Stream) {
+//		cm, s, err := n.preStreamHandler(stream)
+//		if err != nil {
+//			n.logger.Error("last change round preStreamHandler failed", zap.Error(err))
+//			return
+//		}
+//		n.propagateSyncMsg(cm, s)
+//	})
+//}
 
 // GetHighestDecidedInstance asks peers for SyncMessage
 func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	peerID, err := peerFromString(peerStr)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := n.sendAndReadSyncResponse(peerID, legacyMsgStream, msg)
+	res, err := n.sendSyncRequest(peerStr, legacyMsgStream, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
 	return res.SyncMessage, nil
-}
-
-// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
-func (n *p2pNetwork) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
-	return err
 }
 
 // GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
 func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	peerID, err := peerFromString(peerStr)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := n.sendAndReadSyncResponse(peerID, legacyMsgStream, msg)
+	res, err := n.sendSyncRequest(peerStr, legacyMsgStream, msg)
 	if err != nil {
 		return nil, err
 	}
 	return res.SyncMessage, nil
-}
-
-func (n *p2pNetwork) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().Pretty() // critical
-	s, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
-	if s != nil {
-		streamCloseErr := s.Close()
-		if streamCloseErr != nil {
-			n.logger.Error("could not close stream ", zap.Error(streamCloseErr))
-		}
-		if err == nil {
-			return streamCloseErr
-		}
-	}
-	return err
 }
 
 // GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
 func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	peerID, err := peerFromString(peerStr)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := n.sendAndReadSyncResponse(peerID, legacyMsgStream, msg)
+	res, err := n.sendSyncRequest(peerStr, legacyMsgStream, msg)
 	if err != nil || res == nil {
 		return nil, err
 	}
 	return res.SyncMessage, nil
-}
-
-// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
-func (n *p2pNetwork) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().Pretty() // critical
-	_, err := n.sendSyncMessage(stream, "", legacyMsgStream, msg)
-	return err
 }
 
 // ReceivedSyncMsgChan returns the channel for sync messages

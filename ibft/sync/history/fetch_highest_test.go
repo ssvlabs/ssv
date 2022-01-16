@@ -3,6 +3,7 @@ package history
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -187,7 +188,9 @@ func TestFindHighest(t *testing.T) {
 				}
 			}
 			s := New(zap.L(), test.valdiatorPK, 4, test.identifier, sync.NewTestNetwork(t, test.peers, 100,
-				test.highestMap, test.errorMap, nil, nil, nil), nil, test.validateMsg)
+				test.highestMap, test.errorMap, nil, nil, nil, func(s string) network.SyncStream {
+					return nil
+				}), nil, test.validateMsg)
 			res, _, err := s.findHighestInstance()
 
 			if len(test.expectedError) > 0 {

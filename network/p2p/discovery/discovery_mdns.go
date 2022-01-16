@@ -1,4 +1,4 @@
-package p2p
+package discovery
 
 import (
 	"context"
@@ -7,6 +7,14 @@ import (
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns_legacy"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
+)
+
+const (
+	// DiscoveryInterval is how often we re-publish our mDNS records.
+	DiscoveryInterval = time.Second
+	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
+	DiscoveryServiceTag = "bloxstaking.ssv"
 )
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
@@ -25,9 +33,9 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	}
 }
 
-// setupMdnsDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
+// SetupMdnsDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
-func setupMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) error {
+func SetupMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) error {
 	disc, err := mdnsDiscover.NewMdnsService(ctx, host, DiscoveryInterval, DiscoveryServiceTag)
 	if err != nil {
 		return errors.Wrap(err, "failed to create new mDNS service")

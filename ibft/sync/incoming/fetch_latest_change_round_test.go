@@ -65,24 +65,26 @@ func TestTestNetwork_GetLatestChangeRound(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ibftStorage := sync.TestingIbftStorage(t)
 
+			s := sync.NewTestStream("")
+
 			handler := ReqHandler{
-				paginationMaxSize:  uint64(20),
-				identifier:         test.identifier,
-				network:            sync.NewTestNetwork(t, nil, 20, nil, nil, nil, nil, nil),
+				paginationMaxSize: uint64(20),
+				identifier:        test.identifier,
+				network: sync.NewTestNetwork(t, nil, 20, nil,
+					nil, nil, nil, nil, func(streamID string) network.SyncStream {
+						return s
+					}),
 				storage:            &ibftStorage,
 				logger:             zap.L(),
 				seqNumber:          test.latestSeq,
 				lastChangeRoundMsg: test.latestMsg,
 			}
 
-			// stream
-			s := sync.NewTestStream("")
-
 			handler.handleGetLatestChangeRoundReq(&network.SyncChanObj{
 				Msg: &network.SyncMessage{
 					Params: test.params,
 				},
-				Stream: s,
+				StreamID: s.ID(),
 			})
 
 			byts := <-s.C
