@@ -1,7 +1,6 @@
 package local
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -21,6 +20,8 @@ type Local struct {
 	syncC              []chan *network.SyncChanObj
 	syncPeers          map[string]chan *network.SyncChanObj
 	createChannelMutex *sync.Mutex
+	streamsMut         *sync.Mutex
+	streams            map[string]network.SyncStream
 }
 
 // NewLocalNetwork creates a new instance of a local network
@@ -32,6 +33,8 @@ func NewLocalNetwork() *Local {
 		syncC:              make([]chan *network.SyncChanObj, 0),
 		syncPeers:          make(map[string]chan *network.SyncChanObj),
 		createChannelMutex: &sync.Mutex{},
+		streamsMut:         &sync.Mutex{},
+		streams:            make(map[string]network.SyncStream),
 	}
 }
 
@@ -46,6 +49,8 @@ func (n *Local) CopyWithLocalNodeID(id peer.ID) *Local {
 		syncC:              n.syncC,
 		syncPeers:          n.syncPeers,
 		createChannelMutex: n.createChannelMutex,
+		streamsMut:         n.streamsMut,
+		streams:            n.streams,
 	}
 }
 
@@ -118,22 +123,36 @@ func (n *Local) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessa
 		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
 			toChan <- &network.SyncChanObj{
-				Msg:    msg,
-				Stream: stream,
+				Msg:      msg,
+				StreamID: stream.ID(),
 			}
 		}()
-
+		n.addStream(stream)
 		ret := <-stream.(*Stream).ReceiveChan
 		return ret, nil
 	}
 	return nil, errors.New("could not find peer")
 }
 
-// RespondToHighestDecidedInstance responds to a GetHighestDecidedInstance
-func (n *Local) RespondToHighestDecidedInstance(stream network.SyncStream, msg *network.SyncMessage) error {
+// RespondSyncMsg responds to sync messages
+func (n *Local) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
 	msg.FromPeerID = string(n.localPeerID)
+	n.streamsMut.Lock()
+	stream, ok := n.streams[streamID]
+	delete(n.streams, streamID)
+	n.streamsMut.Unlock()
+	if !ok {
+		return errors.New("stream not found")
+	}
 	_, _ = stream.(*Stream).WriteSynMsg(msg)
 	return nil
+}
+
+// addStream save a reference to the stream
+func (n *Local) addStream(stream network.SyncStream) {
+	n.streamsMut.Lock()
+	n.streams[stream.ID()] = stream
+	n.streamsMut.Unlock()
 }
 
 // ReceivedSyncMsgChan returns the channel for sync messages
@@ -152,30 +171,15 @@ func (n *Local) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*ne
 		stream := NewLocalStream(msg.FromPeerID, peerStr)
 		go func() {
 			toChan <- &network.SyncChanObj{
-				Msg:    msg,
-				Stream: stream,
+				Msg:      msg,
+				StreamID: stream.ID(),
 			}
 		}()
-
+		n.addStream(stream)
 		ret := <-stream.(*Stream).ReceiveChan
 		return ret, nil
 	}
 	return nil, errors.New("could not find peer")
-}
-
-// RespondToGetDecidedByRange responds to a GetDecidedByRange
-func (n *Local) RespondToGetDecidedByRange(stream network.SyncStream, msg *network.SyncMessage) error {
-	rawMsg, err := json.Marshal(msg)
-	if err != nil {
-		return errors.Wrap(err, "could not parse msg")
-	}
-	var cp network.SyncMessage
-	if err := json.Unmarshal(rawMsg, &cp); err != nil {
-		return err
-	}
-	msg.FromPeerID = string(n.localPeerID)
-	_, _ = stream.(*Stream).WriteSynMsg(&cp)
-	return nil
 }
 
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
@@ -200,11 +204,6 @@ func (n *Local) MaxBatch() uint64 {
 // GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
 func (n *Local) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return nil, nil
-}
-
-// RespondToLastChangeRoundMsg responds to a GetLastChangeRoundMsg
-func (n *Local) RespondToLastChangeRoundMsg(stream network.SyncStream, msg *network.SyncMessage) error {
-	return nil
 }
 
 // BroadcastMainTopic implementation

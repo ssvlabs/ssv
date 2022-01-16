@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"crypto/rand"
+	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	testUA = "test:0.0.0:xxx"
+	testUA = "SSV-Node:0.0.0:xxx"
 )
 
 func TestNewPeersIndex(t *testing.T) {
@@ -78,9 +79,8 @@ func TestNewPeersIndex(t *testing.T) {
 
 func TestPeersIndex_IndexNode(t *testing.T) {
 	ctx := context.Background()
-	ua := "test:0.0.0:xxx"
 
-	_, pi := newHostWithPeersIndex(ctx, t, ua+"1")
+	_, pi := newHostWithPeersIndex(ctx, t, testUA+"1")
 	node, pid, oid := newNode(t, Operator)
 	require.False(t, pi.Indexed(pid))
 	pi.IndexNode(node.Node())
@@ -128,7 +128,7 @@ func newHostWithPeersIndex(ctx context.Context, t *testing.T, ua string) (host.H
 	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
 		libp2p.UserAgent(ua))
-	require.NoError(t, setupMdnsDiscovery(ctx, zap.L(), host))
+	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), host))
 	require.NoError(t, err)
 	ids, err := identify.NewIDService(host, identify.UserAgent(ua))
 	require.NoError(t, err)

@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/network/p2p/streams"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/prysmaticlabs/prysm/async"
@@ -23,12 +24,6 @@ import (
 )
 
 const (
-	// DiscoveryInterval is how often we re-publish our mDNS records.
-	DiscoveryInterval = time.Second
-
-	// DiscoveryServiceTag is used in our mDNS advertisements to discover other chat peers.
-	DiscoveryServiceTag = "bloxstaking.ssv"
-
 	topicPrefix = "bloxstaking.ssv"
 
 	// minPeers is the min value for peers limit
@@ -54,6 +49,8 @@ type p2pNetwork struct {
 	peersIndex      PeersIndex
 	operatorPrivKey *rsa.PrivateKey
 	fork            forks.Fork
+
+	streamCtrl streams.StreamController
 
 	psSubs       map[string]context.CancelFunc
 	psTopicsLock *sync.RWMutex
@@ -121,6 +118,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "failed to create p2p host")
 	}
 	n.host = host
+	n.streamCtrl = streams.NewStreamController(ctx, logger, host, cfg.Fork, cfg.RequestTimeout)
 	n.cfg.HostID = host.ID()
 	n.logger = logger.With(zap.String("id", n.cfg.HostID.String()))
 	n.logger.Info("listening on port", zap.String("addr", n.host.Addrs()[0].String()))

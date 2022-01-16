@@ -3,6 +3,7 @@ package history
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -116,7 +117,9 @@ func TestFetchDecided(t *testing.T) {
 			})
 			require.NoError(t, err)
 			storage := collections.NewIbft(db, logger, "attestation")
-			network := sync.NewTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, nil, test.decidedArr, nil, nil)
+			network := sync.NewTestNetwork(t, test.peers, int(test.rangeParams[2]), nil, nil, test.decidedArr, nil, nil, func(s string) network.SyncStream {
+				return nil
+			})
 			s := New(logger, test.validatorPk, 4, test.identifier, network, &storage, func(msg *proto.SignedMessage) error {
 				return nil
 			})

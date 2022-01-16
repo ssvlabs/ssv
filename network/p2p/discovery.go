@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network/p2p/discovery"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
@@ -39,7 +40,7 @@ func (n *p2pNetwork) startDiscovery() error {
 // setupDiscovery configure discovery service according to configured type
 func (n *p2pNetwork) setupDiscovery() error {
 	if n.cfg.DiscoveryType == discoveryTypeMdns {
-		return setupMdnsDiscovery(n.ctx, n.logger, n.host)
+		return discovery.SetupMdnsDiscovery(n.ctx, n.logger, n.host)
 	}
 
 	listener, err := n.setupDiscV5()

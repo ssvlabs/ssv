@@ -21,8 +21,8 @@ func (i *Controller) processSyncQueueMessages() {
 		for {
 			if syncMsg := i.msgQueue.PopMessage(msgqueue.SyncIndexKey(i.Identifier)); syncMsg != nil {
 				i.ProcessSyncMessage(&network.SyncChanObj{
-					Msg:    syncMsg.SyncMessage,
-					Stream: syncMsg.Stream,
+					Msg:      syncMsg.SyncMessage,
+					StreamID: syncMsg.StreamID,
 				})
 			}
 			time.Sleep(i.syncRateLimit)
