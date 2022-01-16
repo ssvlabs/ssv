@@ -100,7 +100,7 @@ type Network interface {
 	Broadcaster
 	Syncer
 
-	// NotifyOperatorID updates the network regarding new operators
+	// NotifyOperatorID updates the network regarding new operators joining the network
 	// TODO: find a better way to do this
 	NotifyOperatorID(oid string)
 }

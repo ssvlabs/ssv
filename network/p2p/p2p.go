@@ -165,7 +165,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 }
 
 func (n *p2pNetwork) setStreamHandlers() {
-	n.setLegacyStreamHandler() // TODO - remove in v0.1.6
+	n.setLegacyStreamHandler()
 	//n.setHighestDecidedStreamHandler()
 	//n.setDecidedByRangeStreamHandler()
 	//n.setLastChangeRoundStreamHandler()
@@ -192,8 +192,7 @@ func (n *p2pNetwork) MaxBatch() uint64 {
 	return n.cfg.MaxBatchResponse
 }
 
-// NotifyOperatorID updates the network regarding new operators
-// TODO: find a better way to do this
+// NotifyOperatorID updates the network regarding new operators joining the network
 func (n *p2pNetwork) NotifyOperatorID(oid string) {
 	n.trace("notified on operator id", zap.String("operatorID", oid))
 	n.peersIndex.EvictPruned(oid)
@@ -202,7 +201,7 @@ func (n *p2pNetwork) NotifyOperatorID(oid string) {
 // getUserAgent returns ua built upon:
 // - node version
 // - node type ('operator' | 'exporter')
-// - operator ID (TODO: remove from UserAgent)
+// - operator ID
 func (n *p2pNetwork) getUserAgent() string {
 	ua, err := GenerateUserAgent(n.operatorPrivKey, n.nodeType)
 	if err != nil {
