@@ -78,8 +78,9 @@ var StartExporterNodeCmd = &cobra.Command{
 
 		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
 		if err != nil {
-			log.Fatal("Failed during migration", zap.Error(err))
+			Logger.Fatal("failed during migration check", zap.Error(err))
 		} else if ok {
+			Logger.Info("migration is required", zap.Error(err))
 			cfg.ETH1Options.CleanRegistryData = true
 		}
 
