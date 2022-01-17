@@ -23,4 +23,9 @@ func TestMigrate(t *testing.T) {
 	clean, err = Migrate(tmpPath)
 	require.NoError(t, err)
 	require.False(t, clean)
+	// deleting second file
+	require.NoError(t, os.RemoveAll(path.Join(tmpPath, "oa_pks")))
+	clean, err = Migrate(tmpPath)
+	require.NoError(t, err)
+	require.True(t, clean)
 }
