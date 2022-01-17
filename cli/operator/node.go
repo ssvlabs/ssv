@@ -73,12 +73,11 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
-		// TODO remove once all operators updated to vXXX
-		ok, err := migrationutils.E2kmMigration(Logger, cfg.DBOptions.Path)
+		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
 		if err != nil {
-			log.Fatal("Failed to create e2km migration file", zap.Error(err))
-		}
-		if ok {
+			Logger.Fatal("failed during migration check", zap.Error(err))
+		} else if ok {
+			Logger.Info("migration is required", zap.Error(err))
 			cfg.ETH1Options.CleanRegistryData = true
 		}
 
