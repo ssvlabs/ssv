@@ -9,18 +9,18 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 12001
+    - port: 12000
       protocol: UDP
-      targetPort: 12001
-      name: port-12001
-    - port: 13001
+      targetPort: 12000
+      name: port-12000
+    - port: 13000
       protocol: TCP
-      targetPort: 13001
-      name: port-13001
-    - port: 15001
+      targetPort: 13000
+      name: port-13000
+    - port: 15000
       protocol: TCP
-      targetPort: 15001
-      name: port-15001
+      targetPort: 15000
+      name: port-15000
   selector:
     app: ssv-node-v2-1
 ---
@@ -90,16 +90,16 @@ spec:
             memory: 5120Mi
         command: ["make", "start-node"]
         ports:
-        - containerPort: 12001
-          name: port-12001
-          hostPort: 12001           
+        - containerPort: 12000
+          name: port-12000
+          hostPort: 12000            
           protocol: UDP
-        - containerPort: 13001
-          name: port-13001
-          hostPort: 13001
-        - containerPort: 15001
-          name: port-15001
-          hostPort: 15001
+        - containerPort: 13000
+          name: port-13000
+          hostPort: 13000
+        - containerPort: 15000
+          name: port-15000
+          hostPort: 15000
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -150,7 +150,7 @@ spec:
         - name: DB_REPORTING
           value: "true"
         - name: METRICS_API_PORT
-          value: "15001"
+          value: "15000"
         - name: ENABLE_PROFILE
           value: "true"
         volumeMounts:
