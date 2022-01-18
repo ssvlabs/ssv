@@ -58,9 +58,16 @@ See more information in [IPFS specs > communication-model - streams](https://ipf
 PubSub is used as an infrastructure for broadcasting messages among a group (AKA subnet) of operator nodes.
 
 GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in SSV. \
-In short, each node saves metadata regards topic subscriptions of other peers in the network. \
-Based on that information, messages are propagated only to the most relevant peers (subscribed or neighbors of a subscribed peer) and therefore reduce the overall traffic.
+In short, each node saves metadata regards subscriptions of other peers in the network, and propagates messages only to a subset of peers (subscribed, neighbors and random peers) for a specific topic.
 
+The following parameters are used for initializing pubsub:
+
+- `floodPublish` was turned on for better reliability, as peer's own messages will be propagated to a larger set of peers 
+  (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
+- `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
+- `directPeers` includes the exporter peer ID, to ensure it gets all messages
+
+**TODO: add peer scoring**
 
 
 ### Network Peers
@@ -325,13 +332,12 @@ nodes can iterate the subnet peers and lookup the desired committee members by t
 
 ### Peers Connectivity
 
-**TBD**
-
 In a fully-connected network, where each peer is connected to all other peers in the network,
 running nodes will consume many resources to process all network related tasks e.g. parsing, peers management etc.
 
 To lower resource consumption, there is a limitation for the total connected peers, currently set to `250`. \
 Once reached to peer limit, the node will connect only to operators that shares at least one subnet / committee.
+
 
 ### Forks
 
@@ -346,33 +352,6 @@ Currently, the following are covered:
 
 validator public key is used as the topic name and JSON is used for encoding/decoding of messages.
 
----
-
-### Configuration
-
-**TODO: filter configs**
-
-| ENV                  | YAML                 | Default Value          | Required |  Description                           |
-| ---                  | ---                  | ---                    | ---      | ---                                    |
-| `NETWORK_PRIVATE_KEY`| `NetworkPrivateKey`  | -                      | No       | Key to use for libp2p/network identity |
-| `ENR_KEY`            | `p2p.Enr`            | Bootnode ENR (Testnet) | No       | Bootnode ENR                           |
-| `DISCOVERY_TYPE_KEY` | `p2p.DiscoveryType`  | `discv5`               | No       | discovery method                       |
-| `TCP_PORT`           | `p2p.TcpPort`        | `13000`                | No       | TCP port to use                        |
-| `UDP_PORT`           | `p2p.UdpPort`        | `12000`                | No       | UDP port to use                        |
-| `HOST_ADDRESS`       | `p2p.HostAddress`    | -                      | No       | External IP address                    |
-| `HOST_DNS`           | `p2p.HostDNS`        | -                      | No       | External DNS address                   |
-| `NETWORK_TRACE`      | `p2p.NetworkTrace`   | false                  | No       | Flag to turn on/off network trace logs |
-| `REQUEST_TIMEOUT`    | `p2p.RequestTimeout` | `5s`                   | No       | Requests timeout                       |
-| `MAX_BATCH_RESPONSE` |`p2p.MaxBatchResponse`| `50`                   | No       | Max batch size                         |
-| `PUBSUB_TRACE_OUT`   | `p2p.PubSubTraceOut` | -                      | No       | PubSub trace output file               |
-
-An example config yaml:
-```yaml
-p2p:
-  HostAddress: 82.210.33.146
-  TcpPort: 13001
-  UdpPort: 12001
-```
 
 -----
 
