@@ -16,13 +16,13 @@ This document contains the networking specification for SSV.
   - [x] [1. Consensus](#1-consensus)
   - [ ] [2. Sync](#2-sync)
 - [ ] [Networking](#networking)
+  - [x] [Discovery](#discovery)
   - [x] [Netowrk ID](#network-id)
-  - [ ] [Discovery](#discovery)
   - [ ] [Authentication](#authentication)
   - [ ] [Subnets](#subnets)
-  - [ ] [Peers Connectivity](#peers-connectivity)
+  - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
-  - [ ] [Configuration](#configuration)
+
 
 ## Fundamentals
 
@@ -242,31 +242,20 @@ This protocol enables a node that was online to catch up with change round messa
 
 ## Networking
 
-### Network ID
-
-Network ID is a 32byte hash, which has to be known and used by all members across the network.
-Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network.
-
-It works with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
-which encrypts/decrypts all traffic of a given network with the corresponding key (network id/hash),
-regardless of the regular transport security ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
-
-
-
 ### Discovery
 
-As libp2p doesn't provide a module for decentralized discovery,
-[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is used in ssv as a complementary module for discovery.
+[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is used in `SSV.network` to complement discovery.
 
-Peers are represented by an ENR record (see below) that is published across the network and stored in a DHT.
+DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers.
+The discovery process walks randomaly on the nodes in the table that are not connected, filters them according to `ENR` entries and connects to relevant ones, as detailed in [Peers Connectivity](#peers-connectivity).
 
-Bootnode is a special kind of peers that have a public static ENR to enable new peers to join the network. \
-The role of the bootnode ends once a new peer finds existing peers in the network.
+Bootnode is a special kind of peers that have a public static ENR to enable new peers to join the network. \. 
+It doesn't start a libp2p host for TCP communication, its role ends once a new peer finds existing peers in the network.
 
 #### ENR
 
-[Ethereum Node Records](https://github.com/ethereum/devp2p/blob/master/enr.md) is a format for connectivity information.
-Each record contains a signature, sequence (for republishing) and arbitrary key/value pairs.
+[Ethereum Node Records](https://github.com/ethereum/devp2p/blob/master/enr.md) is a format that holds peer information.
+Records contain a signature, sequence (for republishing record) and arbitrary key/value pairs.
 
 `ENR` structure in ssv network contains the following key/value pairs:
 
@@ -283,9 +272,22 @@ Each record contains a signature, sequence (for republishing) and arbitrary key/
 
 
 
+### Network ID
+
+Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
+Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network, meaning that the key to be known and used by all network members.
+
+It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
+which encrypts/decrypts all traffic of a given network with the corresponding key,
+regardless of the regular transport security ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
+
+**NOTE** discovery communication (UDP) won't use the network ID, as unknown nodes will be filtered anyway due to missing fields in their `ENR` entry as specified below.
+
+
 ### Authentication
 
 This protocol enables ssv nodes to exchange payloads that authenticate an operator/exporter in relation to the peer.
+
 
 
 ### Subnets
@@ -317,7 +319,7 @@ we can expect a better propagation of messages and therefore lower probability o
 Subnet approach also enables redundancy of decided messages across multiple peers,
 not only among committee peers (+ exporter), and therefore increasing network security.
 
-##### Validator to subnet mapping
+##### Subnet mapping
 
 A simple approach that can be taken is hash partitioning: \
 `hash(validatiorPubKey) % num_of_subnets`,
@@ -330,6 +332,8 @@ How to check how many peers are online for a specific validator? \
 Assuming peers are authenticated, and published their operator public key in that process,
 nodes can iterate the subnet peers and lookup the desired committee members by their public key.
 
+
+
 ### Peers Connectivity
 
 In a fully-connected network, where each peer is connected to all other peers in the network,
@@ -339,10 +343,12 @@ To lower resource consumption, there is a limitation for the total connected pee
 Once reached to peer limit, the node will connect only to operators that shares at least one subnet / committee.
 
 
+
 ### Forks
 
 Future network forks will follow the general forks mechanism and design in SSV. \
 The idea is to wrap procedures that have potential to be changed in future versions.
+
 Currently, the following are covered:
 
 - validator topic mapping
@@ -355,9 +361,9 @@ validator public key is used as the topic name and JSON is used for encoding/dec
 
 -----
 
+
 ## Open points
 
-* Configurations
 * Heartbeat ?
 * Home setup
 * UPnP (NATPortMap)
