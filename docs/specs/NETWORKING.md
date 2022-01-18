@@ -7,21 +7,22 @@ This document contains the networking specification for SSV.
 ## Overview
 
 - [x] [Fundamentals](#fundamentals)
-  - [Stack](#stack)
-  - [Transport](#transport)
-  - [Messaging](#messaging)
-  - [Network Peers](#network-peers)
-  - [Identity](#identity)
+  - [x] [Stack](#stack)
+  - [x] [Transport](#transport)
+  - [x] [Messaging](#messaging)
+  - [x] [Network Peers](#network-peers)
+  - [x] [Identity](#identity)
 - [ ] [Protocols](#protocols)
-    - [x] [1. Consensus](#1-consensus)
-    - [ ] [2. Sync](#2-sync)
+  - [x] [1. Consensus](#1-consensus)
+  - [ ] [2. Sync](#2-sync)
 - [ ] [Networking](#networking)
-    - [x] [Netowrk ID](#network-id)
-    - [ ] [Discovery](#discovery)
-    - [ ] [Authentication](#authentication)
-    - [ ] [Subnets](#subnets)
-    - [ ] [Peers Connectivity](#peers-connectivity)
-    - [x] [Forks](#forks)
+  - [x] [Netowrk ID](#network-id)
+  - [ ] [Discovery](#discovery)
+  - [ ] [Authentication](#authentication)
+  - [ ] [Subnets](#subnets)
+  - [ ] [Peers Connectivity](#peers-connectivity)
+  - [x] [Forks](#forks)
+  - [ ] [Configuration](#configuration)
 
 ## Fundamentals
 
@@ -155,7 +156,7 @@ message Message {
 
 **NOTE** all pubsub messages in the network are wrapped with libp2p's message structure
 
-------
+---
 
 ### 2. Sync
 
@@ -344,6 +345,34 @@ Currently, the following are covered:
 #### Fork v0
 
 validator public key is used as the topic name and JSON is used for encoding/decoding of messages.
+
+---
+
+### Configuration
+
+**TODO: filter configs**
+
+| ENV                  | YAML                 | Default Value          | Required |  Description                           |
+| ---                  | ---                  | ---                    | ---      | ---                                    |
+| `NETWORK_PRIVATE_KEY`| `NetworkPrivateKey`  | -                      | No       | Key to use for libp2p/network identity |
+| `ENR_KEY`            | `p2p.Enr`            | Bootnode ENR (Testnet) | No       | Bootnode ENR                           |
+| `DISCOVERY_TYPE_KEY` | `p2p.DiscoveryType`  | `discv5`               | No       | discovery method                       |
+| `TCP_PORT`           | `p2p.TcpPort`        | `13000`                | No       | TCP port to use                        |
+| `UDP_PORT`           | `p2p.UdpPort`        | `12000`                | No       | UDP port to use                        |
+| `HOST_ADDRESS`       | `p2p.HostAddress`    | -                      | No       | External IP address                    |
+| `HOST_DNS`           | `p2p.HostDNS`        | -                      | No       | External DNS address                   |
+| `NETWORK_TRACE`      | `p2p.NetworkTrace`   | false                  | No       | Flag to turn on/off network trace logs |
+| `REQUEST_TIMEOUT`    | `p2p.RequestTimeout` | `5s`                   | No       | Requests timeout                       |
+| `MAX_BATCH_RESPONSE` |`p2p.MaxBatchResponse`| `50`                   | No       | Max batch size                         |
+| `PUBSUB_TRACE_OUT`   | `p2p.PubSubTraceOut` | -                      | No       | PubSub trace output file               |
+
+An example config yaml:
+```yaml
+p2p:
+  HostAddress: 82.210.33.146
+  TcpPort: 13001
+  UdpPort: 12001
+```
 
 -----
 
