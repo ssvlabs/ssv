@@ -339,9 +339,13 @@ nodes can iterate the subnet peers and lookup the desired committee members by t
 In a fully-connected network, where each peer is connected to all other peers in the network,
 running nodes will consume many resources to process all network related tasks e.g. parsing, peers management etc.
 
-To lower resource consumption, there is a limitation for the total connected peers, currently set to `250`. \
-Once reached to peer limit, the node will connect only to operators that shares at least one subnet / committee.
+To lower resource consumption, there is a limitation for the number of connected peers, currently set to `250`. \
+Once reached to peer limit, the node will connect only to relevant nodes with score above treshold, which is currently set to zero.
 
+Scores are based on the following:
+
+- Shared subnets / committees (1 point per committee)
+- Static nodes (`exporter` or `bootnode`) gets 10 points
 
 
 ### Forks
