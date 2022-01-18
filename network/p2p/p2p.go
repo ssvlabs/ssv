@@ -177,7 +177,7 @@ func (n *p2pNetwork) watchPeers() {
 	})
 
 	async.RunEvery(n.ctx, 1*time.Minute, func() {
-		go reportAllConnections(n)
+		go reportAllPeers(n)
 
 		// topics peers
 		n.psTopicsLock.RLock()

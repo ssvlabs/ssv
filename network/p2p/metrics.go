@@ -44,13 +44,12 @@ func init() {
 	}
 }
 
-func reportAllConnections(n *p2pNetwork) {
-	conns := n.host.Network().Conns()
+func reportAllPeers(n *p2pNetwork) {
+	pids := n.host.Network().Peers()
 	var ids []string
-	for _, conn := range conns {
-		pid := conn.RemotePeer().String()
-		ids = append(ids, pid)
-		reportPeerIdentity(n, conn.RemotePeer())
+	for _, pid := range pids {
+		ids = append(ids, pid.String())
+		reportPeerIdentity(n, pid)
 	}
 	n.logger.Debug("connected peers status",
 		zap.Int("count", len(ids)))
@@ -66,9 +65,9 @@ func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
 
 func reportPeerIdentity(n *p2pNetwork, pid peer.ID) {
 	if ua, err := n.peersIndex.getUserAgent(pid); err != nil {
-		n.logger.Warn("could not report peer", zap.String("peer", pid.String()), zap.Error(err))
+		n.trace("WARNING: could not report peer", zap.String("peer", pid.String()), zap.Error(err))
 	} else {
-		n.logger.Debug("peer identity", zap.String("peer", pid.String()), zap.String("ua", string(ua)))
+		n.trace("peer identity", zap.String("peer", pid.String()), zap.String("ua", string(ua)))
 		metricsPeersIdentity.WithLabelValues(ua.OperatorID(), ua.NodeVersion(), pid.String(), ua.NodeType()).Set(1)
 	}
 }
