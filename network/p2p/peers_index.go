@@ -236,8 +236,10 @@ func (pi *peersIndex) indexNode(node *enode.Node) error {
 		return errors.Wrap(err, "could not store node record in peerstore")
 	}
 	oid, err := extractOperatorIDEntry(node.Record())
+	operatorID := ""
 	if err == nil && oid != nil {
-		if err := pi.host.Peerstore().Put(info.ID, OperatorIDKey, string(*oid)); err != nil {
+		operatorID = string(*oid)
+		if err := pi.host.Peerstore().Put(info.ID, OperatorIDKey, operatorID); err != nil {
 			return errors.Wrap(err, "could not store operator id in peerstore")
 		}
 	}
@@ -248,7 +250,7 @@ func (pi *peersIndex) indexNode(node *enode.Node) error {
 		}
 	}
 	pi.logger.Debug("indexed node", zap.String("nodeType", nodeType.String()),
-		zap.Any("operatorID", *oid),
+		zap.Any("operatorID", operatorID),
 		zap.String("enr", node.String()),
 		zap.String("peerdID", info.ID.String()))
 	return nil
