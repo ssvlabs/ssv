@@ -9,18 +9,18 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 12000
+    - port: 12002
       protocol: UDP
-      targetPort: 12000
-      name: port-12000
-    - port: 13000
+      targetPort: 12002
+      name: port-12002
+    - port: 13002
       protocol: TCP
-      targetPort: 13000
-      name: port-13000
-    - port: 15000
+      targetPort: 13002
+      name: port-13002
+    - port: 15002
       protocol: TCP
-      targetPort: 15000
-      name: port-15000
+      targetPort: 15002
+      name: port-15002
   selector:
     app: ssv-node-v2-2
 ---
@@ -52,35 +52,6 @@ spec:
                     operator: In
                     values:
                       - ssv-node
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-1
-              topologyKey: kubernetes.io/hostname
-            weight: 1
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-3
-              topologyKey: kubernetes.io/hostname
-            weight: 1
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-4
-              topologyKey: kubernetes.io/hostname
-            weight: 1
       containers:
       - name: ssv-node-v2-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
@@ -90,16 +61,16 @@ spec:
             memory: 5120Mi
         command: ["make", "start-node"]
         ports:
-        - containerPort: 12000
-          name: port-12000
+        - containerPort: 12002
+          name: port-12002
           protocol: UDP
-          hostPort: 12000
-        - containerPort: 13000
-          name: port-13000
-          hostPort: 13000
-        - containerPort: 15000
-          name: port-15000
-          hostPort: 15000
+          hostPort: 12002
+        - containerPort: 13002
+          name: port-13002
+          hostPort: 13002
+        - containerPort: 15002
+          name: port-15002
+          hostPort: 15002
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -150,7 +121,7 @@ spec:
         - name: DB_REPORTING
           value: "true"
         - name: METRICS_API_PORT
-          value: "15000"
+          value: "15002"
         - name: ENABLE_PROFILE
           value: "true"
         volumeMounts:
