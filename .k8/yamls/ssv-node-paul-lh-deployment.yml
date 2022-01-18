@@ -64,7 +64,7 @@ spec:
         - containerPort: 12005
           name: port-12005
           protocol: UDP
-          hostPort: 120054            
+          hostPort: 12005            
         - containerPort: 13005
           name: port-13005
           hostPort: 13005
