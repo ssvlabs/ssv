@@ -95,7 +95,7 @@ spec:
         imagePullPolicy: Always
         resources:
           limits:
-            cpu: 4000m
+            cpu: 1000m
             memory: 5120Mi
         command: ["make", "start-exporter"]
         ports:
