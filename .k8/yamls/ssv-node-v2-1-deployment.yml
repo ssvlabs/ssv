@@ -52,35 +52,6 @@ spec:
                     operator: In
                     values:
                       - ssv-node
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-2
-              topologyKey: kubernetes.io/hostname
-            weight: 1
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-3
-              topologyKey: kubernetes.io/hostname
-            weight: 1
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: name
-                  operator: In
-                  values:
-                  - ssv-node-v2-4
-              topologyKey: kubernetes.io/hostname
-            weight: 1              
       containers:
       - name: ssv-node-v2-1
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
