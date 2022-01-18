@@ -13,12 +13,12 @@ This document contains the networking specification for SSV.
   - [x] [Network Peers](#network-peers)
   - [x] [Identity](#identity)
 - [ ] [Protocols](#protocols)
-  - [x] [1. Consensus](#1-consensus)
-  - [ ] [2. Sync](#2-sync)
+  - [x] [Consensus](#consensus-protocol)
+  - [ ] [Sync](#sync-protocol)
+  - [ ] [Authentication](#authentication-protocol)
 - [ ] [Networking](#networking)
   - [x] [Discovery](#discovery)
   - [x] [Netowrk ID](#network-id)
-  - [ ] [Authentication](#authentication)
   - [ ] [Subnets](#subnets)
   - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
@@ -103,7 +103,7 @@ Exporter and Bootnode does not hold this key.
 
 Network interaction includes several types of protocols, as detailed below.
 
-### 1. Consensus
+## Consensus Protocol
 
 `IBFT`/`QBFT` consensus protocol is used to govern `SSV` network.
 `IBFT` ensures that consensus can be reached by a committee of `n` operator nodes while tolerating a certain amount of `f` faulty nodes as defined by `n ≥ 3f + 1`.
@@ -124,9 +124,9 @@ import "gogo.proto";
 // SignedMessage is a wrapper on top of Message for supporting signatures
 message SignedMessage{
   // message is the raw message to sign
-  Message message = 1 [(gogoproto.nullable) = false];
+  Message message            = 1 [(gogoproto.nullable) = false];
   // signature is a signature of the message
-  bytes signature = 2 [(gogoproto.nullable) = false];
+  bytes signature            = 2 [(gogoproto.nullable) = false];
   // signer_ids are the IDs of the signing operators
   repeated uint64 signer_ids = 3;
 }
@@ -134,7 +134,7 @@ message SignedMessage{
 // Message represents an IBFT message
 message Message {
   // type is the IBFT state / stage
-  Stage type   = 1;
+  Stage type        = 1;
   // round is the current round where the message was sent
   uint64 round      = 2;
   // lambda is the message identifier
@@ -163,9 +163,7 @@ message Message {
 
 **NOTE** all pubsub messages in the network are wrapped with libp2p's message structure
 
----
-
-### 2. Sync
+## Sync Protocol
 
 History sync is the procedure of syncing decided messages from other peers. \
 It is a prerequisite for taking part in some validator's consensus.
@@ -173,6 +171,33 @@ It is a prerequisite for taking part in some validator's consensus.
 Sync is done over streams as pubsub is not suitable for this case due to several reasons such as:
 - API nature is request/response, unlike broadcasting in consensus messages
 - Bandwidth - only one peer (usually) needs the data, it would be a waste to send redundant messages across the network.
+#### Protocols
+
+**TODO: add example request/response**
+
+SSV nodes use the following stream protocols:
+
+
+##### 1. Highest Decided
+
+This protocol is used by a node to find out what is the highest decided message among a specific committee.
+In case there are no decided messages, it will return an empty array of messages.
+
+`/ssv/sync/highest_decided/0.0.1`
+
+
+##### 2. Decided By Range
+
+This protocol enables to sync decided messages in some specific range.
+
+`/ssv/sync/decided_by_range/0.0.1`
+
+
+##### 3. Last Change Round
+
+This protocol enables a node that was online to catch up with change round messages.
+
+`/ssv/sync/last_change_round/0.0.1`
 
 #### Message Structure
 
@@ -183,7 +208,7 @@ TODO: refine structure
 ```protobuf
 message SyncMessage {
   // MsgType is the type of sync message
-  SyncMsgType MsgType                      = 1;
+  SyncMsgType MsgType                   = 1;
   // FromPeerID is the ID of the sender
   string FromPeerID                     = 2;
   // Identifier of the message (validator + role)
@@ -199,45 +224,45 @@ message SyncMessage {
 // SyncMsgType is an enum that represents the type of sync message 
 enum SyncMsgType {
   // GetHighestType is a request from peers to return the highest decided/ prepared instance they know of
-  GetHighestType = 0;
+  GetHighestType       = 0;
   // GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
-  GetInstanceRange = 1;
+  GetInstanceRange     = 1;
   // GetCurrentInstance is a request from peers to return their current running instance details
   GetLatestChangeRound = 2;
 }
 ```
 
-#### Stream Protocols
+## Authentication protocol
 
-**TODO: add example request/response**
+Authentication protocol enables ssv nodes to prove ownership of its operator key.
 
-SSV nodes use the following stream protocols:
+`/ssv/auth/0.0.1`
+
+```protobuf
+syntax = "proto3";
+import "gogo.proto";
+
+// AuthMessage is a message that is used for authenticating nodes
+message AuthMessage {
+  // message is the raw message to sign
+  AuthPayload payload = 1 [(gogoproto.nullable) = false];
+  // signature is a signature of the message
+  bytes signature     = 2 [(gogoproto.nullable) = false];
+}
+
+// AuthPayload is the payload used for auth messages
+message AuthPayload {
+  // peer_id of the authenticating node
+  bytes peer_id     = 1 [(gogoproto.nullable) = false];
+  // operator_id of the authenticating node
+  bytes operator_id = 2 [(gogoproto.nullable) = true];
+  // node_type is the type of the authenticating node
+  uint64 node_type  = 3;
+}
+```
 
 
-##### 1. Highest Decided
-
-This protocol is used by a node to find out what is the highest decided message among a specific committee.
-In case there are no decided messages, it will return an empty array of messages.
-
-`/sync/highest_decided/0.0.1`
-
-
-##### 2. Decided By Range
-
-This protocol enables to sync decided messages in some specific range.
-
-`/sync/decided_by_range/0.0.1`
-
-
-##### 3. Last Change Round
-
-This protocol enables a node that was online to catch up with change round messages.
-
-`/sync/last_change_round/0.0.1`
-
-
------
-
+---
 
 
 ## Networking
@@ -278,15 +303,10 @@ Network ID is a `32byte` key, that is used to distinguish between other networks
 Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network, meaning that the key to be known and used by all network members.
 
 It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
-which encrypts/decrypts all traffic of a given network with the corresponding key,
-regardless of the regular transport security ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
+which encrypts/decrypts all traffic with the corresponding key,
+regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
 
 **NOTE** discovery communication (UDP) won't use the network ID, as unknown nodes will be filtered anyway due to missing fields in their `ENR` entry as specified below.
-
-
-### Authentication
-
-This protocol enables ssv nodes to exchange payloads that authenticate an operator/exporter in relation to the peer.
 
 
 
@@ -342,7 +362,7 @@ running nodes will consume many resources to process all network related tasks e
 To lower resource consumption, there is a limitation for the number of connected peers, currently set to `250`. \
 Once reached to peer limit, the node will connect only to relevant nodes with score above treshold, which is currently set to zero.
 
-Scores are based on the following:
+**TBD** Scores are based on the following:
 
 - Shared subnets / committees (1 point per committee)
 - Static nodes (`exporter` or `bootnode`) gets 10 points
