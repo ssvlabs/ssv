@@ -103,7 +103,7 @@ if [[ -d .k8/yamls/ ]]; then
           -e "s|REPLACE_DOMAIN_SUFFIX|${DOMAIN_SUFFIX}|g" \
           -e "s|REPLACE_API_VERSION|${K8S_API_VERSION}|g" \
           -e "s|REPLACE_EXPORTER_CPU_LIMIT|${EXPORTER_CPU_LIMIT}|g" \
-          -e "s|REPLACE_EXPORTER_MEM_LIMIT|${NODES_MEM_LIMIT}|g" \
+          -e "s|REPLACE_EXPORTER_MEM_LIMIT|${EXPORTER_MEM_LIMIT}|g" \
 	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/yamls/${file}" || exit 1
   done
 fi
