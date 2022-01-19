@@ -86,7 +86,7 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 	}
 
 	if found {
-		es.logger.Debug("validator already exist",
+		es.logger.Debug("validator information exist",
 			zap.String("pubKey", validatorInformation.PublicKey))
 		validatorInformation.Index = info.Index
 		// TODO: update validator information (i.e. change operator)

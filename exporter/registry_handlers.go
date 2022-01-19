@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/validator"
+	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -50,32 +51,21 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	pubKeyHex := hex.EncodeToString(event.PublicKey)
 	logger := exp.logger.With(zap.String("eventType", "ValidatorAdded"), zap.String("pubKey", pubKeyHex))
 	logger.Info("validator added event")
-	// save the share to be able to reuse IBFT functionality
+	// create a share to be used in IBFT, parsing it at first to make sure the event is valid
 	validatorShare, _, err := validator.ShareFromValidatorAddedEvent(event, "")
 	if err != nil {
 		return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
 	}
-	// add metadata
-	if updated, err := validator.UpdateShareMetadata(validatorShare, exp.beacon); err != nil {
-		logger.Warn("could not add validator metadata", zap.Error(err))
-	} else if !updated {
-		logger.Warn("could not find validator metadata")
-	} else {
-		logger.Debug("validator metadata was updated")
-	}
-	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
-		return errors.Wrap(err, "failed to save validator share")
-	}
-	logger.Debug("validator share was saved")
-	// save information for exporting validators
-	vi, err := toValidatorInformation(event)
+	// if share was created, save information for exporting validators
+	vi, err := exp.addValidatorInformation(event)
 	if err != nil {
-		return errors.Wrap(err, "could not create ValidatorInformation")
-	}
-	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
-		return errors.Wrap(err, "failed to save validator information")
+		return err
 	}
 	logger.Debug("validator information was saved", zap.Any("value", *vi))
+	if err := exp.addValidatorShare(validatorShare); err != nil {
+		return errors.Wrap(err, "failed to add validator share")
+	}
+	logger.Debug("validator share was saved")
 
 	// TODO: aggregate validators in sync scenario
 	go func() {
@@ -122,6 +112,36 @@ func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	}()
 
 	return nil
+}
+
+// addValidatorShare is called upon ValidatorAdded to add a new share to storage
+func (exp *exporter) addValidatorShare(validatorShare *validatorstorage.Share) error {
+	logger := exp.logger.With(zap.String("eventType", "ValidatorAdded"),
+		zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
+	// add metadata
+	if updated, err := validator.UpdateShareMetadata(validatorShare, exp.beacon); err != nil {
+		logger.Warn("could not add validator metadata", zap.Error(err))
+	} else if !updated {
+		logger.Warn("could not find validator metadata")
+	} else {
+		logger.Debug("validator metadata was updated")
+	}
+	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
+		return errors.Wrap(err, "failed to save validator share")
+	}
+	return nil
+}
+
+// addValidatorInformation is called upon ValidatorAdded to create and add validator information
+func (exp *exporter) addValidatorInformation(event abiparser.ValidatorAddedEvent) (*storage.ValidatorInformation, error) {
+	vi, err := toValidatorInformation(event)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create ValidatorInformation")
+	}
+	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
+		return nil, errors.Wrap(err, "failed to save validator information")
+	}
+	return vi, nil
 }
 
 // toValidatorInformation converts raw event to ValidatorInformation
