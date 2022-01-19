@@ -47,6 +47,17 @@ if [[ -z $9 ]]; then
   exit 1
 fi
 
+if [[ -z ${10} ]]; then
+  echo "Please provide nodes cpu limit"
+  exit 1
+fi
+
+if [[ -z ${11} ]]; then
+  echo "Please provide nodes mem limit"
+  exit 1
+fi
+
+
 DOCKERREPO=$1
 IMAGETAG=$2
 NAMESPACE=$3
@@ -56,6 +67,9 @@ K8S_CONTEXT=$6
 DOMAIN_SUFFIX=$7
 K8S_API_VERSION=$8
 HEALTH_CHECK_IMAGE=$9
+NODES_CPU_LIMIT=${10}
+NODES_MEM_LIMIT=${11}
+
 
 echo $DOCKERREPO
 echo $IMAGETAG
@@ -66,7 +80,8 @@ echo $K8S_CONTEXT
 echo $DOMAIN_SUFFIX
 echo $K8S_API_VERSION
 echo $HEALTH_CHECK_IMAGE
-
+echo $NODES_CPU_LIMIT
+echo $NODES_MEM_LIMIT
 
 # create namespace if not exists
 if ! kubectl --context=$K8S_CONTEXT get ns | grep -q $NAMESPACE; then
@@ -96,6 +111,8 @@ if [[ -d .k8/yamls/ ]]; then
           -e "s|REPLACE_DOMAIN_SUFFIX|${DOMAIN_SUFFIX}|g" \
           -e "s|REPLACE_API_VERSION|${K8S_API_VERSION}|g" \
           -e "s|REPLACE_HEALTH_IMAGE|${HEALTH_CHECK_IMAGE}|g" \
+          -e "s|REPLACE_NODES_CPU_LIMIT|${NODES_CPU_LIMIT}|g" \
+          -e "s|REPLACE_NODES_MEM_LIMIT|${NODES_MEM_LIMIT}|g" \
 	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/yamls/${file}" || exit 1
   done
 fi
