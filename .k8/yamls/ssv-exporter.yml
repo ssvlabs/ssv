@@ -95,8 +95,8 @@ spec:
         imagePullPolicy: Always
         resources:
           limits:
-            cpu: 1000m
-            memory: 5120Mi
+            cpu: REPLACE_EXPORTER_CPU_LIMIT
+            memory: REPLACE_EXPORTER_MEM_LIMIT
         command: ["make", "start-exporter"]
         ports:
         - containerPort: 12000
