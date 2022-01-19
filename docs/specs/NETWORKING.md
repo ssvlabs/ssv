@@ -66,6 +66,8 @@ The following parameters are used for initializing pubsub:
   (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
 - `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
 - `directPeers` includes the exporter peer ID, to ensure it gets all messages
+- `msgID` is a custom function that calculates a `msg-id` based on the message content hash. the default function uses the `sender` and `msg_seq` and therefore causes redundancy in message processing (nodes might process the same message because it came from different senders).
+- `signPolicy` was set to `StrictNoSign` to avoid producing and verifying message signatures in the pubsub router, which is a costly, redundant operation.
 
 **TODO: add peer scoring**
 
