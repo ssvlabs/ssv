@@ -16,10 +16,10 @@ This document contains the networking specification for SSV.
   - [x] [Consensus](#consensus-protocol)
   - [ ] [Sync](#sync-protocol)
   - [ ] [Authentication](#authentication-protocol)
-- [ ] [Networking](#networking)
+- [x] [Networking](#networking)
   - [x] [Discovery](#discovery)
   - [x] [Netowrk ID](#network-id)
-  - [ ] [Subnets](#subnets)
+  - [x] [Subnets](#subnets)
   - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
 
@@ -52,22 +52,24 @@ Streams are used for direct messages between peers.
 Libp2p allows to create a bidirectional stream between two peers and implement the corresponding wire messaging protocol. \
 See more information in [IPFS specs > communication-model - streams](https://ipfs.io/ipfs/QmVqNrDfr2dxzQUo4VN3zhG4NV78uYFmRpgSktWDc2eeh2/specs/7-properties/#71-communication-model---streams).
 
-
 **PubSub**
 
-PubSub is used as an infrastructure for broadcasting messages among a group (AKA subnet) of operator nodes.
+GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in SSV.
 
-GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in SSV. \
-In short, each node saves metadata regards subscriptions of other peers in the network, and propagates messages only to a subset of peers (subscribed, neighbors and random peers) for a specific topic.
+The main purpose is for broadcasting messages to a group (AKA subnet) of nodes. \
+In addition, the following are achieved as well:
+
+- subscriptions metadata helps to get liveliness information of nodes
+- pubsub scoring enables to prune bad/malicious peers based on network behavior and application-specific rules
 
 The following parameters are used for initializing pubsub:
 
-- `floodPublish` was turned on for better reliability, as peer's own messages will be propagated to a larger set of peers 
+- [`v0`] `floodPublish` was turned on for better reliability, as peer's own messages will be propagated to a larger set of peers 
   (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
-- `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
-- `directPeers` includes the exporter peer ID, to ensure it gets all messages
-- `msgID` is a custom function that calculates a `msg-id` based on the message content hash. the default function uses the `sender` and `msg_seq` and therefore causes redundancy in message processing (nodes might process the same message because it came from different senders).
-- `signPolicy` was set to `StrictNoSign` to avoid producing and verifying message signatures in the pubsub router, which is a costly, redundant operation.
+- [`v0`] `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
+- [`v0`] `directPeers` includes the exporter peer ID, to ensure it gets all messages
+- [`v1`] `msgID` is a custom function that calculates a `msg-id` based on the message content hash. the default function uses the `sender` and `msg_seq` and therefore causes redundancy in message processing (nodes might process the same message because it came from different senders).
+- [`v1`] `signPolicy` was set to `StrictNoSign` to avoid producing and verifying message signatures in the pubsub router, which is a costly, redundant operation.
 
 **TODO: add peer scoring**
 
@@ -314,46 +316,38 @@ regardless of the regular transport security protocol ([go-libp2p-noise](https:/
 
 ### Subnets
 
-Messages in the network are being sent over a subnet/topic, which the relevant peers should be subscribed to. \
-This helps to reduce the overall bandwidth, related resources etc.
+Consensus messages are being sent in the network over a subnet (pubsub topic), which the relevant peers should be subscribed to. \ 
 
-There are several options for how setup topics in the network, see below.
+There are several options for how to setup topics in the network, see below.
 
-The first version of SSV testnet is using a topic per validator, as described below.
-
-#### 1. Topic per validator
+#### Subnets v0
 
 Each validator committee has a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter).
 
-It helps to reduce amount of messages in the network, but increases the number of topics. \
-In addition, it a node can instantly understand the status of committee members by checking how many
-peers are subscribed on the validator's topic.
+It helps to reduce amount of messages in the network, but increases the number of topics which will grow up to the number of validators.
 
-#### 2. Subnet 
+#### Subnet v1
 
 A subnet of several validators contains multiple committees,
 reusing the topic to communicate on behalf of multiple validators.
 
-The number of topics will be reduced but the number of messages each peer handles should grow. \
-As the topics interest across the network also increased,
-we can expect a better propagation of messages and therefore lower probability of missed messages.
+The number of topics will be reduced but the number of messages sent over the network should grow.
 
-Subnet approach also enables redundancy of decided messages across multiple peers,
-not only among committee peers (+ exporter), and therefore increasing network security.
+As messages will be propagated to a larget set of nodes, we can expect better reliability (arrival of messages to all operators in the committee).
 
-##### Subnet mapping
+In addition, a larger group of operators provides:
+- redundancy of decided messages across multiple nodes
+- better security for subnets as more nodes will validate messages and can score bad/malicious nodes that will be pruned accordingly.
 
-A simple approach that can be taken is hash partitioning: \
-`hash(validatiorPubKey) % num_of_subnets`,
-where the number of subnets is fixed (TBD 32 / 64 / 128).
-The hash function helps to distribute validators across subnets in a balanced way
+**Validators Mapping**
+
+Validator's public key is mapped to a subnet using a hash function, which helps to distribute validators across subnets in a balanced way:
+
+`hash(validatiorPubKey) % num_of_subnets`
+
+The number of subnets is fixed (TBD 32 / 64 / 128).
 
 **TBD** A dynamic number of subnets (e.g. `log(num_of_peers)`) which requires a different approach.
-
-How to check how many peers are online for a specific validator? \
-Assuming peers are authenticated, and published their operator public key in that process,
-nodes can iterate the subnet peers and lookup the desired committee members by their public key.
-
 
 
 ### Peers Connectivity
@@ -369,7 +363,6 @@ Once reached to peer limit, the node will connect only to relevant nodes with sc
 - Shared subnets / committees (1 point per committee)
 - Static nodes (`exporter` or `bootnode`) gets 10 points
 
-
 ### Forks
 
 Future network forks will follow the general forks mechanism and design in SSV. \
@@ -382,8 +375,23 @@ Currently, the following are covered:
 
 #### Fork v0
 
-validator public key is used as the topic name and JSON is used for encoding/decoding of messages.
+**validator topic mapping**
 
+Validator public key is used as the topic name:
+
+`bloxstaking.ssv.<hex(validator-public-key)>`
+
+**message encoding/decoding**
+
+JSON is used for encoding/decoding of messages.
+
+#### Fork v1
+
+**validator topic mapping**
+
+Validator public key hash is used to determine the validator's subnet which is the topic name:
+
+`bloxstaking.ssv.<hash(validatiorPubKey) % num_of_subnets>`
 
 -----
 
