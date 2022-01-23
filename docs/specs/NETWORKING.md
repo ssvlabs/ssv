@@ -12,11 +12,14 @@ This document contains the networking specification for SSV.
   - [x] [Messaging](#messaging)
   - [x] [Network Peers](#network-peers)
   - [x] [Identity](#identity)
+  - [x] [Network Discovery](#network-discovery)
 - [ ] [Protocols](#protocols)
   - [x] [Consensus](#consensus-protocol)
   - [ ] [Sync](#sync-protocol)
   - [ ] [Authentication](#authentication-protocol)
 - [x] [Networking](#networking)
+  - [x] [PubSub](#pubsub)
+  - [x] [User Agent](#user-agnet)
   - [x] [Discovery](#discovery)
   - [x] [Netowrk ID](#network-id)
   - [x] [Subnets](#subnets)
@@ -42,7 +45,7 @@ Multiplexing of protocols over channels is achieved using [yamux](https://github
 
 ### Messaging
 
-Messages in the network are formatted with `protobuf`,
+Messages in the network are formatted with `protobuf` (NOTE: `v0` messages are encoded/decoded with JSON),
 and being transported p2p with one of the following methods:
 
 **Streams** 
@@ -57,21 +60,7 @@ See more information in [IPFS specs > communication-model - streams](https://ipf
 GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in SSV.
 
 The main purpose is for broadcasting messages to a group (AKA subnet) of nodes. \
-In addition, the following are achieved as well:
-
-- subscriptions metadata helps to get liveliness information of nodes
-- pubsub scoring enables to prune bad/malicious peers based on network behavior and application-specific rules
-
-The following parameters are used for initializing pubsub:
-
-- [`v0`] `floodPublish` was turned on for better reliability, as peer's own messages will be propagated to a larger set of peers 
-  (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
-- [`v0`] `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
-- [`v0`] `directPeers` includes the exporter peer ID, to ensure it gets all messages
-- [`v1`] `msgID` is a custom function that calculates a `msg-id` based on the message content hash. the default function uses the `sender` and `msg_seq` and therefore causes redundancy in message processing (nodes might process the same message because it came from different senders).
-- [`v1`] `signPolicy` was set to `StrictNoSign` to avoid producing and verifying message signatures in the pubsub router, which is a costly, redundant operation.
-
-**TODO: add peer scoring**
+In addition, the machinary helps to determine liveliness and maintain peers scoring.
 
 
 ### Network Peers
@@ -99,6 +88,12 @@ Unless provided, the key will be generated and saved locally for future use.
 `Operator Key` is used for decryption of shares keys that are used for signing consensus messages and duties. \
 Exporter and Bootnode does not hold this key.
 
+
+### Network Discovery
+
+[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is used in `SSV.network` to complement discovery capalities that don't come with libp2p.
+
+More information is available in [Networking / Discovery](#discovery)
 
 ------
 
@@ -265,11 +260,43 @@ message AuthPayload {
 }
 ```
 
+**TODO: heartbeat?**
+
 
 ---
 
 
 ## Networking
+
+### Pubsub
+
+The main purpose is for broadcasting messages to a group (AKA subnet) of nodes. \
+In addition, the following are achieved as well:
+
+- subscriptions metadata helps to get liveliness information of nodes
+- pubsub scoring enables to prune bad/malicious peers based on network behavior and application-specific rules
+
+The following parameters are used for initializing pubsub:
+
+- `floodPublish` was turned on for better reliability, as peer's own messages will be propagated to a larger set of peers 
+  (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
+- `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
+- `directPeers` includes the exporter peer ID, to ensure it gets all messages
+- (fork `v1`) `msgID` is a custom function that calculates a `msg-id` based on the message content hash. the default function uses the `sender` and `msg_seq` and therefore causes redundancy in message processing (nodes might process the same message because it came from different senders).
+- (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router, which is redunant as messages are being signed and verified using the operator key
+  - `signID` was set to empty (no author)
+
+**TODO: add peer scoring**
+
+
+### User Agent
+
+Libp2p provides user agent mechanism with the [identify](https://github.com/libp2p/specs/tree/master/identify) protocol, 
+which is used to exchange basic information with other peers in the network.
+
+User Agent contains the node version and type, and in addition the operator id which might be reduced in future versions. \
+See detailed format in [Forks / user agent](#fork-v0)
+
 
 ### Discovery
 
@@ -288,23 +315,23 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 
 `ENR` structure in ssv network contains the following key/value pairs:
 
-| Key         | Value                                           |
-|:------------|:------------------------------------------------|
-| `id`        | name of identity scheme, e.g. "v4"              |
-| `secp256k1` | compressed secp256k1 public key, 33 bytes       |
-| `ip`        | IPv4 address, 4 bytes                           |
-| `tcp`       | TCP port, big endian integer                    |
-| `udp`       | UDP port, big endian integer                    |
-| `type`      | node type, integer -> 1 (operator), 2 (exporter), 3 (bootnode) |
-| `oid`       | operator id, 32 bytes                           |
-| `version`   | fork version, integer                           |
-
+| Key         | Value                                                          | Status          |
+|:------------|:---------------------------------------------------------------|:----------------|
+| `id`        | name of identity scheme, e.g. "v4"                             | Done            |
+| `secp256k1` | compressed secp256k1 public key, 33 bytes                      | Done            |
+| `ip`        | IPv4 address, 4 bytes                                          | Done            |
+| `tcp`       | TCP port, big endian integer                                   | Done            |
+| `udp`       | UDP port, big endian integer                                   | Done            |
+| `type`      | node type, integer -> 1 (operator), 2 (exporter), 3 (bootnode) | Done (`v0.1.9`) |
+| `oid`       | operator id, 32 bytes                                          | Done (`v0.1.9`) |
+| `version`   | fork version, integer                                          | -               |
 
 
 ### Network ID
 
 Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
-Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network, meaning that the key to be known and used by all network members.
+Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network, 
+meaning that the key to be known and used by all network members.
 
 It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
 which encrypts/decrypts all traffic with the corresponding key,
@@ -316,17 +343,19 @@ regardless of the regular transport security protocol ([go-libp2p-noise](https:/
 
 ### Subnets
 
-Consensus messages are being sent in the network over a subnet (pubsub topic), which the relevant peers should be subscribed to. \ 
+Consensus messages are being sent in the network over a subnet (pubsub topic), which the relevant peers should be subscribed to.
+
+In addition to subnets, there is a global topic (AKA `main topic`) to publish all the decided messages in the network.
 
 There are several options for how to setup topics in the network, see below.
 
-#### Subnets v0
+#### Subnets - fork v0
 
 Each validator committee has a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter).
 
 It helps to reduce amount of messages in the network, but increases the number of topics which will grow up to the number of validators.
 
-#### Subnet v1
+#### Subnet - fork v1
 
 A subnet of several validators contains multiple committees,
 reusing the topic to communicate on behalf of multiple validators.
@@ -338,6 +367,8 @@ As messages will be propagated to a larget set of nodes, we can expect better re
 In addition, a larger group of operators provides:
 - redundancy of decided messages across multiple nodes
 - better security for subnets as more nodes will validate messages and can score bad/malicious nodes that will be pruned accordingly.
+
+**TBD: main topic**
 
 **Validators Mapping**
 
@@ -358,10 +389,10 @@ running nodes will consume many resources to process all network related tasks e
 To lower resource consumption, there is a limitation for the number of connected peers, currently set to `250`. \
 Once reached to peer limit, the node will connect only to relevant nodes with score above treshold, which is currently set to zero.
 
-**TBD** Scores are based on the following:
+**TBD** Scores are based on the following properties:
 
-- Shared subnets / committees (1 point per committee)
-- Static nodes (`exporter` or `bootnode`) gets 10 points
+- Shared subnets / committees
+- Static nodes (`exporter` or `bootnode`)
 
 ### Forks
 
@@ -372,6 +403,7 @@ Currently, the following are covered:
 
 - validator topic mapping
 - message encoding/decoding
+- user agent
 
 #### Fork v0
 
@@ -385,7 +417,13 @@ Validator public key is used as the topic name:
 
 JSON is used for encoding/decoding of messages.
 
-#### Fork v1
+**user agent**
+
+User Agent contains the node version and type, and in addition the operator id.
+
+`SSV-Node:v0.x.x:<node-type>:<?operator-id>`
+
+#### Fork v1 (TBD)
 
 **validator topic mapping**
 
@@ -393,15 +431,33 @@ Validator public key hash is used to determine the validator's subnet which is t
 
 `bloxstaking.ssv.<hash(validatiorPubKey) % num_of_subnets>`
 
+
+### NAT port map
+
+libp2p enables to configure a `NATManager` that will attempt to open a port in the network's firewall using `UPnP`.
+
+
 -----
 
 
 ## Open points
 
-* Heartbeat ?
-* Home setup
-* UPnP (NATPortMap)
-* Hub/HA
-    * proxied network layer?
-* History sync changes?
+### High Availability
 
+HA for an ssv node is not trivial - as it participats in a decentralized p2p network, running multiple instances can cause conflicts in signatures.
+
+Ideas:
+
+#### Hub Node
+
+`Hub Node` is a node that handles the network layer of ssv node, 
+it could be connected to multiple `Worker` nodes and stream the entire network layer messages to/from them.
+
+A possible implmentation could be an SSV node with a proxied network layer that uses websocket to communicate with worker nodes.
+
+#### Subnet Partitions
+
+Subnet partitions referrs breaking relevant subnets into an indenpendant subsets of subnets, 
+creating a seperation for its tasks and therefore enables to run multiple instances of the same operator, working on different subnets.
+
+That will help decrease the damage in case some node fails, as only a portion of the assigned validators will be affected, while the other instances keeps doing tasks in their subnets.
