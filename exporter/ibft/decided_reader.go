@@ -22,6 +22,7 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -50,6 +51,8 @@ type decidedReader struct {
 	identifier []byte
 
 	lock sync.Locker
+
+	state *state
 }
 
 // newDecidedReader creates new instance of DecidedReader
@@ -65,7 +68,8 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 		out:            opts.Out,
 		identifier: []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
 			beacon.RoleTypeAttester.String())),
-		lock: &sync.Mutex{},
+		lock:  &sync.Mutex{},
+		state: &state{},
 	}
 	return &r
 }
@@ -86,24 +90,28 @@ func (r *decidedReader) Start() error {
 	if err := r.network.SubscribeToValidatorNetwork(r.validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
-	// call migration before starting the other stuff
-	if err := GetMainMigrator().Migrate(r); err != nil {
-		r.logger.Error("could not run migration", zap.Error(err))
-	}
-	if err := tasks.Retry(func() error {
-		if err := r.sync(); err != nil {
-			r.logger.Error("could not sync validator", zap.Error(err))
+	if prev := r.state.up(); prev.v == stateDown {
+		// call migration before starting the other stuff
+		if err := GetMainMigrator().Migrate(r); err != nil {
+			r.logger.Error("could not run migration", zap.Error(err))
+			r.state.down()
 			return err
 		}
-		return nil
-	}, 3); err != nil {
-		ibftctl.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), false, true)
-		r.logger.Error("could not setup validator, sync failed", zap.Error(err))
-		return err
+		if err := tasks.Retry(func() error {
+			if err := r.sync(); err != nil {
+				r.logger.Error("could not sync validator", zap.Error(err))
+				return err
+			}
+			return nil
+		}, 3); err != nil {
+			ibftctl.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), false, true)
+			r.logger.Error("could not setup validator, sync failed", zap.Error(err))
+			r.state.down()
+			return err
+		}
+		r.logger.Debug("sync is done, starting to read network messages")
 	}
 	ibftctl.ReportIBFTStatus(r.validatorShare.PublicKey.SerializeToHexStr(), true, false)
-
-	r.logger.Debug("sync is done, starting to read network messages")
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	defer cancelCtx()
 	if err := r.waitForMinPeers(ctx, r.validatorShare.PublicKey, 1); err != nil {
@@ -209,6 +217,8 @@ func (r *decidedReader) checkHighestDecided(msg *proto.SignedMessage) error {
 			return nil
 		}
 		if seq > highestSeqKnown+1 {
+			logger.Debug("received far new sequence, performing sync",
+				zap.Uint64("highestSeqKnown", highestSeqKnown))
 			if err := r.sync(); err != nil {
 				logger.Debug("could not sync", zap.Uint64("seq", seq),
 					zap.Uint64("highestSeqKnown", highestSeqKnown))
@@ -266,4 +276,27 @@ func newDecidedAPIMsg(msg *proto.SignedMessage, pk string) api.Message {
 			Role: api.RoleAttester},
 		Data: []*proto.SignedMessage{msg},
 	}
+}
+
+// state helps to manage the reader
+var (
+	stateDown uint32 = 0
+	stateUp   uint32 = 1
+)
+
+type state struct {
+	v uint32
+}
+
+func (s *state) up() state {
+	return s.set(stateUp)
+}
+
+func (s *state) down() state {
+	return s.set(stateDown)
+}
+
+func (s *state) set(newState uint32) state {
+	prev := atomic.SwapUint32(&s.v, newState)
+	return state{prev}
 }
