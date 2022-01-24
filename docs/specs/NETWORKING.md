@@ -2,7 +2,9 @@
 
 **Status: WIP**
 
-This document contains the networking specification for SSV.
+**TODO: add header**
+
+This document contains the networking specification for `SSV.Network`.
 
 ## Overview
 
@@ -13,10 +15,10 @@ This document contains the networking specification for SSV.
   - [x] [Network Peers](#network-peers)
   - [x] [Identity](#identity)
   - [x] [Network Discovery](#network-discovery)
-- [ ] [Protocols](#protocols)
+- [ ] [Wire](#wire)
   - [x] [Consensus](#consensus-protocol)
   - [ ] [Sync](#sync-protocol)
-  - [ ] [Authentication](#authentication-protocol)
+  - [ ] [Handshake](#handshake-protocol)
 - [x] [Networking](#networking)
   - [x] [PubSub](#pubsub)
   - [x] [User Agent](#user-agnet)
@@ -31,15 +33,17 @@ This document contains the networking specification for SSV.
 
 ### Stack
 
-SSV is a decentralized P2P network, built with [Libp2p](https://libp2p.io/), a modular framework for P2P networking.
+`SSV.Network` is a decentralized P2P network, consists of operator nodes grouped in multiple subnets.
+
+The networking layer is built with [Libp2p](https://libp2p.io/), a modular framework for P2P networking that is used by multiple decetralized projects, inluding eth2.
 
 ### Transport
 
 Network peers should support the following transports:
-- `TCP` is used by libp2p for setting up communication channels between peers
-- `UDP` is used for discovery purposes.
+- `TCP` is used by libp2p for setting up communication channels between peers. default port: `12000`
+- `UDP` is used for discovery purposes. default port: `13000`
 
-[go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise) is used to secure transport channels (based on [noise protocol](https://noiseprotocol.org/noise.html)).
+[go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise) is used to secure transport (based on [noise protocol](https://noiseprotocol.org/noise.html)).
 
 Multiplexing of protocols over channels is achieved using [yamux](https://github.com/libp2p/go-libp2p-yamux) protocol.
 
@@ -57,7 +61,7 @@ See more information in [IPFS specs > communication-model - streams](https://ipf
 
 **PubSub**
 
-GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in SSV.
+GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in `SSV.Network`
 
 The main purpose is for broadcasting messages to a group (AKA subnet) of nodes. \
 In addition, the machinary helps to determine liveliness and maintain peers scoring.
@@ -67,25 +71,27 @@ In addition, the machinary helps to determine liveliness and maintain peers scor
 
 There are several types of nodes in the network:
 
-`Operator` node is responsible for signing validators duties. \
+`Operator` is responsible for executing validators duties. \
 It holds relevant registry data and the validators consensus data.
 
 `Bootnode` is a public peer which is responsible for helping new peers to find other peers in the network.
-It has a static (and stable) ENR so other peers could join the network easily.
+It has a stable ENR that is provided with default configuration, so other peers could join the network easily.
 
-`Exporter` node role is to export information from the network. \
-It collects registry data (validators / operators) and consensus data (decided messages chains) of all validators in the network.
+`Exporter` is a public peer that is responsible for collecting and exporting information from the network. \
+It collects registry data and consensus data (decided messages) of all the validators in the network. \
+It has a stable ENR that is provided with default configuration, so it will have a stable connection with all peers and won't be affected by scoring, prunning, backoff etc.
 
 
 ### Identity
 
 Identity in the network is based on two types of keys:
 
-`Network Key` is used to create peer ID by all network peers. \
-All messages from a peer are signed using this key and verified by other peers with the corresponding public key. \
-Unless provided, the key will be generated and saved locally for future use.
+`Network Key` is used to create network/[libp2p identity](https://docs.libp2p.io/concepts/peer-id) (`peer.ID`), 
+will be used by all network peers to setup a secured connection. \
+Unless provided, the key will be generated and stored locally for future use, 
+and can be revoked in case it was compromised. 
 
-`Operator Key` is used for decryption of shares keys that are used for signing consensus messages and duties. \
+`Operator Key` is used for decryption of share's keys that are used for signing/verifying consensus messages and duties. \
 Exporter and Bootnode does not hold this key.
 
 
@@ -98,7 +104,7 @@ More information is available in [Networking / Discovery](#discovery)
 ------
 
 
-## Protocols
+## Wire
 
 Network interaction includes several types of protocols, as detailed below.
 
@@ -112,7 +118,7 @@ Once the committee reaches consensus, the nodes will publish the decided message
 
 More information regarding the protocol can be found in [iBFT annotated paper (By Blox)](/ibft/IBFT.md)
 
-#### Message Structure
+### Message Structure
 
 `SignedMessage` is a wrapper for IBFT messages, it holds a message and its signature with a list of signer IDs:
 
@@ -121,12 +127,12 @@ syntax = "proto3";
 import "gogo.proto";
 
 // SignedMessage is a wrapper on top of Message for supporting signatures
-message SignedMessage{
-  // message is the raw message to sign
+message SignedMessage {
+  // message is the IBFT message
   Message message            = 1 [(gogoproto.nullable) = false];
-  // signature is a signature of the message
+  // signature is a signature of the IBFT message
   bytes signature            = 2 [(gogoproto.nullable) = false];
-  // signer_ids are the IDs of the signing operators
+  // signer_ids is a list of the IDs of the signing operators
   repeated uint64 signer_ids = 3;
 }
 
@@ -145,7 +151,7 @@ message Message {
 }
 ```
 
-`SignedMessage` JSON example:
+JSON example:
 ```json
 {
   "message": {
@@ -162,62 +168,36 @@ message Message {
 
 **NOTE** all pubsub messages in the network are wrapped with libp2p's message structure
 
-## Sync Protocol
+---
 
-History sync is the procedure of syncing decided messages from other peers. \
-It is a prerequisite for taking part in some validator's consensus.
+## Sync Protocols
 
-Sync is done over streams as pubsub is not suitable for this case due to several reasons such as:
+There are several sync protocols, tha main purpose is to enable operator nodes to sync past decided message or to catch up with round changes.
+
+In order to participat in some validator's consensus, a peer will first use sync protocols to align on past infromation.
+
+Sync is done over streams as pubsub is not suitable in this case due to several reasons such as:
 - API nature is request/response, unlike broadcasting in consensus messages
 - Bandwidth - only one peer (usually) needs the data, it would be a waste to send redundant messages across the network.
-#### Protocols
 
-**TODO: add example request/response**
+### Message Structure
 
-SSV nodes use the following stream protocols:
-
-
-##### 1. Highest Decided
-
-This protocol is used by a node to find out what is the highest decided message among a specific committee.
-In case there are no decided messages, it will return an empty array of messages.
-
-`/ssv/sync/highest_decided/0.0.1`
-
-
-##### 2. Decided By Range
-
-This protocol enables to sync decided messages in some specific range.
-
-`/ssv/sync/decided_by_range/0.0.1`
-
-
-##### 3. Last Change Round
-
-This protocol enables a node that was online to catch up with change round messages.
-
-`/ssv/sync/last_change_round/0.0.1`
-
-#### Message Structure
-
-TODO: refine structure
+**TODO: refine structure, specify changes from current proto**
 
 `SyncMessage` structure is used by all sync protocols, the type of message is specified in a dedicated field:
 
 ```protobuf
 message SyncMessage {
   // MsgType is the type of sync message
-  SyncMsgType MsgType                   = 1;
-  // FromPeerID is the ID of the sender
-  string FromPeerID                     = 2;
+  SyncMsgType Type                   = 1;
   // Identifier of the message (validator + role)
-  bytes Identifier                      = 3;
+  bytes Identifier                      = 2;
   // Params holds the requests parameters
-  repeated uint64 Params                = 4;
+  repeated uint64 Params                = 3;
   // Messages holds the results (decided messages) of some request
-  repeated proto.SignedMessage Messages = 5;
+  repeated proto.SignedMessage Messages = 4;
   // Error holds an error response if exist
-  string Error                          = 6;
+  string Error                          = 5;
 }
 
 // SyncMsgType is an enum that represents the type of sync message 
@@ -231,9 +211,73 @@ enum SyncMsgType {
 }
 ```
 
-## Authentication protocol
+Highest decided response:
+```json
+{
+  "SignedMessages": [
+    {
+      "message": {
+        "type": 3,
+        "round": 1,
+        "identifier": "...",
+        "seq_number": 7943,
+        "value": "Xmcg...sPM="
+      },
+      "signature": "g5y....7Dv",
+      "signer_ids": [4,2,1]
+    }
+  ],
+  "Type": 0,
+  "Identifier": "..."
+}
+```
 
-Authentication protocol enables ssv nodes to prove ownership of its operator key.
+Error response:
+```json
+{
+  "Identifier": "...",
+  "Type": 2,
+  "error": "EntryNotFoundError"
+}
+```
+
+### Protocols
+
+**TODO: add example request/response**
+
+SSV nodes use the following stream protocols:
+
+
+### 1. Highest Decided
+
+This protocol is used by a node to find out what is the highest decided message for a specific validator.
+In case there are no decided messages, it will return an empty array of messages.
+
+`/ssv/sync/highest_decided/0.0.1`
+
+
+### 2. Decided By Range
+
+This protocol enables to sync decided messages in some specific range.
+
+The request should specify the desired range, while the response will include all the found messages for that range.
+
+`/ssv/sync/decided_by_range/0.0.1`
+
+
+### 3. Last Change Round
+
+This protocol enables a node to catch up with change round messages.
+
+`/ssv/sync/last_change_round/0.0.1`
+
+---
+
+## Handshake protocol
+
+**TODO, TBD**
+
+The handshake protocol enables ssv nodes to authenticate / prove ownership of their operator key.
 
 `/ssv/auth/0.0.1`
 
@@ -260,9 +304,6 @@ message AuthPayload {
 }
 ```
 
-**TODO: heartbeat?**
-
-
 ---
 
 
@@ -286,7 +327,9 @@ The following parameters are used for initializing pubsub:
 - (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router, which is redunant as messages are being signed and verified using the operator key
   - `signID` was set to empty (no author)
 
-**TODO: add peer scoring**
+#### Gossip Scoring
+
+**TODO**
 
 
 ### User Agent
@@ -300,20 +343,27 @@ See detailed format in [Forks / user agent](#fork-v0)
 
 ### Discovery
 
-[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is used in `SSV.network` to complement discovery.
+[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is a system for finding other participants in a peer-to-peer network, it is used in `SSV.network` to complement discovery.
 
-DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers.
-The discovery process walks randomaly on the nodes in the table that are not connected, filters them according to `ENR` entries and connects to relevant ones, as detailed in [Peers Connectivity](#peers-connectivity).
+DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers. \
+The discovery process walks randomaly on the nodes in the table that are not connected, filters them by `ENR` entries in order to connect with the most relevant nodes.
 
-Bootnode is a special kind of peers that have a public static ENR to enable new peers to join the network. \. 
-It doesn't start a libp2p host for TCP communication, its role ends once a new peer finds existing peers in the network.
+**Security**
+
+Discovery communication is encrypted and authenticated using session keys, established in the [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
+
+**Bootnode** 
+
+A peer that have a public, static ENR to enable new peers to join the network. For the sake of flexibility, 
+bootnode/s ENR values are configurable and can be changed on demand by operators. \
+Bootnode doesn't start a libp2p host for TCP communication, its role ends once a new peer finds existing peers in the network.
 
 #### ENR
 
 [Ethereum Node Records](https://github.com/ethereum/devp2p/blob/master/enr.md) is a format that holds peer information.
-Records contain a signature, sequence (for republishing record) and arbitrary key/value pairs.
+Records contain a signature, sequence (for republishing record) and arbitrary key/value pairs. 
 
-`ENR` structure in ssv network contains the following key/value pairs:
+`ENR` structure in `SSV.Network` consists of the following key/value pairs:
 
 | Key         | Value                                                          | Status          |
 |:------------|:---------------------------------------------------------------|:----------------|
@@ -326,6 +376,19 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 | `oid`       | operator id, 32 bytes                                          | Done (`v0.1.9`) |
 | `version`   | fork version, integer                                          | -               |
 
+#### Discovery Alternatives
+
+[libp2p's Kademlia DHT](https://github.com/libp2p/specs/tree/master/kad-dht) offers similar features, and even a more complete implemetation of Kademlia DHT.
+Discv5 design is loosely inspired by the Kademlia DHT, but unlike most DHTs no arbitrary keys and values are stored. Instead, the DHT stores and relays node records.
+
+As `ENR` has a size limit (`< 300` bytes), and therefore discv5 won't support multiple key/value pairs.
+On the other hand, using libp2p's Kad DHT will allow to advertise and find peers by multiple keys, e.g. topics/subnets.
+
+Notes:
+- discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) that should help to look for relevant nodes
+- [discv5 specs](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md#comparison-with-other-discovery-mechanisms) details why discv5 was chosen over libp2p Kad DHT in Ethereum.
+
+In `v0` discv5 is used, `v1` TBD upon design/implementation.
 
 ### Network ID
 
@@ -337,8 +400,7 @@ It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/
 which encrypts/decrypts all traffic with the corresponding key,
 regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
 
-**NOTE** discovery communication (UDP) won't use the network ID, as unknown nodes will be filtered anyway due to missing fields in their `ENR` entry as specified below.
-
+**NOTE** discovery communication (UDP) won't use the network ID, but unknown nodes will be filtered anyway due to missing fields in their `ENR` entry as specified in [Discovery section](#discovery).
 
 
 ### Subnets
@@ -347,7 +409,7 @@ Consensus messages are being sent in the network over a subnet (pubsub topic), w
 
 In addition to subnets, there is a global topic (AKA `main topic`) to publish all the decided messages in the network.
 
-There are several options for how to setup topics in the network, see below.
+There are several options for how to setup topics in the network:
 
 #### Subnets - fork v0
 
@@ -357,26 +419,27 @@ It helps to reduce amount of messages in the network, but increases the number o
 
 #### Subnet - fork v1
 
-A subnet of several validators contains multiple committees,
-reusing the topic to communicate on behalf of multiple validators.
+**TBD: main topic**
 
-The number of topics will be reduced but the number of messages sent over the network should grow.
+A subnet of operators is responsible for multiple committees,
+reusing the same topic to communicate on behalf of multiple validators.
 
-As messages will be propagated to a larget set of nodes, we can expect better reliability (arrival of messages to all operators in the committee).
+In comparison to `v0`, the number of topics will be reduced and the number of messages sent over the network should grow. \
+As messages will be propagated to a larger set of nodes, we can expect better reliability (arrival of messages to all operators in the committee).
 
 In addition, a larger group of operators provides:
 - redundancy of decided messages across multiple nodes
 - better security for subnets as more nodes will validate messages and can score bad/malicious nodes that will be pruned accordingly.
 
-**TBD: main topic**
-
 **Validators Mapping**
 
-Validator's public key is mapped to a subnet using a hash function, which helps to distribute validators across subnets in a balanced way:
+Validator's public key is mapped to a subnet using a hash function, 
+which helps to distribute validators across subnets in a balanced way:
 
 `hash(validatiorPubKey) % num_of_subnets`
 
-The number of subnets is fixed (TBD 32 / 64 / 128).
+Deteministic mapping is ensured as long as the number of subnets doesn't change, 
+thefore its a fixed number (TBD 32 / 64 / 128).
 
 **TBD** A dynamic number of subnets (e.g. `log(num_of_peers)`) which requires a different approach.
 
@@ -386,13 +449,29 @@ The number of subnets is fixed (TBD 32 / 64 / 128).
 In a fully-connected network, where each peer is connected to all other peers in the network,
 running nodes will consume many resources to process all network related tasks e.g. parsing, peers management etc.
 
-To lower resource consumption, there is a limitation for the number of connected peers, currently set to `250`. \
+To lower resource consumption, the number of connected peers is limited, currently set to `250`. \
 Once reached to peer limit, the node will connect only to relevant nodes with score above treshold, which is currently set to zero.
 
-**TBD** Scores are based on the following properties:
+#### Connection Scoring
+
+Peer's connection score is determined after a successful handshake, and peers with low score will be pruned. 
+
+Connection scores are based on the following properties:
 
 - Shared subnets / committees
-- Static nodes (`exporter` or `bootnode`)
+- Static nodes (`exporter`)
+
+#### Connection Filters
+
+Connection filters are executed upon new connection. \
+Filters calculates the connection score of the new peer, and can terminate the connection if score is low.
+
+#### Connection Gating
+
+Connection Gating allows to safeguard against bad/pruned peers. 
+Inbound and outbound connections are intercepted and being checked before other components process the connection.
+
+See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) interface for more info.
 
 ### Forks
 
@@ -437,6 +516,10 @@ Validator public key hash is used to determine the validator's subnet which is t
 libp2p enables to configure a `NATManager` that will attempt to open a port in the network's firewall using `UPnP`.
 
 
+### Denial of Service Protection
+
+**TODO**
+
 -----
 
 
@@ -444,7 +527,7 @@ libp2p enables to configure a `NATManager` that will attempt to open a port in t
 
 ### High Availability
 
-HA for an ssv node is not trivial - as it participats in a decentralized p2p network, running multiple instances can cause conflicts in signatures.
+HA for an ssv node is not trivial - as it participats in a decentralized p2p network, running multiple instances might cause ambiguity and conflicts in signatures.
 
 Ideas:
 
@@ -457,7 +540,7 @@ A possible implmentation could be an SSV node with a proxied network layer that 
 
 #### Subnet Partitions
 
-Subnet partitions referrs breaking relevant subnets into an indenpendant subsets of subnets, 
-creating a seperation for its tasks and therefore enables to run multiple instances of the same operator, working on different subnets.
+Subnet partitions separates a given set of subnets into `n` indenpendant subsets of subnets, 
+which could be assigned to `n` running instances of the same operator, each working on different subsets.
 
-That will help decrease the damage in case some node fails, as only a portion of the assigned validators will be affected, while the other instances keeps doing tasks in their subnets.
+That will help decrease the damage in case some node fails, as only a portion of the assigned validators will be affected, while the other healthy instances keeps doing tasks in their subnets.
