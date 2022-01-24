@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,8 @@ type decidedReader struct {
 	out *event.Feed
 
 	identifier []byte
+
+	lock sync.Locker
 }
 
 // newDecidedReader creates new instance of DecidedReader
@@ -62,6 +65,7 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 		out:            opts.Out,
 		identifier: []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
 			beacon.RoleTypeAttester.String())),
+		lock: &sync.Mutex{},
 	}
 	return &r
 }
@@ -141,12 +145,12 @@ func (r *decidedReader) onMessage(msg *proto.SignedMessage) {
 		return
 	}
 	go func(msg *proto.SignedMessage) {
-		defer logger.Debug("done with decided msg")
+		r.lock.Lock()
+		defer r.lock.Unlock()
 		if saved, err := r.handleNewDecidedMessage(msg); err != nil {
-			if !saved {
-				logger.Error("could not handle decided message", zap.Error(err))
-			}
-			logger.Error("could not check highest decided", zap.Error(err))
+			logger.Error("could not handle decided message", zap.Error(err))
+		} else if saved {
+			logger.Debug("done successfully with decided msg")
 		}
 	}(msg)
 }
@@ -154,9 +158,12 @@ func (r *decidedReader) onMessage(msg *proto.SignedMessage) {
 // handleNewDecidedMessage saves an incoming (valid) decided message
 func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool, error) {
 	logger := r.logger.With(messageFields(msg)...)
-	if known, _ := r.checkDecided(msg); known {
+	if known, err := r.checkDecided(msg); known {
 		logger.Debug("received known sequence")
 		return false, nil
+	} else if err != nil {
+		logger.Warn("could not check decided", zap.Error(err))
+		return false, err
 	}
 	if err := r.storage.SaveDecided(msg); err != nil {
 		return false, errors.Wrap(err, "could not save decided")
@@ -167,7 +174,7 @@ func (r *decidedReader) handleNewDecidedMessage(msg *proto.SignedMessage) (bool,
 	return true, r.checkHighestDecided(msg)
 }
 
-// checkDecided check if the new decided message is a duplicate or should override existing message ()
+// checkDecided check if the new decided message is a duplicate or should override existing message
 func (r *decidedReader) checkDecided(msg *proto.SignedMessage) (bool, error) {
 	decided, found, err := r.storage.GetDecided(r.identifier, msg.Message.SeqNumber)
 	if err != nil {
