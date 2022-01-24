@@ -158,19 +158,25 @@ func (c *conn) ReadLoop() {
 		c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
 		return
 	}
-	c.ws.SetPongHandler(func(string) error {
+	c.ws.SetPongHandler(func(message string) error {
 		// extend read limit on every pong message
 		// this will keep the connection alive from our POV
-		c.logger.Debug("pong received")
+		c.logger.Debug("pong received", zap.String("message", message))
 		err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		if err != nil {
 			c.logger.Error("pong handler - readDeadline", zap.Error(err))
 		}
 		return err
 	})
-	c.ws.SetPingHandler(func(string) error {
+	c.ws.SetPingHandler(func(message string) error {
 		c.logger.Debug("ping received")
-		return nil
+		err := c.ws.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(c.writeTimeout))
+		if err == websocket.ErrCloseSent {
+			return nil
+		} else if e, ok := err.(net.Error); ok && e.Temporary() {
+			return nil
+		}
+		return err
 	})
 	for {
 		if c.ctx.Err() != nil {
