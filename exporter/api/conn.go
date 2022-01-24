@@ -115,7 +115,8 @@ func (c *conn) WriteLoop() {
 				c.logger.Error("could not read ws message", zap.Error(err))
 				return
 			}
-			if _, err = w.Write(message); err != nil {
+			n, err := w.Write(message)
+			if err != nil {
 				c.logger.Error("could not write ws message", zap.Error(err))
 				reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 				return
@@ -130,7 +131,7 @@ func (c *conn) WriteLoop() {
 			if err := json.Unmarshal(message, &msg); err != nil {
 				c.logger.Error("could not parse msg", zap.Any("filter", msg.Filter), zap.Error(err))
 			}
-			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter))
+			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter), zap.Int("bytes", n))
 		case <-ticker.C:
 			c.logger.Debug("sending ping message")
 			if err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout)); err != nil {
