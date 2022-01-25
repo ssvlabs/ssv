@@ -97,6 +97,12 @@ func (n *operatorNode) init(opts Options) error {
 	return nil
 }
 
+// TODO: extract SyncEth1Events to interface
+// SyncEth1Events(ctx context.Context) error
+// func (n *operatorNode) SyncEth1Events(ctx context.Context) error {
+// 		return eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, big.NewInt(0), n.validatorsCtrl.ProcessEth1Event)
+// }
+
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")

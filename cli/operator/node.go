@@ -3,12 +3,16 @@ package operator
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
@@ -23,8 +27,6 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"log"
-	"net/http"
 )
 
 type config struct {
@@ -73,6 +75,7 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
+		// TODO: deprecate migrationutils when migrations pkg is ready
 		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
 		if err != nil {
 			Logger.Fatal("failed during migration check", zap.Error(err))
@@ -89,6 +92,13 @@ var StartNodeCmd = &cobra.Command{
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
+		}
+
+		// TODO: implement operatorNodeSyncer & pass to migrations runner
+		// migrations.Run(cmd.Context(), db, operatorNodeSyncer)
+		err = migrations.Run(cmd.Context(), db)
+		if err != nil {
+			return
 		}
 
 		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)

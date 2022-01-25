@@ -76,6 +76,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
 
+		// TODO: deprecate migrationutils when migrations pkg is ready
 		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
 		if err != nil {
 			Logger.Fatal("failed during migration check", zap.Error(err))
