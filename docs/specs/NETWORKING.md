@@ -323,13 +323,33 @@ The following parameters are used for initializing pubsub:
   (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
 - `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
 - `directPeers` includes the exporter peer ID, to ensure it gets all messages
-- (fork `v1`) `msgID` is a custom function that calculates a `msg-id` based on the message content hash. the default function uses the `sender` and `msg_seq` and therefore causes redundancy in message processing (nodes might process the same message because it came from different senders).
-- (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router, which is redunant as messages are being signed and verified using the operator key
+- `subscriptionFilter` was injected to ensure a peer will connect to relevant topics, see [SubscriptionFilter](https://github.com/libp2p/go-libp2p-pubsub/blob/master/subscription_filter.go) interface
+- (fork `v1`) `msgID` is a custom function that calculates a `msg-id` based on the message content hash. 
+The default function uses the `sender` + `msg_seq` which we don't track, and enforces signature / verification for each message. 
+As all the messages are being verified using the share key, it would be redundant to it also in the pubusb level.
+Moreover, the default `msg-id` duplicates messages, causing it to be processed more than once, in case it was sent by multiple peers (e.g. decided message).
+- (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router
   - `signID` was set to empty (no author)
 
-#### Gossip Scoring
+#### Pubsub Scoring
 
-**TODO**
+[Peer scoring](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#peer-scoring) was introduced in `gossipsub v1.1`,
+the idea is that each individual peer maintains a score for other peers. 
+The score is locally computed by each individual peer based on observed behaviour and is not shared.
+
+`SSV.network` injects application specific scoring to apply connection scoring as part of pubsub scoring system.
+
+Score thresholds are used by libp2p to determine whether a peer should be removed from topic's mesh, penalized or even ignored if the score drops too low. \
+See [this section](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#score-thresholds) for more details regards the different thresholds. \
+Thresholds values **TBD**, this section will be updated once that work is complete:
+
+- `gossipThreshold`: -4000
+- `publishThreshold`: -8000
+- `graylistThreshold`: -16000
+- `acceptPXThreshold`: 100
+- `opportunisticGraftThreshold`: 5
+
+[Score function](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function) is running pariodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
 
 
 ### User Agent
@@ -348,9 +368,7 @@ See detailed format in [Forks / user agent](#fork-v0)
 DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers. \
 The discovery process walks randomaly on the nodes in the table that are not connected, filters them by `ENR` entries in order to connect with the most relevant nodes.
 
-**Security**
-
-Discovery communication is encrypted and authenticated using session keys, established in the [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
+The communication is encrypted and authenticated using session keys, established in the [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
 
 **Bootnode** 
 
@@ -388,7 +406,7 @@ Notes:
 - discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) that should help to look for relevant nodes
 - [discv5 specs](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md#comparison-with-other-discovery-mechanisms) details why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
-In `v0` discv5 is used, `v1` TBD upon design/implementation.
+In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
 
 ### Network ID
 
