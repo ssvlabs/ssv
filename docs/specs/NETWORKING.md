@@ -27,7 +27,8 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [Subnets](#subnets)
   - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
-
+  - [x] [High Availability](#high-availability)
+  - [ ] [Security](#security)
 
 ## Fundamentals
 
@@ -363,12 +364,14 @@ See detailed format in [Forks / user agent](#fork-v0)
 
 ### Discovery
 
-[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is a system for finding other participants in a peer-to-peer network, it is used in `SSV.network` to complement discovery.
+[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is a system for finding other participants in a peer-to-peer network, 
+it is used in `SSV.network` to complement discovery.
 
 DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers. \
 The discovery process walks randomaly on the nodes in the table that are not connected, filters them by `ENR` entries in order to connect with the most relevant nodes.
 
-The communication is encrypted and authenticated using session keys, established in the [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
+The communication is encrypted and authenticated using session keys, 
+established in the [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
 
 **Bootnode** 
 
@@ -399,11 +402,11 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 [libp2p's Kademlia DHT](https://github.com/libp2p/specs/tree/master/kad-dht) offers similar features, and even a more complete implemetation of Kademlia DHT.
 Discv5 design is loosely inspired by the Kademlia DHT, but unlike most DHTs no arbitrary keys and values are stored. Instead, the DHT stores and relays node records.
 
+Libp2p's Kad DHT will allow to advertise and find peers by multiple keys, e.g. topics/subnets.
 As `ENR` has a size limit (`< 300` bytes), and therefore discv5 won't support multiple key/value pairs.
-On the other hand, using libp2p's Kad DHT will allow to advertise and find peers by multiple keys, e.g. topics/subnets.
 
 Notes:
-- discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) that should help to look for relevant nodes
+- discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) that help to lookup relevant nodes in a smaller set of nodes, currently not fully implemented
 - [discv5 specs](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md#comparison-with-other-discovery-mechanisms) details why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
@@ -482,11 +485,12 @@ Connection scores are based on the following properties:
 #### Connection Filters
 
 Connection filters are executed upon new connection. \
-Filters calculates the connection score of the new peer, and can terminate the connection if score is low.
+Filters calculates the connection score of the new peer, and will terminate the connection if score is low.
+In addition, it will mark the peer as pruned so connection gater will decline it in early stage, before the connection is processed by filters.
 
 #### Connection Gating
 
-Connection Gating allows to safeguard against bad/pruned peers. 
+Connection Gating allows to safeguard against bad/pruned peers that tries to connect multiple times. 
 Inbound and outbound connections are intercepted and being checked before other components process the connection.
 
 See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) interface for more info.
@@ -534,20 +538,27 @@ Validator public key hash is used to determine the validator's subnet which is t
 libp2p enables to configure a `NATManager` that will attempt to open a port in the network's firewall using `UPnP`.
 
 
-### Denial of Service Protection
+### Security
 
-**TODO**
+The following measures are used to protect against malicious peers and denial of service attacks:
+- The number of connected peer is limited to `250`. Once reaching limit, the node should connect only with peers that have high connection score.
+- Connection score that is determined during discovery process, ensures that the node will try to connect only with relevant peers.
+- Connection filters determine the score for inbound connections, 
+- Connection gater protects against peers which were pruned in the past but tries to connect again before backoff timeout (5 min). 
+it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
 
------
+DiscV5 specs specifies potential vulnerabilities in the discovery system, 
+see (discv5-rationale/security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
+Not all vulnerabilities applies to `SSV.Network`, and some were mitigated.
 
-
-## Open points
+**TODO: complete**
 
 ### High Availability
 
-HA for an ssv node is not trivial - as it participats in a decentralized p2p network, running multiple instances might cause ambiguity and conflicts in signatures.
+As it participats in a decentralized p2p network, HA for an ssv node is not trivial. \ 
+The reason is that running multiple instances might lead to slashing and even disturb the consensus as it creates ambiguity and conflicts.
 
-Ideas:
+Ideas TBD:
 
 #### Hub Node
 
