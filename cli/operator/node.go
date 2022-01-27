@@ -85,7 +85,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		migrationOpts := migrations.Options{
-			Db: db,
+			Db:     db,
 			Logger: Logger,
 		}
 		err = migrations.Run(cmd.Context(), migrationOpts)

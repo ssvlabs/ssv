@@ -50,8 +50,6 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 	require.Equal(t, count, 1) // Only ran once.
 }
 
-// TODO: Check that the migration fails (does not continue to next migration)
-// if the previous returned an error and .Run() returns that error
 func Test_Rollback(t *testing.T) {
 	ctx := context.Background()
 	opt, err := setupOptions(ctx)
