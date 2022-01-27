@@ -51,7 +51,7 @@ spec:
                   - key: kubernetes.io/role
                     operator: In
                     values:
-                      - ssv-node
+                      - ssv-main
       containers:
       - name: ssv-node-paul-lh
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 

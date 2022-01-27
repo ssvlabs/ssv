@@ -51,7 +51,11 @@ spec:
                   - key: kubernetes.io/role
                     operator: In
                     values:
-                      - ssv-node
+                      - ssv-main
+                  - key: beta.kubernetes.io/instance-type
+                    operator: In
+                    values:
+                      - m5a.4xlarge
       containers:
       - name: ssv-node-v2-1
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
