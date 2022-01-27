@@ -17,7 +17,7 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [Network Discovery](#network-discovery)
 - [ ] [Wire](#wire)
   - [x] [Consensus](#consensus-protocol)
-  - [ ] [Sync](#sync-protocol)
+  - [x] [Sync](#sync-protocol)
   - [ ] [Handshake](#handshake-protocol)
 - [x] [Networking](#networking)
   - [x] [PubSub](#pubsub)
@@ -28,6 +28,8 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
   - [x] [High Availability](#high-availability)
+  - [x] [Message Scoring](#message-scoring)
+  - [x] [Connection Scoring](#connection-scoring)
   - [ ] [Security](#security)
 
 ## Fundamentals
@@ -36,7 +38,8 @@ This document contains the networking specification for `SSV.Network`.
 
 `SSV.Network` is a decentralized P2P network, consists of operator nodes grouped in multiple subnets.
 
-The networking layer is built with [Libp2p](https://libp2p.io/), a modular framework for P2P networking that is used by multiple decetralized projects, inluding eth2.
+The networking layer is built with [Libp2p](https://libp2p.io/), 
+a modular framework for P2P networking that is used by multiple decetralized projects, inluding eth2.
 
 ### Transport
 
@@ -44,7 +47,8 @@ Network peers should support the following transports:
 - `TCP` is used by libp2p for setting up communication channels between peers. default port: `12000`
 - `UDP` is used for discovery purposes. default port: `13000`
 
-[go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise) is used to secure transport (based on [noise protocol](https://noiseprotocol.org/noise.html)).
+[go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise) 
+is used to secure transport (see [noise protocol](https://noiseprotocol.org/noise.html)).
 
 Multiplexing of protocols over channels is achieved using [yamux](https://github.com/libp2p/go-libp2p-yamux) protocol.
 
@@ -62,7 +66,8 @@ See more information in [IPFS specs > communication-model - streams](https://ipf
 
 **PubSub**
 
-GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) is the pubsub protocol used in `SSV.Network`
+GossipSub ([v1.1](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md)) 
+is the pubsub protocol used in `SSV.Network`
 
 The main purpose is for broadcasting messages to a group (AKA subnet) of nodes. \
 In addition, the machinary helps to determine liveliness and maintain peers scoring.
@@ -80,7 +85,8 @@ It has a stable ENR that is provided with default configuration, so other peers 
 
 `Exporter` is a public peer that is responsible for collecting and exporting information from the network. \
 It collects registry data and consensus data (decided messages) of all the validators in the network. \
-It has a stable ENR that is provided with default configuration, so it will have a stable connection with all peers and won't be affected by scoring, prunning, backoff etc.
+It has a stable ENR that is provided with default configuration, 
+so it will have a stable connection with all peers and won't be affected by scoring, prunning, backoff etc.
 
 
 ### Identity
@@ -98,9 +104,10 @@ Exporter and Bootnode does not hold this key.
 
 ### Network Discovery
 
-[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is used in `SSV.network` to complement discovery capalities that don't come with libp2p.
+[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) 
+is used in `SSV.network` as the discovery system.
 
-More information is available in [Networking / Discovery](#discovery)
+More information is available in [Networking > Discovery](#discovery)
 
 ------
 
@@ -112,10 +119,13 @@ Network interaction includes several types of protocols, as detailed below.
 ## Consensus Protocol
 
 `IBFT`/`QBFT` consensus protocol is used to govern `SSV` network.
-`IBFT` ensures that consensus can be reached by a committee of `n` operator nodes while tolerating a certain amount of `f` faulty nodes as defined by `n ≥ 3f + 1`.
+`IBFT` ensures that consensus can be reached by a committee of `n` 
+operator nodes while tolerating a certain amount of `f` faulty nodes as defined by `n ≥ 3f + 1`.
 
 As part of the algorithm, nodes are exchanging messages with other nodes in the committee. \
 Once the committee reaches consensus, the nodes will publish the decided message across the network.
+
+Consensus messages are being sent in the network over pubsub topics (see [subnets](#subnets))
 
 More information regarding the protocol can be found in [iBFT annotated paper (By Blox)](/ibft/IBFT.md)
 
@@ -133,7 +143,7 @@ message SignedMessage {
   Message message            = 1 [(gogoproto.nullable) = false];
   // signature is a signature of the IBFT message
   bytes signature            = 2 [(gogoproto.nullable) = false];
-  // signer_ids is a list of the IDs of the signing operators
+  // signer_ids is a sorted list of the IDs of the signing operators
   repeated uint64 signer_ids = 3;
 }
 
@@ -169,7 +179,7 @@ JSON example:
 
 **NOTE:** 
 - all pubsub messages in the network are wrapped with libp2p's message structure
-- `signer_ids` must be sorted, to allow hashing the entire message 
+- `signer_ids` must be sorted, to allow hashing the entire message
 
 ---
 
@@ -189,16 +199,16 @@ Sync is done over streams as pubsub is not suitable in this case due to several 
 
 ```protobuf
 message SyncMessage {
-  // MsgType is the type of sync message
-  SyncMsgType Type                   = 1;
-  // Identifier of the message (validator + role)
-  bytes Identifier                      = 2;
-  // Params holds the requests parameters
-  repeated uint64 Params                = 3;
-  // Messages holds the results (decided messages) of some request
-  repeated proto.SignedMessage Messages = 4;
-  // Error holds an error response if exist
-  string Error                          = 5;
+  // type is the type of sync message
+  SyncMsgType type                   = 1;
+  // identifier of the message (validator + role)
+  bytes identifier                      = 2;
+  // params holds the requests parameters
+  repeated uint64 params                = 3;
+  // messages holds the results (decided messages) of some request
+  repeated proto.SignedMessage messages = 4;
+  // error holds an error response if exist
+  string error                          = 5;
 }
 
 // SyncMsgType is an enum that represents the type of sync message 
@@ -212,42 +222,30 @@ enum SyncMsgType {
 }
 ```
 
-Highest decided response:
-```json
+A successful response message usually includes a list of results and the corresponding message type and identifier:
+```
 {
-  "SignedMessages": [
-    {
-      "message": {
-        "type": 3,
-        "round": 1,
-        "identifier": "...",
-        "seq_number": 7943,
-        "value": "Xmcg...sPM="
-      },
-      "signature": "g5y....7Dv",
-      "signer_ids": [4,2,1]
-    }
-  ],
-  "Type": 0,
-  "Identifier": "..."
+  "messages": [ ... ],
+  "type": <type>,
+  "identifier": "..."
 }
 ```
 
-Error response:
-```json
+An error response includes an error code in the form of a string to allow flexability:
+```
 {
-  "Identifier": "...",
-  "Type": 2,
+  "identifier": "...",
+  "type": <type>,
   "error": "EntryNotFoundError"
 }
 ```
+The following error codes exist:
+- `EntryNotFoundError` is returned when no results were found
+- `InternalError` is returned upon internal error
 
 ### Protocols
 
-**TODO: add example request/response**
-
 SSV nodes use the following stream protocols:
-
 
 ### 1. Highest Decided
 
@@ -256,6 +254,38 @@ In case there are no decided messages, it will return an empty array of messages
 
 `/ssv/sync/highest_decided/0.0.1`
 
+<details>
+  <summary>examples</summary>
+
+  Request:
+  ```json
+  {
+    "identifier": "...",
+    "type":   0,
+  }
+  ```
+
+  Response:
+  ```json
+  {
+    "messages": [
+      {
+        "message": {
+          "type": 3,
+          "round": 1,
+          "identifier": "...",
+          "seq_number": 7943,
+          "value": "Xmcg...sPM="
+        },
+        "signature": "g5y....7Dv",
+        "signer_ids": [1,2,4]
+      }
+    ],
+    "type": 0,
+    "identifier": "..."
+  }
+  ```
+</details>
 
 ### 2. Decided By Range
 
@@ -265,6 +295,53 @@ The request should specify the desired range, while the response will include al
 
 `/ssv/sync/decided_by_range/0.0.1`
 
+<details>
+  <summary>examples</summary>
+  
+  Request:
+  ```json
+  {
+    "identifier": "...",
+    "params": [1200, 1225],
+    "type":   1,
+  }
+  ```
+
+  Response:
+  ```json
+  {
+    "identifier": "...",
+    "params": [1200, 1225],
+    "messages": [
+      {
+        "message": {
+          "type": 3,
+          "round": 1,
+          "identifier": "...",
+          "seq_number": 1200,
+          "value": "Xmcg...sPM="
+        },
+        "signature": "g5y....7Dv",
+        "signer_ids": [1,2,4]
+      },
+      // ... 1201-1224
+      {
+        "message": {
+          "type": 3,
+          "round": 1,
+          "identifier": "...",
+          "seq_number": 1225,
+          "value": "Xmcg...sPM="
+        },
+        "signature": "g5y....7Dv",
+        "signer_ids": [1,2,4]
+      }
+    ],
+    "type":   1,
+  }
+  ```
+</details>
+
 
 ### 3. Last Change Round
 
@@ -272,9 +349,46 @@ This protocol enables a node to catch up with change round messages.
 
 `/ssv/sync/last_change_round/0.0.1`
 
+<details>
+  <summary>examples</summary>
+  
+  Request:
+  ```json
+  {
+    "identifier": "...",
+    "params": [7554],
+    "type":   2,
+  }
+  ```
+
+  Response:
+  ```json
+  {
+    "identifier": "...",
+    "params": [7554],
+    "messages": [
+      {
+        "message": {
+          "type": 4,
+          "round": 6,
+          "identifier": "...",
+          "seq_number": 411,
+          "value": "Xmcg...sPM="
+        },
+        "signature": "g5y....7Dv",
+        "signer_ids": [1]
+      }
+    ],
+    "type":   2,
+  }
+  ```
+</details>
+
 ---
 
 ## Handshake protocol
+
+`/ssv/auth/0.0.1`
 
 The handshake protocol allows peers to identify, by exchanging signed information. \
 It must be performed for every connection, and therefore forces nodes to 
@@ -282,7 +396,7 @@ authenticate / prove ownership of their operator key.
 
 **TBD** Public, static nodes such as exporter requires registration 
 
-`/ssv/auth/0.0.1`
+### Message Structure
 
 The following information will be exchanged as part of the handshake:
 
@@ -296,6 +410,12 @@ message HandshakeMessage {
   NodeInfo info = 1 [(gogoproto.nullable) = false];
   // signed is a signature of the message
   bytes signed     = 2 [(gogoproto.nullable) = false];
+
+// TODO: TBD
+  // msg_seq helps to keep track over multiple handshakes, will by set by the sender
+  uint64 msg_seq         = 1 [(gogoproto.nullable) = false];
+  // peer_id is the peer that the message is targeted for, will by set by the sender
+  bytes peer_id   = 2 [(gogoproto.nullable) = false];
 }
 
 // NodeInfo contains node's information
@@ -317,6 +437,7 @@ message NodeInfo {
 
   // TODO: add cloud provider / region / ... 
 }
+
 ```
 
 ---
@@ -348,7 +469,7 @@ Moreover, the default `msg-id` duplicates messages, causing it to be processed m
 
 #### Pubsub Scoring
 
-[Peer scoring](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#peer-scoring) was introduced in `gossipsub v1.1`,
+`gossipsub v1.1` introduced pubsub [scoring](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#peer-scoring),
 the idea is that each individual peer maintains a score for other peers. 
 The score is locally computed by each individual peer based on observed behaviour and is not shared.
 
@@ -374,7 +495,7 @@ Libp2p provides user agent mechanism with the [identify](https://github.com/libp
 which is used to exchange basic information with other peers in the network.
 
 User Agent contains the node version and type, and in addition the operator id which might be reduced in future versions. \
-See detailed format in [Forks / user agent](#fork-v0)
+See detailed format in [forks > user agent](#fork-v0)
 
 
 ### Discovery
@@ -383,10 +504,11 @@ See detailed format in [Forks / user agent](#fork-v0)
 it is used in `SSV.network` to complement discovery.
 
 DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers. \
-The discovery process walks randomaly on the nodes in the table that are not connected, filters them by `ENR` entries in order to connect with the most relevant nodes.
+The discovery process walks randomaly on the nodes in the table that are not connected, 
+filters them by `ENR` entries in order to connect with the most relevant nodes.
 
-The communication is encrypted and authenticated using session keys, 
-established in the [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
+As this a seperate process than libp2p, the communication is encrypted and authenticated using session keys, 
+established in an [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
 
 **Bootnode** 
 
@@ -423,7 +545,8 @@ As `ENR` has a size limit (`< 300` bytes), and therefore discv5 won't support mu
 
 Notes:
 - discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) that help to lookup relevant nodes in a smaller set of nodes, currently not fully implemented
-- [discv5 specs](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md#comparison-with-other-discovery-mechanisms) details why discv5 was chosen over libp2p Kad DHT in Ethereum.
+- [discv5 specs](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md#comparison-with-other-discovery-mechanisms) 
+details why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
 
@@ -437,26 +560,24 @@ It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/
 which encrypts/decrypts all traffic with the corresponding key,
 regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
 
-**NOTE** discovery communication (UDP) won't use the network ID, but unknown nodes will be filtered anyway due to missing fields in their `ENR` entry as specified in [Discovery section](#discovery).
+**NOTE** discovery communication (UDP) won't use the network ID, 
+and its not needed as unknown peers will be filtered.
 
 
 ### Subnets
 
 Consensus messages are being sent in the network over a subnet (pubsub topic), which the relevant peers should be subscribed to.
 
-In addition to subnets, there is a global topic (AKA `main topic`) to publish all the decided messages in the network.
-
-There are several options for how to setup topics in the network:
-
 #### Subnets - fork v0
 
-Each validator committee has a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter).
+`v0` was working with a simple approach, each validator committee has 
+a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter). \
+It helps to reduce amount of messages in the network, 
+but increases the number of topics which will grow up to the number of validators.
 
-It helps to reduce amount of messages in the network, but increases the number of topics which will grow up to the number of validators.
+In order to provide more redundancy, there is a global topic (AKA `main topic`) to publish all the decided messages in the network.
 
 #### Subnet - fork v1
-
-**TBD: main topic**
 
 A subnet of operators is responsible for multiple committees,
 reusing the same topic to communicate on behalf of multiple validators.
@@ -467,6 +588,8 @@ As messages will be propagated to a larger set of nodes, we can expect better re
 In addition, a larger group of operators provides:
 - redundancy of decided messages across multiple nodes
 - better security for subnets as more nodes will validate messages and can score bad/malicious nodes that will be pruned accordingly.
+
+Global/main topic is not needed in this solution and therefore will be reduced.
 
 **Validators Mapping**
 
@@ -515,7 +638,7 @@ In addition, it will mark the peer as pruned so following connections requests w
 
 #### Connection Gating
 
-Connection Gating allows to safeguard against bad/pruned peers that tries to connect multiple times. 
+Connection Gating allows to safeguard against bad/pruned peers that tries to reconnect multiple times. 
 Inbound and outbound connections are intercepted and being checked before other components process the connection.
 
 See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) interface for more info.
@@ -565,18 +688,20 @@ libp2p enables to configure a `NATManager` that will attempt to open a port in t
 
 ### Security
 
+The discovery system is naturally a good candidate for security vulnerabilities. \
+DiscV5 specs specifies potential vulnerabilities in their system, 
+See (discv5-rationale/security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
+The major ones includes routing table pollution, traffic redirection, spamming or replayed messages. \
+Some are less relevant to `SSV.Network` as messages are being verified in a higher level, 
+by the IBFT machinary using the share public key, 
+and therefore verification in the network layer is redundant.
+
 The following measures are used to protect against malicious peers and denial of service attacks:
-- The number of connected peer is limited to `250`. Once reaching limit, the node should connect only with peers that have high connection score.
-- Connection score that is determined during discovery process, ensures that the node will try to connect only with relevant peers.
-- Connection filters determine the score for inbound connections, 
-- Connection gater protects against peers which were pruned in the past but tries to connect again before backoff timeout (5 min). 
+- Connection score is determined during discovery process, ensures that the node will try to connect only with relevant peers.
+- Connection filters determine the score for inbound connections, and terminates low scored connections
+- Connection gater protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min). 
 it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
 
-DiscV5 specs specifies potential vulnerabilities in the discovery system, 
-see (discv5-rationale/security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
-Not all vulnerabilities applies to `SSV.Network`, and some were mitigated.
-
-**TODO: complete**
 
 ### High Availability
 
@@ -590,11 +715,15 @@ Ideas TBD:
 `Hub Node` is a node that handles the network layer of ssv node, 
 it could be connected to multiple `Worker` nodes and stream the entire network layer messages to/from them.
 
-A possible implmentation could be an SSV node with a proxied network layer that uses websocket to communicate with worker nodes.
+A possible implmentation could be an SSV node with a proxied network layer 
+that uses websocket to communicate with worker nodes.
 
 #### Subnet Partitions
 
 Subnet partitions separates a given set of subnets into `n` indenpendant subsets of subnets, 
-which could be assigned to `n` running instances of the same operator, each working on different subsets.
+which could be assigned to `n` running instances of the same operator, 
+each working on different subsets.
 
-That will help decrease the damage in case some node fails, as only a portion of the assigned validators will be affected, while the other healthy instances keeps doing tasks in their subnets.
+That will help decrease the damage in case some node fails, 
+as only a portion of the assigned validators will be affected, 
+while the other healthy instances keeps doing tasks in their subnets.
