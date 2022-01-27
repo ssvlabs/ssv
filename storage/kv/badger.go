@@ -2,12 +2,13 @@ package kv
 
 import (
 	"bytes"
+	"time"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
-	"time"
 )
 
 const (
@@ -54,6 +55,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 
 // Set save value with key to storage
 func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
+	// TODO: Re-use code with Update or badgerTxn instead of this:
 	return b.db.Update(func(txn *badger.Txn) error {
 		err := txn.Set(append(prefix, key...), value)
 		return err
@@ -139,6 +141,7 @@ func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Ob
 
 // Delete key in specific prefix
 func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
+	// TODO: Re-use code with Delete or badgerTxn instead of this:
 	return b.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(append(prefix, key...))
 	})
@@ -231,6 +234,45 @@ func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 	return keys
 }
 
+// Update is a gateway to badger db Update function
+// creating and managing a read-write transaction
+func (b *BadgerDb) Update(fn func(basedb.ITxn) error) error {
+	return b.db.Update(func(txn *badger.Txn) error {
+		return fn(&badgerTxn{txn: txn})
+	})
+}
+
 func isNotFoundError(err error) bool {
 	return err != nil && (err.Error() == "not found" || err.Error() == "Key not found")
+}
+
+type badgerTxn struct {
+	txn *badger.Txn
+}
+
+func (t *badgerTxn) Set(prefix []byte, key []byte, value []byte) error {
+	return t.txn.Set(append(prefix, key...), value)
+}
+
+func (t *badgerTxn) Get(prefix []byte, key []byte) (obj basedb.Obj, found bool, err error) {
+	var resValue []byte
+	item, err := t.txn.Get(append(prefix, key...))
+	if err != nil {
+		if isNotFoundError(err) { // in order to couple the not found errors together
+			return basedb.Obj{}, false, err
+		}
+		return basedb.Obj{}, true, err
+	}
+	resValue, err = item.ValueCopy(nil)
+	if err != nil {
+		return basedb.Obj{}, true, err
+	}
+	return basedb.Obj{
+		Key:   key,
+		Value: resValue,
+	}, true, err
+}
+
+func (t *badgerTxn) Delete(prefix []byte, key []byte) error {
+	return t.txn.Delete(append(prefix, key...))
 }

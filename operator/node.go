@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -90,7 +91,7 @@ func New(opts Options) Node {
 
 func (n *operatorNode) init(opts Options) error {
 	if opts.ValidatorOptions.CleanRegistryData {
-		if err := n.storage.(*storage).cleanSyncOffset(); err != nil {
+		if err := n.storage.(*storage).CleanSyncOffset(); err != nil {
 			return errors.Wrap(err, "could not clean sync offset")
 		}
 	}

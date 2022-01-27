@@ -22,7 +22,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -75,15 +74,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
-		// TODO: deprecate migrationutils when migrations pkg is ready
-		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
-		if err != nil {
-			Logger.Fatal("failed during migration check", zap.Error(err))
-		} else if ok {
-			Logger.Info("migration is required", zap.Error(err))
-			cfg.ETH1Options.CleanRegistryData = true
-		}
-
 		// TODO - change via command line?
 		fork := v0.New()
 
@@ -94,11 +84,13 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
 
-		// TODO: implement operatorNodeSyncer & pass to migrations runner
-		// migrations.Run(cmd.Context(), db, operatorNodeSyncer)
-		err = migrations.Run(cmd.Context(), db)
+		migrationOpts := migrations.Options{
+			Db: db,
+			Logger: Logger,
+		}
+		err = migrations.Run(cmd.Context(), migrationOpts)
 		if err != nil {
-			return
+			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
 		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)

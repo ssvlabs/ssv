@@ -3,12 +3,13 @@ package operator
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"math/big"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math/big"
 )
 
 var (
@@ -22,6 +23,9 @@ type Storage interface {
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(operatorKey string) error
+	// CleanSyncOffset TODO: validate that this interface change does not affect
+	// mocks or type casts.
+	CleanSyncOffset() error
 }
 
 type storage struct {
@@ -40,7 +44,7 @@ func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 	return s.db.Set(prefix, syncOffsetKey, offset.Bytes())
 }
 
-func (s *storage) cleanSyncOffset() error {
+func (s *storage) CleanSyncOffset() error {
 	return s.db.RemoveAllByCollection(append(prefix, syncOffsetKey...))
 }
 
