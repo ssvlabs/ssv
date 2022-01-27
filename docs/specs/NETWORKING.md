@@ -128,7 +128,7 @@ For more info please refer to the linked sections.
 
 ## Wire
 
-Network interaction includes several types of protocols, as detailed below.
+Network interaction includes several types of protocols:
 
 ## Consensus Protocol
 
@@ -147,49 +147,57 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
 
 `SignedMessage` is a wrapper for IBFT messages, it holds a message and its signature with a list of signer IDs:
 
-```protobuf
-syntax = "proto3";
-import "gogo.proto";
 
-// SignedMessage holds a message and it's corresponding signature
-message SignedMessage {
-  // message is the IBFT message
-  Message message            = 1 [(gogoproto.nullable) = false];
-  // signature is a signature of the IBFT message
-  bytes signature            = 2 [(gogoproto.nullable) = false];
-  // signer_ids is a sorted list of the IDs of the signing operators
-  repeated uint64 signer_ids = 3;
-}
+<details>
+  <summary><b>protobuf</b></summary>
+  
+  ```protobuf
+  syntax = "proto3";
+  import "gogo.proto";
+  
+  // SignedMessage holds a message and it's corresponding signature
+  message SignedMessage {
+    // message is the IBFT message
+    Message message            = 1 [(gogoproto.nullable) = false];
+    // signature is a signature of the IBFT message
+    bytes signature            = 2 [(gogoproto.nullable) = false];
+    // signer_ids is a sorted list of the IDs of the signing operators
+    repeated uint64 signer_ids = 3;
+  }
+  
+  // Message represents an IBFT message
+  message Message {
+    // type is the IBFT state / stage
+    Stage type        = 1;
+    // round is the current round where the message was sent
+    uint64 round      = 2;
+    // identifier is the message identifier
+    bytes identifier      = 3;
+    // sequence number is an incremental number for each instance, much like a block number would be in a blockchain
+    uint64 seq_number = 4;
+    // value holds the message data in bytes
+    bytes value       = 5;
+  }
+  ```
+</details>
 
-// Message represents an IBFT message
-message Message {
-  // type is the IBFT state / stage
-  Stage type        = 1;
-  // round is the current round where the message was sent
-  uint64 round      = 2;
-  // identifier is the message identifier
-  bytes identifier      = 3;
-  // sequence number is an incremental number for each instance, much like a block number would be in a blockchain
-  uint64 seq_number = 4;
-  // value holds the message data in bytes
-  bytes value       = 5;
-}
-```
+<details>
+  <summary><b>JSON example</b></summary>
 
-JSON example:
-```json
-{
-  "message": {
-    "type": 3,
-    "round": 1,
-    "identifier": "OTFiZGZjOWQxYzU4NzZkYTEwY...",
-    "seq_number": 28276,
-    "value": "mB0aAAAAAAA4AAAAAAAAADpTC1djq..."
-  },
-  "signature": "jrB0+Z9zyzzVaUpDMTlCt6Om9mj...",
-  "signer_ids": [2, 3, 4]
-}
-```
+  ```json
+  {
+    "message": {
+      "type": 3,
+      "round": 1,
+      "identifier": "OTFiZGZjOWQxYzU4NzZkYTEwY...",
+      "seq_number": 28276,
+      "value": "mB0aAAAAAAA4AAAAAAAAADpTC1djq..."
+    },
+    "signature": "jrB0+Z9zyzzVaUpDMTlCt6Om9mj...",
+    "signer_ids": [2, 3, 4]
+  }
+  ```
+</details>
 
 **NOTE:** 
 - all pubsub messages in the network are wrapped with libp2p's message structure
@@ -211,30 +219,35 @@ Sync is done over streams as pubsub is not suitable in this case due to several 
 
 `SyncMessage` structure is used by all sync protocols, the type of message is specified in a dedicated field:
 
-```protobuf
-message SyncMessage {
-  // type is the type of sync message
-  SyncMsgType type                   = 1;
-  // identifier of the message (validator + role)
-  bytes identifier                      = 2;
-  // params holds the requests parameters
-  repeated uint64 params                = 3;
-  // messages holds the results (decided messages) of some request
-  repeated proto.SignedMessage messages = 4;
-  // error holds an error response if exist
-  string error                          = 5;
-}
 
-// SyncMsgType is an enum that represents the type of sync message 
-enum SyncMsgType {
-  // GetHighestType is a request from peers to return the highest decided/ prepared instance they know of
-  GetHighestType       = 0;
-  // GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
-  GetInstanceRange     = 1;
-  // GetCurrentInstance is a request from peers to return their current running instance details
-  GetLatestChangeRound = 2;
-}
-```
+<details>
+  <summary><b>protobuf</b></summary>
+
+  ```protobuf
+  message SyncMessage {
+    // type is the type of sync message
+    SyncMsgType type                   = 1;
+    // identifier of the message (validator + role)
+    bytes identifier                      = 2;
+    // params holds the requests parameters
+    repeated uint64 params                = 3;
+    // messages holds the results (decided messages) of some request
+    repeated proto.SignedMessage messages = 4;
+    // error holds an error response if exist
+    string error                          = 5;
+  }
+  
+  // SyncMsgType is an enum that represents the type of sync message 
+  enum SyncMsgType {
+    // GetHighestType is a request from peers to return the highest decided/ prepared instance they know of
+    GetHighestType       = 0;
+    // GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
+    GetInstanceRange     = 1;
+    // GetCurrentInstance is a request from peers to return their current running instance details
+    GetLatestChangeRound = 2;
+  }
+  ```
+</details>
 
 A successful response message usually includes a list of results and the corresponding message type and identifier:
 ```
