@@ -1,8 +1,8 @@
 # SSV Specifications - Networking
 
-**Status: WIP**
-
-**TODO: add header**
+| Authors                                    | Status | Latest Revision |
+|:-------------------------------------------|:-------|:----------------|
+| [@amir-blox](https://github.com/amir-blox) | WIP    | JAN 22          |
 
 This document contains the networking specification for `SSV.Network`.
 
@@ -31,7 +31,7 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [High Availability](#high-availability)
   - [x] [Message Scoring](#message-scoring)
   - [x] [Connection Scoring](#connection-scoring)
-  - [ ] [Security](#security)
+  - [x] [Security](#security)
 
 ## Fundamentals
 
@@ -102,6 +102,8 @@ and can be revoked in case it was compromised.
 `Operator Key` is used for decryption of share's keys that are used for signing/verifying consensus messages and duties. \
 Exporter and Bootnode does not hold this key.
 
+In adition, Operator nodes will expose an `Operator ID` that is calculated from the operator public key, 
+and helps to identify a peer in the network.
 
 ### Network Discovery
 
@@ -384,7 +386,7 @@ This protocol enables a node to catch up with change round messages.
           "type": 4,
           "round": 6,
           "identifier": "...",
-          "seq_number": 411,
+          "seq_number": 7554,
           "value": "Xmcg...sPM="
         },
         "signature": "g5y....7Dv",
@@ -700,13 +702,13 @@ libp2p enables to configure a `NATManager` that will attempt to open a port in t
 
 ### Security
 
-The discovery system is naturally a good candidate for security vulnerabilities. \
+The discovery system is naturally a good candidate for security problems. \
 DiscV5 specs specifies potential vulnerabilities in their system, 
-See (discv5-rationale/security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
+See (DiscV5 Rationale > security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
 The major ones includes routing table pollution, traffic redirection, spamming or replayed messages. \
 Some are less relevant to `SSV.Network` as messages are being verified in a higher level, 
 by the IBFT machinary using the share public key, 
-and therefore verification in the network layer is redundant.
+and therefore malicious messages will be identified as invalid.
 
 The following measures are used to protect against malicious peers and denial of service attacks:
 - Connection score is determined during discovery process, ensures that the node will try to connect only with relevant peers.
