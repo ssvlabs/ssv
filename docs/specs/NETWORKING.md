@@ -127,7 +127,7 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
 syntax = "proto3";
 import "gogo.proto";
 
-// SignedMessage is a wrapper on top of Message for supporting signatures
+// SignedMessage holds a message and it's corresponding signature
 message SignedMessage {
   // message is the IBFT message
   Message message            = 1 [(gogoproto.nullable) = false];
@@ -143,8 +143,8 @@ message Message {
   Stage type        = 1;
   // round is the current round where the message was sent
   uint64 round      = 2;
-  // lambda is the message identifier
-  bytes lambda      = 3;
+  // identifier is the message identifier
+  bytes identifier      = 3;
   // sequence number is an incremental number for each instance, much like a block number would be in a blockchain
   uint64 seq_number = 4;
   // value holds the message data in bytes
@@ -158,16 +158,18 @@ JSON example:
   "message": {
     "type": 3,
     "round": 1,
-    "lambda": "OTFiZGZjOWQxYzU4NzZkYTEwY...",
+    "identifier": "OTFiZGZjOWQxYzU4NzZkYTEwY...",
     "seq_number": 28276,
     "value": "mB0aAAAAAAA4AAAAAAAAADpTC1djq..."
   },
   "signature": "jrB0+Z9zyzzVaUpDMTlCt6Om9mj...",
-  "signer_ids": [4, 2, 3]
+  "signer_ids": [2, 3, 4]
 }
 ```
 
-**NOTE** all pubsub messages in the network are wrapped with libp2p's message structure
+**NOTE:** 
+- all pubsub messages in the network are wrapped with libp2p's message structure
+- `signer_ids` must be sorted, to allow hashing the entire message 
 
 ---
 
@@ -182,8 +184,6 @@ Sync is done over streams as pubsub is not suitable in this case due to several 
 - Bandwidth - only one peer (usually) needs the data, it would be a waste to send redundant messages across the network.
 
 ### Message Structure
-
-**TODO: refine structure, specify changes from current proto**
 
 `SyncMessage` structure is used by all sync protocols, the type of message is specified in a dedicated field:
 
@@ -276,32 +276,46 @@ This protocol enables a node to catch up with change round messages.
 
 ## Handshake protocol
 
-**TODO, TBD**
+The handshake protocol allows peers to identify, by exchanging signed information. \
+It must be performed for every connection, and therefore forces nodes to 
+authenticate / prove ownership of their operator key.
 
-The handshake protocol enables ssv nodes to authenticate / prove ownership of their operator key.
+**TBD** Public, static nodes such as exporter requires registration 
 
 `/ssv/auth/0.0.1`
+
+The following information will be exchanged as part of the handshake:
 
 ```protobuf
 syntax = "proto3";
 import "gogo.proto";
 
 // AuthMessage is a message that is used for authenticating nodes
-message AuthMessage {
-  // message is the raw message to sign
-  AuthPayload payload = 1 [(gogoproto.nullable) = false];
-  // signature is a signature of the message
-  bytes signature     = 2 [(gogoproto.nullable) = false];
+message HandshakeMessage {
+  // info is the node information to sign
+  NodeInfo info = 1 [(gogoproto.nullable) = false];
+  // signed is a signature of the message
+  bytes signed     = 2 [(gogoproto.nullable) = false];
 }
 
-// AuthPayload is the payload used for auth messages
-message AuthPayload {
+// NodeInfo contains node's information
+message NodeInfo {
   // peer_id of the authenticating node
-  bytes peer_id     = 1 [(gogoproto.nullable) = false];
+  bytes peer_id          = 1 [(gogoproto.nullable) = false];
   // operator_id of the authenticating node
-  bytes operator_id = 2 [(gogoproto.nullable) = true];
+  bytes operator_id      = 2 [(gogoproto.nullable) = true];
   // node_type is the type of the authenticating node
-  uint64 node_type  = 3;
+  uint64 node_type       = 3 [(gogoproto.nullable) = false];
+  // execution_node is the eth1 node used by the node
+  string execution_node  = 4; // TBD: actual value
+  // consesnsus_node is the eth2 node used by the node
+  string consesnsus_node = 5; // TBD: actual value
+  // fork_version is the current fork used by the node
+  uint32 fork_version    = 6;
+  // fork_version is the current ssv-node version
+  string node_version    = 7;
+
+  // TODO: add cloud provider / region / ... 
 }
 ```
 
@@ -338,7 +352,8 @@ Moreover, the default `msg-id` duplicates messages, causing it to be processed m
 the idea is that each individual peer maintains a score for other peers. 
 The score is locally computed by each individual peer based on observed behaviour and is not shared.
 
-`SSV.network` injects application specific scoring to apply connection scoring as part of pubsub scoring system.
+`SSV.network` injects application specific scoring to apply connection and message scoring as part of pubsub scoring system. \
+See [Connection Scoring](#connection-scoring) and [Message Scoring](#message-scoring) for more information.
 
 Score thresholds are used by libp2p to determine whether a peer should be removed from topic's mesh, penalized or even ignored if the score drops too low. \
 See [this section](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#score-thresholds) for more details regards the different thresholds. \
@@ -393,9 +408,10 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 | `ip`        | IPv4 address, 4 bytes                                          | Done            |
 | `tcp`       | TCP port, big endian integer                                   | Done            |
 | `udp`       | UDP port, big endian integer                                   | Done            |
-| `type`      | node type, integer -> 1 (operator), 2 (exporter), 3 (bootnode) | Done (`v0.1.9`) |
+| `type`      | node type, integer; 1 (operator), 2 (exporter), 3 (bootnode)   | Done (`v0.1.9`) |
 | `oid`       | operator id, 32 bytes                                          | Done (`v0.1.9`) |
 | `version`   | fork version, integer                                          | -               |
+| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | -               |
 
 #### Discovery Alternatives
 
@@ -465,6 +481,23 @@ thefore its a fixed number (TBD 32 / 64 / 128).
 **TBD** A dynamic number of subnets (e.g. `log(num_of_peers)`) which requires a different approach.
 
 
+### Message Scoring
+
+Message scorers track on operators behavior w.r.t incoming IBFT messages:
+
+- Invalid message signature (`-100`)
+- Message from operator w/o shared committees (`-1000`)
+
+### Connection Scoring
+
+Peer's connection score is determined after a successful handshake, and peers with low score will be pruned. 
+
+Connection scores are based on the following properties:
+
+- Shared subnets / committees (`25`)
+- Static nodes such as `exporter` (`10000`)
+
+
 ### Peers Connectivity
 
 In a fully-connected network, where each peer is connected to all other peers in the network,
@@ -473,20 +506,12 @@ running nodes will consume many resources to process all network related tasks e
 To lower resource consumption, the number of connected peers is limited, currently set to `250`. \
 Once reached to peer limit, the node will connect only to relevant nodes with score above treshold, which is currently set to zero.
 
-#### Connection Scoring
-
-Peer's connection score is determined after a successful handshake, and peers with low score will be pruned. 
-
-Connection scores are based on the following properties:
-
-- Shared subnets / committees
-- Static nodes (`exporter`)
 
 #### Connection Filters
 
 Connection filters are executed upon new connection. \
 Filters calculates the connection score of the new peer, and will terminate the connection if score is low.
-In addition, it will mark the peer as pruned so connection gater will decline it in early stage, before the connection is processed by filters.
+In addition, it will mark the peer as pruned so following connections requests will be stopped at connection gater.
 
 #### Connection Gating
 
