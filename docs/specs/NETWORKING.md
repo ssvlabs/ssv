@@ -15,6 +15,7 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [Network Peers](#network-peers)
   - [x] [Identity](#identity)
   - [x] [Network Discovery](#network-discovery)
+  - [x] [Peer Scoring](#peer-scoring)
 - [ ] [Wire](#wire)
   - [x] [Consensus](#consensus-protocol)
   - [x] [Sync](#sync-protocol)
@@ -105,9 +106,20 @@ Exporter and Bootnode does not hold this key.
 ### Network Discovery
 
 [discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) 
-is used in `SSV.network` as the discovery system.
+is used in `SSV.Network` as the discovery system.
 
 More information is available in [Networking > Discovery](#discovery)
+
+
+### Peer Scoring
+
+The peer scoring in `SSV.Network` consists of the following types of scorers:
+
+- [Connection Scoring](#connection-scoring) - calculated during handshake, affects the peers we connect to
+- [Message Scoring](#message-scoring) - tracks operators behavior w.r.t incoming IBFT messages
+- [Pubsub Scoring](#pubsub-scoring) - calculated by libp2p, tracks over gossip tasks and pubsub related metrics
+
+For more info please refer to the linked sections.
 
 ------
 
