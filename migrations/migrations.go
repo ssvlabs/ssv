@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	migrationsPrefix   = []byte("migrations-")
+	migrationsPrefix   = []byte("migrations/")
 	migrationCompleted = []byte("migrationCompleted")
 
 	defaultMigrations = Migrations{

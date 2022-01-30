@@ -5,7 +5,6 @@ import (
 )
 
 // This migration is responsible to delete all (exporter, operator) registry data
-// View/Update transactions usage
 var migrationCleanAllRegistryData = Migration{
 	Name: "migration_2_clean_all_registry_data",
 	Run: func(ctx context.Context, opt Options, key []byte) error {
