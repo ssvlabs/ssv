@@ -15,8 +15,8 @@ type Options struct {
 	Ctx       context.Context
 }
 
-// ITxn interface for badger transaction like functions
-type ITxn interface {
+// Txn interface for badger transaction like functions
+type Txn interface {
 	Set(prefix []byte, key []byte, value []byte) error
 	Get(prefix []byte, key []byte) (Obj, bool, error)
 	Delete(prefix []byte, key []byte) error
@@ -33,7 +33,7 @@ type IDb interface {
 	GetAll(prefix []byte, handler func(int, Obj) error) error
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error
-	Update(fn func(ITxn) error) error
+	Update(fn func(Txn) error) error
 	Close()
 }
 

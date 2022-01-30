@@ -236,7 +236,7 @@ func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
 
 // Update is a gateway to badger db Update function
 // creating and managing a read-write transaction
-func (b *BadgerDb) Update(fn func(basedb.ITxn) error) error {
+func (b *BadgerDb) Update(fn func(basedb.Txn) error) error {
 	return b.db.Update(func(txn *badger.Txn) error {
 		return fn(&badgerTxn{txn: txn})
 	})

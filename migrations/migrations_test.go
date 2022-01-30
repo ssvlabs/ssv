@@ -99,7 +99,7 @@ func fakeMigration(name string, returnErr error) Migration {
 	return Migration{
 		Name: name,
 		Run: func(ctx context.Context, opt Options, key []byte) error {
-			return opt.Db.Update(func(txn basedb.ITxn) error {
+			return opt.Db.Update(func(txn basedb.Txn) error {
 				err := txn.Set(migrationsPrefix, key, migrationCompleted)
 				if err != nil {
 					return err
