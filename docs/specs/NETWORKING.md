@@ -22,16 +22,17 @@ This document contains the networking specification for `SSV.Network`.
   - [ ] [Handshake](#handshake-protocol)
 - [x] [Networking](#networking)
   - [x] [PubSub](#pubsub)
-  - [x] [User Agent](#user-agnet)
+  - [x] [PubSub Scoring](#pubsub-scoring)
+  - [x] [Message Scoring](#message-scoring)
+  - [x] [Connection Scoring](#connection-scoring)
+  - [x] [User Agent](#user-agent)
   - [x] [Discovery](#discovery)
   - [x] [Netowrk ID](#network-id)
   - [x] [Subnets](#subnets)
   - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
-  - [x] [High Availability](#high-availability)
-  - [x] [Message Scoring](#message-scoring)
-  - [x] [Connection Scoring](#connection-scoring)
   - [x] [Security](#security)
+  - [x] [High Availability](#high-availability)
 
 ## Fundamentals
 
@@ -280,7 +281,7 @@ SSV nodes use the following stream protocols:
 This protocol is used by a node to find out what is the highest decided message for a specific validator.
 In case there are no decided messages, it will return an empty array of messages.
 
-`/ssv/sync/highest_decided/0.0.1`
+`/ssv/sync/decided/highest/0.0.1`
 
 <details>
   <summary>examples</summary>
@@ -321,7 +322,7 @@ This protocol enables to sync decided messages in some specific range.
 
 The request should specify the desired range, while the response will include all the found messages for that range.
 
-`/ssv/sync/decided_by_range/0.0.1`
+`/ssv/sync/decided/range/0.0.1`
 
 <details>
   <summary>examples</summary>
@@ -416,7 +417,7 @@ This protocol enables a node to catch up with change round messages.
 
 ## Handshake protocol
 
-`/ssv/auth/0.0.1`
+`/ssv/handshake/0.0.1`
 
 The handshake protocol allows peers to identify, by exchanging signed information. \
 It must be performed for every connection, and therefore forces nodes to 
@@ -454,16 +455,14 @@ message NodeInfo {
   bytes operator_id      = 2 [(gogoproto.nullable) = true];
   // node_type is the type of the authenticating node
   uint64 node_type       = 3 [(gogoproto.nullable) = false];
-  // execution_node is the eth1 node used by the node
+  // execution_node is the "name/version" of the eth1 node used by the node
   string execution_node  = 4; // TBD: actual value
-  // consesnsus_node is the eth2 node used by the node
+  // consensus_node is the "name/version" of the eth2 node used by the node
   string consesnsus_node = 5; // TBD: actual value
   // fork_version is the current fork used by the node
   uint32 fork_version    = 6;
   // fork_version is the current ssv-node version
   string node_version    = 7;
-
-  // TODO: add cloud provider / region / ... 
 }
 
 ```
@@ -495,7 +494,7 @@ Moreover, the default `msg-id` duplicates messages, causing it to be processed m
 - (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router
   - `signID` was set to empty (no author)
 
-#### Pubsub Scoring
+### Pubsub Scoring
 
 `gossipsub v1.1` introduced pubsub [scoring](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#peer-scoring),
 the idea is that each individual peer maintains a score for other peers. 
@@ -515,6 +514,24 @@ Thresholds values **TBD**, this section will be updated once that work is comple
 - `opportunisticGraftThreshold`: 5
 
 [Score function](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function) is running pariodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
+
+
+### Message Scoring
+
+Message scorers track on operators' behavior w.r.t incoming IBFT messages:
+
+- Invalid message signature (`-100`)
+- Message from operator w/o shared committees (`-1000`)
+
+### Connection Scoring
+
+Peer's connection score is determined after a successful handshake,
+and peers with low score will be pruned.
+
+Connection scores are based on the following properties:
+
+- Shared subnets / committees (`25`)
+- Static nodes such as `exporter` (`10000`)
 
 
 ### User Agent
@@ -632,24 +649,6 @@ therefore it's a fixed number (TBD 32 / 64 / 128).
 **TBD** A dynamic number of subnets (e.g. `log(num_of_peers)`) which requires a different approach.
 
 
-### Message Scoring
-
-Message scorers track on operators' behavior w.r.t incoming IBFT messages:
-
-- Invalid message signature (`-100`)
-- Message from operator w/o shared committees (`-1000`)
-
-### Connection Scoring
-
-Peer's connection score is determined after a successful handshake, 
-and peers with low score will be pruned. 
-
-Connection scores are based on the following properties:
-
-- Shared subnets / committees (`25`)
-- Static nodes such as `exporter` (`10000`)
-
-
 ### Peers Connectivity
 
 In a fully-connected network, where each peer is connected to all other peers in the network,
@@ -658,7 +657,6 @@ running nodes will consume many resources to process all network related tasks e
 To lower resource consumption, the number of connected peers is limited, currently set to `250`. \
 Once reached to peer limit, the node will connect only to relevant nodes with score above threshold, 
 which is currently set to zero.
-
 
 #### Connection Filters
 
@@ -712,7 +710,6 @@ Validator public key hash is used to determine the validator's subnet which is t
 
 `bloxstaking.ssv.<hash(validatiorPubKey) % num_of_subnets>`
 
-
 ### NAT port map
 
 libp2p enables to configure a `NATManager` that will attempt to open a port in the network's firewall using `UPnP`.
@@ -738,7 +735,8 @@ it kicks in in an early stage, before the other components processes the request
 ### High Availability
 
 As it participates in a decentralized p2p network, HA for an ssv node is not trivial. \ 
-The reason is that running multiple instances might lead to slashing and even disturb the consensus as it creates ambiguity and conflicts.
+The reason is that running multiple instances might lead to slashing or 
+disturb the consensus as it creates ambiguity and conflicts.
 
 Ideas TBD:
 
@@ -752,6 +750,10 @@ but it can't have multiple instances running because it is part of a p2p network
 A possible implementation could be a node with a proxied network layer 
 that uses websocket to communicate with worker nodes.
 
+The drawback is that the hub node becomes a point of failure, 
+and it's a single instance and therefore will have downtime, 
+but less than a full-blown stateful node.
+
 #### Subnet Partitions
 
 Subnet partitions separates a given set of subnets into `n` independent subsets of subnets, 
@@ -761,3 +763,7 @@ each working on different subsets.
 That will help decrease the damage in case some node fails, 
 as only a portion of the assigned validators will be affected, 
 while the other healthy instances keeps doing tasks in their subnets.
+
+The drawback of this approach is that we end up in a situation 
+where multiple peers (different `peer.ID`)
+share the same operator key, and that might lead to vulnerabilities.
