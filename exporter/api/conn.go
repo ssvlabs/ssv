@@ -115,7 +115,8 @@ func (c *conn) WriteLoop() {
 				c.logger.Error("could not read ws message", zap.Error(err))
 				return
 			}
-			if _, err = w.Write(message); err != nil {
+			n, err := w.Write(message)
+			if err != nil {
 				c.logger.Error("could not write ws message", zap.Error(err))
 				reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 				return
@@ -130,7 +131,7 @@ func (c *conn) WriteLoop() {
 			if err := json.Unmarshal(message, &msg); err != nil {
 				c.logger.Error("could not parse msg", zap.Any("filter", msg.Filter), zap.Error(err))
 			}
-			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter))
+			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter), zap.Int("bytes", n))
 		case <-ticker.C:
 			c.logger.Debug("sending ping message")
 			if err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout)); err != nil {
@@ -158,19 +159,25 @@ func (c *conn) ReadLoop() {
 		c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
 		return
 	}
-	c.ws.SetPongHandler(func(string) error {
+	c.ws.SetPongHandler(func(message string) error {
 		// extend read limit on every pong message
 		// this will keep the connection alive from our POV
-		c.logger.Debug("pong received")
+		c.logger.Debug("pong received", zap.String("message", message))
 		err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
 		if err != nil {
 			c.logger.Error("pong handler - readDeadline", zap.Error(err))
 		}
 		return err
 	})
-	c.ws.SetPingHandler(func(string) error {
+	c.ws.SetPingHandler(func(message string) error {
 		c.logger.Debug("ping received")
-		return nil
+		err := c.ws.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(c.writeTimeout))
+		if err == websocket.ErrCloseSent {
+			return nil
+		} else if e, ok := err.(net.Error); ok && e.Temporary() {
+			return nil
+		}
+		return err
 	})
 	for {
 		if c.ctx.Err() != nil {
