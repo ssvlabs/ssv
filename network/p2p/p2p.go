@@ -55,6 +55,7 @@ type p2pNetwork struct {
 	psSubs       map[string]context.CancelFunc
 	psTopicsLock *sync.RWMutex
 
+	useMainTopic  bool
 	reportLastMsg bool
 	nodeType      NodeType
 

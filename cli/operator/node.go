@@ -139,6 +139,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.Network = p2pNet
 
+		cfg.SSVOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+
 		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
