@@ -91,8 +91,8 @@ func New(opts Options) Node {
 
 func (n *operatorNode) init(opts Options) error {
 	if opts.ValidatorOptions.CleanRegistryData {
-		if err := n.storage.(*storage).CleanSyncOffset(); err != nil {
-			return errors.Wrap(err, "could not clean sync offset")
+		if err := n.storage.CleanRegistryData(); err != nil {
+			return errors.Wrap(err, "failed to clean registry data")
 		}
 	}
 	return nil

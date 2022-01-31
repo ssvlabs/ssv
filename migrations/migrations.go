@@ -45,34 +45,23 @@ type Migrations []Migration
 type Options struct {
 	Db     basedb.IDb
 	Logger *zap.Logger
-	// Storage Storage
-	// ExporterStorage ExporterStorage
+}
+
+func (o *Options) getRegistryStores() []basedb.RegistryStore {
+	return []basedb.RegistryStore{o.exporterStorage(), o.validatorStorage(), o.operatorStorage()}
 }
 
 func (o Options) exporterStorage() exporterstorage.Storage {
 	return exporterstorage.NewExporterStorage(o.Db, o.Logger)
 }
-
 func (o Options) validatorStorage() validatorstorage.ICollection {
-	opt := validatorstorage.CollectionOptions{
+	return validatorstorage.NewCollection(validatorstorage.CollectionOptions{
 		DB:     o.Db,
 		Logger: o.Logger,
-	}
-	return validatorstorage.NewCollection(opt)
+	})
 }
-
 func (o Options) operatorStorage() operator.Storage {
 	return operator.NewOperatorNodeStorage(o.Db, o.Logger)
-}
-
-func (o Options) cleanAll() error {
-	if err := o.exporterStorage().Clean(); err != nil {
-		return err
-	}
-	if err := o.validatorStorage().CleanAllShares(); err != nil {
-		return err
-	}
-	return o.operatorStorage().CleanSyncOffset()
 }
 
 // Run executes the migrations.

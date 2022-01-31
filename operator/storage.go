@@ -20,12 +20,10 @@ var (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	eth1.SyncOffsetStorage
+	basedb.RegistryStore
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(operatorKey string) error
-	// CleanSyncOffset TODO: validate that this interface change does not affect
-	// mocks or type casts.
-	CleanSyncOffset() error
 }
 
 type storage struct {
@@ -39,12 +37,16 @@ func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	return &es
 }
 
+func (s *storage) CleanRegistryData() error {
+	return s.cleanSyncOffset()
+}
+
 // SaveSyncOffset saves the offset
 func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 	return s.db.Set(prefix, syncOffsetKey, offset.Bytes())
 }
 
-func (s *storage) CleanSyncOffset() error {
+func (s *storage) cleanSyncOffset() error {
 	return s.db.RemoveAllByCollection(append(prefix, syncOffsetKey...))
 }
 

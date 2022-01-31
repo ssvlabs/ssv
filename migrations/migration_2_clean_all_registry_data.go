@@ -8,9 +8,12 @@ import (
 var migrationCleanAllRegistryData = Migration{
 	Name: "migration_2_clean_all_registry_data",
 	Run: func(ctx context.Context, opt Options, key []byte) error {
-		err := opt.cleanAll()
-		if err != nil {
-			return err
+		stores := opt.getRegistryStores()
+		for _, store := range stores {
+			err := store.CleanRegistryData()
+			if err != nil {
+				return err
+			}
 		}
 		return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
 	},

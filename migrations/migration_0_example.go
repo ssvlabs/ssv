@@ -10,7 +10,8 @@ import (
 var migrationExample1 = Migration{
 	Name: "migration_0_example",
 	Run: func(ctx context.Context, opt Options, key []byte) error {
-		if err := opt.exporterStorage().Clean(); err != nil {
+		// Example to clean registry data for specific storage
+		if err := opt.exporterStorage().CleanRegistryData(); err != nil {
 			return err
 		}
 

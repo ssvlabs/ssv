@@ -23,6 +23,12 @@ type Txn interface {
 	// TODO: add iterator
 }
 
+// RegistryStore interface for registry store
+// TODO: extend this interface and re-think storage refactoring
+type RegistryStore interface {
+	CleanRegistryData() error
+}
+
 // IDb interface for all db kind
 type IDb interface {
 	Set(prefix []byte, key []byte, value []byte) error

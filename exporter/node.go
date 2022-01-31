@@ -140,11 +140,11 @@ func New(opts Options) Exporter {
 
 func (exp *exporter) init(opts Options) error {
 	if opts.CleanRegistryData {
-		if err := exp.validatorStorage.CleanAllShares(); err != nil {
-			return errors.Wrap(err, "could not clean existing shares")
+		if err := exp.validatorStorage.CleanRegistryData(); err != nil {
+			return errors.Wrap(err, "failed to clean validator storage registry data")
 		}
-		if err := exp.storage.Clean(); err != nil {
-			return errors.Wrap(err, "could not clean existing data")
+		if err := exp.storage.CleanRegistryData(); err != nil {
+			return errors.Wrap(err, "failed to clean exporter storage registry data")
 		}
 		exp.logger.Debug("manage to cleanup registry data")
 	}
