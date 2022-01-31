@@ -5,13 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
 var (
+	// writeDeadline time allowed to read the next pong message from the peer.
+	writeDeadline = 10 * time.Second
+
 	// pongWait time allowed to read the next pong message from the peer.
 	pongWait = 60 * time.Second
 
@@ -101,48 +106,53 @@ func (c *conn) Send(msg []byte) {
 
 // WriteLoop a loop to activate writes on the socket
 func (c *conn) WriteLoop() {
-	ticker := time.NewTicker(pingPeriod)
 	defer func() {
-		ticker.Stop()
 		_ = c.ws.Close()
 	}()
-	for {
-		select {
-		case message := <-c.send:
-			_ = c.ws.SetWriteDeadline(time.Now().Add(pongWait))
-			w, err := c.ws.NextWriter(websocket.TextMessage)
-			if err != nil {
-				c.logger.Error("could not read ws message", zap.Error(err))
+	writeLock := sync.Mutex{}
+
+	ctx, cancel := context.WithCancel(c.ctx)
+	defer cancel()
+
+	t := time.NewTimer(pingPeriod)
+	defer t.Stop()
+	go func() {
+		defer cancel()
+		for {
+			if ctx.Err() != nil {
 				return
 			}
-			n, err := w.Write(message)
-			if err != nil {
-				c.logger.Error("could not write ws message", zap.Error(err))
-				reportStreamOutbound(c.ws.RemoteAddr().String(), err)
-				return
-			}
-			err = w.Close()
-			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
-			if err != nil {
-				c.logger.Error("could not close writer", zap.Error(err))
-				return
-			}
-			var msg Message
-			if err := json.Unmarshal(message, &msg); err != nil {
-				c.logger.Error("could not parse msg", zap.Any("filter", msg.Filter), zap.Error(err))
-			}
-			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter), zap.Int("bytes", n))
-		case <-ticker.C:
+			t.Reset(pingPeriod)
+			<-t.C
+			writeLock.Lock()
 			c.logger.Debug("sending ping message")
-			if err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout)); err != nil {
+			err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout))
+			writeLock.Unlock()
+			if err != nil {
 				c.logger.Error("could not send ping message", zap.Error(err))
 				return
 			}
-		case <-c.ctx.Done():
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			writeLock.Lock()
 			c.logger.Debug("context done, sending close message")
-			if err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout)); err != nil {
+			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
+			writeLock.Unlock()
+			if err != nil {
 				c.logger.Error("could not send close message", zap.Error(err))
 				return
+			}
+		case message := <-c.send:
+			writeLock.Lock()
+			err := c.sendMsg(message)
+			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
+			writeLock.Unlock()
+			if err != nil {
+				c.logger.Warn("failed to send message", zap.Error(err))
 			}
 		}
 	}
@@ -200,6 +210,28 @@ func (c *conn) ReadLoop() {
 			c.read <- msg
 		}
 	}
+}
+
+func (c *conn) sendMsg(message []byte) error {
+	_ = c.ws.SetWriteDeadline(time.Now().Add(writeDeadline))
+	w, err := c.ws.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return errors.Wrap(err, "could not create ws writer")
+	}
+	n, err := w.Write(message)
+	if err != nil {
+		return errors.Wrap(err, "could not write ws message")
+	}
+	err = w.Close()
+	if err != nil {
+		return errors.Wrap(err, "could not close writer")
+	}
+	var msg Message
+	if err := json.Unmarshal(message, &msg); err != nil {
+		c.logger.Error("could not parse msg", zap.Any("filter", msg.Filter), zap.Error(err))
+	}
+	c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter), zap.Int("bytes", n))
+	return nil
 }
 
 func isCloseError(err error) bool {
