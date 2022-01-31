@@ -9,8 +9,7 @@ import (
 // fileMigrator checks if migration file exist.
 // returns whether to clean data and if failed to create the file
 func fileMigrator(migrationDir string) (bool, error) {
-	migrationFileName := "migration.txt"
-	fullPath := filepath.Join(migrationDir, migrationFileName)
+	fullPath := filepath.Clean(filepath.Join(filepath.Clean(migrationDir), "migration.txt"))
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
 		if err := os.MkdirAll(migrationDir, 0700); err != nil {
 			return true, errors.Wrap(err, "Failed to create migration folder")

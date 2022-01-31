@@ -206,11 +206,6 @@ func (n *Local) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) 
 	return nil, nil
 }
 
-// BroadcastMainTopic implementation
-func (n *Local) BroadcastMainTopic(msg *proto.SignedMessage) error {
-	return nil
-}
-
 // SubscribeToMainTopic implementation
 func (n *Local) SubscribeToMainTopic() error {
 	return nil
