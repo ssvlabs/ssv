@@ -272,11 +272,6 @@ func (n *TestNetwork) MaxBatch() uint64 {
 	return uint64(n.maxBatch)
 }
 
-// BroadcastMainTopic implementation
-func (n *TestNetwork) BroadcastMainTopic(msg *proto.SignedMessage) error {
-	return nil
-}
-
 // SubscribeToMainTopic implementation
 func (n *TestNetwork) SubscribeToMainTopic() error {
 	return nil

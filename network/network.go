@@ -75,8 +75,6 @@ type Broadcaster interface {
 	BroadcastSignature(topicName []byte, msg *proto.SignedMessage) error
 	// BroadcastDecided broadcasts a decided instance with collected signatures
 	BroadcastDecided(topicName []byte, msg *proto.SignedMessage) error
-	// BroadcastMainTopic broadcasts the given msg on main channel
-	BroadcastMainTopic(msg *proto.SignedMessage) error
 	// MaxBatch returns the maximum batch size for network responses
 	MaxBatch() uint64
 }

@@ -150,6 +150,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
+		exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
 
 		exporterNode = exporter.New(*exporterOptions)
 
