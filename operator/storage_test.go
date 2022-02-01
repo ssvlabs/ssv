@@ -48,29 +48,51 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 func TestSetupPrivateKey(t *testing.T) {
 	tests := []struct {
-		name      string
-		existKey  string
-		passedKey string
+		name           string
+		existKey       string
+		passedKey      string
+		generateIfNone bool
+		expectedError  string
 	}{
 		{
-			name:      "key not exist passing nothing", // expected - generate new key
-			existKey:  "",
-			passedKey: "",
+			name:           "key not exist passing nothing", // expected - generate new key
+			existKey:       "",
+			passedKey:      "",
+			generateIfNone: true,
+			expectedError:  "",
 		},
 		{
-			name:      "key not exist passing key in env", // expected - set the passed key
-			existKey:  "",
-			passedKey: skPem2,
+			name:           "key not exist passing key in env", // expected - set the passed key
+			existKey:       "",
+			passedKey:      skPem2,
+			generateIfNone: true,
+			expectedError:  "",
 		},
 		{
-			name:      "key exist passing key in env", // expected - override current key with the passed one
-			existKey:  skPem,
-			passedKey: skPem2,
+			name:          "key not exist passing key in env (not generate)", // expected - throw an error
+			existKey:      "",
+			passedKey:     skPem2,
+			expectedError: "",
 		},
 		{
-			name:      "key exist passing nothing", // expected - do nothing
-			existKey:  skPem,
-			passedKey: "",
+			name:           "key exist passing key in env", // expected - override current key with the passed one
+			existKey:       skPem,
+			passedKey:      skPem2,
+			generateIfNone: true,
+			expectedError:  "",
+		},
+		{
+			name:           "key exist passing nothing", // expected - do nothing
+			existKey:       skPem,
+			passedKey:      "",
+			generateIfNone: true,
+			expectedError:  "",
+		},
+		{
+			name:          "key not exist passing nothing (not generate)", // expected - throw an error
+			existKey:      "",
+			passedKey:     "",
+			expectedError: "failed to verify operator private key: operator key is not provided",
 		},
 	}
 
@@ -96,8 +118,8 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, operatorStorage.savePrivateKey(string(existKeyByte)))
 				sk, found, err := operatorStorage.GetPrivateKey()
-				require.True(t, found)
 				require.NoError(t, err)
+				require.True(t, found)
 				require.NotNil(t, sk)
 
 				existKeyByte, err = base64.StdEncoding.DecodeString(test.existKey)
@@ -105,7 +127,14 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			require.NoError(t, operatorStorage.SetupPrivateKey(test.passedKey))
+			err = operatorStorage.SetupPrivateKey(test.generateIfNone, test.passedKey)
+			if test.expectedError != "" {
+				require.NotNil(t, err)
+				require.Equal(t, test.expectedError, err.Error())
+				return
+			}
+
+			require.NoError(t, err)
 			sk, found, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)
 			pk, err := rsaencryption.ExtractPublicKey(sk) // from storage

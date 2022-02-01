@@ -21,7 +21,7 @@ type Storage interface {
 	eth1.SyncOffsetStorage
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
-	SetupPrivateKey(operatorKey string) error
+	SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error
 }
 
 type storage struct {
@@ -61,21 +61,21 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 // GetPrivateKey return rsa private key
 func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 	obj, found, err := s.db.Get(prefix, []byte("private-key"))
+	if err != nil {
+		return nil, false, err
+	}
 	if !found {
 		return nil, found, nil
 	}
-	if err != nil {
-		return nil, found, err
-	}
 	sk, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
 	if err != nil {
-		return nil, found, err
+		return nil, false, err
 	}
 	return sk, found, nil
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
+func (s *storage) SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error {
 	logger := s.logger.With(zap.String("who", "operatorKeys"))
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	}
 	var operatorKey = string(operatorKeyByte)
 
-	newSk, exist, err := s.verifyPrivateKeyExistAndGenerateIfNeed(operatorKey)
+	newSk, exist, err := s.verifyPrivateKeyExistAndGenerateIfNeed(generateIfNone, operatorKey)
 	if err != nil {
 		return errors.Wrap(err, "failed to verify operator private key")
 	}
@@ -109,11 +109,11 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string) error {
 	}
 
 	sk, found, err := s.GetPrivateKey()
-	if !found {
-		return errors.New("failed to find operator private key")
-	}
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator private key")
+	}
+	if !found {
+		return errors.New("failed to find operator private key")
 	}
 	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
 	if err != nil {
@@ -132,9 +132,12 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 }
 
 // verifyPrivateKeyExistAndGenerateIfNeed return true if key exist and no new key passed else return new generated key
-func (s *storage) verifyPrivateKeyExistAndGenerateIfNeed(operatorKey string) (string, bool, error) {
+func (s *storage) verifyPrivateKeyExistAndGenerateIfNeed(generateIfNone bool, operatorKey string) (string, bool, error) {
 	_, found, err := s.GetPrivateKey()
 	if !found && operatorKey == "" { // no sk in storage and no key passed from config
+		if !generateIfNone {
+			return "", false, errors.New("operator key is not provided")
+		}
 		_, skByte, err := rsaencryption.GenerateKeys()
 		if err != nil {
 			return "", false, errors.Wrap(err, "failed to generate new keys")
