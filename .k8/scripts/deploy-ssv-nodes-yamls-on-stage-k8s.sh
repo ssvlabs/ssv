@@ -113,7 +113,7 @@ if [[ -d .k8/yamls/ ]]; then
           -e "s|REPLACE_HEALTH_IMAGE|${HEALTH_CHECK_IMAGE}|g" \
           -e "s|REPLACE_NODES_CPU_LIMIT|${NODES_CPU_LIMIT}|g" \
           -e "s|REPLACE_NODES_MEM_LIMIT|${NODES_MEM_LIMIT}|g" \
-	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/yamls/${file}" || exit 1
+	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/yamls-stage/${file}" || exit 1
   done
 fi
 
