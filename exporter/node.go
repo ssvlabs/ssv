@@ -312,6 +312,10 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	if !validatorShare.HasMetadata() {
+		logger.Debug("validator w/o metadata,skipped setup")
+		return nil
+	}
 	logger.Debug("setup validator")
 	defer logger.Debug("setup validator done")
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
