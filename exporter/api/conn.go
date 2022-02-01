@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -19,9 +18,9 @@ var (
 
 	// pongWait time allowed to read the next pong message from the peer.
 	pongWait = 60 * time.Second
-
-	// pingPeriod period to send ping messages. Must be less than pongWait.
-	pingPeriod = (pongWait * 8) / 10
+	//
+	//// pingPeriod period to send ping messages. Must be less than pongWait.
+	//pingPeriod = (pongWait * 8) / 10
 
 	// maxMessageSize max msg size allowed from peer.
 	maxMessageSize = int64(1024)
@@ -109,48 +108,48 @@ func (c *conn) WriteLoop() {
 	defer func() {
 		_ = c.ws.Close()
 	}()
-	writeLock := sync.Mutex{}
+	//writeLock := sync.Mutex{}
 
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
-
-	t := time.NewTimer(pingPeriod)
-	defer t.Stop()
-	go func() {
-		defer cancel()
-		for {
-			if ctx.Err() != nil {
-				return
-			}
-			t.Reset(pingPeriod)
-			<-t.C
-			writeLock.Lock()
-			c.logger.Debug("sending ping message")
-			err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout))
-			writeLock.Unlock()
-			if err != nil {
-				c.logger.Error("could not send ping message", zap.Error(err))
-				return
-			}
-		}
-	}()
+	//
+	//t := time.NewTimer(pingPeriod)
+	//defer t.Stop()
+	//go func() {
+	//	defer cancel()
+	//	for {
+	//		if ctx.Err() != nil {
+	//			return
+	//		}
+	//		t.Reset(pingPeriod)
+	//		<-t.C
+	//		writeLock.Lock()
+	//		c.logger.Debug("sending ping message")
+	//		err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout))
+	//		writeLock.Unlock()
+	//		if err != nil {
+	//			c.logger.Error("could not send ping message", zap.Error(err))
+	//			return
+	//		}
+	//	}
+	//}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			writeLock.Lock()
+			//writeLock.Lock()
 			c.logger.Debug("context done, sending close message")
 			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
-			writeLock.Unlock()
+			//writeLock.Unlock()
 			if err != nil {
 				c.logger.Error("could not send close message", zap.Error(err))
 				return
 			}
 		case message := <-c.send:
-			writeLock.Lock()
+			//writeLock.Lock()
 			err := c.sendMsg(message)
 			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
-			writeLock.Unlock()
+			//writeLock.Unlock()
 			if err != nil {
 				c.logger.Warn("failed to send message", zap.Error(err))
 			}
@@ -164,11 +163,11 @@ func (c *conn) ReadLoop() {
 		_ = c.ws.Close()
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
-	err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	if err != nil {
-		c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
-		return
-	}
+	//err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
+	//if err != nil {
+	//	c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
+	//	return
+	//}
 	c.ws.SetPongHandler(func(message string) error {
 		// extend read limit on every pong message
 		// this will keep the connection alive from our POV
