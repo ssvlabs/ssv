@@ -55,44 +55,53 @@ func TestSetupPrivateKey(t *testing.T) {
 		expectedError  string
 	}{
 		{
-			name:           "key not exist passing nothing", // expected - generate new key
+			name:           "key not exist, passing nothing", // expected - raise an error
+			existKey:       "",
+			passedKey:      "",
+			generateIfNone: false,
+			expectedError:  "key not exist or provided",
+		},
+		{
+			name:           "key not exist passing, nothing (with generate flag)", // expected - generate new key
 			existKey:       "",
 			passedKey:      "",
 			generateIfNone: true,
 			expectedError:  "",
 		},
 		{
-			name:           "key not exist passing key in env", // expected - set the passed key
+			name:           "key not exist, passing key in env", // expected - set the passed key
 			existKey:       "",
 			passedKey:      skPem2,
-			generateIfNone: true,
+			generateIfNone: false,
 			expectedError:  "",
 		},
 		{
-			name:          "key not exist passing key in env (not generate)", // expected - throw an error
-			existKey:      "",
-			passedKey:     skPem2,
-			expectedError: "",
-		},
-		{
-			name:           "key exist passing key in env", // expected - override current key with the passed one
+			name:           "key exist, passing key in env", // expected - override current key with the passed one
 			existKey:       skPem,
 			passedKey:      skPem2,
-			generateIfNone: true,
+			generateIfNone: false,
 			expectedError:  "",
 		},
 		{
-			name:           "key exist passing nothing", // expected - do nothing
+			name:           "key exist, passing nothing", // expected - do nothing
+			existKey:       skPem,
+			passedKey:      "",
+			generateIfNone: false,
+			expectedError:  "",
+		},
+		{
+			name:           "key exist, passing nothing (with generate flag)", // expected - do nothing
 			existKey:       skPem,
 			passedKey:      "",
 			generateIfNone: true,
 			expectedError:  "",
 		},
 		{
-			name:          "key not exist passing nothing (not generate)", // expected - throw an error
-			existKey:      "",
-			passedKey:     "",
-			expectedError: "failed to verify operator private key: operator key is not provided",
+			name:           "error raised", // expected - throw an error
+			existKey:       "",
+			passedKey:      "xxx",
+			generateIfNone: false,
+			expectedError:  "Failed to decode base64: illegal base64 data at input byte 0",
 		},
 	}
 
