@@ -16,7 +16,7 @@ func GenerateKeys() ([]byte, []byte, error) {
 	// generate random private key (secret)
 	sk, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "Failed to generate private key")
+		return nil, nil, errors.Wrap(err, "Failed to generate rsa key")
 	}
 	// retrieve public key from the newly generated secret
 	pk := &sk.PublicKey
