@@ -2,15 +2,13 @@ package migrationutils
 
 import (
 	"github.com/stretchr/testify/require"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
 )
 
 func TestMigrate(t *testing.T) {
-	tmpPath, err := ioutil.TempDir("", "xxx")
-	require.NoError(t, err)
+	tmpPath := path.Join(t.TempDir(), "xxx")
 	require.NoError(t, os.MkdirAll(tmpPath, 0700))
 	clean, err := Migrate(tmpPath)
 	require.NoError(t, err)
