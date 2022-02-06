@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"sync"
 	"testing"
 	"time"
 )
@@ -60,9 +61,13 @@ func TestRoundTimer_Kill(t *testing.T) {
 func TestRoundTimer_Race(t *testing.T) {
 	timer := New(context.Background(), zaptest.NewLogger(t))
 	timer.Reset(time.Millisecond * 4)
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		time.Sleep(time.Millisecond * 5)
 		timer.Kill()
 	}()
+	wg.Wait()
 	require.True(t, <-timer.ResultChan())
 }
