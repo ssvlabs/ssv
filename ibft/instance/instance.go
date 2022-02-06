@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"context"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
@@ -100,6 +101,9 @@ func NewInstanceWithState(state *proto.State) ibft.Instance {
 func NewInstance(opts *InstanceOptions) ibft.Instance {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
+	logger := opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
+		zap.Uint64("seq_num", opts.SeqNumber),
+		zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()))
 	ret := &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		state: &proto.State{
@@ -115,10 +119,8 @@ func NewInstance(opts *InstanceOptions) ibft.Instance {
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
-		Logger: opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
-			zap.Uint64("seq_num", opts.SeqNumber),
-			zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr())),
-		signer: opts.Signer,
+		Logger:         logger,
+		signer:         opts.Signer,
 
 		MsgQueue:            opts.Queue,
 		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
@@ -126,7 +128,7 @@ func NewInstance(opts *InstanceOptions) ibft.Instance {
 		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 
-		roundTimer: roundtimer.New(),
+		roundTimer: roundtimer.New(context.Background(), logger.With(zap.String("who", "RoundTimer"))),
 
 		eventQueue: eventqueue.New(),
 

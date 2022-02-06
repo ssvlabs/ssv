@@ -93,7 +93,7 @@ loop:
 			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State().Round.Get()))
 		}
 	}
-	i.roundTimer.CloseChan()
+	//i.roundTimer.CloseChan()
 	i.Logger.Debug("instance round timer loop stopped")
 }
 
