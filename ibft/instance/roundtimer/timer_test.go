@@ -31,6 +31,7 @@ func TestRoundTimer_ResetMultiple(t *testing.T) {
 	require.True(t, <-timer.ResultChan())
 	timer.Reset(time.Millisecond * 100)
 	require.True(t, <-timer.ResultChan())
+	require.True(t, timer.Stopped())
 }
 
 func TestRoundTimer_ResetBeforeLapsed(t *testing.T) {
@@ -45,7 +46,7 @@ func TestRoundTimer_ResetBeforeLapsed(t *testing.T) {
 	require.Greater(t, t2.Milliseconds(), (time.Millisecond * 250).Milliseconds())
 }
 
-func TestRoundTimer_Stop(t *testing.T) {
+func TestRoundTimer_Kill(t *testing.T) {
 	timer := New(context.Background(), zaptest.NewLogger(t))
 	timer.Reset(time.Millisecond * 500)
 	go func() {
@@ -53,6 +54,9 @@ func TestRoundTimer_Stop(t *testing.T) {
 		timer.Kill()
 	}()
 	require.False(t, <-timer.ResultChan())
+	// make sure another call to reset won't start the timer
+	timer.Reset(time.Millisecond * 500)
+	require.True(t, timer.Stopped())
 }
 
 func TestRoundTimer_Race(t *testing.T) {

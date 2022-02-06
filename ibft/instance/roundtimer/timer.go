@@ -42,7 +42,6 @@ func New(pctx context.Context, logger *zap.Logger) *RoundTimer {
 		result:    make(chan bool, 1),
 		state:     stateNotInitialized,
 	}
-	//t.init()
 	return t
 }
 
@@ -54,6 +53,10 @@ func (t *RoundTimer) ResultChan() <-chan bool {
 
 // Reset will reset the underlying timer
 func (t *RoundTimer) Reset(d time.Duration) {
+	if t.ctx.Err() != nil { // timer was killed
+		t.logger.Warn("timer was killed already, reset failed")
+		return
+	}
 	t.logger.Debug("Reset()")
 	if atomic.SwapUint32(&t.state, stateRunning) == stateNotInitialized {
 		// first reset creates the timer
@@ -67,7 +70,6 @@ func (t *RoundTimer) Reset(d time.Duration) {
 	go func() {
 		select {
 		case <-t.ctx.Done():
-			t.logger.Debug("context done")
 			if atomic.CompareAndSwapUint32(&t.state, stateRunning, stateStopped) {
 				t.logger.Debug("timer killed")
 				t.result <- false
@@ -92,25 +94,3 @@ func (t *RoundTimer) Stopped() bool {
 	state := atomic.LoadUint32(&t.state)
 	return state == stateStopped || state == stateNotInitialized
 }
-
-//
-//func (t *RoundTimer) init() {
-//	t.timer = time.NewTimer(time.Second)
-//
-//	go func() {
-//		for {
-//			select {
-//			case <-t.ctx.Done():
-//				t.logger.Debug("context done")
-//				return
-//			case <-t.timer.C:
-//				if atomic.CompareAndSwapUint32(&t.state, stateRunning, stateResetting) {
-//					t.logger.Debug("sending result after time elapsed")
-//					t.result <- true
-//				} else {
-//					t.logger.Debug("state is not resetting")
-//				}
-//			}
-//		}
-//	}()
-//}
