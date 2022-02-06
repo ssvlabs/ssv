@@ -38,11 +38,9 @@ func TestRoundTimer_ResetBeforeLapsed(t *testing.T) {
 	timer := New(context.Background(), zap.L())
 	timer.Reset(time.Millisecond * 100)
 	timer.Reset(time.Millisecond * 300)
-
 	t1 := time.Now()
-	res := <-timer.ResultChan()
+	require.True(t, <-timer.ResultChan())
 	t2 := time.Since(t1)
-	require.True(t, res)
 	require.Greater(t, t2.Milliseconds(), (time.Millisecond * 250).Milliseconds())
 }
 

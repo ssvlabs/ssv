@@ -86,6 +86,7 @@ func (t *RoundTimer) Reset(d time.Duration) {
 
 // Kill kills the timer
 func (t *RoundTimer) Kill() {
+	t.logger.Debug("Kill()")
 	t.cancelCtx()
 }
 
