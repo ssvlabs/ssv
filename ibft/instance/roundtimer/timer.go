@@ -89,7 +89,8 @@ func (t *RoundTimer) Kill() {
 
 // Stopped returns whether the timer has stopped
 func (t *RoundTimer) Stopped() bool {
-	return atomic.LoadUint32(&t.state) == stateStopped
+	state := atomic.LoadUint32(&t.state)
+	return state == stateStopped || state == stateNotInitialized
 }
 
 //

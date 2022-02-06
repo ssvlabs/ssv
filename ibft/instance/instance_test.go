@@ -43,7 +43,7 @@ func TestInstanceStop(t *testing.T) {
 		ValueCheck:     bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:         zaptest.NewLogger(t),
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
-		roundTimer:     roundtimer.New(context.Background(), zap.L()),
+		roundTimer:     roundtimer.New(context.Background(), zaptest.NewLogger(t)),
 	}
 	instance.fork = testingFork(instance)
 	instance.Init()
