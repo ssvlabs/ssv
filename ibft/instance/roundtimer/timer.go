@@ -59,7 +59,7 @@ func (t *RoundTimer) Reset(d time.Duration) {
 		t.logger.Warn("could not reset timer as it was killed already")
 		return
 	}
-	t.logger.Debug("resetting timer")
+	t.logger.Debug("resetting timer", zap.Duration("timeout", d))
 	if atomic.SwapUint32(&t.state, stateRunning) == stateNotInitialized {
 		// first reset creates the timer
 		t.timer = time.NewTimer(d)
@@ -73,13 +73,13 @@ func (t *RoundTimer) Reset(d time.Duration) {
 		select {
 		case <-t.ctx.Done():
 			if atomic.CompareAndSwapUint32(&t.state, stateRunning, stateStopped) {
-				t.logger.Debug("timer was killed")
+				t.logger.Debug("round timer was killed")
 				t.result <- false
 			}
 			return
 		case <-t.timer.C:
 			if atomic.CompareAndSwapUint32(&t.state, stateRunning, stateStopped) {
-				t.logger.Debug("sending result after time elapsed")
+				t.logger.Debug("round timer was timed-out")
 				t.result <- true
 			}
 		}
