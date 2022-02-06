@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -137,11 +138,13 @@ func (c *conn) WriteLoop() {
 			}
 		case message := <-c.send:
 			c.writeLock.Lock()
-			_, err := c.sendMsg(message)
+			n, err := c.sendMsg(message)
 			c.writeLock.Unlock()
 			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
 				c.logger.Warn("failed to send message", zap.Error(err))
+			} else {
+				c.logMsg(message, n)
 			}
 		}
 	}
@@ -221,6 +224,25 @@ func (c *conn) sendMsg(msg []byte) (int, error) {
 		return 0, errors.Wrap(err, "could not close writer")
 	}
 	return n, nil
+}
+
+func (c *conn) logMsg(message []byte, byteWritten int) {
+	if byteWritten == 0 {
+		return
+	}
+	j := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(message, &j); err != nil {
+		c.logger.Error("could not parse msg", zap.Error(err))
+	}
+	fraw, ok := j["filter"]
+	if !ok {
+		return
+	}
+	filter, err := fraw.MarshalJSON()
+	if err != nil {
+		c.logger.Error("could not parse filter", zap.Error(err))
+	}
+	c.logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
 }
 
 // isCloseError determines whether the given error is of CloseError type
