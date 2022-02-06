@@ -13,7 +13,7 @@ import (
 
 func TestConn_Send_FullQueue(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	c := newConn(context.Background(), logger, nil, "test", 0)
+	c := newConn(context.Background(), logger, nil, "test", 0, false)
 
 	for i := 0; i < chanSize+2; i++ {
 		c.Send([]byte(fmt.Sprintf("test-%d", i)))

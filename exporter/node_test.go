@@ -146,7 +146,7 @@ func newMockExporter() (*exporter, error) {
 		return nil, err
 	}
 
-	ws := api.NewWsServer(context.Background(), logger, nil, nil)
+	ws := api.NewWsServer(context.Background(), logger, nil, nil, false)
 
 	opts := Options{
 		Ctx:        context.Background(),

@@ -22,7 +22,7 @@ func TestHandleQuery(t *testing.T) {
 		nm.Msg.Data = []storage.OperatorInformation{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
-	}, mux).(*wsServer)
+	}, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -72,7 +72,7 @@ func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx := context.Background()
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, logger, nil, mux).(*wsServer)
+	ws := NewWsServer(ctx, logger, nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
 		require.NoError(t, ws.Start(addr))
