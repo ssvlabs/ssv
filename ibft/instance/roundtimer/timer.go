@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// states helps to sync round timer using atomic
+// states helps to sync round timer using atomic package
 const (
 	stateNotInitialized uint32 = 0
 	stateStopped        uint32 = 1
@@ -15,13 +15,16 @@ const (
 )
 
 // RoundTimer helps to manage current instance rounds.
-// it should be killed once the instance finished and recreated for each new instance.
+// it should be killed (Kill()) once the instance finished and recreated for each new IBFT instance,
+// in that case 'false' is returned in result channel.
+// if round has timed-out, the timer returns 'true' in the result channel.
+// upon new round, Reset() should be called to reset the timer with the new timeout.
 type RoundTimer struct {
 	logger *zap.Logger
-
-	ctx       context.Context
+	ctx    context.Context
+	// cancelCtx cancels the current context, will be called from Kill()
 	cancelCtx context.CancelFunc
-
+	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
 	// if timed-out the returned value is true
@@ -34,7 +37,7 @@ type RoundTimer struct {
 // New creates a new instance of RoundTimer
 func New(pctx context.Context, logger *zap.Logger) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
-	t := &RoundTimer{
+	return &RoundTimer{
 		ctx:       ctx,
 		cancelCtx: cancelCtx,
 		logger:    logger,
@@ -42,7 +45,6 @@ func New(pctx context.Context, logger *zap.Logger) *RoundTimer {
 		result:    make(chan bool, 1),
 		state:     stateNotInitialized,
 	}
-	return t
 }
 
 // ResultChan returns the result chan
