@@ -32,7 +32,6 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [Peers Connectivity](#peers-connectivity)
   - [x] [Forks](#forks)
   - [x] [Security](#security)
-  - [x] [High Availability](#high-availability)
 
 ## Fundamentals
 
@@ -46,8 +45,8 @@ a modular framework for P2P networking that is used by multiple decentralized pr
 ### Transport
 
 Network peers should support the following transports:
-- `TCP` is used by libp2p for setting up communication channels between peers. default port: `12000`
-- `UDP` is used for discovery purposes. default port: `13000`
+- `TCP` is used by libp2p for setting up communication channels between peers. default port: `12001`
+- `UDP` is used for discovery purposes. default port: `13001`
 
 [go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise) 
 is used to secure transport (see [noise protocol](https://noiseprotocol.org/noise.html)).
@@ -61,10 +60,10 @@ and being transported p2p with one of the following methods:
 
 **Streams** 
 
-Streams are used for direct messages between peers.
-
 Libp2p allows to create a bidirectional stream between two peers and implement the corresponding wire messaging protocol. \
 See more information in [IPFS specs > communication-model - streams](https://ipfs.io/ipfs/QmVqNrDfr2dxzQUo4VN3zhG4NV78uYFmRpgSktWDc2eeh2/specs/7-properties/#71-communication-model---streams).
+
+Streams are used for direct messages between peers.
 
 **PubSub**
 
@@ -148,7 +147,6 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
 
 `SignedMessage` is a wrapper for IBFT messages, it holds a message and its signature with a list of signer IDs:
 
-
 <details>
   <summary><b>protobuf</b></summary>
   
@@ -227,7 +225,7 @@ Sync is done over streams as pubsub is not suitable in this case due to several 
   ```protobuf
   message SyncMessage {
     // type is the type of sync message
-    SyncMsgType type                   = 1;
+    SyncMsgType type                      = 1;
     // identifier of the message (validator + role)
     bytes identifier                      = 2;
     // params holds the requests parameters
@@ -259,7 +257,7 @@ A successful response message usually includes a list of results and the corresp
 }
 ```
 
-An error response includes an error code in the form of a string to allow flexability:
+An error response includes an error code in the form of a string to allow flexibility:
 ```
 {
   "identifier": "...",
@@ -423,50 +421,69 @@ The handshake protocol allows peers to identify, by exchanging signed informatio
 It must be performed for every connection, and therefore forces nodes to 
 authenticate / prove ownership of their operator key.
 
-**TBD** Public, static nodes such as exporter requires registration 
+**TBD** Public, static nodes such as exporter requires registration
 
 ### Message Structure
 
 The following information will be exchanged as part of the handshake:
 
+<details>
+  <summary><b>protobuf</b></summary>
+
 ```protobuf
 syntax = "proto3";
 import "gogo.proto";
 
-// AuthMessage is a message that is used for authenticating nodes
+// HandshakeMessage is a message that is used for handshaking nodes
 message HandshakeMessage {
-  // info is the node information to sign
-  NodeInfo info = 1 [(gogoproto.nullable) = false];
+  // payload is the information to sign in bytes
+  bytes payload = 1 [(gogoproto.nullable) = false];
   // signed is a signature of the message
   bytes signed  = 2 [(gogoproto.nullable) = false];
+}
 
-  // TODO: TBD
+// HandshakePayload contains the information passed during handshake
+message HandshakePayload {
+  // identity is the information of the answering node
+  NodeIdentity identity = 1 [(gogoproto.nullable) = true];
+  // src is set by the sender
+  Source src            = 2 [(gogoproto.nullable) = false];
+}
+
+// Source contains information from initiator of the handshake
+message Source {
   // msg_seq helps to keep track over multiple handshakes, will by set by the sender
   uint64 msg_seq = 1 [(gogoproto.nullable) = false];
   // peer_id is the peer that the message is targeted for, will by set by the sender
   bytes peer_id  = 2 [(gogoproto.nullable) = false];
 }
 
-// NodeInfo contains node's information
-message NodeInfo {
+// NodeIdentity contains node's identity information
+message NodeIdentity {
   // peer_id of the authenticating node
-  bytes peer_id          = 1 [(gogoproto.nullable) = false];
+  bytes peer_id       = 1 [(gogoproto.nullable) = false];
   // operator_id of the authenticating node
-  bytes operator_id      = 2 [(gogoproto.nullable) = true];
+  bytes operator_id   = 2 [(gogoproto.nullable) = true];
   // node_type is the type of the authenticating node
-  uint64 node_type       = 3 [(gogoproto.nullable) = false];
-  // execution_node is the "name/version" of the eth1 node used by the node
-  string execution_node  = 4; // TBD: actual value
-  // consensus_node is the "name/version" of the eth2 node used by the node
-  string consesnsus_node = 5; // TBD: actual value
+  uint64 node_type    = 3 [(gogoproto.nullable) = false];
   // fork_version is the current fork used by the node
-  uint32 fork_version    = 6;
+  uint32 fork_version = 4;
+  // metadata is the NodeMetadata in bytes, to allow future flexibility
+  bytes metadata      = 5;
+}
+
+// NodeMetadata contains node's general information
+message NodeMetadata {
+  // execution_node is the "name/version" of the eth1 node
+  string execution_node  = 1;
+  // consensus_node is the "name/version" of the eth2 node
+  string consesnsus_node = 2;
   // fork_version is the current ssv-node version
-  string node_version    = 7;
+  string node_version    = 3;
 }
 
 ```
-
+</details>
 ---
 
 
@@ -513,7 +530,8 @@ Thresholds values **TBD**, this section will be updated once that work is comple
 - `acceptPXThreshold`: 100
 - `opportunisticGraftThreshold`: 5
 
-[Score function](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function) is running pariodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
+[Score function](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function) is 
+running pariodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
 
 
 ### Message Scoring
@@ -522,6 +540,7 @@ Message scorers track on operators' behavior w.r.t incoming IBFT messages:
 
 - Invalid message signature (`-100`)
 - Message from operator w/o shared committees (`-1000`)
+- Late arrival of valid message (`-25`)
 
 ### Connection Scoring
 
@@ -531,29 +550,31 @@ and peers with low score will be pruned.
 Connection scores are based on the following properties:
 
 - Shared subnets / committees (`25`)
-- Static nodes such as `exporter` (`10000`)
-
 
 ### User Agent
 
 Libp2p provides user agent mechanism with the [identify](https://github.com/libp2p/specs/tree/master/identify) protocol, 
 which is used to exchange basic information with other peers in the network.
 
-User Agent contains the node version and type, and in addition the operator id which might be reduced in future versions. \
-See detailed format in [forks > user agent](#fork-v0)
+User Agent contains the node version and type, and in addition the operator id. \
+See detailed format in [forks > user agent](#fork-v0).
 
+Note that user agent might be reduced in future versions,
+but a short and simple user agent will be kept for libp2p interoperability. 
 
 ### Discovery
 
 [discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is a system for finding other participants in a peer-to-peer network, 
 it is used in `SSV.network` to complement discovery.
 
-DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers. \
-The discovery process walks randomaly on the nodes in the table that are not connected, 
-filters them by `ENR` entries in order to connect with the most relevant nodes.
+DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers.
+It allows walking randomly on the nodes in the table, and act according to application needs.
+
+In SSV, new nodes are filtered by score, that is calculated from past behavior and properties (`ENR` entries). 
+If the score is above threshold, the node tries to connect and handshake with the new node.
 
 As discv5 is standalone (i.e. not depends on libp2p), the communication is encrypted and authenticated using session keys,
-established in ana separate [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
+established in a separate [handshake process](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#sessions).
 
 **Bootnode** 
 
@@ -582,18 +603,33 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 
 #### Discovery Alternatives
 
-[libp2p's Kademlia DHT](https://github.com/libp2p/specs/tree/master/kad-dht) offers similar features, and even a more complete implemetation of Kademlia DHT.
-Discv5 design is loosely inspired by the Kademlia DHT, but unlike most DHTs no arbitrary keys and values are stored. Instead, the DHT stores and relays node records.
+[libp2p's Kademlia DHT](https://github.com/libp2p/specs/tree/master/kad-dht) offers similar features, 
+and even a more complete implementation of Kademlia DHT.
+Discv5 design is loosely inspired by the Kademlia DHT, but unlike most DHTs no arbitrary keys and values are stored. 
+Instead, the DHT stores and relays only node records.
 
-Libp2p's Kad DHT will allow advertising and finding peers by multiple keys, e.g. topics/subnets.
-As `ENR` has a size limit (`< 300` bytes), and therefore discv5 won't support multiple key/value pairs.
+Libp2p's Kad DHT allows advertising and finding peers by values. \
+In SSV the values would be the subnets of the operator, 
+making it easier for other nodes to find it in case they share common subnets.
 
-Notes:
-- discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) that help to lookup relevant nodes in a smaller set of nodes, currently not fully implemented
-- See [Ethereum specs > phase 0 > p2p interface](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#why-are-we-using-discv5-and-not-libp2p-kademlia-dht) 
-details why discv5 was chosen over libp2p Kad DHT in Ethereum.
+As `ENR` has a size limit (`< 300` bytes), 
+discv5 won't support multiple key/value pairs for complementing this feature.
+Instead, a bitlist is used as an array of flags, 
+representing the assignment of subnets for an operator. 
+Similar to how it implemented in Ethereum 2.0.
+
+discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) 
+which helps to lookup nodes by their advertised topics. In SSV these topics would be the operator's subnets. \ 
+This hasn't been implemented yet, planned for [v5.2](https://github.com/ethereum/devp2p/milestone/3). 
+For more information:
+  - [DiscV5 Theory > Topic Advertisement](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#topic-advertisement)
+  - [discv5: topic index design thread](https://github.com/ethereum/devp2p/issues/136)
+
+See [Ethereum specs > phase 0 > p2p interface](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#why-are-we-using-discv5-and-not-libp2p-kademlia-dht) 
+for more details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
+
 
 ### Network ID
 
@@ -658,12 +694,14 @@ To lower resource consumption, the number of connected peers is limited, current
 Once reached to peer limit, the node will connect only to relevant nodes with score above threshold, 
 which is currently set to zero.
 
+
 #### Connection Filters
 
 Connection filters are executed upon new connection. \
 Filters calculates the connection score of the new peer, and will terminate the connection if score is low.
 In addition, it will mark the peer as pruned so following connections requests 
 will be stopped at connection gater (see below).
+
 
 #### Connection Gating
 
@@ -672,6 +710,7 @@ Inbound and outbound connections are intercepted and being checked before other 
 
 See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) 
 interface for more info.
+
 
 ### Forks
 
@@ -683,6 +722,7 @@ Currently, the following are covered:
 - validator topic mapping
 - message encoding/decoding
 - user agent
+
 
 #### Fork v0
 
@@ -710,9 +750,18 @@ Validator public key hash is used to determine the validator's subnet which is t
 
 `bloxstaking.ssv.<hash(validatiorPubKey) % num_of_subnets>`
 
-### NAT port map
+**message encoding/decoding**
 
-libp2p enables to configure a `NATManager` that will attempt to open a port in the network's firewall using `UPnP`.
+**TBD** check regards other encodings such as `SSZ` which is aligned with Ethereum, 
+or `protobuf` that should show faster results than JSON.
+
+**user agent**
+
+User Agent in `v1` will be reduced in the favor of the handshake process.
+
+A short and simple user agent is kept for acheiving libp2p interoperability.
+
+`SSV-Node/v0.x.x`
 
 
 ### Security
@@ -730,40 +779,3 @@ The following measures are used to protect against malicious peers and denial of
 - Connection filters determine the score for inbound connections, and terminates low scored connections
 - Connection gater protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min). 
 it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
-
-
-### High Availability
-
-As it participates in a decentralized p2p network, HA for an ssv node is not trivial. \ 
-The reason is that running multiple instances might lead to slashing or 
-disturb the consensus as it creates ambiguity and conflicts.
-
-Ideas TBD:
-
-#### Hub Node
-
-`Hub Node` is a node that handles the network layer of ssv node,
-it could be connected to multiple `Worker` nodes and stream the entire network layer messages to/from them. \
-The node is stateless as it does nothing besides proxying network,
-but it can't have multiple instances running because it is part of a p2p network (see above).
-
-A possible implementation could be a node with a proxied network layer 
-that uses websocket to communicate with worker nodes.
-
-The drawback is that the hub node becomes a point of failure, 
-and it's a single instance and therefore will have downtime, 
-but less than a full-blown stateful node.
-
-#### Subnet Partitions
-
-Subnet partitions separates a given set of subnets into `n` independent subsets of subnets, 
-which could be assigned to `n` running instances of the same operator,
-each working on different subsets.
-
-That will help decrease the damage in case some node fails, 
-as only a portion of the assigned validators will be affected, 
-while the other healthy instances keeps doing tasks in their subnets.
-
-The drawback of this approach is that we end up in a situation 
-where multiple peers (different `peer.ID`)
-share the same operator key, and that might lead to vulnerabilities.
