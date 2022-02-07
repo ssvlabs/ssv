@@ -51,7 +51,7 @@ spec:
                   - key: kubernetes.io/role
                     operator: In
                     values:
-                      - ssv-node
+                      - ssv-main
       containers:
       - name: ssv-node-paul-lh
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
@@ -65,7 +65,7 @@ spec:
         - containerPort: 12005
           name: port-12005
           protocol: UDP
-          hostPort: 120054            
+          hostPort: 12005            
         - containerPort: 13005
           name: port-13005
           hostPort: 13005
