@@ -171,6 +171,20 @@ func (v *Validator) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *prot
 }
 
 func (v *Validator) listenToNetworkMessages(msg *proto.SignedMessage) {
+	fields := func() []zap.Field {
+		var res []zap.Field
+		if msg == nil {
+			return res
+		}
+		if msg.Message != nil {
+			res = append(res, zap.String("type", msg.Message.Type.String()))
+			res = append(res, zap.Uint64("round", msg.Message.Round))
+		}
+		res = append(res, zap.String("sender_ibft_id", msg.SignersIDString()))
+		return res
+	}
+
+	v.logger.Debug("adding ibft message to msg queue", fields()...)
 	v.msgQueue.AddMessage(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,

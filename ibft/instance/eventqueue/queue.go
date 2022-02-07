@@ -34,20 +34,21 @@ type EventQueue interface {
 	Add(Event) bool
 	Pop() EventExec
 	ClearAndStop()
+	Size() int
 }
 
 // queue thread safe implementation of EventQueue
 type queue struct {
 	stop  bool
 	queue []Event
-	lock  sync.Mutex
+	lock  sync.RWMutex
 }
 
 // New returns a new instance of queue
 func New() EventQueue {
 	q := queue{
 		queue: make([]Event, 0),
-		lock:  sync.Mutex{},
+		lock:  sync.RWMutex{},
 	}
 	return &q
 }
@@ -90,6 +91,12 @@ func (q *queue) ClearAndStop() {
 	q.drain()
 
 	q.queue = make([]Event, 0)
+}
+
+func (q *queue) Size() int {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	return len(q.queue)
 }
 
 // pop will return and delete an an item from the queue, NOT thread safe
