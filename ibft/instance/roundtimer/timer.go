@@ -59,7 +59,7 @@ func (t *RoundTimer) Reset(d time.Duration) {
 		t.logger.Warn("could not reset timer as it was killed already")
 		return
 	}
-	t.logger.Debug("resetting timer", zap.Duration("timeout", d))
+	//t.logger.Debug("resetting timer", zap.Duration("timeout", d))
 	if atomic.SwapUint32(&t.state, stateRunning) == stateNotInitialized {
 		// first reset creates the timer
 		t.timer = time.NewTimer(d)
@@ -88,7 +88,7 @@ func (t *RoundTimer) Reset(d time.Duration) {
 
 // Kill kills the timer
 func (t *RoundTimer) Kill() {
-	t.logger.Debug("killing round timer")
+	//t.logger.Debug("killing round timer")
 	t.cancelCtx()
 }
 
