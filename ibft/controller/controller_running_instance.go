@@ -116,13 +116,13 @@ func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 		if err != nil {
 			return true, errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 		}
-		if err := i.ibftStorage.SaveDecided(agg); err != nil {
+		if err = i.ibftStorage.SaveDecided(agg); err != nil {
 			return true, errors.Wrap(err, "could not save aggregated commit msg to storage")
 		}
-		if err := i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
+		if err = i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
 			return true, errors.Wrap(err, "could not save highest decided message to storage")
 		}
-		if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
+		if err = i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
 			return true, errors.Wrap(err, "could not broadcast decided message")
 		}
 		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
