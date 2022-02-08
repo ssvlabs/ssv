@@ -195,6 +195,7 @@ func getFields(msg *proto.SignedMessage) []zap.Field {
 	if msg.Message != nil {
 		res = append(res, zap.String("type", msg.Message.Type.String()))
 		res = append(res, zap.Uint64("round", msg.Message.Round))
+		res = append(res, zap.Uint64("seqNum", msg.Message.SeqNumber))
 	}
 	res = append(res, zap.String("sender_ibft_id", msg.SignersIDString()))
 	return res
