@@ -1,8 +1,8 @@
 # SSV Specifications - Networking
 
-| Authors                                    | Status | Latest Revision |
-|:-------------------------------------------|:-------|:----------------|
-| [@amir-blox](https://github.com/amir-blox) | WIP    | JAN 22          |
+| Authors                                    | Status | Last Revision |
+|:-------------------------------------------|:-------|:--------------|
+| [@amir-blox](https://github.com/amir-blox) | WIP    | FEB 22        |
 
 This document contains the networking specification for `SSV.Network`.
 
@@ -25,11 +25,11 @@ This document contains the networking specification for `SSV.Network`.
   - [x] [PubSub Scoring](#pubsub-scoring)
   - [x] [Message Scoring](#message-scoring)
   - [x] [Connection Scoring](#connection-scoring)
-  - [x] [User Agent](#user-agent)
   - [x] [Discovery](#discovery)
-  - [x] [Netowrk ID](#network-id)
   - [x] [Subnets](#subnets)
   - [x] [Peers Connectivity](#peers-connectivity)
+  - [x] [Network ID](#network-id)
+  - [x] [User Agent](#user-agent)
   - [x] [Forks](#forks)
   - [x] [Security](#security)
 
@@ -104,6 +104,7 @@ Exporter and Bootnode does not hold this key.
 
 In addition, Operator nodes will expose an `Operator ID` that is calculated from the operator public key, 
 and helps to identify a peer in the network.
+
 
 ### Network Discovery
 
@@ -288,7 +289,7 @@ In case there are no decided messages, it will return an empty array of messages
   ```json
   {
     "identifier": "...",
-    "type":   0,
+    "type":   0
   }
   ```
 
@@ -330,7 +331,7 @@ The request should specify the desired range, while the response will include al
   {
     "identifier": "...",
     "params": [1200, 1225],
-    "type":   1,
+    "type":   1
   }
   ```
 
@@ -384,7 +385,7 @@ This protocol enables a node to catch up with change round messages.
   {
     "identifier": "...",
     "params": [7554],
-    "type":   2,
+    "type":   2
   }
   ```
 
@@ -406,7 +407,7 @@ This protocol enables a node to catch up with change round messages.
         "signer_ids": [1]
       }
     ],
-    "type":   2,
+    "type":   2
   }
   ```
 </details>
@@ -440,6 +441,8 @@ message HandshakeMessage {
   bytes payload = 1 [(gogoproto.nullable) = false];
   // signed is a signature of the message
   bytes signed  = 2 [(gogoproto.nullable) = false];
+  // pubkey is the public key needed to verify the handshake message
+  bytes pubkey  = 3 [(gogoproto.nullable) = false];
 }
 
 // HandshakePayload contains the information passed during handshake
@@ -520,8 +523,10 @@ The score is locally computed by each individual peer based on observed behaviou
 `SSV.network` injects application specific scoring to apply connection and message scoring as part of pubsub scoring system. \
 See [Connection Scoring](#connection-scoring) and [Message Scoring](#message-scoring) for more information.
 
-Score thresholds are used by libp2p to determine whether a peer should be removed from topic's mesh, penalized or even ignored if the score drops too low. \
-See [this section](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#score-thresholds) for more details regards the different thresholds. \
+Score thresholds are used by libp2p to determine whether a peer should be removed from topic's mesh, 
+penalized or even ignored if the score drops too low. \
+See [this section](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#score-thresholds) 
+for more details regards the different thresholds. \
 Thresholds values **TBD**, this section will be updated once that work is complete:
 
 - `gossipThreshold`: -4000
@@ -531,7 +536,7 @@ Thresholds values **TBD**, this section will be updated once that work is comple
 - `opportunisticGraftThreshold`: 5
 
 [Score function](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function) is 
-running pariodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
+running periodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
 
 
 ### Message Scoring
@@ -550,17 +555,6 @@ and peers with low score will be pruned.
 Connection scores are based on the following properties:
 
 - Shared subnets / committees (`25`)
-
-### User Agent
-
-Libp2p provides user agent mechanism with the [identify](https://github.com/libp2p/specs/tree/master/identify) protocol, 
-which is used to exchange basic information with other peers in the network.
-
-User Agent contains the node version and type, and in addition the operator id. \
-See detailed format in [forks > user agent](#fork-v0).
-
-Note that user agent might be reduced in future versions,
-but a short and simple user agent will be kept for libp2p interoperability. 
 
 ### Discovery
 
@@ -598,8 +592,8 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 | `udp`       | UDP port, big endian integer                                   | Done            |
 | `type`      | node type, integer; 1 (operator), 2 (exporter), 3 (bootnode)   | Done (`v0.1.9`) |
 | `oid`       | operator id, 32 bytes                                          | Done (`v0.1.9`) |
-| `version`   | fork version, integer                                          | -               |
-| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | -               |
+| `version`   | fork version, integer                                          | TODO            |
+| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | TODO            |
 
 #### Discovery Alternatives
 
@@ -616,11 +610,10 @@ As `ENR` has a size limit (`< 300` bytes),
 discv5 won't support multiple key/value pairs for complementing this feature.
 Instead, a bitlist is used as an array of flags, 
 representing the assignment of subnets for an operator. 
-Similar to how it implemented in Ethereum 2.0.
-
-discv5 specifies [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) 
-which helps to lookup nodes by their advertised topics. In SSV these topics would be the operator's subnets. \ 
-This hasn't been implemented yet, planned for [v5.2](https://github.com/ethereum/devp2p/milestone/3). 
+Similar to how it implemented in Ethereum 2.0 at the moment. \
+[Discovery v5.2](https://github.com/ethereum/devp2p/milestone/3) will introduce 
+[Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) 
+which helps to lookup nodes by their advertised topics. In SSV these topics would be the operator's subnets. \
 For more information:
   - [DiscV5 Theory > Topic Advertisement](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#topic-advertisement)
   - [discv5: topic index design thread](https://github.com/ethereum/devp2p/issues/136)
@@ -629,20 +622,6 @@ See [Ethereum specs > phase 0 > p2p interface](https://github.com/ethereum/conse
 for more details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
-
-
-### Network ID
-
-Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
-Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network, 
-meaning that the key to be known and used by all network members.
-
-It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
-which encrypts/decrypts all traffic with the corresponding key,
-regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
-
-**NOTE** discovery communication (UDP) won't use the network ID, 
-and it's not needed as unknown peers will be filtered.
 
 
 ### Subnets
@@ -700,7 +679,7 @@ which is currently set to zero.
 Connection filters are executed upon new connection. \
 Filters calculates the connection score of the new peer, and will terminate the connection if score is low.
 In addition, it will mark the peer as pruned so following connections requests 
-will be stopped at connection gater (see below).
+will be stopped at connection gater.
 
 
 #### Connection Gating
@@ -710,6 +689,32 @@ Inbound and outbound connections are intercepted and being checked before other 
 
 See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) 
 interface for more info.
+
+
+### Network ID
+
+Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
+Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network,
+meaning that the key to be known and used by all network members.
+
+It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
+which encrypts/decrypts all traffic with the corresponding key,
+regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
+
+**NOTE** discovery communication (UDP) won't use the network ID,
+and it's not needed as unknown peers will be filtered.
+
+
+### User Agent
+
+Libp2p provides user agent mechanism with the [identify](https://github.com/libp2p/specs/tree/master/identify) protocol,
+which is used to exchange basic information with other peers in the network.
+
+User Agent contains the node version and type, and in addition the operator id. \
+See detailed format in [forks > user agent](#fork-v0).
+
+Note that user agent might be reduced in future versions,
+but a short and simple user agent will be kept for libp2p interoperability.
 
 
 ### Forks
@@ -775,7 +780,9 @@ by the IBFT components using the share public key,
 and therefore malicious messages will be identified as invalid.
 
 The following measures are used to protect against malicious peers and denial of service attacks:
-- Connection score is determined during discovery process, ensures that the node will try to connect only with relevant peers.
+- Sync operations must be limited according to the score of the asking peer
+  - highly scored peers should have less aggressive limit
+  - unknown peers must be well limited to prevent attacks
 - Connection filters determine the score for inbound connections, and terminates low scored connections
 - Connection gater protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min). 
 it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
