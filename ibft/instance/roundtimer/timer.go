@@ -9,9 +9,10 @@ import (
 
 // states helps to sync round timer using atomic package
 const (
-	stateNotInitialized uint32 = 0
-	stateStopped        uint32 = 1
-	stateRunning        uint32 = 2
+	statePreInit   uint32 = 0
+	stateStopped   uint32 = 1
+	stateResetting uint32 = 3
+	stateRunning   uint32 = 2
 )
 
 // RoundTimer helps to manage current instance rounds.
@@ -27,8 +28,6 @@ type RoundTimer struct {
 	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
-	// if timed-out the returned value is true
-	// otherwise, the timer was killed and the returned value is false
 	result chan bool
 	// state helps to sync goroutines on the current state of the timer
 	state uint32
@@ -43,7 +42,7 @@ func New(pctx context.Context, logger *zap.Logger) *RoundTimer {
 		logger:    logger,
 		timer:     nil,
 		result:    make(chan bool, 1),
-		state:     stateNotInitialized,
+		state:     statePreInit,
 	}
 }
 
@@ -60,7 +59,7 @@ func (t *RoundTimer) Reset(d time.Duration) {
 		return
 	}
 	//t.logger.Debug("resetting timer", zap.Duration("timeout", d))
-	if atomic.SwapUint32(&t.state, stateRunning) == stateNotInitialized {
+	if atomic.SwapUint32(&t.state, stateResetting) == statePreInit {
 		// first reset creates the timer
 		t.timer = time.NewTimer(d)
 	} else {
@@ -95,5 +94,5 @@ func (t *RoundTimer) Kill() {
 // Stopped returns whether the timer has stopped
 func (t *RoundTimer) Stopped() bool {
 	state := atomic.LoadUint32(&t.state)
-	return state == stateStopped || state == stateNotInitialized
+	return state == stateStopped || state == statePreInit
 }
