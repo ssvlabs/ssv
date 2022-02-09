@@ -31,14 +31,7 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	}
 
 	if _, ok := n.psSubs[pubKey]; !ok {
-		err := n.pubsub.RegisterTopicValidator(getTopicName(pubKey), func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
-			nm, err := n.fork.DecodeNetworkMsg(msg.Data)
-			if msg.ReceivedFrom != p {
-				// sending peer does not own the message
-			}
-			logger.Debug("xxx validate topic msg", zap.ByteString("data", nm.SignedMessage.Message.Lambda))
-			return pubsub.ValidationAccept
-		})
+		_ = n.pubsub.RegisterTopicValidator(getTopicName(pubKey), n.msgValidator(logger))
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
 			if err != pubsub.ErrTopicClosed {
@@ -79,6 +72,27 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	}
 
 	return nil
+}
+
+func invalidResult(p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+	if msg.ReceivedFrom != p {
+		// sending peer does not own the message
+		return pubsub.ValidationIgnore
+	}
+	return pubsub.ValidationReject
+}
+
+type MsgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
+
+func (n *p2pNetwork) msgValidator(logger *zap.Logger) MsgValidator {
+	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		nm, err := n.fork.DecodeNetworkMsg(msg.Data)
+		if err != nil {
+			return invalidResult(p, msg)
+		}
+		logger.Debug("xxx validate topic msg", zap.ByteString("data", nm.SignedMessage.Message.Lambda))
+		return pubsub.ValidationAccept
+	}
 }
 
 // AllPeers returns all connected peers for a validator PK (except for the validator itself)

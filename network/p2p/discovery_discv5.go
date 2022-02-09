@@ -175,12 +175,9 @@ func createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, udpPort, tcpPort 
 	}
 	localNode := enode.NewLocalNode(db, privKey)
 
-	ipEntry := enr.IP(ipAddr)
-	udpEntry := enr.UDP(udpPort)
-	tcpEntry := enr.TCP(tcpPort)
-	localNode.Set(ipEntry)
-	localNode.Set(udpEntry)
-	localNode.Set(tcpEntry)
+	localNode.Set(enr.IP(ipAddr))
+	localNode.Set(enr.UDP(udpPort))
+	localNode.Set(enr.TCP(tcpPort))
 	localNode.SetFallbackIP(ipAddr)
 	localNode.SetFallbackUDP(udpPort)
 
