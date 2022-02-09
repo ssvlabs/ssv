@@ -26,7 +26,8 @@ func setupOptions(ctx context.Context) (Options, error) {
 		return Options{}, err
 	}
 	return Options{
-		Db: db,
+		Db:     db,
+		Logger: zap.L(),
 	}, nil
 }
 

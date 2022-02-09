@@ -33,7 +33,7 @@ var migrationExample1 = Migration{
 				Value: migrationCompleted,
 			},
 		}
-		return opt.Db.SetMany(nil, 3, func(i int) (basedb.Obj, error) {
+		return opt.Db.SetMany(migrationsPrefix, 3, func(i int) (basedb.Obj, error) {
 			return sets[i], nil
 		})
 	},
