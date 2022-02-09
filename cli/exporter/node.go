@@ -36,6 +36,7 @@ type config struct {
 	ETH2Options                beacon.Options `yaml:"eth2"`
 
 	WsAPIPort                       int           `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	WithPing                        bool          `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	MetricsAPIPort                  int           `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile                   bool          `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	IbftSyncEnabled                 bool          `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
@@ -146,11 +147,12 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Network = network
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
-		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux())
+		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
+		exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
 
 		exporterNode = exporter.New(*exporterOptions)
 

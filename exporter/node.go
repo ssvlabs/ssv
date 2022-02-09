@@ -60,6 +60,8 @@ type Options struct {
 	IbftSyncEnabled                 bool
 	CleanRegistryData               bool
 	ValidatorMetaDataUpdateInterval time.Duration
+
+	UseMainTopic bool
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -89,6 +91,7 @@ type exporter struct {
 	metaDataReadersQueue tasks.Queue
 
 	networkMsgMediator ibftController.Mediator
+	useMainTopic       bool
 }
 
 // New creates a new Exporter instance
@@ -129,6 +132,7 @@ func New(opts Options) Exporter {
 		wsAPIPort:                       opts.WsAPIPort,
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
 		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
+		useMainTopic:                    opts.UseMainTopic,
 	}
 
 	if err := e.init(opts); err != nil {
@@ -205,8 +209,10 @@ func (exp *exporter) healthAgents() []metrics.HealthCheckAgent {
 
 // startMainTopic starts to listen to main topic
 func (exp *exporter) startMainTopic() {
-	if err := tasks.Retry(exp.network.SubscribeToMainTopic, 3); err != nil {
-		exp.logger.Error("failed to subscribe to main topic", zap.Error(err))
+	if exp.useMainTopic {
+		if err := tasks.Retry(exp.network.SubscribeToMainTopic, 3); err != nil {
+			exp.logger.Error("failed to subscribe to main topic", zap.Error(err))
+		}
 	}
 }
 
@@ -306,6 +312,10 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	logger := exp.logger.With(zap.String("pubKey", pubKey))
+	if !validatorShare.HasMetadata() {
+		logger.Debug("validator w/o metadata,skipped setup")
+		return nil
+	}
 	logger.Debug("setup validator")
 	defer logger.Debug("setup validator done")
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)

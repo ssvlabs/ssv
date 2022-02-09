@@ -5,18 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
 var (
-	// pongWait time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	// pingTimeout time allowed to read the next pong message from the peer.
+	pingTimeout = 60 * time.Second
 
-	// pingPeriod period to send ping messages. Must be less than pongWait.
-	pingPeriod = (pongWait * 8) / 10
+	// pingInterval period to send ping messages. Must be less than pingTimeout.
+	pingInterval = (pingTimeout * 8) / 10
 
 	// maxMessageSize max msg size allowed from peer.
 	maxMessageSize = int64(1024)
@@ -56,9 +58,13 @@ type conn struct {
 
 	read chan []byte
 	send chan []byte
+
+	writeLock sync.Locker
+
+	withPing bool
 }
 
-func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id string, writeTimeout time.Duration) Conn {
+func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
 	return &conn{
 		ctx:          ctx,
 		logger:       logger.With(zap.String("who", "WSConn")),
@@ -67,6 +73,8 @@ func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id str
 		writeTimeout: writeTimeout,
 		read:         make(chan []byte, chanSize),
 		send:         make(chan []byte, chanSize),
+		writeLock:    &sync.Mutex{},
+		withPing:     withPing,
 	}
 }
 
@@ -101,47 +109,42 @@ func (c *conn) Send(msg []byte) {
 
 // WriteLoop a loop to activate writes on the socket
 func (c *conn) WriteLoop() {
-	ticker := time.NewTicker(pingPeriod)
 	defer func() {
-		ticker.Stop()
 		_ = c.ws.Close()
 	}()
+
+	ctx, cancel := context.WithCancel(c.ctx)
+	defer cancel()
+
+	if c.withPing {
+		t := time.NewTimer(pingInterval)
+		defer t.Stop()
+		go func() {
+			defer cancel()
+			c.pingLoop(ctx)
+		}()
+	}
+
 	for {
 		select {
-		case message := <-c.send:
-			_ = c.ws.SetWriteDeadline(time.Now().Add(pongWait))
-			w, err := c.ws.NextWriter(websocket.TextMessage)
-			if err != nil {
-				c.logger.Error("could not read ws message", zap.Error(err))
-				return
-			}
-			if _, err = w.Write(message); err != nil {
-				c.logger.Error("could not write ws message", zap.Error(err))
-				reportStreamOutbound(c.ws.RemoteAddr().String(), err)
-				return
-			}
-			err = w.Close()
-			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
-			if err != nil {
-				c.logger.Error("could not close writer", zap.Error(err))
-				return
-			}
-			var msg Message
-			if err := json.Unmarshal(message, &msg); err != nil {
-				c.logger.Error("could not parse msg", zap.Any("filter", msg.Filter), zap.Error(err))
-			}
-			c.logger.Debug("ws msg was sent", zap.Any("filter", msg.Filter))
-		case <-ticker.C:
-			c.logger.Debug("sending ping message")
-			if err := c.ws.WriteControl(websocket.PingMessage, []byte{0, 0, 0, 0}, time.Now().Add(c.writeTimeout)); err != nil {
-				c.logger.Error("could not send ping message", zap.Error(err))
-				return
-			}
-		case <-c.ctx.Done():
+		case <-ctx.Done():
+			c.writeLock.Lock()
 			c.logger.Debug("context done, sending close message")
-			if err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout)); err != nil {
+			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
+			c.writeLock.Unlock()
+			if err != nil {
 				c.logger.Error("could not send close message", zap.Error(err))
 				return
+			}
+		case message := <-c.send:
+			c.writeLock.Lock()
+			n, err := c.sendMsg(message)
+			c.writeLock.Unlock()
+			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
+			if err != nil {
+				c.logger.Warn("failed to send message", zap.Error(err))
+			} else {
+				c.logMsg(message, n)
 			}
 		}
 	}
@@ -153,25 +156,15 @@ func (c *conn) ReadLoop() {
 		_ = c.ws.Close()
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
-	err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	if err != nil {
-		c.logger.Error("read loop stopped by set read deadline", zap.Error(err))
-		return
+	// ping helps to keep the connection alive from our POV
+	if c.withPing {
+		// set deadline so ping messages won't exceed timeout
+		_ = c.ws.SetReadDeadline(time.Now().Add(pingTimeout))
+		// extend the deadline on every pong message
+		c.ws.SetPongHandler(func(string) error {
+			return c.ws.SetReadDeadline(time.Now().Add(pingTimeout))
+		})
 	}
-	c.ws.SetPongHandler(func(string) error {
-		// extend read limit on every pong message
-		// this will keep the connection alive from our POV
-		c.logger.Debug("pong received")
-		err := c.ws.SetReadDeadline(time.Now().Add(pongWait))
-		if err != nil {
-			c.logger.Error("pong handler - readDeadline", zap.Error(err))
-		}
-		return err
-	})
-	c.ws.SetPingHandler(func(string) error {
-		c.logger.Debug("ping received")
-		return nil
-	})
 	for {
 		if c.ctx.Err() != nil {
 			c.logger.Error("read loop stopped by context")
@@ -195,7 +188,70 @@ func (c *conn) ReadLoop() {
 	}
 }
 
+// pingLoop sends ping messages according to configured interval
+func (c *conn) pingLoop(ctx context.Context) {
+	t := time.NewTimer(pingInterval)
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		t.Reset(pingInterval)
+		<-t.C
+		c.writeLock.Lock()
+		c.logger.Debug("sending ping message")
+		err := c.ws.WriteControl(websocket.PingMessage, pingMsg(c.ID()), time.Now().Add(c.writeTimeout))
+		c.writeLock.Unlock()
+		if err != nil {
+			c.logger.Error("could not send ping message", zap.Error(err))
+			return
+		}
+	}
+}
+
+// sendMsg sends the given message and returns the number of bytes that were written, plus the error
+func (c *conn) sendMsg(msg []byte) (int, error) {
+	_ = c.ws.SetWriteDeadline(time.Now().Add(pingTimeout))
+	w, err := c.ws.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not create ws writer")
+	}
+	n, err := w.Write(msg)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not write ws message")
+	}
+	err = w.Close()
+	if err != nil {
+		return 0, errors.Wrap(err, "could not close writer")
+	}
+	return n, nil
+}
+
+func (c *conn) logMsg(message []byte, byteWritten int) {
+	if byteWritten == 0 {
+		return
+	}
+	j := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(message, &j); err != nil {
+		c.logger.Error("could not parse msg", zap.Error(err))
+	}
+	fraw, ok := j["filter"]
+	if !ok {
+		return
+	}
+	filter, err := fraw.MarshalJSON()
+	if err != nil {
+		c.logger.Error("could not parse filter", zap.Error(err))
+	}
+	c.logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
+}
+
+// isCloseError determines whether the given error is of CloseError type
 func isCloseError(err error) bool {
 	_, ok := err.(*websocket.CloseError)
 	return ok
+}
+
+// pingMsg construct a ping message
+func pingMsg(cid string) []byte {
+	return []byte{cid[0], cid[1], cid[3], cid[4]}
 }

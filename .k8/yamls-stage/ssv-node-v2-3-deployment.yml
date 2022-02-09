@@ -1,0 +1,163 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-v2-3-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-v2-3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12003
+      protocol: UDP
+      targetPort: 12003
+      name: port-12003
+    - port: 13003
+      protocol: TCP
+      targetPort: 13003
+      name: port-13003
+    - port: 15003
+      protocol: TCP
+      targetPort: 15003
+      name: port-15003
+  selector:
+    app: ssv-node-v2-3
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-v2-3
+  name: ssv-node-v2-3
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-v2-3
+  template:
+    metadata:
+      labels:
+        app: ssv-node-v2-3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-main        
+      containers:
+      - name: ssv-node-v2-3
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: REPLACE_NODES_CPU_LIMIT
+            memory: REPLACE_NODES_MEM_LIMIT            
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12003
+          name: port-12003
+          protocol: UDP
+          hostPort: 12003            
+        - containerPort: 13003
+          name: port-13003
+          hostPort: 13003
+        - containerPort: 15003
+          name: port-15003
+          hostPort: 15003
+        env:
+        - name: SHARE_CONFIG
+          value: "./data/share.yaml"
+        - name: ETH_1_ADDR
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth1_addr
+        - name: CONFIG_PATH
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: config_path
+        - name: ENR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: enr_key
+        - name: REGISTRY_CONTRACT_ADDR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: smart_contract_addr_key
+        - name: ABI_VERSION
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: abi_version
+              optional: true
+        - name: LOG_LEVEL
+          value: "debug"
+        - name: DISCOVERY_TYPE_KEY
+          value: "discv5"
+        - name: NETWORK
+          value: "prater"
+        - name: CONSENSUS_TYPE
+          value: "validation"
+        - name: HOST_DNS
+          value: ""
+        - name: HOST_ADDRESS
+          value: ""
+        - name: GENESIS_EPOCH
+          value: "1"
+        - name: LOGGER_LEVEL
+          value: "debug"
+        - name: DB_PATH
+          value: "./data/db"
+        - name: DB_REPORTING
+          value: "true"
+        - name: METRICS_API_PORT
+          value: "15003"
+        - name: ENABLE_PROFILE
+          value: "true"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-node-v2-3
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-cm-validator-options-3
+#      - name: ubuntu
+#        image: REPLACE_HEALTH_IMAGE
+#        imagePullPolicy: Always
+#        args: [bash, -c, sleep infinity]
+#        volumeMounts:
+#        - name: ssv-nodes-health-check-cm
+#          mountPath: /root/http-status.sh
+#          subPath: http-status.sh
+#        livenessProbe:
+#          exec:
+#            command:
+#            - /bin/bash
+#            - /root/http-status.sh
+#          initialDelaySeconds: 120
+#          periodSeconds: 60
+      volumes:
+      - name: ssv-node-v2-3
+        persistentVolumeClaim:
+          claimName: ssv-node-v2-3
+      - name: ssv-cm-validator-options-3
+        configMap:
+          name: ssv-cm-validator-options-3
+#      - name: ssv-nodes-health-check-cm
+#        configMap:
+#          name: ssv-nodes-health-check-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true

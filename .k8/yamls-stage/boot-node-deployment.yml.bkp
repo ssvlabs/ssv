@@ -1,0 +1,112 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: boot-node
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ssv.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - boot-node
+  http:
+  - route:
+    - destination:
+        host: boot-node-svc
+        port:
+          number: 5000
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: boot-node
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ssv.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: boot-node-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: boot-node
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5678
+      protocol: TCP
+      targetPort: 5678
+      name: port-5678
+    - port: 4000
+      protocol: UDP
+      targetPort: 4000
+      name: port-4000
+    - port: 5000
+      protocol: TCP
+      targetPort: 5000
+      name: port-5000
+  selector:
+    app: boot-node
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: boot-node
+  name: boot-node
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: boot-node
+  template:
+    metadata:
+      labels:
+        app: boot-node
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/role
+                operator: In
+                values:
+                - ssv-boot-node
+      containers:
+      - name: boot-node
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        command: ["make", "start-boot-node"]
+        ports:
+        - containerPort: 5000
+          name: port-5000          
+          hostPort: 5000
+        env:
+          - name: BOOT_NODE_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node_private_key
+          - name: BOOT_NODE_EXTERNAL_IP
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node_external_ip
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/role
+        operator: Exists         
+      hostNetwork: true          

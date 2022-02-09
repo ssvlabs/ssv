@@ -77,8 +77,16 @@ func (exp *exporter) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 		return errors.Wrap(err, "failed to update share")
 	}
 	if decidedReader := exp.getDecidedReader(pk); decidedReader != nil {
-		decidedReader.(ibft.ShareHolder).Share().Metadata = metadata
+		share := decidedReader.(ibft.ShareHolder).Share()
+		share.HasMetadata()
+		if !share.HasMetadata() {
+			share.Metadata = metadata
+			exp.logger.Debug("metadata was created", zap.String("pk", pk), zap.Any("metadata", *metadata))
+		} else if !share.Metadata.Equals(metadata) {
+			share.Metadata.Status = metadata.Status
+			share.Metadata.Balance = metadata.Balance
+			exp.logger.Debug("metadata was updated", zap.String("pk", pk), zap.Any("metadata", *metadata))
+		}
 	}
-	exp.logger.Debug("metadata was updated", zap.String("pk", pk), zap.Any("metadata", *metadata))
 	return nil
 }
