@@ -55,10 +55,8 @@ func New(options basedb.Options) (basedb.IDb, error) {
 
 // Set save value with key to storage
 func (b *BadgerDb) Set(prefix []byte, key []byte, value []byte) error {
-	// TODO: Re-use code with Update or badgerTxn instead of this:
 	return b.db.Update(func(txn *badger.Txn) error {
-		err := txn.Set(append(prefix, key...), value)
-		return err
+		return badgerTxn{txn}.Set(prefix, key, value)
 	})
 }
 
@@ -81,26 +79,9 @@ func (b *BadgerDb) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, err
 
 // Get return value for specified key
 func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
-	var resValue []byte
-	err := b.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(append(prefix, key...))
-		if err != nil {
-			if isNotFoundError(err) { // in order to couple the not found errors together
-				return errors.New(EntryNotFoundError)
-			}
-			return err
-		}
-		resValue, err = item.ValueCopy(nil)
-		return err
-	})
-	found := err == nil || err.Error() != EntryNotFoundError
-	if !found {
-		return basedb.Obj{}, found, nil
-	}
-	return basedb.Obj{
-		Key:   key,
-		Value: resValue,
-	}, found, err
+	txn := b.db.NewTransaction(false)
+	defer txn.Discard()
+	return badgerTxn{txn}.Get(prefix, key)
 }
 
 // GetMany return values for the given keys
@@ -141,9 +122,8 @@ func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Ob
 
 // Delete key in specific prefix
 func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
-	// TODO: Re-use code with Delete or badgerTxn instead of this:
 	return b.db.Update(func(txn *badger.Txn) error {
-		return txn.Delete(append(prefix, key...))
+		return badgerTxn{txn}.Delete(prefix, key)
 	})
 }
 
@@ -250,16 +230,16 @@ type badgerTxn struct {
 	txn *badger.Txn
 }
 
-func (t *badgerTxn) Set(prefix []byte, key []byte, value []byte) error {
+func (t badgerTxn) Set(prefix []byte, key []byte, value []byte) error {
 	return t.txn.Set(append(prefix, key...), value)
 }
 
-func (t *badgerTxn) Get(prefix []byte, key []byte) (obj basedb.Obj, found bool, err error) {
+func (t badgerTxn) Get(prefix []byte, key []byte) (obj basedb.Obj, found bool, err error) {
 	var resValue []byte
 	item, err := t.txn.Get(append(prefix, key...))
 	if err != nil {
 		if isNotFoundError(err) { // in order to couple the not found errors together
-			return basedb.Obj{}, false, err
+			return basedb.Obj{}, false, nil
 		}
 		return basedb.Obj{}, true, err
 	}
@@ -273,6 +253,6 @@ func (t *badgerTxn) Get(prefix []byte, key []byte) (obj basedb.Obj, found bool, 
 	}, true, err
 }
 
-func (t *badgerTxn) Delete(prefix []byte, key []byte) error {
+func (t badgerTxn) Delete(prefix []byte, key []byte) error {
 	return t.txn.Delete(append(prefix, key...))
 }
