@@ -66,6 +66,8 @@ func (o Options) operatorStorage() operator.Storage {
 
 // Run executes the migrations.
 func (m Migrations) Run(ctx context.Context, opt Options) error {
+	opt.Logger.Info("Running migrations")
+	count := 0
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
@@ -73,6 +75,7 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 			return err
 		}
 		if bytes.Equal(obj.Value, migrationCompleted) {
+			opt.Logger.Debug("migration already completed, skipping", zap.String("name", migration.Name))
 			continue
 		}
 
@@ -80,6 +83,16 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 		if err := migration.Run(ctx, opt, []byte(migration.Name)); err != nil {
 			return errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
+		err = migration.Run(ctx, opt, []byte(migration.Name))
+		if err != nil {
+			return errors.Wrapf(err, "migration %q failed", migration.Name)
+		} else {
+			count++
+			opt.Logger.Info("migration completed", zap.String("name", migration.Name))
+		}
+	}
+	if count == 0 {
+		opt.Logger.Info("No migrations to apply.")
 	}
 
 	return nil
