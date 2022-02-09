@@ -86,10 +86,9 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 		err = migration.Run(ctx, opt, []byte(migration.Name))
 		if err != nil {
 			return errors.Wrapf(err, "migration %q failed", migration.Name)
-		} else {
-			count++
-			opt.Logger.Info("migration completed", zap.String("name", migration.Name))
 		}
+		count++
+		opt.Logger.Info("migration completed", zap.String("name", migration.Name))
 	}
 	if count == 0 {
 		opt.Logger.Info("No migrations to apply.")
