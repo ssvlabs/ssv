@@ -31,6 +31,14 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	}
 
 	if _, ok := n.psSubs[pubKey]; !ok {
+		err := n.pubsub.RegisterTopicValidator(getTopicName(pubKey), func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+			nm, err := n.fork.DecodeNetworkMsg(msg.Data)
+			if msg.ReceivedFrom != p {
+				// sending peer does not own the message
+			}
+			logger.Debug("xxx validate topic msg", zap.ByteString("data", nm.SignedMessage.Message.Lambda))
+			return pubsub.ValidationAccept
+		})
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
 			if err != pubsub.ErrTopicClosed {
@@ -56,6 +64,9 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 			defer n.psTopicsLock.Unlock()
 			if err := n.closeTopic(topicName); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", topicName), zap.Error(err))
+			}
+			if err := n.pubsub.UnregisterTopicValidator(topicName); err != nil {
+				n.logger.Error("xxx failed to unregister topic validator", zap.String("topic", topicName), zap.Error(err))
 			}
 			// make sure the context is canceled once listen was done from some reason
 			if cancel, ok := n.psSubs[pubKey]; ok {
