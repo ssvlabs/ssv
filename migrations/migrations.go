@@ -45,6 +45,7 @@ type Migrations []Migration
 type Options struct {
 	Db     basedb.IDb
 	Logger *zap.Logger
+	DbPath string
 }
 
 func (o *Options) getRegistryStores() []basedb.RegistryStore {
@@ -75,7 +76,7 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 			return err
 		}
 		if bytes.Equal(obj.Value, migrationCompleted) {
-			opt.Logger.Debug("migration already completed, skipping", zap.String("name", migration.Name))
+			opt.Logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
 			continue
 		}
 
@@ -85,7 +86,7 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 			return errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
 		count++
-		opt.Logger.Info("migration completed", zap.String("name", migration.Name))
+		opt.Logger.Info("migration applied successfully", zap.String("name", migration.Name))
 	}
 	if count == 0 {
 		opt.Logger.Info("No migrations to apply.")
