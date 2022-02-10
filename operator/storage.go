@@ -3,12 +3,13 @@ package operator
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"math/big"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math/big"
 )
 
 var (
@@ -19,6 +20,7 @@ var (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	eth1.SyncOffsetStorage
+	basedb.RegistryStore
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error
@@ -33,6 +35,10 @@ type storage struct {
 func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	es := storage{db, logger}
 	return &es
+}
+
+func (s *storage) CleanRegistryData() error {
+	return s.cleanSyncOffset()
 }
 
 // SaveSyncOffset saves the offset

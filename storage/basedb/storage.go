@@ -2,6 +2,7 @@ package basedb
 
 import (
 	"context"
+
 	"go.uber.org/zap"
 )
 
@@ -14,6 +15,20 @@ type Options struct {
 	Ctx       context.Context
 }
 
+// Txn interface for badger transaction like functions
+type Txn interface {
+	Set(prefix []byte, key []byte, value []byte) error
+	Get(prefix []byte, key []byte) (Obj, bool, error)
+	Delete(prefix []byte, key []byte) error
+	// TODO: add iterator
+}
+
+// RegistryStore interface for registry store
+// TODO: extend this interface and re-think storage refactoring
+type RegistryStore interface {
+	CleanRegistryData() error
+}
+
 // IDb interface for all db kind
 type IDb interface {
 	Set(prefix []byte, key []byte, value []byte) error
@@ -24,6 +39,7 @@ type IDb interface {
 	GetAll(prefix []byte, handler func(int, Obj) error) error
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error
+	Update(fn func(Txn) error) error
 	Close()
 }
 

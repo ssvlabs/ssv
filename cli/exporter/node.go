@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -19,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -77,17 +77,19 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
 
-		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
-		if err != nil {
-			Logger.Fatal("failed during migration check", zap.Error(err))
-		} else if ok {
-			Logger.Info("migration is required", zap.Error(err))
-			cfg.ETH1Options.CleanRegistryData = true
-		}
-
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
+		}
+
+		migrationOpts := migrations.Options{
+			Db:     db,
+			Logger: Logger,
+			DbPath: cfg.DBOptions.Path,
+		}
+		err = migrations.Run(cmd.Context(), migrationOpts)
+		if err != nil {
+			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
