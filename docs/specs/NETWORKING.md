@@ -63,7 +63,7 @@ and being transported p2p with one of the following methods:
 Libp2p allows to create a bidirectional stream between two peers and implement the corresponding wire messaging protocol. \
 See more information in [IPFS specs > communication-model - streams](https://ipfs.io/ipfs/QmVqNrDfr2dxzQUo4VN3zhG4NV78uYFmRpgSktWDc2eeh2/specs/7-properties/#71-communication-model---streams).
 
-Streams are used for direct messages between peers.
+Streams are used in the network for direct messages between peers.
 
 **PubSub**
 
@@ -79,15 +79,13 @@ In addition, the machinery helps to determine liveliness and maintain peers scor
 There are several types of nodes in the network:
 
 `Operator` is responsible for executing validators duties. \
-It holds relevant registry data and the validators consensus data.
+It holds registry data and the validators consensus data.
+
+`Exporter` is responsible for collecting and exporting information from the network. \
+It collects registry data and consensus data (decided messages) of all the validators in the network.
 
 `Bootnode` is a public peer which is responsible for helping new peers to find other peers in the network.
 It has a stable ENR that is provided with default configuration, so other peers could join the network easily.
-
-`Exporter` is a public peer that is responsible for collecting and exporting information from the network. \
-It collects registry data and consensus data (decided messages) of all the validators in the network. \
-It has a stable ENR that is provided with default configuration, 
-so it will have a stable connection with all peers and won't be affected by scoring, pruning, backoff etc.
 
 
 ### Identity
@@ -119,7 +117,7 @@ More information is available in [Networking > Discovery](#discovery)
 The peer scoring in `SSV.Network` consists of the following types of scorers:
 
 - [Connection Scoring](#connection-scoring) - calculated during handshake, affects the peers we connect to
-- [Message Scoring](#message-scoring) - tracks operators behavior w.r.t incoming IBFT messages
+- [Message Scoring](#message-scoring) - tracks operators behavior w.r.t incoming QBFT messages
 - [Pubsub Scoring](#pubsub-scoring) - calculated by libp2p, tracks over gossip tasks and pubsub related metrics
 
 For more info please refer to the linked sections.
@@ -129,12 +127,39 @@ For more info please refer to the linked sections.
 
 ## Wire
 
-Network interaction includes several types of protocols:
+All the messages that are being transmitted over the network must be wrapped with the following structure:
+
+```protobuf
+syntax = "proto3";
+import "gogo.proto";
+
+// SignedMessage holds a message and it's corresponding signature
+message SSVMessage {
+  // type of the message
+  MsgType MsgType = 1 [(gogoproto.nullable) = false];
+  // id of the message
+  bytes MsgID     = 2 [(gogoproto.nullable) = false];
+  // message data (encoded)
+  bytes Data      = 3 [(gogoproto.nullable) = false];
+}
+
+// MsgType is an enum that represents the type of message 
+enum MsgType {
+  // consensus/QBFT messages
+  Consensus              = 0;
+  // sync messages
+  Sync                   = 1;
+  // partial signatures sent post consensus
+  Signature = 2;
+}
+```
+
+Note that all pubsub messages in the network are wrapped with libp2p's message structure ([see RPC](https://github.com/libp2p/specs/blob/master/pubsub/README.md#the-rpc)).
 
 ## Consensus Protocol
 
 `IBFT`/`QBFT` consensus protocol is used to govern `SSV` network.
-`IBFT` ensures that consensus can be reached by a committee of `n` 
+`QBFT` ensures that consensus can be reached by a committee of `n` 
 operator nodes while tolerating a certain amount of `f` faulty nodes as defined by `n ≥ 3f + 1`.
 
 As part of the algorithm, nodes are exchanging messages with other nodes in the committee. \
@@ -146,7 +171,9 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
 
 ### Message Structure
 
-`SignedMessage` is a wrapper for IBFT messages, it holds a message and its signature with a list of signer IDs:
+`SignedMessage` is a wrapper for QBFT messages, it holds a message and its signature with a list of signer IDs:
+
+More details can be found in the [QBFT spec](https://github.com/bloxapp/ssv/blob/ssv_spec/docs/spec/qbft/messages.go).
 
 <details>
   <summary><b>protobuf</b></summary>
@@ -157,24 +184,24 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
   
   // SignedMessage holds a message and it's corresponding signature
   message SignedMessage {
-    // message is the IBFT message
+    // message is the QBFT message
     Message message            = 1 [(gogoproto.nullable) = false];
-    // signature is a signature of the IBFT message
+    // signature is a signature of the QBFT message
     bytes signature            = 2 [(gogoproto.nullable) = false];
     // signer_ids is a sorted list of the IDs of the signing operators
     repeated uint64 signer_ids = 3;
   }
   
-  // Message represents an IBFT message
+  // Message represents an QBFT message
   message Message {
-    // type is the IBFT state / stage
+    // type is the QBFT state / stage
     Stage type        = 1;
     // round is the current round where the message was sent
     uint64 round      = 2;
     // identifier is the message identifier
     bytes identifier      = 3;
-    // sequence number is an incremental number for each instance, much like a block number would be in a blockchain
-    uint64 seq_number = 4;
+    // height is the instance height
+    uint64 height = 4;
     // value holds the message data in bytes
     bytes value       = 5;
   }
@@ -190,7 +217,7 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
       "type": 3,
       "round": 1,
       "identifier": "OTFiZGZjOWQxYzU4NzZkYTEwY...",
-      "seq_number": 28276,
+      "height": 28276,
       "value": "mB0aAAAAAAA4AAAAAAAAADpTC1djq..."
     },
     "signature": "jrB0+Z9zyzzVaUpDMTlCt6Om9mj...",
@@ -198,10 +225,6 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
   }
   ```
 </details>
-
-**NOTE:** 
-- all pubsub messages in the network are wrapped with libp2p's message structure
-- `signer_ids` must be sorted, to allow hashing the entire message
 
 ---
 
@@ -224,27 +247,31 @@ Sync is done over streams as pubsub is not suitable in this case due to several 
   <summary><b>protobuf</b></summary>
 
   ```protobuf
+  syntax = "proto3";
+
   message SyncMessage {
-    // type is the type of sync message
-    SyncMsgType type                      = 1;
-    // identifier of the message (validator + role)
-    bytes identifier                      = 2;
+    // protocol is the type of sync message
+    string protocol       = 1;
+    // identifier of the message
+    bytes identifier      = 2;
     // params holds the requests parameters
-    repeated uint64 params                = 3;
-    // messages holds the results (decided messages) of some request
-    repeated proto.SignedMessage messages = 4;
-    // error holds an error response if exist
-    string error                          = 5;
+    repeated bytes params = 3;
+    // data holds the results
+    repeated bytes data   = 4;
+    // status code of the operation
+    uint32 status_code  = 5;
   }
   
-  // SyncMsgType is an enum that represents the type of sync message 
-  enum SyncMsgType {
-    // GetHighestType is a request from peers to return the highest decided/ prepared instance they know of
-    GetHighestType       = 0;
-    // GetInstanceRange is a request from peers to return instances and their decided/ prepared justifications
-    GetInstanceRange     = 1;
-    // GetCurrentInstance is a request from peers to return their current running instance details
-    GetLatestChangeRound = 2;
+  enum StatusCode {
+    Success = 0;
+    // no results were found
+    NotFound = 1;
+    // failed due to bad request
+    BadRequest = 2;
+    // failed due to internal error
+    InternalError = 3;
+    // limits were exceeded
+    Backoff = 4;
   }
   ```
 </details>
@@ -252,24 +279,22 @@ Sync is done over streams as pubsub is not suitable in this case due to several 
 A successful response message usually includes a list of results and the corresponding message type and identifier:
 ```
 {
-  "messages": [ ... ],
-  "type": <type>,
+  "protocol": "<protocol>",
   "identifier": "..."
+  "data": [ ... ],
+  "statusCode": 0,
 }
 ```
 
-An error response includes an error code in the form of a string to allow flexibility:
+An error response includes an error string (as bytes) in the `data` field, plus the corresponding `status code`:
 ```
 {
-  "identifier": "...",
-  "type": <type>,
-  "error": "EntryNotFoundError"
+  "protocol": "<protocol>",
+  "identifier": "..."
+  "data": [],
+  "statusCode": 1, // not found
 }
 ```
-
-The following error codes exist: **TBD**
-- `EntryNotFoundError` is returned when no results were found
-- `InternalError` is returned upon internal error
 
 ### Protocols
 
@@ -277,8 +302,7 @@ SSV nodes use the following stream protocols:
 
 ### 1. Highest Decided
 
-This protocol is used by a node to find out what is the highest decided message for a specific validator.
-In case there are no decided messages, it will return an empty array of messages.
+This protocol is used by a node to find out what is the highest decided message for a specific QBFT instance.
 
 `/ssv/sync/decided/highest/0.0.1`
 
@@ -288,40 +312,44 @@ In case there are no decided messages, it will return an empty array of messages
   Request:
   ```json
   {
+    "protocol": "/ssv/sync/decided/highest/0.0.1",
     "identifier": "...",
-    "type":   0
   }
   ```
 
   Response:
   ```json
   {
-    "messages": [
+    "protocol": "/ssv/sync/decided/highest/0.0.1",
+    "identifier": "...",
+    "statusCode": 0,
+    "data": [
       {
         "message": {
           "type": 3,
           "round": 1,
           "identifier": "...",
-          "seq_number": 7943,
+          "height": 7943,
           "value": "Xmcg...sPM="
         },
         "signature": "g5y....7Dv",
         "signer_ids": [1,2,4]
       }
-    ],
-    "type": 0,
-    "identifier": "..."
+    ]
   }
   ```
 </details>
 
-### 2. Decided By Range
+### 2. Decided History
 
-This protocol enables to sync decided messages in some specific range.
+This protocol enables to sync historical decided messages in some specific range.
 
 The request should specify the desired range, while the response will include all the found messages for that range.
 
-`/ssv/sync/decided/range/0.0.1`
+**NOTE** that this protocol is optional. by default nodes won't save history, 
+only those who turn on the corresponding flag will support this protocol. 
+
+`/ssv/sync/decided/history/0.0.1`
 
 <details>
   <summary>examples</summary>
@@ -329,44 +357,44 @@ The request should specify the desired range, while the response will include al
   Request:
   ```json
   {
+    "protocol": "/ssv/sync/decided/history/0.0.1",
     "identifier": "...",
-    "params": [1200, 1225],
-    "type":   1
+    "params": ["1200", "1225"]
   }
   ```
 
   Response:
   ```json
-  {
-    "identifier": "...",
-    "params": [1200, 1225],
-    "messages": [
-      {
-        "message": {
-          "type": 3,
-          "round": 1,
-          "identifier": "...",
-          "seq_number": 1200,
-          "value": "Xmcg...sPM="
-        },
-        "signature": "g5y....7Dv",
-        "signer_ids": [1,2,4]
+{
+  "protocol": "/ssv/sync/decided/history/0.0.1",
+  "identifier": "...",
+  "params": ["1200", "1225"]
+  "statusCode": 0,
+  "data": [{
+      "message": {
+        "type": 3,
+        "round": 1,
+        "identifier": "...",
+        "height": 1200,
+        "value": "Xmcg...sPM="
       },
-      // ... 1201-1224
-      {
-        "message": {
-          "type": 3,
-          "round": 1,
-          "identifier": "...",
-          "seq_number": 1225,
-          "value": "Xmcg...sPM="
-        },
-        "signature": "g5y....7Dv",
-        "signer_ids": [1,2,4]
-      }
-    ],
-    "type":   1,
-  }
+      "signature": "g5y....7Dv",
+      "signer_ids": [1,2,4]
+    },
+    // ... 1201-1224
+    {
+      "message": {
+        "type": 3,
+        "round": 1,
+        "identifier": "...",
+        "height": 1225,
+        "value": "Xmcg...sPM="
+      },
+      "signature": "g5y....7Dv",
+      "signer_ids": [1,2,4]
+    }
+  ]
+}
   ```
 </details>
 
@@ -383,18 +411,20 @@ This protocol enables a node to catch up with change round messages.
   Request:
   ```json
   {
+    "protocol": "/ssv/sync/decided/history/0.0.1",
     "identifier": "...",
-    "params": [7554],
-    "type":   2
+    "params": ["7554"]
   }
   ```
 
   Response:
   ```json
   {
+    "protocol": "/ssv/sync/decided/history/0.0.1",
     "identifier": "...",
-    "params": [7554],
-    "messages": [
+    "params": ["7554"],
+    "statusCode": 0,
+    "data": [
       {
         "message": {
           "type": 4,
@@ -406,8 +436,7 @@ This protocol enables a node to catch up with change round messages.
         "signature": "g5y....7Dv",
         "signer_ids": [1]
       }
-    ],
-    "type":   2
+    ]
   }
   ```
 </details>
@@ -507,10 +536,11 @@ The following parameters are used for initializing pubsub:
 - `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
 - `directPeers` includes the exporter peer ID, to ensure it gets all messages
 - `subscriptionFilter` was injected to ensure a peer will connect to relevant topics, see [SubscriptionFilter](https://github.com/libp2p/go-libp2p-pubsub/blob/master/subscription_filter.go) interface
-- (fork `v1`) `msgID` is a custom function that calculates a `msg-id` based on the message content hash. 
+- (fork `v1`) `msgID` is a custom function that calculates a `msg-id` based on the message content hash and the corresponding topic. 
 The default function uses the `sender` + `msg_seq` which we don't track, and enforces signature / verification for each message. 
 As all the messages are being verified using the share key, it would be redundant to it also in the pubusb level.
 Moreover, the default `msg-id` duplicates messages, causing it to be processed more than once, in case it was sent by multiple peers (e.g. decided message).
+See [pubsub spec > message identification](https://github.com/libp2p/specs/blob/master/pubsub/README.md#message-identification) for more details.
 - (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router
   - `signID` was set to empty (no author)
 
@@ -541,7 +571,7 @@ running periodically and will determine the score of peers. During heartbeat, th
 
 ### Message Scoring
 
-Message scorers track on operators' behavior w.r.t incoming IBFT messages:
+Message scorers track on operators' behavior w.r.t incoming QBFT messages:
 
 - Invalid message signature (`-100`)
 - Message from operator w/o shared committees (`-1000`)
@@ -558,7 +588,8 @@ Connection scores are based on the following properties:
 
 ### Discovery
 
-[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) is a system for finding other participants in a peer-to-peer network, 
+[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) 
+is a system for finding other participants in a peer-to-peer network, 
 it is used in `SSV.network` to complement discovery.
 
 DiscV5 works on top of UDP, it uses a DHT to store node records (`ENR`) of discovered peers.
@@ -609,8 +640,9 @@ making it easier for other nodes to find it in case they share common subnets.
 As `ENR` has a size limit (`< 300` bytes), 
 discv5 won't support multiple key/value pairs for complementing this feature.
 Instead, a bitlist is used as an array of flags, 
-representing the assignment of subnets for an operator. 
-Similar to how it implemented in Ethereum 2.0 at the moment. \
+representing the assignment of subnets for an operator.
+Similar to how it implemented in Ethereum 2.0 
+[phase 0](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#attestation-subnet-bitfield). \
 [Discovery v5.2](https://github.com/ethereum/devp2p/milestone/3) will introduce 
 [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) 
 which helps to lookup nodes by their advertised topics. In SSV these topics would be the operator's subnets. \
@@ -618,7 +650,7 @@ For more information:
   - [DiscV5 Theory > Topic Advertisement](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-theory.md#topic-advertisement)
   - [discv5: topic index design thread](https://github.com/ethereum/devp2p/issues/136)
 
-See [Ethereum specs > phase 0 > p2p interface](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#why-are-we-using-discv5-and-not-libp2p-kademlia-dht) 
+See [Consensus specs > phase 0 > p2p interface](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#why-are-we-using-discv5-and-not-libp2p-kademlia-dht) 
 for more details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
@@ -626,53 +658,68 @@ In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is
 
 ### Subnets
 
-Consensus messages are being sent in the network over a subnet (pubsub topic), which the relevant peers should be subscribed to.
+Consensus messages are being sent in the network over a subnet (pubsub topic), 
+which the relevant peers are subscribed to.
 
 #### Subnets - fork v0
 
-`v0` was working with a simple approach, each validator committee has 
+`v0` was working with a simple approach, where each validator committee has 
 a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter). \
 It helps to reduce amount of messages in the network, 
 but increases the number of topics which will grow up to the number of validators.
 
-In order to provide more redundancy, there is a global topic (AKA `main topic`) to publish all the decided messages in the network.
+In order to have more redundancy, a global topic (AKA `main topic`) is used 
+to publish all the decided messages in the network.
 
 #### Subnet - fork v1
 
-A subnet of operators is responsible for multiple committees,
+A subnet of operators is a network that includes responsible for multiple committees,
 reusing the same topic to communicate on behalf of multiple validators.
 
-In comparison to `v0`, the number of topics will be reduced and the number of messages sent over the network should grow. \
-As messages will be propagated to a larger set of nodes, we can expect better reliability (arrival of messages to all operators in the committee).
+Operator nodes, regardless of their shares, will save highest decided messages (and potentially historical data)
+of all the committees in the subnets they participate.
 
-In addition, a larger group of operators provides:
-- redundancy of decided messages across multiple nodes
-- better security for subnets as more nodes will validate messages and can score bad/malicious nodes that will be pruned accordingly.
+In comparison to `v0`, the number of messages sent over the network should grow. \
+To calculate the amount of messages, when each operator get every message (once) for all committees in subnet, 
+w/o taking into account gossip overhead, we use the following function:
 
-Global/main topic is not needed in this solution and therefore will be reduced.
+`msgs_in_subnet = msgs_per_committee * operators_per_subnet * committees_per_subnet`
+
+| Validators | Operators | Subnets | Committee - Messages (6min) | Subnet - Messages (6min) | Total Messages (6min) |
+|:-----------|:----------|:--------|:----------------------------|:-------------------------|:----------------------|
+| 10000      | 1000      | 64      | 12                          | ~29300                   | 1875000               |
+| 10000      | 1000      | 128     | 12                          | ~7325                    | 937500                |
+| 10000      | 1000      | 256     | 12                          | ~1830                    | 468750                |
+
+**TBD** number of subnets (32 / 64 / 128 / 256)
+
+On the other hand, more nodes in a topic results 
+increased reliability and security as more nodes will validate messages.
+
+Main topic will be used to propagate decided messages across all the nodes in the network,
+which will store the last decided message of each committee.
+This will provide more redundancy that helps to maintain a consistent state across the network.
 
 **Validators Mapping**
 
 Validator's public key is mapped to a subnet using a hash function, 
-which helps to distribute validators across subnets in a balanced way:
+which helps to distribute validators across subnets in a balanced, distributed way:
 
 `hash(validatiorPubKey) % num_of_subnets`
 
 Deterministic mapping is ensured as long as the number of subnets doesn't change, 
-therefore it's a fixed number (TBD 32 / 64 / 128).
+therefore it's a fixed number.
 
-**TBD** A dynamic number of subnets (e.g. `log(num_of_peers)`) which requires a different approach.
-
+A dynamic number of subnets (e.g. `log(numOfValidators)`) was also considered, 
+but might require a different approach to ensure deterministic mapping.
 
 ### Peers Connectivity
 
 In a fully-connected network, where each peer is connected to all other peers in the network,
 running nodes will consume many resources to process all network related tasks e.g. parsing, peers management etc.
 
-To lower resource consumption, the number of connected peers is limited, currently set to `250`. \
-Once reached to peer limit, the node will connect only to relevant nodes with score above threshold, 
-which is currently set to zero.
-
+To lower resource consumption, the number of connected peers is limited, configurable via flag. \
+Once reached to peer limit, the node will try to connect with relevant nodes.
 
 #### Connection Filters
 
@@ -776,7 +823,7 @@ DiscV5 specs specifies potential vulnerabilities in their system,
 See (DiscV5 Rationale > security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
 The major ones includes routing table pollution, traffic redirection, spamming or replayed messages. \
 Some are less relevant to `SSV.Network` as messages are being verified in a higher level, 
-by the IBFT components using the share public key, 
+by the QBFT components using the share public key, 
 and therefore malicious messages will be identified as invalid.
 
 The following measures are used to protect against malicious peers and denial of service attacks:
