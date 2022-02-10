@@ -3,6 +3,8 @@ package migrations
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 	"testing"
 
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -12,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func setupOptions(ctx context.Context) (Options, error) {
+func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
 	options := basedb.Options{
 		Type:      "badger-memory",
@@ -28,12 +30,13 @@ func setupOptions(ctx context.Context) (Options, error) {
 	return Options{
 		Db:     db,
 		Logger: zap.L(),
+		DbPath: t.TempDir(),
 	}, nil
 }
 
 func Test_RunNotMigratingTwice(t *testing.T) {
 	ctx := context.Background()
-	opt, err := setupOptions(ctx)
+	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
 	var count int
@@ -53,7 +56,7 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 
 func Test_Rollback(t *testing.T) {
 	ctx := context.Background()
-	opt, err := setupOptions(ctx)
+	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
 	// Test that migration fails and rolls back on error.
@@ -77,7 +80,7 @@ func Test_Rollback(t *testing.T) {
 
 func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	ctx := context.Background()
-	opt, err := setupOptions(ctx)
+	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
 	fakeError := errors.New("fake error")
@@ -94,6 +97,46 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	_, found, err = opt.Db.Get(migrationsPrefix, []byte("second"))
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
+	ctx := context.Background()
+	opt, err := setupOptions(ctx, t)
+	require.NoError(t, err)
+
+	var (
+		exporterPrefix = []byte("exporter/")
+		exporterKey    = []byte("exporterKey")
+		exporterValue  = []byte("exporterValue")
+	)
+	// create share key/value under share collection
+	err = opt.Db.Set(exporterPrefix, exporterKey, exporterValue)
+	require.NoError(t, err)
+
+	// create deprecated oa_pks/migration.txt file
+	tmpDirPath := path.Join(opt.DbPath, "oa_pks")
+	require.NoError(t, os.MkdirAll(tmpDirPath, 0700))
+	tmpFilePath := path.Join(tmpDirPath, "migration.txt")
+	_, err = os.Create(tmpFilePath)
+	require.NoError(t, err)
+
+	migrations := Migrations{
+		migrationCleanAllRegistryData,
+	}
+	err = migrations.Run(ctx, opt)
+	require.NoError(t, err)
+
+	// validate that migrationCleanAllRegistryData fake applied
+	obj, found, err := opt.Db.Get(exporterPrefix, exporterKey)
+	require.NoError(t, err)
+	require.NotNil(t, obj)
+	require.True(t, found)
+	require.Equal(t, obj.Key, exporterKey)
+	require.Equal(t, obj.Value, exporterValue)
+
+	_, found, err = opt.Db.Get(migrationsPrefix, []byte(migrationCleanAllRegistryData.Name))
+	require.NoError(t, err)
+	require.True(t, found)
 }
 
 func fakeMigration(name string, returnErr error) Migration {
