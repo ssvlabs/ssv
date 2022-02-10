@@ -109,7 +109,7 @@ func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 		exporterKey    = []byte("exporterKey")
 		exporterValue  = []byte("exporterValue")
 	)
-	// create share key/value under share collection
+	// create temp key/value under exporter collection
 	err = opt.Db.Set(exporterPrefix, exporterKey, exporterValue)
 	require.NoError(t, err)
 

@@ -23,7 +23,7 @@ var migrationCleanAllRegistryData = Migration{
 				}
 			}
 		} else {
-			opt.Logger.Debug("migration ownerAddrAndOperatorsPKsMigration already applied, set as completed")
+			opt.Logger.Debug("migration should be fake applied due to completed oa_pks deprecated migration, setting as completed")
 		}
 		return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
 	},
