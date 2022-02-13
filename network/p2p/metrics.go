@@ -27,6 +27,10 @@ var (
 		Name: "ssv:network:peer_last_msg",
 		Help: "Timestamps of last messages",
 	}, []string{"pid"})
+	metricsPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:pubsub:trace",
+		Help: "Traces of pubsub messages",
+	}, []string{"type"})
 )
 
 func init() {
@@ -40,6 +44,9 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsConnectedPeers); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsPubsubTrace); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
@@ -78,4 +85,8 @@ func reportLastMsg(pid string) {
 
 func timestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+func reportPubsubTrace(t string) {
+	metricsPubsubTrace.WithLabelValues(t).Inc()
 }
