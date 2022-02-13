@@ -6,6 +6,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	noise "github.com/libp2p/go-libp2p-noise"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
@@ -146,7 +147,9 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		}
 	}
 
-	if len(cfg.PubSubTraceOut) > 0 {
+	if cfg.PubSubTraceOut == "log" {
+		psOpts = append(psOpts, pubsub.WithEventTracer(newLogTracer(n.logger)))
+	} else if len(cfg.PubSubTraceOut) > 0 {
 		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create pubsub tracer")
@@ -159,6 +162,38 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 	// Create a new PubSub service using the GossipSub router
 	return pubsub.NewGossipSub(n.ctx, n.host, psOpts...)
+}
+
+type psTracer struct {
+	logger *zap.Logger
+}
+
+func newLogTracer(logger *zap.Logger) pubsub.EventTracer {
+	return &psTracer{logger: logger.With(zap.String("who", "pubsubTrace"))}
+}
+
+func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
+	pid := ""
+	id, err := peer.IDFromBytes(evt.PeerID)
+	if err != nil {
+		pst.logger.Debug("could not convert peer.ID", zap.Error(err))
+	} else {
+		pid = id.String()
+	}
+	topics := make([]string, 0)
+	if evt.GetType() == ps_pb.TraceEvent_SEND_RPC {
+		if met := evt.GetSendRPC().GetMeta(); met != nil {
+			if ihaves := met.GetControl().GetIhave(); ihaves != nil {
+				for _, ihave := range ihaves {
+					topics = append(topics, ihave.GetTopic())
+				}
+			}
+		}
+	}
+	pst.logger.Debug("pubsub event",
+		zap.String("type", evt.Type.String()),
+		zap.Strings("topics", topics),
+		zap.String("peer", pid))
 }
 
 // creates a custom gossipsub parameter set.
