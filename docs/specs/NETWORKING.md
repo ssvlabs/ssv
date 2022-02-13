@@ -37,21 +37,26 @@ This document contains the networking specification for `SSV.Network`.
 
 ### Stack
 
-`SSV.Network` is a decentralized P2P network, consists of operator nodes grouped in multiple subnets.
+`SSV.Network` is a decentralized P2P network, consists of operator nodes that are grouped in multiple subnets, 
+signing validators' duties after reaching to consensus for each duty.
 
 The networking layer is built with [Libp2p](https://libp2p.io/), 
-a modular framework for P2P networking that is used by multiple decentralized projects, including eth2.
+a modular framework for P2P networking that is used by multiple decentralized projects, including ETH 2.0.
 
 ### Transport
 
-Network peers should support the following transports:
-- `TCP` is used by libp2p for setting up communication channels between peers. default port: `12001`
-- `UDP` is used for discovery purposes. default port: `13001`
+Network peers must support the following transports:
+- `TCP` is used by libp2p for setting up communication channels between peers. 
+default port: `12001`
+- `UDP` is used for discovery by[discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md). 
+default port: `13001`
 
 [go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise) 
-is used to secure transport (see [noise protocol](https://noiseprotocol.org/noise.html)).
+is used to secure transport, for more details see [noise protocol](https://noiseprotocol.org/noise.html) 
+and [libp2p spec](https://github.com/libp2p/specs/blob/master/noise/README.md).
 
 Multiplexing of protocols over channels is achieved using [yamux](https://github.com/libp2p/go-libp2p-yamux) protocol.
+
 
 ### Messaging
 
@@ -60,10 +65,10 @@ and being transported p2p with one of the following methods:
 
 **Streams** 
 
-Libp2p allows to create a bidirectional stream between two peers and implement the corresponding wire messaging protocol. \
-See more information in [IPFS specs > communication-model - streams](https://ipfs.io/ipfs/QmVqNrDfr2dxzQUo4VN3zhG4NV78uYFmRpgSktWDc2eeh2/specs/7-properties/#71-communication-model---streams).
+Libp2p allows to create a bidirectional stream between two peers and implement the corresponding wire messaging protocol.
 
-Streams are used in the network for direct messages between peers.
+[Streams](https://ipfs.io/ipfs/QmVqNrDfr2dxzQUo4VN3zhG4NV78uYFmRpgSktWDc2eeh2/specs/7-properties/#71-communication-model---streams) 
+are used in the network for direct messages between peers.
 
 **PubSub**
 
@@ -100,8 +105,10 @@ and can be revoked in case it was compromised.
 `Operator Key` is used for decryption of share's keys that are used for signing/verifying consensus messages and duties. \
 Exporter and Bootnode does not hold this key.
 
-In addition, Operator nodes will expose an `Operator ID` that is calculated from the operator public key, 
-and helps to identify a peer in the network.
+Operator nodes will expose an `Operator ID` that is calculated from the operator public key. \
+Note that this value is used as a hint for better observability of the network. 
+Malicious peers with fake operator ID will be pruned due to bad scores 
+as they don't have the key to sign messages.
 
 
 ### Network Discovery
@@ -195,15 +202,15 @@ More details can be found in the [QBFT spec](https://github.com/bloxapp/ssv/blob
   // Message represents an QBFT message
   message Message {
     // type is the QBFT state / stage
-    Stage type        = 1;
+    Stage type       = 1;
     // round is the current round where the message was sent
-    uint64 round      = 2;
+    uint64 round     = 2;
     // identifier is the message identifier
-    bytes identifier      = 3;
+    bytes identifier = 3;
     // height is the instance height
-    uint64 height = 4;
+    uint64 height    = 4;
     // value holds the message data in bytes
-    bytes value       = 5;
+    bytes value      = 5;
   }
   ```
 </details>
@@ -447,11 +454,8 @@ This protocol enables a node to catch up with change round messages.
 
 `/ssv/handshake/0.0.1`
 
-The handshake protocol allows peers to identify, by exchanging signed information. \
-It must be performed for every connection, and therefore forces nodes to 
-authenticate / prove ownership of their operator key.
-
-**TBD** Public, static nodes such as exporter requires registration
+The handshake protocol allows peers to identify by exchanging information 
+when a new connection is established.
 
 ### Message Structure
 
@@ -463,32 +467,6 @@ The following information will be exchanged as part of the handshake:
 ```protobuf
 syntax = "proto3";
 import "gogo.proto";
-
-// HandshakeMessage is a message that is used for handshaking nodes
-message HandshakeMessage {
-  // payload is the information to sign in bytes
-  bytes payload = 1 [(gogoproto.nullable) = false];
-  // signed is a signature of the message
-  bytes signed  = 2 [(gogoproto.nullable) = false];
-  // pubkey is the public key needed to verify the handshake message
-  bytes pubkey  = 3 [(gogoproto.nullable) = false];
-}
-
-// HandshakePayload contains the information passed during handshake
-message HandshakePayload {
-  // identity is the information of the answering node
-  NodeIdentity identity = 1 [(gogoproto.nullable) = true];
-  // src is set by the sender
-  Source src            = 2 [(gogoproto.nullable) = false];
-}
-
-// Source contains information from initiator of the handshake
-message Source {
-  // msg_seq helps to keep track over multiple handshakes, will by set by the sender
-  uint64 msg_seq = 1 [(gogoproto.nullable) = false];
-  // peer_id is the peer that the message is targeted for, will by set by the sender
-  bytes peer_id  = 2 [(gogoproto.nullable) = false];
-}
 
 // NodeIdentity contains node's identity information
 message NodeIdentity {
@@ -521,6 +499,7 @@ message NodeMetadata {
 
 ## Networking
 
+
 ### Pubsub
 
 The main purpose is for broadcasting messages to a group (AKA subnet) of nodes. \
@@ -531,18 +510,44 @@ In addition, the following are achieved as well:
 
 The following parameters are used for initializing pubsub:
 
-- `floodPublish` was turned on for better reliability, as peer's own messages will be propagated to a larger set of peers 
-  (see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing)) 
-- `peerOutboundQueueSize` / `validationQueueSize` were increased to `600`, to avoid dropped messages on bad connectivity or slow processing
-- `directPeers` includes the exporter peer ID, to ensure it gets all messages
-- `subscriptionFilter` was injected to ensure a peer will connect to relevant topics, see [SubscriptionFilter](https://github.com/libp2p/go-libp2p-pubsub/blob/master/subscription_filter.go) interface
-- (fork `v1`) `msgID` is a custom function that calculates a `msg-id` based on the message content hash and the corresponding topic. 
-The default function uses the `sender` + `msg_seq` which we don't track, and enforces signature / verification for each message. 
-As all the messages are being verified using the share key, it would be redundant to it also in the pubusb level.
-Moreover, the default `msg-id` duplicates messages, causing it to be processed more than once, in case it was sent by multiple peers (e.g. decided message).
+
+#### Flood Publishing 
+
+`floodPublish` was turned on for ensuring better reliability, as peer's own messages will be propagated to a larger set of peers 
+(see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing))
+In addition it is mentioned as a mitigation strategy for attacks, 
+as it helps to overcome situations where most of the node’s mesh connections were occupied by Sybils.
+
+[Gossipsub v1.1 Evaluation Report > 2.2 Mitigation Strategies](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
+
+
+#### Subscription Filter
+
+[SubscriptionFilter](https://github.com/libp2p/go-libp2p-pubsub/blob/master/subscription_filter.go) 
+is used to apply access control for topics. \
+It is invoked whenever the peer wants to subscribe to some topic, 
+it helps in case other peers are suggesting topics that we don't want to join, 
+e.g. if we are already subscribed to a large number of topics.
+
+
+#### Message ID
+
+`msg-id` is a function that calculates the IDs of messages. 
+It reduces the overhead of duplicated messages as the pubsub router ignores messages with known ID. \
+The default `msg-id` function uses the `sender` + `msg_seq` which we don't track, 
+and therefore creates multiple IDs for the same logical message, causing it to be processed more than once.
+
 See [pubsub spec > message identification](https://github.com/libp2p/specs/blob/master/pubsub/README.md#message-identification) for more details.
-- (fork `v1`) `signPolicy` was set to `StrictNoSign` (required for custom `msg-id`) to avoid producing and verifying message signatures in the pubsub router
-  - `signID` was set to empty (no author)
+
+The `msg-id` function that is used in `SSV.Network` creates the ID based on the message content:
+
+`msg-id = hash(signed-consensus-msg)`
+
+**TBD** As hashing is CPU intensive, an optimized version of this function would be to hash specific values from the message, 
+which will reduce the overhead created by hashing the entire message:
+
+`msg-id = hash(identifier + height + signature + signers)`
+
 
 ### Pubsub Scoring
 
@@ -586,6 +591,66 @@ Connection scores are based on the following properties:
 
 - Shared subnets / committees (`25`)
 
+
+### Subnets
+
+Consensus messages are being sent in the network over a subnet (pubsub topic),
+which the relevant peers are subscribed to.
+
+#### Subnets - fork v0
+
+`v0` was working with a simple approach, where each validator committee has
+a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter). \
+It helps to reduce amount of messages in the network,
+but increases the number of topics which will grow up to the number of validators.
+
+In order to have more redundancy, a global topic (AKA `main topic`) is used
+to publish all the decided messages in the network.
+
+#### Subnet - fork v1
+
+A subnet of operators is a network that includes responsible for multiple committees,
+reusing the same topic to communicate on behalf of multiple validators.
+
+Operator nodes, regardless of their shares, will save highest decided messages (and potentially historical data)
+of all the committees in the subnets they participate.
+
+In comparison to `v0`, the number of messages sent over the network should grow. \
+To calculate the amount of messages, when each operator get every message (once) for all committees in subnet,
+w/o taking into account gossip overhead, we use the following function:
+
+`msgs_in_subnet = msgs_per_committee * operators_per_subnet * committees_per_subnet`
+
+| Validators | Operators | Subnets | Committee - Messages (6min) | Subnet - Messages (6min) | Total Messages (6min) |
+|:-----------|:----------|:--------|:----------------------------|:-------------------------|:----------------------|
+| 10000      | 1000      | 64      | 12                          | ~29300                   | 1875000               |
+| 10000      | 1000      | 128     | 12                          | ~7325                    | 937500                |
+| 10000      | 1000      | 256     | 12                          | ~1830                    | 468750                |
+
+**TBD** number of subnets (32 / 64 / 128 / 256)
+
+On the other hand, more nodes in a topic results
+increased reliability and security as more nodes will validate messages.
+
+Main topic will be used to propagate decided messages across all the nodes in the network,
+which will store the last decided message of each committee.
+This will provide more redundancy that helps to maintain a consistent state across the network.
+
+**Validators Mapping**
+
+Validator's public key is mapped to a subnet using a hash function,
+which helps to distribute validators across subnets in a balanced, distributed way:
+
+`hash(validatiorPubKey) % num_of_subnets`
+
+Deterministic mapping is ensured as long as the number of subnets doesn't change,
+therefore it's a fixed number.
+
+A dynamic number of subnets (e.g. `log(numOfValidators)`) was also considered,
+but might require a different approach to ensure deterministic mapping.
+
+
+
 ### Discovery
 
 [discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) 
@@ -626,23 +691,17 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 | `version`   | fork version, integer                                          | TODO            |
 | `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | TODO            |
 
-#### Discovery Alternatives
-
-[libp2p's Kademlia DHT](https://github.com/libp2p/specs/tree/master/kad-dht) offers similar features, 
-and even a more complete implementation of Kademlia DHT.
-Discv5 design is loosely inspired by the Kademlia DHT, but unlike most DHTs no arbitrary keys and values are stored. 
-Instead, the DHT stores and relays only node records.
-
-Libp2p's Kad DHT allows advertising and finding peers by values. \
-In SSV the values would be the subnets of the operator, 
-making it easier for other nodes to find it in case they share common subnets.
+#### Subnets Discovery
 
 As `ENR` has a size limit (`< 300` bytes), 
-discv5 won't support multiple key/value pairs for complementing this feature.
-Instead, a bitlist is used as an array of flags, 
+discv5 won't support multiple key/value pairs for storing subnets of operators, 
+which could have made it easier to find nodes with common subnets.
+
+Instead, an array of flags is used, 
 representing the assignment of subnets for an operator.
 Similar to how it implemented in Ethereum 2.0 
-[phase 0](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#attestation-subnet-bitfield). \
+[phase 0](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#attestation-subnet-bitfield).
+
 [Discovery v5.2](https://github.com/ethereum/devp2p/milestone/3) will introduce 
 [Topic Index](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#the-topic-index) 
 which helps to lookup nodes by their advertised topics. In SSV these topics would be the operator's subnets. \
@@ -651,67 +710,10 @@ For more information:
   - [discv5: topic index design thread](https://github.com/ethereum/devp2p/issues/136)
 
 See [Consensus specs > phase 0 > p2p interface](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#why-are-we-using-discv5-and-not-libp2p-kademlia-dht) 
-for more details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
+for details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
 
-
-### Subnets
-
-Consensus messages are being sent in the network over a subnet (pubsub topic), 
-which the relevant peers are subscribed to.
-
-#### Subnets - fork v0
-
-`v0` was working with a simple approach, where each validator committee has 
-a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter). \
-It helps to reduce amount of messages in the network, 
-but increases the number of topics which will grow up to the number of validators.
-
-In order to have more redundancy, a global topic (AKA `main topic`) is used 
-to publish all the decided messages in the network.
-
-#### Subnet - fork v1
-
-A subnet of operators is a network that includes responsible for multiple committees,
-reusing the same topic to communicate on behalf of multiple validators.
-
-Operator nodes, regardless of their shares, will save highest decided messages (and potentially historical data)
-of all the committees in the subnets they participate.
-
-In comparison to `v0`, the number of messages sent over the network should grow. \
-To calculate the amount of messages, when each operator get every message (once) for all committees in subnet, 
-w/o taking into account gossip overhead, we use the following function:
-
-`msgs_in_subnet = msgs_per_committee * operators_per_subnet * committees_per_subnet`
-
-| Validators | Operators | Subnets | Committee - Messages (6min) | Subnet - Messages (6min) | Total Messages (6min) |
-|:-----------|:----------|:--------|:----------------------------|:-------------------------|:----------------------|
-| 10000      | 1000      | 64      | 12                          | ~29300                   | 1875000               |
-| 10000      | 1000      | 128     | 12                          | ~7325                    | 937500                |
-| 10000      | 1000      | 256     | 12                          | ~1830                    | 468750                |
-
-**TBD** number of subnets (32 / 64 / 128 / 256)
-
-On the other hand, more nodes in a topic results 
-increased reliability and security as more nodes will validate messages.
-
-Main topic will be used to propagate decided messages across all the nodes in the network,
-which will store the last decided message of each committee.
-This will provide more redundancy that helps to maintain a consistent state across the network.
-
-**Validators Mapping**
-
-Validator's public key is mapped to a subnet using a hash function, 
-which helps to distribute validators across subnets in a balanced, distributed way:
-
-`hash(validatiorPubKey) % num_of_subnets`
-
-Deterministic mapping is ensured as long as the number of subnets doesn't change, 
-therefore it's a fixed number.
-
-A dynamic number of subnets (e.g. `log(numOfValidators)`) was also considered, 
-but might require a different approach to ensure deterministic mapping.
 
 ### Peers Connectivity
 
