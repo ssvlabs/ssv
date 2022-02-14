@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"strings"
+	"sync/atomic"
 )
 
 // SubscribeToValidatorNetwork  for new validator create new topic, subscribe and start listen
@@ -180,4 +183,36 @@ func getTopicName(pk string) string {
 // getTopicName return formatted topic name
 func unwrapTopicName(topicName string) string {
 	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
+}
+
+// pubsub tracer
+var (
+	psTraceStateWithReporting uint32 = 0
+	psTraceStateWithLogging   uint32 = 1
+)
+
+type psTracer struct {
+	logger *zap.Logger
+	state  uint32
+}
+
+func newTracer(logger *zap.Logger, state uint32) pubsub.EventTracer {
+	return &psTracer{logger: logger.With(zap.String("who", "pubsubTrace")), state: state}
+}
+
+func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
+	reportPubsubTrace(evt.GetType().String())
+	if atomic.LoadUint32(&pst.state) < psTraceStateWithLogging {
+		return
+	}
+	pid := ""
+	id, err := peer.IDFromBytes(evt.PeerID)
+	if err != nil {
+		pst.logger.Debug("could not convert peer.ID", zap.Error(err))
+	} else {
+		pid = id.String()
+	}
+	pst.logger.Debug("pubsub event",
+		zap.String("type", evt.GetType().String()),
+		zap.String("peer", pid))
 }

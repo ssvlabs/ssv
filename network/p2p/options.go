@@ -146,13 +146,19 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		}
 	}
 
-	if len(cfg.PubSubTraceOut) > 0 {
+	// TODO: change this implementation as part of networking epic
+	if cfg.PubSubTraceOut == "log" {
+		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(n.logger, psTraceStateWithLogging)))
+	} else if len(cfg.PubSubTraceOut) > 0 {
 		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create pubsub tracer")
 		}
 		n.logger.Debug("pubusb trace file was created", zap.String("path", cfg.PubSubTraceOut))
 		psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
+	} else {
+		// if pubsub trace flag was not set, turn on pubsub tracer with prometheus reporting
+		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(n.logger, psTraceStateWithReporting)))
 	}
 
 	setGlobalPubSubParameters()
