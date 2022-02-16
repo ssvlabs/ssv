@@ -1,0 +1,186 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-exporter-v2
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ws-exporter-v2.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-exporter-v2
+  http:
+  - route:
+    - destination:
+        host: ssv-exporter-v2
+        port:
+          number: 14007
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-exporter-v2
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ws-exporter-v2.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-exporter-v2
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-exporter-v2
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12007
+      protocol: UDP
+      targetPort: 12007
+      name: port-12007
+    - port: 13007
+      protocol: TCP
+      targetPort: 13007
+      name: port-13007
+    - port: 14007
+      protocol: TCP
+      targetPort: 14007
+      name: port-14007
+    - port: 15007
+      protocol: TCP
+      targetPort: 15007
+      name: port-15007
+  selector:
+    app: ssv-exporter-v2
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-exporter-v2
+  name: ssv-exporter-v2
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: 0
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-exporter-v2
+  template:
+    metadata:
+      labels:
+        app: ssv-exporter-v2
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-main
+                  - key: beta.kubernetes.io/instance-type
+                    operator: In
+                    values:
+                      - m5a.4xlarge                        
+      containers:
+      - name: ssv-exporter-v2
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: REPLACE_EXPORTER_CPU_LIMIT
+            memory: REPLACE_EXPORTER_MEM_LIMIT
+        command: ["make", "start-exporter"]
+        ports:
+        - containerPort: 12007
+          name: port-12007
+          hostPort: 12007           
+          protocol: UDP
+        - containerPort: 13007
+          name: port-13007
+          hostPort: 13007
+        - containerPort: 14007
+          name: port-14007
+          hostPort: 14007
+        - containerPort: 15007
+          name: port-15007
+          hostPort: 15007
+        env:
+          - name: SHARE_CONFIG
+            value: "./data/share.yaml"
+          - name: ETH_1_ADDR
+            valueFrom:
+              secretKeyRef:
+                key: eth1_addr
+                name: config-secrets
+          - name: CONFIG_PATH
+            valueFrom:
+              secretKeyRef:
+                key: config_path
+                name: config-secrets
+          - name: ENR_KEY
+            valueFrom:
+              secretKeyRef:
+                key: enr_key
+                name: config-secrets
+          - name: REGISTRY_CONTRACT_ADDR_KEY
+            valueFrom:
+              secretKeyRef:
+                key: smart_contract_addr_key
+                name: config-secrets
+          - name: ABI_VERSION
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: abi_version
+                optional: true
+          - name: NETWORK_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                key: network_private_key
+                name: config-secrets
+          - name: LOG_LEVEL
+            value: debug
+          - name: DISCOVERY_TYPE_KEY
+            value: discv5
+          - name: NETWORK
+            value: prater
+          - name: DB_PATH
+            value: ./data/db
+          - name: DB_REPORTING
+            value: "true"
+          - name: METRICS_API_PORT
+            value: "15007"
+          - name: ENABLE_PROFILE
+            value: "true"
+          - name: IBFT_SYNC_ENABLED
+            value: "true"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-exporter-v2
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-exporter-v2-cm
+      volumes:
+      - name: ssv-exporter-v2
+        persistentVolumeClaim:
+          claimName: ssv-exporter-v2
+      - name: ssv-exporter-v2-cm
+        configMap:
+          name: ssv-exporter-v2-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true      
