@@ -89,10 +89,6 @@ spec:
                     operator: In
                     values:
                       - ssv-main
-                  - key: beta.kubernetes.io/instance-type
-                    operator: In
-                    values:
-                      - m5a.4xlarge                        
       containers:
       - name: ssv-exporter-v2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
@@ -170,6 +166,12 @@ spec:
             value: "2"
           - name: INSTANCE_ID
             value: "1"
+          - name: UDP_PORT
+            value: "12001"
+          - name: TCP_PORT
+            value: "13001"
+          - name: WS_API_PORT
+            value: "14001"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-v2
