@@ -19,8 +19,12 @@ const (
 	gossipSubDlo = 6 // topic stable mesh low watermark
 	//gossipSubDhi = 12 // topic stable mesh high watermark
 
+	// gossipMaxIHaveLength is max number fo ihave messages to send
+	// lower the maximum (default is 5000) to avoid ihave floods
+	gossipMaxIHaveLength = 2000
+
 	// gossip parameters
-	gossipSubMcacheLen    = 6 // number of windows to retain full messages in cache for `IWANT` responses
+	gossipSubMcacheLen    = 4 // number of windows to retain full messages in cache for `IWANT` responses
 	gossipSubMcacheGossip = 3 // number of windows to gossip about
 	//gossipSubSeenTTL      = 550 // number of heartbeat intervals to retain message IDs
 
@@ -28,7 +32,7 @@ const (
 	gossipSubHeartbeatInterval = 700 * time.Millisecond // frequency of heartbeat, milliseconds
 
 	// pubsubQueueSize is the size that we assign to our validation queue and outbound message queue
-	pubsubQueueSize = 600
+	pubsubQueueSize = 512
 )
 
 // buildOptions for the libp2p host.
@@ -175,7 +179,7 @@ func pubsubGossipParam() pubsub.GossipSubParams {
 	gParams.HeartbeatInterval = gossipSubHeartbeatInterval
 	gParams.HistoryLength = gossipSubMcacheLen
 	gParams.HistoryGossip = gossipSubMcacheGossip
-
+	gParams.MaxIHaveLength = gossipMaxIHaveLength
 	// Set a larger gossip history to ensure that slower
 	// messages have a longer time to be propagated. This
 	// comes with the tradeoff of larger memory usage and
