@@ -149,15 +149,17 @@ func newMockExporter() (*exporter, error) {
 	ws := api.NewWsServer(context.Background(), logger, nil, nil, false)
 
 	opts := Options{
-		Ctx:        context.Background(),
-		Beacon:     beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
-		Logger:     logger,
-		ETHNetwork: nil,
-		Eth1Client: nil,
-		Network:    nil,
-		DB:         db,
-		WS:         ws,
-		WsAPIPort:  0,
+		Ctx:            context.Background(),
+		Beacon:         beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
+		Logger:         logger,
+		ETHNetwork:     nil,
+		Eth1Client:     nil,
+		Network:        nil,
+		DB:             db,
+		WS:             ws,
+		WsAPIPort:      0,
+		NumOfInstances: 1,
+		InstanceID:     0,
 	}
 	e := New(opts)
 	ws.UseQueryHandler(e.(*exporter).handleQueryRequests)

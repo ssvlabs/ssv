@@ -42,6 +42,10 @@ type config struct {
 	IbftSyncEnabled                 bool          `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
 	ValidatorMetaDataUpdateInterval time.Duration `yaml:"ValidatorMetaDataUpdateInterval" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
 	NetworkPrivateKey               string        `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+
+	// TODO: change this after network refactoring
+	NumOfInstances int `yaml:"NumOfInstances" env:"NUM_OF_INSTANCES" env-default:"1" env-description:"number of existing exporter instances"`
+	InstanceID     int `yaml:"InstanceID" env:"INSTANCE_ID" env-default:"0" env-description:"current instance ID"`
 }
 
 var cfg config
@@ -154,6 +158,8 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
 		exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+		exporterOptions.NumOfInstances = cfg.NumOfInstances
+		exporterOptions.InstanceID = cfg.InstanceID
 
 		exporterNode = exporter.New(*exporterOptions)
 

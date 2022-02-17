@@ -21,6 +21,8 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,10 +31,6 @@ const (
 	readerQueuesInterval         = 10 * time.Millisecond
 	metaDataReaderQueuesInterval = 5 * time.Second
 	metaDataBatchSize            = 25
-)
-
-var (
-	syncWhitelist []string
 )
 
 // Exporter represents the main interface of this package
@@ -62,6 +60,9 @@ type Options struct {
 	ValidatorMetaDataUpdateInterval time.Duration
 
 	UseMainTopic bool
+
+	NumOfInstances int
+	InstanceID     int
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -92,6 +93,9 @@ type exporter struct {
 
 	networkMsgMediator ibftController.Mediator
 	useMainTopic       bool
+
+	numOfInstances int
+	instanceID     int
 }
 
 // New creates a new Exporter instance
@@ -103,6 +107,10 @@ func New(opts Options) Exporter {
 			Logger: opts.Logger,
 		},
 	)
+	// set at least a single instance
+	if opts.NumOfInstances == 0 {
+		opts.NumOfInstances = 1
+	}
 	e := exporter{
 		ctx:                  opts.Ctx,
 		storage:              storage.NewExporterStorage(opts.DB, opts.Logger),
@@ -133,6 +141,9 @@ func New(opts Options) Exporter {
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
 		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
 		useMainTopic:                    opts.UseMainTopic,
+
+		numOfInstances: opts.NumOfInstances,
+		instanceID:     opts.InstanceID,
 	}
 
 	if err := e.init(opts); err != nil {
@@ -279,12 +290,11 @@ func (exp *exporter) triggerAllValidators() {
 }
 
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
-	for _, pk := range syncWhitelist {
-		if pubkey == pk {
-			return true
-		}
+	val := hexToUint64(pubkey)
+	if int(val)%exp.numOfInstances == exp.instanceID {
+		return exp.ibftSyncEnabled
 	}
-	return exp.ibftSyncEnabled
+	return false
 }
 
 // triggerValidator starts the given validator
@@ -406,4 +416,10 @@ func (exp *exporter) startNetworkMediators() {
 		}
 		return nil, false
 	})
+}
+
+func hexToUint64(hexStr string) uint64 {
+	cleaned := strings.Replace(hexStr, "0x", "", -1)
+	result, _ := strconv.ParseUint(cleaned, 16, 64)
+	return result
 }
