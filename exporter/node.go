@@ -291,7 +291,10 @@ func (exp *exporter) triggerAllValidators() {
 
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	val := hexToUint64(pubkey)
-	if int(val)%exp.numOfInstances == exp.instanceID {
+	exp.logger.Debug("check validator",
+		zap.Uint64("mod", val%uint64(exp.numOfInstances)),
+		zap.Int("numOfInstances", exp.numOfInstances))
+	if val%uint64(exp.numOfInstances) == uint64(exp.instanceID) {
 		return exp.ibftSyncEnabled
 	}
 	return false
