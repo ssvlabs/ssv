@@ -23,7 +23,7 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 		return errors.Wrap(err, "failed to get topic")
 	}
 
-	n.logger.Debug("broadcasting ibft msg", zap.String("lambda", string(msg.Message.Lambda)),
+	n.logger.Debug("broadcasting ibft msg", zap.Uint64("seqNum", msg.Message.SeqNumber), zap.String("msgType", msg.Message.Type.String()), zap.String("lambda", string(msg.Message.Lambda)),
 		zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
 
 	return topic.Publish(n.ctx, msgBytes)
