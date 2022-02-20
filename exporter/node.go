@@ -322,6 +322,9 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) (bool, err
 	if err != nil {
 		return false, errors.Wrap(err, "could not get validator share")
 	}
+	if !validatorShare.HasMetadata() {
+		return false, nil
+	}
 	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
 	return true, exp.setup(validatorShare)
@@ -330,13 +333,8 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) (bool, err
 // setup starts all validator readers
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
-	logger := exp.logger.With(zap.String("pubKey", pubKey))
-	if !validatorShare.HasMetadata() {
-		logger.Debug("validator w/o metadata,skipped setup")
-		return nil
-	}
-	logger.Debug("setup validator")
-	defer logger.Debug("setup validator done")
+	exp.logger.Debug("setup validator", zap.String("pubKey", pubKey))
+
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	// start network reader
 	networkReader := exp.getOrCreateNetworkReader(validatorShare.PublicKey)
@@ -344,6 +342,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	// start decided reader
 	decidedReader := exp.getOrCreateDecidedReader(validatorShare)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
+
 	return nil
 }
 
