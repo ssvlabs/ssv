@@ -96,7 +96,13 @@ func (es *exporterStorage) SaveValidatorInformation(validatorInformation *Valida
 	if err != nil {
 		return errors.Wrap(err, "could not calculate next validator index")
 	}
-	return es.saveValidatorNotSafe(validatorInformation)
+	err = es.saveValidatorNotSafe(validatorInformation)
+	if err != nil {
+		return err
+	}
+	es.logger.Debug("validator information was saved", zap.String("pubKey", validatorInformation.PublicKey),
+		zap.Any("value", *validatorInformation))
+	return nil
 }
 
 func (es *exporterStorage) saveValidatorNotSafe(val *ValidatorInformation) error {

@@ -50,7 +50,12 @@ func (s *Collection) SaveValidatorShare(share *Share) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.saveUnsafe(share)
+	err := s.saveUnsafe(share)
+	if err != nil {
+		return err
+	}
+	s.logger.Debug("validator share was saved", zap.String("pk", share.PublicKey.SerializeToHexStr()))
+	return nil
 }
 
 // SaveValidatorShare save validator share to db

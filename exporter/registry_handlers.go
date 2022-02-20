@@ -66,7 +66,6 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	if err := exp.validatorStorage.SaveValidatorShare(validatorShare); err != nil {
 		return errors.Wrap(err, "failed to save validator share")
 	}
-	logger.Debug("validator share was saved")
 	// save information for exporting validators
 	vi, err := toValidatorInformation(event)
 	if err != nil {
@@ -75,8 +74,6 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	if err := exp.storage.SaveValidatorInformation(vi); err != nil {
 		return errors.Wrap(err, "failed to save validator information")
 	}
-	logger.Debug("validator information was saved", zap.Any("value", *vi))
-
 	// TODO: aggregate validators in sync scenario
 	go func() {
 		n := exp.ws.BroadcastFeed().Send(api.Message{
