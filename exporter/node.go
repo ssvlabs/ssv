@@ -22,7 +22,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -291,13 +290,14 @@ func (exp *exporter) triggerAllValidators() {
 
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 	val := hexToUint64(pubkey)
-	instance := val%uint64(exp.numOfInstances)
+	instance := val % uint64(exp.numOfInstances)
 	exp.logger.Debug("check validator",
 		zap.Uint64("mod", instance),
+		zap.Uint64("val", val),
 		zap.Uint64("instanceID", uint64(exp.instanceID)),
 		zap.String("pubkey", pubkey),
 		zap.Int("numOfInstances", exp.numOfInstances))
-	if val%uint64(exp.numOfInstances) == uint64(exp.instanceID) {
+	if instance == uint64(exp.instanceID) {
 		return exp.ibftSyncEnabled
 	}
 	return false
@@ -425,7 +425,9 @@ func (exp *exporter) startNetworkMediators() {
 }
 
 func hexToUint64(hexStr string) uint64 {
-	cleaned := strings.Replace(hexStr, "0x", "", -1)
-	result, _ := strconv.ParseUint(cleaned, 16, 64)
+	result, err := strconv.ParseUint(hexStr[:10], 16, 64)
+	if err != nil {
+		return uint64(0)
+	}
 	return result
 }

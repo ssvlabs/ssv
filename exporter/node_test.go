@@ -31,6 +31,7 @@ func init() {
 }
 
 func TestExporter_ShouldProcessValidator(t *testing.T) {
+	count1, count2 := uint64(0), uint64(0)
 	exp1, err := newMockExporter()
 	require.NoError(t, err)
 	exp2, err := newMockExporter()
@@ -49,14 +50,27 @@ func TestExporter_ShouldProcessValidator(t *testing.T) {
 		"b7734916ae1931bcd607d0e404d8b4de6b46b8298dd12819dfb2e1d59cf89fe0540bf94a786dc6633a83c5cfb7b4b5ca",
 		"b62b6cd780e9b3bccddcd8f4de0a5a8d416915a1e21239da92a6d20240545f7a829c3988be6a79394aa05eee24429795",
 		"b5b9e340d4c5f06fec38fc3d5bbc1eb39822b4ea2f07f4bd57fecb7d522e3f8755522919c69e019459de525903810363",
+		"b88297ef1097d929857d2f4a409e2141fecffcd589aa38428827881b7814ee116f591e0f599fa7e2433a148732ce50e3",
+		"aeef1d330f8bb2fe71a430de6c71b80eb5b260a676b2f74e14488c42f50c51d3859a223ca79d847e160afed5a9092caa",
+		"aef4bc917b9562a35fbb5fc2d993d9c44a2e928e35500131ca2ef349c5e183b27335d1c356941cd7aa21fe13ce5b31e7",
+		"af07571fb559ead83ae1b6000a4a3733e89c47a1568619ad23e887c67acff2822d77988eef904bac3f0a47fe61709b04",
+		"ac8c03ce86fa1edb60c4dcebcc888a631fb7117a45482edbfd1141b2494d3563bab15fcefad26d7930e6ab77b7cd4fa9",
+		"add13922a1e35c2c606e50cf8038ddc8a227f255f049d912032952b12192864c80eaec0b2bf8ab06aa0f25e329ec0c7d",
 	}
+	n := len(pks)
 
 	for _, pk := range pks {
-		e1 := exp1.shouldProcessValidator(pk)
-		e2 := exp2.shouldProcessValidator(pk)
-		require.True(t, e1 || e2)
-		require.False(t, e1 && e2)
+		if exp1.shouldProcessValidator(pk) {
+			count1++
+		}
+		if exp2.shouldProcessValidator(pk) {
+			count2++
+		}
 	}
+
+	require.Equal(t, n, int(count1+count2))
+	require.Equal(t, 7, int(count1))
+	require.Equal(t, 6, int(count2))
 }
 
 func TestExporter_handleQueryRequests(t *testing.T) {
