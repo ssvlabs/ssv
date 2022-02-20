@@ -167,11 +167,11 @@ spec:
           - name: INSTANCE_ID
             value: "1"
           - name: UDP_PORT
-            value: "12001"
+            value: "12007"
           - name: TCP_PORT
-            value: "13001"
+            value: "13007"
           - name: WS_API_PORT
-            value: "14001"
+            value: "14007"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-v2
