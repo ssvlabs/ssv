@@ -88,7 +88,7 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	}()
 
 	// triggers a sync for the given validator
-	if err = exp.triggerValidator(validatorShare.PublicKey); err != nil {
+	if _, err := exp.triggerValidator(validatorShare.PublicKey); err != nil {
 		return errors.Wrap(err, "failed to trigger ibft sync")
 	}
 

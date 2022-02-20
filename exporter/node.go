@@ -281,8 +281,11 @@ func (exp *exporter) triggerAllValidators() {
 	}
 	exp.logger.Debug("triggering validators", zap.Int("count", len(shares)))
 	for _, share := range shares {
-		if err = exp.triggerValidator(share.PublicKey); err != nil {
-			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),
+		if started, err := exp.triggerValidator(share.PublicKey); err != nil {
+			exp.logger.Error("failed to trigger validator", zap.Error(err),
+				zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+		} else if !started {
+			exp.logger.Debug("validator didn't started",
 				zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
 		}
 	}
@@ -304,24 +307,24 @@ func (exp *exporter) shouldProcessValidator(pubkey string) bool {
 }
 
 // triggerValidator starts the given validator
-func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
+func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) (bool, error) {
 	if validatorPubKey == nil {
-		return errors.New("empty validator pubkey")
+		return false, errors.New("empty validator pubkey")
 	}
 	pubkey := validatorPubKey.SerializeToHexStr()
 	if !exp.shouldProcessValidator(pubkey) {
-		return nil
+		return false, nil
 	}
 	validatorShare, found, err := exp.validatorStorage.GetValidatorShare(validatorPubKey.Serialize())
 	if !found {
-		return errors.New("could not find validator share")
+		return false, errors.New("could not find validator share")
 	}
 	if err != nil {
-		return errors.Wrap(err, "could not get validator share")
+		return false, errors.Wrap(err, "could not get validator share")
 	}
 	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
-	return exp.setup(validatorShare)
+	return true, exp.setup(validatorShare)
 }
 
 // setup starts all validator readers
