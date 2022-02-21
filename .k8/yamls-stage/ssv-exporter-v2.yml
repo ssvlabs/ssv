@@ -69,7 +69,7 @@ metadata:
   name: ssv-exporter-v2
   namespace: REPLACE_NAMESPACE
 spec:
-  replicas: 0
+  replicas: 1
   strategy:
     type: Recreate
   selector:
