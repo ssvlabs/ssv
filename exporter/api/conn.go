@@ -143,9 +143,9 @@ func (c *conn) WriteLoop() {
 			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
 				c.logger.Warn("failed to send message", zap.Error(err))
-			} else {
-				c.logMsg(message, n)
+				return
 			}
+			c.logMsg(message, n)
 		}
 	}
 }

@@ -52,17 +52,10 @@ func (exp *exporter) updateValidatorsMetadata(shares []*validatorstorage.Share, 
 			logger.Error("could not desrialize public key", zap.Error(err))
 			return
 		}
-		share, found, err := exp.validatorStorage.GetValidatorShare(pubKey.Serialize())
-		if err != nil {
-			logger.Error("could not get validator share", zap.Error(err))
-			return
-		}
-		if !found {
-			logger.Error("could not find validator share")
-			return
-		}
-		if err := exp.setup(share); err != nil {
+		if started, err := exp.triggerValidator(&pubKey); err != nil {
 			logger.Error("could not setup validator share")
+		} else if !started {
+			logger.Debug("validator didn't started")
 		}
 	}
 	beacon.UpdateValidatorsMetadataBatch(pks, exp.metaDataReadersQueue, exp, exp.beacon, onUpdated, batchSize)
