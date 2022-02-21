@@ -6,10 +6,11 @@ import (
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
 
 // Broadcast propagates a signed message to all peers
-func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error {
+func (n *p2pNetwork) Broadcast(pk []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
@@ -18,15 +19,18 @@ func (n *p2pNetwork) Broadcast(topicName []byte, msg *proto.SignedMessage) error
 		return errors.Wrap(err, "failed to marshal message")
 	}
 
-	topic, err := n.getTopic(topicName)
+	topicID := n.fork.ValidatorTopicID(pk)
+	name := getTopicName(topicID)
+
+	peers, err := n.topicManager.Peers(name)
 	if err != nil {
-		return errors.Wrap(err, "failed to get topic")
+		return errors.Wrap(err, "could not check peers")
 	}
+	n.logger.Debug("Broadcasting ibft message", zap.Uint64("seqNum", msg.Message.SeqNumber),
+		zap.String("lambda", string(msg.Message.Lambda)), zap.String("topic", topicID),
+		zap.Any("peers", peers))
 
-	n.logger.Debug("broadcasting ibft msg", zap.Uint64("seqNum", msg.Message.SeqNumber), zap.String("msgType", msg.Message.Type.String()), zap.String("lambda", string(msg.Message.Lambda)),
-		zap.Any("topic", topic), zap.Any("peers", topic.ListPeers()))
-
-	return topic.Publish(n.ctx, msgBytes)
+	return n.topicManager.Broadcast(name, msgBytes, time.Second*5)
 }
 
 // ReceivedMsgChan return a channel with messages

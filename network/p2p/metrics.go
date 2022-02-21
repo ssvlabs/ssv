@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"github.com/libp2p/go-libp2p-core/peer"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -27,10 +26,6 @@ var (
 		Name: "ssv:network:peer_last_msg",
 		Help: "Timestamps of last messages",
 	}, []string{"pid"})
-	metricsPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:pubsub:trace",
-		Help: "Traces of pubsub messages",
-	}, []string{"type"})
 	metricsStreams = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:network:stream",
 		Help: "Counts opened/closed streams",
@@ -54,9 +49,6 @@ func init() {
 	if err := prometheus.Register(metricsConnectedPeers); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsPubsubTrace); err != nil {
-		log.Println("could not register prometheus collector")
-	}
 	if err := prometheus.Register(metricsStreams); err != nil {
 		log.Println("could not register prometheus collector")
 	}
@@ -77,11 +69,16 @@ func reportAllPeers(n *p2pNetwork) {
 	metricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
-func reportTopicPeers(n *p2pNetwork, name string, topic *pubsub.Topic) {
-	peers := n.allPeersOfTopic(topic)
-	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
+func reportTopicPeers(n *p2pNetwork, name string) {
+	peers, err := n.topicManager.Peers(name)
+	if err != nil {
+		n.logger.Warn("could not get topic peers status", zap.String("topic", name), zap.Error(err))
+		return
+	}
+	filtered := n.allPeersOfTopic(peers)
+	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(filtered)),
 		zap.Any("peers", peers))
-	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(filtered)))
 }
 
 func reportPeerIdentity(n *p2pNetwork, pid peer.ID) {
@@ -99,10 +96,6 @@ func reportLastMsg(pid string) {
 
 func timestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
-}
-
-func reportPubsubTrace(t string) {
-	metricsPubsubTrace.WithLabelValues(t).Inc()
 }
 
 func reportStream(open bool) {

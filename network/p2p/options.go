@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"fmt"
+	ssv_pubsub "github.com/bloxapp/ssv/network/p2p/pubsub"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	noise "github.com/libp2p/go-libp2p-noise"
@@ -152,7 +153,7 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 
 	// TODO: change this implementation as part of networking epic
 	if cfg.PubSubTraceOut == "log" {
-		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(n.logger, psTraceStateWithLogging)))
+		psOpts = append(psOpts, pubsub.WithEventTracer(ssv_pubsub.NewTracer(n.logger, true)))
 	} else if len(cfg.PubSubTraceOut) > 0 {
 		tracer, err := pubsub.NewPBTracer(cfg.PubSubTraceOut)
 		if err != nil {
@@ -162,7 +163,7 @@ func (n *p2pNetwork) newGossipPubsub(cfg *Config) (*pubsub.PubSub, error) {
 		psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
 	} else {
 		// if pubsub trace flag was not set, turn on pubsub tracer with prometheus reporting
-		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(n.logger, psTraceStateWithReporting)))
+		psOpts = append(psOpts, pubsub.WithEventTracer(ssv_pubsub.NewTracer(n.logger, false)))
 	}
 
 	setGlobalPubSubParameters()

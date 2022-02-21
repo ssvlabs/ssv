@@ -6,11 +6,11 @@ import (
 	"crypto/rsa"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
+	ssv_pubsub "github.com/bloxapp/ssv/network/p2p/pubsub"
 	"github.com/bloxapp/ssv/network/p2p/streams"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/prysmaticlabs/prysm/async"
-	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -52,15 +52,14 @@ type p2pNetwork struct {
 
 	streamCtrl streams.StreamController
 
-	psSubs       map[string]context.CancelFunc
-	psTopicsLock *sync.RWMutex
-
 	useMainTopic  bool
 	reportLastMsg bool
 	nodeType      NodeType
 
 	lookupOperator LookupOperatorHandler
 	peersLimit     int
+
+	topicManager ssv_pubsub.TopicManager
 }
 
 // LookupOperatorHandler is a function that checks if the given operator
@@ -93,8 +92,6 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		logger:          logger,
 		operatorPrivKey: cfg.OperatorPrivateKey,
 		privKey:         cfg.NetworkPrivateKey,
-		psSubs:          make(map[string]context.CancelFunc),
-		psTopicsLock:    &sync.RWMutex{},
 		reportLastMsg:   cfg.ReportLastMsg,
 		fork:            cfg.Fork,
 		nodeType:        cfg.NodeType,
@@ -150,7 +147,7 @@ func New(ctx context.Context, logger *zap.Logger, cfg *Config) (network.Network,
 		return nil, errors.Wrap(err, "failed to start pubsub")
 	}
 	n.pubsub = ps
-
+	n.topicManager = ssv_pubsub.NewTopicManager(ctx, logger, ps, nil)
 	if err := n.setupDiscovery(); err != nil {
 		return nil, errors.Wrap(err, "failed to setup discovery")
 	}
@@ -181,10 +178,9 @@ func (n *p2pNetwork) watchPeers() {
 		go reportAllPeers(n)
 
 		// topics peers
-		n.psTopicsLock.RLock()
-		defer n.psTopicsLock.RUnlock()
-		for name, topic := range n.cfg.Topics {
-			reportTopicPeers(n, name, topic)
+		topics := n.topicManager.Topics()
+		for _, topic := range topics {
+			reportTopicPeers(n, topic)
 		}
 	})
 }

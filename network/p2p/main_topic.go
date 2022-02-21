@@ -1,37 +1,42 @@
 package p2p
 
 import (
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/pkg/errors"
+	"go.uber.org/zap"
+)
+
+const (
+	mainTopicName = "main"
 )
 
 // SubscribeToMainTopic subscribes to main topic
 func (n *p2pNetwork) SubscribeToMainTopic() error {
-	topic, err := n.getMainTopic()
+	cn, err := n.topicManager.Subscribe(mainTopicName)
 	if err != nil {
 		return err
 	}
-	sub, err := topic.Subscribe()
-	if err != nil {
-		return errors.Wrap(err, "failed to subscribe on Topic")
-	}
-	go n.listen(n.ctx, sub)
+
+	go func() {
+		for n.ctx.Err() == nil {
+			select {
+			case msg := <-cn:
+				if msg == nil {
+					continue
+				}
+				n.trace("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
+				cm, err := n.fork.DecodeNetworkMsg(msg.Data)
+				if err != nil {
+					n.logger.Error("failed to un-marshal message", zap.Error(err))
+					continue
+				}
+				if n.reportLastMsg && len(msg.ReceivedFrom) > 0 {
+					reportLastMsg(msg.ReceivedFrom.String())
+				}
+				n.propagateSignedMsg(cm)
+			default:
+				return
+			}
+		}
+	}()
 
 	return nil
-}
-
-// getTopic return topic by validator public key
-func (n *p2pNetwork) getMainTopic() (*pubsub.Topic, error) {
-	n.psTopicsLock.RLock()
-	defer n.psTopicsLock.RUnlock()
-
-	name := "main"
-	if _, ok := n.cfg.Topics[name]; !ok {
-		topic, err := n.pubsub.Join(getTopicName(name))
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to join main topic")
-		}
-		n.cfg.Topics[name] = topic
-	}
-	return n.cfg.Topics[name], nil
 }
