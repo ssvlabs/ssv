@@ -292,7 +292,7 @@ func (exp *exporter) triggerAllValidators() {
 }
 
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
-	val := hexToUint64(pubkey)
+	val := hexToUint64(pubkey[:10])
 	instance := val % uint64(exp.numOfInstances)
 	exp.logger.Debug("check validator",
 		zap.Uint64("mod", instance),
@@ -427,7 +427,7 @@ func (exp *exporter) startNetworkMediators() {
 }
 
 func hexToUint64(hexStr string) uint64 {
-	result, err := strconv.ParseUint(hexStr[:10], 16, 64)
+	result, err := strconv.ParseUint(hexStr, 16, 64)
 	if err != nil {
 		return uint64(0)
 	}
