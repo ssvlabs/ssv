@@ -92,7 +92,7 @@ spec:
                   - key: beta.kubernetes.io/instance-type
                     operator: In
                     values:
-                      - m5a.4xlarge                        
+                      - m5a.4xlarge
       containers:
       - name: ssv-exporter-v2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
