@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -21,16 +22,24 @@ var (
 	ErrCouldNotJoin = errors.New("could not join topic")
 	// ErrCouldNotSubscribe is exported so the caller can track reasons of failures when calling Subscribe
 	ErrCouldNotSubscribe = errors.New("could not subscribe topic")
+	// ErrTopicNotReady happens when trying to access a topic which is not ready yet
+	ErrTopicNotReady = errors.New("topic is not ready")
+
+	errTopicAlreadyExists = errors.New("topic already exists")
 )
 
 // TopicManager is an interface for managing pubsub topics
 type TopicManager interface {
 	// Subscribe subscribes to the given topic
-	Subscribe(topic string) (<-chan *pubsub.Message, error)
+	Subscribe(topicName string) (<-chan *pubsub.Message, error)
 	// Unsubscribe unsubscribes from the given topic
-	Unsubscribe(topic string) error
+	Unsubscribe(topicName string) error
+	// Peers returns the peers subscribed to the given topic
+	Peers(topicName string) ([]peer.ID, error)
+	// Topics lists all the available topics
+	Topics() []string
 	// Broadcast publishes the message on the given topic
-	Broadcast(topic string, data []byte, timeout time.Duration) error
+	Broadcast(topicName string, data []byte, timeout time.Duration) error
 }
 
 // topicManager implements
@@ -55,9 +64,26 @@ func NewTopicManager(ctx context.Context, logger *zap.Logger, pubSub *pubsub.Pub
 	}
 }
 
+// Peers returns the peers subscribed to the given topic
+func (tm *topicManager) Peers(topicName string) ([]peer.ID, error) {
+	topic := tm.getTopic(topicName)
+	if topic == nil {
+		return nil, nil
+	}
+	if topic.getState() >= topicStateJoined {
+		return topic.topic.ListPeers(), nil
+	}
+	return nil, ErrTopicNotReady
+}
+
 // Subscribe subscribes to the given topic
 func (tm *topicManager) Subscribe(topicName string) (<-chan *pubsub.Message, error) {
 	return tm.subscribe(topicName)
+}
+
+// Topics lists all the available topics
+func (tm *topicManager) Topics() []string {
+	return tm.ps.GetTopics()
 }
 
 // Unsubscribe unsubscribes from the given topic
@@ -105,6 +131,7 @@ func (tm *topicManager) joinTopic(name string) (*psTopic, error) {
 	topic := tm.getTopic(name)
 	if topic == nil {
 		topic = newTopic(tm.logger)
+		tm.topics.Store(name, topic)
 	}
 	switch topic.getState() {
 	case topicStateJoining:

@@ -17,21 +17,28 @@ import (
 	"time"
 )
 
-func TestNewTopicManager(t *testing.T) {
+func TestTopicManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	nPeers := 4
-	nTopics := 4
+	nPeers := 8
+	nTopics := 16
 
 	peers := newPeers(ctx, t, nPeers)
 
-	subTopic := func(p *P, i int, potentialErr error) {
+	subTopic := func(p *P, i int, potentialErrs ...error) {
 		tname := topicName(i)
 		in, err := p.tm.Subscribe(tname)
-		if potentialErr == nil {
+		if len(potentialErrs) == 0 {
 			require.NoError(t, err)
 		} else if err != nil {
-			require.Equal(t, potentialErr, err)
+			found := false
+			for _, e := range potentialErrs {
+				if e.Error() == err.Error() {
+					found = true
+					break
+				}
+			}
+			require.True(t, found)
 		}
 		if in == nil {
 			return
@@ -48,7 +55,7 @@ func TestNewTopicManager(t *testing.T) {
 			go subTopic(p, i, nil)
 			// simulate concurrency, by trying to subscribe twice
 			<-time.After(time.Millisecond)
-			go subTopic(p, i, ErrInProcess)
+			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
 		}
 	}
 
@@ -67,11 +74,21 @@ func TestNewTopicManager(t *testing.T) {
 	// let the messages propagate
 	<-time.After(time.Second * 5)
 
+	// check number of topics
+	for _, p := range peers {
+		require.Len(t, p.tm.Topics(), nTopics)
+	}
+
+	// check number of peers and messages
 	for i := 0; i < nTopics; i++ {
-		for j, p := range peers {
+		for _, p := range peers {
+			peers, err := p.tm.Peers(topicName(i))
+			require.NoError(t, err)
+			require.Len(t, peers, nPeers-1)
 			c := p.getCount(topicName(i))
 			//t.Logf("peer %d got %d messages for %s", j, c, topicName(i))
-			require.Equal(t, nPeers, c, "peer %d got %d messages for %s", j, c, topicName(i))
+			require.Greater(t, float64(c), float64(nPeers)*0.5)
+			require.Less(t, float64(c), float64(nPeers)*1.2)
 		}
 	}
 
