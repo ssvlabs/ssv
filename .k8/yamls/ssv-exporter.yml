@@ -166,6 +166,10 @@ spec:
             value: "true"
           - name: IBFT_SYNC_ENABLED
             value: "true"
+          - name: NUM_OF_INSTANCES
+            value: "2"
+          - name: INSTANCE_ID
+            value: "0"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter
