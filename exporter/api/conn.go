@@ -144,9 +144,8 @@ func (c *conn) WriteLoop() {
 			if err != nil {
 				c.logger.Warn("failed to send message", zap.Error(err))
 				return
-			} else {
-				c.logMsg(message, n)
 			}
+			c.logMsg(message, n)
 		}
 	}
 }
