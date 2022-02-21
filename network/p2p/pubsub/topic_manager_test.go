@@ -52,7 +52,7 @@ func TestTopicManager(t *testing.T) {
 	// listen to topics
 	for i := 0; i < nTopics; i++ {
 		for _, p := range peers {
-			go subTopic(p, i, nil)
+			go subTopic(p, i)
 			// simulate concurrency, by trying to subscribe twice
 			<-time.After(time.Millisecond)
 			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
