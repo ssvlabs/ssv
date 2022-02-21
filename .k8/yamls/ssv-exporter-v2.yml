@@ -148,7 +148,7 @@ spec:
           - name: NETWORK_PRIVATE_KEY
             valueFrom:
               secretKeyRef:
-                key: network_private_key
+                key: network_private_key_2
                 name: config-secrets
           - name: LOG_LEVEL
             value: debug
@@ -166,6 +166,16 @@ spec:
             value: "true"
           - name: IBFT_SYNC_ENABLED
             value: "true"
+          - name: NUM_OF_INSTANCES
+            value: "2"
+          - name: INSTANCE_ID
+            value: "1"
+          - name: UDP_PORT
+            value: "12007"
+          - name: TCP_PORT
+            value: "13007"
+          - name: WS_API_PORT
+            value: "14007"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-v2
