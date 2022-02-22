@@ -1,10 +1,12 @@
 package exporter
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/format"
 	"go.uber.org/zap"
 )
 
@@ -68,13 +70,19 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 		logger.Warn("validator not found")
 		res.Data = []string{"internal error - could not find validator"}
 	} else {
-		identifier := fmt.Sprintf("%s_%s", v.PublicKey, string(nm.Msg.Filter.Role))
-		msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
+		pkRaw, err := hex.DecodeString(v.PublicKey)
 		if err != nil {
-			logger.Warn("failed to get decided messages", zap.Error(err))
-			res.Data = []string{"internal error - could not get decided messages"}
+			logger.Warn("failed to decode validator public key", zap.Error(err))
+			res.Data = []string{"internal error - could not read validator key"}
 		} else {
-			res.Data = msgs
+			identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
+			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
+			if err != nil {
+				logger.Warn("failed to get decided messages", zap.Error(err))
+				res.Data = []string{"internal error - could not get decided messages"}
+			} else {
+				res.Data = msgs
+			}
 		}
 	}
 	nm.Msg = res
