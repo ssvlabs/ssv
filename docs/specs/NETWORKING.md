@@ -8,30 +8,29 @@ This document contains the networking specification for `SSV.Network`.
 
 ## Overview
 
-- [x] [Fundamentals](#fundamentals)
-  - [x] [Stack](#stack)
-  - [x] [Transport](#transport)
-  - [x] [Messaging](#messaging)
-  - [x] [Network Peers](#network-peers)
-  - [x] [Identity](#identity)
-  - [x] [Network Discovery](#network-discovery)
-  - [x] [Peer Scoring](#peer-scoring)
-- [ ] [Wire](#wire)
-  - [x] [Consensus](#consensus-protocol)
-  - [x] [Sync](#sync-protocol)
-  - [ ] [Handshake](#handshake-protocol)
-- [x] [Networking](#networking)
-  - [x] [PubSub](#pubsub)
-  - [x] [PubSub Scoring](#pubsub-scoring)
-  - [x] [Message Scoring](#message-scoring)
-  - [x] [Connection Scoring](#connection-scoring)
-  - [x] [Discovery](#discovery)
-  - [x] [Subnets](#subnets)
-  - [x] [Peers Connectivity](#peers-connectivity)
-  - [x] [Network ID](#network-id)
-  - [x] [User Agent](#user-agent)
-  - [x] [Forks](#forks)
-  - [x] [Security](#security)
+- [Fundamentals](#fundamentals)
+  - [Stack](#stack)
+  - [Transport](#transport)
+  - [Messaging](#messaging)
+  - [Network Peers](#network-peers)
+  - [Identity](#identity)
+  - [Network Discovery](#network-discovery)
+  - [Peer Scoring](#peer-scoring)
+- [Wire](#wire)
+  - [Consensus](#consensus-protocol)
+  - [Sync](#sync-protocol)
+  - [Handshake](#handshake-protocol)
+- [Networking](#networking)
+  - [PubSub](#pubsub)
+  - [PubSub Scoring](#pubsub-scoring)
+  - [Message Scoring](#consensus-scoring)
+  - [Discovery](#discovery)
+  - [Subnets](#subnets)
+  - [Peers Connectivity](#peers-connectivity)
+  - [Connection Gating](#connection-gating)
+  - [Security](#security)
+  - [Forks](#forks)
+  - [Network ID](#network-id)
 
 ## Fundamentals
 
@@ -121,13 +120,14 @@ More information is available in [Networking > Discovery](#discovery)
 
 ### Peer Scoring
 
-The peer scoring in `SSV.Network` consists of the following types of scorers:
+Peer scoring in `SSV.Network` is how we protect the network from bad peers,
+by scoring them according to a predefined set of scores.
 
-- [Connection Scoring](#connection-scoring) - calculated during handshake, affects the peers we connect to
-- [Message Scoring](#message-scoring) - tracks operators behavior w.r.t incoming QBFT messages
-- [Pubsub Scoring](#pubsub-scoring) - calculated by libp2p, tracks over gossip tasks and pubsub related metrics
+For more info please refer to the following sections:
 
-For more info please refer to the linked sections.
+- [Pubsub Scoring](#pubsub-scoring) - calculated by libp2p, configured by us
+- [Consensus Scoring](#consensus-scoring) - calculated by internal components during message processing
+
 
 ------
 
@@ -534,7 +534,8 @@ which will reduce the overhead created by hashing the entire message:
 `msg-id = hash(identifier + height + signature + signers)`
 
 
-### Pubsub Scoring
+
+#### Pubsub Scoring
 
 `gossipsub v1.1` introduced pubsub [scoring](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#peer-scoring),
 the idea is that each individual peer maintains a score for other peers. 
@@ -561,6 +562,7 @@ During heartbeat, the score it checked and bad peers are handled accordingly. se
 for more information.
 
 
+
 #### Consensus Scoring
 
 Message scorers track on operators' behavior w.r.t incoming QBFT messages.
@@ -577,6 +579,7 @@ The following scores will be reported if applies:
 - Late arrival of valid message - `-10 <= s <= -100`
 - Wrong sequence number - `-25 <= s <= -50`
 - Invalid message signature - `-250 <= s <= -500`
+
 
 
 #### Message Validation
@@ -709,6 +712,7 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 | `version`   | fork version, integer                                          | TODO            |
 | `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | TODO            |
 
+
 #### Subnets Discovery
 
 As `ENR` has a size limit (`< 300` bytes), 
@@ -753,18 +757,19 @@ See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/mas
 interface for more info.
 
 
-### Network ID
+### Security
 
-Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
-Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network,
-meaning that the key to be known and used by all network members.
+As mentioned above, `gossipsub v1.1` comes with a set of tools to protect the network from bad peers.
+[Gossipsub v1.1 Evaluation Report](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
+describes some potential attacks and how they are mitigated.
 
-It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
-which encrypts/decrypts all traffic with the corresponding key,
-regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
+Connection gating protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min).
+it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
 
-**NOTE** discovery communication (UDP) won't use the network ID,
-and it's not needed as unknown peers will be filtered.
+In addition, the discovery system is naturally a good candidate for security problems. \
+DiscV5 specs specifies potential vulnerabilities in their system and how they were (or will be) mitigated,
+see [DiscV5 Rationale > security-goals](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals).
+The major ones includes routing table pollution, traffic redirection, spamming or replayed messages.
 
 
 
@@ -825,19 +830,17 @@ A short and simple user agent is kept for acheiving libp2p interoperability.
 `SSV-Node/v0.x.x`
 
 
-### Security
+### Network ID
 
-The discovery system is naturally a good candidate for security problems. \
-DiscV5 specs specifies potential vulnerabilities in their system, 
-See (DiscV5 Rationale > security-goals)[https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals].
-The major ones includes routing table pollution, traffic redirection, spamming or replayed messages. \
-Some are less relevant to `SSV.Network` as messages are being verified in a higher level, 
-by the QBFT components using the share public key, 
-and therefore malicious messages will be identified as invalid.
+**TBD**
 
-The following measures are used to protect against malicious peers and denial of service attacks:
-- Sync operations must be limited according to the score of the asking peer
-  - highly scored peers should have less aggressive limit
-  - unknown peers must be well limited to prevent attacks
-- Connection gater protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min). 
-it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
+Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
+Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network,
+meaning that the key to be known and used by all network members.
+
+It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
+which encrypts/decrypts all traffic with the corresponding key,
+regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
+
+**NOTE** discovery communication (UDP) won't use the network ID,
+and it's not needed as unknown peers will be filtered.
