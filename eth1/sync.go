@@ -72,8 +72,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
 				return
 			}
-			logger.Debug("got new event from eth1 sync",
-				zap.Uint64("BlockNumber", event.Log.BlockNumber))
+			logger.Debug("got new event from eth1 sync", zap.Uint64("BlockNumber", event.Log.BlockNumber))
 			if handler != nil {
 				queue(*event)
 			}
