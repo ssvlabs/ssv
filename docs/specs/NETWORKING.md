@@ -310,6 +310,7 @@ SSV nodes use the following stream protocols:
 ### 1. Highest Decided
 
 This protocol is used by a node to find out what is the highest decided message for a specific QBFT instance.
+All the nodes in the network should support this protocol.
 
 `/ssv/sync/decided/highest/0.0.1`
 
@@ -408,6 +409,7 @@ only those who turn on the corresponding flag will support this protocol.
 ### 3. Last Change Round
 
 This protocol enables a node to catch up with change round messages.
+All the nodes in the network should support this protocol.
 
 `/ssv/sync/last_change_round/0.0.1`
 
@@ -530,9 +532,9 @@ The `msg-id` function that is used in `SSV.Network` creates the ID based on the 
 **TBD** As hashing is CPU intensive, an optimized version of this function would be to hash specific values from the message, 
 which will reduce the overhead created by hashing the entire message:
 
-`msg-id = hash(identifier + height + signature + signers)`
+`msg-id = hash(identifier + height + round + msg_type + signature + signers)`
 
-
+**TBD** check [ETH2 altair spec](https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/p2p-interface.md#topics-and-messages)
 
 #### Pubsub Scoring
 
