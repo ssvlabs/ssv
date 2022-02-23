@@ -582,15 +582,26 @@ The following scores will be reported if applies:
 - Invalid message signature - `-250 <= s <= -500`
 
 
-
 #### Topic Message Validation
 
 Basic message validation is applied on the topic level,
-each incoming message will be validated to avoid relaying bad messages.
+each incoming message will be validated to avoid relaying bad messages, 
+and affecting peers scores.
 
 [Extended Validators](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators) 
 allows the application to aid in the gossipsub peer-scoring scheme.
-We utilize `ACCEPT`, `REJECT`, and `IGNORE` as the result of the validation.
+We utilize `ACCEPT`, `REJECT`, and `IGNORE` as the result of the validation, 
+this will affect the scoring of the sending peers.
+
+The following validations will take place as part of message validation:
+
+- subnet check will `REJECT` the given message if it doesn't belong to the topic 
+- message structure check will:
+  - `REJECT` messages with corrupted or invalid structure
+  - `REJECT` empty messages
+- **TBD** operator check will make sure the operator is eligible 
+to send a message on behalf of the given validator
+
 
 
 #### Flood Publishing
