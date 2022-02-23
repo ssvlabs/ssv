@@ -21,6 +21,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -29,10 +30,6 @@ const (
 	readerQueuesInterval         = 10 * time.Millisecond
 	metaDataReaderQueuesInterval = 5 * time.Second
 	metaDataBatchSize            = 25
-)
-
-var (
-	syncWhitelist []string
 )
 
 // Exporter represents the main interface of this package
@@ -62,6 +59,9 @@ type Options struct {
 	ValidatorMetaDataUpdateInterval time.Duration
 
 	UseMainTopic bool
+
+	NumOfInstances int
+	InstanceID     int
 }
 
 // exporter is the internal implementation of Exporter interface
@@ -92,6 +92,9 @@ type exporter struct {
 
 	networkMsgMediator ibftController.Mediator
 	useMainTopic       bool
+
+	numOfInstances int
+	instanceID     int
 }
 
 // New creates a new Exporter instance
@@ -103,6 +106,10 @@ func New(opts Options) Exporter {
 			Logger: opts.Logger,
 		},
 	)
+	// set at least a single instance
+	if opts.NumOfInstances == 0 {
+		opts.NumOfInstances = 1
+	}
 	e := exporter{
 		ctx:                  opts.Ctx,
 		storage:              storage.NewExporterStorage(opts.DB, opts.Logger),
@@ -133,6 +140,9 @@ func New(opts Options) Exporter {
 		ibftSyncEnabled:                 opts.IbftSyncEnabled,
 		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
 		useMainTopic:                    opts.UseMainTopic,
+
+		numOfInstances: opts.NumOfInstances,
+		instanceID:     opts.InstanceID,
 	}
 
 	if err := e.init(opts); err != nil {
@@ -144,11 +154,11 @@ func New(opts Options) Exporter {
 
 func (exp *exporter) init(opts Options) error {
 	if opts.CleanRegistryData {
-		if err := exp.validatorStorage.CleanAllShares(); err != nil {
-			return errors.Wrap(err, "could not clean existing shares")
+		if err := exp.validatorStorage.CleanRegistryData(); err != nil {
+			return errors.Wrap(err, "failed to clean validator storage registry data")
 		}
-		if err := exp.storage.Clean(); err != nil {
-			return errors.Wrap(err, "could not clean existing data")
+		if err := exp.storage.CleanRegistryData(); err != nil {
+			return errors.Wrap(err, "failed to clean exporter storage registry data")
 		}
 		exp.logger.Debug("manage to cleanup registry data")
 	}
@@ -271,49 +281,60 @@ func (exp *exporter) triggerAllValidators() {
 	}
 	exp.logger.Debug("triggering validators", zap.Int("count", len(shares)))
 	for _, share := range shares {
-		if err = exp.triggerValidator(share.PublicKey); err != nil {
-			exp.logger.Error("failed to trigger ibft sync", zap.Error(err),
+		if started, err := exp.triggerValidator(share.PublicKey); err != nil {
+			exp.logger.Error("failed to trigger validator", zap.Error(err),
+				zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+		} else if !started {
+			exp.logger.Debug("validator didn't started",
 				zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
 		}
 	}
 }
 
 func (exp *exporter) shouldProcessValidator(pubkey string) bool {
-	for _, pk := range syncWhitelist {
-		if pubkey == pk {
-			return true
-		}
+	val := hexToUint64(pubkey[:10])
+	instance := val % uint64(exp.numOfInstances)
+	exp.logger.Debug("check validator",
+		zap.Uint64("mod", instance),
+		zap.Uint64("val", val),
+		zap.Uint64("instanceID", uint64(exp.instanceID)),
+		zap.String("pubkey", pubkey),
+		zap.Int("numOfInstances", exp.numOfInstances))
+	if instance == uint64(exp.instanceID) {
+		return exp.ibftSyncEnabled
 	}
-	return exp.ibftSyncEnabled
+	return false
 }
 
 // triggerValidator starts the given validator
-func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) error {
+func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) (bool, error) {
 	if validatorPubKey == nil {
-		return errors.New("empty validator pubkey")
+		return false, errors.New("empty validator pubkey")
 	}
 	pubkey := validatorPubKey.SerializeToHexStr()
 	if !exp.shouldProcessValidator(pubkey) {
-		return nil
+		return false, nil
 	}
 	validatorShare, found, err := exp.validatorStorage.GetValidatorShare(validatorPubKey.Serialize())
 	if !found {
-		return errors.New("could not find validator share")
+		return false, errors.New("could not find validator share")
 	}
 	if err != nil {
-		return errors.Wrap(err, "could not get validator share")
+		return false, errors.Wrap(err, "could not get validator share")
+	}
+	if !validatorShare.HasMetadata() {
+		return false, nil
 	}
 	exp.logger.Debug("validator was triggered", zap.String("pubKey", pubkey))
 
-	return exp.setup(validatorShare)
+	return true, exp.setup(validatorShare)
 }
 
 // setup starts all validator readers
 func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
-	logger := exp.logger.With(zap.String("pubKey", pubKey))
-	logger.Debug("setup validator")
-	defer logger.Debug("setup validator done")
+	exp.logger.Debug("setup validator", zap.String("pubKey", pubKey))
+
 	validator.ReportValidatorStatus(pubKey, validatorShare.Metadata, exp.logger)
 	// start network reader
 	networkReader := exp.getOrCreateNetworkReader(validatorShare.PublicKey)
@@ -321,6 +342,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 	// start decided reader
 	decidedReader := exp.getOrCreateDecidedReader(validatorShare)
 	exp.decidedReadersQueue.QueueDistinct(decidedReader.Start, pubKey)
+
 	return nil
 }
 
@@ -402,4 +424,12 @@ func (exp *exporter) startNetworkMediators() {
 		}
 		return nil, false
 	})
+}
+
+func hexToUint64(hexStr string) uint64 {
+	result, err := strconv.ParseUint(hexStr, 16, 64)
+	if err != nil {
+		return uint64(0)
+	}
+	return result
 }

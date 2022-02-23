@@ -56,7 +56,7 @@ loop:
 		var wg sync.WaitGroup
 		if queueCnt := i.MsgQueue.MsgCount(msgqueue.IBFTMessageIndexKey(i.State().Lambda.Get(), i.State().SeqNumber.Get())); queueCnt > 0 {
 			logger := i.Logger.With(zap.Uint64("round", i.State().Round.Get()))
-			logger.Debug("adding ibft message to event queue - waiting for done", zap.Int("queue msg count", queueCnt))
+			logger.Debug("adding ibft message to event queue", zap.Int("msg queue count", queueCnt), zap.Int("event queue count", i.eventQueue.Size()))
 			wg.Add(1)
 			if added := i.eventQueue.Add(eventqueue.NewEventWithCancel(func() {
 				defer wg.Done()
@@ -93,7 +93,7 @@ loop:
 			i.Logger.Info("stopped timeout clock", zap.Uint64("round", i.State().Round.Get()))
 		}
 	}
-	i.roundTimer.CloseChan()
+	//i.roundTimer.CloseChan()
 	i.Logger.Debug("instance round timer loop stopped")
 }
 

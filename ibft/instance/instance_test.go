@@ -1,6 +1,7 @@
 package ibft
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
@@ -12,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	"sync"
 	"testing"
@@ -41,7 +43,7 @@ func TestInstanceStop(t *testing.T) {
 		ValueCheck:     bytesval.NewEqualBytes([]byte(time.Now().Weekday().String())),
 		Logger:         zaptest.NewLogger(t),
 		LeaderSelector: &constant.Constant{LeaderIndex: 1},
-		roundTimer:     roundtimer.New(),
+		roundTimer:     roundtimer.New(context.Background(), zaptest.NewLogger(t)),
 	}
 	instance.fork = testingFork(instance)
 	instance.Init()
@@ -118,7 +120,7 @@ func TestInit(t *testing.T) {
 			SeqNumber: threadsafe.Uint64(1),
 		},
 		Logger:     zaptest.NewLogger(t),
-		roundTimer: roundtimer.New(),
+		roundTimer: roundtimer.New(context.Background(), zap.L()),
 	}
 	instance.Init()
 	require.True(t, instance.initialized)
@@ -141,7 +143,7 @@ func TestSetStage(t *testing.T) {
 			SeqNumber: threadsafe.Uint64(1),
 		},
 		Logger:     zaptest.NewLogger(t),
-		roundTimer: roundtimer.New(),
+		roundTimer: roundtimer.New(context.Background(), zap.L()),
 		ValidatorShare: &storage.Share{
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
@@ -207,7 +209,7 @@ func TestBumpRound(t *testing.T) {
 			SeqNumber: threadsafe.Uint64(1),
 		},
 		Logger:     zaptest.NewLogger(t),
-		roundTimer: roundtimer.New(),
+		roundTimer: roundtimer.New(context.Background(), zap.L()),
 		ValidatorShare: &storage.Share{
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},

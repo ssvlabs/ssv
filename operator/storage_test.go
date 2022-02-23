@@ -48,29 +48,60 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 func TestSetupPrivateKey(t *testing.T) {
 	tests := []struct {
-		name      string
-		existKey  string
-		passedKey string
+		name           string
+		existKey       string
+		passedKey      string
+		generateIfNone bool
+		expectedError  string
 	}{
 		{
-			name:      "key not exist passing nothing", // expected - generate new key
-			existKey:  "",
-			passedKey: "",
+			name:           "key not exist, passing nothing", // expected - raise an error
+			existKey:       "",
+			passedKey:      "",
+			generateIfNone: false,
+			expectedError:  "key not exist or provided",
 		},
 		{
-			name:      "key not exist passing key in env", // expected - set the passed key
-			existKey:  "",
-			passedKey: skPem2,
+			name:           "key not exist passing, nothing (with generate flag)", // expected - generate new key
+			existKey:       "",
+			passedKey:      "",
+			generateIfNone: true,
+			expectedError:  "",
 		},
 		{
-			name:      "key exist passing key in env", // expected - override current key with the passed one
-			existKey:  skPem,
-			passedKey: skPem2,
+			name:           "key not exist, passing key in env", // expected - set the passed key
+			existKey:       "",
+			passedKey:      skPem2,
+			generateIfNone: false,
+			expectedError:  "",
 		},
 		{
-			name:      "key exist passing nothing", // expected - do nothing
-			existKey:  skPem,
-			passedKey: "",
+			name:           "key exist, passing key in env", // expected - override current key with the passed one
+			existKey:       skPem,
+			passedKey:      skPem2,
+			generateIfNone: false,
+			expectedError:  "",
+		},
+		{
+			name:           "key exist, passing nothing", // expected - do nothing
+			existKey:       skPem,
+			passedKey:      "",
+			generateIfNone: false,
+			expectedError:  "",
+		},
+		{
+			name:           "key exist, passing nothing (with generate flag)", // expected - do nothing
+			existKey:       skPem,
+			passedKey:      "",
+			generateIfNone: true,
+			expectedError:  "",
+		},
+		{
+			name:           "error raised", // expected - throw an error
+			existKey:       "",
+			passedKey:      "xxx",
+			generateIfNone: false,
+			expectedError:  "Failed to decode base64: illegal base64 data at input byte 0",
 		},
 	}
 
@@ -96,8 +127,8 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, operatorStorage.savePrivateKey(string(existKeyByte)))
 				sk, found, err := operatorStorage.GetPrivateKey()
-				require.True(t, found)
 				require.NoError(t, err)
+				require.True(t, found)
 				require.NotNil(t, sk)
 
 				existKeyByte, err = base64.StdEncoding.DecodeString(test.existKey)
@@ -105,7 +136,14 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			require.NoError(t, operatorStorage.SetupPrivateKey(test.passedKey))
+			err = operatorStorage.SetupPrivateKey(test.generateIfNone, test.passedKey)
+			if test.expectedError != "" {
+				require.NotNil(t, err)
+				require.Equal(t, test.expectedError, err.Error())
+				return
+			}
+
+			require.NoError(t, err)
 			sk, found, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)
 			pk, err := rsaencryption.ExtractPublicKey(sk) // from storage

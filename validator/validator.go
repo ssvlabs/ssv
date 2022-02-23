@@ -142,6 +142,7 @@ func (v *Validator) listenToSignatureMessages() {
 		}
 
 		if sigMsg.Message != nil && v.oneOfIBFTIdentifiers(sigMsg.Message.Lambda) {
+			v.logger.Debug("adding sig message to msg queue", getFields(sigMsg)...)
 			v.msgQueue.AddMessage(&network.Message{
 				SignedMessage: sigMsg,
 				Type:          network.NetworkMsg_SignatureType,
@@ -171,6 +172,7 @@ func (v *Validator) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *prot
 }
 
 func (v *Validator) listenToNetworkMessages(msg *proto.SignedMessage) {
+	v.logger.Debug("adding ibft message to msg queue", getFields(msg)...)
 	v.msgQueue.AddMessage(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
@@ -178,10 +180,25 @@ func (v *Validator) listenToNetworkMessages(msg *proto.SignedMessage) {
 }
 
 func (v *Validator) listenToNetworkDecidedMessages(msg *proto.SignedMessage) {
+	v.logger.Debug("adding decided message to msg queue", getFields(msg)...)
 	v.msgQueue.AddMessage(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
 	})
+}
+
+func getFields(msg *proto.SignedMessage) []zap.Field {
+	var res []zap.Field
+	if msg == nil {
+		return res
+	}
+	if msg.Message != nil {
+		res = append(res, zap.String("type", msg.Message.Type.String()))
+		res = append(res, zap.Uint64("round", msg.Message.Round))
+		res = append(res, zap.Uint64("seqNum", msg.Message.SeqNumber))
+	}
+	res = append(res, zap.String("sender_ibft_id", msg.SignersIDString()))
+	return res
 }
 
 func setupIbftController(

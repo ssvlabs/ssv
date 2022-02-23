@@ -11,10 +11,11 @@ import (
 
 // ICollection interface for validator storage
 type ICollection interface {
+	basedb.RegistryStore
+
 	SaveValidatorShare(share *Share) error
 	GetValidatorShare(key []byte) (*Share, bool, error)
 	GetAllValidatorsShare() ([]*Share, error)
-	CleanAllShares() error
 }
 
 func collectionPrefix() []byte {
@@ -49,7 +50,12 @@ func (s *Collection) SaveValidatorShare(share *Share) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.saveUnsafe(share)
+	err := s.saveUnsafe(share)
+	if err != nil {
+		return err
+	}
+	s.logger.Debug("validator share was saved", zap.String("pk", share.PublicKey.SerializeToHexStr()))
+	return nil
 }
 
 // SaveValidatorShare save validator share to db
@@ -83,8 +89,12 @@ func (s *Collection) getUnsafe(key []byte) (*Share, bool, error) {
 	return share, found, err
 }
 
-// CleanAllShares cleans all existing shares from DB
-func (s *Collection) CleanAllShares() error {
+// CleanRegistryData clears all registry data
+func (s *Collection) CleanRegistryData() error {
+	return s.cleanAllShares()
+}
+
+func (s *Collection) cleanAllShares() error {
 	return s.db.RemoveAllByCollection(collectionPrefix())
 }
 

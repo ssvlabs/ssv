@@ -3,12 +3,16 @@ package operator
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
@@ -18,13 +22,10 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"log"
-	"net/http"
 )
 
 type config struct {
@@ -35,10 +36,11 @@ type config struct {
 	ETH2Options                beacon.Options   `yaml:"eth2"`
 	P2pNetworkConfig           p2p.Config       `yaml:"p2p"`
 
-	OperatorPrivateKey string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	MetricsAPIPort     int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile      bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey  string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
+	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 
 	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
 }
@@ -73,14 +75,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
-		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
-		if err != nil {
-			Logger.Fatal("failed during migration check", zap.Error(err))
-		} else if ok {
-			Logger.Info("migration is required", zap.Error(err))
-			cfg.ETH1Options.CleanRegistryData = true
-		}
-
 		// TODO - change via command line?
 		fork := v0.New()
 
@@ -89,6 +83,16 @@ var StartNodeCmd = &cobra.Command{
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
+		}
+
+		migrationOpts := migrations.Options{
+			Db:     db,
+			Logger: Logger,
+			DbPath: cfg.DBOptions.Path,
+		}
+		err = migrations.Run(cmd.Context(), migrationOpts)
+		if err != nil {
+			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
 		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
@@ -105,7 +109,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
-		if err := operatorStorage.SetupPrivateKey(cfg.OperatorPrivateKey); err != nil {
+		if err := operatorStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
 		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()

@@ -27,6 +27,18 @@ var (
 		Name: "ssv:network:peer_last_msg",
 		Help: "Timestamps of last messages",
 	}, []string{"pid"})
+	metricsPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:pubsub:trace",
+		Help: "Traces of pubsub messages",
+	}, []string{"type"})
+	metricsStreams = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:network:stream",
+		Help: "Counts opened/closed streams",
+	})
+	metricsConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:network:connections",
+		Help: "Counts opened/closed connections",
+	})
 )
 
 func init() {
@@ -40,6 +52,15 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsConnectedPeers); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsPubsubTrace); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsStreams); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsConnections); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
@@ -78,4 +99,23 @@ func reportLastMsg(pid string) {
 
 func timestamp() int64 {
 	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
+func reportPubsubTrace(t string) {
+	metricsPubsubTrace.WithLabelValues(t).Inc()
+}
+
+func reportStream(open bool) {
+	if open {
+		metricsStreams.Inc()
+	} else {
+		metricsStreams.Dec()
+	}
+}
+func reportConnection(open bool) {
+	if open {
+		metricsConnections.Inc()
+	} else {
+		metricsConnections.Dec()
+	}
 }

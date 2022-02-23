@@ -30,6 +30,49 @@ func init() {
 	logex.Build("test", zapcore.DebugLevel, nil)
 }
 
+func TestExporter_ShouldProcessValidator(t *testing.T) {
+	count1, count2 := uint64(0), uint64(0)
+	exp1, err := newMockExporter()
+	require.NoError(t, err)
+	exp2, err := newMockExporter()
+	require.NoError(t, err)
+	exp1.numOfInstances = 2
+	exp1.ibftSyncEnabled = true
+	exp2.numOfInstances = 2
+	exp2.ibftSyncEnabled = true
+	exp2.instanceID = 1
+
+	pks := []string{
+		"b85f43305dcd7f90355b2e1bf6ee621501ecb7afdc268fdc10f64a17b6a5f06daf881068d9725a3f4f6f30f98db50cd3",
+		"b88297ef1097d929857d2f4a409e2141fecffcd589aa38428827881b7814ee116f591e0f599fa7e2433a148732ce50e3",
+		"b9fab8f48f77561346a9f994aa9bf378ce686260fbb62e93c423ec02756f94979b1c796c9494003e68e407b720793972",
+		"b809e86ef4bf4840a59b79592ef7024fc89cc3a1aee87ac32892a5cb9580babb665b74128f5c871e4d2f7a69033106c8",
+		"b7734916ae1931bcd607d0e404d8b4de6b46b8298dd12819dfb2e1d59cf89fe0540bf94a786dc6633a83c5cfb7b4b5ca",
+		"b62b6cd780e9b3bccddcd8f4de0a5a8d416915a1e21239da92a6d20240545f7a829c3988be6a79394aa05eee24429795",
+		"b5b9e340d4c5f06fec38fc3d5bbc1eb39822b4ea2f07f4bd57fecb7d522e3f8755522919c69e019459de525903810363",
+		"b88297ef1097d929857d2f4a409e2141fecffcd589aa38428827881b7814ee116f591e0f599fa7e2433a148732ce50e3",
+		"aeef1d330f8bb2fe71a430de6c71b80eb5b260a676b2f74e14488c42f50c51d3859a223ca79d847e160afed5a9092caa",
+		"aef4bc917b9562a35fbb5fc2d993d9c44a2e928e35500131ca2ef349c5e183b27335d1c356941cd7aa21fe13ce5b31e7",
+		"af07571fb559ead83ae1b6000a4a3733e89c47a1568619ad23e887c67acff2822d77988eef904bac3f0a47fe61709b04",
+		"ac8c03ce86fa1edb60c4dcebcc888a631fb7117a45482edbfd1141b2494d3563bab15fcefad26d7930e6ab77b7cd4fa9",
+		"add13922a1e35c2c606e50cf8038ddc8a227f255f049d912032952b12192864c80eaec0b2bf8ab06aa0f25e329ec0c7d",
+	}
+	n := len(pks)
+
+	for _, pk := range pks {
+		if exp1.shouldProcessValidator(pk) {
+			count1++
+		}
+		if exp2.shouldProcessValidator(pk) {
+			count2++
+		}
+	}
+
+	require.Equal(t, n, int(count1+count2))
+	require.Equal(t, 7, int(count1))
+	require.Equal(t, 6, int(count2))
+}
+
 func TestExporter_handleQueryRequests(t *testing.T) {
 	exp, err := newMockExporter()
 	require.NoError(t, err)
@@ -146,18 +189,20 @@ func newMockExporter() (*exporter, error) {
 		return nil, err
 	}
 
-	ws := api.NewWsServer(context.Background(), logger, nil, nil)
+	ws := api.NewWsServer(context.Background(), logger, nil, nil, false)
 
 	opts := Options{
-		Ctx:        context.Background(),
-		Beacon:     beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
-		Logger:     logger,
-		ETHNetwork: nil,
-		Eth1Client: nil,
-		Network:    nil,
-		DB:         db,
-		WS:         ws,
-		WsAPIPort:  0,
+		Ctx:            context.Background(),
+		Beacon:         beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
+		Logger:         logger,
+		ETHNetwork:     nil,
+		Eth1Client:     nil,
+		Network:        nil,
+		DB:             db,
+		WS:             ws,
+		WsAPIPort:      0,
+		NumOfInstances: 1,
+		InstanceID:     0,
 	}
 	e := New(opts)
 	ws.UseQueryHandler(e.(*exporter).handleQueryRequests)

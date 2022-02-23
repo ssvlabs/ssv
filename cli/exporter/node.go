@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/p2p"
@@ -19,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/migrationutils"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -36,11 +36,16 @@ type config struct {
 	ETH2Options                beacon.Options `yaml:"eth2"`
 
 	WsAPIPort                       int           `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-default:"14000" env-description:"port of exporter WS api"`
+	WithPing                        bool          `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	MetricsAPIPort                  int           `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile                   bool          `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	IbftSyncEnabled                 bool          `yaml:"IbftSyncEnabled" env:"IBFT_SYNC_ENABLED" env-default:"false" env-description:"enable ibft sync for all topics"`
 	ValidatorMetaDataUpdateInterval time.Duration `yaml:"ValidatorMetaDataUpdateInterval" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
 	NetworkPrivateKey               string        `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+
+	// TODO: change this after network refactoring
+	NumOfInstances int `yaml:"NumOfInstances" env:"NUM_OF_INSTANCES" env-default:"1" env-description:"number of existing exporter instances"`
+	InstanceID     int `yaml:"InstanceID" env:"INSTANCE_ID" env-default:"0" env-description:"current instance ID"`
 }
 
 var cfg config
@@ -76,17 +81,19 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
 
-		ok, err := migrationutils.Migrate(cfg.DBOptions.Path)
-		if err != nil {
-			Logger.Fatal("failed during migration check", zap.Error(err))
-		} else if ok {
-			Logger.Info("migration is required", zap.Error(err))
-			cfg.ETH1Options.CleanRegistryData = true
-		}
-
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
 		if err != nil {
 			Logger.Fatal("failed to create db!", zap.Error(err))
+		}
+
+		migrationOpts := migrations.Options{
+			Db:     db,
+			Logger: Logger,
+			DbPath: cfg.DBOptions.Path,
+		}
+		err = migrations.Run(cmd.Context(), migrationOpts)
+		if err != nil {
+			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
@@ -145,12 +152,14 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Network = network
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
-		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux())
+		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
 		exporterOptions.WsAPIPort = cfg.WsAPIPort
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
 		exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+		exporterOptions.NumOfInstances = cfg.NumOfInstances
+		exporterOptions.InstanceID = cfg.InstanceID
 
 		exporterNode = exporter.New(*exporterOptions)
 

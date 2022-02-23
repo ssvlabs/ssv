@@ -42,6 +42,9 @@ func (n *p2pNetwork) handleConnections(filters ...ConnectionFilter) *libp2pnetwo
 			return
 		}
 		defer removePending(pid)
+
+		reportConnection(true)
+
 		fieldPid := zap.String("peerID", pid)
 		n.peersIndex.IndexConn(conn)
 		for _, f := range filters {
@@ -78,10 +81,23 @@ func (n *p2pNetwork) handleConnections(filters ...ConnectionFilter) *libp2pnetwo
 			if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
 				return
 			}
+			reportConnection(false)
 			n.trace("disconnected peer", who,
 				//zap.String("conn", conn.ID()),
 				//zap.String("multiaddr", conn.RemoteMultiaddr().String()),
 				zap.String("peerID", conn.RemotePeer().String()))
+		},
+		OpenedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
+			if conn := stream.Conn(); conn != nil {
+				reportStream(true)
+				n.trace("new stream opened", zap.String("peerID", conn.RemotePeer().String()))
+			}
+		},
+		ClosedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
+			if conn := stream.Conn(); conn != nil {
+				reportStream(false)
+				n.trace("stream closed", zap.String("peerID", conn.RemotePeer().String()))
+			}
 		},
 	}
 }

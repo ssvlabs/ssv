@@ -137,11 +137,10 @@ func TestGetHighestDecided(t *testing.T) {
 
 func TestGetDecidedByRange(t *testing.T) {
 	net := NewLocalNetwork()
-	_, _ = net.ReceivedSyncMsgChan()
-	c2, _ := net.ReceivedSyncMsgChan()
+	c, _ := net.ReceivedSyncMsgChan()
 
 	go func() {
-		msg := <-c2
+		msg := <-c
 		require.EqualValues(t, []byte{1, 2, 3, 4}, msg.Msg.Lambda)
 		require.EqualValues(t, network.Sync_GetHighestType, msg.Msg.Type)
 		require.NoError(t, net.RespondSyncMsg(msg.StreamID, &network.SyncMessage{
@@ -151,7 +150,7 @@ func TestGetDecidedByRange(t *testing.T) {
 		}))
 	}()
 
-	res, err := net.GetDecidedByRange("1", &network.SyncMessage{
+	res, err := net.GetDecidedByRange("0", &network.SyncMessage{
 		Lambda:     []byte{1, 2, 3, 4},
 		FromPeerID: "0",
 		Type:       network.Sync_GetHighestType,

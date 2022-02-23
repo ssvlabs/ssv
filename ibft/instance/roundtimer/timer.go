@@ -1,116 +1,98 @@
 package roundtimer
 
 import (
-	"sync"
+	"context"
+	"go.uber.org/zap"
+	"sync/atomic"
 	"time"
 )
 
-// RoundTimer is a wrapper around timer to fit the use in an iBFT instance
-type RoundTimer struct {
-	timer   *time.Timer
-	lapsedC chan bool
-	resC    chan bool
-	killC   chan bool
+// states helps to sync round timer using atomic package
+const (
+	statePreInit   uint32 = 0
+	stateStopped   uint32 = 1
+	stateResetting uint32 = 3
+	stateRunning   uint32 = 2
+)
 
-	stopped  bool
-	syncLock sync.RWMutex
+// RoundTimer helps to manage current instance rounds.
+// it should be killed (Kill()) once the instance finished and recreated for each new IBFT instance,
+// in that case 'false' is returned in result channel.
+// if round has timed-out, the timer returns 'true' in the result channel.
+// upon new round, Reset() should be called to reset the timer with the new timeout.
+type RoundTimer struct {
+	logger *zap.Logger
+	ctx    context.Context
+	// cancelCtx cancels the current context, will be called from Kill()
+	cancelCtx context.CancelFunc
+	// timer is the underlying time.Timer
+	timer *time.Timer
+	// result holds the result of the timer
+	result chan bool
+	// state helps to sync goroutines on the current state of the timer
+	state uint32
 }
 
-// New returns a new instance of RoundTimer
-func New() *RoundTimer {
-	ret := &RoundTimer{
-		timer:    nil,
-		lapsedC:  make(chan bool),
-		killC:    make(chan bool),
-		stopped:  true,
-		syncLock: sync.RWMutex{},
+// New creates a new instance of RoundTimer
+func New(pctx context.Context, logger *zap.Logger) *RoundTimer {
+	ctx, cancelCtx := context.WithCancel(pctx)
+	return &RoundTimer{
+		ctx:       ctx,
+		cancelCtx: cancelCtx,
+		logger:    logger,
+		timer:     nil,
+		result:    make(chan bool, 1),
+		state:     statePreInit,
 	}
-	go ret.eventLoop()
-	return ret
 }
 
 // ResultChan returns the result chan
 // true if the timer lapsed or false if it was stopped
-func (t *RoundTimer) ResultChan() chan bool {
-	t.syncLock.Lock()
-	defer t.syncLock.Unlock()
-
-	if t.resC == nil {
-		t.resC = make(chan bool)
-	}
-	return t.resC
+func (t *RoundTimer) ResultChan() <-chan bool {
+	return t.result
 }
 
-// CloseChan closes the results chan
-func (t *RoundTimer) CloseChan() {
-	t.syncLock.Lock()
-	defer t.syncLock.Unlock()
-	if t.resC != nil {
-		close(t.resC)
-		t.resC = nil
-	}
-}
-
-func (t *RoundTimer) fireChannelEvent(value bool) {
-	t.syncLock.RLock()
-	defer t.syncLock.RUnlock()
-
-	if t.resC != nil {
-		t.resC <- value
-	}
-}
-
-// Reset will return a channel that sends true if the timer lapsed or false if it was cancelled
-// If Start is called more than once, the first timer and chan are returned and used
+// Reset will reset the underlying timer
 func (t *RoundTimer) Reset(d time.Duration) {
-	t.syncLock.Lock()
-	defer t.syncLock.Unlock()
-
-	t.stopped = false
-
-	if t.timer != nil {
-		t.timer.Stop()
-		t.timer.Reset(d)
+	if t.ctx.Err() != nil { // timer was killed
+		t.logger.Warn("could not reset timer as it was killed already")
+		return
+	}
+	//t.logger.Debug("resetting timer", zap.Duration("timeout", d))
+	if atomic.SwapUint32(&t.state, stateResetting) == statePreInit {
+		// first reset creates the timer
+		t.timer = time.NewTimer(d)
 	} else {
-		t.timer = time.AfterFunc(d, func() {
-			t.lapsedC <- true
-		})
-	}
-}
-
-// Stopped returns true if there is no running timer
-func (t *RoundTimer) Stopped() bool {
-	t.syncLock.RLock()
-	defer t.syncLock.RUnlock()
-	return t.stopped
-}
-
-// Kill will stop the timer (without the ability to restart it) and send false on the result chan
-func (t *RoundTimer) Kill() {
-	t.syncLock.Lock()
-
-	if t.timer != nil {
+		// following calls to reset will reuse the same timer
 		t.timer.Stop()
 	}
-	t.stopped = true
-	t.killC <- true
-
-	t.syncLock.Unlock()
-
-	go t.fireChannelEvent(false)
+	t.timer.Reset(d)
+	atomic.StoreUint32(&t.state, stateRunning)
+	go func() {
+		select {
+		case <-t.ctx.Done():
+			if atomic.CompareAndSwapUint32(&t.state, stateRunning, stateStopped) {
+				t.logger.Debug("round timer was killed")
+				t.result <- false
+			}
+			return
+		case <-t.timer.C:
+			if atomic.CompareAndSwapUint32(&t.state, stateRunning, stateStopped) {
+				t.logger.Debug("round timer was timed-out")
+				t.result <- true
+			}
+		}
+	}()
 }
 
-func (t *RoundTimer) eventLoop() {
-loop:
-	for {
-		select {
-		case <-t.lapsedC:
-			t.syncLock.Lock()
-			t.stopped = true
-			t.syncLock.Unlock()
-			go t.fireChannelEvent(true)
-		case <-t.killC:
-			break loop
-		}
-	}
+// Kill kills the timer
+func (t *RoundTimer) Kill() {
+	//t.logger.Debug("killing round timer")
+	t.cancelCtx()
+}
+
+// Stopped returns whether the timer has stopped
+func (t *RoundTimer) Stopped() bool {
+	state := atomic.LoadUint32(&t.state)
+	return state == stateStopped || state == statePreInit
 }
