@@ -405,7 +405,6 @@ only those who turn on the corresponding flag will support this protocol.
   ```
 </details>
 
-
 ### 3. Last Change Round
 
 This protocol enables a node to catch up with change round messages.
@@ -582,14 +581,14 @@ The following scores will be reported if applies:
 
 
 
-#### Message Validation
+#### Topic Message Validation
 
-Basic message validation should be applied on the topic level,
+Basic message validation is applied on the topic level,
 each incoming message will be validated to avoid relaying bad messages.
 
-Peers that will send badly structured or corrupted messages will be scored accordingly.
-
-**TBD: value**
+[Extended Validators](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators) 
+allows the application to aid in the gossipsub peer-scoring scheme.
+We utilize `ACCEPT`, `REJECT`, and `IGNORE` as the result of the validation.
 
 
 #### Flood Publishing
@@ -738,6 +737,7 @@ In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is
 
 ---
 
+
 ### Peers Connectivity
 
 In a fully-connected network, where each peer is connected to all other peers in the network,
@@ -761,7 +761,7 @@ interface for more info.
 
 As mentioned above, `gossipsub v1.1` comes with a set of tools to protect the network from bad peers.
 [Gossipsub v1.1 Evaluation Report](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
-describes some potential attacks and how they are mitigated.
+describes some potential attacks and how they are mitigated.  
 
 Connection gating protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min).
 it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
