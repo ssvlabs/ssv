@@ -32,7 +32,7 @@ metadata:
   name: ssv-node-v2-6
   namespace: REPLACE_NAMESPACE
 spec:
-  replicas: 0
+  replicas: 1
   strategy:
     type: Recreate
   selector:
