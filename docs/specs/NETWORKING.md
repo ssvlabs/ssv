@@ -37,7 +37,7 @@ This document contains the networking specification for `SSV.Network`.
 
 ### Stack
 
-`SSV.Network` is a decentralized P2P network, consists of operator nodes that are grouped in multiple subnets, 
+`SSV.Network` is a permission-less P2P network, consists of operator nodes that are grouped in multiple subnets, 
 signing validators' duties after reaching to consensus for each duty.
 
 The networking layer is built with [Libp2p](https://libp2p.io/), 
@@ -457,6 +457,10 @@ This protocol enables a node to catch up with change round messages.
 The handshake protocol allows peers to identify by exchanging information 
 when a new connection is established.
 
+**TBD** The operator ID will be validated at a later point in time, 
+when the peer will send consensus or decided messages.
+
+
 ### Message Structure
 
 The following information will be exchanged as part of the handshake:
@@ -508,26 +512,7 @@ In addition, the following are achieved as well:
 - subscriptions metadata helps to get liveliness information of nodes
 - pubsub scoring enables to prune bad/malicious peers based on network behavior and application-specific rules
 
-The following parameters are used for initializing pubsub:
-
-
-#### Flood Publishing 
-
-`floodPublish` was turned on for ensuring better reliability, as peer's own messages will be propagated to a larger set of peers 
-(see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing))
-In addition it is mentioned as a mitigation strategy for attacks, 
-as it helps to overcome situations where most of the node’s mesh connections were occupied by Sybils.
-
-[Gossipsub v1.1 Evaluation Report > 2.2 Mitigation Strategies](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
-
-
-#### Subscription Filter
-
-[SubscriptionFilter](https://github.com/libp2p/go-libp2p-pubsub/blob/master/subscription_filter.go) 
-is used to apply access control for topics. \
-It is invoked whenever the peer wants to subscribe to some topic, 
-it helps in case other peers are suggesting topics that we don't want to join, 
-e.g. if we are already subscribed to a large number of topics.
+The following sections details on how pubsub is used in `SSV.network`:
 
 
 #### Message ID
@@ -570,49 +555,75 @@ Thresholds values **TBD**, this section will be updated once that work is comple
 - `acceptPXThreshold`: 100
 - `opportunisticGraftThreshold`: 5
 
-[Score function](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function) is 
-running periodically and will determine the score of peers. During heartbeat, the score it checked and bad peers are handled accordingly.
+Pubsub runs a `Score Function` periodically to determine the score of peers. 
+During heartbeat, the score it checked and bad peers are handled accordingly. see
+[gossipsub v1.1 spec](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function)
+for more information.
 
 
-### Message Scoring
+#### Consensus Scoring
 
-Message scorers track on operators' behavior w.r.t incoming QBFT messages:
+Message scorers track on operators' behavior w.r.t incoming QBFT messages.
 
-- Invalid message signature (`-100`)
-- Message from operator w/o shared committees (`-1000`)
-- Late arrival of valid message (`-25`)
+The full validation of messages is done by other components,
+but will be reported asynchronously and scores will be set
+with application specific scoring upon gossipsub heartbeat.
 
-### Connection Scoring
+Other components will report severity for each of the given scores below,
+which then will be converted to actual scores according to predefined scale.
 
-Peer's connection score is determined after a successful handshake,
-and peers with low score will be pruned.
+The following scores will be reported if applies:
 
-Connection scores are based on the following properties:
+- Late arrival of valid message - `-10 <= s <= -100`
+- Wrong sequence number - `-25 <= s <= -50`
+- Invalid message signature - `-250 <= s <= -500`
 
-- Shared subnets / committees (`25`)
 
+#### Message Validation
+
+Basic message validation should be applied on the topic level,
+each incoming message will be validated to avoid relaying bad messages.
+
+Peers that will send badly structured or corrupted messages will be scored accordingly.
+
+**TBD: value**
+
+
+#### Flood Publishing
+
+`floodPublish` was turned on for ensuring better reliability, as peer's own messages will be propagated to a larger set of peers
+(see [Flood Publishing](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#flood-publishing))
+In addition it is mentioned as a mitigation strategy for attacks,
+as it helps to overcome situations where most of the node’s mesh connections were occupied by Sybils.
+
+[Gossipsub v1.1 Evaluation Report > 2.2 Mitigation Strategies](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
+
+
+#### Subscription Filter
+
+[SubscriptionFilter](https://github.com/libp2p/go-libp2p-pubsub/blob/master/subscription_filter.go)
+is used to apply access control for topics. \
+It is invoked whenever the peer wants to subscribe to some topic,
+it helps in case other peers are suggesting topics that we don't want to join,
+e.g. if we are already subscribed to a large number of topics.
+
+---
 
 ### Subnets
 
-Consensus messages are being sent in the network over a subnet (pubsub topic),
-which the relevant peers are subscribed to.
+Consensus messages are being sent in the network over a pubsub topic.
 
-#### Subnets - fork v0
-
-`v0` was working with a simple approach, where each validator committee has
-a dedicated pubsub topic with all the relevant peers subscribed to it (committee + exporter). \
-It helps to reduce amount of messages in the network,
-but increases the number of topics which will grow up to the number of validators.
-
-In order to have more redundancy, a global topic (AKA `main topic`) is used
+In `v0`, each validator had a topic for its committee.
+The issue with that approach is the number of topics. It will grow up to the number of validators, 
+which is not scalable. \
+In order to have more redundancy, a global topic (AKA `main topic`) was used
 to publish all the decided messages in the network.
 
-#### Subnet - fork v1
-
-A subnet of operators is a network that includes responsible for multiple committees,
+`v1` introduces **subnets** - a subnet of peers consists of 
+operators that are responsible for multiple committees,
 reusing the same topic to communicate on behalf of multiple validators.
 
-Operator nodes, regardless of their shares, will save highest decided messages (and potentially historical data)
+Operator nodes, will validate and store highest decided messages (and potentially historical data)
 of all the committees in the subnets they participate.
 
 In comparison to `v0`, the number of messages sent over the network should grow. \
@@ -627,12 +638,19 @@ w/o taking into account gossip overhead, we use the following function:
 | 10000      | 1000      | 128     | 12                          | ~7325                    | 937500                |
 | 10000      | 1000      | 256     | 12                          | ~1830                    | 468750                |
 
+**TODO: define a more accurate function to calculate the amount of messages**
+
+The amount of message a peer will get from a single subnet is defined in 
+`Subnet - Messages` column, and in `Total Messages` 
+you can find the amount of messages for a peer that is subscribed to all subnets.
+
 **TBD** number of subnets (32 / 64 / 128 / 256)
 
 On the other hand, more nodes in a topic results
-increased reliability and security as more nodes will validate messages.
+increased reliability and security as more nodes will validate messages 
+and score peers accordingly.
 
-Main topic will be used to propagate decided messages across all the nodes in the network,
+**TBD** Main topic will be used to propagate decided messages across all the nodes in the network,
 which will store the last decided message of each committee.
 This will provide more redundancy that helps to maintain a consistent state across the network.
 
@@ -714,6 +732,7 @@ for details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
 In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
 
+---
 
 ### Peers Connectivity
 
@@ -721,14 +740,8 @@ In a fully-connected network, where each peer is connected to all other peers in
 running nodes will consume many resources to process all network related tasks e.g. parsing, peers management etc.
 
 To lower resource consumption, the number of connected peers is limited, configurable via flag. \
-Once reached to peer limit, the node will try to connect with relevant nodes.
-
-#### Connection Filters
-
-Connection filters are executed upon new connection. \
-Filters calculates the connection score of the new peer, and will terminate the connection if score is low.
-In addition, it will mark the peer as pruned so following connections requests 
-will be stopped at connection gater.
+Once reached to peer limit, the node will stop looking for new nodes, 
+but will accept incoming connections from relevant peers.
 
 
 #### Connection Gating
@@ -754,17 +767,6 @@ regardless of the regular transport security protocol ([go-libp2p-noise](https:/
 and it's not needed as unknown peers will be filtered.
 
 
-### User Agent
-
-Libp2p provides user agent mechanism with the [identify](https://github.com/libp2p/specs/tree/master/identify) protocol,
-which is used to exchange basic information with other peers in the network.
-
-User Agent contains the node version and type, and in addition the operator id. \
-See detailed format in [forks > user agent](#fork-v0).
-
-Note that user agent might be reduced in future versions,
-but a short and simple user agent will be kept for libp2p interoperability.
-
 
 ### Forks
 
@@ -786,15 +788,18 @@ Validator public key is used as the topic name:
 
 `bloxstaking.ssv.<hex(validator-public-key)>`
 
+
 **message encoding/decoding**
 
 JSON is used for encoding/decoding of messages.
+
 
 **user agent**
 
 User Agent contains the node version and type, and in addition the operator id.
 
 `SSV-Node:v0.x.x:<node-type>:<?operator-id>`
+
 
 #### Fork v1 (TBD)
 
@@ -804,10 +809,12 @@ Validator public key hash is used to determine the validator's subnet which is t
 
 `bloxstaking.ssv.<hash(validatiorPubKey) % num_of_subnets>`
 
+
 **message encoding/decoding**
 
 **TBD** check regards other encodings such as `SSZ` which is aligned with Ethereum, 
 or `protobuf` that should show faster results than JSON.
+
 
 **user agent**
 
@@ -832,6 +839,5 @@ The following measures are used to protect against malicious peers and denial of
 - Sync operations must be limited according to the score of the asking peer
   - highly scored peers should have less aggressive limit
   - unknown peers must be well limited to prevent attacks
-- Connection filters determine the score for inbound connections, and terminates low scored connections
 - Connection gater protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min). 
 it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
