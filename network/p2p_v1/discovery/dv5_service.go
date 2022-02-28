@@ -18,6 +18,12 @@ var (
 	defaultDiscoveryInterval = time.Second
 )
 
+// NodeProvider is an interface for managing ENRs
+type NodeProvider interface {
+	Self() *enode.LocalNode
+	Node(info peer.AddrInfo) (*enode.Node, error)
+}
+
 // NodeFilter can be used for nodes filtering during discovery
 type NodeFilter func(*enode.Node) bool
 
@@ -29,7 +35,7 @@ type DiscV5Service struct {
 	ctx    context.Context
 	logger *zap.Logger
 
-	connect Connect
+	//connect Connect
 
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
@@ -39,10 +45,10 @@ type DiscV5Service struct {
 
 func newDiscV5Service(ctx context.Context, discOpts *Options) (Service, error) {
 	dvs := DiscV5Service{
-		ctx:     ctx,
-		logger:  discOpts.Logger,
-		connect: discOpts.Connect,
-		conns:   discOpts.ConnIndex,
+		ctx:    ctx,
+		logger: discOpts.Logger,
+		//connect: discOpts.Connect,
+		conns: discOpts.ConnIndex,
 	}
 	dvs.logger.Debug("configuring discv5 discovery")
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
@@ -51,25 +57,52 @@ func newDiscV5Service(ctx context.Context, discOpts *Options) (Service, error) {
 	return &dvs, nil
 }
 
+// Self returns self node
+func (dvs *DiscV5Service) Self() *enode.LocalNode {
+	return dvs.dv5Listener.LocalNode()
+}
+
+// Node tries to find the enode.Node of the given peer
+func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
+	pki, err := info.ID.ExtractPublicKey()
+	if err != nil {
+		return nil, err
+	}
+	pk := fromInterfacePubKey(pki)
+	id := enode.PubkeyToIDV4(pk)
+	logger := dvs.logger.With(zap.String("info", info.String()),
+		zap.String("enode.ID", id.String()))
+	nodes := dvs.dv5Listener.AllNodes()
+	node := findNode(nodes, id)
+	if node == nil {
+		logger.Debug("could not find node, trying lookup")
+		// could not find node, trying to look it up
+		nodes = dvs.dv5Listener.Lookup(id)
+		node = findNode(nodes, id)
+	}
+	logger.Debug("managed to find node")
+	return node, nil
+}
+
 // Bootstrap connects to bootnodes and start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	connected := 0
-	for _, bn := range dvs.bootnodes {
-		pi, err := ToPeer(bn)
-		if err != nil {
-			dvs.logger.Warn("could not parse bootnode", zap.Error(err))
-			continue
-		}
-		if err = dvs.connect(pi); err != nil {
-			dvs.logger.Warn("could not connect to bootnode", zap.Error(err))
-			continue
-		}
-		connected++
-	}
-	if connected == 0 {
-		return errors.New("could not connect to bootnode")
-	}
+	//connected := 0
+	//for _, bn := range dvs.bootnodes {
+	//	pi, err := ToPeer(bn)
+	//	if err != nil {
+	//		dvs.logger.Warn("could not parse bootnode", zap.Error(err))
+	//		continue
+	//	}
+	//	if err = dvs.connect(pi); err != nil {
+	//		dvs.logger.Warn("could not connect to bootnode", zap.Error(err))
+	//		continue
+	//	}
+	//	connected++
+	//}
+	//if connected == 0 {
+	//	return errors.New("could not connect to bootnode")
+	//}
 
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
 		dvs.limitNodeFilter, dvs.badNodeFilter)

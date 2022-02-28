@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -155,4 +156,36 @@ func (n *p2pNetwork) setupTopicsCtrl() error {
 
 func (n *p2pNetwork) setupSyncHandlers() error {
 	return nil
+}
+
+// CreateDiscovery creates a discovery service
+func CreateDiscovery(ctx context.Context, cfg *Config, host host.Host, idx peers.ConnectionIndex) (discovery.Service, error) {
+	ipAddr, err := commons.IPAddr()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get ip addr")
+	}
+	var discV5Opts *discovery.DiscV5Options
+	if len(cfg.Bootnodes) > 0 { // otherwise, we are in local scenario
+		discV5Opts = &discovery.DiscV5Options{
+			IP:         ipAddr.String(),
+			BindIP:     "", // net.IPv4zero.String()
+			Port:       cfg.UDPPort,
+			TCPPort:    cfg.TCPPort,
+			NetworkKey: cfg.NetworkPrivateKey,
+			Bootnodes:  cfg.TransformBootnodes(),
+			Logger:     cfg.Logger,
+		}
+	}
+	discOpts := discovery.Options{
+		Logger: cfg.Logger,
+		Host:   host,
+		Connect: func(info *peer.AddrInfo) error {
+			ctx, cancel := context.WithTimeout(ctx, cfg.RequestTimeout)
+			defer cancel()
+			return host.Connect(ctx, *info)
+		},
+		DiscV5Opts: discV5Opts,
+		ConnIndex:  idx,
+	}
+	return discovery.NewService(ctx, discOpts)
 }
