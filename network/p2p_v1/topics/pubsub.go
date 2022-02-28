@@ -93,7 +93,11 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, error) {
 		psOpts = append(psOpts, pubsub.WithEventTracer(tracer))
 	}
 
-	return pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
+	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return ps, nil
 }
 
 // creates a custom gossipsub parameter set.

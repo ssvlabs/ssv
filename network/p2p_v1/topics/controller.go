@@ -153,6 +153,13 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
 				return nil, errors.Wrap(err, "could not set score params")
 			}
 		}
+		// TODO: check if we want have topic validators here or elsewhere
+		//msgVal := newMsgValidator(ctrl.logger.With(zap.String("name", name)), nil)
+		//err = ctrl.ps.RegisterTopicValidator(name, msgVal, pubsub.WithValidatorConcurrency(100))
+		//if err != nil {
+		//	state.close()
+		//	return nil, errors.Wrap(err, "could not register topic validator")
+		//}
 		state.join(t)
 		ctrl.topics.Store(name, state)
 	default:

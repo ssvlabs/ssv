@@ -9,7 +9,6 @@ import (
 )
 
 // MsgValidator represents the interface expected by libp2p
-//
 type MsgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
 
 // newMsgValidator creates a new msg validator
