@@ -72,8 +72,8 @@ func (n *p2pNetwork) Start() error {
 	})
 
 	async.RunEvery(n.ctx, 30*time.Second, func() {
-		go reportAllPeers(n)
-		reportTopics(n)
+		go n.reportAllPeers()
+		n.reportTopics()
 	})
 
 	return nil
