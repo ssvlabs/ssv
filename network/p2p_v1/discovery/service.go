@@ -10,16 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// DiscType is the discovery type
-type DiscType string
-
-const (
-	// Mdns is used for local discovery
-	Mdns DiscType = "mdns"
-	// DiscV5 is used for discv5
-	DiscV5 DiscType = "discv5"
-)
-
 const (
 	//udp4 = "udp4"
 	//udp6 = "udp6"
@@ -45,7 +35,6 @@ type HandleNewPeer func(e PeerEvent)
 type Options struct {
 	Logger *zap.Logger
 
-	Type       DiscType
 	Host       host.Host
 	Connect    Connect
 	DiscV5Opts *DiscV5Options
@@ -61,7 +50,7 @@ type Service interface {
 
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, opts Options) (Service, error) {
-	if opts.Type == Mdns {
+	if opts.DiscV5Opts == nil || len(opts.DiscV5Opts.Bootnodes) == 0 {
 		return NewMdnsDiscovery(ctx, opts.Logger, opts.Host)
 	}
 	return newDiscV5Service(ctx, &opts)

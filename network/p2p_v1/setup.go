@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
@@ -23,11 +24,6 @@ func (n *p2pNetwork) Setup() error {
 	if err != nil {
 		return err
 	}
-
-	err = n.watchPeers()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -45,7 +41,7 @@ func (n *p2pNetwork) SetupHost() error {
 	return nil
 }
 
-// SetupServices configures the needed services
+// SetupServices configures the required services
 func (n *p2pNetwork) SetupServices() error {
 	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.cfg.Fork, n.cfg.RequestTimeout)
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent()))
@@ -78,17 +74,28 @@ func (n *p2pNetwork) SetupServices() error {
 }
 
 func (n *p2pNetwork) setupDiscovery() error {
+	ipAddr, err := commons.IPAddr()
+	if err != nil {
+		return errors.Wrap(err, "could not get ip addr")
+	}
 	discOpts := discovery.Options{
 		Logger: n.cfg.Logger,
-		//Type:       "",
-		//Host:       nil,
+		Host:   n.host,
 		Connect: func(info *peer.AddrInfo) error {
 			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
 			defer cancel()
 			return n.host.Connect(ctx, *info)
 		},
-		DiscV5Opts: &discovery.DiscV5Options{},
-		ConnIndex:  n.idx,
+		DiscV5Opts: &discovery.DiscV5Options{
+			IP:         ipAddr.String(),
+			BindIP:     "", // net.IPv4zero.String()
+			Port:       n.cfg.UDPPort,
+			TCPPort:    n.cfg.TCPPort,
+			NetworkKey: n.cfg.NetworkPrivateKey,
+			Bootnodes:  n.cfg.TransformBootnodes(),
+			Logger:     n.cfg.Logger,
+		},
+		ConnIndex: n.idx,
 	}
 	disc, err := discovery.NewService(n.ctx, discOpts)
 	if err != nil {
@@ -104,9 +111,5 @@ func (n *p2pNetwork) setupPubsub() error {
 }
 
 func (n *p2pNetwork) setupSyncHandlers() error {
-	return nil
-}
-
-func (n *p2pNetwork) watchPeers() error {
 	return nil
 }
