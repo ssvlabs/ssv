@@ -15,8 +15,8 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 
 	q := tasks.NewExecutionQueue(time.Millisecond*10, tasks.WithoutErrors())
 
-	q.Start()
 	go func() {
+		go q.Start()
 		defer q.Stop()
 		for ctx.Err() == nil {
 			// wait for context done
@@ -34,12 +34,13 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 				_logger.Debug("could not handshake with peer: already in process")
 			}
 			_logger.Warn("could not handshake with peer", zap.Error(err))
-			if err := net.ClosePeer(id); err != nil {
+			err := net.ClosePeer(id)
+			if err != nil {
 				_logger.Warn("could not close connection", zap.Error(err))
-				return err
 			}
+			return err
 		}
-		_logger.Debug("successful handshake with new connection",
+		_logger.Debug("new connection is ready",
 			zap.String("dir", conn.Stat().Direction.String()))
 		metricsConnections.Inc()
 		return nil

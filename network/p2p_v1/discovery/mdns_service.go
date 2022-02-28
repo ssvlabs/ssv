@@ -32,14 +32,18 @@ type mdnsDiscovery struct {
 // NewMdnsDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
+	logger.Debug("configuring mdns discovery")
+
 	svc, err := mdnsDiscover.NewMdnsService(ctx, host, DiscoveryInterval, DiscoveryServiceTag)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create new mDNS service")
 	}
+
 	return &mdnsDiscovery{
 		ctx:       ctx,
 		logger:    logger,
 		svc:       svc,
+		peers:     make(map[string]PeerEvent),
 		peersLock: &sync.RWMutex{},
 	}, nil
 }

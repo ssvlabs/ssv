@@ -8,7 +8,9 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"io"
@@ -60,6 +62,8 @@ func (n *p2pNetwork) Close() error {
 
 // Start starts the required services
 func (n *p2pNetwork) Start() error {
+	n.logger.Info("starting p2p network service")
+
 	go n.startDiscovery()
 
 	async.RunEvery(n.ctx, 15*time.Minute, func() {
@@ -90,4 +94,13 @@ func (n *p2pNetwork) startDiscovery() {
 	if err != nil {
 		n.logger.Panic("could not setup discovery", zap.Error(err))
 	}
+}
+
+func (n *p2pNetwork) Connect(info *peer.AddrInfo) error {
+	if info == nil {
+		return errors.New("empty info")
+	}
+	ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
+	defer cancel()
+	return n.host.Connect(ctx, *info)
 }

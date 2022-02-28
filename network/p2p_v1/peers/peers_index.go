@@ -201,7 +201,7 @@ func (pi *peersIndex) Close() error {
 // add saves the given identity
 func (pi *peersIndex) add(identity *Identity) (bool, error) {
 	pi.setState(identity.ID, StateIndexing)
-	pid, err := peer.IDFromString(identity.ID)
+	pid, err := peer.Decode(identity.ID)
 	if err != nil {
 		return false, errors.Wrap(err, "could not convert string to peer.ID")
 	}

@@ -95,7 +95,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return err
 	}
 	pid := conn.RemotePeer()
-	h.logger.Debug("handshaking peer", zap.String("id", pid.String()))
+	//h.logger.Debug("handshaking peer", zap.String("id", pid.String()))
 	resBytes, err := h.streams.RequestBytes(pid, HandshakeProtocol, data, handshakeTimeout)
 	if err != nil {
 		return err
@@ -107,6 +107,9 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	added, err := h.idx.Add(res)
 	if added {
 		h.logger.Debug("handshaked peer", zap.String("id", pid.String()))
+	}
+	if err != nil {
+		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()))
 	}
 	return err
 }
