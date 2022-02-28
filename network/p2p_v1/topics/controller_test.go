@@ -147,7 +147,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 func newPeers(ctx context.Context, t *testing.T, n int) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, t, 256)
+		peers[i] = newPeer(ctx, t)
 	}
 	t.Logf("%d peers were created", n)
 	for ctx.Err() == nil {
@@ -165,24 +165,20 @@ func newPeers(ctx context.Context, t *testing.T, n int) []*P {
 	return peers
 }
 
-func newPeer(ctx context.Context, t *testing.T, qSize int) *P {
+func newPeer(ctx context.Context, t *testing.T) *P {
 	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), host))
 
-	gsParams := pubsub.DefaultGossipSubParams()
-	psOpts := []pubsub.Option{
-		//pubsub.WithMessageIdFn(n.msgId),
-		//pubsub.WithSubscriptionFilter(s),
-		pubsub.WithPeerOutboundQueueSize(qSize),
-		pubsub.WithValidateQueueSize(qSize),
-		pubsub.WithFloodPublish(true),
-		pubsub.WithGossipSubParams(gsParams),
-		pubsub.WithEventTracer(NewTracer(zap.L(), true)),
-	}
-	ps, err := pubsub.NewGossipSub(ctx, host, psOpts...)
+	ps, err := NewPubsub(ctx, &PububConfig{
+		Logger:   zaptest.NewLogger(t),
+		Host:     host,
+		TraceOut: "",
+		TraceLog: false,
+	})
 	require.NoError(t, err)
+
 	tm := NewTopicsController(ctx, zaptest.NewLogger(t), ps, nil)
 
 	p := &P{
