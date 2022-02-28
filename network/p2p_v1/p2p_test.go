@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 	"testing"
 	"time"
 )
@@ -20,9 +19,12 @@ func TestP2pNetwork_SetupStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
+
 	sk, err := commons.GenNetworkKey()
 	require.NoError(t, err)
-	cfg := defaultMockConfig(zaptest.NewLogger(t), sk)
+	cfg := defaultMockConfig(logger, sk)
 	p := New(ctx, cfg).(*p2pNetwork)
 	require.NoError(t, p.Setup())
 	t.Logf("configured first peer %s", p.host.ID().String())
@@ -34,7 +36,7 @@ func TestP2pNetwork_SetupStart(t *testing.T) {
 
 	sk2, err := commons.GenNetworkKey()
 	require.NoError(t, err)
-	cfg2 := defaultMockConfig(zaptest.NewLogger(t), sk2)
+	cfg2 := defaultMockConfig(logger, sk2)
 	cfg2.TCPPort++
 	cfg2.UDPPort++
 	p2 := New(ctx, cfg2).(*p2pNetwork)

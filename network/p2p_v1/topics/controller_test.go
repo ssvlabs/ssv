@@ -10,7 +10,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,8 +19,8 @@ import (
 func TestTopicManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	nPeers := 8
-	nTopics := 16
+	nPeers := 4
+	nTopics := 8
 
 	peers := newPeers(ctx, t, nPeers)
 
@@ -171,15 +170,18 @@ func newPeer(ctx context.Context, t *testing.T) *P {
 	require.NoError(t, err)
 	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), host))
 
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
 	ps, err := NewPubsub(ctx, &PububConfig{
-		Logger:   zaptest.NewLogger(t),
+		//Logger:   zaptest.NewLogger(t),
+		Logger:   logger,
 		Host:     host,
 		TraceOut: "",
 		TraceLog: false,
 	})
 	require.NoError(t, err)
 
-	tm := NewTopicsController(ctx, zaptest.NewLogger(t), ps, nil)
+	tm := NewTopicsController(ctx, logger, ps, nil)
 
 	p := &P{
 		host:     host,
