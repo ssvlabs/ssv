@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -111,4 +112,13 @@ func hasTCPEntry(node *enode.Node) (bool, error) {
 		return false, errors.Wrap(err, "could not load tcp port from ENR")
 	}
 	return true, nil
+}
+
+func findNode(nodes []*enode.Node, id enode.ID) *enode.Node {
+	for _, node := range nodes {
+		if bytes.Equal(node.ID().Bytes(), id.Bytes()) {
+			return node
+		}
+	}
+	return nil
 }

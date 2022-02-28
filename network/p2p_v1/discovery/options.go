@@ -77,11 +77,13 @@ func (opts *DiscV5Options) DiscV5Cfg() (*discover.Config, error) {
 	dv5Cfg := discover.Config{
 		PrivateKey: opts.NetworkKey,
 	}
-	bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not parse bootnodes ENR")
+	if len(opts.Bootnodes) > 0 {
+		bootnodes, err := ParseENR(nil, false, opts.Bootnodes...)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not parse bootnodes ENR")
+		}
+		dv5Cfg.Bootnodes = bootnodes
 	}
-	dv5Cfg.Bootnodes = bootnodes
 
 	if opts.Logger != nil {
 		logger := log.New()
