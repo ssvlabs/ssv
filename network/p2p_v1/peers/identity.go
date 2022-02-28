@@ -69,6 +69,14 @@ func (i *Identity) NodeVersion() string {
 	return v
 }
 
+// NodeType returns the node type
+func (i *Identity) NodeType() string {
+	if len(i.OperatorID) == 0 {
+		return "exporter"
+	}
+	return "operator"
+}
+
 // Encode encodes the identity
 func (i *Identity) Encode() ([]byte, error) {
 	return json.Marshal(i)
