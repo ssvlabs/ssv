@@ -89,11 +89,11 @@ func ParseENR(schemes enr.SchemeMap, tcpRequired bool, enrs ...string) ([]*enode
 			return nodes, errors.Wrap(err, "could not parse ENR")
 		}
 		if tcpRequired {
-			hasTcp, err := hasTcpEntry(node)
+			hasTCP, err := hasTCPEntry(node)
 			if err != nil {
 				return nil, errors.Wrap(err, "could not check tcp port")
 			}
-			if !hasTcp {
+			if !hasTCP {
 				return nil, errors.Wrap(err, "could not find tcp port")
 			}
 		}
@@ -102,8 +102,8 @@ func ParseENR(schemes enr.SchemeMap, tcpRequired bool, enrs ...string) ([]*enode
 	return nodes, nil
 }
 
-// hasTcpEntry ensures that the node has a TCP entry
-func hasTcpEntry(node *enode.Node) (bool, error) {
+// hasTCPEntry ensures that the node has a TCP entry
+func hasTCPEntry(node *enode.Node) (bool, error) {
 	if err := node.Record().Load(enr.WithEntry(tcp, new(enr.TCP))); err != nil {
 		if !enr.IsNotFound(err) {
 			return false, errors.Wrap(err, "could not find tcp port in ENR")

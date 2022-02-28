@@ -1,4 +1,4 @@
-package pubsub
+package topics
 
 import (
 	"context"
@@ -28,8 +28,10 @@ var (
 	errTopicAlreadyExists = errors.New("topic already exists")
 )
 
-// TopicsManager is an interface for managing pubsub topics
-type TopicsManager interface {
+// Controller is an interface for managing pubsub topics
+// it encapsulates all the functionality to facilitate subnets on top of
+// pubsub (gossipsub v1.1)
+type Controller interface {
 	// Subscribe subscribes to the given topic
 	Subscribe(topicName string) (<-chan *pubsub.Message, error)
 	// Unsubscribe unsubscribes from the given topic
@@ -42,8 +44,8 @@ type TopicsManager interface {
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
 }
 
-// topicsManager implements
-type topicsManager struct {
+// topicsCtrl implements Controller
+type topicsCtrl struct {
 	ctx    context.Context
 	logger *zap.Logger
 	ps     *pubsub.PubSub
@@ -53,9 +55,9 @@ type topicsManager struct {
 	topics *sync.Map
 }
 
-// NewTopicManager creates an instance of TopicsManager
-func NewTopicManager(ctx context.Context, logger *zap.Logger, pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) TopicsManager {
-	return &topicsManager{
+// NewTopicsController creates an instance of Controller
+func NewTopicsController(ctx context.Context, logger *zap.Logger, pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+	return &topicsCtrl{
 		ctx:         ctx,
 		logger:      logger,
 		ps:          pubSub,
@@ -65,8 +67,8 @@ func NewTopicManager(ctx context.Context, logger *zap.Logger, pubSub *pubsub.Pub
 }
 
 // Peers returns the peers subscribed to the given topic
-func (tm *topicsManager) Peers(topicName string) ([]peer.ID, error) {
-	topic := tm.getTopicState(topicName)
+func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
+	topic := ctrl.getTopicState(topicName)
 	if topic == nil {
 		return nil, nil
 	}
@@ -77,49 +79,49 @@ func (tm *topicsManager) Peers(topicName string) ([]peer.ID, error) {
 }
 
 // Subscribe subscribes to the given topic
-func (tm *topicsManager) Subscribe(topicName string) (<-chan *pubsub.Message, error) {
-	return tm.subscribe(topicName)
+func (ctrl *topicsCtrl) Subscribe(topicName string) (<-chan *pubsub.Message, error) {
+	return ctrl.subscribe(topicName)
 }
 
 // Topics lists all the available topics
-func (tm *topicsManager) Topics() []string {
-	return tm.ps.GetTopics()
+func (ctrl *topicsCtrl) Topics() []string {
+	return ctrl.ps.GetTopics()
 }
 
 // Unsubscribe unsubscribes from the given topic
-func (tm *topicsManager) Unsubscribe(topicName string) error {
-	topic := tm.getTopicState(topicName)
+func (ctrl *topicsCtrl) Unsubscribe(topicName string) error {
+	topic := ctrl.getTopicState(topicName)
 	if topic == nil {
 		return nil
 	}
-	tm.topics.Delete(topicName)
+	ctrl.topics.Delete(topicName)
 	topic.close()
 	return nil
 }
 
 // Broadcast publishes the message on the given topic
-func (tm *topicsManager) Broadcast(topicName string, data []byte, timeout time.Duration) error {
-	//topic := tm.fork.ValidatorTopicID(pk)
-	topic, err := tm.joinTopic(topicName)
+func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
+	//topic := ctrl.fork.ValidatorTopicID(pk)
+	topic, err := ctrl.joinTopic(topicName)
 	if err != nil {
 		return err
 	}
 	if !topic.canPublish() {
 		return errors.New("can't publish message as topic is not ready")
 	}
-	//data, err := tm.fork.EncodeNetworkMsg(msg)
+	//data, err := ctrl.fork.EncodeNetworkMsg(msg)
 	//if err != nil {
 	//	return errors.Wrap(err, "could not encode message")
 	//}
-	ctx, done := context.WithTimeout(tm.ctx, timeout)
+	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
 	return topic.topic.Publish(ctx, data)
 }
 
 // getTopicState returns the topic wrapper if exist
-func (tm *topicsManager) getTopicState(name string) *topicState {
-	t, ok := tm.topics.Load(name)
+func (ctrl *topicsCtrl) getTopicState(name string) *topicState {
+	t, ok := ctrl.topics.Load(name)
 	if !ok {
 		return nil
 	}
@@ -127,40 +129,40 @@ func (tm *topicsManager) getTopicState(name string) *topicState {
 }
 
 // joinTopic joins the given topic and returns the wrapper
-func (tm *topicsManager) joinTopic(name string) (*topicState, error) {
-	state := tm.getTopicState(name)
+func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
+	state := ctrl.getTopicState(name)
 	if state == nil {
-		state = newTopicWrapper(tm.logger)
-		tm.topics.Store(name, state)
+		state = newTopicWrapper(ctrl.logger)
+		ctrl.topics.Store(name, state)
 	}
 	switch state.getState() {
 	case topicStateJoining:
 		return state, ErrInProcess
 	case topicStateClosed:
 		state.joining()
-		t, err := tm.ps.Join(name)
+		t, err := ctrl.ps.Join(name)
 		if err != nil {
-			tm.logger.Warn("could not join topic", zap.String("name", name), zap.Error(err))
+			ctrl.logger.Warn("could not join topic", zap.String("name", name), zap.Error(err))
 			state.close()
 			return nil, ErrCouldNotJoin
 		}
-		if tm.scoreParams != nil {
-			err = t.SetScoreParams(tm.scoreParams(name))
+		if ctrl.scoreParams != nil {
+			err = t.SetScoreParams(ctrl.scoreParams(name))
 			if err != nil {
 				state.close()
 				return nil, errors.Wrap(err, "could not set score params")
 			}
 		}
 		state.join(t)
-		tm.topics.Store(name, state)
+		ctrl.topics.Store(name, state)
 	default:
 	}
 	return state, nil
 }
 
 // subscribe to the given topic and returns a channel to read the messages from
-func (tm *topicsManager) subscribe(name string) (<-chan *pubsub.Message, error) {
-	state, err := tm.joinTopic(name)
+func (ctrl *topicsCtrl) subscribe(name string) (<-chan *pubsub.Message, error) {
+	state, err := ctrl.joinTopic(name)
 	if err != nil {
 		return nil, err
 	}
@@ -173,20 +175,20 @@ func (tm *topicsManager) subscribe(name string) (<-chan *pubsub.Message, error) 
 		if err == pubsub.ErrTopicClosed {
 			// rejoin a topic in case it was closed, and try to subscribe again
 			state.close()
-			state, err = tm.joinTopic(name)
+			state, err = ctrl.joinTopic(name)
 			if err != nil {
 				return nil, err
 			}
 			sub, err = state.topic.Subscribe()
 			if err != nil {
-				tm.logger.Warn("could not subscribe to topic", zap.String("topic", name), zap.Error(err))
+				ctrl.logger.Warn("could not subscribe to topic", zap.String("topic", name), zap.Error(err))
 			}
 		}
 		if sub == nil {
 			state.close()
 			return nil, ErrCouldNotSubscribe
 		}
-		in := tm.listen(state, sub)
+		in := ctrl.listen(state, sub)
 		return in, nil
 	default:
 	}
@@ -196,17 +198,17 @@ func (tm *topicsManager) subscribe(name string) (<-chan *pubsub.Message, error) 
 // listen handles incoming messages from the topic
 // it buffers results to make sure we keep up with incoming messages rate
 // in case subscription returns error, the topic is closed
-func (tm *topicsManager) listen(state *topicState, sub *pubsub.Subscription) chan *pubsub.Message {
-	ctx, cancel := context.WithCancel(tm.ctx)
+func (ctrl *topicsCtrl) listen(state *topicState, sub *pubsub.Subscription) chan *pubsub.Message {
+	ctx, cancel := context.WithCancel(ctrl.ctx)
 	in := make(chan *pubsub.Message, bufSize)
 	go func() {
 		state.subscribe(sub, cancel)
-		tm.topics.Store(state.topic.String(), state)
+		ctrl.topics.Store(state.topic.String(), state)
 		defer func() {
 			state.close()
 			close(in)
 		}()
-		logger := tm.logger.With(zap.String("topic", sub.Topic()))
+		logger := ctrl.logger.With(zap.String("topic", sub.Topic()))
 		logger.Info("start listening to topic")
 		for ctx.Err() == nil {
 			msg, err := sub.Next(ctx)

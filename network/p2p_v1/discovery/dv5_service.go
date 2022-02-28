@@ -2,9 +2,11 @@ package discovery
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/discovery"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -32,7 +34,7 @@ type DiscV5Service struct {
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
 
-	checkPeerLimit CheckPeerLimit
+	conns peers.ConnectionIndex
 }
 
 func newDiscV5Service(ctx context.Context, discOpts *Options) (Service, error) {
@@ -40,6 +42,7 @@ func newDiscV5Service(ctx context.Context, discOpts *Options) (Service, error) {
 		ctx:     ctx,
 		logger:  discOpts.Logger,
 		connect: discOpts.Connect,
+		conns:   discOpts.ConnIndex,
 	}
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
 		return nil, err
@@ -64,7 +67,7 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 		connected++
 	}
 	if connected == 0 {
-		return errors.New("could not connect to bootnodes")
+		return errors.New("could not connect to bootnode")
 	}
 
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
@@ -165,8 +168,8 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	for _, f := range filters {
 		iterator = enode.Filter(iterator, f)
 	}
-	// selfId is used to exclude current node
-	selfId := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
+	// selfID is used to exclude current node
+	selfID := dvs.dv5Listener.LocalNode().Node().ID().TerminalString()
 
 	t := time.NewTimer(interval)
 	defer t.Stop()
@@ -183,7 +186,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 		}
 		// ignoring nil or self nodes
 		if n := iterator.Node(); n != nil {
-			if n.ID().TerminalString() == selfId {
+			if n.ID().TerminalString() == selfID {
 				continue
 			}
 			ai, err := ToPeer(n)
@@ -200,16 +203,17 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 
 // limitNodeFilter checks if limit exceeded, then only relevant nodes will pass this filter
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-	if dvs.checkPeerLimit() {
-		return false
-	}
-	return true
+	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
 }
 
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
-	// TODO: implement
-	return true
+	pid, err := PeerID(node)
+	if err != nil {
+		dvs.logger.Warn("could not get peer ID from node record", zap.Error(err))
+		return false
+	}
+	return !dvs.conns.IsBad(pid)
 }
 
 func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Node) bool {

@@ -14,7 +14,7 @@ import (
 func Test_ENR_OperatorIDEntry(t *testing.T) {
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
-	sk := convertFromInterfacePrivKey(priv)
+	sk := fromInterfacePrivKey(priv)
 	ip, err := commons.IPAddr()
 	pubkey := genPublicKey()
 	require.NoError(t, err)
