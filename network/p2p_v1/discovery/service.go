@@ -2,7 +2,7 @@ package discovery
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/p2p_v1/discovery/mdns"
+	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -10,17 +10,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// DiscType is the discovery type
 type DiscType string
 
 const (
-	Mdns   DiscType = "mdns"
+	// Mdns is used for local discovery
+	Mdns DiscType = "mdns"
+	// DiscV5 is used for discv5
 	DiscV5 DiscType = "discv5"
 )
 
 const (
-	udp4 = "udp4"
-	udp6 = "udp6"
-	tcp  = "tcp"
+	//udp4 = "udp4"
+	//udp6 = "udp6"
+	tcp = "tcp"
 )
 
 // CheckPeerLimit enables listener to check peers limit
@@ -45,8 +48,8 @@ type Options struct {
 	Type       DiscType
 	Host       host.Host
 	Connect    Connect
-	CheckPeerLimit CheckPeerLimit
 	DiscV5Opts *DiscV5Options
+	ConnIndex  peers.ConnectionIndex
 }
 
 // Service is the interface for discovery
@@ -59,7 +62,7 @@ type Service interface {
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, opts Options) (Service, error) {
 	if opts.Type == Mdns {
-		return mdns.NewMdnsDiscovery(ctx, opts.Logger, opts.Host)
+		return NewMdnsDiscovery(ctx, opts.Logger, opts.Host)
 	}
 	return newDiscV5Service(ctx, &opts)
 }

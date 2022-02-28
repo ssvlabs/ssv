@@ -11,7 +11,7 @@ import (
 func Test_SubnetsEntry(t *testing.T) {
 	priv, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	require.NoError(t, err)
-	sk := convertFromInterfacePrivKey(priv)
+	sk := fromInterfacePrivKey(priv)
 	ip, err := commons.IPAddr()
 	require.NoError(t, err)
 	node, err := createLocalNode(sk, "", ip, commons.DefaultUDP, commons.DefaultTCP)

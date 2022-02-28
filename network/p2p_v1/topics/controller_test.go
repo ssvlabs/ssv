@@ -1,4 +1,4 @@
-package pubsub
+package topics
 
 import (
 	"context"
@@ -113,7 +113,7 @@ func topicName(i int) string {
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
-	tm   *topicsManager
+	tm   *topicsCtrl
 
 	connsCount uint64
 
@@ -183,12 +183,12 @@ func newPeer(ctx context.Context, t *testing.T, qSize int) *P {
 	}
 	ps, err := pubsub.NewGossipSub(ctx, host, psOpts...)
 	require.NoError(t, err)
-	tm := NewTopicManager(ctx, zaptest.NewLogger(t), ps, nil)
+	tm := NewTopicsController(ctx, zaptest.NewLogger(t), ps, nil)
 
 	p := &P{
 		host:     host,
 		ps:       ps,
-		tm:       tm.(*topicsManager),
+		tm:       tm.(*topicsCtrl),
 		msgs:     make(map[string][]*pubsub.Message),
 		msgsLock: &sync.Mutex{},
 	}

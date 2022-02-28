@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/binary"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -17,8 +17,8 @@ const (
 )
 
 func nsToSubnet(ns string) uint64 {
-	h := md5.Sum([]byte(ns))
-	val := binary.BigEndian.Uint64(h[:])
+	h := sha256.Sum256([]byte(ns))
+	val := binary.BigEndian.Uint64(h[10:])
 	return val % uint64(SubnetsCount)
 }
 

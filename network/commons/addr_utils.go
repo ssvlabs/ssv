@@ -31,6 +31,7 @@ func CheckAddress(addr string) error {
 	return nil
 }
 
+// BuildMultiAddress creates a multiaddr from the given params
 func BuildMultiAddress(ipAddr, protocol string, port uint, id peer.ID) (ma.Multiaddr, error) {
 	parsedIP := net.ParseIP(ipAddr)
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {

@@ -1,8 +1,7 @@
-package mdns
+package discovery
 
 import (
 	"context"
-	ssv_discovery "github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -27,29 +26,29 @@ type mdnsDiscovery struct {
 	svc    mdnsDiscover.Service
 
 	peersLock *sync.RWMutex
-	peers map[string]ssv_discovery.PeerEvent
+	peers     map[string]PeerEvent
 }
 
 // NewMdnsDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
-func NewMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (ssv_discovery.Service, error) {
+func NewMdnsDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
 	svc, err := mdnsDiscover.NewMdnsService(ctx, host, DiscoveryInterval, DiscoveryServiceTag)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create new mDNS service")
 	}
 	return &mdnsDiscovery{
-		ctx:    ctx,
-		logger: logger,
-		svc:    svc,
+		ctx:       ctx,
+		logger:    logger,
+		svc:       svc,
 		peersLock: &sync.RWMutex{},
 	}, nil
 }
 
 // Bootstrap starts to listen to new nodes
-func (md *mdnsDiscovery) Bootstrap(handler ssv_discovery.HandleNewPeer) error {
+func (md *mdnsDiscovery) Bootstrap(handler HandleNewPeer) error {
 	// default handler
 	md.svc.RegisterNotifee(&discoveryNotifee{
-		handler: func(e ssv_discovery.PeerEvent) {
+		handler: func(e PeerEvent) {
 			md.peersLock.Lock()
 			defer md.peersLock.Unlock()
 
@@ -87,12 +86,12 @@ func (md *mdnsDiscovery) FindPeers(ctx context.Context, ns string, opt ...discov
 
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
 type discoveryNotifee struct {
-	handler ssv_discovery.HandleNewPeer
+	handler HandleNewPeer
 }
 
 // HandlePeerFound connects to peers discovered via mDNS. Once they're connected,
 // the PubSub system will automatically start interacting with them if they also
 // support PubSub.
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
-	n.handler(ssv_discovery.PeerEvent{AddrInfo: pi})
+	n.handler(PeerEvent{AddrInfo: pi})
 }
