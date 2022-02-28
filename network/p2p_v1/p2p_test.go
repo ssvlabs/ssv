@@ -69,6 +69,5 @@ func defaultMockConfig(logger *zap.Logger, sk *ecdsa.PrivateKey) *Config {
 		OperatorPublicKey: nil,
 		Logger:            logger,
 		Fork:              forksv1.New(),
-		Local:             true,
 	}
 }
