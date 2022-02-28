@@ -22,6 +22,7 @@ import (
 type P2PNetwork interface {
 	Start() error
 	Setup() error
+	Connect(info *peer.AddrInfo) error
 
 	io.Closer
 }

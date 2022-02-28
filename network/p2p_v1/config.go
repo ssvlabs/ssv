@@ -21,7 +21,7 @@ import (
 
 // Config holds the configuration options for p2p network
 type Config struct {
-	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:""`
+	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
 
 	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
 	UDPPort     int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
@@ -42,8 +42,6 @@ type Config struct {
 
 	Logger *zap.Logger
 	Fork   forks.Fork
-	// TODO: remove
-	Local bool
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -78,10 +76,6 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 }
 
 func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
-	if c.Local {
-		opts = append(opts, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
-		return opts, nil
-	}
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {

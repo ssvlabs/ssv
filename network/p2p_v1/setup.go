@@ -95,7 +95,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		return errors.Wrap(err, "could not get ip addr")
 	}
 	var discV5Opts *discovery.DiscV5Options
-	if !n.cfg.Local {
+	if len(n.cfg.Bootnodes) > 0 { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
 			IP:         ipAddr.String(),
 			BindIP:     "", // net.IPv4zero.String()
