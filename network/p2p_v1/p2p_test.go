@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"github.com/bloxapp/ssv/network/commons"
+	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -21,9 +23,11 @@ func TestP2pNetwork_SetupStart(t *testing.T) {
 	sk, err := commons.GenNetworkKey()
 	require.NoError(t, err)
 	cfg := defaultMockConfig(zaptest.NewLogger(t), sk)
-	p := New(ctx, cfg)
+	p := New(ctx, cfg).(*p2pNetwork)
 	require.NoError(t, p.Setup())
+	t.Logf("configured first peer %s", p.host.ID().String())
 	require.NoError(t, p.Start())
+	t.Logf("started first peer %s", p.host.ID().String())
 	defer func() {
 		_ = p.Close()
 	}()
@@ -33,14 +37,21 @@ func TestP2pNetwork_SetupStart(t *testing.T) {
 	cfg2 := defaultMockConfig(zaptest.NewLogger(t), sk2)
 	cfg2.TCPPort++
 	cfg2.UDPPort++
-	p2 := New(ctx, cfg2)
+	p2 := New(ctx, cfg2).(*p2pNetwork)
 	require.NoError(t, p2.Setup())
+	t.Logf("configured second peer %s", p2.host.ID().String())
 	require.NoError(t, p2.Start())
+	t.Logf("started second peer %s", p2.host.ID().String())
 	defer func() {
 		_ = p2.Close()
 	}()
 
-	<-time.After(5 * time.Second)
+	for p.idx.State(p2.host.ID()) != peers.StateReady {
+		<-time.After(time.Second)
+	}
+	for p2.idx.State(p.host.ID()) != peers.StateReady {
+		<-time.After(time.Second)
+	}
 }
 
 func defaultMockConfig(logger *zap.Logger, sk *ecdsa.PrivateKey) *Config {
@@ -57,6 +68,7 @@ func defaultMockConfig(logger *zap.Logger, sk *ecdsa.PrivateKey) *Config {
 		NetworkPrivateKey: sk,
 		OperatorPublicKey: nil,
 		Logger:            logger,
-		//Fork:              nil,
+		Fork:              forksv1.New(),
+		Local:             true,
 	}
 }

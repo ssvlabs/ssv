@@ -42,6 +42,8 @@ type Config struct {
 
 	Logger *zap.Logger
 	Fork   forks.Fork
+	// TODO: remove
+	Local bool
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -76,6 +78,10 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 }
 
 func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
+	if c.Local {
+		opts = append(opts, libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+		return opts, nil
+	}
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {

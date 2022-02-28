@@ -44,6 +44,7 @@ func newDiscV5Service(ctx context.Context, discOpts *Options) (Service, error) {
 		connect: discOpts.Connect,
 		conns:   discOpts.ConnIndex,
 	}
+	dvs.logger.Debug("configuring discv5 discovery")
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
 		return nil, err
 	}
