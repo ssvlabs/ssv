@@ -30,8 +30,8 @@ type psTracer struct {
 	state  uint32
 }
 
-// NewTracer creates an instance of psTracer
-func NewTracer(logger *zap.Logger, withLogging bool) pubsub.EventTracer {
+// newTracer creates an instance of psTracer
+func newTracer(logger *zap.Logger, withLogging bool) pubsub.EventTracer {
 	state := psTraceStateWithReporting
 	if withLogging {
 		state = psTraceStateWithLogging

@@ -32,6 +32,7 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 				// TODO: check if that's even possible as we run this function in a
 				// 	distinct queue thus the same peer can't here at the same time
 				_logger.Debug("could not handshake with peer: already in process")
+				return err
 			}
 			_logger.Warn("could not handshake with peer", zap.Error(err))
 			err := net.ClosePeer(id)

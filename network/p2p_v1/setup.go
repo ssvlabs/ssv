@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
+	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
@@ -49,8 +50,32 @@ func (n *p2pNetwork) SetupHost() error {
 
 // SetupServices configures the required services
 func (n *p2pNetwork) SetupServices() error {
+	if err := n.setupStreamCtrl(); err != nil {
+		return errors.Wrap(err, "could not setup stream controller")
+	}
+	if err := n.setupPeerServices(); err != nil {
+		return errors.Wrap(err, "could not setup peer services")
+	}
+	if err := n.setupDiscovery(); err != nil {
+		return errors.Wrap(err, "could not setup discovery service")
+	}
+	if err := n.setupTopicsCtrl(); err != nil {
+		return errors.Wrap(err, "could not setup topic controller")
+	}
+	if err := n.setupSyncHandlers(); err != nil {
+		return errors.Wrap(err, "could not setup sync handlers")
+	}
+
+	return nil
+}
+
+func (n *p2pNetwork) setupStreamCtrl() error {
 	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.cfg.Fork, n.cfg.RequestTimeout)
 	n.logger.Debug("stream controller is ready")
+	return nil
+}
+
+func (n *p2pNetwork) setupPeerServices() error {
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent()))
 	if err != nil {
 		return errors.Wrap(err, "failed to create ID service")
@@ -70,22 +95,6 @@ func (n *p2pNetwork) SetupServices() error {
 	connHandler := peers.HandleConnections(n.ctx, n.cfg.Logger, handshaker)
 	n.host.Network().Notify(connHandler)
 	n.logger.Debug("connection handler is ready")
-
-	if err := n.setupDiscovery(); err != nil {
-		return errors.Wrap(err, "failed to create discovery service")
-	}
-	n.logger.Debug("discovery is ready")
-
-	if err := n.setupPubsub(); err != nil {
-		return errors.Wrap(err, "failed to create discovery service")
-	}
-	n.logger.Debug("pubsub is ready")
-
-	if err := n.setupSyncHandlers(); err != nil {
-		return errors.Wrap(err, "failed to create discovery service")
-	}
-	n.logger.Debug("sync handlers are ready")
-
 	return nil
 }
 
@@ -123,10 +132,24 @@ func (n *p2pNetwork) setupDiscovery() error {
 	}
 	n.disc = disc
 
+	n.logger.Debug("discovery is ready")
+
 	return nil
 }
 
-func (n *p2pNetwork) setupPubsub() error {
+func (n *p2pNetwork) setupTopicsCtrl() error {
+	ps, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
+		Logger:      n.cfg.Logger,
+		Host:        n.host,
+		TraceOut:    n.cfg.PubSubTraceOut,
+		TraceLog:    n.cfg.PubSubTrace,
+		StaticPeers: nil,
+	})
+	if err != nil {
+		return errors.Wrap(err, "could not setup pubsub")
+	}
+	n.topicsCtrl = topics.NewTopicsController(n.ctx, n.logger, ps, nil)
+	n.logger.Debug("topics controller is ready")
 	return nil
 }
 
