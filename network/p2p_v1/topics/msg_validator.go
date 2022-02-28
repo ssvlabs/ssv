@@ -15,6 +15,9 @@ type MsgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubs
 // newMsgValidator creates a new msg validator
 func newMsgValidator(logger *zap.Logger, fork forks.Fork) MsgValidator {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		if len(msg.Data) == 0 {
+			return pubsub.ValidationReject
+		}
 		nm, err := fork.DecodeNetworkMsg(msg.Data)
 		if err != nil {
 			return invalidResult(p, msg)

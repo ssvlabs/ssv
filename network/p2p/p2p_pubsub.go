@@ -82,9 +82,9 @@ func invalidResult(p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return pubsub.ValidationReject
 }
 
-type MsgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
+type msgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
 
-func (n *p2pNetwork) msgValidator(logger *zap.Logger) MsgValidator {
+func (n *p2pNetwork) msgValidator(logger *zap.Logger) msgValidator {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		nm, err := n.fork.DecodeNetworkMsg(msg.Data)
 		if err != nil {
