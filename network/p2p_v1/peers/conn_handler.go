@@ -13,7 +13,7 @@ import (
 func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Handshaker) *libp2pnetwork.NotifyBundle {
 	logger = logger.With(zap.String("who", "conn_handler"))
 
-	q := tasks.NewExecutionQueue(time.Millisecond * 10)
+	q := tasks.NewExecutionQueue(time.Millisecond*10, tasks.WithoutErrors())
 
 	q.Start()
 	go func() {
@@ -29,6 +29,8 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 		err := handshaker.Handshake(conn)
 		if err != nil {
 			if err == ErrIndexingInProcess {
+				// TODO: check if that's even possible as we run this function in a
+				// 	distinct queue thus the same peer can't here at the same time
 				_logger.Debug("could not handshake with peer: already in process")
 			}
 			_logger.Warn("could not handshake with peer", zap.Error(err))

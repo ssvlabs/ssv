@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	// HandshakeProtocol is the protocol.ID used for handshake
 	HandshakeProtocol = "/ssv/handshake/0.0.1"
 	handshakeTimeout  = 10 * time.Second
 )

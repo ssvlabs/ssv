@@ -37,8 +37,12 @@ func BuildMultiAddress(ipAddr, protocol string, port uint, id peer.ID) (ma.Multi
 	if parsedIP.To4() == nil && parsedIP.To16() == nil {
 		return nil, errors.Errorf("invalid ip address provided: %s", ipAddr)
 	}
-	if parsedIP.To4() != nil {
-		return ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/%s/%d/p2p/%s", ipAddr, protocol, port, id.String()))
+	maStr := fmt.Sprintf("/ip4/%s/%s/%d", ipAddr, protocol, port)
+	if parsedIP.To16() != nil {
+		maStr = fmt.Sprintf("/ip6/%s/%s/%d", ipAddr, protocol, port)
 	}
-	return ma.NewMultiaddr(fmt.Sprintf("/ip6/%s/%s/%d/p2p/%s", ipAddr, protocol, port, id.String()))
+	if len(id) > 0 {
+		maStr = fmt.Sprintf("%s/p2p/%s", maStr, id.String())
+	}
+	return ma.NewMultiaddr(maStr)
 }
