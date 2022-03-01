@@ -101,8 +101,8 @@ func NewLocalDiscV5Net(ctx context.Context, logger *zap.Logger, identities ...No
 		return nil, err
 	}
 	ln.Bootnode = bn
-
-	<-time.After(time.Second)
+	// let the bootnode start
+	<-time.After(time.Millisecond * 500)
 
 	up := make(UDPPortsRand)
 
@@ -119,9 +119,9 @@ func NewLocalDiscV5Net(ctx context.Context, logger *zap.Logger, identities ...No
 		if err = p.Start(); err != nil {
 			return nil, err
 		}
-		<-time.After(time.Millisecond * 100)
 	}
-
+	// wait for node to find other peers
+	// TODO: do it w/o timeout by asking the nodes for found peers
 	<-time.After(time.Millisecond * 500)
 
 	return ln, nil
