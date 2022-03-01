@@ -30,7 +30,6 @@ This document contains the networking specification for `SSV.Network`.
   - [Connection Gating](#connection-gating)
   - [Security](#security)
   - [Forks](#forks)
-  - [Network ID](#network-id)
 
 ## Fundamentals
 
@@ -572,14 +571,17 @@ The full validation of messages is done by other components,
 but will be reported asynchronously and scores will be set
 with application specific scoring upon gossipsub heartbeat.
 
-Other components will report severity for each of the given scores below,
-which then will be converted to actual scores according to predefined scale.
+Other components will report validation results,
+that will be converted to meaningful scores for the publisher of the message.
+Note that the relaying peers won't get a bad score.
 
-The following scores will be reported if applies:
+The following results can be reported:
 
-- Late arrival of valid message - `-10 <= s <= -100`
-- Wrong sequence number - `-25 <= s <= -50`
-- Invalid message signature - `-250 <= s <= -500`
+- `Accept` is the result of a valid message
+- `Ignore` is the result in case the validation should be ignored
+- `RejectLow` is the result for invalid message, with low severity (e.g. late message)
+- `RejectMedium` is the result for invalid message, with medium severity (e.g. wrong height)
+- `RejectHigh` is the result for invalid message, with high severity (e.g. invalid signature)
 
 
 #### Topic Message Validation
