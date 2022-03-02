@@ -57,10 +57,12 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, identities ...NodeKeys
 
 	up := make(UDPPortsRand)
 
+	n := len(identities)
+
 	for i, idn := range identities {
 		cfg := NewConfig(logger.With(zap.String("component", fmt.Sprintf("node-%d", i))),
 			idn.NetKey, &idn.OperatorKey.PublicKey, nil,
-			RandomTCPPort(12001, 12999), up.Next(13001, 13999))
+			RandomTCPPort(12001, 12999), up.Next(13001, 13999), n)
 		p := p2pv1.New(ctx, cfg)
 		err := p.Setup()
 		if err != nil {
@@ -105,12 +107,13 @@ func NewLocalDiscV5Net(ctx context.Context, logger *zap.Logger, identities ...No
 	<-time.After(time.Millisecond * 500)
 
 	up := make(UDPPortsRand)
+	n := len(identities)
 
 	for i, idn := range identities {
 		cfg := NewConfig(logger.With(zap.String("component", fmt.Sprintf("node-%d", i))),
 			idn.NetKey, &idn.OperatorKey.PublicKey, bn,
 			RandomTCPPort(12001, 12999),
-			up.Next(13001, 13999))
+			up.Next(13001, 13999), n)
 		p := p2pv1.New(ctx, cfg)
 		if err = p.Setup(); err != nil {
 			return nil, err
@@ -128,7 +131,7 @@ func NewLocalDiscV5Net(ctx context.Context, logger *zap.Logger, identities ...No
 }
 
 // NewConfig creates a new config for tests
-func NewConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubkey *rsa.PublicKey, bn *Bootnode, tcpPort, udpPort int) *p2pv1.Config {
+func NewConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubkey *rsa.PublicKey, bn *Bootnode, tcpPort, udpPort, maxPeers int) *p2pv1.Config {
 	bns := ""
 	if bn != nil {
 		bns = bn.ENR
@@ -141,7 +144,7 @@ func NewConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubkey 
 		HostDNS:           "",
 		RequestTimeout:    10 * time.Second,
 		MaxBatchResponse:  25,
-		MaxPeers:          10,
+		MaxPeers:          maxPeers,
 		PubSubTrace:       false,
 		NetworkPrivateKey: netPrivKey,
 		OperatorPublicKey: operatorPubkey,
@@ -190,6 +193,7 @@ udpPortLoop:
 }
 
 func random(from, to int) int {
+	// #nosec G404
 	return rand.Intn(to-from) + from
 	//n, err := crand.Int(crand.Reader, big.NewInt(int64(to-from)))
 	//if err != nil {

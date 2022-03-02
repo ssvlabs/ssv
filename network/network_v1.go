@@ -57,8 +57,8 @@ type SyncerV1 interface {
 	Respond(streamID string, results []protocol.SSVMessage) error
 }
 
-// NetworkV1 is a facade interface that provides the entire functionality of the different network interfaces
-type NetworkV1 interface {
+// V1 is a facade interface that provides the entire functionality of the different network interfaces
+type V1 interface {
 	ValidationReporter
 	SubscriberV1
 	BroadcasterV1

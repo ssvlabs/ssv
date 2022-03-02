@@ -59,15 +59,15 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, error) {
 		return nil, err
 	}
 
+	mapper := newMsgIDMapper(time.Minute * 2)
 	psOpts := []pubsub.Option{
-		// TODO: add msg id
-		//pubsub.WithMessageIdFn(n.msgId),
+		pubsub.WithMessageIdFn(MsgID(cfg.Logger, mapper)),
 		// TODO: add subs filter
-		//pubsub.WithSubscriptionFilter(s),
+		//pubsub.WithSubscriptionFilter(cfg.subsFilter),
 		pubsub.WithPeerOutboundQueueSize(outQueueSize),
 		pubsub.WithValidateQueueSize(valQueueSize),
 		pubsub.WithFloodPublish(true),
-		pubsub.WithGossipSubParams(pubsubGossipParam()),
+		pubsub.WithGossipSubParams(gossipSubParam()),
 		// TODO: check
 		//pubsub.WithPeerGater(),
 		//pubsub.WithPeerFilter(),
@@ -97,11 +97,12 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return ps, nil
 }
 
 // creates a custom gossipsub parameter set.
-func pubsubGossipParam() pubsub.GossipSubParams {
+func gossipSubParam() pubsub.GossipSubParams {
 	params := pubsub.DefaultGossipSubParams()
 	params.Dlo = gossipSubDlo
 	params.D = gossipSubD

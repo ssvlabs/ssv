@@ -2,36 +2,45 @@ package topics
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/protocol"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
 )
 
-// MsgValidator represents the interface expected by libp2p
-type MsgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
-
 // newMsgValidator creates a new msg validator
-func newMsgValidator(logger *zap.Logger, fork forks.Fork) MsgValidator {
+func newMsgValidator(logger *zap.Logger, fork forks.Fork) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		logger.Debug("xxx validating topic msg")
 		if len(msg.Data) == 0 {
+			logger.Warn("xxx no data")
 			return pubsub.ValidationReject
 		}
-		nm, err := fork.DecodeNetworkMsg(msg.Data)
-		if err != nil {
-			return invalidResult(p, msg)
+		smsg := &protocol.SSVMessage{}
+		if err := smsg.Decode(msg.Data); err != nil {
+			// can't decode message
+			logger.Warn("xxx can't decode message", zap.Error(err))
+			return pubsub.ValidationReject
 		}
-		// TODO: validate msg
-		logger.Debug("xxx validate topic msg", zap.ByteString("data", nm.SignedMessage.Message.Lambda))
+		validatorPKHex := smsg.MsgID.GetValidatorPK()
+		vpk, err := hex.DecodeString(string(validatorPKHex))
+		if err != nil {
+			// can't decode message
+			logger.Warn("xxx invalid validator public key", zap.Error(err))
+			return pubsub.ValidationReject
+		}
+		topic := fork.ValidatorTopicID(vpk)
+		if topic != *msg.Topic {
+			// wrong topic
+			logger.Warn("xxx wrong topic", zap.String("actual", topic),
+				zap.String("expected", *msg.Topic),
+				zap.ByteString("smsg.MsgID", smsg.MsgID))
+			return pubsub.ValidationReject
+		}
+		logger.Debug("xxx validated topic msg", zap.String("topic", topic),
+			zap.ByteString("smsg.MsgID", smsg.MsgID))
 		return pubsub.ValidationAccept
 	}
-}
-
-// invalidResult determines whether we should act upon an invalid message
-func invalidResult(p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
-	if msg.ReceivedFrom != p {
-		// sending peer does not own the message
-		return pubsub.ValidationIgnore
-	}
-	return pubsub.ValidationReject
 }
