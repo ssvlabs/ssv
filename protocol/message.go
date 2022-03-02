@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// MsgType is the type of the message
 type MsgType uint32
 
 const (
@@ -32,21 +33,31 @@ func (vid ValidatorPK) MessageIDBelongs(msgID MessageID) bool {
 // MessageID is used to identify and route messages to the right validator and DutyRunner
 type MessageID []byte
 
+// NewMessageID creates a new MessageID
 func NewMessageID(pk []byte, role beacon.RoleType) MessageID {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
 	return append(pk, roleByts...)
 }
 
+// GetRoleType extracts the role type from the id
 func (msgID MessageID) GetRoleType() beacon.RoleType {
 	roleByts := msgID[len(msgID)-4:]
 	return beacon.RoleType(binary.LittleEndian.Uint32(roleByts))
 }
 
+// GetValidatorPK extracts the validator public key from the id
+func (msgID MessageID) GetValidatorPK() ValidatorPK {
+	vpk := msgID[:len(msgID)-4]
+	return ValidatorPK(vpk)
+}
+
+// String returns the string representation of the id
 func (msgID MessageID) String() string {
 	return hex.EncodeToString(msgID)
 }
 
+// MessageEncoder encodes or decodes the message
 type MessageEncoder interface {
 	// Encode returns a msg encoded bytes or error
 	Encode() ([]byte, error)
@@ -61,6 +72,7 @@ type SSVMessage struct {
 	Data    []byte
 }
 
+// GetType returns the msg type
 func (msg *SSVMessage) GetType() MsgType {
 	return msg.MsgType
 }

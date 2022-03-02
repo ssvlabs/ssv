@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
@@ -28,9 +29,7 @@ var (
 	errTopicAlreadyExists = errors.New("topic already exists")
 )
 
-// Controller is an interface for managing pubsub topics
-// it encapsulates all the functionality to facilitate subnets on top of
-// pubsub (gossipsub v1.1)
+// Controller is an interface for managing pubsub (gossipsub v1.1) topics
 type Controller interface {
 	// Subscribe subscribes to the given topic
 	Subscribe(topicName string) (<-chan *pubsub.Message, error)
@@ -53,16 +52,18 @@ type topicsCtrl struct {
 	scoreParams func(string) *pubsub.TopicScoreParams
 	// topics holds all the available topics
 	topics *sync.Map
+	fork   forks.Fork
 }
 
 // NewTopicsController creates an instance of Controller
-func NewTopicsController(ctx context.Context, logger *zap.Logger, pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork, pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	return &topicsCtrl{
 		ctx:         ctx,
 		logger:      logger,
 		ps:          pubSub,
 		scoreParams: scoreParams,
 		topics:      &sync.Map{},
+		fork:        fork,
 	}
 }
 
@@ -154,8 +155,9 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
 			}
 		}
 		// TODO: check if we want have topic validators here or elsewhere
-		//msgVal := newMsgValidator(ctrl.logger.With(zap.String("name", name)), nil)
-		//err = ctrl.ps.RegisterTopicValidator(name, msgVal, pubsub.WithValidatorConcurrency(100))
+		//msgVal := newMsgValidator(ctrl.logger.With(zap.String("topic", name)), ctrl.fork)
+		//err = ctrl.ps.RegisterTopicValidator(name, msgVal,
+		//	pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
 		//if err != nil {
 		//	state.close()
 		//	return nil, errors.Wrap(err, "could not register topic validator")
