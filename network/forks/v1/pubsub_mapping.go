@@ -10,7 +10,7 @@ import (
 // TODO: change
 var SubnetCount uint64 = 128
 
-// ValidatorTopicID - genesis version 0
+// ValidatorTopicID returns the topic to use for the given validator
 func (v1 *ForkV1) ValidatorTopicID(pkByts []byte) string {
 	subnet := validatorSubnet(hex.EncodeToString(pkByts), SubnetCount)
 	return topicOf(subnet)

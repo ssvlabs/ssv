@@ -2,7 +2,10 @@ package topics
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/network/forks"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/bloxapp/ssv/protocol"
@@ -12,6 +15,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,15 +23,49 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	nPeers := 4
-	nTopics := 8
+	nPeers := 8
 
-	peers := newPeers(ctx, t, nPeers)
+	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
+		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
+		"9340b7b80983a412bbb42cad6f992e06983d53deb41166ed5978dcbfa3761f347b237ad446d7cb4a4d0a5cca78c2ce8a",
+		"a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b",
+		"a1169bd8407279d9e56b8cefafa37449afd6751f94d1da6bc8145b96d7ad2940184d506971291cd55ae152f9fc65b146",
+		"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
+		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
+		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
+	//shares := createShares(nValidators)
 
+	t.Run("v0 features", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f := forksv1.New()
+		peers := newPeers(ctx, t, nPeers, false, false, f)
+		baseTest(ctx, t, peers, pks, f, 8)
+	})
+
+	t.Run("v1 features", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f := forksv1.New()
+		peers := newPeers(ctx, t, nPeers, true, true, f)
+		baseTest(ctx, t, peers, pks, f, 2)
+	})
+
+}
+
+func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, msgCountTopic int) {
+	nValidators := len(pks)
+	nPeers := len(pks)
+
+	topicName := func(pkhex string) string {
+		pk, err := hex.DecodeString(pkhex)
+		if err != nil {
+			return "invalid"
+		}
+		return f.ValidatorTopicID(pk)
+	}
 	subTopic := func(p *P, i int, potentialErrs ...error) {
-		tname := topicName(i)
+		tname := topicName(pks[i])
 		in, err := p.tm.Subscribe(tname)
 		if len(potentialErrs) == 0 {
 			require.NoError(t, err)
@@ -51,24 +89,31 @@ func TestTopicManager(t *testing.T) {
 	}
 
 	// listen to topics
-	for i := 0; i < nTopics; i++ {
+	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
-			go subTopic(p, i+1)
+			go subTopic(p, i)
 			// simulate concurrency, by trying to subscribe twice
 			<-time.After(time.Millisecond)
-			go subTopic(p, i+1, ErrInProcess, errTopicAlreadyExists)
+			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
 		}
 	}
 
 	// let the peers join topics
-	<-time.After(time.Second * 5)
+	<-time.After(time.Second * 4)
 
 	// publish some messages
-	for i := 0; i < nTopics; i++ {
-		for _, p := range peers {
-			go func(p *P, i int) {
-				require.NoError(t, p.tm.Broadcast(topicName(i+1), dummyMsg(i), time.Second*3))
-			}(p, i)
+	for i := 0; i < nValidators; i++ {
+		for j, p := range peers {
+			go func(p *P, pk string, pi int) {
+				msg, err := dummyMsg(pk, 1)
+				if pi%2 == 0 { // ensuring that 2 messages will be created across peers
+					msg, err = dummyMsg(pk, 2)
+				}
+				require.NoError(t, err)
+				raw, err := msg.Encode()
+				require.NoError(t, err)
+				require.NoError(t, p.tm.Broadcast(topicName(pk), raw, time.Second*5))
+			}(p, pks[i], j)
 		}
 	}
 
@@ -77,38 +122,33 @@ func TestTopicManager(t *testing.T) {
 
 	// check number of topics
 	for _, p := range peers {
-		require.Len(t, p.tm.Topics(), nTopics)
+		require.Len(t, p.tm.Topics(), nValidators)
 	}
 
 	// check number of peers and messages
-	for i := 0; i < nTopics; i++ {
+	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
-			peers, err := p.tm.Peers(topicName(i + 1))
+			pk := pks[i]
+			peers, err := p.tm.Peers(topicName(pk))
 			require.NoError(t, err)
 			require.Len(t, peers, nPeers-1)
-			c := p.getCount(topicName(i + 1))
-			//t.Logf("peer %d got %d messages for %s", j, c, topicName(i))
-			require.GreaterOrEqual(t, float64(c), float64(nPeers)*0.25) // TODO: set ratio to much higher
-			require.Less(t, float64(c), float64(nPeers)*1.2)
+			c := p.getCount(topicName(pk))
+			require.Equal(t, msgCountTopic, c) // expecting only 2 messages, as the rest were filtered by duplicated id
 		}
 	}
 
 	// unsubscribe
 	var wg sync.WaitGroup
-	for i := 0; i < nTopics; i++ {
+	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
 			wg.Add(1)
-			go func(p *P, i int) {
+			go func(p *P, pk string) {
 				defer wg.Done()
-				require.NoError(t, p.tm.Unsubscribe(topicName(i)))
-			}(p, i)
+				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
+			}(p, pks[i])
 		}
 	}
 	wg.Wait()
-}
-
-func topicName(i int) string {
-	return fmt.Sprintf("ssv.subnet.%d", i)
 }
 
 type P struct {
@@ -145,10 +185,10 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 	p.msgs[t] = msgs
 }
 
-func newPeers(ctx context.Context, t *testing.T, n int) []*P {
+func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, t)
+		peers[i] = newPeer(ctx, t, msgValidator, msgID, fork)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -167,24 +207,25 @@ func newPeers(ctx context.Context, t *testing.T, n int) []*P {
 	return peers
 }
 
-func newPeer(ctx context.Context, t *testing.T) *P {
+func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
 	host, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), host))
 
-	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
-	ps, err := NewPubsub(ctx, &PububConfig{
-		//Logger:   zaptest.NewLogger(t),
-		Logger:   logger,
-		Host:     host,
-		TraceOut: "",
-		TraceLog: false,
+	logger := zaptest.NewLogger(t)
+	//logger := zap.L()
+	psBundle, err := NewPubsub(ctx, &PububConfig{
+		Logger:          logger,
+		Host:            host,
+		TraceLog:        false,
+		UseMsgValidator: msgValidator,
+		UseMsgID:        msgID,
+		Fork:            fork,
 	})
 	require.NoError(t, err)
-
-	tm := NewTopicsController(ctx, logger, &forksv1.ForkV1{}, ps, nil)
+	ps := psBundle.PS
+	tm := psBundle.TopicsCtrl
 
 	p := &P{
 		host:     host,
@@ -201,13 +242,40 @@ func newPeer(ctx context.Context, t *testing.T) *P {
 	return p
 }
 
-func dummyMsg(i int) []byte {
-	msgData := fmt.Sprintf(`{"message":{"type":3,"round":1,"identifier":"OTFiZGZjOWQxYzU4NzZkYTEwY...","height":%d,"value":"mB0aAAAAAAA4AAAAAAAAADpTC1djq..."},"signature":"jrB0+Z9zyzzVaUpDMTlCt6Om9mj...","signer_ids":[2,3,4]}`, i)
-	msg := protocol.SSVMessage{
-		MsgType: protocol.SSVConsensusMsgType,
-		MsgID:   []byte("OTFiZGZjOWQxYzU4NzZkYTEwY"),
-		Data:    []byte(msgData),
+func dummyMsg(pkHex string, height int) (*protocol.SSVMessage, error) {
+	pk, err := hex.DecodeString(pkHex)
+	if err != nil {
+		return nil, err
 	}
-	raw, _ := msg.Encode()
-	return raw
+	id := protocol.NewIdentifier(pk, beacon.RoleTypeAttester)
+	msgData := fmt.Sprintf(`{
+	  "message": {
+		"type": 3,
+		"round": 2,
+		"identifier": "%s",
+		"height": %d,
+		"value": "bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="
+	  },
+	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
+	  "signer_ids": [1,3,4]
+	}`, id, height)
+	return &protocol.SSVMessage{
+		MsgType: protocol.SSVConsensusMsgType,
+		ID:      id,
+		Data:    []byte(msgData),
+	}, nil
 }
+
+//
+//func createShares(n int) []*bls.SecretKey {
+//	threshold.Init()
+//
+//	var res []*bls.SecretKey
+//	for i := 0; i < n; i++ {
+//		sk := bls.SecretKey{}
+//		sk.SetByCSPRNG()
+//		res = append(res, &sk)
+//		fmt.Printf("\"%s\",", sk.GetPublicKey().SerializeToHexStr())
+//	}
+//	return res
+//}

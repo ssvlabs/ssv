@@ -10,6 +10,8 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
+	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"go.uber.org/zap"
 	"math/rand"
@@ -200,4 +202,17 @@ func random(from, to int) int {
 	//	return 0
 	//}
 	//return int(n.Int64()) + from
+}
+
+// CreateShares creates n shares
+func CreateShares(n int) []*bls.SecretKey {
+	threshold.Init()
+
+	var res []*bls.SecretKey
+	for i := 0; i < n; i++ {
+		sk := bls.SecretKey{}
+		sk.SetByCSPRNG()
+		res = append(res, &sk)
+	}
+	return res
 }
