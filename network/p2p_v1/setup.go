@@ -140,17 +140,19 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupTopicsCtrl() error {
-	ps, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
-		Logger:      n.cfg.Logger,
-		Host:        n.host,
-		TraceOut:    n.cfg.PubSubTraceOut,
-		TraceLog:    n.cfg.PubSubTrace,
-		StaticPeers: nil,
+	psBundle, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
+		Logger:          n.cfg.Logger,
+		Host:            n.host,
+		TraceLog:        n.cfg.PubSubTrace,
+		StaticPeers:     nil,
+		Fork:            &forksv1.ForkV1{},
+		UseMsgID:        true,
+		UseMsgValidator: true,
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
-	n.topicsCtrl = topics.NewTopicsController(n.ctx, n.logger, &forksv1.ForkV1{}, ps, nil)
+	n.topicsCtrl = psBundle.TopicsCtrl
 	n.logger.Debug("topics controller is ready")
 	return nil
 }

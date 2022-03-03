@@ -47,11 +47,11 @@ type BroadcasterV1 interface {
 // SyncerV1 is the interface for syncing messages
 type SyncerV1 interface {
 	// LastState fetches last state from other peers
-	LastState(mid protocol.MessageID) ([]protocol.SSVMessage, error)
+	LastState(mid protocol.Identifier) ([]protocol.SSVMessage, error)
 	// GetHistory sync the given range from other peers
-	GetHistory(mid protocol.MessageID, from, to uint64) ([]protocol.SSVMessage, error)
+	GetHistory(mid protocol.Identifier, from, to uint64) ([]protocol.SSVMessage, error)
 	// LastChangeRound fetches last change round message from other peers
-	LastChangeRound(mid protocol.MessageID) ([]protocol.SSVMessage, error)
+	LastChangeRound(mid protocol.Identifier) ([]protocol.SSVMessage, error)
 	// Respond will respond on some stream with the given results
 	// TODO: consider using a different approach or encapsulate the stream id
 	Respond(streamID string, results []protocol.SSVMessage) error

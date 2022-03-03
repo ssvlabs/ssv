@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
@@ -13,6 +14,8 @@ import (
 
 const (
 	bufSize = 32
+	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to
+	subscriptionRequestLimit = 2128
 )
 
 var (
@@ -29,8 +32,9 @@ var (
 	errTopicAlreadyExists = errors.New("topic already exists")
 )
 
-// Controller is an interface for managing pubsub (gossipsub v1.1) topics
+// Controller is an interface for managing pubsub topics
 type Controller interface {
+	WithPubsub(ps *pubsub.PubSub)
 	// Subscribe subscribes to the given topic
 	Subscribe(topicName string) (<-chan *pubsub.Message, error)
 	// Unsubscribe unsubscribes from the given topic
@@ -41,6 +45,9 @@ type Controller interface {
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+	// SubscriptionFilter allows controlling what topics the node will subscribe to
+	// otherwise it might subscribe to irrelevant topics that were suggested by other peers
+	pubsub.SubscriptionFilter
 }
 
 // topicsCtrl implements Controller
@@ -51,20 +58,28 @@ type topicsCtrl struct {
 	// scoreParams is a function that helps to set scoring params on topics
 	scoreParams func(string) *pubsub.TopicScoreParams
 	// topics holds all the available topics
-	topics *sync.Map
-	fork   forks.Fork
+	topics           *sync.Map
+	fork             forks.Fork
+	msgValidatorFunc MsgValidatorFunc
 }
 
 // NewTopicsController creates an instance of Controller
-func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork, pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork, msgValidatorFunc MsgValidatorFunc,
+	pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	return &topicsCtrl{
-		ctx:         ctx,
-		logger:      logger,
-		ps:          pubSub,
-		scoreParams: scoreParams,
-		topics:      &sync.Map{},
-		fork:        fork,
+		ctx:              ctx,
+		logger:           logger,
+		ps:               pubSub,
+		scoreParams:      scoreParams,
+		topics:           &sync.Map{},
+		fork:             fork,
+		msgValidatorFunc: msgValidatorFunc,
 	}
+}
+
+// WithPubsub allows injecting a pubsub router
+func (ctrl *topicsCtrl) WithPubsub(ps *pubsub.PubSub) {
+	ctrl.ps = ps
 }
 
 // Peers returns the peers subscribed to the given topic
@@ -120,6 +135,25 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 	return topic.topic.Publish(ctx, data)
 }
 
+// CanSubscribe returns true if the topic is of interest and we can subscribe to it
+func (ctrl *topicsCtrl) CanSubscribe(topic string) bool {
+	if _, ok := ctrl.topics.Load(topic); ok {
+		return true
+	}
+	return false
+}
+
+// FilterIncomingSubscriptions is invoked for all RPCs containing subscription notifications.
+// It should filter only the subscriptions of interest and my return an error if (for instance)
+// there are too many subscriptions.
+func (ctrl *topicsCtrl) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_SubOpts) ([]*ps_pb.RPC_SubOpts, error) {
+	if len(subs) > subscriptionRequestLimit {
+		return nil, pubsub.ErrTooManySubscriptions
+	}
+
+	return pubsub.FilterSubscriptions(subs, ctrl.CanSubscribe), nil
+}
+
 // getTopicState returns the topic wrapper if exist
 func (ctrl *topicsCtrl) getTopicState(name string) *topicState {
 	t, ok := ctrl.topics.Load(name)
@@ -154,14 +188,16 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
 				return nil, errors.Wrap(err, "could not set score params")
 			}
 		}
-		// TODO: check if we want have topic validators here or elsewhere
-		//msgVal := newMsgValidator(ctrl.logger.With(zap.String("topic", name)), ctrl.fork)
-		//err = ctrl.ps.RegisterTopicValidator(name, msgVal,
-		//	pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
-		//if err != nil {
-		//	state.close()
-		//	return nil, errors.Wrap(err, "could not register topic validator")
-		//}
+		//msgVal := ctrl.msgValidatorFactory.New(ctrl.logger.With(zap.String("topic", name)), ctrl.fork)
+		if ctrl.msgValidatorFunc != nil {
+			err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFunc,
+				pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
+			// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
+			if err != nil {
+				state.close()
+				return nil, errors.Wrap(err, "could not register topic validator")
+			}
+		}
 		state.join(t)
 		ctrl.topics.Store(name, state)
 	default:

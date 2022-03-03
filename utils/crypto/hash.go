@@ -6,12 +6,13 @@ import (
 	"sync"
 )
 
+// sha256Pool holds a pool of hash.Hash
+// it should be used to perform sha256 hash
 var sha256Pool = sync.Pool{New: func() interface{} {
 	return sha256.New()
 }}
 
-// Sha256Hash does a sha256 on the given input
-// it uses sync.Pool to optimize performance
+// Sha256Hash does sha256 on the given input
 func Sha256Hash(data []byte) [32]byte {
 	h, ok := sha256Pool.Get().(hash.Hash)
 	if !ok {

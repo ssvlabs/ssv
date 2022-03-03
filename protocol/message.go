@@ -25,35 +25,35 @@ const (
 type ValidatorPK []byte
 
 // MessageIDBelongs returns true if message ID belongs to validator
-func (vid ValidatorPK) MessageIDBelongs(msgID MessageID) bool {
+func (vid ValidatorPK) MessageIDBelongs(msgID Identifier) bool {
 	toMatch := msgID[:len(vid)]
 	return bytes.Equal(vid, toMatch)
 }
 
-// MessageID is used to identify and route messages to the right validator and DutyRunner
-type MessageID []byte
+// Identifier is used to identify and route messages to the right validator and DutyRunner
+type Identifier []byte
 
-// NewMessageID creates a new MessageID
-func NewMessageID(pk []byte, role beacon.RoleType) MessageID {
+// NewIdentifier creates a new Identifier
+func NewIdentifier(pk []byte, role beacon.RoleType) Identifier {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
 	return append(pk, roleByts...)
 }
 
 // GetRoleType extracts the role type from the id
-func (msgID MessageID) GetRoleType() beacon.RoleType {
+func (msgID Identifier) GetRoleType() beacon.RoleType {
 	roleByts := msgID[len(msgID)-4:]
 	return beacon.RoleType(binary.LittleEndian.Uint32(roleByts))
 }
 
 // GetValidatorPK extracts the validator public key from the id
-func (msgID MessageID) GetValidatorPK() ValidatorPK {
+func (msgID Identifier) GetValidatorPK() ValidatorPK {
 	vpk := msgID[:len(msgID)-4]
 	return ValidatorPK(vpk)
 }
 
 // String returns the string representation of the id
-func (msgID MessageID) String() string {
+func (msgID Identifier) String() string {
 	return hex.EncodeToString(msgID)
 }
 
@@ -68,7 +68,7 @@ type MessageEncoder interface {
 // SSVMessage is the main message passed within the SSV network, it can contain different types of messages (QBTF, Sync, etc.)
 type SSVMessage struct {
 	MsgType MsgType
-	MsgID   MessageID
+	ID      Identifier
 	Data    []byte
 }
 
@@ -78,8 +78,8 @@ func (msg *SSVMessage) GetType() MsgType {
 }
 
 // GetID returns a unique msg ID that is used to identify to which validator should the message be sent for processing
-func (msg *SSVMessage) GetID() MessageID {
-	return msg.MsgID
+func (msg *SSVMessage) GetID() Identifier {
+	return msg.ID
 }
 
 // GetData returns message Data as byte slice
@@ -97,8 +97,8 @@ func (msg *SSVMessage) Encode() ([]byte, error) {
 	}
 	m["type"] = hex.EncodeToString(d)
 
-	if msg.MsgID != nil {
-		m["id"] = hex.EncodeToString(msg.MsgID)
+	if msg.ID != nil {
+		m["id"] = hex.EncodeToString(msg.ID)
 	}
 
 	if msg.Data != nil {
@@ -131,7 +131,7 @@ func (msg *SSVMessage) Decode(data []byte) error {
 		if err != nil {
 			return errors.Wrap(err, "msg id decode string failed")
 		}
-		msg.MsgID = d
+		msg.ID = d
 	}
 
 	if val, ok := m["Data"]; ok {
