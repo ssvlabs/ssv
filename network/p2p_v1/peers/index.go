@@ -27,8 +27,8 @@ var (
 
 // NodeScore is a wrapping objet for scores
 type NodeScore struct {
-	name  string
-	value float64
+	Name  string
+	Value float64
 }
 
 // NodeState is the state of the node w.r.t to the Index

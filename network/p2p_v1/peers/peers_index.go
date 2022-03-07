@@ -55,7 +55,7 @@ func (pi *peersIndex) IsBad(id peer.ID) bool {
 		return false
 	}
 	for _, score := range scores {
-		if score.value < threshold {
+		if score.Value < threshold {
 			logger.Debug("bad peer (low score)")
 			return true
 		}
@@ -124,7 +124,7 @@ func (pi *peersIndex) Score(id peer.ID, scores ...NodeScore) error {
 		_ = tx.Close()
 	}()
 	for _, score := range scores {
-		tx.Put(formatScoreKey(score.name), score.value)
+		tx.Put(formatScoreKey(score.Name), score.Value)
 	}
 	if err := tx.Commit(); err != nil {
 		return tx.Rollback()

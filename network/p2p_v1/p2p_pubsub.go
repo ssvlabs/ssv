@@ -1,0 +1,96 @@
+package p2pv1
+
+import (
+	"context"
+	"github.com/bloxapp/ssv/network"
+	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	"github.com/bloxapp/ssv/network/p2p_v1/topics"
+	"github.com/bloxapp/ssv/protocol"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"time"
+)
+
+func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
+	raw, err := message.Encode()
+	if err != nil {
+		return errors.Wrap(err, "could not decode message")
+	}
+	vpk := message.GetID().GetValidatorPK()
+	topic := n.cfg.Fork.ValidatorTopicID(vpk)
+	if topic == forksv1.UnknownSubnet {
+		return errors.New("unknown topic")
+	}
+	if err := n.topicsCtrl.Broadcast(topic, raw, time.Second*5); err != nil { // TODO: extract interval to variable
+		return errors.Wrap(err, "could not broadcast message")
+	}
+	return nil
+}
+
+// Subscribe subscribes to validator subnet
+func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
+	topic := n.cfg.Fork.ValidatorTopicID(pk)
+	if topic == forksv1.UnknownSubnet {
+		return errors.New("unknown topic")
+	}
+	ctx, cancel := context.WithTimeout(n.ctx, time.Second*10)
+	defer cancel()
+	logger := n.logger.With(zap.String("topic", topic))
+	for ctx.Err() == nil {
+		cn, err := n.topicsCtrl.Subscribe(topic)
+		if err != nil {
+			if err == topics.ErrInProcess {
+				logger.Debug("topic in process")
+				time.Sleep(time.Second)
+				continue
+			}
+			return err
+		}
+		if cn == nil { // already registered
+			logger.Debug("already registered on topic")
+			return nil
+		}
+		go func() {
+			n.handleIncomingMessages(ctx, cn)
+			if err := n.Unsubscribe(pk); err != nil {
+				logger.Warn("could not unsubscribe from topic")
+				return
+			}
+			logger.Debug("unsubscribed from topic")
+		}()
+		break
+	}
+	return nil
+}
+
+// Unsubscribe unsubscribes from the validator subnet
+func (n *p2pNetwork) Unsubscribe(pk protocol.ValidatorPK) error {
+	topic := n.cfg.Fork.ValidatorTopicID(pk)
+	if topic == forksv1.UnknownSubnet {
+		return errors.New("unknown topic")
+	}
+	return n.topicsCtrl.Unsubscribe(topic)
+}
+
+// UseMessageRouter registers a message router to handle incoming messages
+func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
+	n.msgRouter = router
+}
+
+// handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
+func (n *p2pNetwork) handleIncomingMessages(ctx context.Context, in <-chan *pubsub.Message) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-in:
+			var parsed protocol.SSVMessage
+			if err := parsed.Decode(msg.Data); err != nil {
+				n.logger.Warn("could not decode message", zap.Error(err))
+				// TODO: handle..
+			}
+			n.msgRouter.Route(parsed)
+		}
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
@@ -27,7 +28,7 @@ type NodeKeys struct {
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	Nodes    []p2pv1.P2PNetwork
+	Nodes    []network.V1
 	Bootnode *Bootnode
 }
 
