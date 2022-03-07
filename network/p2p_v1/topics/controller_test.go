@@ -15,7 +15,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -213,8 +212,8 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	require.NoError(t, err)
 	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), host))
 
-	logger := zaptest.NewLogger(t)
-	//logger := zap.L()
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
 	psBundle, err := NewPubsub(ctx, &PububConfig{
 		Logger:          logger,
 		Host:            host,

@@ -24,7 +24,7 @@ func TestSyncStream(t *testing.T) {
 
 	hosts[1].SetStreamHandler(prot, func(stream core.Stream) {
 		defer wg.Done()
-		s := NewTimeoutStream(stream)
+		s := NewStream(stream)
 		defer s.Close()
 		<-time.After(timeout * 3)
 		//require.Error(t, s.WriteWithTimeout([]byte("xxx"), timeout))
@@ -32,7 +32,7 @@ func TestSyncStream(t *testing.T) {
 
 	hosts[2].SetStreamHandler(prot, func(stream core.Stream) {
 		defer wg.Done()
-		s := NewTimeoutStream(stream)
+		s := NewStream(stream)
 		defer s.Close()
 		require.NoError(t, s.WriteWithTimeout([]byte("xxx"), timeout))
 	})
@@ -43,7 +43,7 @@ func TestSyncStream(t *testing.T) {
 		defer cancel()
 		s, err := hosts[0].NewStream(ctx, hosts[1].ID(), prot)
 		require.NoError(t, err)
-		strm := NewTimeoutStream(s)
+		strm := NewStream(s)
 		defer strm.Close()
 		byts, err := strm.ReadWithTimeout(timeout)
 		require.EqualError(t, err, "i/o deadline reached")
@@ -56,7 +56,7 @@ func TestSyncStream(t *testing.T) {
 		defer cancel()
 		s, err := hosts[0].NewStream(ctx, hosts[2].ID(), prot)
 		require.NoError(t, err)
-		strm := NewTimeoutStream(s)
+		strm := NewStream(s)
 		defer strm.Close()
 		byts, err := strm.ReadWithTimeout(timeout)
 		require.NoError(t, err)

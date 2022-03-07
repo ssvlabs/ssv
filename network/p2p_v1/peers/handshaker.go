@@ -4,13 +4,11 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"go.uber.org/zap"
-	"time"
 )
 
 const (
 	// HandshakeProtocol is the protocol.ID used for handshake
 	HandshakeProtocol = "/ssv/handshake/0.0.1"
-	handshakeTimeout  = 10 * time.Second
 )
 
 // Handshaker is the interface for handshaking with peers
@@ -41,21 +39,15 @@ func NewHandshaker(logger *zap.Logger, streams streams.StreamController, idx Ide
 // TODO: extract streams logic into streams
 func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
-		s := streams.NewTimeoutStream(stream)
-		defer func() {
-			if err := s.Close(); err != nil {
-				h.logger.Warn("could not close connection", zap.Error(err))
-			}
-		}()
-
-		req, err := s.ReadWithTimeout(handshakeTimeout)
+		req, res, cloze, err := h.streams.HandleStream(stream)
+		defer cloze()
 		if err != nil {
 			h.logger.Warn("could not read identity msg", zap.Error(err))
 			return
 		}
 		identity, err := DecodeIdentity(req)
 		if err != nil {
-			h.logger.Warn("could not unmarshal identity msg", zap.Error(err))
+			h.logger.Warn("could not decode identity msg", zap.Error(err))
 			return
 		}
 		h.logger.Debug("handling handshake request from peer", zap.Any("identity", identity))
@@ -72,7 +64,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			return
 		}
 
-		if err := s.WriteWithTimeout(self, handshakeTimeout); err != nil {
+		if err := res(self); err != nil {
 			h.logger.Warn("could not send self identity", zap.Error(err))
 			return
 		}
@@ -96,7 +88,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	pid := conn.RemotePeer()
 	//h.logger.Debug("handshaking peer", zap.String("id", pid.String()))
-	resBytes, err := h.streams.RequestBytes(pid, HandshakeProtocol, data, handshakeTimeout)
+	resBytes, err := h.streams.Request(pid, HandshakeProtocol, data)
 	if err != nil {
 		return err
 	}
