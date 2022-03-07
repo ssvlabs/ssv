@@ -67,10 +67,13 @@ func (ts *topicState) joining() {
 }
 
 // subscribing set state to topicStateSubscribing
-func (ts *topicState) subscribing() {
-	ts.sub = nil
-	ts.cancelSub = nil
-	ts.setState(topicStateSubscribing)
+func (ts *topicState) subscribing() bool {
+	if ts.setStateCond(topicStateJoined, topicStateSubscribing) {
+		ts.sub = nil
+		ts.cancelSub = nil
+		return true
+	}
+	return false
 }
 
 // subscribe updates state to subscribed

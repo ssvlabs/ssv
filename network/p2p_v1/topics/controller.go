@@ -215,7 +215,9 @@ func (ctrl *topicsCtrl) subscribe(name string) (<-chan *pubsub.Message, error) {
 	case topicStateSubscribing:
 		return nil, ErrInProcess
 	case topicStateJoined:
-		state.subscribing()
+		if !state.subscribing() {
+			return nil, ErrInProcess
+		}
 		sub, err := state.topic.Subscribe()
 		if err == pubsub.ErrTopicClosed {
 			// rejoin a topic in case it was closed, and try to subscribe again
