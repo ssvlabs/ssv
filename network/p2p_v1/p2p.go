@@ -2,54 +2,46 @@ package p2pv1
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
-	"io"
 	"time"
 )
 
-// P2PNetwork is the interface for p2p network
-// TODO: extend network.Network
-type P2PNetwork interface {
-	Start() error
-	Setup() error
-	Connect(info *peer.AddrInfo) error
-
-	io.Closer
-}
-
+// p2pNetwork implements network.V1
 type p2pNetwork struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	logger     *zap.Logger
-	cfg        *Config
-	host       host.Host
-	streamCtrl streams.StreamController
-	ids        *identify.IDService
-	idx        peers.Index
-	disc       discovery.Service
-	topicsCtrl topics.Controller
+	ctx         context.Context
+	cancel      context.CancelFunc
+	logger      *zap.Logger
+	cfg         *Config
+	host        host.Host
+	streamCtrl  streams.StreamController
+	ids         *identify.IDService
+	idx         peers.Index
+	disc        discovery.Service
+	topicsCtrl  topics.Controller
+	msgRouter   network.MessageRouter
+	msgResolver topics.MsgPeersResolver
 }
 
 // New creates a new p2p network
-func New(pctx context.Context, cfg *Config) P2PNetwork {
+func New(pctx context.Context, cfg *Config) network.V1 {
 	ctx, cancel := context.WithCancel(pctx)
-	p := &p2pNetwork{
-		ctx:    ctx,
-		cancel: cancel,
-		logger: cfg.Logger.With(zap.String("who", "p2pNetwork")),
-		cfg:    cfg,
+	return &p2pNetwork{
+		ctx:       ctx,
+		cancel:    cancel,
+		logger:    cfg.Logger.With(zap.String("who", "p2pNetwork")),
+		cfg:       cfg,
+		msgRouter: cfg.Router,
 	}
-	return p
 }
 
 // Close implements io.Closer
@@ -79,12 +71,22 @@ func (n *p2pNetwork) Start() error {
 	return nil
 }
 
-// Start starts the required services
+// startDiscovery starts the required services
+// it will try to bootstrap discovery service, and inject a connect function
+// which will ignore the peer if it is connected or recently failed to connect
 func (n *p2pNetwork) startDiscovery() {
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
 			defer cancel()
+			cntd := n.idx.Connectedness(e.AddrInfo.ID)
+			switch cntd {
+			case libp2pnetwork.Connected:
+				fallthrough
+			case libp2pnetwork.CannotConnect: // recently failed to connect
+				return
+			default:
+			}
 			if err := n.host.Connect(ctx, e.AddrInfo); err != nil {
 				n.logger.Warn("could not connect to peer", zap.Any("peer", e), zap.Error(err))
 				return
@@ -95,13 +97,4 @@ func (n *p2pNetwork) startDiscovery() {
 	if err != nil {
 		n.logger.Panic("could not setup discovery", zap.Error(err))
 	}
-}
-
-func (n *p2pNetwork) Connect(info *peer.AddrInfo) error {
-	if info == nil {
-		return errors.New("empty info")
-	}
-	ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
-	defer cancel()
-	return n.host.Connect(ctx, *info)
 }

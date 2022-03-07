@@ -6,7 +6,7 @@ import (
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
-	// Route routes the given message
+	// Route routes the given message, this function MUST NOT block
 	Route(message protocol.SSVMessage)
 }
 
@@ -70,4 +70,6 @@ type V1 interface {
 	SubscriberV1
 	BroadcasterV1
 	SyncerV1
+	Start() error
+	Setup() error
 }

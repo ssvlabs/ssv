@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
@@ -41,6 +42,7 @@ type Config struct {
 
 	Logger *zap.Logger
 	Fork   forks.Fork
+	Router network.MessageRouter
 }
 
 // Libp2pOptions creates options list for the libp2p host
