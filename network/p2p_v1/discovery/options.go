@@ -56,7 +56,7 @@ func (opts *DiscV5Options) Validate() error {
 }
 
 // IPs returns the external ip and bind ip
-func (opts *DiscV5Options) IPs() (net.IP, net.IP) {
+func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 	ipAddr := net.ParseIP(opts.IP)
 	if ipAddr == nil {
 		ipAddr = net.ParseIP(commons.DefaultIP)
@@ -69,7 +69,11 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP) {
 			bindIP = net.IPv6zero
 		}
 	}
-	return ipAddr, bindIP
+	n := "udp6"
+	if bindIP.To4() != nil {
+		n = "udp4"
+	}
+	return ipAddr, bindIP, n
 }
 
 // DiscV5Cfg creates discv5 config from the options

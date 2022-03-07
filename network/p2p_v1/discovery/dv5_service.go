@@ -164,9 +164,9 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		return errors.Wrap(err, "invalid opts")
 	}
 
-	ipAddr, bindIP := opts.IPs()
+	ipAddr, bindIP, n := opts.IPs()
 
-	udpConn, err := newUDPListener(bindIP, opts.Port)
+	udpConn, err := newUDPListener(bindIP, opts.Port, n)
 	if err != nil {
 		return errors.Wrap(err, "could not listen UDP")
 	}
@@ -261,12 +261,12 @@ func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Nod
 }
 
 // newUDPListener creates a udp server
-func newUDPListener(bindIP net.IP, port int) (*net.UDPConn, error) {
+func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
 		Port: port,
 	}
-	conn, err := net.ListenUDP("udp", udpAddr)
+	conn, err := net.ListenUDP(network, udpAddr)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not listen to UDP")
 	}
