@@ -774,9 +774,10 @@ interface for more info.
 
 ### Security
 
-As mentioned above, `gossipsub v1.1` comes with a set of tools to protect the network from bad peers.
+As mentioned above, `gossipsub v1.1` comes with a set of tools for protecting the network from bad peers,
+e.g. msg validation will protect from malicious messages, while scoring will cause the bad peers to get pruned. \
 [Gossipsub v1.1 Evaluation Report](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
-describes some potential attacks and how they are mitigated.  
+describes some potential attacks and how they are mitigated.
 
 Connection gating protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min).
 it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
@@ -785,6 +786,8 @@ In addition, the discovery system is naturally a good candidate for security pro
 DiscV5 specs specifies potential vulnerabilities in their system and how they were (or will be) mitigated,
 see [DiscV5 Rationale > security-goals](https://github.com/ethereum/devp2p/blob/master/discv5/discv5-rationale.md#security-goals).
 The major ones includes routing table pollution, traffic redirection, spamming or replayed messages.
+Peers with bad scores will be filtered during discovery, ensuring that attacking peers are
+known and ignored all over the system.
 
 
 
@@ -809,7 +812,7 @@ Validator public key is used as the topic name:
 `bloxstaking.ssv.<hex(validator-public-key)>`
 
 
-**message encoding/decoding**
+**message encoding**
 
 JSON is used for encoding/decoding of messages.
 
@@ -830,10 +833,11 @@ Validator public key hash is used to determine the validator's subnet which is t
 `bloxstaking.ssv.<hash(validatiorPubKey) % num_of_subnets>`
 
 
-**message encoding/decoding**
+**message encoding**
 
-**TBD** check regards other encodings such as `SSZ` which is aligned with Ethereum, 
-or `protobuf` that should show faster results than JSON.
+[SSZ](https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/simple-serialize.md) will be used to 
+encode/decode network messages.
+It is efficient with traversing on fields, and is the standard encoding in ETH 2.0.
 
 
 **user agent**
@@ -844,18 +848,3 @@ A short and simple user agent is kept for acheiving libp2p interoperability.
 
 `SSV-Node/v0.x.x`
 
-
-### Network ID
-
-**TBD**
-
-Network ID is a `32byte` key, that is used to distinguish between other networks (ssv and others).
-Peers from other public/private libp2p networks (with different network ID) won't be able to read or write messages in the network,
-meaning that the key to be known and used by all network members.
-
-It is done with [libp2p's private network](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
-which encrypts/decrypts all traffic with the corresponding key,
-regardless of the regular transport security protocol ([go-libp2p-noise](https://github.com/libp2p/go-libp2p-noise)).
-
-**NOTE** discovery communication (UDP) won't use the network ID,
-and it's not needed as unknown peers will be filtered.
