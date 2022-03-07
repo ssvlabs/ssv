@@ -60,9 +60,9 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 			n.logger.Error("could not close stream", zap.Error(err))
 		}
 	}()
-	metricsStreamRequests.Inc()
-	metricsStreamRequestsActive.Inc()
-	defer metricsStreamRequestsActive.Dec()
+	metricsStreamRequests.WithLabelValues(string(protocol)).Inc()
+	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
+	defer metricsStreamRequestsActive.WithLabelValues(string(protocol)).Dec()
 
 	if err := stream.WriteWithTimeout(data, n.requestTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
@@ -74,7 +74,7 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
-	metricsStreamRequestsSuccess.Inc()
+	metricsStreamRequestsSuccess.WithLabelValues(string(protocol)).Inc()
 	return res, nil
 }
 
@@ -84,21 +84,25 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	s := NewStream(stream)
 
 	streamID := s.ID()
+	protocolID := stream.Protocol()
+	logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
 		if err := s.Close(); err != nil {
-			n.logger.Error("could not close stream", zap.String("streamID", streamID), zap.Error(err))
+			logger.Error("could not close stream", zap.Error(err))
 		}
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
+		logger.Warn("could not read stream msg", zap.Error(err))
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
 	return data, func(res []byte) error {
 		if err := s.WriteWithTimeout(res, n.requestTimeout); err != nil {
+			logger.Warn("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}
-		metricsStreamResponses.Inc()
+		metricsStreamResponses.WithLabelValues(string(protocolID)).Inc()
 		return nil
 	}, done, nil
 }

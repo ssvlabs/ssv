@@ -7,22 +7,22 @@ import (
 )
 
 var (
-	metricsStreamRequests = promauto.NewGauge(prometheus.GaugeOpts{
+	metricsStreamRequests = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:streams:req:count",
 		Help: "Count requests made via streams",
-	})
-	metricsStreamRequestsActive = promauto.NewGauge(prometheus.GaugeOpts{
+	}, []string{"pid"})
+	metricsStreamRequestsActive = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:streams:req:active",
 		Help: "Count requests made via streams",
-	})
-	metricsStreamRequestsSuccess = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"pid"})
+	metricsStreamRequestsSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:streams:req:success",
 		Help: "Count successful requests made via streams",
-	})
-	metricsStreamResponses = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"pid"})
+	metricsStreamResponses = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:streams:res",
 		Help: "Count responses for streams",
-	})
+	}, []string{"pid"})
 )
 
 func init() {
