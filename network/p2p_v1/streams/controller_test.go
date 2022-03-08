@@ -21,7 +21,7 @@ func TestStreamCtrl(t *testing.T) {
 	ctrl0 := NewStreamController(context.Background(), zaptest.NewLogger(t), hosts[0], v0.New(), time.Second)
 	ctrl1 := NewStreamController(context.Background(), zaptest.NewLogger(t), hosts[1], v0.New(), time.Second)
 
-	t.Run("sanity", func(t *testing.T) {
+	t.Run("handle request", func(t *testing.T) {
 		hosts[0].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {
 			msg, res, done, err := ctrl0.HandleStream(stream)
 			defer done()
@@ -39,7 +39,7 @@ func TestStreamCtrl(t *testing.T) {
 		require.True(t, bytes.Equal(res, d))
 	})
 
-	t.Run("with deadline", func(t *testing.T) {
+	t.Run("request deadline", func(t *testing.T) {
 		timeout := time.Millisecond * 10
 		ctrl0.(*streamCtrl).requestTimeout = timeout
 		hosts[1].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {

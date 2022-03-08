@@ -8,6 +8,7 @@ import (
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/sync/semaphore"
 	"sync"
 	"time"
 )
@@ -59,6 +60,8 @@ type topicsCtrl struct {
 	scoreParams func(string) *pubsub.TopicScoreParams
 	// topics holds all the available topics
 	topics           *sync.Map
+	locks            map[string]*semaphore.Weighted
+	mainLock         sync.Locker
 	fork             forks.Fork
 	msgValidatorFunc MsgValidatorFunc
 }
@@ -74,6 +77,45 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.For
 		topics:           &sync.Map{},
 		fork:             fork,
 		msgValidatorFunc: msgValidatorFunc,
+		mainLock:         &sync.Mutex{},
+		locks:            make(map[string]*semaphore.Weighted),
+	}
+}
+
+// lock tried to acquire lock for the given topic, returns result and function for releasing the lock
+func (ctrl *topicsCtrl) lock(topicName string) (bool, func()) {
+	ctrl.mainLock.Lock()
+	defer ctrl.mainLock.Unlock()
+
+	l, ok := ctrl.locks[topicName]
+	if !ok {
+		l = semaphore.NewWeighted(1)
+		ctrl.locks[topicName] = l
+		ctrl.initTopic(topicName)
+	}
+
+	return l.TryAcquire(1), func() {
+		l.Release(1)
+	}
+}
+
+func (ctrl *topicsCtrl) initTopic(name string) {
+	if ctrl.msgValidatorFunc != nil {
+		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFunc,
+			pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
+		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
+		if err != nil {
+			ctrl.logger.Debug("could not register topic validator", zap.Error(err))
+		}
+	}
+}
+
+func (ctrl *topicsCtrl) closeTopic(name string) {
+	if ctrl.msgValidatorFunc != nil {
+		err := ctrl.ps.UnregisterTopicValidator(name)
+		if err != nil {
+			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
+		}
 	}
 }
 
@@ -96,6 +138,11 @@ func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
 
 // Subscribe subscribes to the given topic
 func (ctrl *topicsCtrl) Subscribe(topicName string) (<-chan *pubsub.Message, error) {
+	locked, done := ctrl.lock(topicName)
+	if !locked {
+		return nil, ErrInProcess
+	}
+	defer done()
 	return ctrl.subscribe(topicName)
 }
 
@@ -106,29 +153,36 @@ func (ctrl *topicsCtrl) Topics() []string {
 
 // Unsubscribe unsubscribes from the given topic
 func (ctrl *topicsCtrl) Unsubscribe(topicName string) error {
+	locked, done := ctrl.lock(topicName)
+	if !locked {
+		return ErrInProcess
+	}
+	defer done()
 	topic := ctrl.getTopicState(topicName)
 	if topic == nil {
 		return nil
 	}
 	ctrl.topics.Delete(topicName)
 	topic.close()
+	ctrl.closeTopic(topicName)
 	return nil
 }
 
 // Broadcast publishes the message on the given topic
 func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
-	//topic := ctrl.fork.ValidatorTopicID(pk)
+	locked, done := ctrl.lock(topicName)
+	if !locked {
+		return ErrInProcess
+	}
+	defer done()
 	topic, err := ctrl.joinTopic(topicName)
 	if err != nil {
 		return err
 	}
 	if !topic.canPublish() {
-		return errors.New("can't publish message as topic is not ready")
+		return ErrTopicNotReady
 	}
-	//data, err := ctrl.fork.EncodeNetworkMsg(msg)
-	//if err != nil {
-	//	return errors.Wrap(err, "could not encode message")
-	//}
+
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
@@ -165,6 +219,7 @@ func (ctrl *topicsCtrl) getTopicState(name string) *topicState {
 
 // joinTopic joins the given topic and returns the wrapper
 func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
+	ctrl.logger.Debug("join topic", zap.String("name", name))
 	state := ctrl.getTopicState(name)
 	if state == nil {
 		state = newTopicWrapper(ctrl.logger)
@@ -189,15 +244,15 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
 			}
 		}
 		//msgVal := ctrl.msgValidatorFactory.New(ctrl.logger.With(zap.String("topic", name)), ctrl.fork)
-		if ctrl.msgValidatorFunc != nil {
-			err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFunc,
-				pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
-			// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
-			if err != nil {
-				state.close()
-				return nil, errors.Wrap(err, "could not register topic validator")
-			}
-		}
+		//if ctrl.msgValidatorFunc != nil {
+		//	err = ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFunc,
+		//		pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
+		//	// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
+		//	if err != nil {
+		//		ctrl.closeTopic(state)
+		//		return nil, errors.Wrap(err, "could not register topic validator")
+		//	}
+		//}
 		state.join(t)
 		ctrl.topics.Store(name, state)
 	default:
@@ -248,23 +303,24 @@ func (ctrl *topicsCtrl) subscribe(name string) (<-chan *pubsub.Message, error) {
 func (ctrl *topicsCtrl) listen(state *topicState, sub *pubsub.Subscription) chan *pubsub.Message {
 	ctx, cancel := context.WithCancel(ctrl.ctx)
 	in := make(chan *pubsub.Message, bufSize)
+	state.subscribe(sub, cancel)
+	ctrl.topics.Store(state.topic.String(), state)
 	go func() {
-		state.subscribe(sub, cancel)
-		ctrl.topics.Store(state.topic.String(), state)
+		logger := ctrl.logger.With(zap.String("topic", sub.Topic()))
 		defer func() {
+			logger.Info("closing")
 			state.close()
 			close(in)
 		}()
-		logger := ctrl.logger.With(zap.String("topic", sub.Topic()))
 		logger.Info("start listening to topic")
 		for ctx.Err() == nil {
 			msg, err := sub.Next(ctx)
 			if err != nil {
 				if ctx.Err() != nil {
-					logger.Debug("stop listening to topic: context is done")
-					return
+					logger.Debug("stop listening to topic: context is done", zap.Error(err))
+				} else {
+					logger.Warn("stop listening to topic: could not read message from subscription", zap.Error(err))
 				}
-				logger.Warn("stop listening to topic: could not read message from subscription", zap.Error(err))
 				return
 			}
 			if msg == nil {
@@ -273,6 +329,7 @@ func (ctrl *topicsCtrl) listen(state *topicState, sub *pubsub.Subscription) chan
 			}
 			in <- msg
 		}
+		logger.Info("boo")
 	}()
 	return in
 }

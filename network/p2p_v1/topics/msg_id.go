@@ -87,7 +87,7 @@ func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDBadPeerID
 		}
 		logger = logger.With(zap.String("from", pid.String()))
-		ssvMsg := &protocol.SSVMessage{}
+		ssvMsg := protocol.SSVMessage{}
 		err = ssvMsg.Decode(pmsg.GetData())
 		if err != nil {
 			logger.Warn("invalid encoding", zap.ByteString("seq_no", pmsg.GetSeqno()))
