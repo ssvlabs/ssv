@@ -2,113 +2,108 @@ package p2pv1
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/network/p2p_v1/peers"
-	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/protocol"
-	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestP2pNetwork_SetupStart(t *testing.T) {
-	threshold.Init()
-
+func TestNewLocalNet(t *testing.T) {
+	n := 10
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
-
-	sk, err := commons.GenNetworkKey()
+	ln, err := CreateAndStartLocalNet(ctx, logger, n, false)
 	require.NoError(t, err)
-	cfg := defaultMockConfig(logger, sk)
-	p := New(ctx, cfg).(*p2pNetwork)
-	defer func() {
-		_ = p.Close()
-	}()
-	require.NoError(t, p.Setup())
-	t.Logf("configured first peer %s", p.host.ID().String())
-	require.NoError(t, p.Start())
-	t.Logf("started first peer %s", p.host.ID().String())
+	require.Len(t, ln.Nodes, n)
+}
 
-	sk2, err := commons.GenNetworkKey()
+func TestNewLocalDiscV5Net(t *testing.T) {
+	n := 10
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
+	ln, err := CreateAndStartLocalNet(ctx, logger, n, true)
 	require.NoError(t, err)
-	cfg2 := defaultMockConfig(logger, sk2)
-	cfg2.TCPPort++
-	cfg2.UDPPort++
-	p2 := New(ctx, cfg2).(*p2pNetwork)
-	defer func() {
-		_ = p2.Close()
-	}()
-	require.NoError(t, p2.Setup())
-	t.Logf("configured second peer %s", p2.host.ID().String())
-	require.NoError(t, p2.Start())
-	t.Logf("started second peer %s", p2.host.ID().String())
+	require.NotNil(t, ln.Bootnode)
+	require.Len(t, ln.Nodes, n)
+}
 
-	for p.idx.State(p2.host.ID()) != peers.StateReady {
-		<-time.After(time.Second)
-	}
-	for p2.idx.State(p.host.ID()) != peers.StateReady {
-		<-time.After(time.Second)
-	}
+func TestP2pNetwork_Start(t *testing.T) {
+	n := 4
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := zaptest.NewLogger(t)
+	//logger := zap.L()
+	ln, err := CreateAndStartLocalNet(ctx, logger, n, true)
+	require.NoError(t, err)
+	require.NotNil(t, ln.Bootnode)
+	require.Len(t, ln.Nodes, n)
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 
+	routers := make([]*dummyRouter, n)
+	for i, node := range ln.Nodes {
+		routers[i] = &dummyRouter{logger: logger.With(zap.Int("i", i))}
+		node.UseMessageRouter(routers[i])
+	}
+
 	for _, pk := range pks {
 		vpk, err := hex.DecodeString(pk)
 		require.NoError(t, err)
-		require.NoError(t, p.Subscribe(vpk))
-		require.NoError(t, p2.Subscribe(vpk))
-	}
-
-	r1 := &dummyRouter{logger: logger.With(zap.String("who", "r1"))}
-	p.UseMessageRouter(r1)
-	r2 := &dummyRouter{logger: logger.With(zap.String("who", "r2"))}
-	p2.UseMessageRouter(r2)
-
-	<-time.After(time.Second)
-
-	var net network.V1
-	for i := 1; i < 5; i++ {
-		msg, err := dummyMsg(pks[0], i)
-		require.NoError(t, err)
-		net = p
-		if i%2 == 0 {
-			net = p2
+		for _, node := range ln.Nodes {
+			require.NoError(t, node.Subscribe(vpk))
 		}
-		go func(msg protocol.SSVMessage, net network.V1) {
-		broadcastLoop:
-			for ctx.Err() == nil {
-				err := net.Broadcast(msg)
-				switch err {
-				case topics.ErrInProcess:
-					fallthrough
-				case topics.ErrTopicNotReady:
-					time.Sleep(100 * time.Millisecond)
-					continue broadcastLoop
-				default:
-				}
-				require.NoError(t, err)
-				return
-			}
-		}(*msg, net)
 	}
+	// let the nodes subscribe
+	<-time.After(time.Second * 2)
 
+	msg1, err := dummyMsg(pks[0], 1)
+	require.NoError(t, err)
+	msg2, err := dummyMsg(pks[0], 2)
+	require.NoError(t, err)
+	msg3, err := dummyMsg(pks[0], 3)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.NoError(t, ln.Nodes[0].Broadcast(*msg1))
+		<-time.After(time.Millisecond * 10)
+		require.NoError(t, ln.Nodes[2].Broadcast(*msg3))
+		<-time.After(time.Millisecond * 2)
+		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-time.After(time.Millisecond * 10)
+		require.NoError(t, ln.Nodes[1].Broadcast(*msg2))
+		<-time.After(time.Millisecond * 2)
+		require.NoError(t, ln.Nodes[2].Broadcast(*msg1))
+		require.NoError(t, ln.Nodes[0].Broadcast(*msg3))
+	}()
+
+	wg.Wait()
+
+	// let the messages propagate
 	<-time.After(time.Second * 4)
 
-	require.Equal(t, uint64(4), r1.count)
-	require.Equal(t, uint64(4), r2.count)
+	for _, r := range routers {
+		require.GreaterOrEqual(t, uint64(2), r.count)
+	}
 }
 
 type dummyRouter struct {
@@ -147,20 +142,20 @@ func dummyMsg(pkHex string, height int) (*protocol.SSVMessage, error) {
 	}, nil
 }
 
-func defaultMockConfig(logger *zap.Logger, sk *ecdsa.PrivateKey) *Config {
-	return &Config{
-		Bootnodes:         "",
-		TCPPort:           commons.DefaultTCP,
-		UDPPort:           commons.DefaultUDP,
-		HostAddress:       "",
-		HostDNS:           "",
-		RequestTimeout:    10 * time.Second,
-		MaxBatchResponse:  25,
-		MaxPeers:          10,
-		PubSubTrace:       false,
-		NetworkPrivateKey: sk,
-		OperatorPublicKey: nil,
-		Logger:            logger,
-		Fork:              forksv1.New(),
-	}
-}
+//func defaultMockConfig(logger *zap.Logger, sk *ecdsa.PrivateKey) *Config {
+//	return &Config{
+//		Bootnodes:         "",
+//		TCPPort:           commons.DefaultTCP,
+//		UDPPort:           commons.DefaultUDP,
+//		HostAddress:       "",
+//		HostDNS:           "",
+//		RequestTimeout:    10 * time.Second,
+//		MaxBatchResponse:  25,
+//		MaxPeers:          10,
+//		PubSubTrace:       false,
+//		NetworkPrivateKey: sk,
+//		OperatorPublicKey: nil,
+//		Logger:            logger,
+//		Fork:              forksv1.New(),
+//	}
+//}
