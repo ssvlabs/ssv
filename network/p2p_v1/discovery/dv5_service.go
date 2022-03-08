@@ -16,6 +16,7 @@ import (
 
 var (
 	defaultDiscoveryInterval = time.Second
+	publishENRTimeout        = time.Minute
 )
 
 // NodeProvider is an interface for managing ENRs
@@ -87,22 +88,18 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // Bootstrap connects to bootnodes and start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	//connected := 0
-	//for _, bn := range dvs.bootnodes {
-	//	pi, err := ToPeer(bn)
-	//	if err != nil {
-	//		dvs.logger.Warn("could not parse bootnode", zap.Error(err))
-	//		continue
-	//	}
-	//	if err = dvs.connect(pi); err != nil {
-	//		dvs.logger.Warn("could not connect to bootnode", zap.Error(err))
-	//		continue
-	//	}
-	//	connected++
-	//}
-	//if connected == 0 {
-	//	return errors.New("could not connect to bootnode")
-	//}
+	pinged := 0
+	for _, bn := range dvs.bootnodes {
+		err := dvs.dv5Listener.Ping(bn)
+		if err != nil {
+			dvs.logger.Warn("could not ping bootnode", zap.Error(err))
+			continue
+		}
+		pinged++
+	}
+	if pinged == 0 {
+		dvs.logger.Warn("could not ping bootnodes")
+	}
 
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
 		dvs.limitNodeFilter, dvs.badNodeFilter)
@@ -138,6 +135,8 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	if err := setSubnetsEntry(ln, subnets); err != nil {
 		return 0, errors.Wrap(err, "could not set subnets entry")
 	}
+	go dvs.publishENR()
+
 	return opts.Ttl, nil
 }
 
@@ -258,6 +257,18 @@ func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Nod
 		}
 		return subnets[int(subnet)]
 	}
+}
+
+// publishENR publishes the new ENR across the network
+func (dvs *DiscV5Service) publishENR() {
+	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+	defer done()
+	dvs.discover(ctx, func(e PeerEvent) {
+		err := dvs.dv5Listener.Ping(e.Node)
+		if err != nil {
+			dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
+		}
+	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 
 // newUDPListener creates a udp server

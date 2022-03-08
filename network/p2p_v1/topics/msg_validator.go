@@ -26,7 +26,7 @@ func newMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ct
 			logger.Warn("xxx our node's message")
 			return pubsub.ValidationAccept
 		}
-		smsg := &protocol.SSVMessage{}
+		smsg := protocol.SSVMessage{}
 		if err := smsg.Decode(msg.Data); err != nil {
 			// can't decode message
 			logger.Warn("xxx can't decode message", zap.Error(err))

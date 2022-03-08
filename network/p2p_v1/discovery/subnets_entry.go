@@ -1,12 +1,12 @@
 package discovery
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"strconv"
 )
 
 const (
@@ -16,16 +16,29 @@ const (
 	ENRKeySubnets = "subnets"
 )
 
+var regPool = format.NewRegexpPool("ssv\\.subnets\\.(\\d+)")
+
+// nsToSubnet converts the given topic to subnet
+// TODO: return other value than zero upon failure?
 func nsToSubnet(ns string) uint64 {
-	h := sha256.Sum256([]byte(ns))
-	val := binary.BigEndian.Uint64(h[10:])
-	return val % uint64(SubnetsCount)
+	r, done := regPool.Get()
+	defer done()
+	found := r.FindStringSubmatch(ns)
+	if len(found) != 2 {
+		return 0
+	}
+	val, err := strconv.ParseUint(found[1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return val
 }
 
 // isSubnet checks if the given string is a subnet string
 func isSubnet(ns string) bool {
-	// TODO: check if ns is a subnet
-	return true
+	r, done := regPool.Get()
+	defer done()
+	return r.MatchString(ns)
 }
 
 func setSubnetsEntry(node *enode.LocalNode, subnets []bool) error {

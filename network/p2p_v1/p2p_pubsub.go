@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// UseMessageRouter registers a message router to handle incoming messages
+func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
+	n.msgRouter = router
+}
+
+// Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
 	raw, err := message.Encode()
 	if err != nil {
@@ -23,7 +29,8 @@ func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
 		return errors.New("unknown topic")
 	}
 	if err := n.topicsCtrl.Broadcast(topic, raw, time.Second*5); err != nil { // TODO: extract interval to variable
-		return errors.Wrap(err, "could not broadcast message")
+		//return errors.Wrap(err, "could not broadcast message")
+		return err
 	}
 	return nil
 }
@@ -51,14 +58,18 @@ func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
 			logger.Debug("already registered on topic")
 			return nil
 		}
-		go func() {
+		go func(cn <-chan *pubsub.Message) {
+			ctx, cancel := context.WithCancel(n.ctx)
+			defer cancel()
+			logger.Debug("start listening to topic")
 			n.handleIncomingMessages(ctx, cn)
+			logger.Debug("finished listening to topic")
 			if err := n.Unsubscribe(pk); err != nil {
 				logger.Warn("could not unsubscribe from topic")
 				return
 			}
 			logger.Debug("unsubscribed from topic")
-		}()
+		}(cn)
 		break
 	}
 	return nil
@@ -73,22 +84,19 @@ func (n *p2pNetwork) Unsubscribe(pk protocol.ValidatorPK) error {
 	return n.topicsCtrl.Unsubscribe(topic)
 }
 
-// UseMessageRouter registers a message router to handle incoming messages
-func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
-	n.msgRouter = router
-}
-
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handleIncomingMessages(ctx context.Context, in <-chan *pubsub.Message) {
+listenLoop:
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case msg := <-in:
-			var parsed protocol.SSVMessage
+			parsed := protocol.SSVMessage{}
 			if err := parsed.Decode(msg.Data); err != nil {
 				n.logger.Warn("could not decode message", zap.Error(err))
 				// TODO: handle..
+				continue listenLoop
 			}
 			n.msgRouter.Route(parsed)
 		}
