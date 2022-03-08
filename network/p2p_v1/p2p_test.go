@@ -20,8 +20,7 @@ func TestNewLocalNet(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
-	ln, err := CreateAndStartLocalNet(ctx, logger, n, false)
+	ln, err := CreateAndStartLocalNet(ctx, nil, n, false)
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 }
@@ -31,8 +30,7 @@ func TestNewLocalDiscV5Net(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
-	ln, err := CreateAndStartLocalNet(ctx, logger, n, true)
+	ln, err := CreateAndStartLocalNet(ctx, nil, n, true)
 	require.NoError(t, err)
 	require.NotNil(t, ln.Bootnode)
 	require.Len(t, ln.Nodes, n)
@@ -42,9 +40,8 @@ func TestP2pNetwork_Start(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := zaptest.NewLogger(t)
-	//logger := zap.L()
-	ln, err := CreateAndStartLocalNet(ctx, logger, n, true)
+
+	ln, err := CreateAndStartLocalNet(ctx, zaptest.NewLogger(t), n, true)
 	require.NoError(t, err)
 	require.NotNil(t, ln.Bootnode)
 	require.Len(t, ln.Nodes, n)
@@ -54,7 +51,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 
 	routers := make([]*dummyRouter, n)
 	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{logger: logger.With(zap.Int("i", i))}
+		routers[i] = &dummyRouter{logger: zaptest.NewLogger(t).With(zap.Int("i", i))}
 		node.UseMessageRouter(routers[i])
 	}
 
@@ -70,7 +67,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 
 	msg1, err := dummyMsg(pks[0], 1)
 	require.NoError(t, err)
-	msg2, err := dummyMsg(pks[0], 2)
+	msg2, err := dummyMsg(pks[1], 2)
 	require.NoError(t, err)
 	msg3, err := dummyMsg(pks[0], 3)
 	require.NoError(t, err)

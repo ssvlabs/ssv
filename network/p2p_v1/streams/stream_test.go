@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func TestSyncStream(t *testing.T) {
+func TestStream(t *testing.T) {
 	hosts := testHosts(t, 3)
 
 	timeout := time.Second
