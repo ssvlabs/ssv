@@ -308,7 +308,6 @@ func (ctrl *topicsCtrl) listen(state *topicState, sub *pubsub.Subscription) chan
 	go func() {
 		logger := ctrl.logger.With(zap.String("topic", sub.Topic()))
 		defer func() {
-			logger.Info("closing")
 			state.close()
 			close(in)
 		}()
@@ -323,7 +322,7 @@ func (ctrl *topicsCtrl) listen(state *topicState, sub *pubsub.Subscription) chan
 				}
 				return
 			}
-			if msg == nil {
+			if msg == nil || msg.Data == nil {
 				logger.Warn("got empty message from subscription")
 				continue
 			}

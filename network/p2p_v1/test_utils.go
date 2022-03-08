@@ -68,13 +68,21 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool)
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
-		if err := ln.withBootnode(ctx, logger); err != nil {
+		_logger := zap.L()
+		if logger != nil {
+			_logger = logger
+		}
+		if err := ln.withBootnode(ctx, _logger.With(zap.String("who", "bootnode"))); err != nil {
 			return nil, err
 		}
 	}
 	i := 1
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.V1 {
-		cfg := NewNetConfig(logger.With(zap.String("component", fmt.Sprintf("node-%d", i))),
+		_logger := zap.L()
+		if logger != nil {
+			_logger = logger
+		}
+		cfg := NewNetConfig(_logger.With(zap.String("who", fmt.Sprintf("node-%d", i))),
 			keys.NetKey, &keys.OperatorKey.PublicKey, ln.Bootnode,
 			testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), n)
 		p := New(ctx, cfg)
