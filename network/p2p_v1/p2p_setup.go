@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/commons"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
@@ -139,13 +138,16 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() error {
 	psBundle, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
-		Logger:          n.cfg.Logger,
-		Host:            n.host,
-		TraceLog:        n.cfg.PubSubTrace,
-		StaticPeers:     nil,
-		Fork:            &forksv1.ForkV1{},
-		UseMsgID:        true,
-		UseMsgValidator: true,
+		Logger:      n.cfg.Logger,
+		Host:        n.host,
+		TraceLog:    n.cfg.PubSubTrace,
+		StaticPeers: nil,
+		Fork:        n.cfg.Fork,
+		UseMsgID:    true,
+		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
+			logger := n.cfg.Logger.With(zap.String("who", "MsgValidator"))
+			return topics.NewSSVMsgValidator(logger, n.cfg.Fork, n.host.ID())
+		},
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")

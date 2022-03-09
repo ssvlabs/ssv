@@ -61,26 +61,27 @@ type topicsCtrl struct {
 	// scoreParams is a function that helps to set scoring params on topics
 	scoreParams func(string) *pubsub.TopicScoreParams
 	// topics holds all the available topics
-	topics           *sync.Map
-	locks            map[string]*semaphore.Weighted
-	mainLock         sync.Locker
-	fork             forks.Fork
-	msgValidatorFunc MsgValidatorFunc
+	topics              *sync.Map
+	locks               map[string]*semaphore.Weighted
+	mainLock            sync.Locker
+	fork                forks.Fork
+	msgValidatorFactory func(string) MsgValidatorFunc
 }
 
 // NewTopicsController creates an instance of Controller
-func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork, msgValidatorFunc MsgValidatorFunc,
-	pubSub *pubsub.PubSub, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork,
+	msgValidatorFactory func(string) MsgValidatorFunc, pubSub *pubsub.PubSub,
+	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	return &topicsCtrl{
-		ctx:              ctx,
-		logger:           logger,
-		ps:               pubSub,
-		scoreParams:      scoreParams,
-		topics:           &sync.Map{},
-		fork:             fork,
-		msgValidatorFunc: msgValidatorFunc,
-		mainLock:         &sync.Mutex{},
-		locks:            make(map[string]*semaphore.Weighted),
+		ctx:                 ctx,
+		logger:              logger,
+		ps:                  pubSub,
+		scoreParams:         scoreParams,
+		topics:              &sync.Map{},
+		fork:                fork,
+		msgValidatorFactory: msgValidatorFactory,
+		mainLock:            &sync.Mutex{},
+		locks:               make(map[string]*semaphore.Weighted),
 	}
 }
 
@@ -102,8 +103,8 @@ func (ctrl *topicsCtrl) lock(topicName string) (bool, func()) {
 }
 
 func (ctrl *topicsCtrl) initTopic(name string) {
-	if ctrl.msgValidatorFunc != nil {
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFunc,
+	if ctrl.msgValidatorFactory != nil {
+		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
 			pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
@@ -113,7 +114,7 @@ func (ctrl *topicsCtrl) initTopic(name string) {
 }
 
 func (ctrl *topicsCtrl) closeTopic(name string) {
-	if ctrl.msgValidatorFunc != nil {
+	if ctrl.msgValidatorFactory != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
 		if err != nil {
 			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
