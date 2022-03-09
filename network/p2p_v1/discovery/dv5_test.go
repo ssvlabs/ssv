@@ -100,8 +100,8 @@ func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return libp2pnetwork.NotConnected
 }
 
-func (c *mockConnIndex) Connected(id peer.ID) bool {
-	return false
+func (c *mockConnIndex) CanConnect(id peer.ID) bool {
+	return true
 }
 
 func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {

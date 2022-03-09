@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"time"
@@ -23,7 +22,6 @@ type p2pNetwork struct {
 	cfg         *Config
 	host        host.Host
 	streamCtrl  streams.StreamController
-	ids         *identify.IDService
 	idx         peers.Index
 	disc        discovery.Service
 	topicsCtrl  topics.Controller

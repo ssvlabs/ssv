@@ -77,19 +77,18 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent()))
-	if err != nil {
-		return errors.Wrap(err, "failed to create ID service")
-	}
-	n.ids = ids
-
 	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
 	n.idx = peers.NewPeersIndex(n.cfg.Logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
 	}, 10*time.Minute)
 	n.logger.Debug("peers index is ready")
-	// connections
-	handshaker := peers.NewHandshaker(n.cfg.Logger, n.streamCtrl, n.idx)
+
+	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
+	if err != nil {
+		return errors.Wrap(err, "failed to create ID service")
+	}
+
+	handshaker := peers.NewHandshaker(n.ctx, n.cfg.Logger, n.streamCtrl, n.idx, ids)
 	n.host.SetStreamHandler(peers.HandshakeProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 

@@ -43,6 +43,8 @@ type Config struct {
 	Logger *zap.Logger
 	Fork   forks.Fork
 	Router network.MessageRouter
+
+	UserAgent string
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -53,10 +55,11 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 		return nil, errors.New("could not create options w/o network key")
 	}
 	sk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(c.NetworkPrivateKey))
+
 	opts := []libp2p.Option{
 		libp2p.Identity(sk),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
-		libp2p.UserAgent(userAgent()),
+		libp2p.UserAgent(userAgent(c.UserAgent)),
 	}
 
 	opts, err := c.configureAddrs(opts)
@@ -139,6 +142,9 @@ func (c *Config) TransformBootnodes() []string {
 	return items
 }
 
-func userAgent() string {
+func userAgent(fromCfg string) string {
+	if len(fromCfg) > 0 {
+		return fromCfg
+	}
 	return uc.GetBuildData()
 }

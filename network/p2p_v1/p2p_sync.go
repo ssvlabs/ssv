@@ -24,7 +24,6 @@ func (n *p2pNetwork) GetHistory(mid protocol.Identifier, from, to uint64) ([]pro
 // LastChangeRound fetches last change round message from a random set of peers
 func (n *p2pNetwork) LastChangeRound(mid protocol.Identifier) ([]protocol.SSVMessage, error) {
 	// TODO
-
 	return nil, errors.New("not implemented")
 }
 
