@@ -67,6 +67,18 @@ func (pi *peersIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return pi.network.Connectedness(id)
 }
 
+func (pi *peersIndex) CanConnect(id peer.ID) bool {
+	cntd := pi.network.Connectedness(id)
+	switch cntd {
+	case libp2pnetwork.Connected:
+		fallthrough
+	case libp2pnetwork.CannotConnect: // recently failed to connect
+		return false
+	default:
+	}
+	return true
+}
+
 func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 	maxPeers := pi.maxPeers()
 	if dir == libp2pnetwork.DirInbound {
