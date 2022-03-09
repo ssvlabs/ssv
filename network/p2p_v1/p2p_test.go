@@ -19,8 +19,9 @@ func TestP2pNetwork_Start(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	ln, err := CreateAndStartLocalNet(ctx, zaptest.NewLogger(t), n, false)
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
+	ln, err := CreateAndStartLocalNet(ctx, logger, n, false)
 	require.NoError(t, err)
 	//require.NotNil(t, ln.Bootnode)
 	require.Len(t, ln.Nodes, n)

@@ -215,12 +215,15 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	psBundle, err := NewPubsub(ctx, &PububConfig{
-		Logger:          logger,
-		Host:            host,
-		TraceLog:        false,
-		UseMsgValidator: msgValidator,
-		UseMsgID:        msgID,
-		Fork:            fork,
+		Logger:   logger,
+		Host:     host,
+		TraceLog: false,
+		MsgValidatorFactory: func(s string) MsgValidatorFunc {
+			return NewSSVMsgValidator(logger.With(zap.String("who", "MsgValidator")),
+				fork, host.ID())
+		},
+		UseMsgID: msgID,
+		Fork:     fork,
 	})
 	require.NoError(t, err)
 	ps := psBundle.PS
