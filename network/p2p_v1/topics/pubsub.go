@@ -75,7 +75,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 
 	var msgVal MsgValidatorFunc
 	if cfg.UseMsgValidator {
-		msgVal = newMsgValidator(cfg.Logger, cfg.Fork, cfg.Host.ID())
+		msgVal = NewSSVMsgValidator(cfg.Logger, cfg.Fork, cfg.Host.ID())
 	}
 	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.Fork, msgVal, nil, nil)
 

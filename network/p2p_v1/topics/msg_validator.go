@@ -13,35 +13,55 @@ import (
 // MsgValidatorFunc represents a message validator
 type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
 
-// newMsgValidator creates a new msg validator
-func newMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+// NewSSVMsgValidator creates a new msg validator that validates message structure,
+// and checks that the message was sent on the right topic.
+// TODO: remove logs, break into smaller validators?
+func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		logger := plogger.With(zap.String("topic", msg.GetTopic()), zap.String("peer", p.String()))
 		logger.Debug("xxx validating msg")
 		if len(msg.Data) == 0 {
-			logger.Warn("xxx no data")
+			logger.Debug("xxx no data")
+			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject
 		}
 		if bytes.Equal([]byte(p), []byte(self)) {
-			logger.Warn("xxx our node's message")
+			logger.Debug("xxx our node's message")
+			reportValidationResult(validationResultSelf)
 			return pubsub.ValidationAccept
 		}
 		smsg := protocol.SSVMessage{}
 		if err := smsg.Decode(msg.Data); err != nil {
 			// can't decode message
-			logger.Warn("xxx can't decode message", zap.Error(err))
+			logger.Debug("xxx can't decode message", zap.Error(err))
+			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
 		topic := fork.ValidatorTopicID(smsg.ID.GetValidatorPK())
 		if topic != *msg.Topic {
 			// wrong topic
-			logger.Warn("xxx wrong topic", zap.String("actual", topic),
+			logger.Debug("xxx wrong topic", zap.String("actual", topic),
 				zap.String("expected", *msg.Topic),
 				zap.ByteString("smsg.ID", smsg.ID))
+			reportValidationResult(validationResultTopic)
 			return pubsub.ValidationReject
 		}
 		logger.Debug("xxx validated topic msg", zap.String("topic", topic),
 			zap.ByteString("smsg.ID", smsg.ID))
+		reportValidationResult(validationResultValid)
 		return pubsub.ValidationAccept
 	}
 }
+
+//// CombineMsgValidators executes multiple validators
+//func CombineMsgValidators(validators ...MsgValidatorFunc) MsgValidatorFunc {
+//	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+//		res := pubsub.ValidationAccept
+//		for _, v := range validators {
+//			if res = v(ctx, p, msg); res == pubsub.ValidationReject {
+//				break
+//			}
+//		}
+//		return res
+//	}
+//}

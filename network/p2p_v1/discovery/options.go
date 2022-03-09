@@ -61,16 +61,16 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 	if ipAddr == nil {
 		ipAddr = net.ParseIP(commons.DefaultIP)
 	}
+	n := "udp6"
 	bindIP := net.ParseIP(opts.BindIP)
 	if len(bindIP) == 0 {
 		if ipAddr.To4() != nil {
 			bindIP = net.IPv4zero
+			n = "udp4"
 		} else {
 			bindIP = net.IPv6zero
 		}
-	}
-	n := "udp6"
-	if bindIP.To4() != nil {
+	} else if bindIP.To4() != nil {
 		n = "udp4"
 	}
 	return ipAddr, bindIP, n

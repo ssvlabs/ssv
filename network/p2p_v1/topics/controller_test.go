@@ -69,14 +69,14 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		if len(potentialErrs) == 0 {
 			require.NoError(t, err)
 		} else if err != nil {
-			found := false
+			var errP *error
 			for _, e := range potentialErrs {
 				if e.Error() == err.Error() {
-					found = true
+					errP = &e
 					break
 				}
 			}
-			require.True(t, found)
+			require.Nil(t, errP, "got err", errP)
 		}
 		if in == nil {
 			return

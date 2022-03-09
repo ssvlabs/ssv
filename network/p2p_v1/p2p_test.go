@@ -41,9 +41,9 @@ func TestP2pNetwork_Start(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ln, err := CreateAndStartLocalNet(ctx, zaptest.NewLogger(t), n, true)
+	ln, err := CreateAndStartLocalNet(ctx, zaptest.NewLogger(t), n, false)
 	require.NoError(t, err)
-	require.NotNil(t, ln.Bootnode)
+	//require.NotNil(t, ln.Bootnode)
 	require.Len(t, ln.Nodes, n)
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
@@ -51,7 +51,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 
 	routers := make([]*dummyRouter, n)
 	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{logger: zaptest.NewLogger(t).With(zap.Int("i", i))}
+		routers[i] = &dummyRouter{i: i, logger: zaptest.NewLogger(t).With(zap.Int("i", i))}
 		node.UseMessageRouter(routers[i])
 	}
 
@@ -76,7 +76,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t, ln.Nodes[0].Broadcast(*msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
 		<-time.After(time.Millisecond * 10)
 		require.NoError(t, ln.Nodes[2].Broadcast(*msg3))
 		<-time.After(time.Millisecond * 2)
@@ -90,7 +90,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 		require.NoError(t, ln.Nodes[1].Broadcast(*msg2))
 		<-time.After(time.Millisecond * 2)
 		require.NoError(t, ln.Nodes[2].Broadcast(*msg1))
-		require.NoError(t, ln.Nodes[0].Broadcast(*msg3))
+		require.NoError(t, ln.Nodes[1].Broadcast(*msg3))
 	}()
 
 	wg.Wait()
@@ -99,13 +99,14 @@ func TestP2pNetwork_Start(t *testing.T) {
 	<-time.After(time.Second * 4)
 
 	for _, r := range routers {
-		require.GreaterOrEqual(t, uint64(2), r.count)
+		require.GreaterOrEqual(t, r.count, uint64(2), "router", r.i)
 	}
 }
 
 type dummyRouter struct {
 	logger *zap.Logger
 	count  uint64
+	i      int
 }
 
 func (r *dummyRouter) Route(message protocol.SSVMessage) {

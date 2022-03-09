@@ -88,18 +88,18 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // Bootstrap connects to bootnodes and start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	pinged := 0
-	for _, bn := range dvs.bootnodes {
-		err := dvs.dv5Listener.Ping(bn)
-		if err != nil {
-			dvs.logger.Warn("could not ping bootnode", zap.Error(err))
-			continue
-		}
-		pinged++
-	}
-	if pinged == 0 {
-		dvs.logger.Warn("could not ping bootnodes")
-	}
+	//pinged := 0
+	//for _, bn := range dvs.bootnodes {
+	//	err := dvs.dv5Listener.Ping(bn)
+	//	if err != nil {
+	//		dvs.logger.Warn("could not ping bootnode", zap.Error(err))
+	//		continue
+	//	}
+	//	pinged++
+	//}
+	//if pinged == 0 {
+	//	dvs.logger.Warn("could not ping bootnodes")
+	//}
 
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
 		dvs.limitNodeFilter, dvs.badNodeFilter)

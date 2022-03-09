@@ -36,11 +36,10 @@ func NewHandshaker(logger *zap.Logger, streams streams.StreamController, idx Ide
 }
 
 // Handler returns the handshake handler
-// TODO: extract streams logic into streams
 func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
-		req, res, cloze, err := h.streams.HandleStream(stream)
-		defer cloze()
+		req, res, done, err := h.streams.HandleStream(stream)
+		defer done()
 		if err != nil {
 			h.logger.Warn("could not read identity msg", zap.Error(err))
 			return
