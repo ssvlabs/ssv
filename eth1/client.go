@@ -21,8 +21,12 @@ type Options struct {
 
 // Event represents an eth1 event log in the system
 type Event struct {
-	Log  types.Log
+	// Log is the raw event log
+	Log types.Log
+	// Data is the parsed event
 	Data interface{}
+	// IsOperatorEvent indicates whether the event belongs to operator
+	IsOperatorEvent bool
 }
 
 // SyncEndedEvent meant to notify an observer that the sync is over

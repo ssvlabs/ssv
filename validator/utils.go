@@ -29,13 +29,17 @@ func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 }
 
 // createShareWithOperatorKey creates a new share object from event
-func createShareWithOperatorKey(validatorAddedEvent abiparser.ValidatorAddedEvent, shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider) (*validatorstorage.Share, *bls.SecretKey, error) {
+func createShareWithOperatorKey(
+	validatorAddedEvent abiparser.ValidatorAddedEvent,
+	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider,
+	isOperatorShare bool,
+) (*validatorstorage.Share, *bls.SecretKey, error) {
 	operatorPrivKey, found, err := shareEncryptionKeyProvider()
 	if !found {
 		return nil, nil, errors.New("could not find operator private key")
 	}
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "get operator private key")
+		return nil, nil, errors.Wrap(err, "could not get operator private key")
 	}
 	operatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivKey)
 	if err != nil {
@@ -45,11 +49,15 @@ func createShareWithOperatorKey(validatorAddedEvent abiparser.ValidatorAddedEven
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not create share from event")
 	}
-	if share == nil {
-		return nil, nil, errors.New("could not decode share key from validator added event")
-	}
-	if !validatorShare.OperatorReady() {
-		return nil, nil, errors.New("operator share not ready")
+
+	// handle the case where the share belongs to operator
+	if isOperatorShare {
+		if share == nil {
+			return nil, nil, errors.New("could not decode share key from validator added event")
+		}
+		if !validatorShare.OperatorReady() {
+			return nil, nil, errors.New("operator share not ready")
+		}
 	}
 	return validatorShare, share, nil
 }
