@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
@@ -79,13 +78,9 @@ func (n *p2pNetwork) startDiscovery() {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
 			defer cancel()
-			cntd := n.idx.Connectedness(e.AddrInfo.ID)
-			switch cntd {
-			case libp2pnetwork.Connected:
-				fallthrough
-			case libp2pnetwork.CannotConnect: // recently failed to connect
+			if !n.idx.CanConnect(e.AddrInfo.ID) {
+				n.logger.Debug("should not connect", zap.Any("peer", e))
 				return
-			default:
 			}
 			if err := n.host.Connect(ctx, e.AddrInfo); err != nil {
 				n.logger.Warn("could not connect to peer", zap.Any("peer", e), zap.Error(err))
