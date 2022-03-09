@@ -20,6 +20,8 @@ const (
 )
 
 var (
+	// ErrLocked happens when you try to access a locked topic
+	ErrLocked = errors.New("locked")
 	// ErrInProcess happens when you try to subscribe multiple times concurrently
 	// exported so the caller can decide how to act upon it
 	ErrInProcess = errors.New("in process")
@@ -140,7 +142,7 @@ func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
 func (ctrl *topicsCtrl) Subscribe(topicName string) (<-chan *pubsub.Message, error) {
 	locked, done := ctrl.lock(topicName)
 	if !locked {
-		return nil, ErrInProcess
+		return nil, ErrLocked
 	}
 	defer done()
 	return ctrl.subscribe(topicName)
@@ -153,11 +155,11 @@ func (ctrl *topicsCtrl) Topics() []string {
 
 // Unsubscribe unsubscribes from the given topic
 func (ctrl *topicsCtrl) Unsubscribe(topicName string) error {
-	locked, done := ctrl.lock(topicName)
+	locked, release := ctrl.lock(topicName)
 	if !locked {
-		return ErrInProcess
+		return ErrLocked
 	}
-	defer done()
+	defer release()
 	topic := ctrl.getTopicState(topicName)
 	if topic == nil {
 		return nil
@@ -170,11 +172,11 @@ func (ctrl *topicsCtrl) Unsubscribe(topicName string) error {
 
 // Broadcast publishes the message on the given topic
 func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
-	locked, done := ctrl.lock(topicName)
+	locked, release := ctrl.lock(topicName)
 	if !locked {
-		return ErrInProcess
+		return ErrLocked
 	}
-	defer done()
+	defer release()
 	topic, err := ctrl.joinTopic(topicName)
 	if err != nil {
 		return err
@@ -185,7 +187,6 @@ func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Du
 
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
-
 	return topic.topic.Publish(ctx, data)
 }
 

@@ -12,7 +12,9 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/testing"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -49,16 +51,35 @@ func (ln *LocalNet) withBootnode(ctx context.Context, logger *zap.Logger) error 
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
-func CreateAndStartLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
-	ln, err := NewLocalNet(ctx, logger, n, useDiscv5)
+func CreateAndStartLocalNet(pctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
+	ln, err := NewLocalNet(pctx, logger, n, useDiscv5)
 	if err != nil {
 		return nil, err
 	}
+	var wg sync.WaitGroup
 	for _, node := range ln.Nodes {
 		if err := node.Start(); err != nil {
 			logger.Error("could not start node", zap.Error(err))
 		}
+		wg.Add(1)
+		go func(node network.V1) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(pctx, time.Second*10)
+			defer cancel()
+			var peers []peer.ID
+			for len(peers) < n/2 && ctx.Err() == nil {
+				peers = node.(*p2pNetwork).host.Network().Peers()
+				time.Sleep(time.Millisecond * 100)
+			}
+			if ctx.Err() != nil {
+				logger.Fatal("could not find enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+				return
+			}
+			logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+		}(node)
 	}
+
+	wg.Wait()
 
 	return ln, nil
 }

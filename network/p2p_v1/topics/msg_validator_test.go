@@ -23,7 +23,7 @@ func TestMsgValidator(t *testing.T) {
 	//logger := zaptest.NewLogger(t)
 	f := forksv1.ForkV1{}
 	self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
-	mv := newMsgValidator(logger, &f, self)
+	mv := NewSSVMsgValidator(logger, &f, self)
 	require.NotNil(t, mv)
 
 	t.Run("valid consensus msg", func(t *testing.T) {

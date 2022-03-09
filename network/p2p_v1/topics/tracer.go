@@ -4,17 +4,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 	"sync/atomic"
-)
-
-var (
-	metricsPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:pubsub:trace",
-		Help: "Traces of pubsub messages",
-	}, []string{"type"})
 )
 
 // pubsub tracer states

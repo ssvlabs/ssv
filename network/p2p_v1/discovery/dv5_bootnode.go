@@ -53,17 +53,17 @@ func createBootnodeDiscovery(ctx context.Context, opts *BootnodeOptions) (Servic
 	if err != nil {
 		return nil, err
 	}
-	discOpts := Options{
+	discOpts := &Options{
 		Logger: opts.Logger,
 		DiscV5Opts: &DiscV5Options{
 			IP:         opts.ExternalIP,
 			BindIP:     "", // net.IPv4zero.String()
 			Port:       opts.Port,
-			TCPPort:    0,
+			TCPPort:    5000,
 			NetworkKey: privKey,
-			Bootnodes:  nil,
+			Bootnodes:  []string{},
 			Logger:     opts.Logger,
 		},
 	}
-	return NewService(ctx, discOpts)
+	return newDiscV5Service(ctx, discOpts)
 }
