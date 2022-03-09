@@ -15,27 +15,6 @@ import (
 	"time"
 )
 
-func TestNewLocalNet(t *testing.T) {
-	n := 10
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	//logger := zaptest.NewLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, nil, n, false)
-	require.NoError(t, err)
-	require.Len(t, ln.Nodes, n)
-}
-
-func TestNewLocalDiscV5Net(t *testing.T) {
-	n := 10
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	//logger := zaptest.NewLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, nil, n, true)
-	require.NoError(t, err)
-	require.NotNil(t, ln.Bootnode)
-	require.Len(t, ln.Nodes, n)
-}
-
 func TestP2pNetwork_Start(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
