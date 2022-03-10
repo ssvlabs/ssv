@@ -34,6 +34,7 @@ func (i *Controller) processSyncQueueMessages() {
 
 // ProcessSyncMessage processes sync messages
 func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
+	i.logger.Info("ProcessSyncMessage: processing message")
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)
 	if i.currentInstance != nil {
