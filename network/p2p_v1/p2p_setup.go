@@ -148,6 +148,7 @@ func (n *p2pNetwork) setupPubsub() error {
 			logger := n.cfg.Logger.With(zap.String("who", "MsgValidator"))
 			return topics.NewSSVMsgValidator(logger, n.cfg.Fork, n.host.ID())
 		},
+		MsgHandler: n.handlePubsubMessages,
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")

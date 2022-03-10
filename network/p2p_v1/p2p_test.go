@@ -18,10 +18,16 @@ import (
 func TestP2pNetwork_Start(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
-	ln, err := CreateAndStartLocalNet(ctx, logger, n, false)
+	defer func() {
+		cancel()
+		<-time.After(time.Millisecond * 200)
+	}()
+	loggerFactory := func(who string) *zap.Logger {
+		//logger := zaptest.NewLogger(t).With(zap.String("who", who))
+		logger := zap.L().With(zap.String("who", who))
+		return logger
+	}
+	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, n, false)
 	require.NoError(t, err)
 	//require.NotNil(t, ln.Bootnode)
 	require.Len(t, ln.Nodes, n)
@@ -79,7 +85,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 	<-time.After(time.Second * 4)
 
 	for _, r := range routers {
-		require.GreaterOrEqual(t, r.count, uint64(2), "router", r.i)
+		require.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router", r.i)
 	}
 }
 

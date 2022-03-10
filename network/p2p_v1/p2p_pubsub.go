@@ -1,10 +1,8 @@
 package p2pv1
 
 import (
-	"context"
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/protocol"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
@@ -41,38 +39,41 @@ func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
 	if topic == forksv1.UnknownSubnet {
 		return errors.New("unknown topic")
 	}
-	ctx, cancel := context.WithTimeout(n.ctx, time.Second*10)
-	defer cancel()
-	logger := n.logger.With(zap.String("topic", topic))
-	for ctx.Err() == nil {
-		cn, err := n.topicsCtrl.Subscribe(topic)
-		if err != nil {
-			if err == topics.ErrInProcess {
-				logger.Debug("topic in process")
-				time.Sleep(time.Second)
-				continue
-			}
-			return err
-		}
-		if cn == nil { // already registered
-			logger.Debug("already registered on topic")
-			return nil
-		}
-		go func(cn <-chan *pubsub.Message) {
-			ctx, cancel := context.WithCancel(n.ctx)
-			defer cancel()
-			logger.Debug("start listening to topic")
-			n.handleIncomingMessages(ctx, cn)
-			logger.Debug("finished listening to topic")
-			if err := n.Unsubscribe(pk); err != nil {
-				logger.Warn("could not unsubscribe from topic")
-				return
-			}
-			logger.Debug("unsubscribed from topic")
-		}(cn)
-		break
-	}
-	return nil
+	return n.topicsCtrl.Subscribe(topic)
+	//ctx, cancel := context.WithTimeout(n.ctx, time.Second*10)
+	//defer cancel()
+	//logger := n.logger.With(zap.String("topic", topic))
+	//
+	////for ctx.Err() == nil {
+	//cn, err := n.topicsCtrl.Subscribe(topic)
+	//if err != nil {
+	//	//if err == topics.ErrInProcess {
+	//	//	logger.Debug("topic in process")
+	//	//	time.Sleep(time.Second)
+	//	//	continue
+	//	//}
+	//	return err
+	//}
+	//if cn == nil { // already registered
+	//	logger.Debug("already registered on topic")
+	//	return nil
+	//}
+	//go func(cn <-chan *pubsub.Message) {
+	//	_logger := logger.With(zap.String("where", "listener"))
+	//	ctx, cancel := context.WithCancel(n.ctx)
+	//	defer cancel()
+	//	_logger.Debug("handles incoming messages")
+	//	n.handleIncomingMessages(ctx, cn)
+	//	//_logger.Debug("finished listening to topic")
+	//	if err := n.Unsubscribe(pk); err != nil {
+	//		_logger.Warn("could not unsubscribe from topic")
+	//		return
+	//	}
+	//	_logger.Debug("unsubscribed from topic")
+	//}(cn)
+	////break
+	////}
+	//return nil
 }
 
 // Unsubscribe unsubscribes from the validator subnet
@@ -85,20 +86,21 @@ func (n *p2pNetwork) Unsubscribe(pk protocol.ValidatorPK) error {
 }
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handleIncomingMessages(ctx context.Context, in <-chan *pubsub.Message) {
-listenLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg := <-in:
-			parsed := protocol.SSVMessage{}
-			if err := parsed.Decode(msg.Data); err != nil {
-				n.logger.Warn("could not decode message", zap.Error(err))
-				// TODO: handle..
-				continue listenLoop
-			}
-			n.msgRouter.Route(parsed)
-		}
+func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
+	if n.msgRouter == nil {
+		n.logger.Warn("msg router is not configured")
+		return nil
 	}
+	if msg == nil {
+		n.logger.Warn("got nil message", zap.String("topic", topic))
+		return nil
+	}
+	parsed := protocol.SSVMessage{}
+	if err := parsed.Decode(msg.Data); err != nil {
+		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
+		// TODO: handle..
+		return nil
+	}
+	n.msgRouter.Route(parsed)
+	return nil
 }
