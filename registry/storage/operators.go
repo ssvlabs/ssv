@@ -3,6 +3,10 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"math"
+	"sync"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -28,15 +32,31 @@ type OperatorsCollection interface {
 	ListOperators(from int64, to int64) ([]OperatorInformation, error)
 }
 
+type operatorsStorage struct {
+	db            basedb.IDb
+	logger        *zap.Logger
+	operatorsLock sync.RWMutex
+	prefix        []byte
+}
+
+// NewOperatorsStorage creates a new instance of Storage
+func NewOperatorsStorage(db basedb.IDb, logger *zap.Logger, prefix []byte) OperatorsCollection {
+	return &operatorsStorage{
+		db:     db,
+		logger: logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
+		prefix: prefix,
+	}
+}
+
 // ListOperators returns information of all the known operators
 // when 'to' equals zero, all operators will be returned
-func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInformation, error) {
-	es.operatorsLock.RLock()
-	defer es.operatorsLock.RUnlock()
+func (s *operatorsStorage) ListOperators(from int64, to int64) ([]OperatorInformation, error) {
+	s.operatorsLock.RLock()
+	defer s.operatorsLock.RUnlock()
 
 	var operators []OperatorInformation
 	to = normalTo(to)
-	err := es.db.GetAll(append(storagePrefix(), operatorsPrefix...), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
 		var oi OperatorInformation
 		if err := json.Unmarshal(obj.Value, &oi); err != nil {
 			return err
@@ -51,16 +71,16 @@ func (es *exporterStorage) ListOperators(from int64, to int64) ([]OperatorInform
 }
 
 // GetOperatorInformation returns information of the given operator by public key
-func (es *exporterStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
-	es.operatorsLock.RLock()
-	defer es.operatorsLock.RUnlock()
+func (s *operatorsStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
+	s.operatorsLock.RLock()
+	defer s.operatorsLock.RUnlock()
 
-	return es.getOperatorInformation(operatorPubKey)
+	return s.getOperatorInformation(operatorPubKey)
 }
 
 // GetOperatorInformation returns information of the given operator by public key
-func (es *exporterStorage) getOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
-	obj, found, err := es.db.Get(storagePrefix(), operatorKey(operatorPubKey))
+func (s *operatorsStorage) getOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
+	obj, found, err := s.db.Get(s.prefix, operatorKey(operatorPubKey))
 	if !found {
 		return nil, found, nil
 	}
@@ -73,23 +93,23 @@ func (es *exporterStorage) getOperatorInformation(operatorPubKey string) (*Opera
 }
 
 // SaveOperatorInformation saves operator information by its public key
-func (es *exporterStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
-	es.operatorsLock.Lock()
-	defer es.operatorsLock.Unlock()
+func (s *operatorsStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
+	s.operatorsLock.Lock()
+	defer s.operatorsLock.Unlock()
 
-	info, found, err := es.getOperatorInformation(operatorInformation.PublicKey)
+	info, found, err := s.getOperatorInformation(operatorInformation.PublicKey)
 	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
 	if found {
-		es.logger.Debug("operator already exist",
+		s.logger.Debug("operator already exist",
 			zap.String("pubKey", operatorInformation.PublicKey))
 		operatorInformation.Index = info.Index
 		// TODO: update operator information (i.e. change name)
 		return nil
 	}
 
-	operatorInformation.Index, err = es.nextIndex(operatorsPrefix)
+	operatorInformation.Index, err = s.nextIndex(operatorsPrefix)
 	if err != nil {
 		return errors.Wrap(err, "could not calculate next operator index")
 	}
@@ -97,7 +117,11 @@ func (es *exporterStorage) SaveOperatorInformation(operatorInformation *Operator
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
 	}
-	return es.db.Set(storagePrefix(), operatorKey(operatorInformation.PublicKey), raw)
+	return s.db.Set(s.prefix, operatorKey(operatorInformation.PublicKey), raw)
+}
+
+func (s *operatorsStorage) nextIndex(prefix []byte) (int64, error) {
+	return s.db.CountByCollection(append(s.prefix, prefix...))
 }
 
 func operatorKey(pubKey string) []byte {
@@ -105,4 +129,11 @@ func operatorKey(pubKey string) []byte {
 		operatorsPrefix[:],
 		[]byte(pubKey),
 	}, []byte("/"))
+}
+
+func normalTo(to int64) int64 {
+	if to == 0 {
+		return math.MaxInt64
+	}
+	return to
 }

@@ -162,6 +162,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorPublicKey = operatorPubKey
+		cfg.SSVOptions.ValidatorOptions.RegistryStorage = operatorStorage
 
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 

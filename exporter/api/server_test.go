@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"math/rand"
@@ -19,7 +20,7 @@ func TestHandleQuery(t *testing.T) {
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, logger, func(nm *NetworkMessage) {
-		nm.Msg.Data = []storage.OperatorInformation{
+		nm.Msg.Data = []registrystorage.OperatorInformation{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
@@ -94,7 +95,7 @@ func TestHandleStream(t *testing.T) {
 		ws.out.Send(newTestMessage())
 
 		msg2 := newTestMessage()
-		msg2.Data = []storage.OperatorInformation{
+		msg2.Data = []registrystorage.OperatorInformation{
 			{PublicKey: "pubkey-operator"},
 		}
 		ws.out.Send(msg2)

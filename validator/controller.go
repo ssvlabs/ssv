@@ -3,6 +3,9 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"sync"
+	"time"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
@@ -11,17 +14,16 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator/forks"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
-	"sync"
-	"time"
-
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 const (
@@ -45,6 +47,7 @@ type ControllerOptions struct {
 	Fork                       forks.Fork
 	KeyManager                 beacon.KeyManager
 	OperatorPublicKey          string
+	RegistryStorage            registrystorage.OperatorsCollection
 }
 
 // Controller represent the validators controller,
@@ -63,6 +66,7 @@ type Controller interface {
 type controller struct {
 	context    context.Context
 	collection validatorstorage.ICollection
+	storage    registrystorage.OperatorsCollection
 	logger     *zap.Logger
 	beacon     beacon.Beacon
 	keyManager beacon.KeyManager
@@ -97,6 +101,7 @@ func NewController(options ControllerOptions) Controller {
 
 	ctrl := controller{
 		collection:                 collection,
+		storage:                    options.RegistryStorage,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
@@ -168,6 +173,12 @@ func (c *controller) ProcessOngoingEth1Event(e eth1.Event) error {
 		if err != nil {
 			c.logger.Warn("could not start validator", zap.Error(err))
 		}
+	} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
+		err := c.handleOperatorAddedEvent(operatorAddedEvent)
+		if err != nil {
+			c.logger.Error("could not handle operatorAdded event", zap.Error(err))
+			return err
+		}
 	}
 	return nil
 }
@@ -179,6 +190,12 @@ func (c *controller) ProcessEth1Event(e eth1.Event) error {
 		_, err := c.handleValidatorAddedEvent(validatorAddedEvent, e.IsOperatorEvent)
 		if err != nil {
 			c.logger.Error("could not process validator", zap.String("pubkey", pubKey), zap.Error(err))
+			return err
+		}
+	} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
+		err := c.handleOperatorAddedEvent(operatorAddedEvent)
+		if err != nil {
+			c.logger.Error("could not handle operatorAdded event", zap.Error(err))
 			return err
 		}
 	}
@@ -338,6 +355,24 @@ func (c *controller) handleValidatorAddedEvent(
 		logger.Debug("new validator share was created and saved")
 	}
 	return validatorShare, nil
+}
+
+// handleOperatorAddedEvent parses the given event and saves operator information
+func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
+	logger := c.logger.With(zap.String("eventType", "OperatorAdded"),
+		zap.String("pubKey", string(event.PublicKey)))
+	logger.Info("operator added event")
+	oi := registrystorage.OperatorInformation{
+		PublicKey:    string(event.PublicKey),
+		Name:         event.Name,
+		OwnerAddress: event.OwnerAddress,
+	}
+	err := c.storage.SaveOperatorInformation(&oi)
+	if err != nil {
+		return err
+	}
+	logger.Debug("managed to save operator information", zap.Any("value", oi))
+	return nil
 }
 
 // onMetadataUpdated is called when validator's metadata was updated

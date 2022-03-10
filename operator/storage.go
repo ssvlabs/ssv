@@ -3,6 +3,7 @@ package operator
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"math/big"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -21,6 +22,7 @@ var (
 type Storage interface {
 	eth1.SyncOffsetStorage
 	basedb.RegistryStore
+	registrystorage.OperatorsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error
@@ -29,12 +31,29 @@ type Storage interface {
 type storage struct {
 	db     basedb.IDb
 	logger *zap.Logger
+
+	operatorStore registrystorage.OperatorsCollection
+}
+
+func (s *storage) GetOperatorInformation(operatorPubKey string) (*registrystorage.OperatorInformation, bool, error) {
+	return s.operatorStore.GetOperatorInformation(operatorPubKey)
+}
+
+func (s *storage) SaveOperatorInformation(operatorInformation *registrystorage.OperatorInformation) error {
+	return s.operatorStore.SaveOperatorInformation(operatorInformation)
+}
+
+func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.OperatorInformation, error) {
+	return s.operatorStore.ListOperators(from, to)
 }
 
 // NewOperatorNodeStorage creates a new instance of Storage
 func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
-	es := storage{db, logger}
-	return &es
+	return &storage{
+		db:            db,
+		logger:        logger,
+		operatorStore: registrystorage.NewOperatorsStorage(db, logger, prefix),
+	}
 }
 
 func (s *storage) CleanRegistryData() error {
