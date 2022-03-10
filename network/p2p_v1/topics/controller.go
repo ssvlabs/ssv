@@ -8,7 +8,7 @@ import (
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
+	"golang.org/x/sync/singleflight"
 	"sync"
 	"time"
 )
@@ -25,10 +25,6 @@ var (
 	// ErrInProcess happens when you try to subscribe multiple times concurrently
 	// exported so the caller can decide how to act upon it
 	ErrInProcess = errors.New("in process")
-	// ErrCouldNotJoin is exported so the caller can track reasons of failures when calling Subscribe
-	ErrCouldNotJoin = errors.New("could not join topic")
-	// ErrCouldNotSubscribe is exported so the caller can track reasons of failures when calling Subscribe
-	ErrCouldNotSubscribe = errors.New("could not subscribe topic")
 	// ErrTopicNotReady happens when trying to access a topic which is not ready yet
 	ErrTopicNotReady = errors.New("topic is not ready")
 
@@ -60,66 +56,95 @@ type topicsCtrl struct {
 	ps     *pubsub.PubSub
 	// scoreParams is a function that helps to set scoring params on topics
 	scoreParams func(string) *pubsub.TopicScoreParams
-	// topics holds all the available topics
-	topics              *sync.Map
-	locks               map[string]*semaphore.Weighted
-	mainLock            sync.Locker
+
 	fork                forks.Fork
 	msgValidatorFactory func(string) MsgValidatorFunc
+
+	sfTopics      *singleflight.Group
+	activeTopics  *sync.Map
+	allowedTopics *sync.Map
+
+	sfSubs     *singleflight.Group
+	activeSubs *sync.Map
 }
 
 // NewTopicsController creates an instance of Controller
 func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork,
 	msgValidatorFactory func(string) MsgValidatorFunc, pubSub *pubsub.PubSub,
 	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
-	return &topicsCtrl{
+	ctrl := &topicsCtrl{
 		ctx:                 ctx,
 		logger:              logger,
 		ps:                  pubSub,
 		scoreParams:         scoreParams,
-		topics:              &sync.Map{},
 		fork:                fork,
 		msgValidatorFactory: msgValidatorFactory,
-		mainLock:            &sync.Mutex{},
-		locks:               make(map[string]*semaphore.Weighted),
+
+		sfTopics:      &singleflight.Group{},
+		activeTopics:  &sync.Map{},
+		allowedTopics: &sync.Map{},
+		sfSubs:        &singleflight.Group{},
+		activeSubs:    &sync.Map{},
 	}
+
+	return ctrl
 }
 
-// lock tried to acquire lock for the given topic, returns result and function for releasing the lock
-func (ctrl *topicsCtrl) lock(topicName string) (bool, func()) {
-	ctrl.mainLock.Lock()
-	defer ctrl.mainLock.Unlock()
-
-	l, ok := ctrl.locks[topicName]
+func (ctrl *topicsCtrl) JoinTopic(name string) (*pubsub.Topic, error) {
+	cn := ctrl.sfTopics.DoChan(name, func() (interface{}, error) {
+		ctrl.logger.Debug("joining topic", zap.String("topic", name))
+		ctrl.allowedTopics.Store(name, true)
+		topic, err := ctrl.joinTopic(name)
+		if err == nil {
+			ctrl.logger.Debug("joined topic", zap.String("topic", name))
+		}
+		return topic, err
+	})
+	res := <-cn
+	if res.Err != nil {
+		return nil, res.Err
+	}
+	topic, ok := res.Val.(*pubsub.Topic)
 	if !ok {
-		l = semaphore.NewWeighted(1)
-		ctrl.locks[topicName] = l
-		ctrl.initTopic(topicName)
+		return nil, errors.New("could not cast topic")
 	}
-
-	return l.TryAcquire(1), func() {
-		l.Release(1)
-	}
+	return topic, nil
 }
 
-func (ctrl *topicsCtrl) initTopic(name string) {
-	if ctrl.msgValidatorFactory != nil {
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
-			pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
-		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
-		if err != nil {
-			ctrl.logger.Debug("could not register topic validator", zap.Error(err))
+func (ctrl *topicsCtrl) Subscribe(name string) (<-chan *pubsub.Message, error) {
+	cn := ctrl.sfSubs.DoChan(name, func() (interface{}, error) {
+		in, err := ctrl.subscribe(name)
+		if err == nil {
+			ctrl.logger.Debug("subscribed topic", zap.String("topic", name))
 		}
+		return in, err
+	})
+	res := <-cn
+	if res.Err != nil {
+		return nil, res.Err
 	}
+	in, ok := res.Val.(chan *pubsub.Message)
+	if !ok {
+		ctrl.logger.Debug("val", zap.Any("val", res.Val))
+		return nil, errors.New("could not cast subscription channel")
+	}
+	return in, nil
 }
 
-func (ctrl *topicsCtrl) closeTopic(name string) {
-	if ctrl.msgValidatorFactory != nil {
-		err := ctrl.ps.UnregisterTopicValidator(name)
-		if err != nil {
-			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
-		}
+// Broadcast publishes the message on the given topic
+func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
+	topic, err := ctrl.JoinTopic(topicName)
+	if err != nil {
+		return err
 	}
+	if topic == nil {
+		return ErrTopicNotReady
+	}
+
+	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
+	defer done()
+
+	return topic.Publish(ctx, data)
 }
 
 // WithPubsub allows injecting a pubsub router
@@ -129,24 +154,11 @@ func (ctrl *topicsCtrl) WithPubsub(ps *pubsub.PubSub) {
 
 // Peers returns the peers subscribed to the given topic
 func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
-	topic := ctrl.getTopicState(topicName)
+	topic := ctrl.getTopic(topicName)
 	if topic == nil {
-		return nil, nil
+		return nil, ErrTopicNotReady
 	}
-	if topic.getState() >= topicStateJoined {
-		return topic.topic.ListPeers(), nil
-	}
-	return nil, ErrTopicNotReady
-}
-
-// Subscribe subscribes to the given topic
-func (ctrl *topicsCtrl) Subscribe(topicName string) (<-chan *pubsub.Message, error) {
-	locked, done := ctrl.lock(topicName)
-	if !locked {
-		return nil, ErrLocked
-	}
-	defer done()
-	return ctrl.subscribe(topicName)
+	return topic.ListPeers(), nil
 }
 
 // Topics lists all the available topics
@@ -156,44 +168,17 @@ func (ctrl *topicsCtrl) Topics() []string {
 
 // Unsubscribe unsubscribes from the given topic
 func (ctrl *topicsCtrl) Unsubscribe(topicName string) error {
-	locked, release := ctrl.lock(topicName)
-	if !locked {
-		return ErrLocked
-	}
-	defer release()
-	topic := ctrl.getTopicState(topicName)
+	topic := ctrl.getTopic(topicName)
 	if topic == nil {
 		return nil
 	}
-	ctrl.topics.Delete(topicName)
-	topic.close()
 	ctrl.closeTopic(topicName)
 	return nil
 }
 
-// Broadcast publishes the message on the given topic
-func (ctrl *topicsCtrl) Broadcast(topicName string, data []byte, timeout time.Duration) error {
-	locked, release := ctrl.lock(topicName)
-	if !locked {
-		return ErrLocked
-	}
-	defer release()
-	topic, err := ctrl.joinTopic(topicName)
-	if err != nil {
-		return err
-	}
-	if !topic.canPublish() {
-		return ErrTopicNotReady
-	}
-
-	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
-	defer done()
-	return topic.topic.Publish(ctx, data)
-}
-
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (ctrl *topicsCtrl) CanSubscribe(topic string) bool {
-	if _, ok := ctrl.topics.Load(topic); ok {
+	if _, ok := ctrl.allowedTopics.Load(topic); ok {
 		return true
 	}
 	return false
@@ -210,97 +195,101 @@ func (ctrl *topicsCtrl) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RP
 	return pubsub.FilterSubscriptions(subs, ctrl.CanSubscribe), nil
 }
 
-// getTopicState returns the topic wrapper if exist
-func (ctrl *topicsCtrl) getTopicState(name string) *topicState {
-	t, ok := ctrl.topics.Load(name)
+// getTopic returns the topic if exist
+func (ctrl *topicsCtrl) getTopic(name string) *pubsub.Topic {
+	t, ok := ctrl.activeTopics.Load(name)
 	if !ok {
 		return nil
 	}
-	return t.(*topicState)
+	return t.(*pubsub.Topic)
 }
 
-// joinTopic joins the given topic and returns the wrapper
-func (ctrl *topicsCtrl) joinTopic(name string) (*topicState, error) {
-	ctrl.logger.Debug("join topic", zap.String("name", name))
-	state := ctrl.getTopicState(name)
-	if state == nil {
-		state = newTopicWrapper(ctrl.logger)
-		ctrl.topics.Store(name, state)
+// getTopic returns the subscription if exit
+func (ctrl *topicsCtrl) getSub(name string) *pubsub.Subscription {
+	s, ok := ctrl.activeSubs.Load(name)
+	if !ok {
+		return nil
 	}
-	switch state.getState() {
-	case topicStateJoining:
-		return state, ErrInProcess
-	case topicStateClosed:
-		state.joining()
-		t, err := ctrl.ps.Join(name)
+	return s.(*pubsub.Subscription)
+}
+
+func (ctrl *topicsCtrl) subscribe(name string) (chan *pubsub.Message, error) {
+	sub := ctrl.getSub(name)
+	if sub == nil {
+		topic, err := ctrl.JoinTopic(name)
 		if err != nil {
-			ctrl.logger.Warn("could not join topic", zap.String("name", name), zap.Error(err))
-			state.close()
-			return nil, ErrCouldNotJoin
+			return nil, err
 		}
-		if ctrl.scoreParams != nil {
-			err = t.SetScoreParams(ctrl.scoreParams(name))
-			if err != nil {
-				state.close()
-				return nil, errors.Wrap(err, "could not set score params")
-			}
+		if topic == nil {
+			return nil, ErrTopicNotReady
 		}
-		state.join(t)
-		ctrl.topics.Store(name, state)
-	default:
+		sub, err = topic.Subscribe()
+		if err != nil {
+			return nil, err
+		}
+		ctrl.activeSubs.Store(name, sub)
+		return ctrl.listen(sub), nil
 	}
-	return state, nil
+	return nil, nil
 }
 
-// subscribe to the given topic and returns a channel to read the messages from
-func (ctrl *topicsCtrl) subscribe(name string) (<-chan *pubsub.Message, error) {
-	state, err := ctrl.joinTopic(name)
+func (ctrl *topicsCtrl) joinTopic(name string) (*pubsub.Topic, error) {
+	topic := ctrl.getTopic(name)
+	if topic != nil {
+		return topic, nil
+	}
+	// joining topic
+	topic, err := ctrl.ps.Join(name)
 	if err != nil {
 		return nil, err
 	}
-	switch state.getState() {
-	case topicStateSubscribing:
-		return nil, ErrInProcess
-	case topicStateJoined:
-		if !state.subscribing() {
-			return nil, ErrInProcess
+	if ctrl.scoreParams != nil {
+		err = topic.SetScoreParams(ctrl.scoreParams(name))
+		if err != nil {
+			ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
 		}
-		sub, err := state.topic.Subscribe()
-		if err == pubsub.ErrTopicClosed {
-			// rejoin a topic in case it was closed, and try to subscribe again
-			state.close()
-			state, err = ctrl.joinTopic(name)
-			if err != nil {
-				return nil, err
-			}
-			sub, err = state.topic.Subscribe()
-			if err != nil {
-				ctrl.logger.Warn("could not subscribe to topic", zap.String("topic", name), zap.Error(err))
-			}
-		}
-		if sub == nil {
-			state.close()
-			return nil, ErrCouldNotSubscribe
-		}
-		in := ctrl.listen(state, sub)
-		return in, nil
-	default:
 	}
-	return nil, nil
+	ctrl.setupTopicValidator(name)
+	ctrl.activeTopics.Store(name, topic)
+	return topic, nil
+}
+
+func (ctrl *topicsCtrl) setupTopicValidator(name string) {
+	if ctrl.msgValidatorFactory != nil {
+		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
+		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
+			pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
+		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
+		if err != nil {
+			ctrl.logger.Warn("could not register topic validator", zap.Error(err))
+		}
+	}
+}
+
+func (ctrl *topicsCtrl) closeTopic(name string) {
+	sub := ctrl.getSub(name)
+	sub.Cancel()
+	ctrl.activeSubs.Delete(name)
+	ctrl.activeTopics.Delete(name)
+	if ctrl.msgValidatorFactory != nil {
+		err := ctrl.ps.UnregisterTopicValidator(name)
+		if err != nil {
+			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
+		}
+	}
 }
 
 // listen handles incoming messages from the topic
 // it buffers results to make sure we keep up with incoming messages rate
 // in case subscription returns error, the topic is closed
-func (ctrl *topicsCtrl) listen(state *topicState, sub *pubsub.Subscription) chan *pubsub.Message {
-	ctx, cancel := context.WithCancel(ctrl.ctx)
+func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) chan *pubsub.Message {
 	in := make(chan *pubsub.Message, bufSize)
-	state.subscribe(sub, cancel)
-	ctrl.topics.Store(state.topic.String(), state)
 	go func() {
+		ctx, cancel := context.WithCancel(ctrl.ctx)
+		defer cancel()
 		logger := ctrl.logger.With(zap.String("topic", sub.Topic()))
 		defer func() {
-			state.close()
+			sub.Cancel()
 			close(in)
 		}()
 		logger.Info("start listening to topic")

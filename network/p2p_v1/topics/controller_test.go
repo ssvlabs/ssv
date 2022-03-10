@@ -39,7 +39,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv1.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, 8)
+		baseTest(ctx, t, peers, pks, f, nPeers)
 	})
 
 	t.Run("v1 features", func(t *testing.T) {
@@ -54,7 +54,7 @@ func TestTopicManager(t *testing.T) {
 
 func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, msgCountTopic int) {
 	nValidators := len(pks)
-	nPeers := len(pks)
+	nPeers := len(peers)
 
 	topicName := func(pkhex string) string {
 		pk, err := hex.DecodeString(pkhex)
@@ -87,6 +87,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		}
 	}
 
+	t.Log("subscribing to topics")
 	// listen to topics
 	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
@@ -99,7 +100,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 
 	// let the peers join topics
 	<-time.After(time.Second * 4)
-
+	t.Log("broadcasting messages")
 	// publish some messages
 	for i := 0; i < nValidators; i++ {
 		for j, p := range peers {
@@ -118,6 +119,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 
 	// let the messages propagate
 	<-time.After(time.Second * 5)
+	t.Log("validating topics and messages")
 
 	// check number of topics
 	for _, p := range peers {
@@ -136,6 +138,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		}
 	}
 
+	t.Log("unsubscribing")
 	// unsubscribe
 	var wg sync.WaitGroup
 	for i := 0; i < nValidators; i++ {
@@ -207,36 +210,39 @@ func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool
 }
 
 func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
-	host, err := libp2p.New(ctx,
+	h, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), host))
+	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), h))
 
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
-	psBundle, err := NewPubsub(ctx, &PububConfig{
+	cfg := &PububConfig{
 		Logger:   logger,
-		Host:     host,
+		Host:     h,
 		TraceLog: false,
-		MsgValidatorFactory: func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(logger.With(zap.String("who", "MsgValidator")),
-				fork, host.ID())
-		},
 		UseMsgID: msgID,
 		Fork:     fork,
-	})
+	}
+	if msgValidator {
+		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
+			return NewSSVMsgValidator(logger.With(zap.String("who", "MsgValidator")),
+				fork, h.ID())
+		}
+	}
+	psBundle, err := NewPubsub(ctx, cfg)
 	require.NoError(t, err)
 	ps := psBundle.PS
 	tm := psBundle.TopicsCtrl
 
 	p := &P{
-		host:     host,
+		host:     h,
 		ps:       ps,
 		tm:       tm.(*topicsCtrl),
 		msgs:     make(map[string][]*pubsub.Message),
 		msgsLock: &sync.Mutex{},
 	}
-	host.Network().Notify(&libp2pnetwork.NotifyBundle{
+	h.Network().Notify(&libp2pnetwork.NotifyBundle{
 		ConnectedF: func(network libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			atomic.AddUint64(&p.connsCount, 1)
 		},
