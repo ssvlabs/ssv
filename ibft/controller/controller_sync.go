@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
@@ -9,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
-	"time"
 )
 
 // syncRetries is the number of reties to perform for history sync
@@ -35,7 +36,7 @@ func (i *Controller) processSyncQueueMessages() {
 func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	var lastChangeRoundMsg *proto.SignedMessage
 	currentInstaceSeqNumber := int64(-1)
-	if i.currentInstance != nil {
+	if i.currentInstance != nil && i.currentInstance.State() != nil && i.currentInstance.State().SeqNumber != nil {
 		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
 		currentInstaceSeqNumber = int64(i.currentInstance.State().SeqNumber.Get())
 	}
