@@ -18,6 +18,9 @@ import (
 	"time"
 )
 
+// LoggerFactory helps to inject loggers
+type LoggerFactory func(string) *zap.Logger
+
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
 	Nodes    []network.V1
@@ -51,13 +54,14 @@ func (ln *LocalNet) withBootnode(ctx context.Context, logger *zap.Logger) error 
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
-func CreateAndStartLocalNet(pctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
-	ln, err := NewLocalNet(pctx, logger, n, useDiscv5)
+func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n int, useDiscv5 bool) (*LocalNet, error) {
+	ln, err := NewLocalNet(pctx, loggerFactory, n, useDiscv5)
 	if err != nil {
 		return nil, err
 	}
 	var wg sync.WaitGroup
-	for _, node := range ln.Nodes {
+	for i, node := range ln.Nodes {
+		logger := loggerFactory(fmt.Sprintf("node-%d", i))
 		if err := node.Start(); err != nil {
 			logger.Error("could not start node", zap.Error(err))
 		}
@@ -85,26 +89,18 @@ func CreateAndStartLocalNet(pctx context.Context, logger *zap.Logger, n int, use
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDiscv5 bool) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
-		_logger := zap.L()
-		if logger != nil {
-			_logger = logger
-		}
-		if err := ln.withBootnode(ctx, _logger.With(zap.String("who", "bootnode"))); err != nil {
+		if err := ln.withBootnode(ctx, loggerFactory("bootnode")); err != nil {
 			return nil, err
 		}
 	}
 	i := 1
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.V1 {
-		_logger := zap.L()
-		if logger != nil {
-			_logger = logger
-		}
-		cfg := NewNetConfig(_logger.With(zap.String("who", fmt.Sprintf("node-%d", i))),
-			keys.NetKey, &keys.OperatorKey.PublicKey, ln.Bootnode,
+		logger := loggerFactory(fmt.Sprintf("node-%d", i))
+		cfg := NewNetConfig(logger, keys.NetKey, &keys.OperatorKey.PublicKey, ln.Bootnode,
 			testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), n)
 		p := New(ctx, cfg)
 		i++

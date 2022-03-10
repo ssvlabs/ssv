@@ -19,7 +19,7 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		logger := plogger.With(zap.String("topic", msg.GetTopic()), zap.String("peer", p.String()))
-		logger.Debug("xxx validating msg")
+		//logger.Debug("xxx validating msg")
 		if len(msg.Data) == 0 {
 			logger.Debug("xxx no data")
 			reportValidationResult(validationResultNoData)
@@ -38,16 +38,15 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			return pubsub.ValidationReject
 		}
 		topic := fork.ValidatorTopicID(smsg.ID.GetValidatorPK())
-		if topic != *msg.Topic {
+		if topic != msg.GetTopic() {
 			// wrong topic
 			logger.Debug("xxx wrong topic", zap.String("actual", topic),
-				zap.String("expected", *msg.Topic),
+				zap.String("expected", msg.GetTopic()),
 				zap.ByteString("smsg.ID", smsg.ID))
 			reportValidationResult(validationResultTopic)
 			return pubsub.ValidationReject
 		}
-		logger.Debug("xxx validated topic msg", zap.String("topic", topic),
-			zap.ByteString("smsg.ID", smsg.ID))
+		logger.Debug("xxx validated topic msg", zap.ByteString("smsg.ID", smsg.ID))
 		reportValidationResult(validationResultValid)
 		return pubsub.ValidationAccept
 	}

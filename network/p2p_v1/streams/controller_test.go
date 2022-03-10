@@ -8,7 +8,7 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 )
@@ -18,8 +18,12 @@ func TestStreamCtrl(t *testing.T) {
 
 	prot := protocol.ID("/test/protocol")
 
-	ctrl0 := NewStreamController(context.Background(), zaptest.NewLogger(t), hosts[0], v0.New(), time.Second)
-	ctrl1 := NewStreamController(context.Background(), zaptest.NewLogger(t), hosts[1], v0.New(), time.Second)
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
+	ctrl0 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
+		hosts[0], v0.New(), time.Second)
+	ctrl1 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
+		hosts[1], v0.New(), time.Second)
 
 	t.Run("handle request", func(t *testing.T) {
 		hosts[0].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {

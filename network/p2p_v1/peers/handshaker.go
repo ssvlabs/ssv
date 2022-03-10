@@ -112,7 +112,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	// adding to index
 	added, err := h.idx.Add(idn)
 	if added {
-		h.logger.Debug("handshaked peer", zap.String("id", pid.String()))
+		h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()))
 	}
 	if err != nil {
 		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()))

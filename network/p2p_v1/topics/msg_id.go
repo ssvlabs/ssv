@@ -73,10 +73,12 @@ func newMsgIDHandler(logger *zap.Logger, ttl time.Duration) MsgIDHandler {
 // MsgID returns the msg_id function that calculates msg_id based on it's content
 func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 	return func(pmsg *ps_pb.Message) string {
-		logger := store.logger
+		if pmsg == nil {
+			return MsgIDEmptyMessage
+		}
+		logger := store.logger.With(zap.ByteString("seq_no", pmsg.GetSeqno()))
 		if len(pmsg.Data) == 0 {
-			logger.Warn("empty message", zap.ByteString("pmsg.From", pmsg.GetFrom()),
-				zap.ByteString("seq_no", pmsg.GetSeqno()))
+			logger.Warn("empty message", zap.ByteString("pmsg.From", pmsg.GetFrom()))
 			//return fmt.Sprintf("%s/%s", MsgIDEmptyMessage, pubsub.DefaultMsgIdFn(pmsg))
 			return MsgIDEmptyMessage
 		}
@@ -90,16 +92,16 @@ func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 		ssvMsg := protocol.SSVMessage{}
 		err = ssvMsg.Decode(pmsg.GetData())
 		if err != nil {
-			logger.Warn("invalid encoding", zap.ByteString("seq_no", pmsg.GetSeqno()))
+			logger.Warn("invalid encoding", zap.Error(err))
 			return MsgIDBadEncodedMessage
 		}
 		mid := SSVMsgID(ssvMsg.Data)
 		if len(mid) == 0 {
-			logger.Warn("could not create msg_id", zap.ByteString("seq_no", pmsg.GetSeqno()))
+			logger.Warn("could not create msg_id")
 			return MsgIDError
 		}
 		store.add(mid, pid)
-		logger.Debug("msg_id created", zap.String("value", mid))
+		//logger.Debug("msg_id created", zap.String("value", mid))
 		return mid
 	}
 }

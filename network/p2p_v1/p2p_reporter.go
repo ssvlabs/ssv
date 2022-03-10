@@ -5,6 +5,7 @@ import (
 	ssv_peers "github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/protocol"
 	"go.uber.org/zap"
+	"math"
 )
 
 // ReportValidation reports the result for the given message
@@ -20,18 +21,22 @@ func (n *p2pNetwork) ReportValidation(msg protocol.SSVMessage, res network.MsgVa
 	}
 }
 
+const (
+	validationScoreLow = 5.0
+)
+
 func msgValidationScore(res network.MsgValidationResult) float64 {
 	switch res {
 	case network.ValidationAccept:
-		return 10.0
+		return validationScoreLow
 	case network.ValidationIgnore:
 		return 0.0
 	case network.ValidationRejectLow:
-		return -10.0
+		return -validationScoreLow
 	case network.ValidationRejectMedium:
-		return -100.0
+		return -math.Pow(validationScoreLow, 2.0)
 	case network.ValidationRejectHigh:
-		return -1000.0
+		return -math.Pow(validationScoreLow, 3.0)
 	default:
 	}
 	return 0

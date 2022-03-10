@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+const (
+	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to
+	subscriptionRequestLimit = 2128
+)
+
+// the following are kept in vars to allow flexibility (e.g. in tests)
 var (
 	// validationQueueSize is the size that we assign to the validation queue
 	validationQueueSize = 512
@@ -30,6 +36,7 @@ type PububConfig struct {
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
 	Fork        forks.Fork
+	MsgHandler  PubsubMessageHandler
 	UseMsgID    bool
 	// MsgValidatorFactory accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
@@ -81,10 +88,9 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 		return nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.Fork, cfg.MsgValidatorFactory, nil, nil)
-
+	sf := newSubFilter(subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
-		pubsub.WithSubscriptionFilter(ctrl),
+		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithPeerOutboundQueueSize(outboundQueueSize),
 		pubsub.WithValidateQueueSize(validationQueueSize),
 		pubsub.WithFloodPublish(true),
@@ -120,7 +126,8 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctrl.WithPubsub(ps)
+
+	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.Fork, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil)
 
 	return &PubsubBundle{
 		PS:         ps,

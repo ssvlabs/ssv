@@ -65,7 +65,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 	subTopic := func(p *P, i int, potentialErrs ...error) {
 		tname := topicName(pks[i])
-		in, err := p.tm.Subscribe(tname)
+		err := p.tm.Subscribe(tname)
 		if len(potentialErrs) == 0 {
 			require.NoError(t, err)
 		} else if err != nil {
@@ -77,13 +77,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				}
 			}
 			require.Nil(t, errP, "got err", errP)
-		}
-		if in == nil {
 			return
-		}
-		for ctx.Err() == nil {
-			next := <-in
-			p.saveMsg(tname, next)
 		}
 	}
 
@@ -92,13 +86,16 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
 			go subTopic(p, i)
-			// simulate concurrency, by trying to subscribe twice
+			// simulate concurrency, by trying to subscribe multiple times
+			<-time.After(time.Millisecond)
+			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
 			<-time.After(time.Millisecond)
 			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
 		}
 	}
 
 	// let the peers join topics
+	// TODO: change behavior to check messages in all peers, with a wrapping timeout
 	<-time.After(time.Second * 4)
 	t.Log("broadcasting messages")
 	// publish some messages
@@ -118,6 +115,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	// let the messages propagate
+	// TODO: change behavior to check messages in all peers, with a wrapping timeout
 	<-time.After(time.Second * 5)
 	t.Log("validating topics and messages")
 
@@ -139,13 +137,16 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	t.Log("unsubscribing")
-	// unsubscribe
+	// unsubscribing multiple times for each topic
 	var wg sync.WaitGroup
 	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
 			wg.Add(1)
 			go func(p *P, pk string) {
 				defer wg.Done()
+				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
+				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
+				<-time.After(time.Millisecond)
 				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
 			}(p, pks[i])
 		}
@@ -187,6 +188,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 	p.msgs[t] = msgs
 }
 
+// TODO: use p2p_v1/testing
 func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
@@ -215,6 +217,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	require.NoError(t, err)
 	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), h))
 
+	var p *P
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	cfg := &PububConfig{
@@ -223,7 +226,12 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 		TraceLog: false,
 		UseMsgID: msgID,
 		Fork:     fork,
+		MsgHandler: func(topic string, msg *pubsub.Message) error {
+			p.saveMsg(topic, msg)
+			return nil
+		},
 	}
+	//
 	if msgValidator {
 		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
 			return NewSSVMsgValidator(logger.With(zap.String("who", "MsgValidator")),
@@ -235,7 +243,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	ps := psBundle.PS
 	tm := psBundle.TopicsCtrl
 
-	p := &P{
+	p = &P{
 		host:     h,
 		ps:       ps,
 		tm:       tm.(*topicsCtrl),
