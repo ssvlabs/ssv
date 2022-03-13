@@ -1,4 +1,4 @@
-package adapter
+package v0
 
 import (
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (n *netV0Adapter) setupDiscovery() error {
+func (n *NetV0Adapter) setupDiscovery() error {
 	// TODO: create new discovery.Service
 	return n.disc.Bootstrap(func(e discovery.PeerEvent) {
 		// TODO: check if relevant
@@ -22,7 +22,7 @@ func (n *netV0Adapter) setupDiscovery() error {
 	})
 }
 
-func (n *netV0Adapter) setupPubsub() error {
+func (n *NetV0Adapter) setupPubsub() error {
 	var staticPeers []peer.AddrInfo
 	if len(n.v0Cfg.ExporterPeerID) > 0 {
 		expID, err := peer.Decode(n.v0Cfg.ExporterPeerID)

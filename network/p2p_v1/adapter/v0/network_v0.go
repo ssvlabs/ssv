@@ -1,4 +1,4 @@
-package adapter
+package v0
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p"
 	streams_v0 "github.com/bloxapp/ssv/network/p2p/streams"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
+	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -27,8 +28,8 @@ const (
 	legacyMsgStream = "/sync/0.0.1"
 )
 
-// netV0Adapter is an adapter for network v0
-type netV0Adapter struct {
+// NetV0Adapter is an adapter for network v0
+type NetV0Adapter struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	v1           network.V1
@@ -45,19 +46,19 @@ type netV0Adapter struct {
 }
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
-func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config, v0Cfg *p2p.Config) network.Network {
+func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
-	return &netV0Adapter{
+	return &NetV0Adapter{
 		ctx:    ctx,
 		cancel: cancel,
 		v1:     p2p_v1.New(pctx, v1Cfg),
-		fork:   v0Cfg.Fork,
+		fork:   v1Cfg.Fork,
 	}
 }
 
 // Setup initializes all required components
-func (n *netV0Adapter) Setup() error {
+func (n *NetV0Adapter) Setup() error {
 	n.setLegacyStreamHandler()
 
 	// TODO: complete
@@ -73,14 +74,19 @@ func (n *netV0Adapter) Setup() error {
 }
 
 // Start starts the network
-func (n *netV0Adapter) Start() error {
+func (n *NetV0Adapter) Start() error {
 	// TODO: complete
 
 	return nil
 }
 
+func (n *NetV0Adapter) Close() error {
+	//TODO implement me
+	panic("implement me")
+}
+
 // Fork is triggered to initiate a fork
-func (n *netV0Adapter) Fork() {
+func (n *NetV0Adapter) Fork() {
 	// cancel current context
 	n.cancel()
 	// wait 3 seconds
@@ -95,7 +101,7 @@ func (n *netV0Adapter) Fork() {
 }
 
 // HandleMsg implements topics.PubsubMessageHandler
-func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
+func (n *NetV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	cm, err := n.fork.DecodeNetworkMsg(msg.Data)
 	if err != nil {
 		return err
@@ -111,36 +117,36 @@ func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	return nil
 }
 
-func (n *netV0Adapter) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
+func (n *NetV0Adapter) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_IBFTType)
 
 	return ls.MsgChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
+func (n *NetV0Adapter) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_SignatureType)
 
 	return ls.SigChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
+func (n *NetV0Adapter) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_DecidedType)
 
 	return ls.DecidedChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
+func (n *NetV0Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_SyncType)
 
 	return ls.SyncChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+func (n *NetV0Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
 	topic := n.v1Cfg.Fork.ValidatorTopicID(validatorPk.Serialize())
 	return n.topicsCtrl.Subscribe(topic)
 }
 
-func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
+func (n *NetV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
 	topic := n.v1Cfg.Fork.ValidatorTopicID(validatorPk)
 	peers, err := n.topicsCtrl.Peers(topic)
 	if err != nil {
@@ -153,15 +159,15 @@ func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
 	return results, nil
 }
 
-func (n *netV0Adapter) SubscribeToMainTopic() error {
+func (n *NetV0Adapter) SubscribeToMainTopic() error {
 	return n.topicsCtrl.Subscribe(decidedTopic)
 }
 
-func (n *netV0Adapter) MaxBatch() uint64 {
+func (n *NetV0Adapter) MaxBatch() uint64 {
 	return n.v0Cfg.MaxBatchResponse
 }
 
-func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
+func (n *NetV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
@@ -176,7 +182,7 @@ func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) e
 	return nil
 }
 
-func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
+func (n *NetV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_SignatureType,
@@ -191,7 +197,7 @@ func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedM
 	return nil
 }
 
-func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
+func (n *NetV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
@@ -211,19 +217,19 @@ func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMes
 	return nil
 }
 
-func (n *netV0Adapter) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *NetV0Adapter) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV0Adapter) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *NetV0Adapter) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV0Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *NetV0Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
+func (n *NetV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty()
 	return n.streamCtrlv0.Respond(&network.Message{
 		SyncMessage: msg,
@@ -232,12 +238,12 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 	})
 }
 
-func (n *netV0Adapter) NotifyOperatorID(oid string) {
+func (n *NetV0Adapter) NotifyOperatorID(oid string) {
 	// TODO
 	panic("implement me")
 }
 
-func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *NetV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	pi, err := peer.Decode(peerStr)
 	if err != nil {
 		return nil, err
@@ -257,7 +263,7 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	return res.SyncMessage, nil
 }
 
-func (n *netV0Adapter) setLegacyStreamHandler() {
+func (n *NetV0Adapter) setLegacyStreamHandler() {
 	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
 		cm, _, err := n.streamCtrlv0.HandleStream(stream)
 		if err != nil {

@@ -1,4 +1,4 @@
-package adapter
+package v0
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -9,7 +9,7 @@ import (
 
 // propagateSignedMsg takes an incoming message (from validator's topic)
 // and propagates it to the corresponding internal listeners
-func (n *netV0Adapter) propagateSignedMsg(cm *network.Message) {
+func (n *NetV0Adapter) propagateSignedMsg(cm *network.Message) {
 	if cm == nil || cm.SignedMessage == nil {
 		n.v1Cfg.Logger.Debug("could not propagate nil message")
 		return

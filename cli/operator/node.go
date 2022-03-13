@@ -3,6 +3,8 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network/network_wrapper"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"log"
 	"net/http"
 
@@ -35,6 +37,7 @@ type config struct {
 	ETH1Options                eth1.Options     `yaml:"eth1"`
 	ETH2Options                beacon.Options   `yaml:"eth2"`
 	P2pNetworkConfig           p2p.Config       `yaml:"p2p"`
+	P2pV1NetworkConfig         p2pv1.Config     `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
@@ -117,6 +120,7 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPrivKey.Public() // TODo fetch publicKey
 
 		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
 		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
@@ -129,7 +133,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
-		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
+		//p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
+		//if err != nil {
+		//	Logger.Fatal("failed to create network", zap.Error(err))
+		//}
+
+		cfg.P2pV1NetworkConfig.NetworkPrivateKey = p2pPrivKey
+		cfg.P2pV1NetworkConfig.Fork = fork.NetworkFork() // TODO check if need differ fork
+
+		p2pNet, err := network_wrapper.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig, &cfg.P2pV1NetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
