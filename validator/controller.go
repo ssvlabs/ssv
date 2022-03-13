@@ -54,12 +54,13 @@ type ControllerOptions struct {
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
-	ProcessEth1Event(e eth1.Event) error
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (*Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
+
+	Eth1EventHandler(handlers ...func(share *validatorstorage.Share)) func(e eth1.Event) error
 }
 
 // controller implements Controller
@@ -143,10 +144,13 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	cn := make(chan *eth1.Event)
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
+
+	handler := c.Eth1EventHandler(c.handleShare)
+
 	for {
 		select {
 		case e := <-cn:
-			if err := c.ProcessOngoingEth1Event(*e); err != nil {
+			if err := handler(*e); err != nil {
 				c.logger.Error("could not process ongoing eth1 event", zap.Error(err))
 			}
 		case err := <-sub.Err():
@@ -155,51 +159,40 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	}
 }
 
-// ProcessOngoingEth1Event handles a single event, will be called in stream events from registry contract
-func (c *controller) ProcessOngoingEth1Event(e eth1.Event) error {
-	if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
-		pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-		if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
-			c.logger.Debug("validator was loaded already")
-			return nil
+// Eth1EventHandler is a factory function for creating eth1 event handler
+func (c *controller) Eth1EventHandler(handlers ...func(share *validatorstorage.Share)) func(e eth1.Event) error {
+	return func(e eth1.Event) error {
+		if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
+			pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
+			if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
+				c.logger.Debug("validator was loaded already")
+				return nil
+			}
+			share, err := c.handleValidatorAddedEvent(validatorAddedEvent, e.IsOperatorEvent)
+			if err != nil {
+				c.logger.Error("could not handle validatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
+				return err
+			}
+			for _, h := range handlers {
+				h(share)
+			}
+		} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
+			err := c.handleOperatorAddedEvent(operatorAddedEvent)
+			if err != nil {
+				c.logger.Error("could not handle operatorAdded event", zap.Error(err))
+				return err
+			}
 		}
-		share, err := c.handleValidatorAddedEvent(validatorAddedEvent, e.IsOperatorEvent)
-		if err != nil {
-			c.logger.Error("could not handle validatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
-			return err
-		}
-		v := c.validatorsMap.GetOrCreateValidator(share)
-		_, err = c.startValidator(v)
-		if err != nil {
-			c.logger.Warn("could not start validator", zap.Error(err))
-		}
-	} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
-		err := c.handleOperatorAddedEvent(operatorAddedEvent)
-		if err != nil {
-			c.logger.Error("could not handle operatorAdded event", zap.Error(err))
-			return err
-		}
+		return nil
 	}
-	return nil
 }
 
-// ProcessEth1Event handles a single event, will be called in sync events from registry contract
-func (c *controller) ProcessEth1Event(e eth1.Event) error {
-	if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
-		pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-		_, err := c.handleValidatorAddedEvent(validatorAddedEvent, e.IsOperatorEvent)
-		if err != nil {
-			c.logger.Error("could not process validator", zap.String("pubkey", pubKey), zap.Error(err))
-			return err
-		}
-	} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
-		err := c.handleOperatorAddedEvent(operatorAddedEvent)
-		if err != nil {
-			c.logger.Error("could not handle operatorAdded event", zap.Error(err))
-			return err
-		}
+func (c *controller) handleShare(share *validatorstorage.Share) {
+	v := c.validatorsMap.GetOrCreateValidator(share)
+	_, err := c.startValidator(v)
+	if err != nil {
+		c.logger.Warn("could not start validator", zap.Error(err))
 	}
-	return nil
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
