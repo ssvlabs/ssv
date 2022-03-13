@@ -36,12 +36,12 @@ func (i *Controller) processSyncQueueMessages() {
 func (i *Controller) ProcessSyncMessage(msg *network.SyncChanObj) {
 	i.logger.Info("ProcessSyncMessage: processing message")
 	var lastChangeRoundMsg *proto.SignedMessage
-	currentInstaceSeqNumber := int64(-1)
+	currentInstanceSeqNumber := int64(-1)
 	if i.currentInstance != nil && i.currentInstance.State() != nil && i.currentInstance.State().SeqNumber != nil {
 		lastChangeRoundMsg = i.currentInstance.GetLastChangeRoundMsg()
-		currentInstaceSeqNumber = int64(i.currentInstance.State().SeqNumber.Get())
+		currentInstanceSeqNumber = int64(i.currentInstance.State().SeqNumber.Get())
 	}
-	s := incoming.New(i.logger, i.Identifier, currentInstaceSeqNumber, i.network, i.ibftStorage, lastChangeRoundMsg)
+	s := incoming.New(i.logger, i.Identifier, currentInstanceSeqNumber, i.network, i.ibftStorage, lastChangeRoundMsg)
 	go s.Process(msg)
 }
 
