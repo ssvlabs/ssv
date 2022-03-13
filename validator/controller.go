@@ -30,6 +30,9 @@ const (
 	metadataBatchSize = 25
 )
 
+// ShareEventHandlerFunc is a function that handles event in an extended mode
+type ShareEventHandlerFunc func(share *validatorstorage.Share)
+
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
@@ -59,8 +62,7 @@ type Controller interface {
 	GetValidator(pubKey string) (*Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
-
-	Eth1EventHandler(handlers ...func(share *validatorstorage.Share)) func(e eth1.Event) error
+	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
 }
 
 // controller implements Controller
@@ -160,7 +162,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 }
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
-func (c *controller) Eth1EventHandler(handlers ...func(share *validatorstorage.Share)) func(e eth1.Event) error {
+func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler {
 	return func(e eth1.Event) error {
 		if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
 			pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)

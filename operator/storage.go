@@ -35,6 +35,15 @@ type storage struct {
 	operatorStore registrystorage.OperatorsCollection
 }
 
+// NewOperatorNodeStorage creates a new instance of Storage
+func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
+	return &storage{
+		db:            db,
+		logger:        logger,
+		operatorStore: registrystorage.NewOperatorsStorage(db, logger, prefix),
+	}
+}
+
 func (s *storage) GetOperatorInformation(operatorPubKey string) (*registrystorage.OperatorInformation, bool, error) {
 	return s.operatorStore.GetOperatorInformation(operatorPubKey)
 }
@@ -45,15 +54,6 @@ func (s *storage) SaveOperatorInformation(operatorInformation *registrystorage.O
 
 func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.OperatorInformation, error) {
 	return s.operatorStore.ListOperators(from, to)
-}
-
-// NewOperatorNodeStorage creates a new instance of Storage
-func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
-	return &storage{
-		db:            db,
-		logger:        logger,
-		operatorStore: registrystorage.NewOperatorsStorage(db, logger, prefix),
-	}
 }
 
 func (s *storage) CleanRegistryData() error {
