@@ -1,23 +1,27 @@
 package p2pv1
 
 import (
-	"context"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 )
 
+const (
+	defaultReqTimeout = 10 * time.Second
+)
+
 // Setup is used to setup the network
 func (n *p2pNetwork) Setup() error {
 	n.logger.Info("configuring p2p network service")
+
+	n.initCfg()
 
 	err := n.SetupHost()
 	if err != nil {
@@ -32,6 +36,12 @@ func (n *p2pNetwork) Setup() error {
 	n.logger.Debug("p2p services were configured", zap.String("peer", n.host.ID().String()))
 
 	return nil
+}
+
+func (n *p2pNetwork) initCfg() {
+	if n.cfg.RequestTimeout == 0 {
+		n.cfg.RequestTimeout = defaultReqTimeout
+	}
 }
 
 // SetupHost configures a libp2p host
@@ -115,13 +125,8 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 	}
 	discOpts := discovery.Options{
-		Logger: n.cfg.Logger,
-		Host:   n.host,
-		Connect: func(info *peer.AddrInfo) error {
-			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
-			defer cancel()
-			return n.host.Connect(ctx, *info)
-		},
+		Logger:     n.cfg.Logger,
+		Host:       n.host,
 		DiscV5Opts: discV5Opts,
 		ConnIndex:  n.idx,
 	}
@@ -142,7 +147,6 @@ func (n *p2pNetwork) setupPubsub() error {
 		Host:        n.host,
 		TraceLog:    n.cfg.PubSubTrace,
 		StaticPeers: nil,
-		Fork:        n.cfg.Fork,
 		UseMsgID:    true,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
 			logger := n.cfg.Logger.With(zap.String("who", "MsgValidator"))
@@ -160,5 +164,6 @@ func (n *p2pNetwork) setupPubsub() error {
 }
 
 func (n *p2pNetwork) setupSyncHandlers() error {
+	// TODO: complete
 	return nil
 }

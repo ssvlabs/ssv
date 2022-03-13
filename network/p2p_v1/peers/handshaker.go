@@ -80,7 +80,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			h.logger.Warn("could not send self identity", zap.Error(err))
 			return
 		}
-		h.logger.Debug("successful handshake", zap.String("id", identity.ID))
+		//h.logger.Debug("successful handshake", zap.String("id", identity.ID))
 	}
 }
 

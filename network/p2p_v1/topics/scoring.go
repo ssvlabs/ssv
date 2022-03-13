@@ -34,7 +34,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(scores m
 			if err != nil {
 				logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
 			} else {
-				logger.Debug("peer score were updated", zap.String("peer", pid.String()))
+				logger.Debug("peer scores were updated", zap.String("peer", pid.String()))
 			}
 		}
 	}
@@ -83,6 +83,7 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 
 func appSpecificScore(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(p peer.ID) float64 {
 	return func(p peer.ID) float64 {
+		// TODO: complete
 		scores, err := scoreIdx.GetScore(p, "")
 		if err != nil {
 			logger.Warn("could not get score for peer", zap.String("peer", p.String()), zap.Error(err))

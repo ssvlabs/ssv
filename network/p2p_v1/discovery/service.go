@@ -19,9 +19,6 @@ const (
 // CheckPeerLimit enables listener to check peers limit
 type CheckPeerLimit func() bool
 
-// Connect is the function interface for connecting to some peer
-type Connect func(*peer.AddrInfo) error
-
 // PeerEvent is the data passed to peer handler
 type PeerEvent struct {
 	AddrInfo peer.AddrInfo
@@ -36,7 +33,6 @@ type Options struct {
 	Logger *zap.Logger
 
 	Host       host.Host
-	Connect    Connect
 	DiscV5Opts *DiscV5Options
 	ConnIndex  peers.ConnectionIndex
 }

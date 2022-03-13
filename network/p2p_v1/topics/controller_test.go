@@ -225,7 +225,6 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 		Host:     h,
 		TraceLog: false,
 		UseMsgID: msgID,
-		Fork:     fork,
 		MsgHandler: func(topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
