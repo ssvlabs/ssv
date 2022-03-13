@@ -188,6 +188,10 @@ func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
 	}
 	var results []string
 	for _, p := range peers {
+		pid := p.String()
+		if pid == n.v0Cfg.ExporterPeerID {
+			continue
+		}
 		results = append(results, p.String())
 	}
 	return results, nil
