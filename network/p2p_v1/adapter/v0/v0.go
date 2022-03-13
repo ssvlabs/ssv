@@ -1,4 +1,4 @@
-package adapter
+package v0
 
 import (
 	"context"
@@ -10,13 +10,17 @@ import (
 	streams_v0 "github.com/bloxapp/ssv/network/p2p/streams"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
+	"github.com/bloxapp/ssv/network/p2p_v1/peers"
+	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"time"
 )
@@ -29,19 +33,23 @@ const (
 
 // netV0Adapter is an adapter for network v0
 type netV0Adapter struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	v1           network.V1
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	logger *zap.Logger
+
 	v1Cfg        *p2p_v1.Config
 	v0Cfg        *p2p.Config
 	fork         forks.Fork
 	host         host.Host
 	streamCtrlv0 streams_v0.StreamController
-	topicsCtrl   topics.Controller
-	// TODO: add discovery service
-	disc discovery.Service
 
-	listeners listeners.Container
+	streamCtrl streams.StreamController
+
+	topicsCtrl topics.Controller
+	idx        peers.Index
+	disc       discovery.Service
+	listeners  listeners.Container
 }
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
@@ -49,19 +57,32 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config, v0Cfg *p2p.Config)
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
 	return &netV0Adapter{
-		ctx:    ctx,
-		cancel: cancel,
-		v1:     p2p_v1.New(pctx, v1Cfg),
-		fork:   v0Cfg.Fork,
+		ctx:       ctx,
+		cancel:    cancel,
+		fork:      v0Cfg.Fork,
+		logger:    v1Cfg.Logger,
+		listeners: listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 	}
+}
+
+func (n *netV0Adapter) Listeners() listeners.Container {
+	return n.listeners
 }
 
 // Setup initializes all required components
 func (n *netV0Adapter) Setup() error {
 	n.setLegacyStreamHandler()
 
-	// TODO: complete
+	if err := n.setupHost(); err != nil {
+		return errors.Wrap(err, "could not setup libp2p host")
+	}
+	// creating 2 stream controllers, first for supporting old sync and new for handshake
+	n.streamCtrlv0 = streams_v0.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
 
+	if err := n.setupPeerServices(); err != nil {
+		return errors.Wrap(err, "could not setup peers discovery")
+	}
 	if err := n.setupDiscovery(); err != nil {
 		return errors.Wrap(err, "could not bootstrap discovery")
 	}
@@ -74,24 +95,43 @@ func (n *netV0Adapter) Setup() error {
 
 // Start starts the network
 func (n *netV0Adapter) Start() error {
-	// TODO: complete
+	go func() {
+		err := tasks.Retry(func() error {
+			return n.disc.Bootstrap(func(e discovery.PeerEvent) {
+				// TODO: check if relevant
+				if err := n.host.Connect(n.ctx, e.AddrInfo); err != nil {
+					n.logger.Warn("could not connect peer",
+						zap.String("peer", e.AddrInfo.String()), zap.Error(err))
+					return
+				}
+				n.logger.Debug("connected peer",
+					zap.String("peer", e.AddrInfo.String()))
+			})
+		}, 3)
+		if err != nil {
+			n.logger.Panic("could not bootstrap discovery", zap.Error(err))
+		}
+	}()
+
+	async.RunEvery(n.ctx, 15*time.Minute, func() {
+		n.idx.GC()
+	})
+
+	async.RunEvery(n.ctx, 30*time.Second, func() {
+		go n.reportAllPeers()
+		n.reportTopics()
+	})
 
 	return nil
 }
 
-// Fork is triggered to initiate a fork
-func (n *netV0Adapter) Fork() {
-	// cancel current context
+// Close closes the network
+func (n *netV0Adapter) Close() error {
 	n.cancel()
-	// wait 3 seconds
-	time.After(time.Second * 3)
-	n.fork = n.v1Cfg.Fork
-	if err := n.v1.Setup(); err != nil {
-		n.v1Cfg.Logger.Panic("could not setup network v1", zap.Error(err))
+	if err := n.idx.Close(); err != nil {
+		n.logger.Error("could not close index", zap.Error(err))
 	}
-	if err := n.v1.Start(); err != nil {
-		n.v1Cfg.Logger.Panic("could not start network v1", zap.Error(err))
-	}
+	return n.host.Close()
 }
 
 // HandleMsg implements topics.PubsubMessageHandler
@@ -102,7 +142,7 @@ func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	}
 
 	if cm == nil || cm.SignedMessage == nil {
-		n.v1Cfg.Logger.Debug("could not propagate nil message")
+		n.logger.Debug("could not propagate nil message")
 		return nil
 	}
 
@@ -202,7 +242,7 @@ func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMes
 	topic := n.fork.ValidatorTopicID(validatorPK)
 	go func() {
 		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*10); err != nil {
-			n.v1Cfg.Logger.Error("could not broadcast message on decided topic", zap.Error(err))
+			n.logger.Error("could not broadcast message on decided topic", zap.Error(err))
 		}
 	}()
 	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
@@ -252,7 +292,7 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	if res.SyncMessage == nil {
 		return nil, errors.New("no response for sync request")
 	}
-	n.v1Cfg.Logger.Debug("got sync response",
+	n.logger.Debug("got sync response",
 		zap.String("FromPeerID", res.SyncMessage.GetFromPeerID()))
 	return res.SyncMessage, nil
 }
@@ -261,11 +301,11 @@ func (n *netV0Adapter) setLegacyStreamHandler() {
 	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
 		cm, _, err := n.streamCtrlv0.HandleStream(stream)
 		if err != nil {
-			n.v1Cfg.Logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
 			return
 		}
 		if cm == nil {
-			n.v1Cfg.Logger.Debug("got nil sync message")
+			n.logger.Debug("got nil sync message")
 			return
 		}
 		// adjusting message and propagating to other (internal) components
