@@ -10,12 +10,13 @@ import (
 )
 
 var (
-	// TODO: migration for the new prefixes
-	// was: prefix="p2p-", netKeyPrefix="private-key"
+	// TODO: use the new prefixes and add migration
 	// prefix is the store prefix
-	prefix = []byte("identity/")
+	prefix = []byte("p2p-")
+	//prefix = []byte("identity/")
 	// netKeyPrefix is the prefix for network key
-	netKeyPrefix = []byte("network-key/")
+	netKeyPrefix = []byte("private-key")
+	//netKeyPrefix = []byte("network-key/")
 	// operatorKeyPrefix is the prefix for operator key
 	//operatorKeyPrefix = []byte("operator-key/")
 )
