@@ -1,14 +1,15 @@
 package controller
 
 import (
+	"sync"
+	"time"
+
 	"github.com/bloxapp/ssv/ibft"
 	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
-	"sync"
-	"time"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -18,10 +19,8 @@ import (
 	"github.com/bloxapp/ssv/validator/storage"
 )
 
-var (
-	// ErrAlreadyRunning is used to express that some process is already running, e.g. sync
-	ErrAlreadyRunning = errors.New("already running")
-)
+// ErrAlreadyRunning is used to express that some process is already running, e.g. sync
+var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
@@ -56,7 +55,7 @@ func New(
 	network network.Network,
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
-	ValidatorShare *storage.Share,
+	validatorShare *storage.Share,
 	fork contollerforks.Fork,
 	signer beacon.Signer,
 	syncRateLimit time.Duration,
@@ -68,7 +67,7 @@ func New(
 		network:        network,
 		msgQueue:       queue,
 		instanceConfig: instanceConfig,
-		ValidatorShare: ValidatorShare,
+		ValidatorShare: validatorShare,
 		Identifier:     identifier,
 		signer:         signer,
 
@@ -157,7 +156,7 @@ func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *Controller) GetIdentifier() []byte {
-	return i.Identifier //TODO should use mutex to lock var?
+	return i.Identifier // TODO should use mutex to lock var?
 }
 
 // setFork sets Controller fork for any new instances

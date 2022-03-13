@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -12,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.

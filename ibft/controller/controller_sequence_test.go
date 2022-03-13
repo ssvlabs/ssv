@@ -2,6 +2,8 @@ package controller
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -12,7 +14,6 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
 )
 
 func testIBFTInstance(t *testing.T) *Controller {
@@ -20,7 +21,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 		Identifier:   []byte("lambda_11"),
 		initHandlers: threadsafe.NewSafeBool(),
 		initSynced:   threadsafe.NewSafeBool(),
-		//instances: make([]*Instance, 0),
+		// instances: make([]*Instance, 0),
 	}
 
 	ret.fork = testFork(ret)
@@ -177,10 +178,10 @@ func TestCanStartNewInstance(t *testing.T) {
 
 			i.ValidatorShare = test.share
 			i.instanceConfig = proto.DefaultConsensusParams()
-			//i.instances = test.prevInstances
+			// i.instances = test.prevInstances
 			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
 			require.NoError(t, err)
-			//instanceOpts.SeqNumber = test.seqNumber
+			// instanceOpts.SeqNumber = test.seqNumber
 			err = i.canStartNewInstance(*instanceOpts)
 
 			if len(test.expectedError) > 0 {

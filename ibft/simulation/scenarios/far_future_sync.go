@@ -2,18 +2,17 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type farFutureSync struct {
 	logger     *zap.Logger
 	nodes      []ibft.Controller
-	shares     map[uint64]*validatorstorage.Share
 	dbs        []collections.Iibft
 	valueCheck valcheck.ValueCheck
 }
@@ -26,9 +25,8 @@ func FarFutureSync(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario
 	}
 }
 
-func (r *farFutureSync) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, dbs []collections.Iibft) {
+func (r *farFutureSync) Start(nodes []ibft.Controller, dbs []collections.Iibft) {
 	r.nodes = nodes
-	r.shares = shares
 	r.dbs = dbs
 	nodeCount := len(nodes)
 
@@ -82,11 +80,10 @@ loop:
 
 func (r *farFutureSync) startNode(node ibft.Controller, index uint64, seqNumber uint64) {
 	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:         r.logger,
-		ValueCheck:     r.valueCheck,
-		SeqNumber:      seqNumber,
-		Value:          []byte("value"),
-		ValidatorShare: r.shares[index],
+		Logger:     r.logger,
+		ValueCheck: r.valueCheck,
+		SeqNumber:  seqNumber,
+		Value:      []byte("value"),
 	})
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))

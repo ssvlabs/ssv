@@ -2,12 +2,12 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type regular struct {
@@ -24,7 +24,7 @@ func NewRegularScenario(logger *zap.Logger, valueCheck valcheck.ValueCheck) ISce
 	}
 }
 
-func (r *regular) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *regular) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	r.nodes = nodes
 	nodeCount := len(nodes)
 
@@ -49,11 +49,10 @@ func (r *regular) Start(nodes []ibft.Controller, shares map[uint64]*validatorsto
 		go func(node ibft.Controller, index uint64) {
 			defer wg.Done()
 			res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-				Logger:         r.logger,
-				ValueCheck:     r.valueCheck,
-				SeqNumber:      1,
-				Value:          []byte("value"),
-				ValidatorShare: shares[index],
+				Logger:     r.logger,
+				ValueCheck: r.valueCheck,
+				SeqNumber:  1,
+				Value:      []byte("value"),
 			})
 			if err != nil {
 				r.logger.Error("instance returned error", zap.Error(err))

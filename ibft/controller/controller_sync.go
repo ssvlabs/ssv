@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/ibft/sync/incoming"
@@ -9,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
-	"time"
 )
 
 // syncRetries is the number of reties to perform for history sync
