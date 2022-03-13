@@ -2,7 +2,6 @@ package topics
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -35,7 +34,6 @@ type PububConfig struct {
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
-	Fork        forks.Fork
 	MsgHandler  PubsubMessageHandler
 	UseMsgID    bool
 	// MsgValidatorFactory accepts the topic name and returns the corresponding msg validator
@@ -127,7 +125,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 		return nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.Fork, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil)
+	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil)
 
 	return &PubsubBundle{
 		PS:         ps,

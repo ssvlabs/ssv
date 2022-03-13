@@ -2,7 +2,6 @@ package topics
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
@@ -53,7 +52,6 @@ type topicsCtrl struct {
 	// scoreParams is a function that helps to set scoring params on topics
 	scoreParams func(string) *pubsub.TopicScoreParams
 
-	fork                forks.Fork
 	msgHandler          PubsubMessageHandler
 	msgValidatorFactory func(string) MsgValidatorFunc
 	subFilter           SubFilter
@@ -66,7 +64,7 @@ type topicsCtrl struct {
 }
 
 // NewTopicsController creates an instance of Controller
-func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.Fork, msgHandler PubsubMessageHandler,
+func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler PubsubMessageHandler,
 	msgValidatorFactory func(string) MsgValidatorFunc, subFilter SubFilter, pubSub *pubsub.PubSub,
 	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	ctrl := &topicsCtrl{
@@ -74,7 +72,6 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, fork forks.For
 		logger:              logger,
 		ps:                  pubSub,
 		scoreParams:         scoreParams,
-		fork:                fork,
 		msgHandler:          msgHandler,
 		msgValidatorFactory: msgValidatorFactory,
 

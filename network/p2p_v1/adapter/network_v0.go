@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p"
 	streams_v0 "github.com/bloxapp/ssv/network/p2p/streams"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
+	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -38,7 +39,7 @@ type netV0Adapter struct {
 	streamCtrlv0 streams_v0.StreamController
 	topicsCtrl   topics.Controller
 	// TODO: add discovery service
-	//disc         discovery.Service
+	disc discovery.Service
 
 	listeners listeners.Container
 }
@@ -60,6 +61,13 @@ func (n *netV0Adapter) Setup() error {
 	n.setLegacyStreamHandler()
 
 	// TODO: complete
+
+	if err := n.setupDiscovery(); err != nil {
+		return errors.Wrap(err, "could not bootstrap discovery")
+	}
+	if err := n.setupPubsub(); err != nil {
+		return errors.Wrap(err, "could not setup pubsub")
+	}
 
 	return nil
 }
