@@ -9,9 +9,9 @@ import (
 
 // propagateSignedMsg takes an incoming message (from validator's topic)
 // and propagates it to the corresponding internal listeners
-func (n *NetV0Adapter) propagateSignedMsg(cm *network.Message) {
+func (n *netV0Adapter) propagateSignedMsg(cm *network.Message) {
 	if cm == nil || cm.SignedMessage == nil {
-		n.v1Cfg.Logger.Debug("could not propagate nil message")
+		n.logger.Debug("could not propagate nil message")
 		return
 	}
 
@@ -25,7 +25,7 @@ func (n *NetV0Adapter) propagateSignedMsg(cm *network.Message) {
 	case network.NetworkMsg_DecidedType:
 		go propagateDecidedMessage(lss, cm.SignedMessage)
 	default:
-		n.v1Cfg.Logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
+		n.logger.Error("received unsupported message", zap.Int32("msg type", int32(cm.Type)))
 	}
 }
 

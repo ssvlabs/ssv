@@ -39,7 +39,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv1.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, nPeers)
+		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers)
 	})
 
 	t.Run("v1 features", func(t *testing.T) {
@@ -47,12 +47,12 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv1.New()
 		peers := newPeers(ctx, t, nPeers, true, true, f)
-		baseTest(ctx, t, peers, pks, f, 2)
+		baseTest(ctx, t, peers, pks, f, 2, 2)
 	})
 
 }
 
-func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, msgCountTopic int) {
+func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
 	nPeers := len(peers)
 
@@ -95,8 +95,26 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	// let the peers join topics
-	// TODO: change behavior to check messages in all peers, with a wrapping timeout
-	<-time.After(time.Second * 4)
+	// v1 features includes msg_id, msg validator, subnets, scoring
+	// wait for the peers to join topics
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		for _, p := range peers {
+			// TODO: modify for subnets
+			for len(p.tm.Topics()) < nValidators {
+				if c.Err() != nil {
+					return
+				}
+				time.Sleep(time.Millisecond * 100)
+			}
+		}
+	}()
+	wg.Wait()
+
 	t.Log("broadcasting messages")
 	// publish some messages
 	for i := 0; i < nValidators; i++ {
@@ -115,8 +133,36 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	// let the messages propagate
-	// TODO: change behavior to check messages in all peers, with a wrapping timeout
-	<-time.After(time.Second * 5)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ctxReadMessages, cancel := context.WithTimeout(ctx, time.Second*8)
+		defer cancel()
+		// check number of peers and messages
+		for i := 0; i < nValidators; i++ {
+			wg.Add(1)
+			go func(pk string) {
+				defer wg.Done()
+				for _, p := range peers {
+					peers, err := p.tm.Peers(topicName(pk))
+					require.NoError(t, err)
+					for ctxReadMessages.Err() == nil && len(peers) < nPeers-2 {
+						time.Sleep(time.Millisecond * 20)
+					}
+					for ctxReadMessages.Err() == nil && p.getCount(topicName(pk)) < minMsgCount {
+						time.Sleep(time.Millisecond * 20)
+					}
+					if ctxReadMessages.Err() != nil {
+						return
+					}
+					c := p.getCount(topicName(pk))
+					require.GreaterOrEqual(t, c, minMsgCount)
+					require.LessOrEqual(t, c, maxMsgCount)
+				}
+			}(pks[i])
+		}
+	}()
+	wg.Wait()
 	t.Log("validating topics and messages")
 
 	// check number of topics
@@ -124,21 +170,8 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		require.Len(t, p.tm.Topics(), nValidators)
 	}
 
-	// check number of peers and messages
-	for i := 0; i < nValidators; i++ {
-		for _, p := range peers {
-			pk := pks[i]
-			peers, err := p.tm.Peers(topicName(pk))
-			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(peers), nPeers-2)
-			c := p.getCount(topicName(pk))
-			require.Equal(t, msgCountTopic, c) // expecting only 2 messages, as the rest were filtered by duplicated id
-		}
-	}
-
 	t.Log("unsubscribing")
 	// unsubscribing multiple times for each topic
-	var wg sync.WaitGroup
 	for i := 0; i < nValidators; i++ {
 		for _, p := range peers {
 			wg.Add(1)
