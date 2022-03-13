@@ -354,7 +354,7 @@ func (c *controller) handleValidatorAddedEvent(
 func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
 	logger := c.logger.With(zap.String("eventType", "OperatorAdded"),
 		zap.String("pubKey", string(event.PublicKey)))
-	logger.Info("operator added event")
+	logger.Debug("operator added event")
 	oi := registrystorage.OperatorInformation{
 		PublicKey:    string(event.PublicKey),
 		Name:         event.Name,
@@ -362,7 +362,7 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	}
 	err := c.storage.SaveOperatorInformation(&oi)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "could not save operator information")
 	}
 	logger.Debug("managed to save operator information", zap.Any("value", oi))
 	return nil
