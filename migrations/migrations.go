@@ -21,7 +21,6 @@ var (
 		migrationExample2,
 		migrationCleanAllRegistryData,
 		migrationCleanOperatorNodeRegistryData,
-		migrationTemp,
 	}
 )
 
