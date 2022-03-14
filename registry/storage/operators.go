@@ -51,7 +51,7 @@ func NewOperatorsStorage(db basedb.IDb, logger *zap.Logger, prefix []byte) Opera
 
 // GetOperatorsPrefix returns the prefix
 func (s *operatorsStorage) GetOperatorsPrefix() []byte {
-	return s.prefix
+	return append(s.prefix, operatorsPrefix...)
 }
 
 // ListOperators returns information of all the known operators
