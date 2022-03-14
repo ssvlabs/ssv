@@ -119,8 +119,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil || !found {
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
-		cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPrivKey.Public() // TODo fetch publicKey
 
 		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
 		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
@@ -130,6 +128,9 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil || !found {
 			Logger.Fatal("failed to get p2p private key", zap.Error(err))
 		}
+
+		// TODO can remove? 13.2
+		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
 		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
@@ -138,8 +139,9 @@ var StartNodeCmd = &cobra.Command{
 		//	Logger.Fatal("failed to create network", zap.Error(err))
 		//}
 
+		cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPrivKey.Public() // TODo fetch publicKey 13.2
 		cfg.P2pV1NetworkConfig.NetworkPrivateKey = p2pPrivKey
-		cfg.P2pV1NetworkConfig.Fork = fork.NetworkFork() // TODO check if need differ fork
+		cfg.P2pV1NetworkConfig.Fork = fork.NetworkFork() // TODO check if need differ fork 13.2
 
 		p2pNet, err := network_wrapper.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig, &cfg.P2pV1NetworkConfig)
 		if err != nil {

@@ -34,7 +34,7 @@ func (v1 *ForkV1) SetHandler(handler forks.OnFork) {
 
 // SlotTick implementation
 func (v1 *ForkV1) SlotTick(slot uint64) {
-	if slot == forkedSlot {
+	if slot >= forkedSlot && !v1.IsForked() { // TODo check if can do this code with atomic func
 		if v1.handler != nil {
 			v1.handler()
 		}

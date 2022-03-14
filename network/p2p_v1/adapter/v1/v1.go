@@ -1,4 +1,4 @@
-package v0
+package v1
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/p2p"
 	streams_v0 "github.com/bloxapp/ssv/network/p2p/streams"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
@@ -40,7 +39,6 @@ type netV0Adapter struct {
 	logger *zap.Logger
 
 	v1Cfg        *p2p_v1.Config
-	v0Cfg        *p2p.Config
 	fork         forks.Fork
 	host         host.Host
 	streamCtrlv0 streams_v0.StreamController
@@ -54,13 +52,12 @@ type netV0Adapter struct {
 }
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
-func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config, v0Cfg *p2p.Config) adapter.Adapter {
+func New(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
 	return &netV0Adapter{
 		ctx:       ctx,
 		cancel:    cancel,
-		fork:      v0Cfg.Fork,
 		logger:    v1Cfg.Logger,
 		listeners: listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 	}
