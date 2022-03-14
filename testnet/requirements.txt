@@ -1,0 +1,4 @@
+click
+pyyaml
+docker
+go_template
