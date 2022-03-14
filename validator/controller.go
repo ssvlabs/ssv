@@ -338,7 +338,7 @@ func (c *controller) handleValidatorAddedEvent(
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not check if validator share exits")
+		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
 		newValShare, share, err := createShareWithOperatorKey(validatorAddedEvent, c.shareEncryptionKeyProvider, isOperatorShare)

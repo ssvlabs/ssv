@@ -57,7 +57,7 @@ func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.Operato
 }
 
 func (s *storage) CleanRegistryData() error {
-	return s.cleanSyncOffset()
+	return s.db.RemoveAllByCollection(prefix)
 }
 
 // SaveSyncOffset saves the offset
