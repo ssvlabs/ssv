@@ -2,19 +2,18 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 type f1Speedup struct {
 	logger     *zap.Logger
 	nodes      []ibft.Controller
-	shares     map[uint64]*validatorstorage.Share
 	valueCheck valcheck.ValueCheck
 }
 
@@ -26,9 +25,8 @@ func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (r *f1Speedup) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, _ []collections.Iibft) {
+func (r *f1Speedup) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	r.nodes = nodes
-	r.shares = shares
 	nodeCount := len(nodes)
 
 	if nodeCount < 3 {
@@ -74,11 +72,10 @@ func (r *f1Speedup) Start(nodes []ibft.Controller, shares map[uint64]*validators
 
 func (r *f1Speedup) startNode(node ibft.Controller, index uint64) {
 	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:         r.logger,
-		ValueCheck:     r.valueCheck,
-		SeqNumber:      1,
-		Value:          []byte("value"),
-		ValidatorShare: r.shares[index],
+		Logger:     r.logger,
+		ValueCheck: r.valueCheck,
+		SeqNumber:  1,
+		Value:      []byte("value"),
 	})
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))

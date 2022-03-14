@@ -4,17 +4,15 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 )
 
 // ControllerStartInstanceOptions defines type for Controller instance options
 type ControllerStartInstanceOptions struct {
-	Logger         *zap.Logger
-	ValueCheck     valcheck.ValueCheck
-	SeqNumber      uint64
-	Value          []byte
-	ValidatorShare *storage.Share
+	Logger     *zap.Logger
+	ValueCheck valcheck.ValueCheck
+	SeqNumber  uint64
+	Value      []byte
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool

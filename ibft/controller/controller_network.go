@@ -3,9 +3,10 @@ package controller
 import (
 	"bytes"
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	"time"
 )
 
 var (

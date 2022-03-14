@@ -3,10 +3,11 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"time"
+
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
-	"time"
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
@@ -182,7 +183,6 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	}
 
 	result, err := v.ibfts[duty.Type].StartInstance(ibft.ControllerStartInstanceOptions{
-		ValidatorShare:  v.Share,
 		Logger:          logger,
 		ValueCheck:      valCheckInstance,
 		SeqNumber:       seqNumber,

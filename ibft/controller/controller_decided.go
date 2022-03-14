@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"time"
+
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
@@ -8,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 )
 
 // processDecidedQueueMessages is listen for all the ibft decided msg's and process them
