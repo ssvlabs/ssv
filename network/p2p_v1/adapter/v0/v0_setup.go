@@ -73,6 +73,7 @@ func (n *netV0Adapter) setupPubsub() error {
 		StaticPeers: staticPeers,
 		UseMsgID:    false,
 		MsgHandler:  n.HandleMsg,
+		Fork:        n.fork,
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")

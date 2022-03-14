@@ -2,6 +2,7 @@ package topics
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/protocol"
 	scrypto "github.com/bloxapp/ssv/utils/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -59,14 +60,16 @@ type msgIDHandler struct {
 	ids    map[string]*msgIDEntry
 	locker sync.Locker
 	ttl    time.Duration
+	fork   forks.Fork
 }
 
-func newMsgIDHandler(logger *zap.Logger, ttl time.Duration) MsgIDHandler {
+func newMsgIDHandler(logger *zap.Logger, ttl time.Duration, fork forks.Fork) MsgIDHandler {
 	return &msgIDHandler{
 		logger: logger,
 		ids:    make(map[string]*msgIDEntry),
 		locker: &sync.Mutex{},
 		ttl:    ttl,
+		fork:   fork,
 	}
 }
 
@@ -90,6 +93,7 @@ func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 		}
 		logger = logger.With(zap.String("from", pid.String()))
 		ssvMsg := protocol.SSVMessage{}
+
 		err = ssvMsg.Decode(pmsg.GetData())
 		if err != nil {
 			logger.Warn("invalid encoding", zap.Error(err))

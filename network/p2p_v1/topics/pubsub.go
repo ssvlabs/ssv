@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -42,6 +43,7 @@ type PububConfig struct {
 	MsgValidatorFactory func(string) MsgValidatorFunc
 	ScoreIndex          peers.ScoreIndex
 	Scoring             *ScoringConfig
+	Fork                forks.Fork
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -107,7 +109,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 
 	var midHandler MsgIDHandler
 	if cfg.UseMsgID {
-		midHandler = newMsgIDHandler(cfg.Logger, time.Minute*2)
+		midHandler = newMsgIDHandler(cfg.Logger, time.Minute*2, cfg.Fork)
 		async.RunEvery(ctx, time.Minute*3, midHandler.GC)
 		psOpts = append(psOpts, pubsub.WithMessageIdFn(midHandler.MsgID()))
 	}

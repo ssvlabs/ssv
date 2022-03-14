@@ -36,18 +36,17 @@ func (n *p2pNetwork) SetStreamHandler(pid string, handler network.StreamHandler)
 			//n.logger.Warn("could not handle stream", zap.Error(err))
 			return
 		}
-		msg := protocol.SSVMessage{}
-		err = msg.Decode(req)
+		msg, err := n.cfg.Fork.DecodeNetworkMsgV1(req)
 		if err != nil {
 			n.logger.Warn("could not decode msg from stream", zap.Error(err))
 			return
 		}
-		result, err := handler(&msg)
+		result, err := handler(msg)
 		if err != nil {
 			n.logger.Warn("could not handle msg from stream", zap.Error(err))
 			return
 		}
-		resultBytes, err := result.Encode()
+		resultBytes, err := n.cfg.Fork.EncodeNetworkMsgV1(result)
 		if err != nil {
 			n.logger.Warn("could not encode msg", zap.Error(err))
 			return

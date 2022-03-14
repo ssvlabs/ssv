@@ -254,6 +254,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	cfg := &PububConfig{
+		Fork:     fork,
 		Logger:   logger,
 		Host:     h,
 		TraceLog: false,
