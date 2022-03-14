@@ -43,6 +43,10 @@ func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.Operato
 	return s.operatorStore.ListOperators(from, to)
 }
 
+func (s *storage) GetOperatorsPrefix() []byte {
+	return s.operatorStore.GetOperatorsPrefix()
+}
+
 // NewExporterStorage creates a new instance of Storage
 func NewExporterStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	return &storage{

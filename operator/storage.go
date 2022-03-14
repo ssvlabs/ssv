@@ -56,8 +56,21 @@ func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.Operato
 	return s.operatorStore.ListOperators(from, to)
 }
 
+func (s *storage) GetOperatorsPrefix() []byte {
+	return s.operatorStore.GetOperatorsPrefix()
+}
+
 func (s *storage) CleanRegistryData() error {
-	return s.db.RemoveAllByCollection(prefix)
+	err := s.cleanSyncOffset()
+	if err != nil {
+		return errors.Wrap(err, "could not clean sync offset")
+	}
+
+	err = s.cleanOperators()
+	if err != nil {
+		return errors.Wrap(err, "could not clean sync offset")
+	}
+	return nil
 }
 
 // SaveSyncOffset saves the offset
@@ -67,6 +80,11 @@ func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
 
 func (s *storage) cleanSyncOffset() error {
 	return s.db.RemoveAllByCollection(append(prefix, syncOffsetKey...))
+}
+
+func (s *storage) cleanOperators() error {
+	operatorsPrefix := s.GetOperatorsPrefix()
+	return s.db.RemoveAllByCollection(append(prefix, operatorsPrefix...))
 }
 
 // GetSyncOffset returns the offset

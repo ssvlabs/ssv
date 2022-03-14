@@ -30,6 +30,7 @@ type OperatorsCollection interface {
 	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error)
 	SaveOperatorInformation(operatorInformation *OperatorInformation) error
 	ListOperators(from int64, to int64) ([]OperatorInformation, error)
+	GetOperatorsPrefix() []byte
 }
 
 type operatorsStorage struct {
@@ -46,6 +47,11 @@ func NewOperatorsStorage(db basedb.IDb, logger *zap.Logger, prefix []byte) Opera
 		logger: logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
 		prefix: prefix,
 	}
+}
+
+// GetOperatorsPrefix returns the prefix
+func (s *operatorsStorage) GetOperatorsPrefix() []byte {
+	return s.prefix
 }
 
 // ListOperators returns information of all the known operators
