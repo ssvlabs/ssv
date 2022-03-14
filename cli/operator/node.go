@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"log"
 	"net/http"
 
@@ -118,15 +119,12 @@ var StartNodeCmd = &cobra.Command{
 		}
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
 
-		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
-		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
-			Logger.Fatal("failed to setup p2p private key", zap.Error(err))
+		istore := ssv_identity.NewIdentityStore(db, Logger)
+		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
+		if err != nil {
+			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
-		p2pPrivKey, found, err := p2pStorage.GetPrivateKey()
-		if err != nil || !found {
-			Logger.Fatal("failed to get p2p private key", zap.Error(err))
-		}
-		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
+		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)

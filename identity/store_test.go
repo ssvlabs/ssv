@@ -62,7 +62,7 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			p2pStorage := storage{
+			p2pStorage := identityStore{
 				db:     db,
 				logger: zap.L(),
 			}
@@ -70,8 +70,8 @@ func TestSetupPrivateKey(t *testing.T) {
 			if test.existKey != "" { // mock exist key
 				privKey, err := gcrypto.HexToECDSA(test.existKey)
 				require.NoError(t, err)
-				require.NoError(t, p2pStorage.SavePrivateKey(privKey))
-				sk, found, err := p2pStorage.GetPrivateKey()
+				require.NoError(t, p2pStorage.saveNetworkKey(privKey))
+				sk, found, err := p2pStorage.GetNetworkKey()
 				require.True(t, found)
 				require.NoError(t, err)
 				require.NotNil(t, sk)
@@ -82,8 +82,9 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, test.existKey, hex.EncodeToString(b))
 			}
 
-			require.NoError(t, p2pStorage.SetupPrivateKey(test.passedKey))
-			privateKey, found, err := p2pStorage.GetPrivateKey()
+			_, err = p2pStorage.SetupNetworkKey(test.passedKey)
+			require.NoError(t, err)
+			privateKey, found, err := p2pStorage.GetNetworkKey()
 			require.NoError(t, err)
 			require.True(t, found)
 			require.NoError(t, err)
