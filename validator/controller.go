@@ -164,13 +164,14 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler {
 	return func(e eth1.Event) error {
-		if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
-			pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
+		switch ev := e.Data.(type) {
+		case abiparser.ValidatorAddedEvent:
+			pubKey := hex.EncodeToString(ev.PublicKey)
 			if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 				c.logger.Debug("validator was loaded already")
 				return nil
 			}
-			share, err := c.handleValidatorAddedEvent(validatorAddedEvent, e.IsOperatorEvent)
+			share, err := c.handleValidatorAddedEvent(ev, e.IsOperatorEvent)
 			if err != nil {
 				c.logger.Error("could not handle validatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
 				return err
@@ -178,12 +179,14 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 			for _, h := range handlers {
 				h(share)
 			}
-		} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
-			err := c.handleOperatorAddedEvent(operatorAddedEvent)
+		case abiparser.OperatorAddedEvent:
+			err := c.handleOperatorAddedEvent(ev)
 			if err != nil {
 				c.logger.Error("could not handle operatorAdded event", zap.Error(err))
 				return err
 			}
+		default:
+			c.logger.Warn("could not handle unknown event")
 		}
 		return nil
 	}
