@@ -3,35 +3,34 @@ package ibft
 import (
 	"context"
 	"encoding/hex"
+	"sync"
+	"time"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
+	"github.com/bloxapp/ssv/ibft/instance/msgcont"
+	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
+	"github.com/bloxapp/ssv/ibft/leader"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
-	"github.com/pkg/errors"
-	"sync"
-	"time"
-
-	"github.com/bloxapp/ssv/ibft/leader"
-
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/ibft/instance/msgcont"
-	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/msgqueue"
 )
 
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *storage.Share
-	//Me             *proto.Node
+	// Me             *proto.Node
 	Network        network.Network
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
@@ -101,9 +100,7 @@ func NewInstanceWithState(state *proto.State) ibft.Instance {
 func NewInstance(opts *InstanceOptions) ibft.Instance {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
-	logger := opts.Logger.With(zap.Uint64("node_id", opts.ValidatorShare.NodeID),
-		zap.Uint64("seq_num", opts.SeqNumber),
-		zap.String("pubKey", opts.ValidatorShare.PublicKey.SerializeToHexStr()))
+	logger := opts.Logger.With(zap.Uint64("seq_num", opts.SeqNumber))
 	ret := &Instance{
 		ValidatorShare: opts.ValidatorShare,
 		state: &proto.State{
