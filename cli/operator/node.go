@@ -120,7 +120,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
 
 		istore := ssv_identity.NewIdentityStore(db, Logger)
-		//p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
 		if err != nil {
 			Logger.Fatal("failed to setup network private key", zap.Error(err))
