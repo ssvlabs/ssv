@@ -81,8 +81,22 @@ func TestP2pNetwork_Start(t *testing.T) {
 
 	wg.Wait()
 
-	// let the messages propagate
-	<-time.After(time.Second * 4)
+	// waiting for messages
+	wg.Add(1)
+	go func() {
+		ct, cancel := context.WithTimeout(ctx, time.Second*4)
+		defer cancel()
+		defer wg.Done()
+		for _, r := range routers {
+			for atomic.LoadUint64(&r.count) < uint64(2) {
+				time.Sleep(100 * time.Millisecond)
+				if ct.Err() != nil {
+					return
+				}
+			}
+		}
+	}()
+	wg.Wait()
 
 	for _, r := range routers {
 		require.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router", r.i)
@@ -117,7 +131,7 @@ func dummyMsg(pkHex string, height int) (*protocol.SSVMessage, error) {
 		"value": "bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="
 	  },
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
-	  "signer_ids": [1,3,4]
+	  "signers": [1,3,4]
 	}`, id, height)
 	return &protocol.SSVMessage{
 		MsgType: protocol.SSVConsensusMsgType,

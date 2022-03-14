@@ -142,7 +142,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupPubsub() error {
-	psBundle, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
+	cfg := &topics.PububConfig{
 		Logger:      n.cfg.Logger,
 		Host:        n.host,
 		TraceLog:    n.cfg.PubSubTrace,
@@ -153,7 +153,12 @@ func (n *p2pNetwork) setupPubsub() error {
 			return topics.NewSSVMsgValidator(logger, n.cfg.Fork, n.host.ID())
 		},
 		MsgHandler: n.handlePubsubMessages,
-	})
+		ScoreIndex: n.idx,
+	}
+	if !n.cfg.PubSubScoring {
+		cfg.ScoreIndex = nil
+	}
+	psBundle, err := topics.NewPubsub(n.ctx, cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
