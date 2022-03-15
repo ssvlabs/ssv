@@ -23,8 +23,8 @@ type P2pNetwork struct {
 	cfgV1          *p2pv1.Config
 }
 
-func New(ctx context.Context, logger *zap.Logger, cfgV1 *p2pv1.Config) (network.Network, error) {
-	logger = logger.With(zap.String("who", "networkWrapper"))
+func New(ctx context.Context, cfgV1 *p2pv1.Config) (network.Network, error) {
+	logger := cfgV1.Logger.With(zap.String("who", "networkWrapper"))
 	logger.Debug("start new wrapper")
 	n := &P2pNetwork{
 		ctx:    ctx,
@@ -40,7 +40,7 @@ func New(ctx context.Context, logger *zap.Logger, cfgV1 *p2pv1.Config) (network.
 		cfg := *cfgV1
 		cfg.Fork = networkForkV0.New() // set v0 fork
 		n.networkAdapter = v0.NewV0Adapter(ctx, &cfg)
-		cfg.Fork.SetHandler(n.onFork)
+		cfgV1.Fork.SetHandler(n.onFork)
 	}
 
 	n.setup()

@@ -115,10 +115,6 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
-		//operatorPrivKey, found, err := operatorStorage.GetPrivateKey() TODO can be removed?
-		//if err != nil || !found {
-		//	Logger.Fatal("failed to get operator private key", zap.Error(err))
-		//}
 
 		istore := ssv_identity.NewIdentityStore(db, Logger)
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
@@ -126,11 +122,11 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
 
-		//cfg.P2pNetworkConfig.OperatorPublicKey = operatorPublicKey TODO its optional but need it this case? 13.2
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
+		cfg.P2pNetworkConfig.Logger = Logger
 
-		p2pNet, err := network_wrapper.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
+		p2pNet, err := network_wrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}

@@ -5,7 +5,7 @@ import (
 	ibftControllerFork "github.com/bloxapp/ssv/ibft/controller/forks"
 	ibftControllerForkV0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	networkForks "github.com/bloxapp/ssv/network/forks"
-	networkForkV1 "github.com/bloxapp/ssv/network/forks/v1"
+	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/operator/forks"
 	storageForks "github.com/bloxapp/ssv/storage/forks"
 	storageForksV0 "github.com/bloxapp/ssv/storage/forks/v0"
@@ -13,10 +13,11 @@ import (
 
 // ForkV0 is the genesis operator fork
 type ForkV0 struct {
-	network     core.Network
-	ibftForks   []ibftControllerFork.Fork
-	networkFork networkForks.Fork
-	storageFork storageForks.Fork
+	network       core.Network
+	ibftForks     []ibftControllerFork.Fork
+	networkForker forks.Forker
+	networkFork   networkForks.Fork
+	storageFork   storageForks.Fork
 }
 
 // New returns a new ForkV0 instance
@@ -24,7 +25,7 @@ func New(network string) forks.Fork {
 	return &ForkV0{
 		network:     core.NetworkFromString(network),
 		ibftForks:   make([]ibftControllerFork.Fork, 0),
-		networkFork: networkForkV1.New(),
+		networkFork: networkForkV0.New(),
 		storageFork: storageForksV0.New(),
 	}
 }

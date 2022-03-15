@@ -6,7 +6,7 @@ import (
 )
 
 // forkedSlot represent the slot when fork happen
-const forkedSlot uint64 = 3
+const forkedSlot uint64 = 30000000000 // TODO set as params
 
 // state to know when fork start
 const (

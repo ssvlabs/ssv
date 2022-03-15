@@ -124,8 +124,8 @@ func (n *netV0Adapter) Start() error {
 	})
 
 	async.RunEvery(n.ctx, 30*time.Second, func() {
-		go n.reportAllPeers()
-		n.reportTopics()
+		//go n.reportAllPeers()
+		//n.reportTopics()
 	})
 
 	return nil

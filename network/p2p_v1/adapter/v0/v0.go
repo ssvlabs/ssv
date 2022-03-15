@@ -62,6 +62,7 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 		cancel:         cancel,
 		fork:           v1Cfg.Fork, // should be v0 fork
 		logger:         v1Cfg.Logger,
+		v1Cfg:          v1Cfg,
 		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 		knownOperators: &sync.Map{},
 	}
@@ -119,8 +120,8 @@ func (n *netV0Adapter) Start() error {
 	})
 
 	async.RunEvery(n.ctx, 30*time.Second, func() {
-		go n.reportAllPeers()
-		n.reportTopics()
+		//go n.reportAllPeers()
+		//n.reportTopics()
 	})
 
 	return nil
