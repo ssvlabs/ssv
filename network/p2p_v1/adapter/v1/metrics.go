@@ -10,23 +10,23 @@ import (
 
 var (
 	metricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:all_connected_peers",
+		Name: "ssv:network:all_connected_peers:v1:adapter",
 		Help: "Count connected peers",
 	})
 	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:connected_peers",
+		Name: "ssv:network:connected_peers:v1:adapter",
 		Help: "Count connected peers for a validator",
 	}, []string{"pubKey"})
 	metricsTopicsCount = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:topics:count",
+		Name: "ssv:network:topics:count:v1:adapter",
 		Help: "Count connected peers for a validator",
 	})
 	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peers_identity",
+		Name: "ssv:network:peers_identity:v1:adapter",
 		Help: "Peers identity",
 	}, []string{"pubKey", "v", "pid", "type"})
 	metricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peer_last_msg",
+		Name: "ssv:network:peer_last_msg:v1:adapter",
 		Help: "Timestamps of last messages",
 	}, []string{"pid"})
 )
