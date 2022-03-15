@@ -99,7 +99,7 @@ func (s *Collection) cleanAllShares() error {
 	return s.db.RemoveAllByCollection(collectionPrefix())
 }
 
-// GetAllValidatorsShare returns all shares
+// GetAllValidatorShares returns all shares
 func (s *Collection) GetAllValidatorShares() ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
