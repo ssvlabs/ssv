@@ -63,6 +63,7 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
+	GetAllValidatorShares() ([]*validatorstorage.Share, error)
 }
 
 // controller implements Controller
@@ -139,6 +140,10 @@ func NewController(options ControllerOptions) Controller {
 	}
 
 	return &ctrl
+}
+
+func (c *controller) GetAllValidatorShares() ([]*validatorstorage.Share, error) {
+	return c.collection.GetAllValidatorShares()
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client

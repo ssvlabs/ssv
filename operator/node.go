@@ -137,6 +137,18 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	n.logger.Info("manage to sync contract events")
+	shares, err := n.validatorsCtrl.GetAllValidatorShares()
+	if err != nil {
+		n.logger.Error("failed to get validator shares", zap.Error(err))
+	}
+	operators, err := n.storage.ListOperators(0, 0)
+	if err != nil {
+		n.logger.Error("failed to get operators", zap.Error(err))
+	}
+	n.logger.Info("ETH1 sync history stats",
+		zap.Int("shares count", len(shares)),
+		zap.Int("operators count", len(operators)),
+	)
 
 	// setup validator controller to listen to new events
 	go n.validatorsCtrl.ListenToEth1Events(n.eth1Client.EventsFeed())
