@@ -70,7 +70,7 @@ func New(opts Options) Node {
 		beacon:         opts.Beacon,
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
-		storage:        NewOperatorNodeStorage(opts.DB, opts.Logger),
+		storage:        NewNodeStorage(opts.DB, opts.Logger),
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,

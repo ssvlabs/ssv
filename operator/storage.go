@@ -35,8 +35,8 @@ type storage struct {
 	operatorStore registrystorage.OperatorsCollection
 }
 
-// NewOperatorNodeStorage creates a new instance of Storage
-func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
+// NewNodeStorage creates a new instance of Storage
+func NewNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	return &storage{
 		db:            db,
 		logger:        logger,

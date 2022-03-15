@@ -49,7 +49,7 @@ type ControllerOptions struct {
 	CleanRegistryData          bool
 	Fork                       forks.Fork
 	KeyManager                 beacon.KeyManager
-	OperatorPublicKey          string
+	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 }
 
@@ -75,7 +75,7 @@ type controller struct {
 	keyManager beacon.KeyManager
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
-	operatorPublicKey          string
+	operatorPubKey             string
 
 	validatorsMap *validatorsMap
 
@@ -109,7 +109,7 @@ func NewController(options ControllerOptions) Controller {
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
-		operatorPublicKey:          options.OperatorPublicKey,
+		operatorPubKey:             options.OperatorPubKey,
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
 
@@ -167,6 +167,7 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 		switch ev := e.Data.(type) {
 		case abiparser.ValidatorAddedEvent:
 			pubKey := hex.EncodeToString(ev.PublicKey)
+			// TODO: on history sync this should not be called
 			if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 				c.logger.Debug("validator was loaded already")
 				return nil
@@ -176,8 +177,10 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 				c.logger.Error("could not handle validatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
 				return err
 			}
-			for _, h := range handlers {
-				h(share)
+			if e.IsOperatorEvent {
+				for _, h := range handlers {
+					h(share)
+				}
 			}
 		case abiparser.OperatorAddedEvent:
 			err := c.handleOperatorAddedEvent(ev)
@@ -202,7 +205,7 @@ func (c *controller) handleShare(share *validatorstorage.Share) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetAllValidatorsShare()
+	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey)
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -427,13 +430,6 @@ func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *Validator) (bool, error) {
-	// check if the validator share belongs to operator,
-	// if so start it, otherwise ignore it
-	ok := v.Share.IsOperatorShare(c.operatorPublicKey)
-	if !ok {
-		c.logger.Debug("ignoring validator")
-		return false, nil
-	}
 	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
 	if !v.Share.HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")
@@ -455,7 +451,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetAllValidatorsShare()
+		shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey)
 		if err != nil {
 			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 			continue
