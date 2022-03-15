@@ -23,6 +23,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -113,11 +114,15 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
-		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()
+		operatorPrivateKey, found, err := operatorStorage.GetPrivateKey()
 		if err != nil || !found {
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		operatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+		if err != nil {
+			Logger.Fatal("failed to extract operator public key", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivateKey
 
 		istore := ssv_identity.NewIdentityStore(db, Logger)
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
@@ -154,6 +159,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
+		cfg.SSVOptions.ValidatorOptions.OperatorPublicKey = operatorPubKey
+		cfg.SSVOptions.ValidatorOptions.RegistryStorage = operatorStorage
 
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 

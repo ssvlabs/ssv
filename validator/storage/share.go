@@ -45,6 +45,16 @@ type serializedShare struct {
 	Operators    [][]byte
 }
 
+// IsOperatorShare checks whether the share belongs to operator
+func (s *Share) IsOperatorShare(operatorPubKey string) bool {
+	for _, op := range s.operators {
+		if string(op) == operatorPubKey {
+			return true
+		}
+	}
+	return false
+}
+
 // CommitteeSize returns the IBFT committee size
 func (s *Share) CommitteeSize() int {
 	return len(s.Committee)

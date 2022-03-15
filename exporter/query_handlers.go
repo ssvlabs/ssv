@@ -3,8 +3,10 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"go.uber.org/zap"
@@ -14,7 +16,7 @@ const (
 	unknownError = "unknown error"
 )
 
-func handleOperatorsQuery(logger *zap.Logger, storage storage.OperatorsCollection, nm *api.NetworkMessage) {
+func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),

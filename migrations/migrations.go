@@ -20,6 +20,7 @@ var (
 		migrationExample1,
 		migrationExample2,
 		migrationCleanAllRegistryData,
+		migrationCleanOperatorNodeRegistryData,
 	}
 )
 
