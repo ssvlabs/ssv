@@ -40,6 +40,8 @@ type netV0Adapter struct {
 	v1Cfg *p2p_v1.Config
 	fork  forks.Fork
 	host  host.Host
+	// TODO: use index
+	knownOperators *sync.Map
 	// TODO: remove after v0
 	streams    *sync.Map
 	streamCtrl streams.StreamController
@@ -55,11 +57,12 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) network.Network {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
 	return &netV0Adapter{
-		ctx:       ctx,
-		cancel:    cancel,
-		fork:      v1Cfg.Fork,
-		logger:    v1Cfg.Logger,
-		listeners: listeners.NewListenersContainer(pctx, v1Cfg.Logger),
+		ctx:            ctx,
+		cancel:         cancel,
+		fork:           v1Cfg.Fork,
+		logger:         v1Cfg.Logger,
+		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
+		knownOperators: &sync.Map{},
 	}
 }
 
@@ -69,13 +72,9 @@ func (n *netV0Adapter) Listeners() listeners.Container {
 
 // Setup initializes all required components
 func (n *netV0Adapter) Setup() error {
-	n.setLegacyStreamHandler()
-
 	if err := n.setupHost(); err != nil {
 		return errors.Wrap(err, "could not setup libp2p host")
 	}
-	// creating 2 stream controllers, first for supporting old sync and new for handshake
-	//n.streamCtrlv0 = streams_v0.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
 	n.streams = &sync.Map{}
 	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
 
@@ -88,6 +87,8 @@ func (n *netV0Adapter) Setup() error {
 	if err := n.setupPubsub(); err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
+
+	n.setLegacyStreamHandler()
 
 	return nil
 }
@@ -289,8 +290,7 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 }
 
 func (n *netV0Adapter) NotifyOperatorID(oid string) {
-	// TODO
-	panic("implement me")
+	n.knownOperators.Store(oid, true)
 }
 
 func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {

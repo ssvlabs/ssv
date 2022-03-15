@@ -18,6 +18,9 @@ const (
 	userAgentKey = "AgentVersion"
 )
 
+// HandshakeFilter can be used to filter nodes once we handshaked with them
+type HandshakeFilter func(*Identity) (bool, error)
+
 // Handshaker is the interface for handshaking with peers
 type Handshaker interface {
 	Handshake(conn libp2pnetwork.Conn) error
@@ -29,6 +32,8 @@ type handshaker struct {
 
 	logger *zap.Logger
 
+	filters []HandshakeFilter
+
 	streams streams.StreamController
 
 	idx IdentityIndex
@@ -37,13 +42,14 @@ type handshaker struct {
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx IdentityIndex, ids *identify.IDService) Handshaker {
+func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx IdentityIndex, ids *identify.IDService, filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:     ctx,
 		logger:  logger,
 		streams: streams,
 		idx:     idx,
 		ids:     ids,
+		filters: filters,
 	}
 	return h
 }
@@ -63,6 +69,10 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			return
 		}
 		h.logger.Debug("handling handshake request from peer", zap.Any("identity", identity))
+		if !h.applyFilters(identity) {
+			h.logger.Debug("filtering peer", zap.Any("identity", identity))
+			return
+		}
 		if added, err := h.idx.Add(identity); err != nil {
 			h.logger.Warn("could not add identity identity", zap.Error(err))
 			return
@@ -109,6 +119,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if idn == nil {
 		return errors.New("empty identity")
 	}
+	if !h.applyFilters(identity) {
+		h.logger.Debug("filtering peer", zap.Any("identity", identity))
+		return errors.New("peer was filtered")
+	}
 	// adding to index
 	added, err := h.idx.Add(idn)
 	if added {
@@ -150,6 +164,21 @@ func (h *handshaker) handshakeWithUserAgent(conn libp2pnetwork.Conn) (*Identity,
 		return nil, errors.New("could not cast ua to string")
 	}
 	return identityFromUserAgent(ua, pid.String()), nil
+}
+
+func (h *handshaker) applyFilters(identity *Identity) bool {
+	for _, filter := range h.filters {
+		ok, err := filter(identity)
+		if err != nil {
+			h.logger.Warn("could not filter identity", zap.Error(err))
+			return false
+		}
+		if !ok {
+			h.logger.Debug("filtering peer", zap.Any("identity", identity))
+			return false
+		}
+	}
+	return true
 }
 
 func identityFromUserAgent(ua string, pid string) *Identity {
