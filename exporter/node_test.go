@@ -167,11 +167,11 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 
 		wg.Wait()
 
-		validators, err := exp.storage.ListValidators(0, 0)
+		validators, err := exp.storage.ListValidators(0, 1)
 		require.NoError(t, err)
 		require.Equal(t, len(validators), 2)
 
-		operators, err := exp.storage.ListOperators(0, 0)
+		operators, err := exp.storage.ListOperators(0, 1)
 		require.NoError(t, err)
 		require.Equal(t, len(operators), 2)
 	})

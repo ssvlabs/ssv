@@ -38,7 +38,6 @@ func (s *storage) ListValidators(from int64, to int64) ([]ValidatorInformation, 
 	s.validatorsLock.RLock()
 	defer s.validatorsLock.RUnlock()
 
-	to = normalTo(to)
 	var validators []ValidatorInformation
 	err := s.db.GetAll(append(storagePrefix(), validatorsPrefix()...), func(i int, obj basedb.Obj) error {
 		var vi ValidatorInformation

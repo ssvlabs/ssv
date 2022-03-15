@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"math"
 	"sync"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -68,11 +67,4 @@ func (s *storage) nextIndex(prefix []byte) (int64, error) {
 		return 0, err
 	}
 	return n, err
-}
-
-func normalTo(to int64) int64 {
-	if to == 0 {
-		return math.MaxInt64
-	}
-	return to
 }
