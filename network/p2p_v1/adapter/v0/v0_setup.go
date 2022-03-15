@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/libp2p/go-libp2p"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -92,10 +93,20 @@ func (n *netV0Adapter) setupPeerServices() error {
 		return errors.Wrap(err, "failed to create ID service")
 	}
 
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids)
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids, n.filterKnownOperators)
 	n.host.SetStreamHandler(peers.HandshakeProtocol, handshaker.Handler())
 
 	connHandler := peers.HandleConnections(n.ctx, n.logger, handshaker)
 	n.host.Network().Notify(connHandler)
 	return nil
+}
+
+func (n *netV0Adapter) filterKnownOperators(identity *peers.Identity) (bool, error) {
+	if n.idx.Limit(libp2pnetwork.DirInbound) {
+		return true, nil
+	}
+	if _, ok := n.knownOperators.Load(identity.OperatorID); ok {
+		return true, nil
+	}
+	return false, nil
 }

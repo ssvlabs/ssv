@@ -45,7 +45,8 @@ func TestP2pNetwork_Start(t *testing.T) {
 		}
 	}
 	// let the nodes subscribe
-	<-time.After(time.Second * 3)
+	// TODO: remove timeout
+	<-time.After(time.Second * 5)
 
 	msg1, err := dummyMsg(pks[0], 1)
 	require.NoError(t, err)

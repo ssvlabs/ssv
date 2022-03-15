@@ -16,11 +16,11 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 	q := tasks.NewExecutionQueue(time.Millisecond*10, tasks.WithoutErrors())
 
 	go func() {
-		go q.Start()
+		c, cancel := context.WithCancel(ctx)
+		defer cancel()
 		defer q.Stop()
-		for ctx.Err() == nil {
-			// wait for context done
-		}
+		q.Start()
+		<-c.Done()
 	}()
 
 	handshake := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {

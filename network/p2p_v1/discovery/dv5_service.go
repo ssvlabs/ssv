@@ -234,7 +234,7 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	}
 }
 
-// limitNodeFilter checks if limit exceeded, then only relevant nodes will pass this filter
+// limitNodeFilter checks if limit exceeded
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
 }
