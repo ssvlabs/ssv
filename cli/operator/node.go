@@ -143,8 +143,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
-		Logger.Debug("THIS IS TEST!")
-
 		ctx := cmd.Context()
 		cfg.SSVOptions.Fork = forker
 		cfg.SSVOptions.Context = ctx

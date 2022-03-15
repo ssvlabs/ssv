@@ -15,10 +15,3 @@ func New() forks.Fork {
 func (v0 *ForkV0) SlotTick(slot uint64) {
 
 }
-
-func (v0 *ForkV0) IsForked() bool {
-	return false
-}
-
-func (v0 *ForkV0) SetHandler(fork forks.OnFork) {
-}

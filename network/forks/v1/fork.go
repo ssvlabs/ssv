@@ -12,3 +12,8 @@ type ForkV1 struct {
 func New() forks.Fork {
 	return &ForkV1{}
 }
+
+// SlotTick implementation
+func (v0 *ForkV1) SlotTick(slot uint64) {
+
+}

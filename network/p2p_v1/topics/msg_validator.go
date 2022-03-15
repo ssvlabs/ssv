@@ -3,8 +3,8 @@ package topics
 import (
 	"bytes"
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	forks2 "github.com/bloxapp/ssv/operator/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
@@ -16,7 +16,7 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // NewSSVMsgValidator creates a new msg validator that validates message structure,
 // and checks that the message was sent on the right topic.
 // TODO: remove logs, break into smaller validators?
-func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+func NewSSVMsgValidator(plogger *zap.Logger, fork *forks2.Forker, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 		logger := plogger.With(zap.String("topic", msg.GetTopic()), zap.String("peer", p.String()))
 		//logger.Debug("xxx validating msg")
@@ -30,14 +30,14 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultSelf)
 			return pubsub.ValidationAccept
 		}
-		smsg, err := fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(msg.GetData())
+		smsg, err := fork.GetCurrentFork().NetworkFork().(*forksv1.ForkV1).DecodeNetworkMsgV1(msg.GetData())
 		if err != nil {
 			// can't decode message
 			logger.Debug("invalid: can't decode message", zap.Error(err))
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
-		topic := fork.ValidatorTopicID(smsg.ID.GetValidatorPK())
+		topic := fork.GetCurrentFork().NetworkFork().ValidatorTopicID(smsg.ID.GetValidatorPK())
 		if topic != msg.GetTopic() {
 			// wrong topic
 			logger.Debug("invalid: wrong topic", zap.String("actual", topic),

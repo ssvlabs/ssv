@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/testing"
+	"github.com/bloxapp/ssv/operator/forks"
+	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
@@ -127,6 +128,12 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubk
 	if bn != nil {
 		bns = bn.ENR
 	}
+	forker := forks.NewForker(forks.Config{
+		Network:    "prater",
+		BeforeFork: v1.New(),
+		PostFork:   nil,
+		ForkSlot:   0,
+	})
 	return &Config{
 		Bootnodes:         bns,
 		TCPPort:           tcpPort,
@@ -140,6 +147,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubk
 		NetworkPrivateKey: netPrivKey,
 		OperatorPublicKey: operatorPubkey,
 		Logger:            logger,
-		Fork:              forksv1.New(),
+		Fork:              forker,
 	}
 }
