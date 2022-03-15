@@ -9,6 +9,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"time"
 )
@@ -142,12 +143,19 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupPubsub() error {
+	// creates a msgID handler
+	midHandler := topics.NewMsgIDHandler(n.cfg.Logger.With(zap.String("who", "msgIDHandler")),
+		n.cfg.Fork, time.Minute*2)
+	n.msgResolver = midHandler
+	// run GC every 3 minutes to clear old messages
+	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
+
 	cfg := &topics.PububConfig{
-		Logger:      n.cfg.Logger,
-		Host:        n.host,
-		TraceLog:    n.cfg.PubSubTrace,
-		StaticPeers: nil,
-		UseMsgID:    true,
+		Logger:       n.cfg.Logger,
+		Host:         n.host,
+		TraceLog:     n.cfg.PubSubTrace,
+		StaticPeers:  nil,
+		MsgIDHandler: midHandler,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
 			logger := n.cfg.Logger.With(zap.String("who", "MsgValidator"))
 			return topics.NewSSVMsgValidator(logger, n.cfg.Fork, n.host.ID())
@@ -159,12 +167,11 @@ func (n *p2pNetwork) setupPubsub() error {
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
 	}
-	psBundle, err := topics.NewPubsub(n.ctx, cfg)
+	_, tc, err := topics.NewPubsub(n.ctx, cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
-	n.topicsCtrl = psBundle.TopicsCtrl
-	n.msgResolver = psBundle.Resolver
+	n.topicsCtrl = tc
 	n.logger.Debug("topics controller is ready")
 	return nil
 }

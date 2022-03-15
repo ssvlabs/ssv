@@ -103,7 +103,7 @@ func testNetwork(ctx context.Context, logger *zap.Logger, netKey *ecdsa.PrivateK
 		TCPPort:           13000,
 		MaxBatchResponse:  10,
 		RequestTimeout:    time.Second * 1,
-		Fork:              v0.New(),
+		Fork:              &v0.ForkV0{},
 	})
 	if err != nil {
 		return nil, nil, err

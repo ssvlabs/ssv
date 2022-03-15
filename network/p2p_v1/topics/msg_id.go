@@ -3,7 +3,7 @@ package topics
 import (
 	"bytes"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/protocol"
+	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	scrypto "github.com/bloxapp/ssv/utils/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -57,19 +57,20 @@ type msgIDEntry struct {
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
 	logger *zap.Logger
+	fork   forks.Fork
 	ids    map[string]*msgIDEntry
 	locker sync.Locker
 	ttl    time.Duration
-	fork   forks.Fork
 }
 
-func newMsgIDHandler(logger *zap.Logger, ttl time.Duration, fork forks.Fork) MsgIDHandler {
+// NewMsgIDHandler creates a new MsgIDHandler
+func NewMsgIDHandler(logger *zap.Logger, fork forks.Fork, ttl time.Duration) MsgIDHandler {
 	return &msgIDHandler{
 		logger: logger,
+		fork:   fork,
 		ids:    make(map[string]*msgIDEntry),
 		locker: &sync.Mutex{},
 		ttl:    ttl,
-		fork:   fork,
 	}
 }
 
@@ -80,7 +81,7 @@ func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDEmptyMessage
 		}
 		logger := store.logger.With(zap.ByteString("seq_no", pmsg.GetSeqno()))
-		if len(pmsg.Data) == 0 {
+		if len(pmsg.GetData()) == 0 {
 			logger.Warn("empty message", zap.ByteString("pmsg.From", pmsg.GetFrom()))
 			//return fmt.Sprintf("%s/%s", MsgIDEmptyMessage, pubsub.DefaultMsgIdFn(pmsg))
 			return MsgIDEmptyMessage
@@ -92,9 +93,7 @@ func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDBadPeerID
 		}
 		logger = logger.With(zap.String("from", pid.String()))
-		ssvMsg := protocol.SSVMessage{}
-
-		err = ssvMsg.Decode(pmsg.GetData())
+		ssvMsg, err := store.fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(pmsg.GetData())
 		if err != nil {
 			logger.Warn("invalid encoding", zap.Error(err))
 			return MsgIDBadEncodedMessage

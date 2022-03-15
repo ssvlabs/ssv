@@ -15,7 +15,7 @@ func TestSSVMsgID(t *testing.T) {
 			ID:      []byte("OTFiZGZjOWQxYzU4NzZkYTEwY"),
 			Data:    []byte(msgData),
 		}
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		mid := SSVMsgID(raw)
 		require.Greater(t, len(mid), 0)

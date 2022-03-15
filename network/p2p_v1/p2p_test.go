@@ -18,18 +18,14 @@ import (
 func TestP2pNetwork_Start(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
-	defer func() {
-		cancel()
-		<-time.After(time.Millisecond * 200)
-	}()
+	defer cancel()
 	loggerFactory := func(who string) *zap.Logger {
 		//logger := zaptest.NewLogger(t).With(zap.String("who", who))
 		logger := zap.L().With(zap.String("who", who))
 		return logger
 	}
-	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, n, false)
+	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, n, n/2, false)
 	require.NoError(t, err)
-	//require.NotNil(t, ln.Bootnode)
 	require.Len(t, ln.Nodes, n)
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
@@ -49,7 +45,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 		}
 	}
 	// let the nodes subscribe
-	<-time.After(time.Second * 2)
+	<-time.After(time.Second * 3)
 
 	msg1, err := dummyMsg(pks[0], 1)
 	require.NoError(t, err)

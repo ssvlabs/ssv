@@ -54,7 +54,7 @@ func (ln *LocalNet) withBootnode(ctx context.Context, logger *zap.Logger) error 
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
-func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n int, useDiscv5 bool) (*LocalNet, error) {
+func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n, minConnected int, useDiscv5 bool) (*LocalNet, error) {
 	ln, err := NewLocalNet(pctx, loggerFactory, n, useDiscv5)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n
 			ctx, cancel := context.WithTimeout(pctx, time.Second*10)
 			defer cancel()
 			var peers []peer.ID
-			for len(peers) < n/2 && ctx.Err() == nil {
+			for len(peers) < minConnected && ctx.Err() == nil {
 				peers = node.(*p2pNetwork).host.Network().Peers()
 				time.Sleep(time.Millisecond * 100)
 			}

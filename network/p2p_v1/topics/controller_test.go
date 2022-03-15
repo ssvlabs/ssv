@@ -125,7 +125,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 					msg, err = dummyMsg(pk, 2)
 				}
 				require.NoError(t, err)
-				raw, err := msg.Encode()
+				raw, err := msg.MarshalJSON()
 				require.NoError(t, err)
 				require.NoError(t, p.tm.Broadcast(topicName(pk), raw, time.Second*5))
 			}(p, pks[i], j)
@@ -253,12 +253,12 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	var p *P
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
+	midHandler := NewMsgIDHandler(logger, fork, 2*time.Minute)
 	cfg := &PububConfig{
-		Fork:     fork,
-		Logger:   logger,
-		Host:     h,
-		TraceLog: false,
-		UseMsgID: msgID,
+		Logger:       logger,
+		Host:         h,
+		TraceLog:     false,
+		MsgIDHandler: midHandler,
 		MsgHandler: func(topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
@@ -278,10 +278,8 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 				fork, h.ID())
 		}
 	}
-	psBundle, err := NewPubsub(ctx, cfg)
+	ps, tm, err := NewPubsub(ctx, cfg)
 	require.NoError(t, err)
-	ps := psBundle.PS
-	tm := psBundle.TopicsCtrl
 
 	p = &P{
 		host:     h,
