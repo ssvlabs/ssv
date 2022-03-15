@@ -114,7 +114,7 @@ func TestStorage_ListOperators(t *testing.T) {
 
 	operators, err := storage.ListOperators(0, 0)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(operators))
+	require.Equal(t, 1, len(operators))
 	for _, operator := range operators {
 		require.True(t, strings.Contains(operator.Name, "operator-"))
 	}

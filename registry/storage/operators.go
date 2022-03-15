@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sync"
 
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -61,7 +60,6 @@ func (s *operatorsStorage) ListOperators(from int64, to int64) ([]OperatorInform
 	defer s.operatorsLock.RUnlock()
 
 	var operators []OperatorInformation
-	to = normalTo(to)
 	err := s.db.GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
 		var oi OperatorInformation
 		if err := json.Unmarshal(obj.Value, &oi); err != nil {
@@ -135,11 +133,4 @@ func operatorKey(pubKey string) []byte {
 		operatorsPrefix[:],
 		[]byte(pubKey),
 	}, []byte("/"))
-}
-
-func normalTo(to int64) int64 {
-	if to == 0 {
-		return math.MaxInt64
-	}
-	return to
 }

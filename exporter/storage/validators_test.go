@@ -117,5 +117,5 @@ func TestStorage_ListValidators(t *testing.T) {
 
 	validators, err := storage.ListValidators(0, 0)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(validators))
+	require.Equal(t, 1, len(validators))
 }
