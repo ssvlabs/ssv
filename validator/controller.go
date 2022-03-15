@@ -68,7 +68,8 @@ type controller struct {
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 
-	validatorsMap *validatorsMap
+	validatorsMap         *validatorsMap
+	nonCommitteeValidator controller2.MediatorReader
 
 	metadataUpdateQueue    tasks.Queue
 	metadataUpdateInterval time.Duration
@@ -115,6 +116,7 @@ func NewController(options ControllerOptions) Controller {
 			SyncRateLimit:              options.HistorySyncRateLimit,
 			notifyOperatorID:           notifyOperatorID,
 		}),
+		nonCommitteeValidator: NewReader(options.Logger.With(zap.String("who", "nonCommitteeReader")), options.DB),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -245,7 +247,12 @@ func (c *controller) StartNetworkMediators() {
 }
 
 func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {
-	return c.validatorsMap.GetValidator(publicKey)
+	v, ok := c.validatorsMap.GetValidator(publicKey)
+	if !ok {
+		//	return handler for non committee validator to save the decided
+		return c.nonCommitteeValidator, true
+	}
+	return v, ok
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.

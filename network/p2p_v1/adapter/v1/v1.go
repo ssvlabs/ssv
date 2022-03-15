@@ -51,15 +51,22 @@ type netV0Adapter struct {
 	listeners  listeners.Container
 }
 
-// NewV0Adapter creates a new v0 network with underlying v1 infra
-func New(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
+// New creates a new v0 network with underlying v1 infra
+func New(pctx context.Context, v1Cfg *p2p_v1.Config, lis listeners.Container) adapter.Adapter {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
+
+	// set current listeners in order to prevent new subscribe
+	newLis := listeners.NewListenersContainer(pctx, v1Cfg.Logger)
+	if lis != nil {
+		newLis.SetListeners(lis.GetAllListeners())
+	}
+
 	return &netV0Adapter{
 		ctx:       ctx,
 		cancel:    cancel,
 		logger:    v1Cfg.Logger,
-		listeners: listeners.NewListenersContainer(pctx, v1Cfg.Logger),
+		listeners: newLis,
 	}
 }
 

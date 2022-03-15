@@ -79,7 +79,8 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO - change via command line?
-		fork := v0.New()
+		fork := v0.New(cfg.ETH2Options.Network)
+		fork.Start()
 
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
@@ -134,12 +135,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
-		//p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
-		//if err != nil {
-		//	Logger.Fatal("failed to create network", zap.Error(err))
-		//}
 
-		cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPrivKey.Public() // TODo fetch publicKey 13.2
+		//cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPublicKey TODO its optional but need it this case? 13.2
 		cfg.P2pV1NetworkConfig.NetworkPrivateKey = p2pPrivKey
 		cfg.P2pV1NetworkConfig.Fork = fork.NetworkFork() // TODO check if need differ fork 13.2
 

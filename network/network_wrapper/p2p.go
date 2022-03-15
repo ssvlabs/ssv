@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter/v1"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
+	"time"
 )
 
 type p2pNetwork struct {
@@ -24,43 +25,57 @@ type p2pNetwork struct {
 
 func New(ctx context.Context, logger *zap.Logger, cfgV0 *p2p.Config, cfgV1 *p2pv1.Config) (network.Network, error) {
 	logger = logger.With(zap.String("who", "networkWrapper"))
-
-	networkAdapter := v0.NewV0Adapter(ctx, cfgV1, cfgV0)
 	n := &p2pNetwork{
-		ctx:            ctx,
-		logger:         logger,
-		networkAdapter: networkAdapter,
-		fork:           cfgV0.Fork,
-		cfgV1:          cfgV1,
+		ctx:    ctx,
+		logger: logger,
+		fork:   cfgV0.Fork,
+		cfgV1:  cfgV1,
 	}
 
 	if cfgV1.Fork.IsForked() {
-		n.OnFork()
+		logger.Debug("post fork. using v1 adapter")
+		n.networkAdapter = v1.New(ctx, cfgV1, nil)
 	} else {
-		// only need if not forked yet
-		cfgV0.Fork.SetHandler(n.OnFork)
+		logger.Debug("before fork. using v0 adapter")
+		n.networkAdapter = v0.NewV0Adapter(ctx, cfgV1, cfgV0)
+		cfgV0.Fork.SetHandler(n.onFork)
 	}
 	return n, nil
 }
 
-func (p *p2pNetwork) OnFork() {
-	if
-	//listeners := p.networkAdapter.Listeners() TODO pass to the new adapter
-	if err := p.networkAdapter.Close(); err != nil {
-		p.logger.Error("failed to close network adapter", zap.Error(err))
-		return // TODO fatal?
-	}
-
-	// TODo  nilling previews p.networkAdapter instance?
-	p.networkAdapter = v1.New(p.ctx, p.cfgV1)
+func (p *p2pNetwork) Setup() { // TODO need to be called
 	if err := p.networkAdapter.Setup(); err != nil {
 		p.logger.Fatal("failed to setup network adapter")
 	}
+}
+
+func (p *p2pNetwork) Start() { // TODO need to be called
 	if err := p.networkAdapter.Start(); err != nil {
 		p.logger.Fatal("failed to setup network adapter")
 	}
+}
+
+func (p *p2pNetwork) onFork() {
+	p.logger.Info("network fork start... moving from adapter v0 to v1")
+	lis := p.networkAdapter.Listeners()
+	p.logger.Info("closing current v0 adapter")
+	if err := p.networkAdapter.Close(); err != nil {
+		p.logger.Fatal("failed to close network adapter", zap.Error(err))
+	}
+	p.logger.Info("adapter v0 closed. wait for cooling...")
+	// give time to the system to close all pending actions before start new network
+	time.Sleep(time.Second * 3)
+
+	// TODo  nilling previews p.networkAdapter instance?
+	p.networkAdapter = v1.New(p.ctx, p.cfgV1, lis)
+	p.logger.Info("setup adapter v1")
+	p.Setup()
+	p.logger.Info("start adapter v1")
+	p.Start()
 	// subscribe to subnets
 	// start broadcast to decided topic
+
+	p.logger.Info("fork has been completed!")
 }
 
 func (p *p2pNetwork) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {

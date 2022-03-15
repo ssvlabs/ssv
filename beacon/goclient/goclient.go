@@ -88,7 +88,7 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 		graffiti:       opt.Graffiti,
 	}
 
-	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, core.PraterNetwork) // TODO need to set dynemic network
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, core.NetworkFromString(opt.Network))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
