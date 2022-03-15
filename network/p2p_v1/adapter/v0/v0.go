@@ -89,13 +89,13 @@ func (n *netV0Adapter) Setup() error {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
 
-	n.setLegacyStreamHandler()
-
 	return nil
 }
 
 // Start starts the network
 func (n *netV0Adapter) Start() error {
+	n.setLegacyStreamHandler()
+
 	go func() {
 		err := tasks.Retry(func() error {
 			return n.disc.Bootstrap(func(e discovery.PeerEvent) {
