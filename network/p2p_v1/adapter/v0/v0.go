@@ -6,7 +6,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/p2p"
 	streams_v0 "github.com/bloxapp/ssv/network/p2p/streams"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
@@ -39,7 +38,6 @@ type netV0Adapter struct {
 	logger *zap.Logger
 
 	v1Cfg        *p2p_v1.Config
-	v0Cfg        *p2p.Config
 	fork         forks.Fork
 	host         host.Host
 	streamCtrlv0 streams_v0.StreamController
@@ -53,13 +51,13 @@ type netV0Adapter struct {
 }
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
-func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config, v0Cfg *p2p.Config) network.Network {
+func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) network.Network {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
 	return &netV0Adapter{
 		ctx:       ctx,
 		cancel:    cancel,
-		fork:      v0Cfg.Fork,
+		fork:      v1Cfg.Fork,
 		logger:    v1Cfg.Logger,
 		listeners: listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 	}
@@ -190,7 +188,7 @@ func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
 	var results []string
 	for _, p := range peers {
 		pid := p.String()
-		if pid == n.v0Cfg.ExporterPeerID {
+		if pid == n.v1Cfg.ExporterPeerID {
 			continue
 		}
 		results = append(results, p.String())
@@ -203,7 +201,7 @@ func (n *netV0Adapter) SubscribeToMainTopic() error {
 }
 
 func (n *netV0Adapter) MaxBatch() uint64 {
-	return n.v0Cfg.MaxBatchResponse
+	return n.v1Cfg.MaxBatchResponse
 }
 
 func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
