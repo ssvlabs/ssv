@@ -68,7 +68,7 @@ func (s *storage) CleanRegistryData() error {
 
 	err = s.cleanOperators()
 	if err != nil {
-		return errors.Wrap(err, "could not clean sync offset")
+		return errors.Wrap(err, "could not clean operators")
 	}
 	return nil
 }
