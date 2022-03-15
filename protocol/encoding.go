@@ -6,6 +6,28 @@ import (
 	"github.com/pkg/errors"
 )
 
+// MessageEncoder encodes or decodes the message
+type MessageEncoder interface {
+	// Encode encodes the message
+	Encode() ([]byte, error)
+	// Decode decodes the message
+	Decode(data []byte) error
+}
+
+// Encode implements MessageEncoder
+func (msg *SSVMessage) Encode() ([]byte, error) {
+	// TODO: change to SSZ encoding
+
+	return json.Marshal(msg)
+}
+
+// Decode implements MessageEncoder
+func (msg *SSVMessage) Decode(data []byte) error {
+	// TODO: change to SSZ encoding
+
+	return json.Unmarshal(data, msg)
+}
+
 // MarshalJSON implements json.Marshaler
 // all the top level values will be encoded to hex
 func (msg *SSVMessage) MarshalJSON() ([]byte, error) {

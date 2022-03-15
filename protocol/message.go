@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
 )
 
@@ -56,14 +55,6 @@ func (msgID Identifier) String() string {
 	return hex.EncodeToString(msgID)
 }
 
-// MessageEncoder encodes or decodes the message
-type MessageEncoder interface {
-	// Encode returns a msg encoded bytes or error
-	Encode() ([]byte, error)
-	// Decode returns error if decoding failed
-	Decode(data []byte) error
-}
-
 // SSVMessage is the main message passed within the SSV network, it can contain different types of messages (QBTF, Sync, etc.)
 type SSVMessage struct {
 	MsgType MsgType
@@ -84,14 +75,4 @@ func (msg *SSVMessage) GetID() Identifier {
 // GetData returns message Data as byte slice
 func (msg *SSVMessage) GetData() []byte {
 	return msg.Data
-}
-
-// Encode returns a msg encoded bytes or error
-func (msg *SSVMessage) Encode() ([]byte, error) {
-	return json.Marshal(msg)
-}
-
-// Decode returns error if decoding failed
-func (msg *SSVMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, msg)
 }

@@ -16,7 +16,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
-	raw, err := message.Encode()
+	raw, err := n.cfg.Fork.EncodeNetworkMsg(&message)
 	if err != nil {
 		return errors.Wrap(err, "could not decode message")
 	}
@@ -60,12 +60,16 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		n.logger.Warn("got nil message", zap.String("topic", topic))
 		return nil
 	}
-	parsed := protocol.SSVMessage{}
-	if err := parsed.Decode(msg.Data); err != nil {
+	parsed, err := n.cfg.Fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(msg.GetData())
+	if err != nil {
 		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
 		// TODO: handle..
 		return nil
 	}
-	n.msgRouter.Route(parsed)
+	if parsed == nil {
+		// TODO: handle..
+		return nil
+	}
+	n.msgRouter.Route(*parsed)
 	return nil
 }

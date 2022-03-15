@@ -7,7 +7,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"net"
 	"time"
@@ -35,13 +34,13 @@ type PububConfig struct {
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
 	MsgHandler  PubsubMessageHandler
-	UseMsgID    bool
 	// MsgValidatorFactory accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
 	MsgValidatorFactory func(string) MsgValidatorFunc
 	ScoreIndex          peers.ScoreIndex
 	Scoring             *ScoringConfig
+	MsgIDHandler        MsgIDHandler
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -80,10 +79,10 @@ func (cfg *PububConfig) initScoring() {
 	}
 }
 
-// NewPubsub creates a new pubsub router
-func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
+// NewPubsub creates a new pubsub router and the necessary components
+func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.validate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	sf := newSubFilter(subscriptionRequestLimit)
@@ -105,11 +104,8 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
 	}
 
-	var midHandler MsgIDHandler
-	if cfg.UseMsgID {
-		midHandler = newMsgIDHandler(cfg.Logger, time.Minute*2)
-		async.RunEvery(ctx, time.Minute*3, midHandler.GC)
-		psOpts = append(psOpts, pubsub.WithMessageIdFn(midHandler.MsgID()))
+	if cfg.MsgIDHandler != nil {
+		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID()))
 	}
 
 	setGlobalPubSubParams()
@@ -122,14 +118,10 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*PubsubBundle, error) {
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil)
 
-	return &PubsubBundle{
-		PS:         ps,
-		TopicsCtrl: ctrl,
-		Resolver:   midHandler,
-	}, nil
+	return ps, ctrl, nil
 }

@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -31,7 +32,6 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	}
 
 	if _, ok := n.psSubs[pubKey]; !ok {
-		_ = n.pubsub.RegisterTopicValidator(getTopicName(pubKey), n.msgValidator(logger))
 		sub, err := n.cfg.Topics[pubKey].Subscribe()
 		if err != nil {
 			if err != pubsub.ErrTopicClosed {
@@ -58,9 +58,6 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 			if err := n.closeTopic(topicName); err != nil {
 				n.logger.Error("failed to close topic", zap.String("topic", topicName), zap.Error(err))
 			}
-			if err := n.pubsub.UnregisterTopicValidator(topicName); err != nil {
-				n.logger.Error("xxx failed to unregister topic validator", zap.String("topic", topicName), zap.Error(err))
-			}
 			// make sure the context is canceled once listen was done from some reason
 			if cancel, ok := n.psSubs[pubKey]; ok {
 				defer cancel()
@@ -72,27 +69,6 @@ func (n *p2pNetwork) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) err
 	}
 
 	return nil
-}
-
-func invalidResult(p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
-	if msg.ReceivedFrom != p {
-		// sending peer does not own the message
-		return pubsub.ValidationIgnore
-	}
-	return pubsub.ValidationReject
-}
-
-type msgValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
-
-func (n *p2pNetwork) msgValidator(logger *zap.Logger) msgValidator {
-	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
-		nm, err := n.fork.DecodeNetworkMsg(msg.Data)
-		if err != nil {
-			return invalidResult(p, msg)
-		}
-		logger.Debug("xxx validate topic msg", zap.ByteString("data", nm.SignedMessage.Message.Lambda))
-		return pubsub.ValidationAccept
-	}
 }
 
 // AllPeers returns all connected peers for a validator PK (except for the validator itself)
@@ -183,14 +159,14 @@ func (n *p2pNetwork) listen(ctx context.Context, sub *pubsub.Subscription) {
 			}
 			n.trace("received raw network msg", zap.ByteString("network.Message bytes", msg.Data))
 			cm, err := n.fork.DecodeNetworkMsg(msg.Data)
-			if err != nil {
+			if err != nil || cm == nil {
 				n.logger.Error("failed to un-marshal message", zap.Error(err))
 				continue
 			}
-			if n.reportLastMsg && len(msg.ReceivedFrom) > 0 {
-				reportLastMsg(msg.ReceivedFrom.String())
+			if n.reportLastMsg && len(msg.GetFrom()) > 0 {
+				reportLastMsg(msg.GetFrom().String())
 			}
-			n.propagateSignedMsg(cm)
+			n.propagateSignedMsg(cm.(*network.Message))
 		}
 	}
 }

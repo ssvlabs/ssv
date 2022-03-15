@@ -30,7 +30,7 @@ func TestMsgValidator(t *testing.T) {
 		pkHex := pks[0]
 		msg, err := dummySSVConsensusMsg(pkHex, 15160)
 		require.NoError(t, err)
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		pk, err := hex.DecodeString(pkHex)
 		require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestMsgValidator(t *testing.T) {
 		pkHex := "b5de683dbcb3febe8320cc741948b9282d59b75a6970ed55d6f389da59f26325331b7ea0e71a2552373d0debb6048b8a"
 		msg, err := dummySSVConsensusMsg(pkHex, 15160)
 		require.NoError(t, err)
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		pk, err := hex.DecodeString("a297599ccf617c3b6118bbd248494d7072bb8c6c1cc342ea442a289415987d306bad34415f89469221450a2501a832ec")
 		require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestMsgValidator(t *testing.T) {
 	t.Run("invalid validator public key", func(t *testing.T) {
 		msg, err := dummySSVConsensusMsg("10101011", 1)
 		require.NoError(t, err)
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		pmsg := newPBMsg(raw, "xxx", []byte{})
 		res := mv(context.Background(), "xxxx", pmsg)

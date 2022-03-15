@@ -1,6 +1,7 @@
 package network
 
 import (
+	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"io"
@@ -13,6 +14,16 @@ type Message struct {
 	SyncMessage   *SyncMessage
 	Type          NetworkMsg
 	StreamID      string
+}
+
+// Encode implements MessageEncoder
+func (m *Message) Encode() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+// Decode implements MessageEncoder
+func (m *Message) Decode(data []byte) error {
+	return json.Unmarshal(data, m)
 }
 
 // SyncChanObj is a wrapper object for streaming of sync messages

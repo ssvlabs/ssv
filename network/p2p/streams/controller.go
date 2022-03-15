@@ -154,7 +154,7 @@ func (n *streamCtrl) readMsg(stream network.SyncStream) (*network.Message, error
 		return nil, errors.Wrap(err, "could not decode stream msg")
 	}
 
-	return resMsg, nil
+	return resMsg.(*network.Message), nil
 }
 
 // clean removes expired entries

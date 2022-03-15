@@ -1,18 +1,21 @@
 package v0
 
 import (
-	"encoding/json"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/protocol"
 )
 
 // EncodeNetworkMsg - genesis version 0
-func (v0 *ForkV0) EncodeNetworkMsg(msg *network.Message) ([]byte, error) {
-	return json.Marshal(msg)
+func (v0 *ForkV0) EncodeNetworkMsg(msg protocol.MessageEncoder) ([]byte, error) {
+	return msg.Encode()
 }
 
 // DecodeNetworkMsg - genesis version 0
-func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (*network.Message, error) {
-	ret := &network.Message{}
-	err := json.Unmarshal(data, ret)
-	return ret, err
+func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (protocol.MessageEncoder, error) {
+	msg := network.Message{}
+	err := msg.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+	return &msg, nil
 }

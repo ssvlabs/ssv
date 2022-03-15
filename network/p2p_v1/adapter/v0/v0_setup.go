@@ -66,18 +66,17 @@ func (n *netV0Adapter) setupPubsub() error {
 		}
 		staticPeers = append(staticPeers, peer.AddrInfo{ID: expID})
 	}
-	psBundle, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
+	_, tc, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
 		Logger:      n.logger,
 		Host:        n.host,
 		TraceLog:    n.v1Cfg.PubSubTrace,
 		StaticPeers: staticPeers,
-		UseMsgID:    false,
 		MsgHandler:  n.HandleMsg,
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
-	n.topicsCtrl = psBundle.TopicsCtrl
+	n.topicsCtrl = tc
 
 	return nil
 }

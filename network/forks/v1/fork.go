@@ -1,4 +1,4 @@
-package v0
+package v1
 
 import "github.com/bloxapp/ssv/network/forks"
 

@@ -136,12 +136,13 @@ func (n *netV0Adapter) Close() error {
 
 // HandleMsg implements topics.PubsubMessageHandler
 func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
-	cm, err := n.fork.DecodeNetworkMsg(msg.Data)
+	raw, err := n.fork.DecodeNetworkMsg(msg.Data)
 	if err != nil {
 		return err
 	}
 
-	if cm == nil || cm.SignedMessage == nil {
+	cm, ok := raw.(*network.Message)
+	if !ok || cm == nil || cm.SignedMessage == nil {
 		n.logger.Debug("could not propagate nil message")
 		return nil
 	}
