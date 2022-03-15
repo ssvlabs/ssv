@@ -60,9 +60,9 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 	return &netV0Adapter{
 		ctx:            ctx,
 		cancel:         cancel,
+		v1Cfg:          v1Cfg,
 		fork:           v1Cfg.Fork,
 		logger:         v1Cfg.Logger,
-		v1Cfg:          v1Cfg,
 		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 		knownOperators: &sync.Map{},
 	}
@@ -90,13 +90,13 @@ func (n *netV0Adapter) Setup() error {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
 
-	n.setLegacyStreamHandler()
-
 	return nil
 }
 
 // Start starts the network
 func (n *netV0Adapter) Start() error {
+	n.setLegacyStreamHandler()
+
 	go func() {
 		err := tasks.Retry(func() error {
 			return n.disc.Bootstrap(func(e discovery.PeerEvent) {
@@ -120,8 +120,8 @@ func (n *netV0Adapter) Start() error {
 	})
 
 	async.RunEvery(n.ctx, 30*time.Second, func() {
-		//go n.reportAllPeers()
-		//n.reportTopics()
+		go n.reportAllPeers()
+		n.reportTopics()
 	})
 
 	return nil

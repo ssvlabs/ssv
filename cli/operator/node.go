@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	ssv_identity "github.com/bloxapp/ssv/identity"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/network_wrapper"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/operator/forks"
@@ -121,6 +122,10 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
+		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()
+		if err != nil || !found {
+			Logger.Fatal("failed to get operator private key", zap.Error(err))
+		}
 
 		istore := ssv_identity.NewIdentityStore(db, Logger)
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
@@ -131,7 +136,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Fork = forker
 		cfg.P2pNetworkConfig.Logger = Logger
-
+		// TODO: move
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivKey)
 		p2pNet, err := network_wrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
