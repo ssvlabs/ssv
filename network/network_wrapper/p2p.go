@@ -8,7 +8,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter/v0"
@@ -37,10 +36,8 @@ func New(ctx context.Context, cfgV1 *p2pv1.Config) (network.Network, error) {
 		n.networkAdapter = v1.New(ctx, cfgV1, nil)
 	} else {
 		logger.Debug("before fork. using v0 adapter")
-		cfg := *cfgV1
-		cfg.Fork = networkForkV0.New() // set v0 fork
-		n.networkAdapter = v0.NewV0Adapter(ctx, &cfg)
-		cfgV1.Fork.SetHandler(n.onFork)
+		n.networkAdapter = v0.NewV0Adapter(ctx, cfgV1)
+		cfgV1.Fork.AddHandler(n.onFork)
 	}
 
 	n.setup()
@@ -60,8 +57,8 @@ func (p *P2pNetwork) start() {
 	}
 }
 
-func (p *P2pNetwork) onFork() {
-	p.logger.Info("network fork start... moving from adapter v0 to v1")
+func (p *P2pNetwork) onFork(slot uint64) {
+	p.logger.Info("network fork start... moving from adapter v0 to v1", zap.Uint64("fork slot", slot))
 	lis := p.networkAdapter.Listeners()
 	p.logger.Info("closing current v0 adapter")
 	if err := p.networkAdapter.Close(); err != nil {

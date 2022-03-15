@@ -39,7 +39,7 @@ type Options struct {
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
-	Fork             forks.Fork
+	Fork             *forks.Forker
 
 	UseMainTopic bool
 }
@@ -55,7 +55,7 @@ type operatorNode struct {
 	storage        Storage
 	eth1Client     eth1.Client
 	dutyCtrl       duties.DutyController
-	fork           forks.Fork
+	fork           *forks.Forker
 
 	useMainTopic bool
 }

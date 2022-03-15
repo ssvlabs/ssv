@@ -6,6 +6,7 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/network/network_wrapper"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
+	"github.com/bloxapp/ssv/operator/forks"
 	"log"
 	"net/http"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
+	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -78,8 +80,12 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		// TODO - change via command line?
-		fork := v0.New(cfg.ETH2Options.Network)
-		fork.Start()
+		forker := forks.NewForker(forks.Config{
+			Network:    cfg.ETH2Options.Network,
+			ForkSlot:   10000000, // TODO by flag?
+			BeforeFork: v0.New(),
+			PostFork:   v1.New(),
+		})
 
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
@@ -123,7 +129,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
+		cfg.P2pNetworkConfig.Fork = forker
 		cfg.P2pNetworkConfig.Logger = Logger
 
 		p2pNet, err := network_wrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
@@ -134,7 +140,7 @@ var StartNodeCmd = &cobra.Command{
 		Logger.Debug("THIS IS TEST!")
 
 		ctx := cmd.Context()
-		cfg.SSVOptions.Fork = fork
+		cfg.SSVOptions.Fork = forker
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
 		cfg.SSVOptions.DB = db

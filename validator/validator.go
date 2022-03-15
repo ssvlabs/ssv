@@ -36,7 +36,7 @@ type Options struct {
 	Beacon                     beacon.Beacon
 	ETHNetwork                 *core.Network
 	DB                         basedb.IDb
-	Fork                       forks.Fork
+	Fork                       *forks.Forker
 	Signer                     beacon.Signer
 	SyncRateLimit              time.Duration
 
@@ -57,7 +57,7 @@ type Validator struct {
 	signatureCollectionTimeout time.Duration
 	valueCheck                 *valcheck.SlashingProtection
 	startOnce                  sync.Once
-	fork                       forks.Fork
+	fork                       *forks.Forker
 	signer                     beacon.Signer
 }
 
@@ -201,17 +201,7 @@ func getFields(msg *proto.SignedMessage) []zap.Field {
 	return res
 }
 
-func setupIbftController(
-	role beacon.RoleType,
-	logger *zap.Logger,
-	db basedb.IDb,
-	network network.Network,
-	msgQueue *msgqueue.MessageQueue,
-	share *storage.Share,
-	fork forks.Fork,
-	signer beacon.Signer,
-	syncRateLimit time.Duration,
-) ibft.Controller {
+func setupIbftController(role beacon.RoleType, logger *zap.Logger, db basedb.IDb, network network.Network, msgQueue *msgqueue.MessageQueue, share *storage.Share, fork *forks.Forker, signer beacon.Signer, syncRateLimit time.Duration) ibft.Controller {
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
 	return ibftctrl.New(
@@ -223,7 +213,7 @@ func setupIbftController(
 		msgQueue,
 		proto.DefaultConsensusParams(),
 		share,
-		fork.NewIBFTControllerFork(),
+		fork.GetCurrentFork().NewIBFTControllerFork(),
 		signer,
 		syncRateLimit)
 }

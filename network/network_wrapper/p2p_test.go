@@ -34,7 +34,7 @@ func TestForkV1_Encoding(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg.NetworkPrivateKey = netPrivKey
-	cfg.Fork = fork.NetworkFork()
+	cfg.Fork = fork.NetworkForker()
 	cfg.Logger = logex.GetLogger()
 
 	p2pNet, err := New(context.Background(), cfg)

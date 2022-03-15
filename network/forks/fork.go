@@ -4,14 +4,9 @@ import (
 	"github.com/bloxapp/ssv/protocol"
 )
 
-type OnFork func()
-
 // Fork is an interface for network specific fork implementations
 type Fork interface {
 	encoding
-	SlotTick(slot uint64)
-	IsForked() bool
-	SetHandler(OnFork)
 	pubSubMapping
 }
 

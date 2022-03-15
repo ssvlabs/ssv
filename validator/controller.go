@@ -42,7 +42,7 @@ type ControllerOptions struct {
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	Fork                       forks.Fork
+	Fork                       *forks.Forker
 	KeyManager                 beacon.KeyManager
 }
 
