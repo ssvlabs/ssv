@@ -26,6 +26,7 @@ type P2pNetwork struct {
 func New(ctx context.Context, logger *zap.Logger, cfgV1 *p2pv1.Config) (network.Network, error) {
 	logger = logger.With(zap.String("who", "networkWrapper"))
 	logger.Debug("start new wrapper")
+	cfgV1.Logger = logger
 	n := &P2pNetwork{
 		ctx:    ctx,
 		logger: logger,

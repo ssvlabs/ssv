@@ -60,6 +60,7 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 	return &netV0Adapter{
 		ctx:            ctx,
 		cancel:         cancel,
+		v1Cfg:          v1Cfg,
 		fork:           v1Cfg.Fork, // should be v0 fork
 		logger:         v1Cfg.Logger,
 		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
