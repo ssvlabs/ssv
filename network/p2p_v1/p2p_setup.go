@@ -43,6 +43,9 @@ func (n *p2pNetwork) initCfg() {
 	if n.cfg.RequestTimeout == 0 {
 		n.cfg.RequestTimeout = defaultReqTimeout
 	}
+	if len(n.cfg.UserAgent) == 0 {
+		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
+	}
 }
 
 // SetupHost configures a libp2p host
@@ -81,14 +84,14 @@ func (n *p2pNetwork) SetupServices() error {
 }
 
 func (n *p2pNetwork) setupStreamCtrl() error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.cfg.Fork, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.cfg.RequestTimeout)
 	n.logger.Debug("stream controller is ready")
 	return nil
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
 	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
-	n.idx = peers.NewPeersIndex(n.cfg.Logger, n.host.Network(), self, func() int {
+	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
 	}, 10*time.Minute)
 	n.logger.Debug("peers index is ready")
@@ -98,11 +101,11 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return errors.Wrap(err, "failed to create ID service")
 	}
 
-	handshaker := peers.NewHandshaker(n.ctx, n.cfg.Logger, n.streamCtrl, n.idx, ids)
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids)
 	n.host.SetStreamHandler(peers.HandshakeProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	connHandler := peers.HandleConnections(n.ctx, n.cfg.Logger, handshaker)
+	connHandler := peers.HandleConnections(n.ctx, n.logger, handshaker)
 	n.host.Network().Notify(connHandler)
 	n.logger.Debug("connection handler is ready")
 	return nil
@@ -122,11 +125,11 @@ func (n *p2pNetwork) setupDiscovery() error {
 			TCPPort:    n.cfg.TCPPort,
 			NetworkKey: n.cfg.NetworkPrivateKey,
 			Bootnodes:  n.cfg.TransformBootnodes(),
-			Logger:     n.cfg.Logger,
+			Logger:     n.logger,
 		}
 	}
 	discOpts := discovery.Options{
-		Logger:     n.cfg.Logger,
+		Logger:     n.logger,
 		Host:       n.host,
 		DiscV5Opts: discV5Opts,
 		ConnIndex:  n.idx,
@@ -144,21 +147,21 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() error {
 	// creates a msgID handler
-	midHandler := topics.NewMsgIDHandler(n.cfg.Logger.With(zap.String("who", "msgIDHandler")),
-		n.cfg.Fork, time.Minute*2)
+	midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
+		n.fork, time.Minute*2)
 	n.msgResolver = midHandler
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
 	cfg := &topics.PububConfig{
-		Logger:       n.cfg.Logger,
+		Logger:       n.logger,
 		Host:         n.host,
 		TraceLog:     n.cfg.PubSubTrace,
 		StaticPeers:  nil,
 		MsgIDHandler: midHandler,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			logger := n.cfg.Logger.With(zap.String("who", "MsgValidator"))
-			return topics.NewSSVMsgValidator(logger, n.cfg.Fork, n.host.ID())
+			logger := n.logger.With(zap.String("who", "MsgValidator"))
+			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
 		},
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,

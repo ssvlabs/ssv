@@ -59,8 +59,8 @@ func (n *netV0Adapter) setupDiscovery() error {
 
 func (n *netV0Adapter) setupPubsub() error {
 	var staticPeers []peer.AddrInfo
-	if len(n.v0Cfg.ExporterPeerID) > 0 {
-		expID, err := peer.Decode(n.v0Cfg.ExporterPeerID)
+	if len(n.v1Cfg.ExporterPeerID) > 0 {
+		expID, err := peer.Decode(n.v1Cfg.ExporterPeerID)
 		if err != nil {
 			return errors.Wrap(err, "could not decode exporter id")
 		}
