@@ -3,10 +3,8 @@ package p2p
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
-	"encoding/json"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/forks"
+	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -105,36 +103,10 @@ func testNetwork(ctx context.Context, logger *zap.Logger, netKey *ecdsa.PrivateK
 		TCPPort:           13000,
 		MaxBatchResponse:  10,
 		RequestTimeout:    time.Second * 1,
-		Fork:              testFork(),
+		Fork:              v0.New(),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 	return n, n.(*p2pNetwork).host, nil
-}
-
-// ForkV0 is the genesis version 0 implementation
-type testingFork struct {
-}
-
-func testFork() forks.Fork {
-	return &testingFork{}
-}
-
-func (v0 *testingFork) ValidatorTopicID(pkByts []byte) string {
-	return hex.EncodeToString(pkByts)
-}
-
-func (v0 *testingFork) EncodeNetworkMsg(msg *network.Message) ([]byte, error) {
-	return json.Marshal(msg)
-}
-
-func (v0 *testingFork) DecodeNetworkMsg(data []byte) (*network.Message, error) {
-	ret := &network.Message{}
-	err := json.Unmarshal(data, ret)
-	return ret, err
-}
-
-func (v0 *testingFork) SlotTick(slot uint64) {
-
 }

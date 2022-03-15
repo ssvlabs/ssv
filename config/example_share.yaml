@@ -9,6 +9,7 @@ ssv:
       - NodeID: <node-id>
         PublicKey: <validator-pubkey>
         ShareKey: <share-priv-key>
+        OwnerAddress: <owner-address>
         Committee:
           <share-pubkey-node1>: <node1-id>
           <share-pubkey-node2>: <node2-id>

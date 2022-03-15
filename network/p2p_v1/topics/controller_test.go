@@ -254,6 +254,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	cfg := &PububConfig{
+		Fork:     fork,
 		Logger:   logger,
 		Host:     h,
 		TraceLog: false,
@@ -262,6 +263,13 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 			p.saveMsg(topic, msg)
 			return nil
 		},
+		Scoring: &ScoringConfig{
+			IPWhilelist:        nil,
+			IPColocationWeight: 0,
+			AppSpecificWeight:  1,
+			OneEpochDuration:   time.Minute,
+		},
+		// TODO: add mock for peers.ScoreIndex
 	}
 	//
 	if msgValidator {

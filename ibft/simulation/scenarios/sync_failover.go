@@ -2,19 +2,18 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type syncFailover struct {
 	logger     *zap.Logger
 	nodes      []ibft.Controller
-	shares     map[uint64]*validatorstorage.Share
 	dbs        []collections.Iibft
 	valueCheck valcheck.ValueCheck
 }
@@ -27,9 +26,8 @@ func SyncFailover(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (sf *syncFailover) Start(nodes []ibft.Controller, shares map[uint64]*validatorstorage.Share, dbs []collections.Iibft) {
+func (sf *syncFailover) Start(nodes []ibft.Controller, dbs []collections.Iibft) {
 	sf.nodes = nodes
-	sf.shares = shares
 	sf.dbs = dbs
 	nodeCount := len(nodes)
 
@@ -106,11 +104,10 @@ loop:
 
 func (sf *syncFailover) startNode(node ibft.Controller, index uint64, seqNumber uint64) *proto.SignedMessage {
 	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:         sf.logger,
-		ValueCheck:     sf.valueCheck,
-		SeqNumber:      seqNumber,
-		Value:          []byte("value"),
-		ValidatorShare: sf.shares[index],
+		Logger:     sf.logger,
+		ValueCheck: sf.valueCheck,
+		SeqNumber:  seqNumber,
+		Value:      []byte("value"),
 	})
 	if err != nil {
 		sf.logger.Error("instance returned error", zap.Error(err))

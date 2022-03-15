@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
@@ -26,7 +28,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"time"
 )
 
 /**
@@ -42,8 +43,7 @@ var (
 	scenario  = scenarios.NewRegularScenario(logger, &alwaysTrueValueCheck{})
 )
 
-type alwaysTrueValueCheck struct {
-}
+type alwaysTrueValueCheck struct{}
 
 // Check impl
 func (i *alwaysTrueValueCheck) Check(value []byte) error {
@@ -183,7 +183,7 @@ func main() {
 		nodes = append(nodes, node)
 	}
 
-	scenario.Start(nodes, shares, dbs)
+	scenario.Start(nodes, dbs)
 
 	logger.Info("finished")
 }

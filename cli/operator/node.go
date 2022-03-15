@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network/network_wrapper"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"log"
 	"net/http"
 
@@ -121,23 +122,19 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
 
-		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
-		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
-			Logger.Fatal("failed to setup p2p private key", zap.Error(err))
-		}
-		p2pPrivKey, found, err := p2pStorage.GetPrivateKey()
-		if err != nil || !found {
-			Logger.Fatal("failed to get p2p private key", zap.Error(err))
+		istore := ssv_identity.NewIdentityStore(db, Logger)
+		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
+		if err != nil {
+			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
 
-		// TODO can remove? 13.2
 		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
-		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
+		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 
 		//cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPublicKey TODO its optional but need it this case? 13.2
-		cfg.P2pV1NetworkConfig.NetworkPrivateKey = p2pPrivKey
+		cfg.P2pV1NetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pV1NetworkConfig.Fork = fork.NetworkFork() // TODO check if need differ fork 13.2
 
 		p2pNet, err := network_wrapper.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig, &cfg.P2pV1NetworkConfig)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/protocol"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
@@ -30,8 +29,8 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultSelf)
 			return pubsub.ValidationAccept
 		}
-		smsg := protocol.SSVMessage{}
-		if err := smsg.Decode(msg.Data); err != nil {
+		smsg, err := fork.DecodeNetworkMsgV1(msg.Data)
+		if err != nil {
 			// can't decode message
 			logger.Debug("invalid: can't decode message", zap.Error(err))
 			reportValidationResult(validationResultEncoding)

@@ -2,6 +2,10 @@ package controller
 
 import (
 	"fmt"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
@@ -17,9 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"sync"
-	"testing"
-	"time"
 )
 
 type testStorage struct {
@@ -349,17 +350,11 @@ func TestForceDecided(t *testing.T) {
 		i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 	}()
 
-	share := &storage.Share{
-		NodeID:    1,
-		PublicKey: validatorPK(sks),
-		Committee: nodes,
-	}
 	res, err := i1.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:         logex.GetLogger(),
-		ValueCheck:     &valcheck.AttestationValueCheck{},
-		SeqNumber:      4,
-		Value:          []byte("value"),
-		ValidatorShare: share,
+		Logger:     logex.GetLogger(),
+		ValueCheck: &valcheck.AttestationValueCheck{},
+		SeqNumber:  4,
+		Value:      []byte("value"),
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)
