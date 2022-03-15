@@ -135,6 +135,8 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
 
+		Logger.Debug("THIS IS TEST!")
+
 		ctx := cmd.Context()
 		cfg.SSVOptions.Fork = fork
 		cfg.SSVOptions.Context = ctx
@@ -144,7 +146,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.Network = p2pNet
 
-		cfg.SSVOptions.UseMainTopic = false
+		cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
 		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network

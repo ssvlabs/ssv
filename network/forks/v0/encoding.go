@@ -19,15 +19,3 @@ func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (protocol.MessageEncoder, error)
 	}
 	return &msg, nil
 }
-
-// EncodeNetworkMsgV1 encodes message v1
-func (v0 *ForkV0) EncodeNetworkMsgV1(msg *protocol.SSVMessage) ([]byte, error) {
-	return json.Marshal(msg)
-}
-
-// DecodeNetworkMsgV1 decodes message v1
-func (v0 *ForkV0) DecodeNetworkMsgV1(data []byte) (*protocol.SSVMessage, error) {
-	msg := protocol.SSVMessage{}
-	err := json.Unmarshal(data, &msg)
-	return &msg, err
-}

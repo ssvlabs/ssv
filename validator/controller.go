@@ -248,7 +248,7 @@ func (c *controller) StartNetworkMediators() {
 
 func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {
 	v, ok := c.validatorsMap.GetValidator(publicKey)
-	if !ok {
+	if !ok { //TODo after fork?
 		//	return handler for non committee validator to save the decided
 		return c.nonCommitteeValidator, true
 	}

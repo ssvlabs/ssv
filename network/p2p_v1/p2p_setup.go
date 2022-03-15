@@ -165,7 +165,6 @@ func (n *p2pNetwork) setupPubsub() error {
 		},
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
-		Fork:       n.cfg.Fork,
 	}
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
