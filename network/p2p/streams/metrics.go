@@ -8,19 +8,19 @@ import (
 
 var (
 	metricsStreamRequests = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:p2p:streams:req:count",
+		Name: "ssv:p2p:streams:req:count:v0",
 		Help: "Count requests made via streams",
 	})
 	metricsStreamRequestsActive = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:p2p:streams:req:active",
+		Name: "ssv:p2p:streams:req:active:v0",
 		Help: "Count requests made via streams",
 	})
 	metricsStreamRequestsSuccess = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "ssv:p2p:streams:req:success",
+		Name: "ssv:p2p:streams:req:success:v0",
 		Help: "Count successful requests made via streams",
 	})
 	metricsStreamResponses = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "ssv:p2p:streams:res",
+		Name: "ssv:p2p:streams:res:v0",
 		Help: "Count responses for streams",
 	})
 )
