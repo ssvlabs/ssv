@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"context"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
@@ -19,6 +20,7 @@ type p2pNetwork struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	logger      *zap.Logger
+	fork        forks.Fork
 	cfg         *Config
 	host        host.Host
 	streamCtrl  streams.StreamController
@@ -36,6 +38,7 @@ func New(pctx context.Context, cfg *Config) network.V1 {
 		ctx:       ctx,
 		cancel:    cancel,
 		logger:    cfg.Logger.With(zap.String("who", "p2pNetwork")),
+		fork:      cfg.Fork,
 		cfg:       cfg,
 		msgRouter: cfg.Router,
 	}

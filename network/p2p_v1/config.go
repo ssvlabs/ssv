@@ -64,7 +64,7 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 	opts := []libp2p.Option{
 		libp2p.Identity(sk),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
-		libp2p.UserAgent(userAgent(c.UserAgent)),
+		libp2p.UserAgent(c.UserAgent),
 	}
 
 	opts, err := c.configureAddrs(opts)
