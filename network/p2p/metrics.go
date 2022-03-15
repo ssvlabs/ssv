@@ -12,31 +12,31 @@ import (
 
 var (
 	metricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:all_connected_peers",
+		Name: "ssv:network:all_connected_peers:v0",
 		Help: "Count connected peers",
 	})
 	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:connected_peers",
+		Name: "ssv:network:connected_peers:v0",
 		Help: "Count connected peers for a validator",
 	}, []string{"pubKey"})
 	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peers_identity",
+		Name: "ssv:network:peers_identity:v0",
 		Help: "Peers identity",
 	}, []string{"pubKey", "v", "pid", "type"})
 	metricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peer_last_msg",
+		Name: "ssv:network:peer_last_msg:v0",
 		Help: "Timestamps of last messages",
 	}, []string{"pid"})
 	metricsPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:pubsub:trace",
+		Name: "ssv:network:pubsub:trace:v0",
 		Help: "Traces of pubsub messages",
 	}, []string{"type"})
 	metricsStreams = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:stream",
+		Name: "ssv:network:stream:v0",
 		Help: "Counts opened/closed streams",
 	})
 	metricsConnections = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:connections",
+		Name: "ssv:network:connections:v0",
 		Help: "Counts opened/closed connections",
 	})
 )
