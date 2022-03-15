@@ -3,9 +3,9 @@ package operator
 import (
 	"context"
 	"fmt"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/network/network_wrapper"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
-	ssv_identity "github.com/bloxapp/ssv/identity"
 	"log"
 	"net/http"
 
@@ -17,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
@@ -37,8 +36,7 @@ type config struct {
 	SSVOptions                 operator.Options `yaml:"ssv"`
 	ETH1Options                eth1.Options     `yaml:"eth1"`
 	ETH2Options                beacon.Options   `yaml:"eth2"`
-	P2pNetworkConfig           p2p.Config       `yaml:"p2p"`
-	P2pV1NetworkConfig         p2pv1.Config     `yaml:"p2p"`
+	P2pNetworkConfig           p2pv1.Config     `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
@@ -117,10 +115,10 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
-		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()
-		if err != nil || !found {
-			Logger.Fatal("failed to get operator private key", zap.Error(err))
-		}
+		//operatorPrivKey, found, err := operatorStorage.GetPrivateKey() TODO can be removed?
+		//if err != nil || !found {
+		//	Logger.Fatal("failed to get operator private key", zap.Error(err))
+		//}
 
 		istore := ssv_identity.NewIdentityStore(db, Logger)
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
@@ -128,16 +126,11 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		//cfg.P2pNetworkConfig.OperatorPublicKey = operatorPublicKey TODO its optional but need it this case? 13.2
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
-		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 
-		//cfg.P2pV1NetworkConfig.OperatorPublicKey = operatorPublicKey TODO its optional but need it this case? 13.2
-		cfg.P2pV1NetworkConfig.NetworkPrivateKey = netPrivKey
-		cfg.P2pV1NetworkConfig.Fork = fork.NetworkFork() // TODO check if need differ fork 13.2
-
-		p2pNet, err := network_wrapper.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig, &cfg.P2pV1NetworkConfig)
+		p2pNet, err := network_wrapper.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
@@ -151,7 +144,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.Network = p2pNet
 
-		cfg.SSVOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+		cfg.SSVOptions.UseMainTopic = false
 
 		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network

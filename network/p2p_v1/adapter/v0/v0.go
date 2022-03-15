@@ -54,13 +54,13 @@ type netV0Adapter struct {
 }
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
-func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config, v0Cfg *p2p.Config) adapter.Adapter {
+func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
 	return &netV0Adapter{
 		ctx:       ctx,
 		cancel:    cancel,
-		fork:      v0Cfg.Fork,
+		fork:      v0Cfg.Fork, // v0 fork
 		logger:    v1Cfg.Logger,
 		listeners: listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 	}

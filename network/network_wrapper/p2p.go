@@ -4,8 +4,6 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/p2p"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter/v0"
@@ -19,16 +17,14 @@ type p2pNetwork struct {
 	ctx            context.Context
 	logger         *zap.Logger
 	networkAdapter adapter.Adapter
-	fork           forks.Fork
 	cfgV1          *p2pv1.Config
 }
 
-func New(ctx context.Context, logger *zap.Logger, cfgV0 *p2p.Config, cfgV1 *p2pv1.Config) (network.Network, error) {
+func New(ctx context.Context, logger *zap.Logger, cfgV1 *p2pv1.Config) (network.Network, error) {
 	logger = logger.With(zap.String("who", "networkWrapper"))
 	n := &p2pNetwork{
 		ctx:    ctx,
 		logger: logger,
-		fork:   cfgV0.Fork,
 		cfgV1:  cfgV1,
 	}
 
@@ -37,8 +33,10 @@ func New(ctx context.Context, logger *zap.Logger, cfgV0 *p2p.Config, cfgV1 *p2pv
 		n.networkAdapter = v1.New(ctx, cfgV1, nil)
 	} else {
 		logger.Debug("before fork. using v0 adapter")
-		n.networkAdapter = v0.NewV0Adapter(ctx, cfgV1, cfgV0)
-		cfgV0.Fork.SetHandler(n.onFork)
+		cfg := cfgV1
+		//cfg.Fork = set v0 fork
+		n.networkAdapter = v0.NewV0Adapter(ctx, cfg)
+		cfg.Fork.SetHandler(n.onFork)
 	}
 	return n, nil
 }
