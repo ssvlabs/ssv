@@ -30,6 +30,24 @@ func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 	return localNode, nil
 }
 
+// decorateLocalNode adds more entries to the ENR
+func decorateLocalNode(node *enode.LocalNode, subnets []bool, operatorID string) error {
+	var err error
+	if len(operatorID) > 0 {
+		if err = setOperatorIDEntry(node, operatorID); err != nil {
+			return err
+		}
+	}
+	if len(subnets) > 0 {
+		err = setSubnetsEntry(node, subnets)
+	} else if len(operatorID) > 0 {
+		err = setNodeTypeEntry(node, Operator)
+	} else {
+		err = setNodeTypeEntry(node, Exporter)
+	}
+	return err
+}
+
 // ToPeer creates peer info from the given node
 func ToPeer(node *enode.Node) (*peer.AddrInfo, error) {
 	m, err := ToMultiAddr(node)

@@ -88,6 +88,16 @@ func (md *mdnsDiscovery) FindPeers(ctx context.Context, ns string, opt ...discov
 	return cn, nil
 }
 
+// RegisterSubnets implements Service
+func (md *mdnsDiscovery) RegisterSubnets(subnets ...int) error {
+	return nil
+}
+
+// DeregisterSubnets implements Service
+func (md *mdnsDiscovery) DeregisterSubnets(subnets ...int) error {
+	return nil
+}
+
 // discoveryNotifee gets notified when we find a new peer via mDNS discovery
 type discoveryNotifee struct {
 	handler HandleNewPeer
