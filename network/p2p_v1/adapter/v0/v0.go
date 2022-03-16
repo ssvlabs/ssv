@@ -57,6 +57,7 @@ type netV0Adapter struct {
 func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
+
 	return &netV0Adapter{
 		ctx:            ctx,
 		cancel:         cancel,

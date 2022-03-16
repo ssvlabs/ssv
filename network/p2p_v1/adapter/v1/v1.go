@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
-	forks2 "github.com/bloxapp/ssv/operator/forks"
+	operatorForkers "github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -39,8 +39,10 @@ type netV0Adapter struct {
 	logger *zap.Logger
 
 	v1Cfg *p2p_v1.Config
-	fork  *forks2.Forker
+	fork  *operatorForkers.Forker
 	host  host.Host
+	// TODO: use index
+	knownOperators *sync.Map
 	// TODO: remove after v0
 	streams    *sync.Map
 	streamCtrl streams.StreamController
@@ -62,11 +64,13 @@ func New(pctx context.Context, v1Cfg *p2p_v1.Config, lis listeners.Container) ad
 	}
 
 	return &netV0Adapter{
-		ctx:       ctx,
-		cancel:    cancel,
-		fork:      v1Cfg.Fork, // should be v0 fork
-		logger:    v1Cfg.Logger,
-		listeners: newLis,
+		ctx:            ctx,
+		cancel:         cancel,
+		v1Cfg:          v1Cfg,
+		fork:           v1Cfg.Fork,
+		logger:         v1Cfg.Logger,
+		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
+		knownOperators: &sync.Map{},
 	}
 }
 
@@ -76,13 +80,9 @@ func (n *netV0Adapter) Listeners() listeners.Container {
 
 // Setup initializes all required components
 func (n *netV0Adapter) Setup() error {
-	n.setLegacyStreamHandler()
-
 	if err := n.setupHost(); err != nil {
 		return errors.Wrap(err, "could not setup libp2p host")
 	}
-	// creating 2 stream controllers, first for supporting old sync and new for handshake
-	//n.streamCtrlv0 = streams_v0.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
 	n.streams = &sync.Map{}
 	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
 
@@ -101,6 +101,8 @@ func (n *netV0Adapter) Setup() error {
 
 // Start starts the network
 func (n *netV0Adapter) Start() error {
+	n.setLegacyStreamHandler()
+
 	go func() {
 		err := tasks.Retry(func() error {
 			return n.disc.Bootstrap(func(e discovery.PeerEvent) {
@@ -124,8 +126,8 @@ func (n *netV0Adapter) Start() error {
 	})
 
 	async.RunEvery(n.ctx, 30*time.Second, func() {
-		//go n.reportAllPeers()
-		//n.reportTopics()
+		go n.reportAllPeers()
+		n.reportTopics()
 	})
 
 	return nil
@@ -296,8 +298,7 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 }
 
 func (n *netV0Adapter) NotifyOperatorID(oid string) {
-	// TODO
-	panic("implement me")
+	n.knownOperators.Store(oid, true)
 }
 
 func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
