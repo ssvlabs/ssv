@@ -67,8 +67,8 @@ func (f *Forker) SlotTick(slot uint64) {
 		for _, handler := range f.handlers {
 			handler(slot)
 		}
+		atomic.StoreUint64(&f.state, stateAfter)
 	}
-	atomic.StoreUint64(&f.state, stateAfter)
 }
 
 func (f *Forker) IsForked() bool {
