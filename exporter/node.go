@@ -274,7 +274,7 @@ func (exp *exporter) StartEth1(syncOffset *eth1.SyncOffset) error {
 }
 
 func (exp *exporter) triggerAllValidators() {
-	shares, err := exp.validatorStorage.GetAllValidatorsShare()
+	shares, err := exp.validatorStorage.GetAllValidatorShares()
 	if err != nil {
 		exp.logger.Error("could not get validators shares", zap.Error(err))
 		return

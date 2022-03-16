@@ -9,7 +9,7 @@ import (
 var migrationCleanOperatorNodeRegistryData = Migration{
 	Name: "migration_3_clean_operator_node_registry_data",
 	Run: func(ctx context.Context, opt Options, key []byte) error {
-		storage := opt.operatorStorage()
+		storage := opt.nodeStorage()
 		err := storage.CleanRegistryData()
 		if err != nil {
 			return errors.Wrap(err, "could not clean registry data")

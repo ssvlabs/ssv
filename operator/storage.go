@@ -35,8 +35,8 @@ type storage struct {
 	operatorStore registrystorage.OperatorsCollection
 }
 
-// NewOperatorNodeStorage creates a new instance of Storage
-func NewOperatorNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
+// NewNodeStorage creates a new instance of Storage
+func NewNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	return &storage{
 		db:            db,
 		logger:        logger,
@@ -68,7 +68,7 @@ func (s *storage) CleanRegistryData() error {
 
 	err = s.cleanOperators()
 	if err != nil {
-		return errors.Wrap(err, "could not clean sync offset")
+		return errors.Wrap(err, "could not clean operators")
 	}
 	return nil
 }

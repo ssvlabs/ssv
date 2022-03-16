@@ -15,7 +15,7 @@ func (exp *exporter) continuouslyUpdateValidatorMetaData() {
 	for {
 		time.Sleep(exp.validatorMetaDataUpdateInterval)
 
-		shares, err := exp.validatorStorage.GetAllValidatorsShare()
+		shares, err := exp.validatorStorage.GetAllValidatorShares()
 		if err != nil {
 			exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 			continue
@@ -26,7 +26,7 @@ func (exp *exporter) continuouslyUpdateValidatorMetaData() {
 }
 
 func (exp *exporter) warmupValidatorsMetaData() error {
-	shares, err := exp.validatorStorage.GetAllValidatorsShare()
+	shares, err := exp.validatorStorage.GetAllValidatorShares()
 	if err != nil {
 		exp.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 		return err

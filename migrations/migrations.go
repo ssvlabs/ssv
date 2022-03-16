@@ -50,7 +50,7 @@ type Options struct {
 }
 
 func (o *Options) getRegistryStores() []basedb.RegistryStore {
-	return []basedb.RegistryStore{o.exporterStorage(), o.validatorStorage(), o.operatorStorage()}
+	return []basedb.RegistryStore{o.exporterStorage(), o.validatorStorage(), o.nodeStorage()}
 }
 
 func (o Options) exporterStorage() exporterstorage.Storage {
@@ -62,8 +62,8 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 		Logger: o.Logger,
 	})
 }
-func (o Options) operatorStorage() operator.Storage {
-	return operator.NewOperatorNodeStorage(o.Db, o.Logger)
+func (o Options) nodeStorage() operator.Storage {
+	return operator.NewNodeStorage(o.Db, o.Logger)
 }
 
 // Run executes the migrations.
