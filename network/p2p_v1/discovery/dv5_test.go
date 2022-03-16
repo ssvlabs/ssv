@@ -3,16 +3,23 @@ package discovery
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/ssv/network/commons"
 	v1_testing "github.com/bloxapp/ssv/network/p2p_v1/testing"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"strconv"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestNewService(t *testing.T) {
@@ -25,11 +32,30 @@ func TestNewService(t *testing.T) {
 	keys, err := v1_testing.CreateKeys(n)
 	require.NoError(t, err)
 
-	//var wg sync.WaitGroup
+	var wg sync.WaitGroup
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
+	peers := make([]host.Host, n)
+	for i := 0; i < n; i++ {
+		h, err := libp2p.New(ctx,
+			libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+		require.NoError(t, err)
+		<-time.After(time.Millisecond * 10)
+		peers[i] = h
+	}
 	nodes := make([]*enode.LocalNode, n)
 	for i, k := range keys {
+		tcpPort := v1_testing.RandomTCPPort(12001, 12999)
+		h := peers[i]
+		addrs := h.Addrs()
+		if len(addrs) > 0 {
+			addr := addrs[0]
+			tcpPortS, err := addr.ValueForProtocol(multiaddr.P_TCP)
+			require.NoError(t, err)
+			tcpPort, err = strconv.Atoi(tcpPortS)
+			require.NoError(t, err)
+		}
+		fmt.Printf("using tcp port %d\n", tcpPort)
 		node, err := newDiscV5Service(ctx, &Options{
 			Logger:    logger.With(zap.Int("i", i)),
 			ConnIndex: &mockConnIndex{},
@@ -38,7 +64,7 @@ func TestNewService(t *testing.T) {
 				IP:          "127.0.0.1",
 				BindIP:      "0.0.0.0",
 				Port:        udpRand.Next(13001, 13999),
-				TCPPort:     0,
+				TCPPort:     tcpPort,
 				NetworkKey:  k.NetKey,
 				Bootnodes:   []string{bn.ENR},
 				Logger:      logger.With(zap.Int("i", i), zap.String("who", "dv5")),
@@ -49,30 +75,28 @@ func TestNewService(t *testing.T) {
 		// TODO: fix and unmark
 		//wg.Add(1)
 		//go func() {
-		//defer wg.Done()
-		//found := 0
-		//go func() {
+		//	_ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+		//	defer cancel()
+		//	go func() {
+		//		<-_ctx.Done()
+		//		cancel()
+		//	}()
+		//	found := 0
 		//	require.NoError(t, node.Bootstrap(func(e PeerEvent) {
+		//		found++
+		//		if found > n/2 {
+		//			wg.Done()
+		//			return
+		//		}
 		//		if err := node.(*DiscV5Service).dv5Listener.Ping(e.Node); err != nil {
 		//			t.Log("could not ping node", e.Node.ID().String(), "with err:", err.Error())
 		//			return
 		//		}
-		//		t.Log("pinged node", e.Node.ID().String())
-		//		found++
+		//		t.Log("pinged node", e.Node.ID().String(), fmt.Sprintf("; found %d", found))
 		//	}))
 		//}()
-		//_ctx, cancel := context.WithTimeout(ctx, time.Second * 5)
-		//defer cancel()
-		//for _ctx.Err() == nil {
-		//	if found > n/2 {
-		//		return
-		//	}
-		//	time.Sleep(time.Millisecond * 100)
-		//}
-		//require.Nil(t, _ctx.Err(), "found only %d nodes", found)
-		//}()
 	}
-	//wg.Wait()
+	wg.Wait()
 }
 
 func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
