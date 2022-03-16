@@ -41,6 +41,8 @@ type Options struct {
 type Service interface {
 	discovery.Discovery
 
+	RegisterSubnets(subnets ...int) error
+	DeregisterSubnets(subnets ...int) error
 	Bootstrap(handler HandleNewPeer) error
 }
 

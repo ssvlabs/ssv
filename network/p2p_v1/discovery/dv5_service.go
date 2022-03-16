@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 	"net"
 	"time"
 )
@@ -34,9 +35,10 @@ type NodeFilter func(*enode.Node) bool
 // TODO: should be changed once discv5 supports topics (v5.2)
 type DiscV5Service struct {
 	ctx    context.Context
+	cancel context.CancelFunc
 	logger *zap.Logger
 
-	//connect Connect
+	publishSF *singleflight.Group
 
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
@@ -44,18 +46,28 @@ type DiscV5Service struct {
 	conns peers.ConnectionIndex
 }
 
-func newDiscV5Service(ctx context.Context, discOpts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) {
+	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:    ctx,
-		logger: discOpts.Logger,
-		//connect: discOpts.Connect,
-		conns: discOpts.ConnIndex,
+		ctx:       ctx,
+		cancel:    cancel,
+		logger:    discOpts.Logger,
+		publishSF: &singleflight.Group{},
+		conns:     discOpts.ConnIndex,
 	}
 	dvs.logger.Debug("configuring discv5 discovery")
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
 		return nil, err
 	}
 	return &dvs, nil
+}
+
+// Close implements io.Closer
+func (dvs *DiscV5Service) Close() error {
+	if dvs.cancel != nil {
+		dvs.cancel()
+	}
+	return nil
 }
 
 // Self returns self node
@@ -122,20 +134,10 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 		return opts.Ttl, nil
 	}
 	subnet := nsToSubnet(ns)
-	ln := dvs.dv5Listener.LocalNode()
-	subnets, err := getSubnetsEntry(ln.Node())
-	if err != nil {
-		return 0, errors.Wrap(err, "could not get subnets entry")
+
+	if err := dvs.RegisterSubnets(int(subnet)); err != nil {
+		return 0, err
 	}
-	if subnets[int(subnet)] {
-		dvs.logger.Debug("subnet registered", zap.String("ns", ns))
-		return opts.Ttl, nil
-	}
-	subnets[int(subnet)] = true
-	if err := setSubnetsEntry(ln, subnets); err != nil {
-		return 0, errors.Wrap(err, "could not set subnets entry")
-	}
-	go dvs.publishENR()
 
 	return opts.Ttl, nil
 }
@@ -173,6 +175,10 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	localNode, err := createLocalNode(opts.NetworkKey, opts.StoragePath, ipAddr, opts.Port, opts.TCPPort)
 	if err != nil {
 		return errors.Wrap(err, "could not create local node")
+	}
+	err = decorateLocalNode(localNode, opts.Subnets, opts.OperatorID)
+	if err != nil {
+		return errors.Wrap(err, "could not decorate local node")
 	}
 
 	dv5Cfg, err := opts.DiscV5Cfg()
@@ -234,6 +240,72 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 	}
 }
 
+// RegisterSubnets adds the given subnets and publish the updated node record
+func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
+	if len(subnets) == 0 {
+		return nil
+	}
+	smap := make(map[int]bool)
+	for _, sn := range subnets {
+		smap[sn] = true
+	}
+	if err := dvs.updateSubnetsEntry(smap); err != nil {
+		return err
+	}
+	go dvs.publishENR()
+	return nil
+}
+
+// DeregisterSubnets removes the given subnets and publish the updated node record
+func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int) error {
+	if len(subnets) == 0 {
+		return nil
+	}
+	smap := make(map[int]bool)
+	for _, sn := range subnets {
+		smap[sn] = false
+	}
+	if err := dvs.updateSubnetsEntry(smap); err != nil {
+		return err
+	}
+	return nil
+}
+
+// publishENR publishes the new ENR across the network
+func (dvs *DiscV5Service) publishENR() {
+	_, err, _ := dvs.publishSF.Do("ENR", func() (interface{}, error) {
+		ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+		defer done()
+		dvs.discover(ctx, func(e PeerEvent) {
+			err := dvs.dv5Listener.Ping(e.Node)
+			if err != nil {
+				dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
+			}
+		}, time.Millisecond*100, dvs.badNodeFilter)
+		return nil, nil
+	})
+	if err != nil {
+		dvs.logger.Warn("could not publish ENR", zap.Error(err))
+	}
+}
+
+// updateSubnetsEntry updates the given subnets in the node's ENR
+func (dvs *DiscV5Service) updateSubnetsEntry(subnets map[int]bool) error {
+	ln := dvs.dv5Listener.LocalNode()
+	subnetsEntry, err := getSubnetsEntry(ln.Node())
+	if err != nil {
+		return errors.Wrap(err, "could not get subnets entry")
+	}
+	for sn, val := range subnets {
+		subnetsEntry[sn] = val
+	}
+
+	if err := setSubnetsEntry(ln, subnetsEntry); err != nil {
+		return errors.Wrap(err, "could not set subnets entry")
+	}
+	return nil
+}
+
 // limitNodeFilter checks if limit exceeded
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
@@ -257,18 +329,6 @@ func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Nod
 		}
 		return subnets[int(subnet)]
 	}
-}
-
-// publishENR publishes the new ENR across the network
-func (dvs *DiscV5Service) publishENR() {
-	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-	defer done()
-	dvs.discover(ctx, func(e PeerEvent) {
-		err := dvs.dv5Listener.Ping(e.Node)
-		if err != nil {
-			dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
-		}
-	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 
 // newUDPListener creates a udp server

@@ -30,6 +30,10 @@ type DiscV5Options struct {
 	Bootnodes []string
 	// Log
 	Logger *zap.Logger
+	// Subnets is a bool slice represents all the subnets the node is intreseted in
+	Subnets []bool
+	// OperatorID is the operator id (optional)
+	OperatorID string
 }
 
 // DefaultOptions returns the default options
