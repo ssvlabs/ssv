@@ -82,11 +82,13 @@ var StartNodeCmd = &cobra.Command{
 
 		// TODO - change via command line?
 		forker := forks.NewForker(forks.Config{
+			Logger:     Logger,
 			Network:    cfg.ETH2Options.Network,
-			ForkSlot:   10000000, // TODO by flag?
+			ForkSlot:   2571780, // TODO by flag?
 			BeforeFork: v0.New(),
 			PostFork:   v1.New(),
 		})
+		forker.Start()
 
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()

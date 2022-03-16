@@ -2,6 +2,7 @@ package forks
 
 import (
 	"github.com/bloxapp/eth2-key-manager/core"
+	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 )
@@ -16,12 +17,14 @@ const (
 
 type Config struct {
 	Network    string
+	Logger     *zap.Logger
 	BeforeFork Fork
 	PostFork   Fork
 	ForkSlot   uint64
 }
 
 type Forker struct {
+	logger   *zap.Logger
 	network  core.Network
 	state    uint64
 	forkSlot uint64
@@ -34,6 +37,7 @@ type Forker struct {
 
 func NewForker(cfg Config) *Forker {
 	return &Forker{
+		logger:      cfg.Logger.With(zap.String("who", "forker")),
 		network:     core.NetworkFromString(cfg.Network),
 		forkSlot:    cfg.ForkSlot,
 		state:       stateBefore,
@@ -54,10 +58,12 @@ func (f *Forker) AddHandler(handler OnFork) {
 
 func (f *Forker) SlotTick(slot uint64) {
 	if slot >= f.forkSlot && !f.IsForked() { // TODo check if can do this code with atomic func
+		f.logger.Debug("forker on fork!", zap.Uint64("slot", slot))
 		f.forkLock.Lock()
 		f.currentFork = f.postFork
 		f.forkLock.Unlock()
 
+		f.logger.Debug("calling handlers", zap.Int("size", len(f.handlers)))
 		for _, handler := range f.handlers {
 			handler(slot)
 		}

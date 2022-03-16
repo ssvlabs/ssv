@@ -115,14 +115,15 @@ func (n *operatorNode) Start() error {
 		}
 	}
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
-	n.dutyCtrl.Start()
 	go n.listenForCurrentSlot()
+	n.dutyCtrl.Start()
 
 	return nil
 }
 
 func (n *operatorNode) listenForCurrentSlot() {
 	for slot := range n.dutyCtrl.CurrentSlotChan() {
+		n.logger.Debug("passing slot to fork!")
 		n.fork.SlotTick(slot)
 	}
 }
