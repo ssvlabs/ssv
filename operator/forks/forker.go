@@ -58,7 +58,7 @@ func (f *Forker) AddHandler(handler OnFork) {
 
 func (f *Forker) SlotTick(slot uint64) {
 	if slot >= f.forkSlot && !f.IsForked() { // TODo check if can do this code with atomic func
-		f.logger.Debug("forker on fork!", zap.Uint64("slot", slot))
+		f.logger.Debug("on fork!", zap.Uint64("slot", slot))
 		f.forkLock.Lock()
 		f.currentFork = f.postFork
 		f.forkLock.Unlock()
@@ -67,8 +67,8 @@ func (f *Forker) SlotTick(slot uint64) {
 		for _, handler := range f.handlers {
 			handler(slot)
 		}
+		atomic.StoreUint64(&f.state, stateAfter)
 	}
-	atomic.StoreUint64(&f.state, stateAfter)
 }
 
 func (f *Forker) IsForked() bool {

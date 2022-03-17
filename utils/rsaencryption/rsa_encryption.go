@@ -80,7 +80,7 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 	)
 }
 
-// ExtractPublicKey get public key from private key and return []byte represent the public key
+// ExtractPublicKey get public key from private key and return base64 encoded public key
 func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
 	if err != nil {

@@ -191,8 +191,8 @@ func (ec *eth1Client) reconnect() {
 }
 
 // fireEvent notifies observers about some contract event
-func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
-	e := eth1.Event{Log: log, Data: data}
+func (ec *eth1Client) fireEvent(log types.Log, data interface{}, isOperatorEvent bool) {
+	e := eth1.Event{Log: log, Data: data, IsOperatorEvent: isOperatorEvent}
 	_ = ec.eventsFeed.Send(&e)
 	// TODO: add trace
 	//ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
@@ -310,7 +310,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	ec.logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)}, false)
 
 	return nil
 }
@@ -367,27 +367,21 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isEventBelongsToOperator, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, vLog.Topics, contractAbi)
+		parsed, isOperatorEvent, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, vLog.Topics, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
-		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
-		if isEventBelongsToOperator || shareEncryptionKey == nil {
-			ec.fireEvent(vLog, *parsed)
-		}
+		ec.fireEvent(vLog, *parsed, isOperatorEvent)
 	case "ValidatorAdded":
-		parsed, isEventBelongsToOperator, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isOperatorEvent, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
-		if isEventBelongsToOperator {
+		if isOperatorEvent {
 			ec.logger.Debug("validator is assigned to this operator",
 				zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)))
 		}
-		// if there is no operator-private-key --> assuming that the event should be triggered (e.g. exporter)
-		if isEventBelongsToOperator || shareEncryptionKey == nil {
-			ec.fireEvent(vLog, *parsed)
-		}
+		ec.fireEvent(vLog, *parsed, isOperatorEvent)
 	default:
 		ec.logger.Debug("unknown contract event was received", zap.String("hash", vLog.TxHash.Hex()), zap.String("eventName", eventName))
 	}

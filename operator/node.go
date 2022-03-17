@@ -70,7 +70,7 @@ func New(opts Options) Node {
 		beacon:         opts.Beacon,
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
-		storage:        NewOperatorNodeStorage(opts.DB, opts.Logger),
+		storage:        NewNodeStorage(opts.DB, opts.Logger),
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
@@ -131,12 +131,24 @@ func (n *operatorNode) listenForCurrentSlot() {
 func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	n.logger.Info("starting operator node syncing with eth1")
 
+	handler := n.validatorsCtrl.Eth1EventHandler()
 	// sync past events
-	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset,
-		n.validatorsCtrl.ProcessEth1Event); err != nil {
+	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	n.logger.Info("manage to sync contract events")
+	shares, err := n.validatorsCtrl.GetAllValidatorShares()
+	if err != nil {
+		n.logger.Error("failed to get validator shares", zap.Error(err))
+	}
+	operators, err := n.storage.ListOperators(0, 0)
+	if err != nil {
+		n.logger.Error("failed to get operators", zap.Error(err))
+	}
+	n.logger.Info("ETH1 sync history stats",
+		zap.Int("shares count", len(shares)),
+		zap.Int("operators count", len(operators)),
+	)
 
 	// setup validator controller to listen to new events
 	go n.validatorsCtrl.ListenToEth1Events(n.eth1Client.EventsFeed())

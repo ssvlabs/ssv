@@ -4,7 +4,9 @@ import (
 	"context"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
+	"github.com/bloxapp/ssv/operator/forks"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
+	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -17,9 +19,15 @@ func init() {
 	logex.Build("test", zap.DebugLevel, nil)
 }
 
-func TestForkV1_Encoding(t *testing.T) {
-	fork := v0.New("prater")
-	fork.Start()
+func TestWrapper_Start(t *testing.T) {
+	forker := forks.NewForker(forks.Config{
+		Logger:     logex.GetLogger(),
+		Network:    "prater",
+		ForkSlot:   100000000,
+		BeforeFork: v0.New(),
+		PostFork:   v1.New(),
+	})
+	forker.Start()
 
 	cfg := &p2pv1.Config{}
 
@@ -34,7 +42,7 @@ func TestForkV1_Encoding(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg.NetworkPrivateKey = netPrivKey
-	cfg.Fork = fork.NetworkForker()
+	cfg.Fork = forker
 	cfg.Logger = logex.GetLogger()
 
 	p2pNet, err := New(context.Background(), cfg)

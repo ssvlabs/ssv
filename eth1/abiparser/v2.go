@@ -65,8 +65,8 @@ func (v2 *V2Abi) ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey 
 			return nil, false, errors.Wrap(err, "failed to extract public key")
 		}
 	}
-	isEventBelongsToOperator := strings.EqualFold(hexPubkey, nodeOperatorPubKey)
-	return &operatorAddedEvent, isEventBelongsToOperator, nil
+	isOperatorEvent := strings.EqualFold(hexPubkey, nodeOperatorPubKey)
+	return &operatorAddedEvent, isOperatorEvent, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
@@ -81,19 +81,19 @@ func (v2 *V2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey
 		zap.String("Validator PublicKey", hex.EncodeToString(validatorAddedEvent.PublicKey)),
 		zap.String("Owner Address", validatorAddedEvent.OwnerAddress.String()))
 
-	var isEventBelongsToOperator bool
+	var isOperatorEvent bool
 
 	for i, operatorPublicKey := range validatorAddedEvent.OperatorPublicKeys {
 		outAbi, err := getOutAbi()
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to define ABI")
 		}
-		hexOperatorPublicKey, err := readOperatorPubKey(operatorPublicKey, outAbi)
+		operatorPublicKey, err := readOperatorPubKey(operatorPublicKey, outAbi)
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to unpack OperatorPublicKey")
 		}
 
-		validatorAddedEvent.OperatorPublicKeys[i] = []byte(hexOperatorPublicKey) // set for further use in code
+		validatorAddedEvent.OperatorPublicKeys[i] = []byte(operatorPublicKey) // set for further use in code
 		if operatorPrivateKey == nil {
 			continue
 		}
@@ -101,7 +101,7 @@ func (v2 *V2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to extract public key")
 		}
-		if strings.EqualFold(hexOperatorPublicKey, nodeOperatorPubKey) {
+		if strings.EqualFold(operatorPublicKey, nodeOperatorPubKey) {
 			out, err := outAbi.Unpack("method", validatorAddedEvent.EncryptedKeys[i])
 			if err != nil {
 				return nil, false, errors.Wrap(err, "failed to unpack EncryptedKey")
@@ -114,10 +114,10 @@ func (v2 *V2Abi) ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey
 					return nil, false, errors.Wrap(err, "failed to decrypt share private key")
 				}
 				validatorAddedEvent.EncryptedKeys[i] = []byte(decryptedSharePrivateKey)
-				isEventBelongsToOperator = true
+				isOperatorEvent = true
 			}
 		}
 	}
 
-	return &validatorAddedEvent, isEventBelongsToOperator, nil
+	return &validatorAddedEvent, isOperatorEvent, nil
 }

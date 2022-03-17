@@ -2,10 +2,12 @@ package exporter
 
 import (
 	"encoding/hex"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -39,8 +41,8 @@ func (exp *exporter) handleEth1Event(e eth1.Event) error {
 	var err error = nil
 	if validatorAddedEvent, ok := e.Data.(abiparser.ValidatorAddedEvent); ok {
 		err = exp.handleValidatorAddedEvent(validatorAddedEvent)
-	} else if opertaorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
-		err = exp.handleOperatorAddedEvent(opertaorAddedEvent)
+	} else if operatorAddedEvent, ok := e.Data.(abiparser.OperatorAddedEvent); ok {
+		err = exp.handleOperatorAddedEvent(operatorAddedEvent)
 	}
 	return err
 }
@@ -97,7 +99,7 @@ func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	logger := exp.logger.With(zap.String("eventType", "OperatorAdded"),
 		zap.String("pubKey", string(event.PublicKey)))
 	logger.Info("operator added event")
-	oi := storage.OperatorInformation{
+	oi := registrystorage.OperatorInformation{
 		PublicKey:    string(event.PublicKey),
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
@@ -113,7 +115,7 @@ func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 		n := exp.ws.BroadcastFeed().Send(api.Message{
 			Type:   api.TypeOperator,
 			Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
-			Data:   []storage.OperatorInformation{oi},
+			Data:   []registrystorage.OperatorInformation{oi},
 		})
 		logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
 	}()

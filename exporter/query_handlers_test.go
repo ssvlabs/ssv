@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -82,7 +83,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 	defer done()
 	s, _ := newStorageForTest(db, l)
 
-	ois := []storage.OperatorInformation{
+	ois := []registrystorage.OperatorInformation{
 		{
 			PublicKey:    "01010101",
 			Name:         "my_operator1",
@@ -113,7 +114,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 		}
 		handleOperatorsQuery(l, s, &nm)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]storage.OperatorInformation)
+		results, ok := nm.Msg.Data.([]registrystorage.OperatorInformation)
 		require.True(t, ok)
 		require.Equal(t, 2, len(results))
 		for _, op := range results {
@@ -133,7 +134,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 		}
 		handleOperatorsQuery(l, s, &nm)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]storage.OperatorInformation)
+		results, ok := nm.Msg.Data.([]registrystorage.OperatorInformation)
 		require.True(t, ok)
 		require.Equal(t, 0, len(results))
 	})
@@ -149,7 +150,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 		}
 		handleOperatorsQuery(l, s, &nm)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]storage.OperatorInformation)
+		results, ok := nm.Msg.Data.([]registrystorage.OperatorInformation)
 		require.True(t, ok)
 		require.Equal(t, 1, len(results))
 		require.Equal(t, "my_operator3", results[0].Name)
