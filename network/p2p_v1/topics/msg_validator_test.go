@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	operatorForkers "github.com/bloxapp/ssv/operator/forks"
-	operatorV0 "github.com/bloxapp/ssv/operator/forks/v0"
 	operatorV1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/protocol"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -28,8 +27,7 @@ func TestMsgValidator(t *testing.T) {
 		ForkSlot:   1,
 		Network:    "prater",
 		Logger:     logex.GetLogger(),
-		BeforeFork: operatorV0.New(),
-		PostFork:   operatorV1.New()}
+		BeforeFork: operatorV1.New()}
 	forker := operatorForkers.NewForker(cfg)
 
 	self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
