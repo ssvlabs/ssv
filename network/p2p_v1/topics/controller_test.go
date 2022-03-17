@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/network/forks"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
+	operatorForkers "github.com/bloxapp/ssv/operator/forks"
+	operatorV1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/protocol"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -20,6 +21,10 @@ import (
 	"testing"
 	"time"
 )
+
+func init() {
+	logex.Build("test", zap.InfoLevel, nil)
+}
 
 func TestTopicManager(t *testing.T) {
 	nPeers := 8
@@ -33,26 +38,31 @@ func TestTopicManager(t *testing.T) {
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
 	//shares := createShares(nValidators)
+	cfg := operatorForkers.Config{
+		ForkSlot:   1,
+		Network:    "prater",
+		Logger:     logex.GetLogger(),
+		BeforeFork: operatorV1.New()}
+	forker := operatorForkers.NewForker(cfg)
 
 	t.Run("v0 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		f := forksv1.New()
-		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers)
+
+		peers := newPeers(ctx, t, nPeers, false, false, forker)
+		baseTest(ctx, t, peers, pks, forker, nPeers-2, nPeers)
 	})
 
 	t.Run("v1 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		f := forksv1.New()
-		peers := newPeers(ctx, t, nPeers, true, true, f)
-		baseTest(ctx, t, peers, pks, f, 2, 2)
+		peers := newPeers(ctx, t, nPeers, true, true, forker)
+		baseTest(ctx, t, peers, pks, forker, 2, 2)
 	})
 
 }
 
-func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
+func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f *operatorForkers.Forker, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
 	nPeers := len(peers)
 
@@ -61,7 +71,13 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		if err != nil {
 			return "invalid"
 		}
-		return f.ValidatorTopicID(pk)
+		if f.GetCurrentFork() == nil {
+			logex.GetLogger().Panic("current fork is nil!")
+		}
+		if f.GetCurrentFork().NetworkFork() == nil {
+			logex.GetLogger().Panic("network fork is nil!")
+		}
+		return f.GetCurrentFork().NetworkFork().ValidatorTopicID(pk)
 	}
 	subTopic := func(p *P, i int, potentialErrs ...error) {
 		tname := topicName(pks[i])
@@ -222,7 +238,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p_v1/testing
-func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
+func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool, fork *operatorForkers.Forker) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
 		peers[i] = newPeer(ctx, t, msgValidator, msgID, fork)
@@ -244,7 +260,7 @@ func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool
 	return peers
 }
 
-func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
+func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork *operatorForkers.Forker) *P {
 	h, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/network_wrapper"
+	"github.com/bloxapp/ssv/network/networkwrapper"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/operator/forks"
 	"log"
@@ -145,7 +145,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		// TODO: move
 		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
-		p2pNet, err := network_wrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
+		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}

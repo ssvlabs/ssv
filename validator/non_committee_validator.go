@@ -10,11 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// Reader handle messages for non committee validators
 type Reader struct {
 	logger      *zap.Logger
 	ibftStorage collections.Iibft
 }
 
+// NewReader return new reader struct
 func NewReader(logger *zap.Logger, db basedb.IDb) ibftController.MediatorReader {
 	storage := collections.NewIbft(db, logger, beacon.RoleTypeAttester.String()) // TODO role needs to be passed
 	return Reader{
@@ -23,6 +25,7 @@ func NewReader(logger *zap.Logger, db basedb.IDb) ibftController.MediatorReader 
 	}
 }
 
+// GetMsgResolver return message resolver
 func (r Reader) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.SignedMessage) {
 	return func(msg *proto.SignedMessage) {
 		if networkMsg == network.NetworkMsg_DecidedType {

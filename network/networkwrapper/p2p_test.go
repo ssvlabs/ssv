@@ -1,4 +1,4 @@
-package network_wrapper
+package networkwrapper
 
 import (
 	"context"
@@ -37,6 +37,7 @@ func TestWrapper_Start(t *testing.T) {
 		Path:   "",
 	}
 	db, err := storage.GetStorageFactory(options)
+	require.NoError(t, err)
 	istore := ssv_identity.NewIdentityStore(db, logex.GetLogger())
 	netPrivKey, err := istore.SetupNetworkKey("")
 	require.NoError(t, err)
