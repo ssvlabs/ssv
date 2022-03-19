@@ -98,7 +98,6 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
 	logger := exp.logger.With(zap.String("eventType", "OperatorAdded"),
 		zap.String("pubKey", string(event.PublicKey)))
-	logger.Info("operator added event")
 	oi := registrystorage.OperatorInformation{
 		PublicKey:    string(event.PublicKey),
 		Name:         event.Name,
@@ -108,7 +107,6 @@ func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	if err != nil {
 		return err
 	}
-	logger.Debug("managed to save operator information", zap.Any("value", oi))
 	reportOperatorIndex(exp.logger, &oi)
 
 	go func() {

@@ -179,6 +179,7 @@ var StartNodeCmd = &cobra.Command{
 			ContractABI:                eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
 			ShareEncryptionKeyProvider: nodeStorage.GetPrivateKey,
+			OperatorPubKey:             operatorPubKey,
 			AbiVersion:                 cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {

@@ -146,7 +146,7 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 		n.logger.Error("failed to get operators", zap.Error(err))
 	}
 	n.logger.Info("ETH1 sync history stats",
-		zap.Int("shares count", len(shares)),
+		zap.Int("validators count", len(shares)),
 		zap.Int("operators count", len(operators)),
 	)
 
