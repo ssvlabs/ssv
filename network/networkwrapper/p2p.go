@@ -2,6 +2,7 @@ package networkwrapper
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/operator/forks"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,21 +25,24 @@ type P2pNetwork struct {
 }
 
 // New return p2pNetwork struct of network interface
-func New(ctx context.Context, cfgV1 *p2pv1.Config) (network.Network, error) {
+func New(ctx context.Context, cfgV1 *p2pv1.Config, forker *forks.Forker) (network.Network, error) {
 	logger := cfgV1.Logger.With(zap.String("who", "networkwrapper"))
+
+	cfgV1.Fork = forker.GetCurrentFork().NetworkFork()
+
 	n := &P2pNetwork{
 		ctx:    ctx,
 		logger: logger,
 		cfgV1:  cfgV1,
 	}
 
-	if cfgV1.Fork.IsForked() {
+	if forker.IsForked() {
 		logger.Debug("post fork. using v1 adapter")
 		n.networkAdapter = v1.New(ctx, cfgV1, nil)
 	} else {
 		logger.Debug("before fork. using v0 adapter")
 		n.networkAdapter = v0.NewV0Adapter(ctx, cfgV1)
-		cfgV1.Fork.AddHandler(n.onFork)
+		forker.AddHandler(n.onFork)
 	}
 
 	n.setup()

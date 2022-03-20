@@ -5,13 +5,13 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons/listeners"
+	"github.com/bloxapp/ssv/network/forks"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
-	operatorForkers "github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -31,15 +31,15 @@ const (
 	legacyMsgStream = "/sync/0.0.1"
 )
 
-// netV0Adapter is an adapter for network v0
-type netV0Adapter struct {
+// netV1Adapter is an adapter for network v0
+type netV1Adapter struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
 	logger *zap.Logger
 
 	v1Cfg *p2p_v1.Config
-	fork  *operatorForkers.Forker
+	fork  forks.Fork
 	host  host.Host
 	// TODO: use index
 	knownOperators *sync.Map
@@ -63,7 +63,7 @@ func New(pctx context.Context, v1Cfg *p2p_v1.Config, lis listeners.Container) ad
 		newLis.SetListeners(lis.GetAllListeners())
 	}
 
-	return &netV0Adapter{
+	return &netV1Adapter{
 		ctx:            ctx,
 		cancel:         cancel,
 		v1Cfg:          v1Cfg,
@@ -74,12 +74,12 @@ func New(pctx context.Context, v1Cfg *p2p_v1.Config, lis listeners.Container) ad
 	}
 }
 
-func (n *netV0Adapter) Listeners() listeners.Container {
+func (n *netV1Adapter) Listeners() listeners.Container {
 	return n.listeners
 }
 
 // Setup initializes all required components
-func (n *netV0Adapter) Setup() error {
+func (n *netV1Adapter) Setup() error {
 	if err := n.setupHost(); err != nil {
 		return errors.Wrap(err, "could not setup libp2p host")
 	}
@@ -100,7 +100,7 @@ func (n *netV0Adapter) Setup() error {
 }
 
 // Start starts the network
-func (n *netV0Adapter) Start() error {
+func (n *netV1Adapter) Start() error {
 	n.setLegacyStreamHandler()
 
 	go func() {
@@ -134,7 +134,7 @@ func (n *netV0Adapter) Start() error {
 }
 
 // Close closes the network
-func (n *netV0Adapter) Close() error {
+func (n *netV1Adapter) Close() error {
 	n.cancel()
 	if err := n.idx.Close(); err != nil {
 		n.logger.Error("could not close index", zap.Error(err))
@@ -143,8 +143,8 @@ func (n *netV0Adapter) Close() error {
 }
 
 // HandleMsg implements topics.PubsubMessageHandler
-func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
-	raw, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(msg.Data)
+func (n *netV1Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
+	raw, err := n.fork.DecodeNetworkMsg(msg.Data)
 	if err != nil {
 		return err
 	}
@@ -160,37 +160,37 @@ func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	return nil
 }
 
-func (n *netV0Adapter) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
+func (n *netV1Adapter) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_IBFTType)
 
 	return ls.MsgChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
+func (n *netV1Adapter) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_SignatureType)
 
 	return ls.SigChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
+func (n *netV1Adapter) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_DecidedType)
 
 	return ls.DecidedChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
+func (n *netV1Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_SyncType)
 
 	return ls.SyncChan(), n.listeners.Register(ls)
 }
 
-func (n *netV0Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPk.Serialize())
+func (n *netV1Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+	topic := n.fork.ValidatorTopicID(validatorPk.Serialize())
 	return n.topicsCtrl.Subscribe(topic)
 }
 
-func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPk)
+func (n *netV1Adapter) AllPeers(validatorPk []byte) ([]string, error) {
+	topic := n.fork.ValidatorTopicID(validatorPk)
 	peers, err := n.topicsCtrl.Peers(topic)
 	if err != nil {
 		return nil, err
@@ -206,53 +206,53 @@ func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
 	return results, nil
 }
 
-func (n *netV0Adapter) SubscribeToMainTopic() error {
+func (n *netV1Adapter) SubscribeToMainTopic() error {
 	return n.topicsCtrl.Subscribe(decidedTopic)
 }
 
-func (n *netV0Adapter) MaxBatch() uint64 {
+func (n *netV1Adapter) MaxBatch() uint64 {
 	return n.v1Cfg.MaxBatchResponse
 }
 
-func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+func (n *netV1Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPK)
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
 		return errors.Wrap(err, "could not broadcast signature")
 	}
 	return nil
 }
 
-func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+func (n *netV1Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_SignatureType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPK)
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
 		return errors.Wrap(err, "could not broadcast signature")
 	}
 	return nil
 }
 
-func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+func (n *netV1Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPK)
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	go func() {
 		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*10); err != nil {
 			n.logger.Error("could not broadcast message on decided topic", zap.Error(err))
@@ -264,19 +264,19 @@ func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMes
 	return nil
 }
 
-func (n *netV0Adapter) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV1Adapter) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV0Adapter) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV1Adapter) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV0Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV1Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
+func (n *netV1Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty()
 	resVal, ok := n.streams.Load(streamID)
 	if !ok {
@@ -286,7 +286,7 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 	if !ok {
 		return errors.New("coud not cast stream responder")
 	}
-	data, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	data, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 		StreamID:    streamID,
@@ -297,16 +297,16 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 	return res(data)
 }
 
-func (n *netV0Adapter) NotifyOperatorID(oid string) {
+func (n *netV1Adapter) NotifyOperatorID(oid string) {
 	n.knownOperators.Store(oid, true)
 }
 
-func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV1Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	pi, err := peer.Decode(peerStr)
 	if err != nil {
 		return nil, err
 	}
-	data, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	data, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 	})
@@ -317,7 +317,7 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make sync request")
 	}
-	parsed, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(rawRes)
+	parsed, err := n.fork.DecodeNetworkMsg(rawRes)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode sync request")
 	}
@@ -333,7 +333,7 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	return res.SyncMessage, nil
 }
 
-func (n *netV0Adapter) setLegacyStreamHandler() {
+func (n *netV1Adapter) setLegacyStreamHandler() {
 	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
@@ -342,7 +342,7 @@ func (n *netV0Adapter) setLegacyStreamHandler() {
 			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
 			return
 		}
-		dec, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(req)
+		dec, err := n.fork.DecodeNetworkMsg(req)
 		if err != nil {
 			n.logger.Error("could not decode message", zap.Error(err))
 			return

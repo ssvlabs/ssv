@@ -5,13 +5,13 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons/listeners"
+	"github.com/bloxapp/ssv/network/forks"
 	p2p_v1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
-	operatorForkers "github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -39,7 +39,7 @@ type netV0Adapter struct {
 	logger *zap.Logger
 
 	v1Cfg *p2p_v1.Config
-	fork  *operatorForkers.Forker
+	fork  forks.Fork
 	host  host.Host
 	// TODO: use index
 	knownOperators *sync.Map
@@ -55,7 +55,6 @@ type netV0Adapter struct {
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
 func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
-	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
 
 	return &netV0Adapter{
@@ -139,7 +138,7 @@ func (n *netV0Adapter) Close() error {
 
 // HandleMsg implements topics.PubsubMessageHandler
 func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
-	raw, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(msg.Data)
+	raw, err := n.fork.DecodeNetworkMsg(msg.Data)
 	if err != nil {
 		return err
 	}
@@ -180,12 +179,12 @@ func (n *netV0Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func(
 }
 
 func (n *netV0Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPk.Serialize())
+	topic := n.fork.ValidatorTopicID(validatorPk.Serialize())
 	return n.topicsCtrl.Subscribe(topic)
 }
 
 func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPk)
+	topic := n.fork.ValidatorTopicID(validatorPk)
 	peers, err := n.topicsCtrl.Peers(topic)
 	if err != nil {
 		return nil, err
@@ -210,14 +209,14 @@ func (n *netV0Adapter) MaxBatch() uint64 {
 }
 
 func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPK)
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
 		return errors.Wrap(err, "could not broadcast signature")
 	}
@@ -225,14 +224,14 @@ func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) e
 }
 
 func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_SignatureType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPK)
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
 		return errors.Wrap(err, "could not broadcast signature")
 	}
@@ -240,14 +239,14 @@ func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedM
 }
 
 func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
-	msgBytes, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(validatorPK)
+	topic := n.fork.ValidatorTopicID(validatorPK)
 	go func() {
 		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*10); err != nil {
 			n.logger.Error("could not broadcast message on decided topic", zap.Error(err))
@@ -281,7 +280,7 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 	if !ok {
 		return errors.New("coud not cast stream responder")
 	}
-	data, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	data, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 		StreamID:    streamID,
@@ -301,7 +300,7 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	if err != nil {
 		return nil, err
 	}
-	data, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
+	data, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
 	})
@@ -312,7 +311,7 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make sync request")
 	}
-	parsed, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(rawRes)
+	parsed, err := n.fork.DecodeNetworkMsg(rawRes)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode sync request")
 	}
@@ -337,7 +336,7 @@ func (n *netV0Adapter) setLegacyStreamHandler() {
 			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
 			return
 		}
-		dec, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(req)
+		dec, err := n.fork.DecodeNetworkMsg(req)
 		if err != nil {
 			n.logger.Error("could not decode message", zap.Error(err))
 			return

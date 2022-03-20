@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	operatorForkers "github.com/bloxapp/ssv/operator/forks"
+	"github.com/bloxapp/ssv/network/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -47,7 +47,7 @@ type Config struct {
 	OperatorPublicKey *rsa.PublicKey
 
 	Logger *zap.Logger
-	Fork   *operatorForkers.Forker
+	Fork   forks.Fork
 	Router network.MessageRouter
 
 	UserAgent string

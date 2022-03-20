@@ -13,7 +13,7 @@ import (
 )
 
 // SetupHost configures a libp2p host
-func (n *netV0Adapter) setupHost() error {
+func (n *netV1Adapter) setupHost() error {
 	opts, err := n.v1Cfg.Libp2pOptions()
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
@@ -26,7 +26,7 @@ func (n *netV0Adapter) setupHost() error {
 	return nil
 }
 
-func (n *netV0Adapter) setupDiscovery() error {
+func (n *netV1Adapter) setupDiscovery() error {
 	ipAddr, err := commons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
@@ -57,7 +57,7 @@ func (n *netV0Adapter) setupDiscovery() error {
 	return nil
 }
 
-func (n *netV0Adapter) setupPubsub() error {
+func (n *netV1Adapter) setupPubsub() error {
 	var staticPeers []peer.AddrInfo
 	if len(n.v1Cfg.ExporterPeerID) > 0 {
 		expID, err := peer.Decode(n.v1Cfg.ExporterPeerID)
@@ -81,7 +81,7 @@ func (n *netV0Adapter) setupPubsub() error {
 	return nil
 }
 
-func (n *netV0Adapter) setupPeerServices() error {
+func (n *netV1Adapter) setupPeerServices() error {
 	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.v1Cfg.MaxPeers

@@ -16,12 +16,12 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
-	raw, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&message)
+	raw, err := n.fork.EncodeNetworkMsg(&message)
 	if err != nil {
 		return errors.Wrap(err, "could not decode message")
 	}
 	vpk := message.GetID().GetValidatorPK()
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(vpk)
+	topic := n.fork.ValidatorTopicID(vpk)
 	if topic == forksv1.UnknownSubnet {
 		return errors.New("unknown topic")
 	}
@@ -34,7 +34,7 @@ func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
 
 // Subscribe subscribes to validator subnet
 func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(pk)
+	topic := n.fork.ValidatorTopicID(pk)
 	if topic == forksv1.UnknownSubnet {
 		return errors.New("unknown topic")
 	}
@@ -43,7 +43,7 @@ func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
 
 // Unsubscribe unsubscribes from the validator subnet
 func (n *p2pNetwork) Unsubscribe(pk protocol.ValidatorPK) error {
-	topic := n.fork.GetCurrentFork().NetworkFork().ValidatorTopicID(pk)
+	topic := n.fork.ValidatorTopicID(pk)
 	if topic == forksv1.UnknownSubnet {
 		return errors.New("unknown topic")
 	}
@@ -60,7 +60,7 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		n.logger.Warn("got nil message", zap.String("topic", topic))
 		return nil
 	}
-	parsed, err := n.fork.GetCurrentFork().NetworkFork().(*forksv1.ForkV1).DecodeNetworkMsgV1(msg.GetData())
+	parsed, err := n.fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(msg.GetData())
 	if err != nil {
 		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
 		// TODO: handle..

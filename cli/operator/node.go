@@ -141,11 +141,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-		cfg.P2pNetworkConfig.Fork = forker
 		cfg.P2pNetworkConfig.Logger = Logger
 		// TODO: move
 		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
-		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
+		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig, forker)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
