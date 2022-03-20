@@ -27,7 +27,7 @@ func topicOf(subnet int64) string {
 	if subnet < 0 {
 		return UnknownSubnet
 	}
-	return fmt.Sprintf("ssv.subnet.%d", subnet)
+	return fmt.Sprintf("%d", subnet)
 }
 
 // validatorSubnet returns the subnet for the given validator
