@@ -2,6 +2,7 @@ package api
 
 import (
 	"github.com/bloxapp/ssv/exporter/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 // Message represents an exporter message
@@ -59,5 +60,5 @@ type ValidatorsMessage struct {
 
 // OperatorsMessage represents message for operators response
 type OperatorsMessage struct {
-	Data []storage.OperatorInformation `json:"data,omitempty"`
+	Data []registrystorage.OperatorInformation `json:"data,omitempty"`
 }

@@ -15,7 +15,8 @@ type ICollection interface {
 
 	SaveValidatorShare(share *Share) error
 	GetValidatorShare(key []byte) (*Share, bool, error)
-	GetAllValidatorsShare() ([]*Share, error)
+	GetAllValidatorShares() ([]*Share, error)
+	GetOperatorValidatorShares(operatorPubKey string) ([]*Share, error)
 }
 
 func collectionPrefix() []byte {
@@ -54,7 +55,6 @@ func (s *Collection) SaveValidatorShare(share *Share) error {
 	if err != nil {
 		return err
 	}
-	s.logger.Debug("validator share was saved", zap.String("pk", share.PublicKey.SerializeToHexStr()))
 	return nil
 }
 
@@ -98,8 +98,8 @@ func (s *Collection) cleanAllShares() error {
 	return s.db.RemoveAllByCollection(collectionPrefix())
 }
 
-// GetAllValidatorsShare returns all shares
-func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
+// GetAllValidatorShares returns all shares
+func (s *Collection) GetAllValidatorShares() ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -111,6 +111,28 @@ func (s *Collection) GetAllValidatorsShare() ([]*Share, error) {
 			return errors.Wrap(err, "failed to deserialize validator")
 		}
 		res = append(res, val)
+		return nil
+	})
+
+	return res, err
+}
+
+// GetOperatorValidatorShares returns all validator shares belongs to operator
+func (s *Collection) GetOperatorValidatorShares(operatorPubKey string) ([]*Share, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	var res []*Share
+
+	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
+		val, err := (&Share{}).Deserialize(obj)
+		if err != nil {
+			return errors.Wrap(err, "failed to deserialize validator")
+		}
+		ok := val.IsOperatorShare(operatorPubKey)
+		if ok {
+			res = append(res, val)
+		}
 		return nil
 	})
 

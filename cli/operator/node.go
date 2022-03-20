@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"log"
 	"net/http"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
@@ -108,25 +110,26 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		operatorStorage := operator.NewOperatorNodeStorage(db, Logger)
-		if err := operatorStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
+		nodeStorage := operator.NewNodeStorage(db, Logger)
+		if err := nodeStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
-		operatorPrivKey, found, err := operatorStorage.GetPrivateKey()
+		operatorPrivateKey, found, err := nodeStorage.GetPrivateKey()
 		if err != nil || !found {
 			Logger.Fatal("failed to get operator private key", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivKey
+		operatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+		if err != nil {
+			Logger.Fatal("failed to extract operator public key", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivateKey
 
-		p2pStorage := p2p.NewP2PStorage(db, Logger) // TODO might need to move to separate storage
-		if err := p2pStorage.SetupPrivateKey(cfg.NetworkPrivateKey); err != nil {
-			Logger.Fatal("failed to setup p2p private key", zap.Error(err))
+		istore := ssv_identity.NewIdentityStore(db, Logger)
+		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
+		if err != nil {
+			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
-		p2pPrivKey, found, err := p2pStorage.GetPrivateKey()
-		if err != nil || !found {
-			Logger.Fatal("failed to get p2p private key", zap.Error(err))
-		}
-		cfg.P2pNetworkConfig.NetworkPrivateKey = p2pPrivKey
+		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
 		cfg.P2pNetworkConfig.NodeType = p2p.Operator
 		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
@@ -155,7 +158,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
-		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = operatorStorage.GetPrivateKey
+		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
+		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey
+		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 
@@ -173,7 +178,8 @@ var StartNodeCmd = &cobra.Command{
 			ConnectionTimeout:          cfg.ETH1Options.ETH1ConnectionTimeout,
 			ContractABI:                eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			RegistryContractAddr:       cfg.ETH1Options.RegistryContractAddr,
-			ShareEncryptionKeyProvider: operatorStorage.GetPrivateKey,
+			ShareEncryptionKeyProvider: nodeStorage.GetPrivateKey,
+			OperatorPubKey:             operatorPubKey,
 			AbiVersion:                 cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {

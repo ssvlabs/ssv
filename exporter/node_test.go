@@ -167,11 +167,11 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 
 		wg.Wait()
 
-		validators, err := exp.storage.ListValidators(0, 0)
+		validators, err := exp.storage.ListValidators(0, 1)
 		require.NoError(t, err)
 		require.Equal(t, len(validators), 2)
 
-		operators, err := exp.storage.ListOperators(0, 0)
+		operators, err := exp.storage.ListOperators(0, 1)
 		require.NoError(t, err)
 		require.Equal(t, len(operators), 2)
 	})
@@ -274,7 +274,7 @@ func validatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event 
 	require.NotNil(t, contractAbi)
 
 	abiParser := eth1.NewParser(logex.Build("test", zap.InfoLevel, nil), abiVersion)
-	parsed, _, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
+	parsed, _, _, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
 	return &eth1.Event{Log: types.Log{}, Data: *parsed}
@@ -322,7 +322,7 @@ func operatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	require.NotNil(t, contractAbi)
 
 	abiParser := eth1.NewParser(logex.GetLogger(), abiVersion)
-	parsed, _, err := abiParser.ParseOperatorAddedEvent(nil, vLogOperatorAdded.Data, vLogOperatorAdded.Topics, contractAbi)
+	parsed, _, _, err := abiParser.ParseOperatorAddedEvent("", vLogOperatorAdded.Data, vLogOperatorAdded.Topics, contractAbi)
 	require.NoError(t, err)
 
 	return &eth1.Event{Log: types.Log{}, Data: *parsed}

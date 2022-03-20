@@ -8,8 +8,8 @@ import (
 )
 
 func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
-	storage, done := newStorageForTest()
-	require.NotNil(t, storage)
+	s, done := newStorageForTest()
+	require.NotNil(t, s)
 	defer done()
 
 	validatorInfo := ValidatorInformation{
@@ -35,15 +35,15 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 	}
 
 	t.Run("get non-existing validator", func(t *testing.T) {
-		nonExistingOperator, found, _ := storage.GetValidatorInformation("dummyPK")
+		nonExistingOperator, found, _ := s.GetValidatorInformation("dummyPK")
 		require.Nil(t, nonExistingOperator)
 		require.False(t, found)
 	})
 
 	t.Run("create and get validator", func(t *testing.T) {
-		err := storage.SaveValidatorInformation(&validatorInfo)
+		err := s.SaveValidatorInformation(&validatorInfo)
 		require.NoError(t, err)
-		validatorInfoFromDB, _, err := storage.GetValidatorInformation(validatorInfo.PublicKey)
+		validatorInfoFromDB, _, err := s.GetValidatorInformation(validatorInfo.PublicKey)
 		require.NoError(t, err)
 		require.Equal(t, "kds6E6tCimycIOcQRIjLaWGr6rYOVs9LoZnu07X2587WcOywZslwTcL6kxM3kjgc",
 			validatorInfoFromDB.PublicKey)
@@ -56,19 +56,19 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 			PublicKey: "82e9b36feb8147d3f82c1a03ba246d4a63ac1ce0b1dabbb6991940a06401ab46fb4afbf971a3c145fdad2d4bddd30e12",
 			Operators: validatorInfo.Operators[:],
 		}
-		err := storage.SaveValidatorInformation(&vi)
+		err := s.SaveValidatorInformation(&vi)
 		require.NoError(t, err)
 		viDup := ValidatorInformation{
 			PublicKey: vi.PublicKey,
 			Operators: validatorInfo.Operators[1:],
 		}
-		err = storage.SaveValidatorInformation(&viDup)
+		err = s.SaveValidatorInformation(&viDup)
 		require.NoError(t, err)
 		require.Equal(t, viDup.Index, vi.Index)
 	})
 
 	t.Run("create and get multiple validators", func(t *testing.T) {
-		i, err := storage.(*exporterStorage).nextIndex(validatorsPrefix())
+		i, err := s.(*storage).nextIndex(validatorsPrefix())
 		require.NoError(t, err)
 
 		vis := []ValidatorInformation{
@@ -84,12 +84,12 @@ func TestStorage_SaveAndGetValidatorInformation(t *testing.T) {
 			},
 		}
 		for _, vi := range vis {
-			err = storage.SaveValidatorInformation(&vi)
+			err = s.SaveValidatorInformation(&vi)
 			require.NoError(t, err)
 		}
 
 		for _, vi := range vis {
-			validatorInfoFromDB, _, err := storage.GetValidatorInformation(vi.PublicKey)
+			validatorInfoFromDB, _, err := s.GetValidatorInformation(vi.PublicKey)
 			require.NoError(t, err)
 			require.Equal(t, i, validatorInfoFromDB.Index)
 			require.Equal(t, validatorInfoFromDB.PublicKey, vi.PublicKey)
@@ -117,5 +117,5 @@ func TestStorage_ListValidators(t *testing.T) {
 
 	validators, err := storage.ListValidators(0, 0)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(validators))
+	require.Equal(t, 1, len(validators))
 }

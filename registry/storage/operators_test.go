@@ -5,10 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
@@ -59,7 +63,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	})
 
 	t.Run("create and get multiple operators", func(t *testing.T) {
-		i, err := storage.(*exporterStorage).nextIndex(operatorsPrefix)
+		i, err := storage.(*operatorsStorage).nextIndex(operatorsPrefix)
 		require.NoError(t, err)
 
 		ois := []OperatorInformation{
@@ -112,8 +116,24 @@ func TestStorage_ListOperators(t *testing.T) {
 
 	operators, err := storage.ListOperators(0, 0)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(operators))
+	require.Equal(t, 1, len(operators))
 	for _, operator := range operators {
 		require.True(t, strings.Contains(operator.Name, "operator-"))
+	}
+}
+
+func newStorageForTest() (OperatorsCollection, func()) {
+	logger := zap.L()
+	db, err := ssvstorage.GetStorageFactory(basedb.Options{
+		Type:   "badger-memory",
+		Logger: logger,
+		Path:   "",
+	})
+	if err != nil {
+		return nil, func() {}
+	}
+	s := NewOperatorsStorage(db, logger, []byte("test"))
+	return s, func() {
+		db.Close()
 	}
 }
