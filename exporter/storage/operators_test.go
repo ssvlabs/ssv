@@ -2,12 +2,13 @@ package storage
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/fixtures"
+	"strings"
+	"testing"
+
+	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
-	"strings"
-	"testing"
 )
 
 func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
@@ -15,8 +16,10 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	require.NotNil(t, storage)
 	defer done()
 
+	_, pk := blskeygen.GenBLSKeyPair()
+
 	operatorInfo := OperatorInformation{
-		PublicKey:    string(fixtures.RefPk[:]),
+		PublicKey:    string(pk.Serialize()),
 		Name:         "my_operator",
 		OwnerAddress: common.Address{},
 	}
