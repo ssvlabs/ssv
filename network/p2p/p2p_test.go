@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"encoding/hex"
 	"strings"
 	"testing"
 	"time"
@@ -17,11 +16,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/proto"
 )
-
-func _byteArray(input string) []byte {
-	res, _ := hex.DecodeString(input)
-	return res
-}
 
 func TestP2PNetworker(t *testing.T) {
 	threshold.Init()
