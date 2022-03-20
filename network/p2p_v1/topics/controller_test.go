@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/network/forks"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/network/p2p/discovery"
+	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/protocol"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -22,7 +23,7 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
-	nPeers := 8
+	nPeers := 4
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
@@ -33,15 +34,16 @@ func TestTopicManager(t *testing.T) {
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
 	//shares := createShares(nValidators)
-
+	//
 	t.Run("v0 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		f := forksv1.New()
+		f := forksv0.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
 		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers)
 	})
 
+	// v1 features includes msg_id, msg validator, subnets, scoring
 	t.Run("v1 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -49,53 +51,39 @@ func TestTopicManager(t *testing.T) {
 		peers := newPeers(ctx, t, nPeers, true, true, f)
 		baseTest(ctx, t, peers, pks, f, 2, 2)
 	})
-
 }
 
 func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
-	nPeers := len(peers)
+	//nPeers := len(peers)
 
-	topicName := func(pkhex string) string {
+	validatorTopic := func(pkhex string) string {
 		pk, err := hex.DecodeString(pkhex)
 		if err != nil {
 			return "invalid"
 		}
 		return f.ValidatorTopicID(pk)
 	}
-	subTopic := func(p *P, i int, potentialErrs ...error) {
-		tname := topicName(pks[i])
-		err := p.tm.Subscribe(tname)
-		if len(potentialErrs) == 0 {
-			require.NoError(t, err)
-		} else if err != nil {
-			var errP *error
-			for _, e := range potentialErrs {
-				if e.Error() == err.Error() {
-					errP = &e
-					break
-				}
-			}
-			require.Nil(t, errP, "got err", errP)
-			return
-		}
-	}
 
 	t.Log("subscribing to topics")
 	// listen to topics
-	for i := 0; i < nValidators; i++ {
+	for _, pk := range pks {
 		for _, p := range peers {
-			go subTopic(p, i)
+			require.NoError(t, p.tm.Subscribe(validatorTopic(pk)))
 			// simulate concurrency, by trying to subscribe multiple times
-			<-time.After(time.Millisecond)
-			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
-			<-time.After(time.Millisecond)
-			go subTopic(p, i, ErrInProcess, errTopicAlreadyExists)
+			go func(tm Controller, pk string) {
+				require.NoError(t, tm.Subscribe(validatorTopic(pk)))
+			}(p.tm, pk)
+			go func(tm Controller, pk string) {
+				<-time.After(100 * time.Millisecond)
+				require.NoError(t, tm.Subscribe(validatorTopic(pk)))
+			}(p.tm, pk)
+			//go subTopic(p, pk, nil)
+			//<-time.After(time.Millisecond)
+			//go subTopic(p, pk, nil)
 		}
 	}
 
-	// let the peers join topics
-	// v1 features includes msg_id, msg validator, subnets, scoring
 	// wait for the peers to join topics
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -103,15 +91,33 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		defer wg.Done()
 		c, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
+	peersLoop:
 		for _, p := range peers {
 			// TODO: modify for subnets
 			for len(p.tm.Topics()) < nValidators {
 				if c.Err() != nil {
-					return
+					break peersLoop
 				}
 				time.Sleep(time.Millisecond * 100)
 			}
 		}
+		// TODO: remove timeout
+		<-time.After(time.Second * 2)
+		//for _, p := range peers {
+		//	topics := p.tm.Topics()
+		//	for _, topic := range topics {
+		//		topicPeers, err := p.tm.Peers(topic)
+		//		require.NoError(t, err)
+		//		// wait for min peers
+		//		for c.Err() == nil && len(topicPeers) < nPeers/2 {
+		//			time.Sleep(time.Millisecond * 100)
+		//			p.tm.logger.Debug("xxx", zap.Int("len", len(topicPeers)))
+		//			topicPeers, err = p.tm.Peers(topic)
+		//			require.NoError(t, err)
+		//		}
+		//	}
+		//}
+		require.NoError(t, c.Err())
 	}()
 	wg.Wait()
 
@@ -127,35 +133,31 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				require.NoError(t, err)
 				raw, err := msg.MarshalJSON()
 				require.NoError(t, err)
-				require.NoError(t, p.tm.Broadcast(topicName(pk), raw, time.Second*5))
+				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*5))
 			}(p, pks[i], j)
 		}
 	}
+	// TODO: remove timeout
+	<-time.After(time.Second * 2)
 
 	// let the messages propagate
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ctxReadMessages, cancel := context.WithTimeout(ctx, time.Second*8)
-		defer cancel()
 		// check number of peers and messages
 		for i := 0; i < nValidators; i++ {
 			wg.Add(1)
 			go func(pk string) {
+				ctxReadMessages, cancel := context.WithTimeout(ctx, time.Second*5)
+				defer cancel()
 				defer wg.Done()
 				for _, p := range peers {
-					peers, err := p.tm.Peers(topicName(pk))
-					require.NoError(t, err)
-					for ctxReadMessages.Err() == nil && len(peers) < nPeers-2 {
-						time.Sleep(time.Millisecond * 20)
+					// wait for messages
+					for ctxReadMessages.Err() == nil && p.getCount(getTopicName(validatorTopic(pk))) < minMsgCount {
+						time.Sleep(time.Millisecond * 100)
 					}
-					for ctxReadMessages.Err() == nil && p.getCount(topicName(pk)) < minMsgCount {
-						time.Sleep(time.Millisecond * 20)
-					}
-					if ctxReadMessages.Err() != nil {
-						return
-					}
-					c := p.getCount(topicName(pk))
+					require.NoError(t, ctxReadMessages.Err())
+					c := p.getCount(getTopicName(validatorTopic(pk)))
 					require.GreaterOrEqual(t, c, minMsgCount)
 					require.LessOrEqual(t, c, maxMsgCount)
 				}
@@ -163,12 +165,6 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		}
 	}()
 	wg.Wait()
-	t.Log("validating topics and messages")
-
-	// check number of topics
-	for _, p := range peers {
-		require.Len(t, p.tm.Topics(), nValidators)
-	}
 
 	t.Log("unsubscribing")
 	// unsubscribing multiple times for each topic
@@ -177,10 +173,17 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 			wg.Add(1)
 			go func(p *P, pk string) {
 				defer wg.Done()
-				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
-				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
-				<-time.After(time.Millisecond)
-				require.NoError(t, p.tm.Unsubscribe(topicName(pk)))
+				require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk)))
+				go func(p *P) {
+					<-time.After(time.Millisecond)
+					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk)))
+				}(p)
+				wg.Add(1)
+				go func(p *P) {
+					defer wg.Done()
+					<-time.After(time.Millisecond * 50)
+					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk)))
+				}(p)
 			}(p, pks[i])
 		}
 	}
@@ -248,12 +251,16 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	h, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), h))
+	ds, err := discovery.NewMdnsDiscovery(ctx, zap.L(), h)
+	require.NoError(t, err)
 
 	var p *P
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
-	midHandler := NewMsgIDHandler(logger, fork, 2*time.Minute)
+	var midHandler MsgIDHandler
+	if msgID {
+		midHandler = NewMsgIDHandler(logger, fork, 2*time.Minute)
+	}
 	cfg := &PububConfig{
 		Logger:       logger,
 		Host:         h,
@@ -293,6 +300,10 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 			atomic.AddUint64(&p.connsCount, 1)
 		},
 	})
+	require.NoError(t, ds.Bootstrap(func(e discovery.PeerEvent) {
+		_ = h.Connect(ctx, e.AddrInfo)
+	}))
+
 	return p
 }
 

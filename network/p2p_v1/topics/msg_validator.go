@@ -38,6 +38,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			return pubsub.ValidationReject
 		}
 		topic := fork.ValidatorTopicID(smsg.ID.GetValidatorPK())
+		topic = getTopicName(topic)
 		if topic != msg.GetTopic() {
 			// wrong topic
 			logger.Debug("invalid: wrong topic", zap.String("actual", topic),
