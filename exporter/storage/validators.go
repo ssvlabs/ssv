@@ -34,13 +34,12 @@ type OperatorNodeLink struct {
 
 // ListValidators returns information of all the known validators
 // when 'to' equals zero, all validators will be returned
-func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInformation, error) {
-	es.validatorsLock.RLock()
-	defer es.validatorsLock.RUnlock()
+func (s *storage) ListValidators(from int64, to int64) ([]ValidatorInformation, error) {
+	s.validatorsLock.RLock()
+	defer s.validatorsLock.RUnlock()
 
-	to = normalTo(to)
 	var validators []ValidatorInformation
-	err := es.db.GetAll(append(storagePrefix(), validatorsPrefix()...), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(append(storagePrefix(), validatorsPrefix()...), func(i int, obj basedb.Obj) error {
 		var vi ValidatorInformation
 		if err := json.Unmarshal(obj.Value, &vi); err != nil {
 			return err
@@ -54,16 +53,16 @@ func (es *exporterStorage) ListValidators(from int64, to int64) ([]ValidatorInfo
 }
 
 // GetValidatorInformation returns information of the given validator by public key
-func (es *exporterStorage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error) {
-	es.validatorsLock.RLock()
-	defer es.validatorsLock.RUnlock()
+func (s *storage) GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error) {
+	s.validatorsLock.RLock()
+	defer s.validatorsLock.RUnlock()
 
-	return es.getValidatorInformationNotSafe(validatorPubKey)
+	return s.getValidatorInformationNotSafe(validatorPubKey)
 }
 
 // GetValidatorInformation returns information of the given validator by public key
-func (es *exporterStorage) getValidatorInformationNotSafe(validatorPubKey string) (*ValidatorInformation, bool, error) {
-	obj, found, err := es.db.Get(storagePrefix(), validatorKey(validatorPubKey))
+func (s *storage) getValidatorInformationNotSafe(validatorPubKey string) (*ValidatorInformation, bool, error) {
+	obj, found, err := s.db.Get(storagePrefix(), validatorKey(validatorPubKey))
 	if !found {
 		return nil, found, nil
 	}
@@ -76,41 +75,41 @@ func (es *exporterStorage) getValidatorInformationNotSafe(validatorPubKey string
 }
 
 // SaveValidatorInformation saves validator information by its public key
-func (es *exporterStorage) SaveValidatorInformation(validatorInformation *ValidatorInformation) error {
-	es.validatorsLock.Lock()
-	defer es.validatorsLock.Unlock()
+func (s *storage) SaveValidatorInformation(validatorInformation *ValidatorInformation) error {
+	s.validatorsLock.Lock()
+	defer s.validatorsLock.Unlock()
 
-	info, found, err := es.getValidatorInformationNotSafe(validatorInformation.PublicKey)
+	info, found, err := s.getValidatorInformationNotSafe(validatorInformation.PublicKey)
 	if err != nil {
 		return errors.Wrap(err, "could not read information from DB")
 	}
 
 	if found {
-		es.logger.Debug("validator already exist",
+		s.logger.Debug("validator already exist",
 			zap.String("pubKey", validatorInformation.PublicKey))
 		validatorInformation.Index = info.Index
 		// TODO: update validator information (i.e. change operator)
 		return nil
 	}
-	validatorInformation.Index, err = es.nextIndex(validatorsPrefix())
+	validatorInformation.Index, err = s.nextIndex(validatorsPrefix())
 	if err != nil {
 		return errors.Wrap(err, "could not calculate next validator index")
 	}
-	err = es.saveValidatorNotSafe(validatorInformation)
+	err = s.saveValidatorNotSafe(validatorInformation)
 	if err != nil {
 		return err
 	}
-	es.logger.Debug("validator information was saved", zap.String("pubKey", validatorInformation.PublicKey),
+	s.logger.Debug("validator information was saved", zap.String("pubKey", validatorInformation.PublicKey),
 		zap.Any("value", *validatorInformation))
 	return nil
 }
 
-func (es *exporterStorage) saveValidatorNotSafe(val *ValidatorInformation) error {
+func (s *storage) saveValidatorNotSafe(val *ValidatorInformation) error {
 	raw, err := json.Marshal(val)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal validator information")
 	}
-	return es.db.Set(storagePrefix(), validatorKey(val.PublicKey), raw)
+	return s.db.Set(storagePrefix(), validatorKey(val.PublicKey), raw)
 }
 
 func validatorKey(pubKey string) []byte {

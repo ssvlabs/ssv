@@ -4,20 +4,21 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/pkg/errors"
 	"sort"
 )
 
 // operatorIndexSorter sorts operators by Index
-type operatorIndexSorter []storage.OperatorInformation
+type operatorIndexSorter []registrystorage.OperatorInformation
 
 func (a operatorIndexSorter) Len() int           { return len(a) }
 func (a operatorIndexSorter) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a operatorIndexSorter) Less(i, j int) bool { return a[i].Index < a[j].Index }
 
 // getOperators returns a list operators according to the given filter
-func getOperators(s storage.OperatorsCollection, filter api.MessageFilter) ([]storage.OperatorInformation, error) {
-	var operators []storage.OperatorInformation
+func getOperators(s registrystorage.OperatorsCollection, filter api.MessageFilter) ([]registrystorage.OperatorInformation, error) {
+	var operators []registrystorage.OperatorInformation
 	if len(filter.PublicKey) > 0 {
 		operator, found, err := s.GetOperatorInformation(filter.PublicKey)
 		if !found {
