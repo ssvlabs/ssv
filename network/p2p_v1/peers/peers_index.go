@@ -3,6 +3,7 @@ package peers
 import (
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
@@ -122,7 +123,11 @@ func (pi *peersIndex) Identity(id peer.ID) (*Identity, error) {
 	default:
 	}
 	// if in good state -> get identity
-	return pi.get(id)
+	idn, err := pi.get(id)
+	if err == peerstore.ErrNotFound {
+		return nil, ErrNotFound
+	}
+	return idn, err
 }
 
 func (pi *peersIndex) State(id peer.ID) NodeState {

@@ -48,13 +48,13 @@ func New(ctx context.Context, cfgV1 *p2pv1.Config) (network.Network, error) {
 
 func (p *P2pNetwork) setup() {
 	if err := p.networkAdapter.Setup(); err != nil {
-		p.logger.Fatal("failed to setup network adapter")
+		p.logger.Fatal("failed to setup network adapter", zap.Error(err))
 	}
 }
 
 func (p *P2pNetwork) start() {
 	if err := p.networkAdapter.Start(); err != nil {
-		p.logger.Fatal("failed to setup network adapter")
+		p.logger.Fatal("failed to setup network adapter", zap.Error(err))
 	}
 }
 
@@ -68,6 +68,8 @@ func (p *P2pNetwork) onFork(slot uint64) {
 	p.logger.Info("adapter v0 closed. wait for cooling...")
 	// give time to the system to close all pending actions before start new network
 	time.Sleep(time.Second * 3)
+
+	//cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
 
 	// TODo  nilling previews p.networkAdapter instance?
 	p.networkAdapter = v1.New(p.ctx, p.cfgV1, lis)

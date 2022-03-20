@@ -10,7 +10,7 @@ eth2:
 
 eth1:
   # ETH1 node WebSocket address
-  ETH1Addr: example.url
+  ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
 
 p2p:
   # replace with your ip
@@ -19,6 +19,7 @@ p2p:
 #  UdpPort:
   # mdns for local network setup
   DiscoveryType: mdns
+#  HostAddress: 127.0.0.1
 
 ssv:
   GenesisEpoch:
