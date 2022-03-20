@@ -5,10 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
-	operatorForkers "github.com/bloxapp/ssv/operator/forks"
-	operatorV1 "github.com/bloxapp/ssv/operator/forks/v1"
+	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -23,15 +21,9 @@ func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	logger := zap.L()
 	//logger := zaptest.NewLogger(t)
-	cfg := operatorForkers.Config{
-		ForkSlot:   1,
-		Network:    "prater",
-		Logger:     logex.GetLogger(),
-		BeforeFork: operatorV1.New()}
-	forker := operatorForkers.NewForker(cfg)
-
+	f := forksv1.ForkV1{}
 	self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
-	mv := NewSSVMsgValidator(logger, forker, self)
+	mv := NewSSVMsgValidator(logger, &f, self)
 	require.NotNil(t, mv)
 
 	t.Run("valid consensus msg", func(t *testing.T) {
@@ -42,8 +34,8 @@ func TestMsgValidator(t *testing.T) {
 		require.NoError(t, err)
 		pk, err := hex.DecodeString(pkHex)
 		require.NoError(t, err)
-		topic := forker.GetCurrentFork().NetworkFork().ValidatorTopicID(pk)
-		pmsg := newPBMsg(raw, topic, []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
+		topic := f.ValidatorTopicID(pk)
+		pmsg := newPBMsg(raw, getTopicName(topic), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 		res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, res, pubsub.ValidationAccept)
 	})
@@ -56,7 +48,7 @@ func TestMsgValidator(t *testing.T) {
 		require.NoError(t, err)
 		pk, err := hex.DecodeString("a297599ccf617c3b6118bbd248494d7072bb8c6c1cc342ea442a289415987d306bad34415f89469221450a2501a832ec")
 		require.NoError(t, err)
-		topic := forker.GetCurrentFork().NetworkFork().ValidatorTopicID(pk)
+		topic := f.ValidatorTopicID(pk)
 		pmsg := newPBMsg(raw, topic, []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 		res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, res, pubsub.ValidationReject)

@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func TestP2pNetwork_Start(t *testing.T) {
+func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -46,7 +46,7 @@ func TestP2pNetwork_Start(t *testing.T) {
 	}
 	// let the nodes subscribe
 	// TODO: remove timeout
-	<-time.After(time.Second * 5)
+	<-time.After(time.Second * 3)
 
 	msg1, err := dummyMsg(pks[0], 1)
 	require.NoError(t, err)
@@ -81,15 +81,12 @@ func TestP2pNetwork_Start(t *testing.T) {
 	// waiting for messages
 	wg.Add(1)
 	go func() {
-		ct, cancel := context.WithTimeout(ctx, time.Second*4)
+		ct, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		defer wg.Done()
 		for _, r := range routers {
-			for atomic.LoadUint64(&r.count) < uint64(2) {
+			for ct.Err() == nil && atomic.LoadUint64(&r.count) < uint64(2) {
 				time.Sleep(100 * time.Millisecond)
-				if ct.Err() != nil {
-					return
-				}
 			}
 		}
 	}()
@@ -97,6 +94,10 @@ func TestP2pNetwork_Start(t *testing.T) {
 
 	for _, r := range routers {
 		require.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router", r.i)
+	}
+
+	for _, node := range ln.Nodes {
+		require.NoError(t, node.(*p2pNetwork).Close())
 	}
 }
 
@@ -136,21 +137,3 @@ func dummyMsg(pkHex string, height int) (*protocol.SSVMessage, error) {
 		Data:    []byte(msgData),
 	}, nil
 }
-
-//func defaultMockConfig(logger *zap.Logger, sk *ecdsa.PrivateKey) *Config {
-//	return &Config{
-//		Bootnodes:         "",
-//		TCPPort:           commons.DefaultTCP,
-//		UDPPort:           commons.DefaultUDP,
-//		HostAddress:       "",
-//		HostDNS:           "",
-//		RequestTimeout:    10 * time.Second,
-//		MaxBatchResponse:  25,
-//		MaxPeers:          10,
-//		PubSubTrace:       false,
-//		NetworkPrivateKey: sk,
-//		OperatorPublicKey: nil,
-//		Logger:            logger,
-//		Fork:              forksv1.New(),
-//	}
-//}
