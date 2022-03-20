@@ -35,8 +35,8 @@ func (tc *topicContainer) Close() error {
 	return nil
 }
 
-func (tc *topicContainer) incSubCount() {
-	atomic.AddInt32(&tc.subsCount, 1)
+func (tc *topicContainer) incSubCount() int32 {
+	return atomic.AddInt32(&tc.subsCount, 1)
 }
 
 func (tc *topicContainer) decSubCount() int32 {

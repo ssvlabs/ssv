@@ -26,7 +26,6 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			return pubsub.ValidationReject
 		}
 		if bytes.Equal([]byte(p), []byte(self)) {
-			logger.Debug("valid:  our node's message")
 			reportValidationResult(validationResultSelf)
 			return pubsub.ValidationAccept
 		}
@@ -47,7 +46,6 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultTopic)
 			return pubsub.ValidationReject
 		}
-		logger.Debug("valid", zap.ByteString("smsg.ID", smsg.ID))
 		reportValidationResult(validationResultValid)
 		return pubsub.ValidationAccept
 	}

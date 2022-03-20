@@ -98,7 +98,7 @@ func (ctrl *topicsCtrl) Topics() []string {
 func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = getTopicName(name)
 	tc, err := ctrl.joinTopic(name)
-	if err == nil {
+	if err == nil && tc != nil {
 		tc.incSubCount()
 	}
 	return err

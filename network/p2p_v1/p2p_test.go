@@ -85,11 +85,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		defer cancel()
 		defer wg.Done()
 		for _, r := range routers {
-			for atomic.LoadUint64(&r.count) < uint64(2) {
+			for ct.Err() == nil && atomic.LoadUint64(&r.count) < uint64(2) {
 				time.Sleep(100 * time.Millisecond)
-				if ct.Err() != nil {
-					return
-				}
 			}
 		}
 	}()
@@ -97,6 +94,10 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	for _, r := range routers {
 		require.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router", r.i)
+	}
+
+	for _, node := range ln.Nodes {
+		require.NoError(t, node.(*p2pNetwork).Close())
 	}
 }
 
