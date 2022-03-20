@@ -3,35 +3,35 @@ package operator
 import (
 	"context"
 	"fmt"
-	ssv_identity "github.com/bloxapp/ssv/identity"
-	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/networkwrapper"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
-	"github.com/bloxapp/ssv/operator/forks"
-	"log"
-	"net/http"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
+	"github.com/bloxapp/ssv/network/networkwrapper"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/forks"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"log"
+	"net/http"
 )
 
 type config struct {
@@ -85,7 +85,7 @@ var StartNodeCmd = &cobra.Command{
 		forker := forks.NewForker(forks.Config{
 			Logger:     Logger,
 			Network:    cfg.ETH2Options.Network,
-			ForkSlot:   2571780, // TODO by flag?
+			ForkSlot:   3571780, // TODO by flag?
 			BeforeFork: v0.New(),
 			PostFork:   v1.New(),
 		})
@@ -142,8 +142,9 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Logger = Logger
-		// TODO: move
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
 		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
+		Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
 		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig, forker)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
