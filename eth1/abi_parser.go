@@ -58,19 +58,19 @@ func NewParser(logger *zap.Logger, version Version) AbiParser {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (ap AbiParser) ParseOperatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error) {
-	return ap.Version.ParseOperatorAddedEvent(ap.Logger, operatorPrivateKey, data, topics, contractAbi)
+func (ap AbiParser) ParseOperatorAddedEvent(operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, bool, error) {
+	return ap.Version.ParseOperatorAddedEvent(ap.Logger, operatorPubKey, data, topics, contractAbi)
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (ap AbiParser) ParseValidatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error) {
+func (ap AbiParser) ParseValidatorAddedEvent(operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, bool, error) {
 	return ap.Version.ParseValidatorAddedEvent(ap.Logger, operatorPrivateKey, data, contractAbi)
 }
 
 // AbiVersion serves as the parser client interface
 type AbiVersion interface {
-	ParseOperatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error)
-	ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error)
+	ParseOperatorAddedEvent(logger *zap.Logger, operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, bool, error)
+	ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, bool, error)
 }
 
 // LoadABI enables to load a custom abi json

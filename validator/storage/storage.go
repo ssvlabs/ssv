@@ -55,7 +55,6 @@ func (s *Collection) SaveValidatorShare(share *Share) error {
 	if err != nil {
 		return err
 	}
-	s.logger.Debug("validator share was saved", zap.String("pk", share.PublicKey.SerializeToHexStr()))
 	return nil
 }
 
