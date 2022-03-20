@@ -27,9 +27,7 @@ func _byteArray(input string) []byte {
 }
 
 var (
-	// RefSk is a reference testing private key
-	refSk = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
-	// RefPk is the PK of RefSk
+	// RefPk is a testing PK of RefSk
 	refPk = _byteArray("a9cf360aa15fb1d1d30ee2b578dc5884823c19661886ae8b892775ccb3bd96b7d7345569a2aa0b14e4d015c54a6a0c54")
 
 	// RefSplitShares is RefSk split into 4 shares
