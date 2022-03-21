@@ -26,6 +26,7 @@ def ops_generator(ops):
 def generate_validators(base_path, lh_data_dir='.lighthouse/local-testnet'):
     with open(f"{base_path}/operators.yaml", 'r') as stream:
         all_ops = yaml.safe_load(stream)
+    all_validators = []
     ops_gen = ops_generator(all_ops)
     for node_i in glob.glob(f"{lh_data_dir}/node_*"):
         validators_json = []
@@ -46,8 +47,10 @@ def generate_validators(base_path, lh_data_dir='.lighthouse/local-testnet'):
                 "encryptedKeys": txn[3]
             }
             validators_json.append(validator_json)
+            all_validators.append(validator_json)
         with open(f"{node_i}/validators.json", 'w') as outfile:
             json.dump(validators_json, outfile)
             # TODO: set relevant env and call contract
         # cli = subprocess.run([])
         print(f"created {len(validators_json)} validators")
+    return all_validators

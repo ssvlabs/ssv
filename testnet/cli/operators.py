@@ -76,5 +76,6 @@ def generate_operators(n, testnet_dir, cfg_path='data/config', lh_ip='127.0.0.1'
         cfg = create_operator_config(node_id, sk)
         save_yaml(f"{testnet_dir}/{cfg_path}/share{node_id}.yaml", cfg)
     save_yaml(f"{testnet_dir}/operators.yaml", ops)
+    return ops
 
 # generate_operators(4, os.environ.get('SSV_TESTNET_DIR'))

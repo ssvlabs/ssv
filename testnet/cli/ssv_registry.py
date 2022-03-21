@@ -4,7 +4,7 @@ import subprocess
 
 
 # setup_ssv_net_repo clears
-def setup_ssv_net_repo(main_dir):
+def setup_ssv_registry(main_dir):
     # main_dir = os.environ.get('SSV_TESTNET_DIR')
     os.chdir(main_dir)
     if not os.path.isdir(os.path.join(main_dir, 'ssv-network')):
@@ -32,3 +32,13 @@ def deploy_contracts():
             addr = line_match.group(1)
             return addr
     return ""
+
+
+def register_operators(registry_addr, operators):
+    # TODO: complete
+    return False
+
+
+def register_validators(registry_addr, validators):
+    # TODO: complete
+    return False
