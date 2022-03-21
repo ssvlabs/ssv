@@ -62,7 +62,7 @@ func (p *P2pNetwork) start() {
 	}
 }
 
-func (p *P2pNetwork) onFork(slot uint64) {
+func (p *P2pNetwork) onFork(slot uint64, currentFork forks.Fork) {
 	p.logger.Info("network fork start... moving from adapter v0 to v1", zap.Uint64("fork slot", slot))
 	lis := p.networkAdapter.Listeners()
 	p.logger.Info("closing current v0 adapter")
@@ -74,7 +74,7 @@ func (p *P2pNetwork) onFork(slot uint64) {
 	time.Sleep(time.Second * 3)
 
 	//cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
-
+	p.cfgV1.Fork = currentFork.NetworkFork()
 	// TODo  nilling previews p.networkAdapter instance?
 	p.networkAdapter = v1.New(p.ctx, p.cfgV1, lis)
 	p.logger.Info("setup adapter v1")

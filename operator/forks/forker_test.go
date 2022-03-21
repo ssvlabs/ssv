@@ -22,7 +22,7 @@ func TestForker_StartBeforeFork(t *testing.T) {
 		ForkSlot:   1,
 	})
 
-	forker.AddHandler(func(slot uint64) {
+	forker.AddHandler(func(slot uint64, currentFork Fork) {
 		done = true
 	})
 	require.False(t, forker.IsForked())

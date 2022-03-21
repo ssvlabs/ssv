@@ -8,7 +8,7 @@ import (
 )
 
 // OnFork handles fork event
-type OnFork func(slot uint64)
+type OnFork func(slot uint64, currentFork Fork)
 
 // state for fork event
 const (
@@ -74,7 +74,7 @@ func (f *Forker) SlotTick(slot uint64) {
 
 		f.logger.Debug("calling handlers", zap.Int("size", len(f.handlers)))
 		for _, handler := range f.handlers {
-			handler(slot)
+			handler(slot, f.GetCurrentFork())
 		}
 		atomic.StoreUint64(&f.state, stateAfter)
 	}
