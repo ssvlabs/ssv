@@ -16,15 +16,11 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/networkwrapper"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
-	"github.com/bloxapp/ssv/operator/forks"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
@@ -37,8 +33,6 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"log"
-	"net/http"
 )
 
 type config struct {

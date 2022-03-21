@@ -12,8 +12,6 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
-	operatorForkers "github.com/bloxapp/ssv/operator/forks"
-	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
