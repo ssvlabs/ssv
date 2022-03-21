@@ -148,7 +148,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 func (n *p2pNetwork) setupPubsub() error {
 	// creates a msgID handler
 	midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
-		n.fork, time.Minute*2)
+		n.fork.GetCurrentFork().NetworkFork(), time.Minute*2)
 	n.msgResolver = midHandler
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
@@ -161,7 +161,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgIDHandler: midHandler,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
 			logger := n.logger.With(zap.String("who", "MsgValidator"))
-			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
+			return topics.NewSSVMsgValidator(logger, n.fork.GetCurrentFork().NetworkFork(), n.host.ID())
 		},
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,

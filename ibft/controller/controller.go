@@ -91,12 +91,12 @@ func New(
 // if init fails to sync
 func (i *Controller) Init() error {
 	if !i.initHandlers.Get() {
+		i.initHandlers.Set(true)
 		i.logger.Info("iBFT implementation init started")
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		i.processDecidedQueueMessages()
 		i.processSyncQueueMessages()
 		i.listenToSyncMessages()
-		i.initHandlers.Set(true)
 		i.logger.Debug("managed to setup iBFT handlers")
 	}
 

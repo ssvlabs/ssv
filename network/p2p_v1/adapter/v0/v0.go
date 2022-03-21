@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	operatorForkers "github.com/bloxapp/ssv/operator/forks"
+	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -43,9 +44,11 @@ type netV0Adapter struct {
 	host  host.Host
 	// TODO: use index
 	knownOperators *sync.Map
+
 	// TODO: remove after v0
-	streams    *sync.Map
-	streamCtrl streams.StreamController
+	streamsLock *sync.Mutex
+	streams     map[string]streams.StreamResponder
+	streamCtrl  streams.StreamController
 
 	topicsCtrl topics.Controller
 	idx        peers.Index
@@ -55,8 +58,10 @@ type netV0Adapter struct {
 
 // NewV0Adapter creates a new v0 network with underlying v1 infra
 func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
-	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
 	ctx, cancel := context.WithCancel(pctx)
+
+	// TODO: ensure that the old user agent is passed in v1Cfg.UserAgent
+	v1Cfg.UserAgent = commons.GetBuildData()
 
 	return &netV0Adapter{
 		ctx:            ctx,
@@ -66,6 +71,8 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p_v1.Config) adapter.Adapter {
 		logger:         v1Cfg.Logger,
 		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 		knownOperators: &sync.Map{},
+		streams:        map[string]streams.StreamResponder{},
+		streamsLock:    &sync.Mutex{},
 	}
 }
 
@@ -78,7 +85,7 @@ func (n *netV0Adapter) Setup() error {
 	if err := n.setupHost(); err != nil {
 		return errors.Wrap(err, "could not setup libp2p host")
 	}
-	n.streams = &sync.Map{}
+	n.logger.Debug("started libp2p host", zap.String("peerId", n.host.ID().String()))
 	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.v1Cfg.RequestTimeout)
 
 	if err := n.setupPeerServices(); err != nil {
@@ -273,20 +280,19 @@ func (n *netV0Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMe
 
 func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty()
-	resVal, ok := n.streams.Load(streamID)
+	n.streamsLock.Lock()
+	res, ok := n.streams[streamID]
+	n.streamsLock.Unlock()
+	delete(n.streams, streamID)
 	if !ok {
 		return errors.New("unknown stream")
-	}
-	res, ok := resVal.(streams.StreamResponder)
-	if !ok {
-		return errors.New("coud not cast stream responder")
 	}
 	data, err := n.fork.GetCurrentFork().NetworkFork().EncodeNetworkMsg(&network.Message{
 		SyncMessage: msg,
 		Type:        network.NetworkMsg_SyncType,
-		StreamID:    streamID,
 	})
 	if err != nil {
+		n.logger.Error("failed to encode msg", zap.Error(err))
 		return err
 	}
 	return res(data)
@@ -329,31 +335,40 @@ func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 }
 
 func (n *netV0Adapter) setLegacyStreamHandler() {
-	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
+	n.host.SetStreamHandler(legacyMsgStream, func(stream core.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
-		defer done()
 		//cm, _, err := n.streamCtrl.HandleStream(stream)
 		if err != nil {
-			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+			n.logger.Error("highest decided preStreamHandler failed", zap.Error(err))
+			done()
 			return
 		}
 		dec, err := n.fork.GetCurrentFork().NetworkFork().DecodeNetworkMsg(req)
 		if err != nil {
 			n.logger.Error("could not decode message", zap.Error(err))
+			done()
 			return
 		}
 		cm, ok := dec.(*network.Message)
 		if !ok {
 			n.logger.Debug("bad structured message")
+			done()
 			return
 		}
 		if cm == nil {
 			n.logger.Debug("got nil sync message")
+			done()
 			return
 		}
-		n.streams.Store(stream.ID(), respond)
+		n.streamsLock.Lock()
+		n.streams[stream.ID()] = func(bytes []byte) error {
+			defer done()
+			return respond(bytes)
+		}
+		n.streamsLock.Unlock()
 		// adjusting message and propagating to other (internal) components
 		cm.SyncMessage.FromPeerID = stream.Conn().RemotePeer().String()
+		cm.StreamID = stream.ID()
 		go propagateSyncMessage(n.listeners.GetListeners(network.NetworkMsg_SyncType), cm)
 	})
 }
