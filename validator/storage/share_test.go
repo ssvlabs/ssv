@@ -64,11 +64,11 @@ func TestShare_HashOperators(t *testing.T) {
 		PublicKey: nil,
 		Metadata:  nil,
 		Committee: map[uint64]*proto.Node{},
-		operators: make([][]byte, 4),
+		Operators: make([][]byte, 4),
 	}
 	for i := uint64(1); i <= 4; i++ {
 		share.Committee[i] = &proto.Node{}
-		share.operators[int(i-1)] = []byte{byte(i)}
+		share.Operators[int(i-1)] = []byte{byte(i)}
 	}
 
 	hashes := share.HashOperators()
