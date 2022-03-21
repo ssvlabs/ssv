@@ -5,8 +5,8 @@ import subprocess
 import yaml
 
 
-def save_yaml(fpath, data):
-    with open(fpath, 'w') as outfile:
+def save_yaml(file_path, data):
+    with open(file_path, 'w') as outfile:
         yaml.dump(data, outfile, default_flow_style=False)
 
 
@@ -27,3 +27,6 @@ def replace_in_file(file_path, patterns):
 def exec_cmd(cmd, env):
     cli = subprocess.run(cmd, capture_output=True, env=env)
     return cli.stdout
+
+
+# def apply_template()

@@ -4,8 +4,8 @@ import subprocess
 
 
 # setup_ssv_net_repo clears
-def setup_ssv_net_repo():
-    main_dir = os.environ.get('SSV_TESTNET_DIR')
+def setup_ssv_net_repo(main_dir):
+    # main_dir = os.environ.get('SSV_TESTNET_DIR')
     os.chdir(main_dir)
     if not os.path.isdir(os.path.join(main_dir, 'ssv-network')):
         cli = subprocess.run(['git', 'clone', 'https://github.com/bloxapp/ssv-network.git'])

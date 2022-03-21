@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import docker
 from .utils import save_yaml
@@ -54,23 +55,26 @@ def create_operator_config(i, sk):
     return cfg
 
 
-def generate_operators(n, base_path, cfg_path='data/config', lh_ip='127.0.0.1', reg_contract_addr='0x0',
+def generate_operators(n, testnet_dir, cfg_path='data/config', lh_ip='127.0.0.1', reg_contract_addr='0x0',
                        reg_contract_genesis='0'):
+    cfg_full_path = os.path.join(testnet_dir, cfg_path)
+    os.makedirs(cfg_full_path)
     main_cfg = create_main_config(lh_ip, reg_contract_addr, reg_contract_genesis)
-    save_yaml(f"{base_path}/{cfg_path}/config.yaml", main_cfg)
+    save_yaml(f"{cfg_full_path}/config.yaml", main_cfg)
     ops = []
     for i in range(n):
         pk, sk = create_operator_keys()
         node_id = i + 1
-        ops.append({
+        op = {
             "id": node_id,
             "pk": pk,
             "name": f"node-{str(node_id)}",
             "address": "0x0",
             "fee": 0
-        })
+        }
+        ops.append(op)
         cfg = create_operator_config(node_id, sk)
-        save_yaml(f"{base_path}/{cfg_path}/share{node_id}.yaml", cfg)
-    save_yaml(f"{base_path}/operators.yaml", ops)
+        save_yaml(f"{testnet_dir}/{cfg_path}/share{node_id}.yaml", cfg)
+    save_yaml(f"{testnet_dir}/operators.yaml", ops)
 
 # generate_operators(4, os.environ.get('SSV_TESTNET_DIR'))
