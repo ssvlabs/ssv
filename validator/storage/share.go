@@ -32,7 +32,7 @@ type Share struct {
 	Committee    map[uint64]*proto.Node
 	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
-	operators    [][]byte
+	Operators    [][]byte
 }
 
 //  serializedShare struct
@@ -47,7 +47,7 @@ type serializedShare struct {
 
 // IsOperatorShare checks whether the share belongs to operator
 func (s *Share) IsOperatorShare(operatorPubKey string) bool {
-	for _, op := range s.operators {
+	for _, op := range s.Operators {
 		if string(op) == operatorPubKey {
 			return true
 		}
@@ -127,7 +127,7 @@ func (s *Share) Serialize() ([]byte, error) {
 		Committee:    map[uint64]*proto.Node{},
 		Metadata:     s.Metadata,
 		OwnerAddress: s.OwnerAddress,
-		Operators:    s.operators,
+		Operators:    s.Operators,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {
@@ -168,7 +168,7 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		Committee:    value.Committee,
 		Metadata:     value.Metadata,
 		OwnerAddress: value.OwnerAddress,
-		operators:    value.Operators,
+		Operators:    value.Operators,
 	}, nil
 }
 
@@ -182,17 +182,17 @@ func (s *Share) OperatorReady() bool {
 	return s.NodeID != 0
 }
 
-// SetOperators set operators public keys
+// SetOperators set Operators public keys
 func (s *Share) SetOperators(ops [][]byte) {
-	s.operators = make([][]byte, len(ops))
-	copy(s.operators, ops[:])
-	s.operators = ops
+	s.Operators = make([][]byte, len(ops))
+	copy(s.Operators, ops[:])
+	s.Operators = ops
 }
 
-// HashOperators hash all operators keys key
+// HashOperators hash all Operators keys key
 func (s *Share) HashOperators() []string {
-	hashes := make([]string, len(s.operators))
-	for i, o := range s.operators {
+	hashes := make([]string, len(s.Operators))
+	for i, o := range s.Operators {
 		hashes[i] = fmt.Sprintf("%x", sha256.Sum256(o))
 	}
 	return hashes
