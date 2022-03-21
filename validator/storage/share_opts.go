@@ -14,6 +14,7 @@ type ShareOptions struct {
 	ShareKey     string         `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
 	Committee    map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 	OwnerAddress string         `yaml:"OwnerAddress" env:"LOCAL_OWNER_ADDRESS" env-description:"Local validator owner address"`
+	Operators    []string       `yaml:"Operators" env:"LOCAL_OPERATORS" env-description:"Local validator selected operators"`
 }
 
 // ToShare creates a Share instance from ShareOptions
@@ -41,6 +42,11 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 			}
 		}
 
+		var operators [][]byte
+		for _, op := range options.Operators {
+			operators = append(operators, []byte(op))
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -51,6 +57,7 @@ func (options *ShareOptions) ToShare() (*Share, error) {
 			PublicKey:    validatorPk,
 			Committee:    ibftCommittee,
 			OwnerAddress: options.OwnerAddress,
+			Operators:    operators,
 		}
 		return &share, nil
 	}

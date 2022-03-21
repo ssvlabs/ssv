@@ -183,7 +183,7 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 			}
 			share, err := c.handleValidatorAddedEvent(ev, e.IsOperatorEvent)
 			if err != nil {
-				c.logger.Error("could not handle validatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
+				c.logger.Error("could not handle ValidatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
 				return err
 			}
 			if e.IsOperatorEvent {
@@ -194,7 +194,7 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 		case abiparser.OperatorAddedEvent:
 			err := c.handleOperatorAddedEvent(ev)
 			if err != nil {
-				c.logger.Error("could not handle operatorAdded event", zap.Error(err))
+				c.logger.Error("could not handle OperatorAdded event", zap.Error(err))
 				return err
 			}
 		default:
@@ -353,33 +353,31 @@ func (c *controller) handleValidatorAddedEvent(
 	isOperatorShare bool,
 ) (*validatorstorage.Share, error) {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-	logger := c.logger.With(zap.String("pubKey", pubKey))
-	logger.Debug("new validator, starting setup")
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		newValShare, share, err := createShareWithOperatorKey(validatorAddedEvent, c.shareEncryptionKeyProvider, isOperatorShare)
+		newValShare, shareSecret, err := createShareWithOperatorKey(validatorAddedEvent, c.operatorPubKey, isOperatorShare)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create share")
 		}
-		if err := c.onNewShare(newValShare, share); err != nil {
+		if err := c.onNewShare(newValShare, shareSecret); err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return nil, err
 		}
 		validatorShare = newValShare
-		logger.Debug("new validator share was created and saved")
+		if isOperatorShare {
+			logger := c.logger.With(zap.String("pubKey", pubKey))
+			logger.Debug("ValidatorAdded event was handled successfully")
+		}
 	}
 	return validatorShare, nil
 }
 
 // handleOperatorAddedEvent parses the given event and saves operator information
 func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
-	logger := c.logger.With(zap.String("eventType", "OperatorAdded"),
-		zap.String("pubKey", string(event.PublicKey)))
-	logger.Debug("operator added event")
 	oi := registrystorage.OperatorInformation{
 		PublicKey:    string(event.PublicKey),
 		Name:         event.Name,
@@ -389,7 +387,6 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	if err != nil {
 		return errors.Wrap(err, "could not save operator information")
 	}
-	logger.Debug("managed to save operator information", zap.Any("value", oi))
 	return nil
 }
 
@@ -425,8 +422,6 @@ func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.
 		logger.Warn("could not add validator metadata", zap.Error(err))
 	} else if !updated {
 		logger.Warn("could not find validator metadata")
-	} else {
-		logger.Debug("validator metadata was updated")
 	}
 
 	// in case this validator belongs to operator, the secret key is not nil

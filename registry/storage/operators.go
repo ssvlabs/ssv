@@ -53,7 +53,7 @@ func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 	return operatorsPrefix
 }
 
-// ListOperators returns information of all the known operators
+// ListOperators returns information of the all known operators
 // when 'to' equals zero, all operators will be returned
 func (s *operatorsStorage) ListOperators(from int64, to int64) ([]OperatorInformation, error) {
 	s.operatorsLock.RLock()

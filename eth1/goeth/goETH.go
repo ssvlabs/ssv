@@ -2,49 +2,29 @@ package goeth
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
+	"math/big"
+	"strings"
+	"time"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
-	"log"
-	"math/big"
-	"strings"
-	"time"
 )
 
 const (
 	healthCheckTimeout        = 10 * time.Second
 	blocksInBatch      uint64 = 100000
 )
-
-type eth1NodeStatus int32
-
-var (
-	metricsEth1NodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:eth1:node_status",
-		Help: "Status of the connected eth1 node",
-	})
-	statusUnknown eth1NodeStatus = 0
-	statusSyncing eth1NodeStatus = 1
-	statusOK      eth1NodeStatus = 2
-)
-
-func init() {
-	if err := prometheus.Register(metricsEth1NodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
 
 // ClientOptions are the options for the client
 type ClientOptions struct {
@@ -55,6 +35,7 @@ type ClientOptions struct {
 	ContractABI                string
 	ConnectionTimeout          time.Duration
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	OperatorPubKey             string
 
 	AbiVersion eth1.Version
 }
@@ -66,6 +47,7 @@ type eth1Client struct {
 	logger *zap.Logger
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	operatorPubKey             string
 
 	nodeAddr             string
 	registryContractAddr string
@@ -90,6 +72,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 		ctx:                        opts.Ctx,
 		logger:                     logger,
 		shareEncryptionKeyProvider: opts.ShareEncryptionKeyProvider,
+		operatorPubKey:             opts.OperatorPubKey,
 		nodeAddr:                   opts.NodeAddr,
 		registryContractAddr:       opts.RegistryContractAddr,
 		contractABI:                opts.ContractABI,
@@ -138,16 +121,16 @@ func (ec *eth1Client) HealthCheck() []string {
 	defer cancel()
 	sp, err := ec.conn.SyncProgress(ctx)
 	if err != nil {
-		metricsEth1NodeStatus.Set(float64(statusUnknown))
+		reportNodeStatus(statusUnknown)
 		return []string{"could not get eth1 node sync progress"}
 	}
 	if sp != nil {
-		metricsEth1NodeStatus.Set(float64(statusSyncing))
+		reportNodeStatus(statusSyncing)
 		return []string{fmt.Sprintf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
 			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)}
 	}
 	// eth1 node is connected and synced
-	metricsEth1NodeStatus.Set(float64(statusOK))
+	reportNodeStatus(statusOK)
 	return []string{}
 }
 
@@ -245,7 +228,7 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 			return err
 		case vLog := <-logs:
 			ec.logger.Debug("received contract event from stream")
-			err := ec.handleEvent(vLog, contractAbi)
+			_, err := ec.handleEvent(vLog, contractAbi)
 			if err != nil {
 				ec.logger.Error("Failed to handle event", zap.Error(err))
 				continue
@@ -336,9 +319,11 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	logger.Debug("got event logs")
 
 	for _, vLog := range logs {
-		err := ec.handleEvent(vLog, contractAbi)
+		unpackErr, err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			nSuccess--
+			if !unpackErr {
+				nSuccess--
+			}
 			ec.logger.Error("Failed to handle event during sync", zap.Error(err))
 			continue
 		}
@@ -349,41 +334,39 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	return logs, nSuccess, nil
 }
 
-func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
+func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (bool, error) {
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
-		ec.logger.Warn("failed to find event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
-		return nil
+		ec.logger.Warn("failed to handle event, unknown event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
+		return false, nil
 	}
 	shareEncryptionKey, found, err := ec.shareEncryptionKeyProvider()
 	if !found {
-		return errors.New("failed to find operator private key")
+		return false, errors.New("failed to find operator private key")
 	}
 	if err != nil {
-		return errors.Wrap(err, "failed to get operator private key")
+		return false, errors.Wrap(err, "failed to get operator private key")
 	}
 
 	abiParser := eth1.NewParser(ec.logger, ec.abiVersion)
 
 	switch eventName := eventType.Name; eventName {
 	case "OperatorAdded":
-		parsed, isOperatorEvent, err := abiParser.ParseOperatorAddedEvent(shareEncryptionKey, vLog.Data, vLog.Topics, contractAbi)
+		parsed, isOperatorEvent, unpackErr, err := abiParser.ParseOperatorAddedEvent(ec.operatorPubKey, vLog.Data, vLog.Topics, contractAbi)
+		reportSyncEvent(eventName, isOperatorEvent, err)
 		if err != nil {
-			return errors.Wrap(err, "failed to parse OperatorAdded event")
+			return unpackErr, errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
 		ec.fireEvent(vLog, *parsed, isOperatorEvent)
 	case "ValidatorAdded":
-		parsed, isOperatorEvent, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
+		parsed, isOperatorEvent, unpackErr, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
+		reportSyncEvent(eventName, isOperatorEvent, err)
 		if err != nil {
-			return errors.Wrap(err, "failed to parse ValidatorAdded event")
-		}
-		if isOperatorEvent {
-			ec.logger.Debug("validator is assigned to this operator",
-				zap.String("pubKey", hex.EncodeToString(parsed.PublicKey)))
+			return unpackErr, errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
 		ec.fireEvent(vLog, *parsed, isOperatorEvent)
 	default:
 		ec.logger.Debug("unknown contract event was received", zap.String("hash", vLog.TxHash.Hex()), zap.String("eventName", eventName))
 	}
-	return nil
+	return false, nil
 }
