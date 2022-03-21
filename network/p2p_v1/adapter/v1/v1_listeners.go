@@ -9,7 +9,7 @@ import (
 
 // propagateSignedMsg takes an incoming message (from validator's topic)
 // and propagates it to the corresponding internal listeners
-func (n *netV0Adapter) propagateSignedMsg(cm *network.Message) {
+func (n *netV1Adapter) propagateSignedMsg(cm *network.Message) {
 	if cm == nil || cm.SignedMessage == nil {
 		n.logger.Debug("could not propagate nil message")
 		return

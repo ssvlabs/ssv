@@ -16,21 +16,29 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
+	"github.com/bloxapp/ssv/network/networkwrapper"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/forks"
 	v0 "github.com/bloxapp/ssv/operator/forks/v0"
 	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+	"log"
+	"net/http"
 )
 
 type config struct {
@@ -140,11 +148,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-		cfg.P2pNetworkConfig.Fork = forker
 		cfg.P2pNetworkConfig.Logger = Logger
-		// TODO: move
-
-		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig)
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
+		Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig, forker)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}

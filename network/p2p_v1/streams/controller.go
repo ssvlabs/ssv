@@ -2,7 +2,7 @@ package streams
 
 import (
 	"context"
-	operatorForkers "github.com/bloxapp/ssv/operator/forks"
+	"github.com/bloxapp/ssv/network/forks"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -24,7 +24,7 @@ type StreamController interface {
 }
 
 // NewStreamController create a new instance of StreamController
-func NewStreamController(ctx context.Context, logger *zap.Logger, host host.Host, fork *operatorForkers.Forker, requestTimeout time.Duration) StreamController {
+func NewStreamController(ctx context.Context, logger *zap.Logger, host host.Host, fork forks.Fork, requestTimeout time.Duration) StreamController {
 	ctrl := streamCtrl{
 		ctx:            ctx,
 		logger:         logger,
@@ -42,7 +42,7 @@ type streamCtrl struct {
 	logger *zap.Logger
 
 	host host.Host
-	fork *operatorForkers.Forker
+	fork forks.Fork
 
 	requestTimeout time.Duration
 }

@@ -49,7 +49,7 @@ func init() {
 	}
 }
 
-func (n *netV0Adapter) reportAllPeers() {
+func (n *netV1Adapter) reportAllPeers() {
 	pids := n.host.Network().Peers()
 	var ids []string
 	for _, pid := range pids {
@@ -61,7 +61,7 @@ func (n *netV0Adapter) reportAllPeers() {
 	metricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
-func (n *netV0Adapter) reportTopics() {
+func (n *netV1Adapter) reportTopics() {
 	topics := n.topicsCtrl.Topics()
 	nTopics := len(topics)
 	n.logger.Debug("connected topics",
@@ -72,7 +72,7 @@ func (n *netV0Adapter) reportTopics() {
 	}
 }
 
-func (n *netV0Adapter) reportTopicPeers(name string) {
+func (n *netV1Adapter) reportTopicPeers(name string) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
 		n.logger.Warn("could not get topic peers", zap.String("topic", name), zap.Error(err))
@@ -83,7 +83,7 @@ func (n *netV0Adapter) reportTopicPeers(name string) {
 	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
-func (n *netV0Adapter) reportPeerIdentity(pid peer.ID) {
+func (n *netV1Adapter) reportPeerIdentity(pid peer.ID) {
 	identity, err := n.idx.Identity(pid)
 	if err != nil {
 		//n.trace("WARNING: could not report peer", zap.String("peer", pid.String()), zap.Error(err))

@@ -3,11 +3,11 @@ package p2pv1
 import (
 	"context"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
-	forks2 "github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/prysmaticlabs/prysm/async"
@@ -20,7 +20,7 @@ type p2pNetwork struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	logger      *zap.Logger
-	fork        *forks2.Forker
+	fork        forks.Fork
 	cfg         *Config
 	host        host.Host
 	streamCtrl  streams.StreamController

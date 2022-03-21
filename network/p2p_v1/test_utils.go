@@ -3,16 +3,14 @@ package p2pv1
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
+	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/testing"
-	"github.com/bloxapp/ssv/operator/forks"
-	v1 "github.com/bloxapp/ssv/operator/forks/v1"
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
@@ -102,11 +100,16 @@ func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDis
 	i := 1
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.V1 {
 		logger := loggerFactory(fmt.Sprintf("node-%d", i))
-		cfg := NewNetConfig(logger, keys.NetKey, &keys.OperatorKey.PublicKey, ln.Bootnode,
+		operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
+		if err != nil {
+			logger.Error("could not extract public key", zap.Error(err))
+			return nil
+		}
+		cfg := NewNetConfig(logger, keys.NetKey, operatorPubkey, ln.Bootnode,
 			testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), n)
 		p := New(ctx, cfg)
 		i++
-		err := p.Setup()
+		err = p.Setup()
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}
@@ -124,18 +127,11 @@ func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDis
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubkey *rsa.PublicKey, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
 	if bn != nil {
 		bns = bn.ENR
 	}
-	forker := forks.NewForker(forks.Config{
-		Logger:     logex.Build("", zap.DebugLevel, &logex.EncodingConfig{}),
-		Network:    "prater",
-		BeforeFork: v1.New(),
-		PostFork:   nil,
-		ForkSlot:   0,
-	})
 	return &Config{
 		Bootnodes:         bns,
 		TCPPort:           tcpPort,
@@ -147,8 +143,8 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorPubk
 		MaxPeers:          maxPeers,
 		PubSubTrace:       false,
 		NetworkPrivateKey: netPrivKey,
-		OperatorPublicKey: operatorPubkey,
+		OperatorID:        operatorID,
 		Logger:            logger,
-		Fork:              forker,
+		Fork:              forksv1.New(),
 	}
 }

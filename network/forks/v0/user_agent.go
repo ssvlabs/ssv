@@ -18,6 +18,7 @@ func GenerateUserAgent(sk *rsa.PrivateKey) string {
 		}
 		ua = fmt.Sprintf("%s:%s", ua, "operator")
 		ua = fmt.Sprintf("%s:%s", ua, operatorID(operatorPubKey))
+		return ua
 	}
 	return fmt.Sprintf("%s:%s", ua, "exporter")
 }
