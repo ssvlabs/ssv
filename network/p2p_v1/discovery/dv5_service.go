@@ -113,8 +113,8 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	//	dvs.logger.Warn("could not ping bootnodes")
 	//}
 
-	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
-		dvs.limitNodeFilter, dvs.badNodeFilter)
+	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval)
+		//dvs.limitNodeFilter, dvs.badNodeFilter)
 
 	return nil
 }

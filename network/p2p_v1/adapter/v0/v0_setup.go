@@ -42,6 +42,7 @@ func (n *netV0Adapter) setupDiscovery() error {
 			NetworkKey: n.v1Cfg.NetworkPrivateKey,
 			Bootnodes:  n.v1Cfg.TransformBootnodes(),
 			Logger:     n.logger,
+			OperatorID: n.v1Cfg.OperatorID,
 		}
 	}
 	discOpts := discovery.Options{

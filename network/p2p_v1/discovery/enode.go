@@ -37,6 +37,10 @@ func decorateLocalNode(node *enode.LocalNode, subnets []bool, operatorID string)
 		if err = setOperatorIDEntry(node, operatorID); err != nil {
 			return err
 		}
+		if err = setNodeTypeEntry(node, Operator); err != nil {
+			return err
+		}
+		return nil
 	}
 	if len(subnets) > 0 {
 		err = setSubnetsEntry(node, subnets)
