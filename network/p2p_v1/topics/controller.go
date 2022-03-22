@@ -125,25 +125,34 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 func (ctrl *topicsCtrl) Unsubscribe(name string) error {
+	name = getTopicName(name)
+
+	_, err := ctrl.unsubscribe(name)
+
+	return err
+}
+
+// unsubscribe will decrease the subscription counter and then close the topic if there is no interest
+func (ctrl *topicsCtrl) unsubscribe(name string) (*topicContainer, error) {
 	ctrl.topicsLock.Lock()
+	defer ctrl.topicsLock.Unlock()
+
 	tc := ctrl.getTopicContainerUnsafe(name)
 	if tc == nil {
-		ctrl.topicsLock.Unlock()
-		return nil
+		return nil, nil
 	}
-	if subCount := tc.decSubCount(); subCount > 0 {
-		ctrl.logger.Debug("there are still active subscriptions for this topic",
-			zap.String("topic", name), zap.Int32("subCount", subCount))
-		ctrl.setTopicContainerUnsafe(name, tc)
-		ctrl.topicsLock.Unlock()
-		return nil
+	if counter := tc.decSubCount(); counter > 0 {
+		ctrl.logger.Debug("decreased subscription counter",
+			zap.String("topic", name), zap.Int32("counter", counter))
+		return nil, nil
 	}
-	ctrl.logger.Debug("unsubscribing topic", zap.String("topic", name))
-	delete(ctrl.containers, name)
-	ctrl.topicsLock.Unlock()
+	tc.locker.Lock()
+	defer tc.locker.Unlock()
 
-	if err := tc.Close(); err != nil {
-		return err
+	ctrl.logger.Debug("unsubscribing topic", zap.String("topic", name))
+	err := tc.Close()
+	if err == nil {
+		delete(ctrl.containers, name)
 	}
 	if ctrl.msgValidatorFactory != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
@@ -152,46 +161,13 @@ func (ctrl *topicsCtrl) Unsubscribe(name string) error {
 		}
 	}
 	ctrl.subFilter.Deregister(name)
-	return nil
-}
 
-func (ctrl *topicsCtrl) getTopicContainer(name string) *topicContainer {
-	ctrl.topicsLock.RLock()
-	defer ctrl.topicsLock.RUnlock()
-
-	return ctrl.getTopicContainerUnsafe(name)
-}
-
-func (ctrl *topicsCtrl) getTopicContainerUnsafe(name string) *topicContainer {
-	tc, ok := ctrl.containers[name]
-	if !ok {
-		return nil
-	}
-	return tc
-}
-
-func (ctrl *topicsCtrl) setTopicContainerUnsafe(name string, tc *topicContainer) {
-	ctrl.containers[name] = tc
+	return tc, err
 }
 
 // joinTopic joins and subscribes the given topic
 func (ctrl *topicsCtrl) joinTopic(name string) (*topicContainer, error) {
-	ctrl.topicsLock.Lock()
-	// get or create the container
-	tc := ctrl.getTopicContainerUnsafe(name)
-	if tc == nil {
-		tc = newTopicContainer()
-		ctrl.setTopicContainerUnsafe(name, tc)
-		// initial setup for the topic, should happen only once
-		ctrl.subFilter.Register(name)
-		if err := ctrl.setupTopicValidator(name); err != nil {
-			// TODO: close topic?
-			//return err
-			ctrl.logger.Warn("failed to setup topic validator", zap.String("topic", name), zap.Error(err))
-		}
-	}
-	// lock topic and release main lock
-	ctrl.topicsLock.Unlock()
+	tc := ctrl.getOrCreateTopicContainer(name)
 	tc.locker.Lock()
 	defer tc.locker.Unlock()
 
@@ -261,21 +237,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	return nil
 }
 
-// setupTopicValidator registers the topic validator
-func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
-	if ctrl.msgValidatorFactory != nil {
-		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
-			pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
-		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
-		if err != nil {
-			//ctrl.logger.Warn("could not register topic validator", zap.Error(err))
-			return errors.Wrap(err, "could not register topic validator")
-		}
-	}
-	return nil
-}
-
+// rejoinTopic will try to rejoin the given topic
 func (ctrl *topicsCtrl) rejoinTopic(name string) error {
 	tc := ctrl.getTopicContainer(name)
 	if tc.topic != nil {
@@ -293,6 +255,7 @@ func (ctrl *topicsCtrl) rejoinTopic(name string) error {
 	return nil
 }
 
+// joinTopicUnsafe will join the topic w/o using locks
 func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 	//ctrl.logger.Debug("joining topic", zap.String("topic", name))
 	topic, err := ctrl.ps.Join(name)
@@ -320,6 +283,46 @@ func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 	tc.sub = sub
 
 	return nil
+}
+
+// getTopicContainer returns the topic container
+func (ctrl *topicsCtrl) getTopicContainer(name string) *topicContainer {
+	ctrl.topicsLock.RLock()
+	defer ctrl.topicsLock.RUnlock()
+
+	return ctrl.getTopicContainerUnsafe(name)
+}
+
+// getOrCreateTopicContainer will return or create the corresponding container
+func (ctrl *topicsCtrl) getOrCreateTopicContainer(name string) *topicContainer {
+	ctrl.topicsLock.RLock()
+	defer ctrl.topicsLock.RUnlock()
+	// get or create the container
+	tc := ctrl.getTopicContainerUnsafe(name)
+	if tc == nil {
+		tc = newTopicContainer()
+		ctrl.containers[name] = tc
+		// initial setup for the topic, should happen only once
+		ctrl.subFilter.Register(name)
+		if ctrl.msgValidatorFactory != nil {
+			err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
+				pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
+			// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
+			if err != nil {
+				ctrl.logger.Warn("could not register topic validator", zap.String("topic", name), zap.Error(err))
+			}
+		}
+	}
+	return tc
+}
+
+// getTopicContainerUnsafe returns a container w/o using lock
+func (ctrl *topicsCtrl) getTopicContainerUnsafe(name string) *topicContainer {
+	tc, ok := ctrl.containers[name]
+	if !ok {
+		return nil
+	}
+	return tc
 }
 
 //func (ctrl *topicsCtrl) traceTopicPeerEvents(topic *pubsub.Topic) {
