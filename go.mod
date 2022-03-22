@@ -18,6 +18,8 @@ require (
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/libp2p/go-libp2p v0.15.1
 	github.com/libp2p/go-libp2p-core v0.9.0
+	github.com/libp2p/go-libp2p-discovery v0.5.1
+	github.com/libp2p/go-libp2p-kad-dht v0.15.0
 	github.com/libp2p/go-libp2p-noise v0.2.2
 	github.com/libp2p/go-libp2p-pubsub v0.5.6
 	github.com/libp2p/go-tcp-transport v0.2.8

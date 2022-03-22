@@ -53,19 +53,19 @@ func TestNsToSubnet(t *testing.T) {
 		},
 		{
 			"invalid int",
-			"ssv.subnets.xxx",
+			"floodsub:bloxstaking.ssv.xxx",
 			uint64(0),
 			false,
 		},
 		{
 			"invalid",
-			"ssv.1",
+			"floodsub:ssv.1",
 			uint64(0),
 			false,
 		},
 		{
 			"valid",
-			"ssv.subnets.21",
+			"floodsub:bloxstaking.ssv.21",
 			uint64(21),
 			true,
 		},

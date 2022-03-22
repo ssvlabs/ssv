@@ -16,7 +16,7 @@ const (
 	ENRKeySubnets = "subnets"
 )
 
-var regPool = format.NewRegexpPool("ssv\\.subnets\\.(\\d+)")
+var regPool = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
 
 // nsToSubnet converts the given topic to subnet
 // TODO: return other value than zero upon failure?
