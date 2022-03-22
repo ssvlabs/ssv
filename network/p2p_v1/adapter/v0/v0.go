@@ -278,8 +278,8 @@ func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 	msg.FromPeerID = n.host.ID().Pretty()
 	n.streamsLock.Lock()
 	res, ok := n.streams[streamID]
-	n.streamsLock.Unlock()
 	delete(n.streams, streamID)
+	n.streamsLock.Unlock()
 	if !ok {
 		return errors.New("unknown stream")
 	}
