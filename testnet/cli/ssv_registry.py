@@ -16,6 +16,7 @@ def setup_ssv_registry(main_dir):
         cli = subprocess.run(['npm', 'i'])
         if cli.returncode is not 0:
             print("failed to install dependencies")
+
             return False
         return True
     os.chdir('ssv-network')
