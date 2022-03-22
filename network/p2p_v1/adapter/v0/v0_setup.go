@@ -84,7 +84,7 @@ func (n *netV0Adapter) setupPubsub() error {
 }
 
 func (n *netV0Adapter) setupPeerServices() error {
-	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
+	self := peers.NewIdentity(n.host.ID().String(), n.v1Cfg.OperatorID, "", make(map[string]string))
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.v1Cfg.MaxPeers
 	}, 10*time.Minute)
