@@ -13,9 +13,11 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,7 +36,7 @@ func TestTopicManager(t *testing.T) {
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
 	//shares := createShares(nValidators)
-	//
+
 	t.Run("v0 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -43,7 +45,7 @@ func TestTopicManager(t *testing.T) {
 		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers)
 	})
 
-	// v1 features includes msg_id, msg validator, subnets, scoring
+	//v1 features includes msg_id, msg validator, subnets, scoring
 	t.Run("v1 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -66,6 +68,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	t.Log("subscribing to topics")
+
 	// listen to topics
 	for _, pk := range pks {
 		for _, p := range peers {
@@ -78,45 +81,36 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				<-time.After(100 * time.Millisecond)
 				require.NoError(t, tm.Subscribe(validatorTopic(pk)))
 			}(p.tm, pk)
-			//go subTopic(p, pk, nil)
-			//<-time.After(time.Millisecond)
-			//go subTopic(p, pk, nil)
 		}
 	}
-
+	<-time.After(time.Second)
 	// wait for the peers to join topics
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		c, cancel := context.WithTimeout(ctx, time.Second*5)
+		c, cancel := context.WithTimeout(ctx, time.Second*8)
 		defer cancel()
-	peersLoop:
 		for _, p := range peers {
 			// TODO: modify for subnets
-			for len(p.tm.Topics()) < nValidators {
-				if c.Err() != nil {
-					break peersLoop
-				}
+			for c.Err() == nil && len(p.tm.Topics()) < nValidators {
 				time.Sleep(time.Millisecond * 100)
 			}
 		}
-		// TODO: remove timeout
-		<-time.After(time.Second * 2)
-		//for _, p := range peers {
-		//	topics := p.tm.Topics()
-		//	for _, topic := range topics {
-		//		topicPeers, err := p.tm.Peers(topic)
-		//		require.NoError(t, err)
-		//		// wait for min peers
-		//		for c.Err() == nil && len(topicPeers) < nPeers/2 {
-		//			time.Sleep(time.Millisecond * 100)
-		//			p.tm.logger.Debug("xxx", zap.Int("len", len(topicPeers)))
-		//			topicPeers, err = p.tm.Peers(topic)
-		//			require.NoError(t, err)
-		//		}
-		//	}
-		//}
+		// wait for min peers
+		nPeers := len(peers)
+		for _, p := range peers {
+			topics := p.tm.Topics()
+			for _, topic := range topics {
+				var topicPeers []peer.ID
+				var err error
+				for c.Err() == nil && len(topicPeers) < nPeers/2 {
+					time.Sleep(time.Millisecond * 50)
+					topicPeers, err = p.tm.Peers(topic)
+					require.NoError(t, err)
+				}
+			}
+		}
 		require.NoError(t, c.Err())
 	}()
 	wg.Wait()
@@ -137,20 +131,26 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 			}(p, pks[i], j)
 		}
 	}
-	// TODO: remove timeout
-	<-time.After(time.Second * 2)
 
 	// let the messages propagate
+	<-time.After(time.Second / 2)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		// check number of peers and messages
-		for i := 0; i < nValidators; i++ {
+		for i := 0; i < len(pks); i++ {
 			wg.Add(1)
 			go func(pk string) {
-				ctxReadMessages, cancel := context.WithTimeout(ctx, time.Second*5)
+				ctxReadMessages, cancel := context.WithTimeout(ctx, time.Second*8)
 				defer cancel()
 				defer wg.Done()
+				nPeers := len(peers)
+				// check num of peers in topics
+				for _, p := range peers {
+					topicPeers, err := p.tm.Peers(validatorTopic(pk))
+					require.NoError(t, err)
+					require.GreaterOrEqual(t, len(topicPeers), nPeers/2)
+				}
 				for _, p := range peers {
 					// wait for messages
 					for ctxReadMessages.Err() == nil && p.getCount(getTopicName(validatorTopic(pk))) < minMsgCount {
@@ -228,7 +228,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, t, msgValidator, msgID, fork)
+		peers[i] = newPeer(ctx, t, fmt.Sprintf("node-%d", i), msgValidator, msgID, fork)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -247,16 +247,17 @@ func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool
 	return peers
 }
 
-func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
+func newPeer(ctx context.Context, t *testing.T, id string, msgValidator, msgID bool, fork forks.Fork) *P {
+	var p *P
+	logger := zaptest.NewLogger(t).With(zap.String("id", id))
+	//logger := zap.L()
+
 	h, err := libp2p.New(ctx,
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewMdnsDiscovery(ctx, zap.L(), h)
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
 	require.NoError(t, err)
 
-	var p *P
-	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
 		midHandler = NewMsgIDHandler(logger, fork, 2*time.Minute)
@@ -276,7 +277,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 			AppSpecificWeight:  1,
 			OneEpochDuration:   time.Minute,
 		},
-		// TODO: add mock for peers.ScoreIndex
+		Discovery: ds,
 	}
 	//
 	if msgValidator {
@@ -301,7 +302,13 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 		},
 	})
 	require.NoError(t, ds.Bootstrap(func(e discovery.PeerEvent) {
-		_ = h.Connect(ctx, e.AddrInfo)
+		if ctx.Err() != nil {
+			return
+		}
+		err := h.Connect(ctx, e.AddrInfo)
+		if err != nil {
+			logger.Warn("could not connect to node", zap.Error(err))
+		}
 	}))
 
 	return p

@@ -94,10 +94,11 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		pubsub.WithFloodPublish(true),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
-		pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
-			cfg.Logger.Debug("pubsub: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
-			return true
-		}),
+		// TODO: check
+		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
+		//	cfg.Logger.Debug("pubsub: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
+		//	return true
+		//}),
 	}
 
 	if cfg.Discovery != nil {

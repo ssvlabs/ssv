@@ -43,7 +43,7 @@ func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) 
 		return nil, errors.Wrap(err, "failed to create new mDNS service")
 	}
 
-	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
+	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeAutoServer)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create DHT")
 	}

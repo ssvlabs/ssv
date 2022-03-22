@@ -15,6 +15,14 @@ var (
 		Name: "ssv:network:pubsub:msg:validation",
 		Help: "Traces of pubsub message validation results",
 	}, []string{"type"})
+	metricsBroadcastSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:broadcast:ok",
+		Help: "Count successful broadcast-ed messages",
+	}, []string{"topic"})
+	metricsBroadcastFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:broadcast:fail",
+		Help: "Count failed broadcast-ed messages",
+	}, []string{"topic"})
 )
 
 func init() {
@@ -22,6 +30,12 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsPubsubMsgValidationResults); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsBroadcastSuccess); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsBroadcastFailed); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
@@ -38,4 +52,12 @@ var (
 
 func reportValidationResult(result msgValidationResult) {
 	metricsPubsubMsgValidationResults.WithLabelValues(string(result)).Inc()
+}
+
+func reportBroadcast(topic string, err error) {
+	if err != nil {
+		metricsBroadcastFailed.WithLabelValues(topic).Inc()
+	} else {
+		metricsBroadcastSuccess.WithLabelValues(topic).Inc()
+	}
 }

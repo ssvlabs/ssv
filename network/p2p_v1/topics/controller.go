@@ -117,8 +117,10 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	defer done()
 
 	ctrl.logger.Debug("broadcasting message on topic", zap.String("topic", name))
+	err = tc.Publish(ctx, data)
+	reportBroadcast(name, err)
 
-	return tc.Publish(ctx, data)
+	return err
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
@@ -185,7 +187,7 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicContainer, error) {
 		if err := ctrl.setupTopicValidator(name); err != nil {
 			// TODO: close topic?
 			//return err
-			ctrl.logger.Warn("failed to setup topic", zap.String("topic", name), zap.Error(err))
+			ctrl.logger.Warn("failed to setup topic validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
 	// lock topic and release main lock
@@ -292,7 +294,7 @@ func (ctrl *topicsCtrl) rejoinTopic(name string) error {
 }
 
 func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
-	ctrl.logger.Debug("joining topic", zap.String("topic", name))
+	//ctrl.logger.Debug("joining topic", zap.String("topic", name))
 	topic, err := ctrl.ps.Join(name)
 	if err != nil {
 		return err
@@ -319,6 +321,26 @@ func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 
 	return nil
 }
+
+//func (ctrl *topicsCtrl) traceTopicPeerEvents(topic *pubsub.Topic) {
+//	ctx, cancel := context.WithCancel(ctrl.ctx)
+//	defer cancel()
+//	name:= topic.String()
+//	eh, err := topic.EventHandler()
+//	if err != nil {
+//		ctrl.logger.Warn("could not get topic event handler", zap.Error(err), zap.String("topic", name))
+//		return
+//	}
+//	for ctx.Err() == nil {
+//		pe, err := eh.NextPeerEvent(ctx)
+//		if err != nil {
+//			ctrl.logger.Warn("could not get peer event", zap.Error(err), zap.String("topic", name))
+//			continue
+//		}
+//		ctrl.logger.Debug("peer event", zap.Int("type", int(pe.Type)),
+//			zap.String("peer", pe.Peer.String()), zap.String("topic", name))
+//	}
+//}
 
 // getTopicName returns the topic full name, including prefix
 // TODO: consider moving this to network fork
