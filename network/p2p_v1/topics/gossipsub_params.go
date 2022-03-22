@@ -9,7 +9,7 @@ var (
 	// gsD topic stable mesh target count
 	gsD = 8
 	// gsDlo topic stable mesh low watermark
-	gsDlo = 6
+	gsDlo = 5
 	// gsDhi topic stable mesh high watermark
 	gsDhi = 12
 

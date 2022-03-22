@@ -3,6 +3,7 @@ package topics
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
+	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -41,6 +42,7 @@ type PububConfig struct {
 	ScoreIndex          peers.ScoreIndex
 	Scoring             *ScoringConfig
 	MsgIDHandler        MsgIDHandler
+	Discovery           discovery.Discovery
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -87,14 +89,19 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 
 	sf := newSubFilter(subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
-		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithPeerOutboundQueueSize(outboundQueueSize),
 		pubsub.WithValidateQueueSize(validationQueueSize),
 		pubsub.WithFloodPublish(true),
+		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
-		// TODO: check
-		//pubsub.WithPeerGater(),
-		//pubsub.WithPeerFilter(),
+		pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
+			cfg.Logger.Debug("pubsub: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
+			return true
+		}),
+	}
+
+	if cfg.Discovery != nil {
+		psOpts = append(psOpts, pubsub.WithDiscovery(cfg.Discovery))
 	}
 
 	if cfg.ScoreIndex != nil {

@@ -49,7 +49,7 @@ type Service interface {
 // NewService creates new discovery.Service
 func NewService(ctx context.Context, opts Options) (Service, error) {
 	if opts.DiscV5Opts == nil {
-		return NewMdnsDiscovery(ctx, opts.Logger, opts.Host)
+		return NewLocalDiscovery(ctx, opts.Logger, opts.Host)
 	}
 	return newDiscV5Service(ctx, &opts)
 }
