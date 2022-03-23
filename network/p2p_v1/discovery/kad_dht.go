@@ -15,7 +15,7 @@ const (
 	DHTDiscoveryProtocol = "/ssv/discovery/0.0.1"
 )
 
-// NewKadDHT creates a new kademlia DHT and a corresponding discovery service
+// NewKadDHT creates a new kademlia DHT and the corresponding discovery service
 // NOTE: that the caller must bootstrap the routing.Routing instance
 func NewKadDHT(ctx context.Context, host host.Host, mode dht.ModeOpt) (routing.Routing, discovery.Discovery, error) {
 	kdht, err := dht.New(ctx, host, dht.ProtocolPrefix(DHTDiscoveryProtocol), dht.Mode(mode))

@@ -135,10 +135,12 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 	}
 	discOpts := discovery.Options{
-		Logger:     n.logger,
-		Host:       n.host,
-		DiscV5Opts: discV5Opts,
-		ConnIndex:  n.idx,
+		Logger:      n.logger,
+		Host:        n.host,
+		DiscV5Opts:  discV5Opts,
+		ConnIndex:   n.idx,
+		HostAddress: n.cfg.HostAddress,
+		HostDNS:     n.cfg.HostDNS,
 	}
 	disc, err := discovery.NewService(n.ctx, discOpts)
 	if err != nil {

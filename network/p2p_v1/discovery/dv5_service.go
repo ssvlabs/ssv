@@ -136,6 +136,10 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create local node")
 	}
+	err = addAddresses(localNode, discOpts.HostAddress, discOpts.HostDNS)
+	if err != nil {
+		return errors.Wrap(err, "could not add configured addresses")
+	}
 	err = decorateLocalNode(localNode, opts.Subnets, opts.OperatorID)
 	if err != nil {
 		return errors.Wrap(err, "could not decorate local node")

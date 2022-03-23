@@ -25,11 +25,11 @@ type p2pNetwork struct {
 	host        host.Host
 	streamCtrl  streams.StreamController
 	idx         peers.Index
+	gater       peers.ConnGater
 	disc        discovery.Service
 	topicsCtrl  topics.Controller
 	msgRouter   network.MessageRouter
 	msgResolver topics.MsgPeersResolver
-	gater 		peers.ConnGater
 }
 
 // New creates a new p2p network

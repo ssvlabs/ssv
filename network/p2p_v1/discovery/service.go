@@ -35,6 +35,9 @@ type Options struct {
 	Host       host.Host
 	DiscV5Opts *DiscV5Options
 	ConnIndex  peers.ConnectionIndex
+
+	HostAddress string
+	HostDNS     string
 }
 
 // Service is the interface for discovery

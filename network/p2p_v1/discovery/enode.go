@@ -48,6 +48,29 @@ func decorateLocalNode(node *enode.LocalNode, subnets []bool, operatorID string)
 	return err
 }
 
+// addAddresses adds configured address and/or dns if configured
+func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
+	if len(hostAddr) > 0 {
+		hostIP := net.ParseIP(hostAddr)
+		if hostIP.To4() == nil && hostIP.To16() == nil {
+			return fmt.Errorf("invalid host address given: %s", hostIP.String())
+		}
+		localNode.SetFallbackIP(hostIP)
+		localNode.SetStaticIP(hostIP)
+	}
+	if len(hostDNS) > 0 {
+		ips, err := net.LookupIP(hostDNS)
+		if err != nil {
+			return errors.Wrap(err, "could not resolve host address")
+		}
+		if len(ips) > 0 {
+			firstIP := ips[0]
+			localNode.SetFallbackIP(firstIP)
+		}
+	}
+	return nil
+}
+
 // ToPeer creates peer info from the given node
 func ToPeer(node *enode.Node) (*peer.AddrInfo, error) {
 	m, err := ToMultiAddr(node)
