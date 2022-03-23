@@ -28,6 +28,9 @@ type PeerEvent struct {
 // HandleNewPeer is the function interface for handling new peer
 type HandleNewPeer func(e PeerEvent)
 
+// PingHandler is used to facilitate ping requests
+type PingHandler func(ctx context.Context, id peer.ID) error
+
 // Options represents the options passed to create a service
 type Options struct {
 	Logger *zap.Logger
@@ -38,6 +41,8 @@ type Options struct {
 
 	HostAddress string
 	HostDNS     string
+
+	PingHandler PingHandler
 }
 
 // Service is the interface for discovery

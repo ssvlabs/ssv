@@ -1,12 +1,14 @@
 package p2pv1
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/p2p_v1/discovery"
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
@@ -94,7 +96,7 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
+	self := peers.NewNodeInfo(n.host.ID().String(), "", "", []bool{}, make(map[string]string))
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
 	}, 10*time.Minute)
@@ -109,6 +111,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids)
 	n.host.SetStreamHandler(peers.HandshakeProtocol, handshaker.Handler())
+	n.handshaker = handshaker
 	n.logger.Debug("handshaker is ready")
 
 	connHandler := peers.HandleConnections(n.ctx, n.logger, handshaker)
@@ -135,8 +138,22 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 	}
 	discOpts := discovery.Options{
-		Logger:      n.logger,
-		Host:        n.host,
+		Logger: n.logger,
+		Host:   n.host,
+		PingHandler: func(ctx context.Context, id peer.ID) error {
+			conns := n.host.Network().ConnsToPeer(id)
+			// trying to handshake with the given connection
+			var err error
+			for _, conn := range conns {
+				err = n.handshaker.Handshake(conn)
+				if err != nil {
+					// TODO: trace/log
+					continue
+				}
+				break
+			}
+			return err
+		},
 		DiscV5Opts:  discV5Opts,
 		ConnIndex:   n.idx,
 		HostAddress: n.cfg.HostAddress,

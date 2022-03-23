@@ -26,6 +26,7 @@ type p2pNetwork struct {
 	streamCtrl  streams.StreamController
 	idx         peers.Index
 	gater       peers.ConnGater
+	handshaker  peers.Handshaker
 	disc        discovery.Service
 	topicsCtrl  topics.Controller
 	msgRouter   network.MessageRouter

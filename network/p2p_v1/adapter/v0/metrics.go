@@ -84,7 +84,7 @@ func (n *netV0Adapter) reportTopicPeers(name string) {
 }
 
 func (n *netV0Adapter) reportPeerIdentity(pid peer.ID) {
-	identity, err := n.idx.Identity(pid)
+	identity, err := n.idx.NodeInfo(pid)
 	if err != nil {
 		//n.trace("WARNING: could not report peer", zap.String("peer", pid.String()), zap.Error(err))
 		return

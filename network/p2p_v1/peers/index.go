@@ -14,6 +14,8 @@ const (
 	forkVKey = "forkv"
 	// operatorIDKey is the key used to store the operatorID
 	operatorIDKey = "oid"
+	// subnetsKey is the key used to store the subnets list
+	subnetsKey = "oid"
 )
 
 var (
@@ -39,10 +41,12 @@ var (
 	StatePruned NodeState = -1
 	// StateUnknown is the state for unknown peers
 	StateUnknown NodeState = 0
+	// StateExpired is the state for nodes that their records were expired
+	StateExpired NodeState = 1
 	// StateIndexing is the state for nodes that are currently being indexed / pending
-	StateIndexing NodeState = 1
+	StateIndexing NodeState = 2
 	// StateReady is the state for a connected, identified node
-	StateReady NodeState = 2
+	StateReady NodeState = 10
 )
 
 // nodeStateObj is a wrapper object for a state, has a time for TTL check
@@ -76,11 +80,11 @@ type ScoreIndex interface {
 // IdentityIndex is an interface for managing peers identity
 type IdentityIndex interface {
 	// Self returns the current node identity
-	Self() *Identity
+	Self() *NodeInfo
 	// Add indexes the given peer identity
-	Add(node *Identity) (bool, error)
-	// Identity returns the identity of the given peer
-	Identity(id peer.ID) (*Identity, error)
+	Add(node *NodeInfo) (bool, error)
+	// NodeInfo returns the identity of the given peer
+	NodeInfo(id peer.ID) (*NodeInfo, error)
 	// State returns the state of the peer in the identity store
 	State(id peer.ID) NodeState
 	// EvictPruned removes the given operator or peer from pruned list

@@ -13,38 +13,41 @@ const (
 	Unknown = "unknown"
 )
 
-// Identity contains information of a specific peer
-type Identity struct {
+// NodeInfo contains information of a specific peer
+type NodeInfo struct {
 	// ID is the peer.ID of the node, based on network key
 	ID string
-	// OperatorID holds a hash of the operator public key, based on operator key
+	// OperatorID holds a hash of the operator public key, based on the operator key.
 	OperatorID string
 	// ForkV is the current fork version used by the node
 	ForkV string
+	// Subnets holds the subnets that the node is interested in
+	Subnets []bool
 	// Metadata contains node's general information
 	Metadata map[string]string
 
 	addrInfo peer.AddrInfo
 }
 
-// NewIdentity creates new identity object
-func NewIdentity(id, oid, forkv string, metadata map[string]string) *Identity {
-	return &Identity{
+// NewNodeInfo creates new identity object
+func NewNodeInfo(id, oid, forkv string, subnets []bool, metadata map[string]string) *NodeInfo {
+	return &NodeInfo{
 		ID:         id,
 		OperatorID: oid,
 		ForkV:      forkv,
+		Subnets:    subnets,
 		Metadata:   metadata,
 	}
 }
 
 // AddrInfo returns the underlying peer.AddrInfo
-func (i *Identity) AddrInfo() peer.AddrInfo {
-	return i.addrInfo
+func (ni *NodeInfo) AddrInfo() peer.AddrInfo {
+	return ni.addrInfo
 }
 
 // ExecutionNode is the "name/version" of the eth1 node
-func (i *Identity) ExecutionNode() string {
-	e, ok := i.Metadata[execNodeKey]
+func (ni *NodeInfo) ExecutionNode() string {
+	e, ok := ni.Metadata[execNodeKey]
 	if !ok {
 		return Unknown
 	}
@@ -52,8 +55,8 @@ func (i *Identity) ExecutionNode() string {
 }
 
 // ConsensusNode is the "name/version" of the beacon node
-func (i *Identity) ConsensusNode() string {
-	c, ok := i.Metadata[consensusNodeKey]
+func (ni *NodeInfo) ConsensusNode() string {
+	c, ok := ni.Metadata[consensusNodeKey]
 	if !ok {
 		return Unknown
 	}
@@ -61,8 +64,8 @@ func (i *Identity) ConsensusNode() string {
 }
 
 // NodeVersion is the ssv-node version
-func (i *Identity) NodeVersion() string {
-	v, ok := i.Metadata[nodeVersionKey]
+func (ni *NodeInfo) NodeVersion() string {
+	v, ok := ni.Metadata[nodeVersionKey]
 	if !ok {
 		return Unknown
 	}
@@ -70,21 +73,21 @@ func (i *Identity) NodeVersion() string {
 }
 
 // NodeType returns the node type
-func (i *Identity) NodeType() string {
-	if len(i.OperatorID) == 0 {
+func (ni *NodeInfo) NodeType() string {
+	if len(ni.OperatorID) == 0 {
 		return "exporter"
 	}
 	return "operator"
 }
 
 // Encode encodes the identity
-func (i *Identity) Encode() ([]byte, error) {
-	return json.Marshal(i)
+func (ni *NodeInfo) Encode() ([]byte, error) {
+	return json.Marshal(ni)
 }
 
-// DecodeIdentity decodes the given encoded identity
-func DecodeIdentity(encoded []byte) (*Identity, error) {
-	var res Identity
+// DecodeNodeInfo decodes the given encoded identity
+func DecodeNodeInfo(encoded []byte) (*NodeInfo, error) {
+	var res NodeInfo
 	if err := json.Unmarshal(encoded, &res); err != nil {
 		return nil, err
 	}

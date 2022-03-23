@@ -83,7 +83,7 @@ func (n *netV0Adapter) setupPubsub() error {
 }
 
 func (n *netV0Adapter) setupPeerServices() error {
-	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
+	self := peers.NewNodeInfo(n.host.ID().String(), "", "", []bool{}, make(map[string]string))
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.v1Cfg.MaxPeers
 	}, 10*time.Minute)
@@ -101,7 +101,7 @@ func (n *netV0Adapter) setupPeerServices() error {
 	return nil
 }
 
-func (n *netV0Adapter) filterKnownOperators(identity *peers.Identity) (bool, error) {
+func (n *netV0Adapter) filterKnownOperators(identity *peers.NodeInfo) (bool, error) {
 	if n.idx.Limit(libp2pnetwork.DirInbound) {
 		return true, nil
 	}

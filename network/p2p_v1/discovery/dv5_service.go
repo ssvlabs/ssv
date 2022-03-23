@@ -42,17 +42,19 @@ type DiscV5Service struct {
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
 
-	conns peers.ConnectionIndex
+	conns       peers.ConnectionIndex
+	pingHandler PingHandler
 }
 
 func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
-		ctx:       ctx,
-		cancel:    cancel,
-		logger:    discOpts.Logger,
-		publishSF: &singleflight.Group{},
-		conns:     discOpts.ConnIndex,
+		ctx:         ctx,
+		cancel:      cancel,
+		logger:      discOpts.Logger,
+		publishSF:   &singleflight.Group{},
+		conns:       discOpts.ConnIndex,
+		pingHandler: discOpts.PingHandler,
 	}
 	dvs.logger.Debug("configuring discv5 discovery")
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
@@ -125,9 +127,9 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 		return errors.Wrap(err, "invalid opts")
 	}
 
-	ipAddr, bindIP, n := opts.IPs()
+	ipAddr, bindIP := opts.IPs()
 
-	udpConn, err := newUDPListener(bindIP, opts.Port, n)
+	udpConn, err := newUDPListener(bindIP, opts.Port)
 	if err != nil {
 		return errors.Wrap(err, "could not listen UDP")
 	}
@@ -241,7 +243,12 @@ func (dvs *DiscV5Service) publishENR() {
 		ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
 		defer done()
 		dvs.discover(ctx, func(e PeerEvent) {
-			err := dvs.dv5Listener.Ping(e.Node)
+			var err error
+			if dvs.pingHandler != nil {
+				err = dvs.pingHandler(ctx, e.AddrInfo.ID)
+			} else {
+				err = dvs.dv5Listener.Ping(e.Node)
+			}
 			if err != nil {
 				dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
 			}
@@ -296,12 +303,12 @@ func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Nod
 }
 
 // newUDPListener creates a udp server
-func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, error) {
+func newUDPListener(bindIP net.IP, port int) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
 		Port: port,
 	}
-	conn, err := net.ListenUDP(network, udpAddr)
+	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not listen to UDP")
 	}

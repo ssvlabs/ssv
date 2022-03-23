@@ -84,16 +84,16 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
-	identity, err := n.idx.Identity(pid)
+	nodeInfo, err := n.idx.NodeInfo(pid)
 	if err != nil {
 		//n.trace("WARNING: could not report peer", zap.String("peer", pid.String()), zap.Error(err))
 		return
 	}
-	n.logger.Debug("peer identity", zap.String("peer", pid.String()),
-		zap.String("oid", identity.OperatorID))
+	n.logger.Debug("peer nodeInfo", zap.String("peer", pid.String()),
+		zap.String("oid", nodeInfo.OperatorID))
 
-	metricsPeersIdentity.WithLabelValues(identity.OperatorID, identity.NodeVersion(),
-		pid.String(), identity.NodeType()).Set(1)
+	metricsPeersIdentity.WithLabelValues(nodeInfo.OperatorID, nodeInfo.NodeVersion(),
+		pid.String(), nodeInfo.NodeType()).Set(1)
 }
 
 //func reportLastMsg(pid string) {

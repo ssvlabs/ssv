@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+const (
+	recordsTTL = time.Minute * 5
+)
+
 // peersIndex implements Index interface
 type peersIndex struct {
 	logger *zap.Logger
@@ -19,14 +23,14 @@ type peersIndex struct {
 	statesLock *sync.RWMutex
 	states     map[string]nodeStateObj
 
-	self *Identity
+	self *NodeInfo
 
 	maxPeers func() int
 	pruneTTL time.Duration
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *Identity, maxPeers func() int, pruneTTL time.Duration) Index {
+func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *NodeInfo, maxPeers func() int, pruneTTL time.Duration) Index {
 	return &peersIndex{
 		logger:     logger,
 		network:    network,
@@ -90,12 +94,12 @@ func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 	return len(peers) < maxPeers
 }
 
-func (pi *peersIndex) Self() *Identity {
+func (pi *peersIndex) Self() *NodeInfo {
 	return pi.self
 }
 
 // Add adds a new peer identity
-func (pi *peersIndex) Add(identity *Identity) (bool, error) {
+func (pi *peersIndex) Add(identity *NodeInfo) (bool, error) {
 	switch pi.state(identity.ID) {
 	case StateReady:
 		return true, nil
@@ -104,20 +108,23 @@ func (pi *peersIndex) Add(identity *Identity) (bool, error) {
 		return true, nil
 	case StatePruned:
 		return false, ErrWasPruned
+	case StateExpired:
 	case StateUnknown:
 	default:
 	}
 	return pi.add(identity)
 }
 
-// Identity returns the identity of the given peer
-func (pi *peersIndex) Identity(id peer.ID) (*Identity, error) {
+// NodeInfo returns the identity of the given peer
+func (pi *peersIndex) NodeInfo(id peer.ID) (*NodeInfo, error) {
 	switch pi.state(id.String()) {
 	case StateIndexing:
 		// TODO: handle
 		return nil, ErrIndexingInProcess
 	case StatePruned:
 		return nil, ErrWasPruned
+	// TODO: implement
+	//case StateExpired:
 	case StateUnknown:
 		return nil, ErrNotFound
 	default:
@@ -160,6 +167,8 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 		return nil, ErrWasPruned
 	case StateUnknown:
 		return nil, ErrNotFound
+	// TODO: implement
+	//case StateExpired:
 	default:
 	}
 	tx := newTransactional(id, pi.network.Peerstore())
@@ -216,7 +225,7 @@ func (pi *peersIndex) Close() error {
 }
 
 // add saves the given identity
-func (pi *peersIndex) add(identity *Identity) (bool, error) {
+func (pi *peersIndex) add(identity *NodeInfo) (bool, error) {
 	pi.setState(identity.ID, StateIndexing)
 	pid, err := peer.Decode(identity.ID)
 	if err != nil {
@@ -225,6 +234,7 @@ func (pi *peersIndex) add(identity *Identity) (bool, error) {
 	tx := newTransactional(pid, pi.network.Peerstore())
 	tx.Put(formatIdentityKey(forkVKey), identity.ForkV)
 	tx.Put(formatIdentityKey(operatorIDKey), identity.OperatorID)
+	tx.Put(formatIdentityKey(subnetsKey), identity.Subnets)
 	tx.Put(formatIdentityKey(consensusNodeKey), identity.ConsensusNode())
 	tx.Put(formatIdentityKey(execNodeKey), identity.ExecutionNode())
 	tx.Put(formatIdentityKey(nodeVersionKey), identity.NodeVersion())
@@ -237,7 +247,7 @@ func (pi *peersIndex) add(identity *Identity) (bool, error) {
 }
 
 // add saves the given identity
-func (pi *peersIndex) get(pid peer.ID) (*Identity, error) {
+func (pi *peersIndex) get(pid peer.ID) (*NodeInfo, error) {
 	tx := newTransactional(pid, pi.network.Peerstore())
 	// build identity object
 	fraw, err := tx.Get(formatIdentityKey(forkVKey))
@@ -256,10 +266,18 @@ func (pi *peersIndex) get(pid peer.ID) (*Identity, error) {
 	if !ok {
 		return nil, errors.New("could not cast operator ID")
 	}
+	subnetsRaw, err := tx.Get(formatIdentityKey(subnetsKey))
+	if err != nil {
+		return nil, err
+	}
+	subnets, ok := subnetsRaw.([]bool)
+	if !ok {
+		return nil, errors.New("could not cast operator ID")
+	}
 
 	metadata, err := pi.getMetadata(tx)
 
-	return NewIdentity(pid.String(), oid, forkV, metadata), err
+	return NewNodeInfo(pid.String(), oid, forkV, subnets, metadata), err
 }
 
 func (pi *peersIndex) getMetadata(tx Transactional) (map[string]string, error) {
@@ -299,6 +317,9 @@ func (pi *peersIndex) state(pid string) NodeState {
 	so, ok := pi.states[pid]
 	if !ok {
 		return StateUnknown
+	}
+	if !so.time.Add(recordsTTL).After(time.Now()) {
+		return StateExpired
 	}
 	return so.state
 }
