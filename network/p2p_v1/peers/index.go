@@ -53,8 +53,9 @@ type nodeStateObj struct {
 
 // ConnectionIndex is an interface for accessing peers connections
 type ConnectionIndex interface {
-	// Connectedness returns the connection state of the given peer
-	Connectedness(id peer.ID) libp2pnetwork.Connectedness
+	//// Connectedness returns the connection state of the given peer
+	//Connectedness(id peer.ID) libp2pnetwork.Connectedness
+
 	// CanConnect returns whether we can connect to the given peer,
 	// by checking if it is already connected or if we tried to connect to it recently and failed
 	CanConnect(id peer.ID) bool

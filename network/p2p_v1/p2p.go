@@ -29,6 +29,7 @@ type p2pNetwork struct {
 	topicsCtrl  topics.Controller
 	msgRouter   network.MessageRouter
 	msgResolver topics.MsgPeersResolver
+	gater 		peers.ConnGater
 }
 
 // New creates a new p2p network

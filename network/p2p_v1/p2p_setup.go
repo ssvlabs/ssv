@@ -54,6 +54,10 @@ func (n *p2pNetwork) SetupHost() error {
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
+	// adding connection gater
+	n.gater = peers.NewConnectionGater(n.logger.With(zap.String("who", "ConnectionGater")), false)
+	opts = append(opts, libp2p.ConnectionGater(n.gater))
+	// creating host
 	host, err := libp2p.New(n.ctx, opts...)
 	if err != nil {
 		return errors.Wrap(err, "failed to create p2p host")
@@ -94,6 +98,8 @@ func (n *p2pNetwork) setupPeerServices() error {
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
 	}, 10*time.Minute)
+	// injecting the index so the gater can query it
+	n.gater.WithConnIndex(n.idx)
 	n.logger.Debug("peers index is ready")
 
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
