@@ -3,7 +3,7 @@ package p2pv1
 import (
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol"
+	"github.com/bloxapp/ssv/protocol/v1"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -15,7 +15,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(message v1.SSVMessage) error {
 	raw, err := n.fork.EncodeNetworkMsg(&message)
 	if err != nil {
 		return errors.Wrap(err, "could not decode message")
@@ -33,7 +33,7 @@ func (n *p2pNetwork) Broadcast(message protocol.SSVMessage) error {
 }
 
 // Subscribe subscribes to validator subnet
-func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
+func (n *p2pNetwork) Subscribe(pk v1.ValidatorPK) error {
 	topic := n.fork.ValidatorTopicID(pk)
 	if topic == forksv1.UnknownSubnet {
 		return errors.New("unknown topic")
@@ -42,7 +42,7 @@ func (n *p2pNetwork) Subscribe(pk protocol.ValidatorPK) error {
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(pk protocol.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(pk v1.ValidatorPK) error {
 	topic := n.fork.ValidatorTopicID(pk)
 	if topic == forksv1.UnknownSubnet {
 		return errors.New("unknown topic")

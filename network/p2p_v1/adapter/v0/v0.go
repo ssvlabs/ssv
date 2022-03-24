@@ -135,7 +135,10 @@ func (n *netV0Adapter) Start() error {
 func (n *netV0Adapter) Close() error {
 	n.cancel()
 	if err := n.idx.Close(); err != nil {
-		n.logger.Error("could not close index", zap.Error(err))
+		return errors.Wrap(err, "could not close index")
+	}
+	if err := n.disc.Close(); err != nil {
+		return errors.Wrap(err, "could not close discovery service")
 	}
 	return n.host.Close()
 }

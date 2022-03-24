@@ -3,14 +3,14 @@ package p2pv1
 import (
 	"github.com/bloxapp/ssv/network"
 	ssv_peers "github.com/bloxapp/ssv/network/p2p_v1/peers"
-	"github.com/bloxapp/ssv/protocol"
+	"github.com/bloxapp/ssv/protocol/v1"
 	"go.uber.org/zap"
 	"math"
 )
 
 // ReportValidation reports the result for the given message
 // the result will be converted to a score and reported to peers.ScoreIndex
-func (n *p2pNetwork) ReportValidation(msg protocol.SSVMessage, res network.MsgValidationResult) {
+func (n *p2pNetwork) ReportValidation(msg v1.SSVMessage, res network.MsgValidationResult) {
 	peers := n.msgResolver.GetPeers(msg.GetData())
 	for _, pi := range peers {
 		err := n.idx.Score(pi, ssv_peers.NodeScore{Name: "validation", Value: msgValidationScore(res)})

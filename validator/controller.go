@@ -142,7 +142,6 @@ func NewController(options ControllerOptions) Controller {
 	if err := ctrl.initShares(options); err != nil {
 		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
-
 	return &ctrl
 }
 

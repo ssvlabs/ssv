@@ -66,6 +66,7 @@ func (dvs *DiscV5Service) Close() error {
 	if dvs.cancel != nil {
 		dvs.cancel()
 	}
+	dvs.dv5Listener.Close()
 	return nil
 }
 
@@ -113,7 +114,7 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	//}
 
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval)
-		//dvs.limitNodeFilter, dvs.badNodeFilter)
+	//dvs.limitNodeFilter, dvs.badNodeFilter)
 
 	return nil
 }

@@ -69,18 +69,20 @@ func (p *P2pNetwork) onFork(slot uint64, currentFork forks.Fork) {
 	if err := p.networkAdapter.Close(); err != nil {
 		p.logger.Fatal("failed to close network adapter", zap.Error(err))
 	}
-	p.logger.Info("adapter v0 closed. wait for cooling...")
+
 	// give time to the system to close all pending actions before start new network
+	p.logger.Info("adapter v0 closed. wait for cooling...")
 	time.Sleep(time.Second * 3)
 
-	//cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
-	p.cfgV1.Fork = currentFork.NetworkFork()
-	// TODo  nilling previews p.networkAdapter instance?
+	p.logger.Info("done cooling, setting new adapter")
+	p.cfgV1.Fork = currentFork.NetworkFork() // in order to get the new fork instance
 	p.networkAdapter = v1.New(p.ctx, p.cfgV1, lis)
 	p.logger.Info("setup adapter v1")
 	p.setup()
 	p.logger.Info("start adapter v1")
 	p.start()
+
+	// subscribe to topics?
 	// subscribe to subnets
 	// start broadcast to decided topic
 

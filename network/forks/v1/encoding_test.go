@@ -2,14 +2,14 @@ package v1
 
 import (
 	"bytes"
-	"github.com/bloxapp/ssv/protocol"
+	"github.com/bloxapp/ssv/protocol/v1"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestForkV1_Encoding(t *testing.T) {
-	msg := &protocol.SSVMessage{
-		MsgType: protocol.SSVConsensusMsgType,
+	msg := &v1.SSVMessage{
+		MsgType: v1.SSVConsensusMsgType,
 		ID:      []byte("xxxxxxxxxxx_ATTESTER"),
 		Data:    []byte("data"),
 	}
@@ -21,6 +21,6 @@ func TestForkV1_Encoding(t *testing.T) {
 
 	res, err := f.DecodeNetworkMsg(b)
 	require.NoError(t, err)
-	require.Equal(t, msg.MsgType, res.(*protocol.SSVMessage).MsgType)
-	require.True(t, bytes.Equal(msg.Data, res.(*protocol.SSVMessage).Data))
+	require.Equal(t, msg.MsgType, res.(*v1.SSVMessage).MsgType)
+	require.True(t, bytes.Equal(msg.Data, res.(*v1.SSVMessage).Data))
 }

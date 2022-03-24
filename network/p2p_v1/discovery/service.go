@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
+	"io"
 )
 
 const (
@@ -40,7 +41,7 @@ type Options struct {
 // Service is the interface for discovery
 type Service interface {
 	discovery.Discovery
-
+	io.Closer
 	RegisterSubnets(subnets ...int) error
 	DeregisterSubnets(subnets ...int) error
 	Bootstrap(handler HandleNewPeer) error

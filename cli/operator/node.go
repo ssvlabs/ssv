@@ -86,7 +86,7 @@ var StartNodeCmd = &cobra.Command{
 		forker := forks.NewForker(forks.Config{
 			Logger:     Logger,
 			Network:    cfg.ETH2Options.Network,
-			ForkSlot:   9999999999, // TODO by flag?
+			ForkSlot:   2621740, // TODO by flag?
 			BeforeFork: v0.New(),
 			PostFork:   v1.New(),
 		})

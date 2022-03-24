@@ -111,3 +111,8 @@ type discoveryNotifee struct {
 func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 	n.handler(PeerEvent{AddrInfo: pi})
 }
+
+func (md *localDiscovery) Close() error {
+	//TODO implement me
+	panic("implement me")
+}

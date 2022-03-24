@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	ssv_protocol "github.com/bloxapp/ssv/protocol"
+	ssv_protocol "github.com/bloxapp/ssv/protocol/v1"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/stretchr/testify/require"
