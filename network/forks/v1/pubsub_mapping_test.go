@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"strings"
 	"testing"
 )
 
@@ -19,7 +18,7 @@ func TestForkV1_ValidatorTopicID(t *testing.T) {
 		topic := f.ValidatorTopicID(sk.GetPublicKey().Serialize())
 		t.Log("topic:", topic)
 		require.Greater(t, len(topic), 0)
-		require.Equal(t, 0, strings.Index(topic, "ssv.subnet."))
+		require.Regexp(t, "\\d{1,3}", topic)
 	})
 
 	t.Run("deterministic", func(t *testing.T) {
