@@ -9,12 +9,12 @@ def setup_ssv_registry(main_dir):
     os.chdir(main_dir)
     if not os.path.isdir(os.path.join(main_dir, 'ssv-network')):
         cli = subprocess.run(['git', 'clone', 'https://github.com/bloxapp/ssv-network.git'])
-        if cli.returncode is not 0:
+        if cli.returncode != 0:
             print("failed to clone ssv-network")
             return False
         os.chdir('ssv-network')
         cli = subprocess.run(['npm', 'i'])
-        if cli.returncode is not 0:
+        if cli.returncode != 0:
             print("failed to install dependencies")
 
             return False

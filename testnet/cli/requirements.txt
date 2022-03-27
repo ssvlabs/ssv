@@ -2,3 +2,4 @@ click
 pyyaml
 docker
 go_template
+python-dotenv

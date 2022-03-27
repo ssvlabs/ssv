@@ -19,7 +19,7 @@ def main():
 @click.option('--testnet-dir', envvar='SSV_TESTNET_DIR', help="Testnet directory")
 @click.option('--beacon', default=4, help='Number of beacon nodes')
 @click.option('--validators', default=100, help='Number of validators')
-@click.option('--eth-data-dir', default='', help='Data dir of ETH testnet')
+@click.option('--eth-data-dir', default='.lighthouse/local-testnet', help='Data dir of ETH testnet')
 def eth_up(testnet_dir, beacon, validators, eth_data_dir):
     """Spin up local beacon (lighthouse) and eth1 (ganache)"""
     if not setup_lighthouse(validators, beacon, testnet_dir, eth_data_dir):
