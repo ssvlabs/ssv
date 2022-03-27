@@ -1,14 +1,14 @@
 package v1
 
 import (
-	v1 "github.com/bloxapp/ssv/protocol/v1"
+	v1_protocol "github.com/bloxapp/ssv/protocol/v1"
 	"testing"
 )
 
 func TestAdapterV1_ConvertToV0(t *testing.T) {
-	var messagesV0 []*v1.SSVMessage
+	var messagesV0 []*v1_protocol.SSVMessage
 	for i := 0; i < 4; i++ {
-		messagesV0 = append(messagesV0, &v1.SSVMessage{
+		messagesV0 = append(messagesV0, &v1_protocol.SSVMessage{
 			MsgType: 0,
 			ID:      nil,
 			Data:    nil,
