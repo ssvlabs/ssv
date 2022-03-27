@@ -78,7 +78,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 			res.Data = []string{"internal error - could not read validator key"}
 		} else {
 			identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
-			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
+			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), nm.Msg.Filter.From, nm.Msg.Filter.To)
 			if err != nil {
 				logger.Warn("failed to get decided messages", zap.Error(err))
 				res.Data = []string{"internal error - could not get decided messages"}

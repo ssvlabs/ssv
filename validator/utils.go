@@ -103,14 +103,15 @@ func ShareFromValidatorAddedEvent(
 	return &validatorShare, shareSecret, isOperatorEvent, nil
 }
 
+// ExtractOperatorPublicKeys extracts the operator public keys from the storage
 func ExtractOperatorPublicKeys(
 	storage registrystorage.OperatorsCollection,
 	validatorAddedEvent *abiparser.ValidatorAddedEvent,
 ) error {
 	validatorAddedEvent.OperatorPublicKeys = make([][]byte, len(validatorAddedEvent.OperatorIds))
 	// TODO: implement get many operators instead of just getting one by one
-	for i, operatorId := range validatorAddedEvent.OperatorIds {
-		od, found, err := storage.GetOperatorData(operatorId.Uint64())
+	for i, operatorID := range validatorAddedEvent.OperatorIds {
+		od, found, err := storage.GetOperatorData(operatorID.Uint64())
 		if err != nil {
 			return errors.Wrap(err, "could not get operator's data")
 		}

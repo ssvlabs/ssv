@@ -39,7 +39,7 @@ func (a AdapterV1) ParseOperatorAddedEvent(
 	if event == nil {
 		return nil, unpackErr, err
 	}
-	// TODO: Id is missing
+	// TODO: ID is missing
 	return &OperatorAddedEvent{
 		Name:         event.Name,
 		PublicKey:    event.PublicKey,

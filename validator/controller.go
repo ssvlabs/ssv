@@ -346,12 +346,10 @@ func (c *controller) handleValidatorAddedEvent(
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
-	var isOperatorShare bool
 	if err != nil {
 		return nil, false, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		// TODO: check if we can extract this logic to controller and inject the operator private key
 		operatorPrivateKey, found, err := c.shareEncryptionKeyProvider()
 		if err != nil {
 			return nil, false, errors.Wrap(err, "failed to get operator private key")
@@ -373,9 +371,9 @@ func (c *controller) handleValidatorAddedEvent(
 			logger := c.logger.With(zap.String("pubKey", pubKey))
 			logger.Debug("ValidatorAdded event was handled successfully")
 		}
-	} else {
-		isOperatorShare = validatorShare.IsOperatorShare(c.operatorPubKey)
+		return newValShare, isOperatorShare, nil
 	}
+	isOperatorShare := validatorShare.IsOperatorShare(c.operatorPubKey)
 	return validatorShare, isOperatorShare, nil
 }
 
@@ -386,7 +384,7 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 		PublicKey:    eventOperatorPubKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
-		Index:        event.Id.Uint64(),
+		Index:        event.ID.Uint64(),
 	}
 	err := c.storage.SaveOperatorData(&od)
 	if err != nil {
