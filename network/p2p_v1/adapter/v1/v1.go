@@ -13,7 +13,7 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/streams"
 	"github.com/bloxapp/ssv/network/p2p_v1/topics"
 	"github.com/bloxapp/ssv/protocol/v1"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	core2 "github.com/bloxapp/ssv/protocol/v1/core"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -157,7 +157,7 @@ func (n *netV1Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 		return err
 	}
 
-	cm, ok := raw.(*v1.SSVMessage)
+	cm, ok := raw.(*core2.SSVMessage)
 	if !ok || cm == nil /*|| cm.SignedMessage == nil*/ {
 		n.logger.Error("could not casting to SSVMessage")
 		return nil
@@ -172,7 +172,7 @@ func (n *netV1Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	return nil
 }
 
-func convertToV0Message(msg *v1.SSVMessage) (*network.Message, error) {
+func convertToV0Message(msg *core2.SSVMessage) (*network.Message, error) {
 	signedMsgV0 := &proto.SignedMessage{}
 	v0Msg := &network.Message{
 		SignedMessage: signedMsgV0,
@@ -190,24 +190,24 @@ func convertToV0Message(msg *v1.SSVMessage) (*network.Message, error) {
 	}
 
 	switch msg.GetType() {
-	case v1.SSVConsensusMsgType:
-		signedMsg := &qbft.SignedMessage{}
+	case core2.SSVConsensusMsgType:
+		signedMsg := &v1.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
 
 		var typeV0 proto.RoundState
 		switch signedMsg.Message.MsgType {
-		case qbft.ProposalMsgType:
+		case v1.ProposalMsgType:
 			typeV0 = proto.RoundState_PrePrepare
-		case qbft.PrepareMsgType:
+		case v1.PrepareMsgType:
 			typeV0 = proto.RoundState_Prepare
-		case qbft.CommitMsgType:
+		case v1.CommitMsgType:
 			typeV0 = proto.RoundState_Commit
-		case qbft.RoundChangeMsgType:
+		case v1.RoundChangeMsgType:
 			typeV0 = proto.RoundState_ChangeRound
 			v0Msg.Type = network.NetworkMsg_IBFTType
-		case qbft.DecidedMsgType:
+		case v1.DecidedMsgType:
 			typeV0 = proto.RoundState_Decided
 			v0Msg.Type = network.NetworkMsg_DecidedType
 		}
@@ -225,25 +225,25 @@ func convertToV0Message(msg *v1.SSVMessage) (*network.Message, error) {
 		}
 
 		//return v.processConsensusMsg(dutyRunner, signedMsg)
-	case v1.SSVPostConsensusMsgType:
+	case core2.SSVPostConsensusMsgType:
 		signedMsg := &v1.SignedPostConsensusMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		//return v.processPostConsensusSig(dutyRunner, signedMsg)
-	case v1.SSVSyncMsgType:
+	case core2.SSVSyncMsgType:
 		panic("implement")
 	default:
 		return nil, errors.New("unknown msg")
 	}
 
 	switch msg.MsgType {
-	case v1.SSVConsensusMsgType:
+	case core2.SSVConsensusMsgType:
 		v0Msg.Type = network.NetworkMsg_IBFTType
-	case v1.SSVPostConsensusMsgType:
+	case core2.SSVPostConsensusMsgType:
 		v0Msg.Type = network.NetworkMsg_DecidedType // TODO need to provide the proper type (under consensus or post consensus?)
 		v0Msg.Type = network.NetworkMsg_SignatureType
-	case v1.SSVSyncMsgType:
+	case core2.SSVSyncMsgType:
 		v0Msg.Type = network.NetworkMsg_SyncType
 	}
 

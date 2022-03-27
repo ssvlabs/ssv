@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/network/p2p_v1/peers"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -268,9 +267,9 @@ func (dvs *DiscV5Service) updateSubnetsEntry(subnets map[int]bool) error {
 }
 
 // limitNodeFilter checks if limit exceeded
-func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
-}
+//func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
+//	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
+//}
 
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {

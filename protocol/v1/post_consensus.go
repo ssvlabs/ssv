@@ -3,18 +3,16 @@ package v1
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/crypto"
-	"github.com/bloxapp/ssv/protocol/v1/operator/types"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/bloxapp/ssv/protocol/v1/core"
 	"github.com/pkg/errors"
 )
 
+// PostConsensusMessage is the structure used for post consensus messages
 type PostConsensusMessage struct {
-	Height          qbft.Height
+	Height          Height
 	DutySignature   []byte // The beacon chain partial Signature for a duty
 	DutySigningRoot []byte // the root signed in DutySignature
-	Signers         []types.OperatorID
+	Signers         []core.OperatorID
 }
 
 // Encode returns a msg encoded bytes or error
@@ -27,6 +25,7 @@ func (pcsm *PostConsensusMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, pcsm)
 }
 
+// GetRoot returns the root of the message
 func (pcsm *PostConsensusMessage) GetRoot() ([]byte, error) {
 	marshaledRoot, err := pcsm.Encode()
 	if err != nil {
@@ -36,10 +35,11 @@ func (pcsm *PostConsensusMessage) GetRoot() ([]byte, error) {
 	return ret[:], nil
 }
 
+// SignedPostConsensusMessage is the structure used for signed post consensus messages
 type SignedPostConsensusMessage struct {
 	Message   *PostConsensusMessage
-	Signature crypto.Signature
-	Signers   []types.OperatorID
+	Signature core.Signature
+	Signers   []core.OperatorID
 }
 
 // Encode returns a msg encoded bytes or error
@@ -52,19 +52,23 @@ func (spcsm *SignedPostConsensusMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, &spcsm)
 }
 
-func (spcsm *SignedPostConsensusMessage) GetSignature() crypto.Signature {
+// GetSignature returns the message signature
+func (spcsm *SignedPostConsensusMessage) GetSignature() core.Signature {
 	return spcsm.Signature
 }
 
-func (spcsm *SignedPostConsensusMessage) GetSigners() []types.OperatorID {
+// GetSigners returns the message signers
+func (spcsm *SignedPostConsensusMessage) GetSigners() []core.OperatorID {
 	return spcsm.Signers
 }
 
+// GetRoot returns the signature root
 func (spcsm *SignedPostConsensusMessage) GetRoot() ([]byte, error) {
 	return spcsm.Message.GetRoot()
 }
 
-func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg MessageSignature) error {
+// Aggregate aggregates signatures
+func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg core.MessageSignature) error {
 	//if !bytes.Equal(spcsm.GetRoot(), signedMsg.GetRoot()) {
 	//	return errors.New("can't aggregate msgs with different roots")
 	//}
@@ -99,13 +103,13 @@ func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg MessageSignature) e
 }
 
 // MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []types.OperatorID) bool {
-	toMatchCnt := make(map[types.OperatorID]int)
+func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []core.OperatorID) bool {
+	toMatchCnt := make(map[core.OperatorID]int)
 	for _, id := range ids {
 		toMatchCnt[id]++
 	}
 
-	foundCnt := make(map[types.OperatorID]int)
+	foundCnt := make(map[core.OperatorID]int)
 	for _, id := range spcsm.GetSigners() {
 		foundCnt[id]++
 	}
@@ -118,10 +122,11 @@ func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []types.OperatorID) 
 	return true
 }
 
-func blsSig(sig []byte) (*bls.Sign, error) {
-	ret := &bls.Sign{}
-	if err := ret.Deserialize(sig); err != nil {
-		return nil, errors.Wrap(err, "could not covert DutySignature byts to bls.sign")
-	}
-	return ret, nil
-}
+//
+//func blsSig(sig []byte) (*bls.Sign, error) {
+//	ret := &bls.Sign{}
+//	if err := ret.Deserialize(sig); err != nil {
+//		return nil, errors.Wrap(err, "could not covert DutySignature byts to bls.sign")
+//	}
+//	return ret, nil
+//}

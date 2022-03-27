@@ -1,24 +1,29 @@
-package qbft
+package v1
 
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1"
-	"github.com/bloxapp/ssv/protocol/v1/crypto"
-	"github.com/bloxapp/ssv/protocol/v1/operator/types"
+	"github.com/bloxapp/ssv/protocol/v1/core"
 	"github.com/pkg/errors"
 )
 
-type MessageType int
+// ConsensusMessageType is the type of consensus messages
+type ConsensusMessageType int
 
 const (
-	ProposalMsgType MessageType = iota
+	// ProposalMsgType is the type used for proposal messages
+	ProposalMsgType ConsensusMessageType = iota
+	// PrepareMsgType is the type used for prepare messages
 	PrepareMsgType
+	// CommitMsgType is the type used for commit messages
 	CommitMsgType
+	// RoundChangeMsgType is the type used for change round messages
 	RoundChangeMsgType
+	// DecidedMsgType is the type used for decided messages
 	DecidedMsgType
 )
 
+// ProposalData is the structure used for propose messages
 type ProposalData struct {
 	Data                     []byte
 	RoundChangeJustification []*SignedMessage
@@ -35,6 +40,7 @@ func (d *ProposalData) Decode(data []byte) error {
 	return json.Unmarshal(data, &d)
 }
 
+// PrepareData is the structure used for prepare messages
 type PrepareData struct {
 	Data []byte
 }
@@ -49,6 +55,7 @@ func (d *PrepareData) Decode(data []byte) error {
 	return json.Unmarshal(data, &d)
 }
 
+// CommitData is the structure used for commit messages
 type CommitData struct {
 	Data []byte
 }
@@ -63,6 +70,13 @@ func (d *CommitData) Decode(data []byte) error {
 	return json.Unmarshal(data, &d)
 }
 
+// Round is the QBFT round of the message
+type Round uint64
+
+// Height is the height of the QBFT instance
+type Height int64
+
+// RoundChangeData represents the data that is sent upon change round
 type RoundChangeData interface {
 	GetPreparedValue() []byte
 	GetPreparedRound() Round
@@ -72,8 +86,9 @@ type RoundChangeData interface {
 	GetRoundChangeJustification() []*SignedMessage
 }
 
-type Message struct {
-	MsgType    MessageType
+// ConsensusMessage is the structure used for consensus messages
+type ConsensusMessage struct {
+	MsgType    ConsensusMessageType
 	Height     Height // QBFT instance Height
 	Round      Round  // QBFT round for which the msg is for
 	Identifier []byte // instance Identifier this msg belongs to
@@ -81,7 +96,7 @@ type Message struct {
 }
 
 // GetProposalData returns proposal specific data
-func (msg *Message) GetProposalData() (*ProposalData, error) {
+func (msg *ConsensusMessage) GetProposalData() (*ProposalData, error) {
 	ret := &ProposalData{}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode proposal data from message")
@@ -90,7 +105,7 @@ func (msg *Message) GetProposalData() (*ProposalData, error) {
 }
 
 // GetPrepareData returns prepare specific data
-func (msg *Message) GetPrepareData() (*PrepareData, error) {
+func (msg *ConsensusMessage) GetPrepareData() (*PrepareData, error) {
 	ret := &PrepareData{}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode prepare data from message")
@@ -99,7 +114,7 @@ func (msg *Message) GetPrepareData() (*PrepareData, error) {
 }
 
 // GetCommitData returns commit specific data
-func (msg *Message) GetCommitData() (*CommitData, error) {
+func (msg *ConsensusMessage) GetCommitData() (*CommitData, error) {
 	ret := &CommitData{}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode commit data from message")
@@ -108,22 +123,22 @@ func (msg *Message) GetCommitData() (*CommitData, error) {
 }
 
 // GetRoundChangeData returns round change specific data
-func (msg *Message) GetRoundChangeData() RoundChangeData {
+func (msg *ConsensusMessage) GetRoundChangeData() RoundChangeData {
 	panic("implement")
 }
 
 // Encode returns a msg encoded bytes or error
-func (msg *Message) Encode() ([]byte, error) {
+func (msg *ConsensusMessage) Encode() ([]byte, error) {
 	return json.Marshal(msg)
 }
 
 // Decode returns error if decoding failed
-func (msg *Message) Decode(data []byte) error {
+func (msg *ConsensusMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, &msg)
 }
 
 // GetRoot returns the root used for signing and verification
-func (msg *Message) GetRoot() ([]byte, error) {
+func (msg *ConsensusMessage) GetRoot() ([]byte, error) {
 	marshaledRoot, err := msg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode message")
@@ -132,26 +147,30 @@ func (msg *Message) GetRoot() ([]byte, error) {
 	return ret[:], nil
 }
 
-// DeepCopy returns a new instance of Message, deep copied
-func (msg *Message) DeepCopy() *Message {
+// DeepCopy returns a new instance of ConsensusMessage, deep copied
+func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 	panic("implement")
 }
 
+// SignedMessage contains a message and the corresponding signature + signers list
 type SignedMessage struct {
-	Signature crypto.Signature
-	Signers   []types.OperatorID
-	Message   *Message // message for which this signature is for
+	Signature core.Signature
+	Signers   []core.OperatorID
+	Message   *ConsensusMessage // message for which this signature is for
 }
 
-func (signedMsg *SignedMessage) GetSignature() crypto.Signature {
+// GetSignature returns the message signature
+func (signedMsg *SignedMessage) GetSignature() core.Signature {
 	return signedMsg.Signature
 }
-func (signedMsg *SignedMessage) GetSigners() []types.OperatorID {
+
+// GetSigners returns the message signers
+func (signedMsg *SignedMessage) GetSigners() []core.OperatorID {
 	return signedMsg.Signers
 }
 
 // MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-func (signedMsg *SignedMessage) MatchedSigners(ids []types.OperatorID) bool {
+func (signedMsg *SignedMessage) MatchedSigners(ids []core.OperatorID) bool {
 	for _, id := range signedMsg.Signers {
 		found := false
 		for _, id2 := range ids {
@@ -168,7 +187,7 @@ func (signedMsg *SignedMessage) MatchedSigners(ids []types.OperatorID) bool {
 }
 
 // MutualSigners returns true if signatures have at least 1 mutual signer
-func (signedMsg *SignedMessage) MutualSigners(sig v1.MessageSignature) bool {
+func (signedMsg *SignedMessage) MutualSigners(sig core.MessageSignature) bool {
 	for _, id := range signedMsg.Signers {
 		for _, id2 := range sig.GetSigners() {
 			if id == id2 {
@@ -180,7 +199,7 @@ func (signedMsg *SignedMessage) MutualSigners(sig v1.MessageSignature) bool {
 }
 
 // Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-func (signedMsg *SignedMessage) Aggregate(sig v1.MessageSignature) error {
+func (signedMsg *SignedMessage) Aggregate(sig core.MessageSignature) error {
 	if signedMsg.MutualSigners(sig) {
 		return errors.New("can't aggregate 2 signed messages with mutual signers")
 	}
@@ -213,13 +232,13 @@ func (signedMsg *SignedMessage) GetRoot() ([]byte, error) {
 // DeepCopy returns a new instance of SignedMessage, deep copied
 func (signedMsg *SignedMessage) DeepCopy() *SignedMessage {
 	ret := &SignedMessage{
-		Signers:   make([]types.OperatorID, len(signedMsg.Signers)),
+		Signers:   make([]core.OperatorID, len(signedMsg.Signers)),
 		Signature: make([]byte, len(signedMsg.Signature)),
 	}
 	copy(ret.Signers, signedMsg.Signers)
 	copy(ret.Signature, signedMsg.Signature)
 
-	ret.Message = &Message{
+	ret.Message = &ConsensusMessage{
 		MsgType:    signedMsg.Message.MsgType,
 		Height:     signedMsg.Message.Height,
 		Round:      signedMsg.Message.Round,

@@ -1,13 +1,13 @@
 package network
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1"
+	"github.com/bloxapp/ssv/protocol/v1/core"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(message v1.SSVMessage)
+	Route(message core.SSVMessage)
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
@@ -29,15 +29,15 @@ const (
 // ValidationReporter is the interface for reporting on message validation results
 type ValidationReporter interface {
 	// ReportValidation reports the result for the given message
-	ReportValidation(message v1.SSVMessage, res MsgValidationResult)
+	ReportValidation(message core.SSVMessage, res MsgValidationResult)
 }
 
 // SubscriberV1 is the interface for subscribing to topics
 type SubscriberV1 interface {
 	// Subscribe subscribes to validator subnet
-	Subscribe(pk v1.ValidatorPK) error
+	Subscribe(pk core.ValidatorPK) error
 	// Unsubscribe unsubscribes from the validator subnet
-	Unsubscribe(pk v1.ValidatorPK) error
+	Unsubscribe(pk core.ValidatorPK) error
 	// UseMessageRouter registers a message router to handle incoming messages
 	UseMessageRouter(router MessageRouter)
 }
@@ -45,21 +45,21 @@ type SubscriberV1 interface {
 // BroadcasterV1 is the interface for broadcasting messages
 type BroadcasterV1 interface {
 	// Broadcast publishes the message to all peers in subnet
-	Broadcast(message v1.SSVMessage) error
+	Broadcast(message core.SSVMessage) error
 }
 
 // StreamHandler handles a stream request with a simple interface of handling the incoming request
 // and providing the answer. the actual work with streams is hidden
-type StreamHandler func(*v1.SSVMessage) (*v1.SSVMessage, error)
+type StreamHandler func(*core.SSVMessage) (*core.SSVMessage, error)
 
 // SyncerV1 is the interface for syncing messages
 type SyncerV1 interface {
 	// LastState fetches last decided from a random set of peers
-	LastState(mid v1.Identifier) ([]v1.SSVMessage, error)
+	LastState(mid core.Identifier) ([]core.SSVMessage, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
-	GetHistory(mid v1.Identifier, from, to uint64) ([]v1.SSVMessage, error)
+	GetHistory(mid core.Identifier, from, to uint64) ([]core.SSVMessage, error)
 	// LastChangeRound fetches last change round message from a random set of peers
-	LastChangeRound(mid v1.Identifier) ([]v1.SSVMessage, error)
+	LastChangeRound(mid core.Identifier) ([]core.SSVMessage, error)
 	// SetStreamHandler registers the given handler for the stream
 	SetStreamHandler(protocol string, handler StreamHandler)
 }

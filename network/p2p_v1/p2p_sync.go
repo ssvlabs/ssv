@@ -2,7 +2,7 @@ package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/protocol/v1"
+	"github.com/bloxapp/ssv/protocol/v1/core"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
@@ -10,19 +10,19 @@ import (
 )
 
 // LastState fetches last decided from a random set of peers
-func (n *p2pNetwork) LastState(mid v1.Identifier) ([]v1.SSVMessage, error) {
+func (n *p2pNetwork) LastState(mid core.Identifier) ([]core.SSVMessage, error) {
 	// TODO
 	return nil, errors.New("not implemented")
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid v1.Identifier, from, to uint64) ([]v1.SSVMessage, error) {
+func (n *p2pNetwork) GetHistory(mid core.Identifier, from, to uint64) ([]core.SSVMessage, error) {
 	// TODO
 	return nil, errors.New("not implemented")
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
-func (n *p2pNetwork) LastChangeRound(mid v1.Identifier) ([]v1.SSVMessage, error) {
+func (n *p2pNetwork) LastChangeRound(mid core.Identifier) ([]core.SSVMessage, error) {
 	// TODO
 	return nil, errors.New("not implemented")
 }
@@ -41,7 +41,7 @@ func (n *p2pNetwork) SetStreamHandler(pid string, handler network.StreamHandler)
 			n.logger.Warn("could not decode msg from stream", zap.Error(err))
 			return
 		}
-		smsg, ok := msg.(*v1.SSVMessage)
+		smsg, ok := msg.(*core.SSVMessage)
 		if !ok {
 			n.logger.Warn("could not cast msg from stream", zap.Error(err))
 			return

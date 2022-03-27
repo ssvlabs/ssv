@@ -1,7 +1,7 @@
 package forks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1"
+	"github.com/bloxapp/ssv/protocol/v1/core"
 )
 
 // Fork is an interface for network specific fork implementations
@@ -15,6 +15,6 @@ type pubSubMapping interface {
 }
 
 type encoding interface {
-	EncodeNetworkMsg(msg v1.MessageEncoder) ([]byte, error)
-	DecodeNetworkMsg(data []byte) (v1.MessageEncoder, error)
+	EncodeNetworkMsg(msg core.MessageEncoder) ([]byte, error)
+	DecodeNetworkMsg(data []byte) (core.MessageEncoder, error)
 }

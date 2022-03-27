@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol/v1"
+	"github.com/bloxapp/ssv/protocol/v1/core"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -95,12 +95,12 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 	return pmsg
 }
 
-func dummySSVConsensusMsg(pkHex string, height int) (*v1.SSVMessage, error) {
+func dummySSVConsensusMsg(pkHex string, height int) (*core.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := v1.NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := core.NewIdentifier(pk, beacon.RoleTypeAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,
@@ -112,8 +112,8 @@ func dummySSVConsensusMsg(pkHex string, height int) (*v1.SSVMessage, error) {
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
 	  "signer_ids": [1,3,4]
 	}`, id, height)
-	return &v1.SSVMessage{
-		MsgType: v1.SSVConsensusMsgType,
+	return &core.SSVMessage{
+		MsgType: core.SSVConsensusMsgType,
 		ID:      id,
 		Data:    []byte(msgData),
 	}, nil

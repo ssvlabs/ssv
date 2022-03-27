@@ -1,11 +1,9 @@
-package signer
+package core
 
 import (
 	"encoding/hex"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
-	v1 "github.com/bloxapp/ssv/protocol/v1"
-	"github.com/bloxapp/ssv/protocol/v1/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -14,16 +12,21 @@ import (
 type DomainType []byte
 
 var (
+	// PrimusTestnet is the domain type for the testnet
 	PrimusTestnet = DomainType("primus_testnet")
 )
 
+// SignatureType is the type of the signature
 type SignatureType []byte
 
 var (
-	QBFTSigType          = []byte{1, 0, 0, 0}
+	// QBFTSigType is the type for QBFT signatures
+	QBFTSigType = []byte{1, 0, 0, 0}
+	// PostConsensusSigType is the type for post consensus signatures
 	PostConsensusSigType = []byte{2, 0, 0, 0}
 )
 
+// BeaconSigner is the interface for signing duties
 type BeaconSigner interface {
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error)
@@ -33,7 +36,7 @@ type BeaconSigner interface {
 
 // SSVSigner used for all SSV specific signing
 type SSVSigner interface {
-	SignRoot(data v1.Root, sigType SignatureType, pk []byte) (crypto.Signature, error)
+	SignRoot(data Root, sigType SignatureType, pk []byte) (Signature, error)
 }
 
 // KeyManager is an interface responsible for all key manager functions
@@ -51,6 +54,7 @@ type SSVKeyManager struct {
 	highestAttestation *spec.AttestationData
 }
 
+// NewSSVKeyManager creates a new instance of key manager
 func NewSSVKeyManager(domain DomainType) KeyManager {
 	return &SSVKeyManager{
 		keys:   make(map[string]*bls.SecretKey),
@@ -84,9 +88,10 @@ func (s *SSVKeyManager) IsAttestationSlashable(data *spec.AttestationData) error
 	return nil
 }
 
-func (s *SSVKeyManager) SignRoot(data v1.Root, sigType SignatureType, pk []byte) (crypto.Signature, error) {
+// SignRoot signs the root
+func (s *SSVKeyManager) SignRoot(data Root, sigType SignatureType, pk []byte) (Signature, error) {
 	if k, found := s.keys[hex.EncodeToString(pk)]; found {
-		computedRoot, err := crypto.ComputeSigningRoot(data, crypto.ComputeSignatureDomain(s.domain, sigType))
+		computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(s.domain, sigType))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign root")
 		}

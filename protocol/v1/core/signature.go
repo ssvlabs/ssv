@@ -1,20 +1,37 @@
-package crypto
+package core
 
 import (
 	"crypto/sha256"
 	"fmt"
-	v1 "github.com/bloxapp/ssv/protocol/v1"
-	"github.com/bloxapp/ssv/protocol/v1/operator/types"
-	"github.com/bloxapp/ssv/protocol/v1/signer"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
 
+// Root holds an interface to access the root for signing/verification
+type Root interface {
+	// GetRoot returns the root used for signing and verification
+	GetRoot() ([]byte, error)
+}
+
+// MessageSignature includes all functions relevant for a signed message (QBFT message, post consensus msg, etc)
+type MessageSignature interface {
+	Root
+	GetSignature() Signature
+	GetSigners() []OperatorID
+	// MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
+	MatchedSigners(ids []OperatorID) bool
+	// Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
+	Aggregate(signedMsg MessageSignature) error
+}
+
+// SignatureDomain represents signature domain bytes
 type SignatureDomain []byte
+
+// Signature represents signature bytes
 type Signature []byte
 
 // VerifyByOperators verifies signature by the provided operators
-func (s Signature) VerifyByOperators(data v1.MessageSignature, domain signer.DomainType, sigType signer.SignatureType, operators []*types.Operator) error {
+func (s Signature) VerifyByOperators(data MessageSignature, domain DomainType, sigType SignatureType, operators []*Operator) error {
 	pks := make([][]byte, 0)
 	for _, id := range data.GetSigners() {
 		found := false
@@ -31,7 +48,8 @@ func (s Signature) VerifyByOperators(data v1.MessageSignature, domain signer.Dom
 	return s.VerifyMultiPubKey(data, domain, sigType, pks)
 }
 
-func (s Signature) VerifyMultiPubKey(data v1.Root, domain signer.DomainType, sigType signer.SignatureType, pks [][]byte) error {
+// VerifyMultiPubKey verifies the signature for multiple public keys
+func (s Signature) VerifyMultiPubKey(data Root, domain DomainType, sigType SignatureType, pks [][]byte) error {
 	var aggPK *bls.PublicKey
 	for _, pkByts := range pks {
 		pk := &bls.PublicKey{}
@@ -53,7 +71,8 @@ func (s Signature) VerifyMultiPubKey(data v1.Root, domain signer.DomainType, sig
 	return s.Verify(data, domain, sigType, aggPK.Serialize())
 }
 
-func (s Signature) Verify(data v1.Root, domain signer.DomainType, sigType signer.SignatureType, pkByts []byte) error {
+// Verify verifies the signature for the given public key
+func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, pkByts []byte) error {
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
 		return errors.Wrap(err, "failed to deserialize signature")
@@ -74,6 +93,7 @@ func (s Signature) Verify(data v1.Root, domain signer.DomainType, sigType signer
 	return nil
 }
 
+// Aggregate aggregates other signatures
 func (s Signature) Aggregate(other Signature) (Signature, error) {
 	s1 := &bls.Sign{}
 	if err := s1.Deserialize(s); err != nil {
@@ -89,7 +109,8 @@ func (s Signature) Aggregate(other Signature) (Signature, error) {
 	return s1.Serialize(), nil
 }
 
-func ComputeSigningRoot(data v1.Root, domain SignatureDomain) ([]byte, error) {
+// ComputeSigningRoot computes the signing root
+func ComputeSigningRoot(data Root, domain SignatureDomain) ([]byte, error) {
 	dataRoot, err := data.GetRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get root from Root")
@@ -99,13 +120,14 @@ func ComputeSigningRoot(data v1.Root, domain SignatureDomain) ([]byte, error) {
 	return ret[:], nil
 }
 
-func ComputeSignatureDomain(domain signer.DomainType, sigType signer.SignatureType) SignatureDomain {
+// ComputeSignatureDomain computes the signature domain according to domain+signature types
+func ComputeSignatureDomain(domain DomainType, sigType SignatureType) SignatureDomain {
 	return SignatureDomain(append(domain, sigType...))
 }
 
 // ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
 // It then reconstructs the original threshold signature using lagrange interpolation
-func ReconstructSignatures(signatures map[types.OperatorID][]byte) (*bls.Sign, error) {
+func ReconstructSignatures(signatures map[OperatorID][]byte) (*bls.Sign, error) {
 	reconstructedSig := bls.Sign{}
 
 	idVec := make([]bls.ID, 0)
@@ -132,6 +154,7 @@ func ReconstructSignatures(signatures map[types.OperatorID][]byte) (*bls.Sign, e
 	return &reconstructedSig, err
 }
 
+// VerifyReconstructedSignature verifies the reconstructed signature
 func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey, root []byte) error {
 	pk := &bls.PublicKey{}
 	if err := pk.Deserialize(validatorPubKey); err != nil {
