@@ -2,8 +2,11 @@ package exporter
 
 import (
 	"context"
-	"crypto/rsa"
 	"fmt"
+	"log"
+	"net/http"
+	"time"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
@@ -20,12 +23,10 @@ import (
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
+
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"log"
-	"net/http"
-	"time"
 )
 
 type config struct {
@@ -124,12 +125,7 @@ var StartExporterNodeCmd = &cobra.Command{
 			ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 			ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 			RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
-			// using an empty private key provider
-			// because the exporter doesn't run in the context of an operator
-			ShareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
-				return nil, true, nil
-			},
-			AbiVersion: cfg.ETH1Options.AbiVersion,
+			AbiVersion:           cfg.ETH1Options.AbiVersion,
 		})
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))

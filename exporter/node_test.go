@@ -157,13 +157,13 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 		require.Equal(t, len(operators), 1)
 	})
 
-	t.Run("V2 abi handling", func(t *testing.T) {
+	t.Run("V1 abi handling", func(t *testing.T) {
 		// pushing 2 events and waits for handling
 		wg.Add(1)
-		feed.Send(validatorAddedMockEvent(t, eth1.V2))
+		feed.Send(validatorAddedMockEvent(t, eth1.V1))
 
 		wg.Add(1)
-		feed.Send(operatorAddedMockEvent(t, eth1.V2))
+		feed.Send(operatorAddedMockEvent(t, eth1.V1))
 
 		wg.Wait()
 
@@ -173,7 +173,7 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 
 		operators, err := exp.storage.ListOperators(0, 1)
 		require.NoError(t, err)
-		require.Equal(t, len(operators), 2)
+		require.Equal(t, len(operators), 1)
 	})
 
 }
@@ -222,8 +222,8 @@ func TestToValidatorInformation(t *testing.T) {
 		require.True(t, strings.EqualFold(hex.EncodeToString(vae.PublicKey), vi.PublicKey))
 	})
 
-	t.Run("V2 abi handling", func(t *testing.T) {
-		e := validatorAddedMockEvent(t, eth1.V2)
+	t.Run("V1 abi handling", func(t *testing.T) {
+		e := validatorAddedMockEvent(t, eth1.V1)
 		vae, ok := e.Data.(abiparser.ValidatorAddedEvent)
 		require.True(t, ok)
 
@@ -237,7 +237,7 @@ func TestToValidatorInformation(t *testing.T) {
 func validatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	var rawValidatorAdded string
 	switch abiVersion {
-	case eth1.V2:
+	case eth1.V1:
 		rawValidatorAdded = `{
    "address":"0xd594c1ef4845713e86658cb42227a811625a285b",
    "topics":[
@@ -274,7 +274,7 @@ func validatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event 
 	require.NotNil(t, contractAbi)
 
 	abiParser := eth1.NewParser(logex.Build("test", zap.InfoLevel, nil), abiVersion)
-	parsed, _, _, err := abiParser.ParseValidatorAddedEvent(nil, vLogValidatorAdded.Data, contractAbi)
+	parsed, _, err := abiParser.ParseValidatorAddedEvent(vLogValidatorAdded.Data, contractAbi)
 	require.NoError(t, err)
 
 	return &eth1.Event{Log: types.Log{}, Data: *parsed}
@@ -283,7 +283,7 @@ func validatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event 
 func operatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	var rawOperatorAdded string
 	switch abiVersion {
-	case eth1.V2:
+	case eth1.V1:
 		rawOperatorAdded = `{
    "address":"0xd594c1ef4845713e86658cb42227a811625a285b",
    "topics":[
@@ -322,7 +322,7 @@ func operatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	require.NotNil(t, contractAbi)
 
 	abiParser := eth1.NewParser(logex.GetLogger(), abiVersion)
-	parsed, _, _, err := abiParser.ParseOperatorAddedEvent("", vLogOperatorAdded.Data, vLogOperatorAdded.Topics, contractAbi)
+	parsed, _, err := abiParser.ParseOperatorAddedEvent(vLogOperatorAdded.Data, vLogOperatorAdded.Topics, contractAbi)
 	require.NoError(t, err)
 
 	return &eth1.Event{Log: types.Log{}, Data: *parsed}

@@ -1,8 +1,6 @@
 package abiparser
 
 import (
-	"crypto/rsa"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -19,55 +17,53 @@ type Oess struct {
 	EncryptedKey      []byte
 }
 
-// LegacyValidatorAddedEvent struct represents event received by the smart contract
-type LegacyValidatorAddedEvent struct {
+// ValidatorAddedEventLegacy struct represents event received by the smart contract
+type ValidatorAddedEventLegacy struct {
 	PublicKey    []byte
 	OwnerAddress common.Address
 	OessList     []Oess
 }
 
-// LegacyOperatorAddedEvent struct represents event received by the smart contract
-type LegacyOperatorAddedEvent struct {
+// OperatorAddedEventLegacy struct represents event received by the smart contract
+type OperatorAddedEventLegacy struct {
 	Name           string
 	PublicKey      []byte
 	PaymentAddress common.Address
 	OwnerAddress   common.Address
 }
 
-// LegacyAdapter between legacy to v2 format
-type LegacyAdapter struct {
-	legacyAbi *LegacyAbi
+// AdapterLegacy between legacy to v1 format
+type AdapterLegacy struct {
+	legacyAbi *AbiLegacy
 }
 
-// ParseOperatorAddedEvent parses LegacyOperatorAddedEvent to OperatorAddedEvent
-func (adapter LegacyAdapter) ParseOperatorAddedEvent(
+// ParseOperatorAddedEvent parses OperatorAddedEventLegacy to OperatorAddedEvent
+func (a AdapterLegacy) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	operatorPubKey string,
 	data []byte,
 	topics []common.Hash,
 	contractAbi abi.ABI,
-) (*OperatorAddedEvent, bool, bool, error) {
-	event, isOperatorEvent, unpackErr, err := adapter.legacyAbi.ParseOperatorAddedEvent(logger, operatorPubKey, data, contractAbi)
+) (*OperatorAddedEvent, bool, error) {
+	event, unpackErr, err := a.legacyAbi.ParseOperatorAddedEvent(logger, data, contractAbi)
 	if event == nil {
-		return nil, isOperatorEvent, unpackErr, err
+		return nil, unpackErr, err
 	}
 	return &OperatorAddedEvent{
 		Name:         event.Name,
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.OwnerAddress,
-	}, isOperatorEvent, unpackErr, err
+	}, unpackErr, err
 }
 
-// ParseValidatorAddedEvent parses LegacyValidatorAddedEvent to ValidatorAddedEvent
-func (adapter LegacyAdapter) ParseValidatorAddedEvent(
+// ParseValidatorAddedEvent parses ValidatorAddedEventLegacy to ValidatorAddedEvent
+func (a AdapterLegacy) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	operatorPrivateKey *rsa.PrivateKey,
 	data []byte,
 	contractAbi abi.ABI,
-) (*ValidatorAddedEvent, bool, bool, error) {
-	event, isOperatorEvent, unpackErr, err := adapter.legacyAbi.ParseValidatorAddedEvent(logger, operatorPrivateKey, data, contractAbi)
+) (*ValidatorAddedEvent, bool, error) {
+	event, unpackErr, err := a.legacyAbi.ParseValidatorAddedEvent(logger, data, contractAbi)
 	if event == nil {
-		return nil, isOperatorEvent, unpackErr, err
+		return nil, unpackErr, err
 	}
 
 	unPackOess := func(oesses []Oess) ([][]byte, [][]byte, [][]byte) {
@@ -87,91 +83,72 @@ func (adapter LegacyAdapter) ParseValidatorAddedEvent(
 		OperatorPublicKeys: operatorPublicKeys,
 		SharesPublicKeys:   sharesPublicKeys,
 		EncryptedKeys:      encryptedKeys,
-	}, isOperatorEvent, unpackErr, err
+	}, unpackErr, err
 }
 
-// LegacyAbi parsing events from legacy abi contract
-type LegacyAbi struct {
+// AbiLegacy parsing events from legacy abi contract
+type AbiLegacy struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (l *LegacyAbi) ParseOperatorAddedEvent(
+func (a *AbiLegacy) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	operatorPubKey string,
 	data []byte,
 	contractAbi abi.ABI,
-) (*LegacyOperatorAddedEvent, bool, bool, error) {
-	var operatorAddedEvent LegacyOperatorAddedEvent
+) (*OperatorAddedEventLegacy, bool, error) {
+	var operatorAddedEvent OperatorAddedEventLegacy
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
 	if err != nil {
-		return nil, false, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
+		return nil, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
 	outAbi, err := getOutAbi()
 	if err != nil {
-		return nil, false, false, err
+		return nil, false, err
 	}
 	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
 	if err != nil {
-		return nil, false, true, err
+		return nil, true, err
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
-	isOperatorEvent := strings.EqualFold(pubKey, operatorPubKey)
-	return &operatorAddedEvent, isOperatorEvent, false, nil
+	return &operatorAddedEvent, false, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (l *LegacyAbi) ParseValidatorAddedEvent(
+func (a *AbiLegacy) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	operatorPrivateKey *rsa.PrivateKey,
 	data []byte,
 	contractAbi abi.ABI,
-) (*LegacyValidatorAddedEvent, bool, bool, error) {
-	var validatorAddedEvent LegacyValidatorAddedEvent
+) (*ValidatorAddedEventLegacy, bool, error) {
+	var validatorAddedEvent ValidatorAddedEventLegacy
 	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
 	if err != nil {
-		return nil, false, true, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
+		return nil, true, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
 	}
 
-	var isOperatorEvent bool
+	outAbi, err := getOutAbi()
+	if err != nil {
+		return nil, false, errors.Wrap(err, "failed to define ABI")
+	}
+
 	for i := range validatorAddedEvent.OessList {
 		validatorShare := &validatorAddedEvent.OessList[i]
 
-		outAbi, err := getOutAbi()
-		if err != nil {
-			return nil, false, false, errors.Wrap(err, "failed to define ABI")
-		}
 		operatorPublicKey, err := readOperatorPubKey(validatorShare.OperatorPublicKey, outAbi)
 		if err != nil {
-			return nil, false, true, errors.Wrap(err, "failed to read OperatorPublicKey")
+			return nil, true, errors.Wrap(err, "failed to read OperatorPublicKey")
 		}
-
 		validatorShare.OperatorPublicKey = []byte(operatorPublicKey) // set for further use in code
-		if operatorPrivateKey == nil {
-			continue
-		}
-		nodeOperatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
-		if err != nil {
-			return nil, false, false, errors.Wrap(err, "failed to extract public key")
-		}
-		if strings.EqualFold(operatorPublicKey, nodeOperatorPubKey) {
-			out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
-			if err != nil {
-				return nil, false, true, errors.Wrap(err, "failed to unpack EncryptedKey")
-			}
 
-			if encryptedSharePrivateKey, ok := out[0].(string); ok {
-				decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedSharePrivateKey)
-				decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
-				if err != nil {
-					return nil, false, false, errors.Wrap(err, "failed to decrypt share private key")
-				}
-				validatorShare.EncryptedKey = []byte(decryptedSharePrivateKey)
-				isOperatorEvent = true
-			}
+		out, err := outAbi.Unpack("method", validatorShare.EncryptedKey)
+		if err != nil {
+			return nil, true, errors.Wrap(err, "failed to unpack EncryptedKey")
+		}
+		if encryptedSharePrivateKey, ok := out[0].(string); ok {
+			validatorShare.EncryptedKey = []byte(encryptedSharePrivateKey)
 		}
 	}
 
-	return &validatorAddedEvent, isOperatorEvent, false, nil
+	return &validatorAddedEvent, false, nil
 }
 
 func readOperatorPubKey(operatorPublicKey []byte, outAbi abi.ABI) (string, error) {

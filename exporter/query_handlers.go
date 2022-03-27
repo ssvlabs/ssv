@@ -18,8 +18,8 @@ const (
 
 func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
 	res := api.Message{
@@ -37,8 +37,8 @@ func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsC
 
 func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles validators request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	res := api.Message{
 		Type:   nm.Msg.Type,
@@ -56,8 +56,8 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 
 func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
 	logger.Debug("handles decided request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey),
 		zap.String("role", string(nm.Msg.Filter.Role)))
 	res := api.Message{

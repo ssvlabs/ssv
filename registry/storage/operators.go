@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -16,27 +18,28 @@ var (
 	operatorsPrefix = []byte("operators")
 )
 
-// OperatorInformation the public data of an operator
-type OperatorInformation struct {
+// OperatorData the public data of an operator
+type OperatorData struct {
+	Index        uint64         `json:"index"`
 	PublicKey    string         `json:"publicKey"`
 	Name         string         `json:"name"`
 	OwnerAddress common.Address `json:"ownerAddress"`
-	Index        int64          `json:"index"`
 }
 
-// OperatorsCollection is the interface for managing operators information
+// OperatorsCollection is the interface for managing operators data
 type OperatorsCollection interface {
-	GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error)
-	SaveOperatorInformation(operatorInformation *OperatorInformation) error
-	ListOperators(from int64, to int64) ([]OperatorInformation, error)
+	GetOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error)
+	GetOperatorData(index uint64) (*OperatorData, bool, error)
+	SaveOperatorData(operatorData *OperatorData) error
+	ListOperators(from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 }
 
 type operatorsStorage struct {
-	db            basedb.IDb
-	logger        *zap.Logger
-	operatorsLock sync.RWMutex
-	prefix        []byte
+	db     basedb.IDb
+	logger *zap.Logger
+	lock   sync.RWMutex
+	prefix []byte
 }
 
 // NewOperatorsStorage creates a new instance of Storage
@@ -53,20 +56,66 @@ func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 	return operatorsPrefix
 }
 
-// ListOperators returns information of the all known operators
+// ListOperators returns data of the all known operators by index range (from, to)
 // when 'to' equals zero, all operators will be returned
-func (s *operatorsStorage) ListOperators(from int64, to int64) ([]OperatorInformation, error) {
-	s.operatorsLock.RLock()
-	defer s.operatorsLock.RUnlock()
+func (s *operatorsStorage) ListOperators(from, to uint64) ([]OperatorData, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
-	var operators []OperatorInformation
+	return s.listOperators(from, to)
+}
+
+// GetOperatorData returns data of the given operator by index
+func (s *operatorsStorage) GetOperatorData(index uint64) (*OperatorData, bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.getOperatorData(index)
+}
+
+// GetOperatorDataByPubKey returns data of the given operator by public key
+func (s *operatorsStorage) GetOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.getOperatorDataByPubKey(operatorPubKey)
+}
+
+func (s *operatorsStorage) getOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error) {
+	operatorsData, err := s.listOperators(0, 0)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "could not get all operators")
+	}
+	for _, op := range operatorsData {
+		if strings.EqualFold(op.PublicKey, operatorPubKey) {
+			return &op, true, nil
+		}
+	}
+	return nil, false, nil
+}
+
+func (s *operatorsStorage) getOperatorData(index uint64) (*OperatorData, bool, error) {
+	obj, found, err := s.db.Get(s.prefix, buildOperatorKey(index))
+	if !found {
+		return nil, found, nil
+	}
+	if err != nil {
+		return nil, found, err
+	}
+	var operatorInformation OperatorData
+	err = json.Unmarshal(obj.Value, &operatorInformation)
+	return &operatorInformation, found, err
+}
+
+func (s *operatorsStorage) listOperators(from, to uint64) ([]OperatorData, error) {
+	var operators []OperatorData
 	err := s.db.GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
-		var oi OperatorInformation
-		if err := json.Unmarshal(obj.Value, &oi); err != nil {
+		var od OperatorData
+		if err := json.Unmarshal(obj.Value, &od); err != nil {
 			return err
 		}
-		if oi.Index >= from && oi.Index <= to {
-			operators = append(operators, oi)
+		if (od.Index >= from && od.Index <= to) || (to == 0) {
+			operators = append(operators, od)
 		}
 		return nil
 	})
@@ -74,63 +123,30 @@ func (s *operatorsStorage) ListOperators(from int64, to int64) ([]OperatorInform
 	return operators, err
 }
 
-// GetOperatorInformation returns information of the given operator by public key
-func (s *operatorsStorage) GetOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
-	s.operatorsLock.RLock()
-	defer s.operatorsLock.RUnlock()
+// SaveOperatorData saves operator data
+func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	return s.getOperatorInformation(operatorPubKey)
-}
-
-// GetOperatorInformation returns information of the given operator by public key
-func (s *operatorsStorage) getOperatorInformation(operatorPubKey string) (*OperatorInformation, bool, error) {
-	obj, found, err := s.db.Get(s.prefix, operatorKey(operatorPubKey))
-	if !found {
-		return nil, found, nil
-	}
+	_, found, err := s.getOperatorData(operatorData.Index)
 	if err != nil {
-		return nil, found, err
-	}
-	var operatorInformation OperatorInformation
-	err = json.Unmarshal(obj.Value, &operatorInformation)
-	return &operatorInformation, found, err
-}
-
-// SaveOperatorInformation saves operator information by its public key
-func (s *operatorsStorage) SaveOperatorInformation(operatorInformation *OperatorInformation) error {
-	s.operatorsLock.Lock()
-	defer s.operatorsLock.Unlock()
-
-	info, found, err := s.getOperatorInformation(operatorInformation.PublicKey)
-	if err != nil {
-		return errors.Wrap(err, "could not read information from DB")
+		return errors.Wrap(err, "could not get operator's data")
 	}
 	if found {
 		s.logger.Debug("operator already exist",
-			zap.String("pubKey", operatorInformation.PublicKey))
-		operatorInformation.Index = info.Index
-		// TODO: update operator information (i.e. change name)
+			zap.String("pubKey", operatorData.PublicKey),
+			zap.Uint64("index", operatorData.Index))
 		return nil
 	}
 
-	operatorInformation.Index, err = s.nextIndex(operatorsPrefix)
-	if err != nil {
-		return errors.Wrap(err, "could not calculate next operator index")
-	}
-	raw, err := json.Marshal(operatorInformation)
+	raw, err := json.Marshal(operatorData)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
 	}
-	return s.db.Set(s.prefix, operatorKey(operatorInformation.PublicKey), raw)
+	return s.db.Set(s.prefix, buildOperatorKey(operatorData.Index), raw)
 }
 
-func (s *operatorsStorage) nextIndex(prefix []byte) (int64, error) {
-	return s.db.CountByCollection(append(s.prefix, prefix...))
-}
-
-func operatorKey(pubKey string) []byte {
-	return bytes.Join([][]byte{
-		operatorsPrefix[:],
-		[]byte(pubKey),
-	}, []byte("/"))
+// buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
+func buildOperatorKey(index uint64) []byte {
+	return bytes.Join([][]byte{operatorsPrefix[:], []byte(strconv.FormatUint(index, 10))}, []byte("/"))
 }

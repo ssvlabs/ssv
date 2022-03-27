@@ -83,23 +83,26 @@ func TestHandleOperatorsQuery(t *testing.T) {
 	defer done()
 	s, _ := newStorageForTest(db, l)
 
-	ois := []registrystorage.OperatorInformation{
+	ods := []registrystorage.OperatorData{
 		{
 			PublicKey:    "01010101",
 			Name:         "my_operator1",
 			OwnerAddress: common.Address{},
+			Index:        0,
 		}, {
 			PublicKey:    "02020202",
 			Name:         "my_operator2",
 			OwnerAddress: common.Address{},
+			Index:        1,
 		}, {
 			PublicKey:    "03030303",
 			Name:         "my_operator3",
 			OwnerAddress: common.Address{},
+			Index:        2,
 		},
 	}
-	for _, oi := range ois {
-		err := s.SaveOperatorInformation(&oi)
+	for _, od := range ods {
+		err := s.SaveOperatorData(&od)
 		require.NoError(t, err)
 	}
 
@@ -114,12 +117,12 @@ func TestHandleOperatorsQuery(t *testing.T) {
 		}
 		handleOperatorsQuery(l, s, &nm)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]registrystorage.OperatorInformation)
+		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
 		require.Equal(t, 2, len(results))
 		for _, op := range results {
 			require.True(t, strings.Contains(op.Name, "my_operator"))
-			require.Less(t, op.Index, int64(2))
+			require.Less(t, op.Index, uint64(2))
 		}
 	})
 
@@ -134,7 +137,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 		}
 		handleOperatorsQuery(l, s, &nm)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]registrystorage.OperatorInformation)
+		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
 		require.Equal(t, 0, len(results))
 	})
@@ -150,12 +153,12 @@ func TestHandleOperatorsQuery(t *testing.T) {
 		}
 		handleOperatorsQuery(l, s, &nm)
 		require.Equal(t, api.TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]registrystorage.OperatorInformation)
+		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
 		require.Equal(t, 1, len(results))
 		require.Equal(t, "my_operator3", results[0].Name)
 		require.Equal(t, "03030303", results[0].PublicKey)
-		require.Equal(t, int64(2), results[0].Index)
+		require.Equal(t, uint64(2), results[0].Index)
 	})
 }
 
@@ -285,7 +288,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 }
 
-func newDecidedAPIMsg(pk string, from, to int64) *api.NetworkMessage {
+func newDecidedAPIMsg(pk string, from, to uint64) *api.NetworkMessage {
 	return &api.NetworkMessage{
 		Msg: api.Message{
 			Type: api.TypeDecided,

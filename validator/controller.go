@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/hex"
 	"sync"
 	"time"
@@ -33,6 +34,9 @@ const (
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *validatorstorage.Share)
 
+// ShareEncryptionKeyProvider is a function that returns the operator private key
+type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
+
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
@@ -45,7 +49,7 @@ type ControllerOptions struct {
 	Network                    network.Network
 	Beacon                     beacon.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
-	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	Fork                       forks.Fork
 	KeyManager                 beacon.KeyManager
@@ -75,7 +79,7 @@ type controller struct {
 	beacon     beacon.Beacon
 	keyManager beacon.KeyManager
 
-	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
 
 	validatorsMap *validatorsMap
@@ -177,12 +181,12 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 				c.logger.Debug("validator was loaded already")
 				return nil
 			}
-			share, err := c.handleValidatorAddedEvent(ev, e.IsOperatorEvent)
+			share, IsOperatorShare, err := c.handleValidatorAddedEvent(ev)
 			if err != nil {
 				c.logger.Error("could not handle ValidatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
 				return err
 			}
-			if e.IsOperatorEvent {
+			if IsOperatorShare {
 				for _, h := range handlers {
 					h(share)
 				}
@@ -338,40 +342,53 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 // handleValidatorAddedEvent handles registry contract event for validator added
 func (c *controller) handleValidatorAddedEvent(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
-	isOperatorShare bool,
-) (*validatorstorage.Share, error) {
+) (*validatorstorage.Share, bool, error) {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
+	var isOperatorShare bool
 	if err != nil {
-		return nil, errors.Wrap(err, "could not check if validator share exist")
+		return nil, false, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		newValShare, shareSecret, err := createShareWithOperatorKey(validatorAddedEvent, c.operatorPubKey, isOperatorShare)
+		// TODO: check if we can extract this logic to controller and inject the operator private key
+		operatorPrivateKey, found, err := c.shareEncryptionKeyProvider()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to create share")
+			return nil, false, errors.Wrap(err, "failed to get operator private key")
+		}
+		if !found {
+			return nil, false, errors.New("failed to find operator private key")
+		}
+
+		newValShare, shareSecret, isOperatorShare, err := createShareWithOperatorKey(c.storage, validatorAddedEvent, operatorPrivateKey, c.operatorPubKey)
+		if err != nil {
+			return nil, false, errors.Wrap(err, "failed to create share")
 		}
 		if err := c.onNewShare(newValShare, shareSecret); err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
-			return nil, err
+			return nil, false, err
 		}
 		validatorShare = newValShare
 		if isOperatorShare {
 			logger := c.logger.With(zap.String("pubKey", pubKey))
 			logger.Debug("ValidatorAdded event was handled successfully")
 		}
+	} else {
+		isOperatorShare = validatorShare.IsOperatorShare(c.operatorPubKey)
 	}
-	return validatorShare, nil
+	return validatorShare, isOperatorShare, nil
 }
 
 // handleOperatorAddedEvent parses the given event and saves operator information
 func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
-	oi := registrystorage.OperatorInformation{
-		PublicKey:    string(event.PublicKey),
+	eventOperatorPubKey := string(event.PublicKey)
+	od := registrystorage.OperatorData{
+		PublicKey:    eventOperatorPubKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
+		Index:        event.Id.Uint64(),
 	}
-	err := c.storage.SaveOperatorInformation(&oi)
+	err := c.storage.SaveOperatorData(&od)
 	if err != nil {
 		return errors.Wrap(err, "could not save operator information")
 	}

@@ -53,7 +53,7 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	logger := exp.logger.With(zap.String("eventType", "ValidatorAdded"), zap.String("pubKey", pubKeyHex))
 	logger.Info("validator added event")
 	// save the share to be able to reuse IBFT functionality
-	validatorShare, _, err := validator.ShareFromValidatorAddedEvent(event, "")
+	validatorShare, _, _, err := validator.ShareFromValidatorAddedEvent(nil, "", event)
 	if err != nil {
 		return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
 	}
@@ -80,7 +80,7 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	go func() {
 		n := exp.ws.BroadcastFeed().Send(api.Message{
 			Type:   api.TypeValidator,
-			Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
+			Filter: api.MessageFilter{From: uint64(vi.Index), To: uint64(vi.Index)},
 			Data:   []storage.ValidatorInformation{*vi},
 		})
 		logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
@@ -98,22 +98,22 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
 	logger := exp.logger.With(zap.String("eventType", "OperatorAdded"),
 		zap.String("pubKey", string(event.PublicKey)))
-	oi := registrystorage.OperatorInformation{
+	od := registrystorage.OperatorData{
 		PublicKey:    string(event.PublicKey),
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
 	}
-	err := exp.storage.SaveOperatorInformation(&oi)
+	err := exp.storage.SaveOperatorData(&od)
 	if err != nil {
 		return err
 	}
-	reportOperatorIndex(exp.logger, &oi)
+	reportOperatorIndex(exp.logger, &od)
 
 	go func() {
 		n := exp.ws.BroadcastFeed().Send(api.Message{
 			Type:   api.TypeOperator,
-			Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
-			Data:   []registrystorage.OperatorInformation{oi},
+			Filter: api.MessageFilter{From: od.Index, To: od.Index},
+			Data:   []registrystorage.OperatorData{od},
 		})
 		logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
 	}()

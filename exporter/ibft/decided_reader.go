@@ -272,7 +272,7 @@ func newDecidedAPIMsg(msg *proto.SignedMessage, pk string) api.Message {
 		Type: api.TypeDecided,
 		Filter: api.MessageFilter{
 			PublicKey: pk,
-			From:      int64(msg.Message.SeqNumber), To: int64(msg.Message.SeqNumber),
+			From:      msg.Message.SeqNumber, To: msg.Message.SeqNumber,
 			Role: api.RoleAttester},
 		Data: []*proto.SignedMessage{msg},
 	}
