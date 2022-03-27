@@ -384,7 +384,7 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 		PublicKey:    eventOperatorPubKey,
 		Name:         event.Name,
 		OwnerAddress: event.OwnerAddress,
-		Index:        event.ID.Uint64(),
+		Index:        event.Id.Uint64(),
 	}
 	err := c.storage.SaveOperatorData(&od)
 	if err != nil {

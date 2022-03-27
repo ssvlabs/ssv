@@ -20,7 +20,7 @@ type ValidatorAddedEvent struct {
 
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
-	ID           *big.Int
+	Id           *big.Int //nolint
 	Name         string
 	OwnerAddress common.Address
 	PublicKey    []byte
