@@ -12,7 +12,6 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator/forks"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -222,11 +221,11 @@ func (c *controller) StartValidators() {
 		return
 	}
 	c.setupValidators(shares)
-	// inject handler for finding relevant operators
-	p2p.UseLookupOperatorHandler(c.network, func(oid string) bool {
-		_, ok := c.operatorsIDs.Load(oid)
-		return ok
-	})
+	//// inject handler for finding relevant operators
+	//p2p.UseLookupOperatorHandler(c.network, func(oid string) bool {
+	//	_, ok := c.operatorsIDs.Load(oid)
+	//	return ok
+	//})
 	// print current relevant operators (ids)
 	ids := []string{}
 	c.operatorsIDs.Range(func(key, value interface{}) bool {

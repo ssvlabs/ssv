@@ -7,25 +7,32 @@ import (
 )
 
 var (
-	metricsStreamRequests = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:p2p:streams:req:count:v0",
+	metricsStreamOutgoingRequests = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:streams:req:out",
 		Help: "Count requests made via streams",
-	})
-	metricsStreamRequestsActive = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:p2p:streams:req:active:v0",
+	}, []string{"pid"})
+	metricsStreamRequestsActive = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:streams:req:active",
 		Help: "Count requests made via streams",
-	})
-	metricsStreamRequestsSuccess = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "ssv:p2p:streams:req:success:v0",
+	}, []string{"pid"})
+	metricsStreamRequestsSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:streams:req:success",
 		Help: "Count successful requests made via streams",
-	})
-	metricsStreamResponses = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "ssv:p2p:streams:res:v0",
+	}, []string{"pid"})
+	metricsStreamResponses = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:streams:res",
 		Help: "Count responses for streams",
-	})
+	}, []string{"pid"})
+	metricsStreamRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:streams:req",
+		Help: "Count responses for streams",
+	}, []string{"pid"})
 )
 
 func init() {
+	if err := prometheus.Register(metricsStreamOutgoingRequests); err != nil {
+		log.Println("could not register prometheus collector")
+	}
 	if err := prometheus.Register(metricsStreamRequestsActive); err != nil {
 		log.Println("could not register prometheus collector")
 	}
@@ -33,6 +40,9 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsStreamResponses); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsStreamRequests); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

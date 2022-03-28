@@ -13,8 +13,12 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/p2p"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
+	"github.com/bloxapp/ssv/network/networkwrapper"
+	p2p "github.com/bloxapp/ssv/network/p2p"
+	"github.com/bloxapp/ssv/operator/forks"
+	operator_v0 "github.com/bloxapp/ssv/operator/forks/v0"
+	operator_v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
@@ -96,15 +100,26 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
+		// TODO - change via command line?
+		forker := forks.NewForker(forks.Config{
+			Logger:     Logger,
+			Network:    cfg.ETH2Options.Network,
+			ForkSlot:   99999999, // TODO by flag?
+			BeforeFork: operator_v0.New(),
+			PostFork:   operator_v1.New(),
+		})
+		forker.Start()
+
 		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
 		if err != nil {
 			log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.ReportLastMsg = true
 		// TODO add fork interface for exporter or use the same forks as in operator
-		cfg.P2pNetworkConfig.Fork = networkForkV0.New()
-		cfg.P2pNetworkConfig.NodeType = p2p.Exporter
-		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
+		cfg.P2pNetworkConfig.Fork = forksv0.New()
+		cfg.P2pNetworkConfig.Logger = Logger
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(nil)
+		Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+		network, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig, forker)
 		if err != nil {
 			Logger.Fatal("failed to create network", zap.Error(err))
 		}
@@ -157,7 +172,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
-		exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+		//exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
 		exporterOptions.NumOfInstances = cfg.NumOfInstances
 		exporterOptions.InstanceID = cfg.InstanceID
 

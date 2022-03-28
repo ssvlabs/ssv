@@ -9,10 +9,10 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
-	"github.com/bloxapp/ssv/network/p2p_v1/adapter"
-	"github.com/bloxapp/ssv/network/p2p_v1/adapter/v0"
-	"github.com/bloxapp/ssv/network/p2p_v1/adapter/v1"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
+	"github.com/bloxapp/ssv/network/p2p/adapter"
+	"github.com/bloxapp/ssv/network/p2p/adapter/v0"
+	"github.com/bloxapp/ssv/network/p2p/adapter/v1"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 

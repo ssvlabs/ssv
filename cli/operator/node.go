@@ -5,7 +5,7 @@ import (
 	"fmt"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/network/networkwrapper"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p_v1"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator/forks"
 	"log"
 	"net/http"

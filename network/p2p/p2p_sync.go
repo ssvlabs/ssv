@@ -1,125 +1,64 @@
-package p2p
+package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons/listeners"
-	core "github.com/libp2p/go-libp2p-core"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/bloxapp/ssv/protocol/v1/core"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-// sendSyncRequest sends a sync request and returns the result
-func (n *p2pNetwork) sendSyncRequest(peerStr string, protocol protocol.ID, msg *network.SyncMessage) (*network.Message, error) {
-	peerID, err := peerFromString(peerStr)
-	if err != nil {
-		return nil, err
-	}
-	res, err := n.streamCtrl.Request(peerID, protocol, &network.Message{
-		SyncMessage: msg,
-		Type:        network.NetworkMsg_SyncType,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to make sync request")
-	}
-	if res.SyncMessage == nil {
-		return nil, errors.New("no response for sync request")
-	}
-	n.logger.Debug("got sync response",
-		zap.String("FromPeerID", res.SyncMessage.GetFromPeerID()))
-	return res, nil
+// LastState fetches last decided from a random set of peers
+func (n *p2pNetwork) LastState(mid core.Identifier) ([]core.SSVMessage, error) {
+	// TODO
+	return nil, errors.New("not implemented")
 }
 
-// RespondSyncMsg responds to the given stream
-func (n *p2pNetwork) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
-	msg.FromPeerID = n.host.ID().Pretty()
-	return n.streamCtrl.Respond(&network.Message{
-		SyncMessage: msg,
-		Type:        network.NetworkMsg_SyncType,
-		StreamID:    streamID,
-	})
+// GetHistory sync the given range from a set of peers that supports history for the given identifier
+func (n *p2pNetwork) GetHistory(mid core.Identifier, from, to uint64) ([]core.SSVMessage, error) {
+	// TODO
+	return nil, errors.New("not implemented")
 }
 
-func (n *p2pNetwork) setLegacyStreamHandler() {
-	n.host.SetStreamHandler("/sync/0.0.1", func(stream core.Stream) {
-		cm, _, err := n.streamCtrl.HandleStream(stream)
+// LastChangeRound fetches last change round message from a random set of peers
+func (n *p2pNetwork) LastChangeRound(mid core.Identifier) ([]core.SSVMessage, error) {
+	// TODO
+	return nil, errors.New("not implemented")
+}
+
+// SetStreamHandler registers the given handler for the stream
+func (n *p2pNetwork) SetStreamHandler(pid string, handler network.StreamHandler) {
+	n.host.SetStreamHandler(libp2p_protocol.ID(pid), func(stream libp2pnetwork.Stream) {
+		req, respond, done, err := n.streamCtrl.HandleStream(stream)
+		defer done()
 		if err != nil {
-			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
+			//n.logger.Warn("could not handle stream", zap.Error(err))
 			return
 		}
-		if cm == nil {
-			n.logger.Debug("got nil sync message")
+		msg, err := n.fork.DecodeNetworkMsg(req)
+		if err != nil {
+			n.logger.Warn("could not decode msg from stream", zap.Error(err))
 			return
 		}
-		// adjusting message and propagating to other (internal) components
-		cm.SyncMessage.FromPeerID = stream.Conn().RemotePeer().String()
-		go propagateSyncMessage(n.listeners.GetListeners(network.NetworkMsg_SyncType), cm)
+		smsg, ok := msg.(*core.SSVMessage)
+		if !ok {
+			n.logger.Warn("could not cast msg from stream", zap.Error(err))
+			return
+		}
+		result, err := handler(smsg)
+		if err != nil {
+			n.logger.Warn("could not handle msg from stream")
+			return
+		}
+		resultBytes, err := n.fork.EncodeNetworkMsg(result)
+		if err != nil {
+			n.logger.Warn("could not encode msg", zap.Error(err))
+			return
+		}
+		if err := respond(resultBytes); err != nil {
+			n.logger.Warn("could not respond to stream", zap.Error(err))
+			return
+		}
 	})
-}
-
-//func (n *p2pNetwork) setHighestDecidedStreamHandler() {
-//	n.host.SetStreamHandler(highestDecidedStream, func(stream core.Stream) {
-//		cm, s, err := n.preStreamHandler(stream)
-//		if err != nil {
-//			n.logger.Error(" highest decided preStreamHandler failed", zap.Error(err))
-//			return
-//		}
-//		n.propagateSyncMsg(cm, s)
-//	})
-//}
-//
-//func (n *p2pNetwork) setDecidedByRangeStreamHandler() {
-//	n.host.SetStreamHandler(decidedByRangeStream, func(stream core.Stream) {
-//		cm, s, err := n.preStreamHandler(stream)
-//		if err != nil {
-//			n.logger.Error("decided by range preStreamHandler failed", zap.Error(err))
-//			return
-//		}
-//		n.propagateSyncMsg(cm, s)
-//	})
-//}
-//
-//func (n *p2pNetwork) setLastChangeRoundStreamHandler() {
-//	n.host.SetStreamHandler(lastChangeRoundMsgStream, func(stream core.Stream) {
-//		cm, s, err := n.preStreamHandler(stream)
-//		if err != nil {
-//			n.logger.Error("last change round preStreamHandler failed", zap.Error(err))
-//			return
-//		}
-//		n.propagateSyncMsg(cm, s)
-//	})
-//}
-
-// GetHighestDecidedInstance asks peers for SyncMessage
-func (n *p2pNetwork) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	res, err := n.sendSyncRequest(peerStr, legacyMsgStream, msg)
-	if err != nil || res == nil {
-		return nil, err
-	}
-	return res.SyncMessage, nil
-}
-
-// GetDecidedByRange returns a list of decided signed messages up to 25 in a batch.
-func (n *p2pNetwork) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	res, err := n.sendSyncRequest(peerStr, legacyMsgStream, msg)
-	if err != nil {
-		return nil, err
-	}
-	return res.SyncMessage, nil
-}
-
-// GetLastChangeRoundMsg returns the latest change round msg for a running instance, could return nil
-func (n *p2pNetwork) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
-	res, err := n.sendSyncRequest(peerStr, legacyMsgStream, msg)
-	if err != nil || res == nil {
-		return nil, err
-	}
-	return res.SyncMessage, nil
-}
-
-// ReceivedSyncMsgChan returns the channel for sync messages
-func (n *p2pNetwork) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
-	ls := listeners.NewListener(network.NetworkMsg_SyncType)
-
-	return ls.SyncChan(), n.listeners.Register(ls)
 }
