@@ -12,8 +12,7 @@ RUN npm install -g ganache-cli
 
 RUN git clone -b unstable https://github.com/sigp/lighthouse.git /lighthouse
 
-# TODO: add scripts
-COPY ./scripts /scripts
-RUN bash /scripts/patch.sh
+COPY start.sh /scripts/start.sh
+COPY vars.env /lighthouse/scripts/local_testnet/vars.env
 
 ENTRYPOINT bash /scripts/start.sh
