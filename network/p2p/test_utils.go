@@ -23,7 +23,7 @@ type LoggerFactory func(string) *zap.Logger
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	Nodes    []network.V1
+	Nodes    []network.P2PNetwork
 	NodeKeys []testing.NodeKeys
 	Bootnode *discovery.Bootnode
 
@@ -66,7 +66,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n
 			logger.Error("could not start node", zap.Error(err))
 		}
 		wg.Add(1)
-		go func(node network.V1) {
+		go func(node network.P2PNetwork) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(pctx, time.Second*10)
 			defer cancel()
@@ -98,7 +98,7 @@ func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDis
 		}
 	}
 	i := 1
-	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.V1 {
+	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		logger := loggerFactory(fmt.Sprintf("node-%d", i))
 		operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 		if err != nil {

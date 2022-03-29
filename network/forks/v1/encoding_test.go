@@ -2,7 +2,7 @@ package v1
 
 import (
 	"bytes"
-	v1_protocol "github.com/bloxapp/ssv/protocol/v1/core"
+	v1_protocol "github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

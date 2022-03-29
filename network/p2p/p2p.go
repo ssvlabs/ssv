@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// p2pNetwork implements network.V1
+// p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
@@ -32,7 +32,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(pctx context.Context, cfg *Config) network.V1 {
+func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(pctx)
 	return &p2pNetwork{
 		ctx:       ctx,

@@ -2,13 +2,12 @@ package streams
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/libp2p/go-libp2p"
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"sync"
 	"testing"
 	"time"
@@ -75,11 +74,18 @@ func testHosts(t *testing.T, n int) []host.Host {
 		h, err := libp2p.New(ctx,
 			libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 		require.NoError(t, err)
-		require.NoError(t, discovery.SetupMdnsDiscovery(ctx, zap.L(), h))
 		hosts[i] = h
 	}
 
-	<-time.After(time.Millisecond * 1500) // important to let nodes reach each other
+	for i, current := range hosts {
+		for j, h := range hosts {
+			if i != j {
+				_ = current.Connect(ctx, peer.AddrInfo{ID: h.ID(), Addrs: h.Addrs()})
+			}
+		}
+	}
+
+	<-time.After(time.Millisecond * 1500) // let nodes reach each other
 
 	return hosts
 }

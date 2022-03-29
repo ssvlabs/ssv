@@ -1,16 +1,17 @@
-package v1
+package message
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/core"
 )
 
 // StatusCode is the response status code
 type StatusCode uint32
 
 const (
+	// StatusUnknown represents an unknown state
+	StatusUnknown StatusCode = iota
 	// StatusSuccess means the request went successfully
-	StatusSuccess StatusCode = iota
+	StatusSuccess
 	// StatusNotFound means the desired objects were not found
 	StatusNotFound
 	// StatusBadRequest means the request was bad
@@ -26,7 +27,7 @@ type SyncParams struct {
 	// Height of the message, it can hold up to 2 items to specify a range or a single item for specific height
 	Height []Height
 	// Identifier of the message
-	Identifier core.Identifier
+	Identifier Identifier
 }
 
 // SyncMessage is the message being passed in sync operations

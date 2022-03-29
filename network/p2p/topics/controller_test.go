@@ -9,7 +9,7 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
-	"github.com/bloxapp/ssv/protocol/v1/core"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -307,12 +307,12 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	return p
 }
 
-func dummyMsg(pkHex string, height int) (*core.SSVMessage, error) {
+func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := core.NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := message.NewIdentifier(pk, beacon.RoleTypeAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,
@@ -324,8 +324,8 @@ func dummyMsg(pkHex string, height int) (*core.SSVMessage, error) {
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
 	  "signer_ids": [1,3,4]
 	}`, id, height)
-	return &core.SSVMessage{
-		MsgType: core.SSVConsensusMsgType,
+	return &message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
 		ID:      id,
 		Data:    []byte(msgData),
 	}, nil

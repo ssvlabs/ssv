@@ -74,6 +74,7 @@ func (n *netV1Adapter) setupPubsub() error {
 		TraceLog:    n.v1Cfg.PubSubTrace,
 		StaticPeers: staticPeers,
 		MsgHandler:  n.HandleMsg,
+		//MsgIDHandler: topics.NewMsgIDHandler(n.logger, n.fork, time.Minute * 2),
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")

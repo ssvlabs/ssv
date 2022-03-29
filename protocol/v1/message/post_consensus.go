@@ -1,9 +1,9 @@
-package v1
+package message
 
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/core"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/pkg/errors"
 )
 
@@ -12,7 +12,7 @@ type PostConsensusMessage struct {
 	Height          Height
 	DutySignature   []byte // The beacon chain partial Signature for a duty
 	DutySigningRoot []byte // the root signed in DutySignature
-	Signers         []core.OperatorID
+	Signers         []keymanager.OperatorID
 }
 
 // Encode returns a msg encoded bytes or error
@@ -38,8 +38,8 @@ func (pcsm *PostConsensusMessage) GetRoot() ([]byte, error) {
 // SignedPostConsensusMessage is the structure used for signed post consensus messages
 type SignedPostConsensusMessage struct {
 	Message   *PostConsensusMessage
-	Signature core.Signature
-	Signers   []core.OperatorID
+	Signature keymanager.Signature
+	Signers   []keymanager.OperatorID
 }
 
 // Encode returns a msg encoded bytes or error
@@ -53,12 +53,12 @@ func (spcsm *SignedPostConsensusMessage) Decode(data []byte) error {
 }
 
 // GetSignature returns the message signature
-func (spcsm *SignedPostConsensusMessage) GetSignature() core.Signature {
+func (spcsm *SignedPostConsensusMessage) GetSignature() keymanager.Signature {
 	return spcsm.Signature
 }
 
 // GetSigners returns the message signers
-func (spcsm *SignedPostConsensusMessage) GetSigners() []core.OperatorID {
+func (spcsm *SignedPostConsensusMessage) GetSigners() []keymanager.OperatorID {
 	return spcsm.Signers
 }
 
@@ -68,7 +68,7 @@ func (spcsm *SignedPostConsensusMessage) GetRoot() ([]byte, error) {
 }
 
 // Aggregate aggregates signatures
-func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg core.MessageSignature) error {
+func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg keymanager.MessageSignature) error {
 	//if !bytes.Equal(spcsm.GetRoot(), signedMsg.GetRoot()) {
 	//	return errors.New("can't aggregate msgs with different roots")
 	//}
@@ -103,13 +103,13 @@ func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg core.MessageSignatu
 }
 
 // MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []core.OperatorID) bool {
-	toMatchCnt := make(map[core.OperatorID]int)
+func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []keymanager.OperatorID) bool {
+	toMatchCnt := make(map[keymanager.OperatorID]int)
 	for _, id := range ids {
 		toMatchCnt[id]++
 	}
 
-	foundCnt := make(map[core.OperatorID]int)
+	foundCnt := make(map[keymanager.OperatorID]int)
 	for _, id := range spcsm.GetSigners() {
 		foundCnt[id]++
 	}

@@ -1,10 +1,28 @@
-package core
+package keymanager
 
 import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+)
+
+// DomainType is a unique identifier for signatures, 2 identical pieces of data signed with different domains will result in different sigs
+type DomainType []byte
+
+var (
+	// PrimusTestnet is the domain type for the testnet
+	PrimusTestnet = DomainType("primus_testnet")
+)
+
+// SignatureType is the type of the signature
+type SignatureType []byte
+
+var (
+	// QBFTSigType is the type for QBFT signatures
+	QBFTSigType = []byte{1, 0, 0, 0}
+	// PostConsensusSigType is the type for post consensus signatures
+	PostConsensusSigType = []byte{2, 0, 0, 0}
 )
 
 // Root holds an interface to access the root for signing/verification

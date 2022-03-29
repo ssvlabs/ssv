@@ -1,9 +1,8 @@
-package core
+package message
 
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/stretchr/testify/require"
@@ -33,10 +32,10 @@ func TestSSVMessage_JSONEncoding(t *testing.T) {
 		Data:    []byte(msgData),
 	}
 
-	encoded, err := json.Marshal(&msg)
+	encoded, err := msg.Encode()
 	require.NoError(t, err)
 
 	decoded := SSVMessage{}
-	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	require.NoError(t, decoded.Decode(encoded))
 	require.True(t, bytes.Equal(msg.GetID(), decoded.GetID()))
 }

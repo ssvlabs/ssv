@@ -1,10 +1,12 @@
-package core
+package message
 
 import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/pkg/errors"
 )
 
 // MsgType is the type of the message
@@ -60,6 +62,7 @@ type SSVMessage struct {
 	MsgType MsgType
 	ID      Identifier
 	Data    []byte
+	//Version string
 }
 
 // GetType returns the msg type
@@ -75,4 +78,78 @@ func (msg *SSVMessage) GetID() Identifier {
 // GetData returns message Data as byte slice
 func (msg *SSVMessage) GetData() []byte {
 	return msg.Data
+}
+
+// Encode implements Encoder
+func (msg *SSVMessage) Encode() ([]byte, error) {
+	// TODO: change to SSZ encoding
+	return json.Marshal(msg)
+}
+
+// Decode implements Encoder
+func (msg *SSVMessage) Decode(data []byte) error {
+	// TODO: change to SSZ encoding
+	return json.Unmarshal(data, msg)
+}
+
+// MarshalJSON implements json.Marshaler
+// all the top level values will be encoded to hex
+func (msg *SSVMessage) MarshalJSON() ([]byte, error) {
+	m := make(map[string]string)
+
+	mt, err := json.Marshal(msg.MsgType)
+	if err != nil {
+		return nil, errors.Wrap(err, "MsgType marshaling failed")
+	}
+	m["type"] = hex.EncodeToString(mt)
+
+	if msg.ID != nil {
+		m["id"] = hex.EncodeToString(msg.ID)
+	}
+
+	if msg.Data != nil {
+		data, err := json.Marshal(msg.Data)
+		if err != nil {
+			return nil, errors.Wrap(err, "Data marshaling failed")
+		}
+		m["Data"] = hex.EncodeToString(data)
+	}
+	return json.Marshal(m)
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (msg *SSVMessage) UnmarshalJSON(data []byte) error {
+	m := make(map[string]string)
+	if err := json.Unmarshal(data, &m); err != nil {
+		return errors.Wrap(err, "could not unmarshal SSVMessage")
+	}
+
+	d, err := hex.DecodeString(m["type"])
+	if err != nil {
+		return errors.Wrap(err, "SSVMessage decode string failed")
+	}
+	if err := json.Unmarshal(d, &msg.MsgType); err != nil {
+		return errors.Wrap(err, "could not unmarshal MsgType")
+	}
+
+	if val, ok := m["id"]; ok {
+		id, err := hex.DecodeString(val)
+		if err != nil {
+			return errors.Wrap(err, "msg id decode string failed")
+		}
+		msg.ID = id
+	}
+
+	if val, ok := m["Data"]; ok {
+		msg.Data = make([]byte, 0)
+		data, err := hex.DecodeString(val)
+		if err != nil {
+			return errors.Wrap(err, "Data decode string failed")
+		}
+		if err := json.Unmarshal(data, &msg.Data); err != nil {
+			msg.Data = nil
+			return errors.Wrap(err, "could not unmarshal Data")
+		}
+	}
+	return nil
 }

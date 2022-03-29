@@ -2,7 +2,7 @@ package topics
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/core"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -10,8 +10,8 @@ import (
 func TestSSVMsgID(t *testing.T) {
 	t.Run("consensus msg", func(t *testing.T) {
 		msgData := `{"message":{"type":3,"round":1,"identifier":"OTFiZGZjOWQxYzU4NzZkYTEwY...","height":28276,"value":"mB0aAAAAAAA4AAAAAAAAADpTC1djq..."},"signature":"jrB0+Z9zyzzVaUpDMTlCt6Om9mj...","signer_ids":[2,3,4]}`
-		msg := core.SSVMessage{
-			MsgType: core.SSVConsensusMsgType,
+		msg := message.SSVMessage{
+			MsgType: message.SSVConsensusMsgType,
 			ID:      []byte("OTFiZGZjOWQxYzU4NzZkYTEwY"),
 			Data:    []byte(msgData),
 		}

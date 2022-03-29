@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/core"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -107,19 +107,19 @@ type dummyRouter struct {
 	i      int
 }
 
-func (r *dummyRouter) Route(message core.SSVMessage) {
+func (r *dummyRouter) Route(message message.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	r.logger.Debug("got message",
 		zap.String("identifier", hex.EncodeToString(message.GetID())),
 		zap.Uint64("count", c))
 }
 
-func dummyMsg(pkHex string, height int) (*core.SSVMessage, error) {
+func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := core.NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := message.NewIdentifier(pk, beacon.RoleTypeAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,
@@ -131,8 +131,8 @@ func dummyMsg(pkHex string, height int) (*core.SSVMessage, error) {
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
 	  "signers": [1,3,4]
 	}`, id, height)
-	return &core.SSVMessage{
-		MsgType: core.SSVConsensusMsgType,
+	return &message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
 		ID:      id,
 		Data:    []byte(msgData),
 	}, nil
