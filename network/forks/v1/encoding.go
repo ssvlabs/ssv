@@ -1,12 +1,26 @@
 package v1
 
 import (
-	"errors"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/pkg/errors"
 )
 
 // EncodeNetworkMsg encodes network message
 func (v1 *ForkV1) EncodeNetworkMsg(msg message.Encoder) ([]byte, error) {
+	v0Msg, ok := msg.(*network.Message)
+	if !ok {
+		return nil, errors.New("could not convert message")
+	}
+	v1Msg, err := ToV1Message(v0Msg)
+	if err != nil {
+		return nil, err
+	}
+	return v1Msg.Encode()
+}
+
+// EncodeNetworkMsgV1 encodes network message
+func (v1 *ForkV1) EncodeNetworkMsgV1(msg message.Encoder) ([]byte, error) {
 	return msg.Encode()
 }
 
@@ -17,18 +31,19 @@ func (v1 *ForkV1) DecodeNetworkMsg(data []byte) (message.Encoder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &msg, nil
+	v0Msg, err := ToV0Message(&msg)
+	if err != nil {
+		return nil, err
+	}
+	return v0Msg, nil
 }
 
 // DecodeNetworkMsgV1 decodes network message and returns the actual struct
 func (v1 *ForkV1) DecodeNetworkMsgV1(data []byte) (*message.SSVMessage, error) {
-	raw, err := v1.DecodeNetworkMsg(data)
+	msg := message.SSVMessage{}
+	err := msg.Decode(data)
 	if err != nil {
 		return nil, err
 	}
-	msg, ok := raw.(*message.SSVMessage)
-	if !ok {
-		return nil, errors.New("could not convert message")
-	}
-	return msg, nil
+	return &msg, nil
 }

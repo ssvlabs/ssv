@@ -21,33 +21,47 @@ func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
 		return errors.Wrap(err, "could not decode message")
 	}
 	vpk := message.GetID().GetValidatorPK()
-	topic := n.fork.ValidatorTopicID(vpk)
-	if topic == forksv1.UnknownSubnet {
-		return errors.New("unknown topic")
-	}
-	if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-		//return errors.Wrap(err, "could not broadcast message")
-		return err
+	topics := n.fork.ValidatorTopicID(vpk)
+	for _, topic := range topics {
+		if topic == forksv1.UnknownSubnet {
+			return errors.New("unknown topic")
+		}
+		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+			//return errors.Wrap(err, "could not broadcast message")
+			return err
+		}
 	}
 	return nil
 }
 
 // Subscribe subscribes to validator subnet
 func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
-	topic := n.fork.ValidatorTopicID(pk)
-	if topic == forksv1.UnknownSubnet {
-		return errors.New("unknown topic")
+	topics := n.fork.ValidatorTopicID(pk)
+	for _, topic := range topics {
+		if topic == forksv1.UnknownSubnet {
+			return errors.New("unknown topic")
+		}
+		if err := n.topicsCtrl.Subscribe(topic); err != nil {
+			//return errors.Wrap(err, "could not broadcast message")
+			return err
+		}
 	}
-	return n.topicsCtrl.Subscribe(topic)
+	return nil
 }
 
 // Unsubscribe unsubscribes from the validator subnet
 func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
-	topic := n.fork.ValidatorTopicID(pk)
-	if topic == forksv1.UnknownSubnet {
-		return errors.New("unknown topic")
+	topics := n.fork.ValidatorTopicID(pk)
+	for _, topic := range topics {
+		if topic == forksv1.UnknownSubnet {
+			return errors.New("unknown topic")
+		}
+		if err := n.topicsCtrl.Unsubscribe(topic); err != nil {
+			//return errors.Wrap(err, "could not broadcast message")
+			return err
+		}
 	}
-	return n.topicsCtrl.Unsubscribe(topic)
+	return nil
 }
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.

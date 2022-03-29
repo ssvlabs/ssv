@@ -14,6 +14,8 @@ const (
 	StatusSuccess
 	// StatusNotFound means the desired objects were not found
 	StatusNotFound
+	// StatusError means that the node experienced some general error
+	StatusError
 	// StatusBadRequest means the request was bad
 	StatusBadRequest
 	// StatusInternalError means that the node experienced an internal error
@@ -35,7 +37,7 @@ type SyncMessage struct {
 	// Params holds request parameters
 	Params *SyncParams
 	// Data holds the results
-	Data []SignedMessage
+	Data []*SignedMessage
 	// Status is the status code of the operation
 	Status StatusCode
 }

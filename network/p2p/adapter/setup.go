@@ -1,4 +1,4 @@
-package v0
+package adapter
 
 import (
 	"github.com/bloxapp/ssv/network/commons"
@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async"
 	"time"
 )
 
@@ -68,17 +69,35 @@ func (n *netV0Adapter) setupPubsub() error {
 		}
 		staticPeers = append(staticPeers, peer.AddrInfo{ID: expID})
 	}
-	_, tc, err := topics.NewPubsub(n.ctx, &topics.PububConfig{
+
+	cfg := &topics.PububConfig{
 		Logger:      n.logger,
 		Host:        n.host,
 		TraceLog:    n.v1Cfg.PubSubTrace,
 		StaticPeers: staticPeers,
 		MsgHandler:  n.HandleMsg,
-	})
+	}
+
+	if n.fork.WithMsgID() {
+		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
+		// run GC every 3 minutes to clear old messages
+		async.RunEvery(n.ctx, time.Minute*3, cfg.MsgIDHandler.GC)
+	}
+
+	if n.fork.WithScoring() {
+		cfg.ScoreIndex = n.idx
+		// TODO: tweak values?
+		cfg.Scoring = topics.DefaultScoringConfig()
+		// TODO: add it by default?
+		cfg.Discovery = n.disc
+	}
+
+	ps, tc, err := topics.NewPubsub(n.ctx, cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
 	n.topicsCtrl = tc
+	n.ps = ps
 
 	return nil
 }

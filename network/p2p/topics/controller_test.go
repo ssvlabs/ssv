@@ -62,7 +62,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 		if err != nil {
 			return "invalid"
 		}
-		return f.ValidatorTopicID(pk)
+		return f.ValidatorTopicID(pk)[0]
 	}
 
 	t.Log("subscribing to topics")

@@ -1,6 +1,5 @@
 package p2pv1
 
-import "C"
 import (
 	"crypto/ecdsa"
 	"fmt"

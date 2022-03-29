@@ -1,4 +1,4 @@
-package v0
+package adapter
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"

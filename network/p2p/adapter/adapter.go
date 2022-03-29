@@ -1,4 +1,4 @@
-package v1
+package adapter
 
 import (
 	"context"
@@ -7,12 +7,10 @@ import (
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
 	p2p "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/network/p2p/adapter"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/bloxapp/ssv/network/p2p/peers"
 	"github.com/bloxapp/ssv/network/p2p/streams"
 	"github.com/bloxapp/ssv/network/p2p/topics"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -29,11 +27,11 @@ import (
 const (
 	decidedTopic = "decided"
 
-	legacyMsgStream = "/sync/0.0.1" // TODO change to new protocol? take from protocol?
+	legacyMsgStream = "/sync/0.0.1"
 )
 
-// netV1Adapter is an adapter for network v1
-type netV1Adapter struct {
+// netV0Adapter is an adapter for network v0
+type netV0Adapter struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -45,45 +43,48 @@ type netV1Adapter struct {
 	// TODO: use index
 	knownOperators *sync.Map
 
-	// TODO: remove after v0 ( need to be removed?)
+	// TODO: remove after v0
 	streamsLock *sync.Mutex
 	streams     map[string]streams.StreamResponder
 	streamCtrl  streams.StreamController
 
-	topicsCtrl topics.Controller
-	idx        peers.Index
-	disc       discovery.Service
-	listeners  listeners.Container
+	// TODO: remove after v0
+	activeValidatorsLock *sync.Mutex
+	activeValidators     map[string]bool
+	topicsCtrl           topics.Controller
+	idx                  peers.Index
+	disc                 discovery.Service
+	listeners            listeners.Container
+	ps                   *pubsub.PubSub
+	parentCtx            context.Context
 }
 
-// New creates a new v0 network with underlying v1 infra
-func New(pctx context.Context, v1Cfg *p2p.Config, lis listeners.Container) adapter.Adapter {
+// NewV0Adapter creates a new v0 network with underlying v1 infra
+func NewV0Adapter(pctx context.Context, v1Cfg *p2p.Config) Adapter {
 	ctx, cancel := context.WithCancel(pctx)
 
-	newLis := listeners.NewListenersContainer(pctx, v1Cfg.Logger)
-	if lis != nil {
-		newLis.SetListeners(lis.GetAllListeners())
-	}
-
-	return &netV1Adapter{
-		ctx:            ctx,
-		cancel:         cancel,
-		v1Cfg:          v1Cfg,
-		fork:           v1Cfg.Fork,
-		logger:         v1Cfg.Logger,
-		listeners:      listeners.NewListenersContainer(pctx, v1Cfg.Logger),
-		knownOperators: &sync.Map{},
-		streams:        map[string]streams.StreamResponder{},
-		streamsLock:    &sync.Mutex{},
+	return &netV0Adapter{
+		parentCtx:            pctx,
+		ctx:                  ctx,
+		cancel:               cancel,
+		v1Cfg:                v1Cfg,
+		fork:                 v1Cfg.Fork,
+		logger:               v1Cfg.Logger,
+		listeners:            listeners.NewListenersContainer(pctx, v1Cfg.Logger),
+		knownOperators:       &sync.Map{},
+		streams:              map[string]streams.StreamResponder{},
+		streamsLock:          &sync.Mutex{},
+		activeValidators:     map[string]bool{},
+		activeValidatorsLock: &sync.Mutex{},
 	}
 }
 
-func (n *netV1Adapter) Listeners() listeners.Container {
+func (n *netV0Adapter) Listeners() listeners.Container {
 	return n.listeners
 }
 
 // Setup initializes all required components
-func (n *netV1Adapter) Setup() error {
+func (n *netV0Adapter) Setup() error {
 	if err := n.setupHost(); err != nil {
 		return errors.Wrap(err, "could not setup libp2p host")
 	}
@@ -104,7 +105,7 @@ func (n *netV1Adapter) Setup() error {
 }
 
 // Start starts the network
-func (n *netV1Adapter) Start() error {
+func (n *netV0Adapter) Start() error {
 	n.setLegacyStreamHandler()
 
 	go func() {
@@ -138,7 +139,7 @@ func (n *netV1Adapter) Start() error {
 }
 
 // Close closes the network
-func (n *netV1Adapter) Close() error {
+func (n *netV0Adapter) Close() error {
 	n.cancel()
 	if err := n.idx.Close(); err != nil {
 		return errors.Wrap(err, "could not close index")
@@ -150,142 +151,74 @@ func (n *netV1Adapter) Close() error {
 }
 
 // HandleMsg implements topics.PubsubMessageHandler
-func (n *netV1Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
+func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	raw, err := n.fork.DecodeNetworkMsg(msg.Data)
 	if err != nil {
 		return err
 	}
 
-	cm, ok := raw.(*message.SSVMessage)
-	if !ok || cm == nil /*|| cm.SignedMessage == nil*/ {
-		n.logger.Error("could not casting to SSVMessage")
+	cm, ok := raw.(*network.Message)
+	if !ok || cm == nil || cm.SignedMessage == nil {
+		n.logger.Debug("could not propagate nil message")
 		return nil
 	}
 
-	v0Message, err := convertToV0Message(cm)
-	if err != nil {
-		return errors.Wrap(err, "failed to convert v1Message to v0Message")
-	}
+	n.propagateSignedMsg(cm)
 
-	n.propagateSignedMsg(v0Message)
 	return nil
 }
 
-func convertToV0Message(msg *message.SSVMessage) (*network.Message, error) {
-	signedMsgV0 := &proto.SignedMessage{}
-	v0Msg := &network.Message{
-		SignedMessage: signedMsgV0,
-		SyncMessage: &network.SyncMessage{
-			SignedMessages:       []*proto.SignedMessage{},
-			FromPeerID:           "",
-			Params:               nil,
-			Lambda:               nil,
-			Type:                 0,
-			Error:                "",
-			XXX_NoUnkeyedLiteral: struct{}{},
-			XXX_unrecognized:     nil,
-			XXX_sizecache:        0,
-		},
-	}
-
-	switch msg.GetType() {
-	case message.SSVConsensusMsgType:
-		signedMsg := &message.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return nil, errors.Wrap(err, "could not decode consensus signed message")
-		}
-
-		var typeV0 proto.RoundState
-		switch signedMsg.Message.MsgType {
-		case message.ProposalMsgType:
-			typeV0 = proto.RoundState_PrePrepare
-		case message.PrepareMsgType:
-			typeV0 = proto.RoundState_Prepare
-		case message.CommitMsgType:
-			typeV0 = proto.RoundState_Commit
-		case message.RoundChangeMsgType:
-			typeV0 = proto.RoundState_ChangeRound
-			v0Msg.Type = network.NetworkMsg_IBFTType
-		case message.DecidedMsgType:
-			typeV0 = proto.RoundState_Decided
-			v0Msg.Type = network.NetworkMsg_DecidedType
-		}
-
-		signedMsgV0.Message = &proto.Message{
-			Type:      typeV0,
-			Round:     uint64(signedMsg.Message.Round),
-			Lambda:    signedMsg.Message.Identifier,
-			SeqNumber: uint64(signedMsg.Message.Height),
-			Value:     signedMsg.Message.Data,
-		}
-		signedMsgV0.Signature = signedMsg.GetSignature()
-		for _, signer := range signedMsg.GetSigners() {
-			signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
-		}
-
-		//return v.processConsensusMsg(dutyRunner, signedMsg)
-	case message.SSVPostConsensusMsgType:
-		signedMsg := &message.SignedPostConsensusMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
-		}
-		//return v.processPostConsensusSig(dutyRunner, signedMsg)
-	case message.SSVSyncMsgType:
-		panic("implement")
-	default:
-		return nil, errors.New("unknown msg")
-	}
-
-	switch msg.MsgType {
-	case message.SSVConsensusMsgType:
-		v0Msg.Type = network.NetworkMsg_IBFTType
-	case message.SSVPostConsensusMsgType:
-		v0Msg.Type = network.NetworkMsg_DecidedType // TODO need to provide the proper type (under consensus or post consensus?)
-		v0Msg.Type = network.NetworkMsg_SignatureType
-	case message.SSVSyncMsgType:
-		v0Msg.Type = network.NetworkMsg_SyncType
-	}
-
-	return v0Msg, nil
-}
-
-func (n *netV1Adapter) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
+func (n *netV0Adapter) ReceivedMsgChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_IBFTType)
 
 	return ls.MsgChan(), n.listeners.Register(ls)
 }
 
-func (n *netV1Adapter) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
+func (n *netV0Adapter) ReceivedSignatureChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_SignatureType)
 
 	return ls.SigChan(), n.listeners.Register(ls)
 }
 
-func (n *netV1Adapter) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
+func (n *netV0Adapter) ReceivedDecidedChan() (<-chan *proto.SignedMessage, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_DecidedType)
 
 	return ls.DecidedChan(), n.listeners.Register(ls)
 }
 
-func (n *netV1Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
+func (n *netV0Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func()) {
 	ls := listeners.NewListener(network.NetworkMsg_SyncType)
 
 	return ls.SyncChan(), n.listeners.Register(ls)
 }
 
-func (n *netV1Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
-	topic := n.fork.ValidatorTopicID(validatorPk.Serialize())
-	return n.topicsCtrl.Subscribe(topic)
+func (n *netV0Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+	n.activeValidatorsLock.Lock()
+	pk := validatorPk.SerializeToHexStr()
+	if !n.activeValidators[pk] {
+		n.activeValidators[pk] = true
+	}
+	n.activeValidatorsLock.Unlock()
+
+	valTopics := n.fork.ValidatorTopicID(validatorPk.Serialize())
+	for _, topic := range valTopics {
+		err := n.topicsCtrl.Subscribe(topic)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (n *netV1Adapter) AllPeers(validatorPk []byte) ([]string, error) {
-	topic := n.fork.ValidatorTopicID(validatorPk)
-	peers, err := n.topicsCtrl.Peers(topic)
+func (n *netV0Adapter) AllPeers(validatorPk []byte) ([]string, error) {
+	valTopics := n.fork.ValidatorTopicID(validatorPk)
+	// taking peers of the first topic, as the second one considered to be a subnet
+	topicPeers, err := n.topicsCtrl.Peers(valTopics[0])
 	if err != nil {
 		return nil, err
 	}
 	var results []string
-	for _, p := range peers {
+	for _, p := range topicPeers {
 		pid := p.String()
 		if pid == n.v1Cfg.ExporterPeerID {
 			continue
@@ -295,15 +228,15 @@ func (n *netV1Adapter) AllPeers(validatorPk []byte) ([]string, error) {
 	return results, nil
 }
 
-func (n *netV1Adapter) SubscribeToMainTopic() error {
+func (n *netV0Adapter) SubscribeToMainTopic() error {
 	return n.topicsCtrl.Subscribe(decidedTopic)
 }
 
-func (n *netV1Adapter) MaxBatch() uint64 {
+func (n *netV0Adapter) MaxBatch() uint64 {
 	return n.v1Cfg.MaxBatchResponse
 }
 
-func (n *netV1Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
+func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
@@ -311,14 +244,16 @@ func (n *netV1Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) e
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.ValidatorTopicID(validatorPK)
-	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
-		return errors.Wrap(err, "could not broadcast signature")
+	valTopics := n.fork.ValidatorTopicID(validatorPK)
+	for _, topic := range valTopics {
+		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
+			return errors.Wrap(err, "could not broadcast message")
+		}
 	}
 	return nil
 }
 
-func (n *netV1Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
+func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_SignatureType,
@@ -326,14 +261,16 @@ func (n *netV1Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedM
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.ValidatorTopicID(validatorPK)
-	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
-		return errors.Wrap(err, "could not broadcast signature")
+	valTopics := n.fork.ValidatorTopicID(validatorPK)
+	for _, topic := range valTopics {
+		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
+			return errors.Wrap(err, "could not broadcast signature")
+		}
 	}
 	return nil
 }
 
-func (n *netV1Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
+func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
@@ -341,31 +278,36 @@ func (n *netV1Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMes
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal message")
 	}
-	topic := n.fork.ValidatorTopicID(validatorPK)
+
 	go func() {
-		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*10); err != nil {
+		if err := n.topicsCtrl.Broadcast(decidedTopic, msgBytes, time.Second*10); err != nil {
 			n.logger.Error("could not broadcast message on decided topic", zap.Error(err))
 		}
 	}()
-	if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
-		return errors.Wrap(err, "could not broadcast decided message")
+
+	valTopics := n.fork.ValidatorTopicID(validatorPK)
+	for _, topic := range valTopics {
+		if err := n.topicsCtrl.Broadcast(topic, msgBytes, time.Second*8); err != nil {
+			return errors.Wrap(err, "could not broadcast decided message")
+		}
 	}
+
 	return nil
 }
 
-func (n *netV1Adapter) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV0Adapter) GetHighestDecidedInstance(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV1Adapter) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV0Adapter) GetDecidedByRange(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV1Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV0Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	return n.sendSyncRequest(peerStr, msg)
 }
 
-func (n *netV1Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
+func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
 	msg.FromPeerID = n.host.ID().Pretty()
 	n.streamsLock.Lock()
 	res, ok := n.streams[streamID]
@@ -385,11 +327,11 @@ func (n *netV1Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage)
 	return res(data)
 }
 
-func (n *netV1Adapter) NotifyOperatorID(oid string) {
+func (n *netV0Adapter) NotifyOperatorID(oid string) {
 	n.knownOperators.Store(oid, true)
 }
 
-func (n *netV1Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
+func (n *netV0Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage) (*network.SyncMessage, error) {
 	pi, err := peer.Decode(peerStr)
 	if err != nil {
 		return nil, err
@@ -421,7 +363,7 @@ func (n *netV1Adapter) sendSyncRequest(peerStr string, msg *network.SyncMessage)
 	return res.SyncMessage, nil
 }
 
-func (n *netV1Adapter) setLegacyStreamHandler() {
+func (n *netV0Adapter) setLegacyStreamHandler() {
 	n.host.SetStreamHandler(legacyMsgStream, func(stream core.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		//cm, _, err := n.streamCtrl.HandleStream(stream)
@@ -458,4 +400,42 @@ func (n *netV1Adapter) setLegacyStreamHandler() {
 		cm.StreamID = stream.ID()
 		go propagateSyncMessage(n.listeners.GetListeners(network.NetworkMsg_SyncType), cm)
 	})
+}
+
+// OnFork handles a fork event, it will close the current p2p network
+// and recreate it with while preserving previous state (active validators)
+func (n *netV0Adapter) OnFork(fork forks.Fork) {
+	if err := n.Close(); err != nil {
+		n.logger.Panic("could not close network adapter", zap.Error(err))
+	}
+	ctx, cancel := context.WithCancel(n.parentCtx)
+	n.ctx = ctx
+	n.cancel = cancel
+	n.fork = fork
+	n.streams = map[string]streams.StreamResponder{}
+	if err := n.Setup(); err != nil {
+		n.logger.Panic("could not setup network adapter", zap.Error(err))
+	}
+	if err := n.Start(); err != nil {
+		n.logger.Panic("could not start network adapter", zap.Error(err))
+	}
+	n.resubscribeValidators()
+}
+
+// resubscribeValidators will resubscribe to all existing validators
+func (n *netV0Adapter) resubscribeValidators() {
+	n.activeValidatorsLock.Lock()
+	defer n.activeValidatorsLock.Unlock()
+
+	for pk := range n.activeValidators {
+		pubkey := &bls.PublicKey{}
+		if err := pubkey.DeserializeHexStr(pk); err != nil {
+			n.logger.Warn("could not decode validator public key", zap.Error(err))
+		}
+		if err := n.SubscribeToValidatorNetwork(pubkey); err != nil {
+			n.logger.Warn("could not subscribe to validator's topic'", zap.Error(err))
+			// TODO: handle
+			n.activeValidators[pk] = false
+		}
+	}
 }

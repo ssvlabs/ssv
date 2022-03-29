@@ -11,8 +11,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/p2p/adapter"
-	"github.com/bloxapp/ssv/network/p2p/adapter/v0"
-	"github.com/bloxapp/ssv/network/p2p/adapter/v1"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
@@ -38,10 +36,10 @@ func New(ctx context.Context, cfgV1 *p2pv1.Config, forker *forks.Forker) (networ
 
 	if forker.IsForked() {
 		logger.Debug("post fork. using v1 adapter")
-		n.networkAdapter = v1.New(ctx, cfgV1, nil)
+		//n.networkAdapter = v1.New(ctx, cfgV1, nil) // TODO
 	} else {
 		logger.Debug("before fork. using v0 adapter")
-		n.networkAdapter = v0.NewV0Adapter(ctx, cfgV1)
+		n.networkAdapter = adapter.NewV0Adapter(ctx, cfgV1)
 		forker.AddHandler(n.onFork)
 	}
 
@@ -64,7 +62,7 @@ func (p *P2pNetwork) start() {
 
 func (p *P2pNetwork) onFork(slot uint64, currentFork forks.Fork) {
 	p.logger.Info("network fork start... moving from adapter v0 to v1", zap.Uint64("fork slot", slot))
-	lis := p.networkAdapter.Listeners()
+	//lis := p.networkAdapter.Listeners() // TODO
 	p.logger.Info("closing current v0 adapter")
 	if err := p.networkAdapter.Close(); err != nil {
 		p.logger.Fatal("failed to close network adapter", zap.Error(err))
@@ -76,7 +74,7 @@ func (p *P2pNetwork) onFork(slot uint64, currentFork forks.Fork) {
 
 	p.logger.Info("done cooling, setting new adapter")
 	p.cfgV1.Fork = currentFork.NetworkFork() // in order to get the new fork instance
-	p.networkAdapter = v1.New(p.ctx, p.cfgV1, lis)
+	//p.networkAdapter = adapter.New(p.ctx, p.cfgV1, lis) // TODO
 	p.logger.Info("setup adapter v1")
 	p.setup()
 	p.logger.Info("start adapter v1")

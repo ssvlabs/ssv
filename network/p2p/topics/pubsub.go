@@ -53,6 +53,15 @@ type ScoringConfig struct {
 	OneEpochDuration   time.Duration
 }
 
+// DefaultScoringConfig returns the default scoring config
+func DefaultScoringConfig() *ScoringConfig {
+	return &ScoringConfig{
+		IPColocationWeight: defaultIPColocationWeight,
+		AppSpecificWeight:  defaultAppSpecificWeight,
+		OneEpochDuration:   defaultOneEpochDuration,
+	}
+}
+
 // PubsubBundle includes the pubsub router, plus involved components
 type PubsubBundle struct {
 	PS         *pubsub.PubSub
@@ -73,11 +82,7 @@ func (cfg *PububConfig) validate() error {
 // initScoring initializes scoring config
 func (cfg *PububConfig) initScoring() {
 	if cfg.Scoring == nil {
-		cfg.Scoring = &ScoringConfig{
-			IPColocationWeight: defaultIPColocationWeight,
-			AppSpecificWeight:  defaultAppSpecificWeight,
-			OneEpochDuration:   defaultOneEpochDuration,
-		}
+		cfg.Scoring = DefaultScoringConfig()
 	}
 }
 

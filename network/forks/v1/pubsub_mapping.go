@@ -11,18 +11,17 @@ const (
 	UnknownSubnet = "unknown"
 )
 
-// SubnetCount returns the subnet count for v1
-// TODO: change
-var SubnetCount uint64 = 128
+// SubnetsCount returns the subnet count for v1
+var SubnetsCount uint64 = 128
 
 // ValidatorTopicID returns the topic to use for the given validator
-func (v1 *ForkV1) ValidatorTopicID(pkByts []byte) string {
-	subnet := validatorSubnet(hex.EncodeToString(pkByts), SubnetCount)
-	return topicOf(subnet)
+func (v1 *ForkV1) ValidatorTopicID(pkByts []byte) []string {
+	pkHex := hex.EncodeToString(pkByts)
+	subnet := validatorSubnet(hex.EncodeToString(pkByts))
+	return []string{pkHex, topicOf(subnet)}
 }
 
 // topicOf returns the topic for the given subnet
-// TODO: allow reuse by other components
 func topicOf(subnet int64) string {
 	if subnet < 0 {
 		return UnknownSubnet
@@ -32,12 +31,12 @@ func topicOf(subnet int64) string {
 
 // validatorSubnet returns the subnet for the given validator
 // TODO: allow reuse by other components
-func validatorSubnet(validatorPKHex string, n uint64) int64 {
+func validatorSubnet(validatorPKHex string) int64 {
 	if len(validatorPKHex) < 10 {
 		return -1
 	}
 	val := hexToUint64(validatorPKHex[:10])
-	return int64(val % n)
+	return int64(val % SubnetsCount)
 }
 
 func hexToUint64(hexStr string) uint64 {

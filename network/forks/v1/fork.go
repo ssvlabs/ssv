@@ -14,6 +14,16 @@ func New() forks.Fork {
 }
 
 // SlotTick implementation
-func (v0 *ForkV1) SlotTick(slot uint64) {
+func (v1 *ForkV1) SlotTick(slot uint64) {
 
+}
+
+// WithMsgID implementation
+func (v1 *ForkV1) WithMsgID() bool {
+	return true
+}
+
+// WithScoring implementation
+func (v1 *ForkV1) WithScoring() bool {
+	return true
 }

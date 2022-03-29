@@ -8,10 +8,16 @@ import (
 type Fork interface {
 	encoding
 	pubSubMapping
+	pubSubConfig
 }
 
 type pubSubMapping interface {
-	ValidatorTopicID(pk []byte) string
+	ValidatorTopicID(pk []byte) []string
+}
+
+type pubSubConfig interface {
+	WithMsgID() bool
+	WithScoring() bool
 }
 
 type encoding interface {
