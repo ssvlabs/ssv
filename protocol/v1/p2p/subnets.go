@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	// SubnetsCount is the count of subnets in the network
-	SubnetsCount = 128
+	//// SubnetsCount is the count of subnets in the network
+	//SubnetsCount = 128
 	// subnetTopicPrefix is the prefix used for subnets
 	subnetTopicPrefix = "ssv.subnet" // "bloxstaking.ssv"
 )

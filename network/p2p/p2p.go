@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/bloxapp/ssv/network/p2p/peers"
 	"github.com/bloxapp/ssv/network/p2p/streams"
@@ -34,11 +35,12 @@ type p2pNetwork struct {
 // New creates a new p2p network
 func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(pctx)
+
 	return &p2pNetwork{
 		ctx:       ctx,
 		cancel:    cancel,
 		logger:    cfg.Logger.With(zap.String("who", "p2pNetwork")),
-		fork:      cfg.Fork,
+		fork:      forksfactory.NewFork(cfg.ForkVersion),
 		cfg:       cfg,
 		msgRouter: cfg.Router,
 	}

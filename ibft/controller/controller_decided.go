@@ -4,8 +4,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
@@ -27,17 +25,7 @@ func (i *Controller) processDecidedQueueMessages() {
 
 // ValidateDecidedMsg - the main decided msg pipeline
 func (i *Controller) ValidateDecidedMsg(msg *proto.SignedMessage) error {
-	return i.fork.ValidateDecidedMsg().Run(msg)
-}
-
-// ValidateDecidedMsgV0 - genesis version 0
-func (i *Controller) ValidateDecidedMsgV0() pipeline.Pipeline {
-	return pipeline.Combine(
-		auth.BasicMsgValidation(),
-		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.AuthorizeMsg(i.ValidatorShare),
-		auth.ValidateQuorum(i.ValidatorShare.ThresholdSize()),
-	)
+	return i.fork.ValidateDecidedMsg(i.ValidatorShare).Run(msg)
 }
 
 // ProcessDecidedMessage is responsible for processing an incoming decided message.

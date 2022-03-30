@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -12,6 +13,10 @@ import (
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
 	"time"
+)
+
+const (
+	slotChanBuffer = 32
 )
 
 // DutyExecutor represents the component that executes duties
@@ -36,6 +41,7 @@ type ControllerOptions struct {
 	Executor            DutyExecutor
 	GenesisEpoch        uint64
 	DutyLimit           uint64
+	ForkVersion         forksprotocol.ForkVersion
 }
 
 // dutyController internal implementation of DutyController
@@ -85,7 +91,7 @@ func (dc *dutyController) Start() {
 
 func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
 	if dc.currentSlotC == nil {
-		dc.currentSlotC = make(chan uint64)
+		dc.currentSlotC = make(chan uint64, slotChanBuffer)
 	}
 	return dc.currentSlotC
 }

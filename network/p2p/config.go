@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/forks"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -45,11 +45,12 @@ type Config struct {
 	// OperatorPublicKey is used for operator identity, optional
 	OperatorID string
 
-	Logger *zap.Logger
-	Fork   forks.Fork
-	Router network.MessageRouter
-
+	Logger    *zap.Logger
+	Router    network.MessageRouter
 	UserAgent string
+
+	ForkVersion forksprotocol.ForkVersion
+	//Fork   forks.Fork
 }
 
 // Libp2pOptions creates options list for the libp2p host

@@ -1,15 +1,13 @@
 package forks
 
 import (
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
 	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/validator/storage"
 )
 
 // Fork holds all fork related implementations for the controller
 type Fork interface {
-	SlotTick(slot uint64)
-	Apply(controller ibft.Controller)
 	InstanceFork() forks.Fork
-	ValidateDecidedMsg() pipeline.Pipeline
+	ValidateDecidedMsg(share *storage.Share) pipeline.Pipeline
 }

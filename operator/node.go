@@ -2,14 +2,13 @@ package operator
 
 import (
 	"context"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
-	"github.com/bloxapp/ssv/operator/forks"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
@@ -25,7 +24,7 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork          *core.Network
+	ETHNetwork          core.Network
 	Beacon              beacon.Beacon
 	Network             network.Network
 	Context             context.Context
@@ -39,7 +38,8 @@ type Options struct {
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
-	Fork             *forks.Forker
+
+	ForkVersion forksprotocol.ForkVersion
 
 	UseMainTopic bool
 }
@@ -55,9 +55,10 @@ type operatorNode struct {
 	storage        Storage
 	eth1Client     eth1.Client
 	dutyCtrl       duties.DutyController
-	fork           *forks.Forker
+	//fork           *forks.Forker
 
 	useMainTopic bool
+	forkVersion  forksprotocol.ForkVersion
 }
 
 // New is the constructor of operatorNode
@@ -66,7 +67,7 @@ func New(opts Options) Node {
 		context:        opts.Context,
 		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
 		validatorsCtrl: opts.ValidatorController,
-		ethNetwork:     *opts.ETHNetwork,
+		ethNetwork:     opts.ETHNetwork,
 		beacon:         opts.Beacon,
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
@@ -76,14 +77,15 @@ func New(opts Options) Node {
 			Logger:              opts.Logger,
 			Ctx:                 opts.Context,
 			BeaconClient:        opts.Beacon,
-			EthNetwork:          *opts.ETHNetwork,
+			EthNetwork:          opts.ETHNetwork,
 			ValidatorController: opts.ValidatorController,
 			GenesisEpoch:        opts.GenesisEpoch,
 			DutyLimit:           opts.DutyLimit,
 			Executor:            opts.DutyExec,
+			ForkVersion:         opts.ForkVersion,
 		}),
 
-		fork: opts.Fork,
+		forkVersion: opts.ForkVersion,
 
 		useMainTopic: opts.UseMainTopic,
 	}
@@ -121,9 +123,10 @@ func (n *operatorNode) Start() error {
 	return nil
 }
 
+// listenForCurrentSlot listens to current slot and trigger relevant components if needed
 func (n *operatorNode) listenForCurrentSlot() {
 	for slot := range n.dutyCtrl.CurrentSlotChan() {
-		n.fork.SlotTick(slot)
+		n.setFork(slot)
 	}
 }
 

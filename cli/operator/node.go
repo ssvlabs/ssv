@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	ssv_identity "github.com/bloxapp/ssv/identity"
-	"github.com/bloxapp/ssv/network/networkwrapper"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/operator/forks"
+	"github.com/bloxapp/ssv/network/p2p/adapter"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/prysmaticlabs/prysm/time/slots"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
@@ -21,8 +23,6 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
-	v0 "github.com/bloxapp/ssv/operator/forks/v0"
-	v1 "github.com/bloxapp/ssv/operator/forks/v1"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -82,16 +82,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
-		// TODO - change via command line?
-		forker := forks.NewForker(forks.Config{
-			Logger:     Logger,
-			Network:    cfg.ETH2Options.Network,
-			ForkSlot:   99999999, // TODO by flag?
-			BeforeFork: v0.New(),
-			PostFork:   v1.New(),
-		})
-		forker.Start()
-
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
@@ -110,6 +100,9 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
+
+		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
+		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
 		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
@@ -143,26 +136,30 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Logger = Logger
+		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
 		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
 		Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
-		p2pNet, err := networkwrapper.New(cmd.Context(), &cfg.P2pNetworkConfig, forker)
-		if err != nil {
-			Logger.Fatal("failed to create network", zap.Error(err))
+		p2pNet := adapter.NewV0Adapter(cmd.Context(), &cfg.P2pNetworkConfig)
+		if err := p2pNet.Setup(); err != nil {
+			Logger.Fatal("failed to setup network", zap.Error(err))
+		}
+		if err := p2pNet.Start(); err != nil {
+			Logger.Fatal("failed to start network", zap.Error(err))
 		}
 
 		ctx := cmd.Context()
-		cfg.SSVOptions.Fork = forker
+		cfg.SSVOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = beaconClient
-		cfg.SSVOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.Network = p2pNet
 
 		cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
-		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
+		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx

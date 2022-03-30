@@ -5,12 +5,11 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/instance/forks"
-	v0forks "github.com/bloxapp/ssv/ibft/instance/forks/v0"
-	"github.com/bloxapp/ssv/ibft/pipeline"
+	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -42,29 +41,6 @@ func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 
 func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
-}
-
-type testingFork struct {
-	controller *Controller
-}
-
-func testFork(controller *Controller) *testingFork {
-	return &testingFork{controller: controller}
-}
-
-func (v0 *testingFork) SlotTick(slot uint64) {
-
-}
-
-func (v0 *testingFork) Apply(controller ibft.Controller) {
-}
-
-func (v0 *testingFork) InstanceFork() forks.Fork {
-	return v0forks.New()
-}
-
-func (v0 *testingFork) ValidateDecidedMsg() pipeline.Pipeline {
-	return v0.controller.ValidateDecidedMsgV0()
 }
 
 // SignMsg signs the given message by the given private key
@@ -157,6 +133,7 @@ func populatedIbft(
 		PublicKey: validatorPK(sks),
 		Committee: nodes,
 	}
+	forkVersion := forksprotocol.V0ForkVersion
 	ret := New(
 		beacon.RoleTypeAttester,
 		identifier,
@@ -166,10 +143,10 @@ func populatedIbft(
 		queue,
 		proto.DefaultConsensusParams(),
 		share,
-		nil,
+		forkVersion,
 		signer,
 		100*time.Millisecond)
-	ret.(*Controller).setFork(testFork(ret.(*Controller)))
+	ret.(*Controller).fork = forksfactory.NewFork(forkVersion)
 	ret.(*Controller).initHandlers.Set(true) // as if they are already synced
 	ret.(*Controller).initSynced.Set(true)   // as if they are already synced
 	ret.(*Controller).listenToNetworkMessages()

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	forksv0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
 	"testing"
 
 	"github.com/bloxapp/ssv/ibft"
@@ -24,7 +25,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 		// instances: make([]*Instance, 0),
 	}
 
-	ret.fork = testFork(ret)
+	ret.fork = forksv0.New()
 	return ret
 }
 

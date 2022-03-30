@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/bloxapp/ssv/network/p2p/testing"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -145,6 +145,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
 		Logger:            logger,
-		Fork:              forksv1.New(),
+		ForkVersion:       forksprotocol.V1ForkVersion,
 	}
 }

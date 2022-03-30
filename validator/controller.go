@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"sync"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/operator/forks"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -46,10 +46,10 @@ type ControllerOptions struct {
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	Fork                       *forks.Forker
 	KeyManager                 beacon.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
+	ForkVersion                forksprotocol.ForkVersion
 }
 
 // Controller represent the validators controller,
@@ -73,7 +73,6 @@ type controller struct {
 	logger     *zap.Logger
 	beacon     beacon.Beacon
 	keyManager beacon.KeyManager
-	forker     *forks.Forker
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -87,6 +86,7 @@ type controller struct {
 	networkMediator controller2.Mediator
 	operatorsIDs    *sync.Map
 	network         network.Network
+	forkVersion     forksprotocol.ForkVersion
 }
 
 // NewController creates a new validator controller instance
@@ -114,7 +114,7 @@ func NewController(options ControllerOptions) Controller {
 		operatorPubKey:             options.OperatorPubKey,
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
-		forker:                     options.Fork,
+		forkVersion:                options.ForkVersion,
 
 		validatorsMap: newValidatorsMap(options.Context, options.Logger, &Options{
 			Context:                    options.Context,
@@ -124,7 +124,7 @@ func NewController(options ControllerOptions) Controller {
 			ETHNetwork:                 options.ETHNetwork,
 			Beacon:                     options.Beacon,
 			DB:                         options.DB,
-			Fork:                       options.Fork,
+			ForkVersion:                options.ForkVersion,
 			Signer:                     options.KeyManager,
 			SyncRateLimit:              options.HistorySyncRateLimit,
 			notifyOperatorID:           notifyOperatorID,
@@ -278,7 +278,9 @@ func (c *controller) StartNetworkMediators() {
 func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {
 	v, ok := c.validatorsMap.GetValidator(publicKey)
 	if !ok {
-		if !c.forker.IsForked() { // save non committee only after fork
+		// save non committee only after fork
+		// TODO: change
+		if c.forkVersion == forksprotocol.V0ForkVersion {
 			return nil, false
 		}
 		//	return handler for non committee validator to save the decided

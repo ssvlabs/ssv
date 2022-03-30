@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons/listeners"
 	"github.com/bloxapp/ssv/network/forks"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2p "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/p2p/discovery"
 	"github.com/bloxapp/ssv/network/p2p/peers"
@@ -81,7 +82,7 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p.Config) Adapter {
 		logger:               v1Cfg.Logger,
 		state:                stateInitializing,
 		v1Cfg:                v1Cfg,
-		fork:                 v1Cfg.Fork,
+		fork:                 forksfactory.NewFork(v1Cfg.ForkVersion),
 		listeners:            listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 		knownOperators:       &sync.Map{},
 		streams:              map[string]streams.StreamResponder{},
@@ -155,6 +156,9 @@ func (n *netV0Adapter) Start() error {
 func (n *netV0Adapter) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
+	n.streamsLock.Lock()
+	n.streams = map[string]streams.StreamResponder{}
+	n.streamsLock.Unlock()
 	if err := n.idx.Close(); err != nil {
 		return errors.Wrap(err, "could not close index")
 	}

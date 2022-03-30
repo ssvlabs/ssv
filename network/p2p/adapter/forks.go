@@ -2,8 +2,8 @@ package adapter
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/p2p/streams"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"sync/atomic"
@@ -12,7 +12,7 @@ import (
 
 // OnFork handles a fork event, it will close the current p2p network
 // and recreate it with while preserving previous state (active validators)
-func (n *netV0Adapter) OnFork(fork forks.Fork) {
+func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) {
 	logger := n.logger.With(zap.String("where", "OnFork"))
 	logger.Info("forking network")
 	atomic.StoreInt32(&n.state, stateForking)
@@ -26,10 +26,8 @@ func (n *netV0Adapter) OnFork(fork forks.Fork) {
 	ctx, cancel := context.WithCancel(n.parentCtx)
 	n.ctx = ctx
 	n.cancel = cancel
-	n.fork = fork
-	n.streamsLock.Lock()
-	n.streams = map[string]streams.StreamResponder{}
-	n.streamsLock.Unlock()
+	n.fork = forksfactory.NewFork(forkVersion)
+	n.v1Cfg.ForkVersion = forkVersion
 	if err := n.Setup(); err != nil {
 		logger.Panic("could not setup network adapter", zap.Error(err))
 	}

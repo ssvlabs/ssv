@@ -1,6 +1,8 @@
 package controller
 
 import (
+	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"sync"
 	"time"
 
@@ -56,11 +58,12 @@ func New(
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
 	validatorShare *storage.Share,
-	fork contollerforks.Fork,
+	version forksprotocol.ForkVersion,
 	signer beacon.Signer,
 	syncRateLimit time.Duration,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
+	fork := forksfactory.NewFork(version)
 	ret := &Controller{
 		ibftStorage:    storage,
 		logger:         logger,
@@ -70,6 +73,7 @@ func New(
 		ValidatorShare: validatorShare,
 		Identifier:     identifier,
 		signer:         signer,
+		fork:           fork,
 
 		// flags
 		initHandlers: threadsafe.NewSafeBool(),
@@ -81,8 +85,6 @@ func New(
 
 		syncRateLimit: syncRateLimit,
 	}
-
-	ret.setFork(fork)
 
 	return ret
 }
@@ -157,13 +159,4 @@ func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
-}
-
-// setFork sets Controller fork for any new instances
-func (i *Controller) setFork(fork contollerforks.Fork) {
-	if fork == nil {
-		return
-	}
-	i.fork = fork
-	i.fork.Apply(i)
 }
