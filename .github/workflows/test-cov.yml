@@ -43,5 +43,5 @@ jobs:
           git add ./docs/resources/cov-badge.svg
           git commit -m "update code coverage badge"
           git add ./go.sum
-          git commit -m "update ./go.sum" || true
+          git commit -m "update go.sum" || true
           git push
