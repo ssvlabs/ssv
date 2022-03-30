@@ -2,9 +2,9 @@ package adapter
 
 import (
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/p2p/discovery"
-	"github.com/bloxapp/ssv/network/p2p/peers"
-	"github.com/bloxapp/ssv/network/p2p/topics"
+	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/topics"
 	"github.com/libp2p/go-libp2p"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"

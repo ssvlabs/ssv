@@ -2,10 +2,10 @@ package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/p2p/discovery"
-	"github.com/bloxapp/ssv/network/p2p/peers"
-	"github.com/bloxapp/ssv/network/p2p/streams"
-	"github.com/bloxapp/ssv/network/p2p/topics"
+	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/streams"
+	"github.com/bloxapp/ssv/network/topics"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"

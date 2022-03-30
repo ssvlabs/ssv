@@ -2,7 +2,7 @@ package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/network"
-	ssv_peers "github.com/bloxapp/ssv/network/p2p/peers"
+	ssv_peers "github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"go.uber.org/zap"
 	"math"

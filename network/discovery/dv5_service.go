@@ -2,7 +2,7 @@ package discovery
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/p2p/peers"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/peer"

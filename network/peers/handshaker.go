@@ -2,7 +2,7 @@ package peers
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/p2p/streams"
+	"github.com/bloxapp/ssv/network/streams"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"

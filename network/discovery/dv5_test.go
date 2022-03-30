@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/network/commons"
-	v1_testing "github.com/bloxapp/ssv/network/p2p/testing"
+	v1_testing "github.com/bloxapp/ssv/network/testing"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"

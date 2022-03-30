@@ -1,7 +1,7 @@
 package topics
 
 import (
-	"github.com/bloxapp/ssv/network/p2p/peers"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
