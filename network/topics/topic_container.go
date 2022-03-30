@@ -50,5 +50,9 @@ func (tc *topicContainer) Publish(ctx context.Context, data []byte) error {
 	if tc.topic == nil {
 		return ErrTopicNotReady
 	}
-	return tc.topic.Publish(ctx, data)
+	err := tc.topic.Publish(ctx, data)
+	if err == nil {
+		metricsPubsubOutbound.WithLabelValues(getTopicBaseName(tc.topic.String())).Inc()
+	}
+	return err
 }

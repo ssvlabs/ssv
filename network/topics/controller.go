@@ -252,6 +252,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Warn("got empty message from subscription")
 			continue
 		}
+		metricsPubsubInbound.WithLabelValues(getTopicBaseName(topicName)).Inc()
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}

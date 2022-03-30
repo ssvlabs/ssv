@@ -46,6 +46,11 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	}
 }
 
+// Host implements HostProvider
+func (n *p2pNetwork) Host() host.Host {
+	return n.host
+}
+
 // Close implements io.Closer
 func (n *p2pNetwork) Close() error {
 	n.cancel()

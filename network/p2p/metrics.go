@@ -9,42 +9,39 @@ import (
 )
 
 var (
-	metricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:all_connected_peers:v1",
+	// MetricsAllConnectedPeers counts all connected peers
+	MetricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:network:all_connected_peers",
 		Help: "Count connected peers",
 	})
-	metricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:connected_peers:v1",
+	// MetricsConnectedPeers counts connected peers for a topic
+	MetricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:connected_peers",
 		Help: "Count connected peers for a validator",
 	}, []string{"pubKey"})
-	metricsTopicsCount = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:topics:count:v1",
-		Help: "Count connected peers for a validator",
-	})
-	metricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peers_identity:v1",
+	// MetricsPeersIdentity tracks peers identity
+	MetricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
 	}, []string{"pubKey", "v", "pid", "type"})
-	metricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peer_last_msg:v1",
-		Help: "Timestamps of last messages",
-	}, []string{"pid"})
+	// MetricsPeerLastMsg tracks last message
+	//MetricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	//	Name: "ssv:network:peer_last_msg",
+	//	Help: "Timestamps of last messages",
+	//}, []string{"pid"})
 )
 
 func init() {
-	if err := prometheus.Register(metricsAllConnectedPeers); err != nil {
+	if err := prometheus.Register(MetricsAllConnectedPeers); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsTopicsCount); err != nil {
+	if err := prometheus.Register(MetricsPeersIdentity); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsPeersIdentity); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsPeerLastMsg); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsConnectedPeers); err != nil {
+	//if err := prometheus.Register(MetricsPeerLastMsg); err != nil {
+	//	log.Println("could not register prometheus collector")
+	//}
+	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
@@ -58,7 +55,7 @@ func (n *p2pNetwork) reportAllPeers() {
 	}
 	n.logger.Debug("connected peers status",
 		zap.Int("count", len(ids)))
-	metricsAllConnectedPeers.Set(float64(len(ids)))
+	MetricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
 func (n *p2pNetwork) reportTopics() {
@@ -66,7 +63,6 @@ func (n *p2pNetwork) reportTopics() {
 	nTopics := len(topics)
 	n.logger.Debug("connected topics",
 		zap.Int("count", nTopics))
-	metricsTopicsCount.Set(float64(nTopics))
 	for _, name := range topics {
 		n.reportTopicPeers(name)
 	}
@@ -80,7 +76,7 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 	}
 	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
 		zap.Any("peers", peers))
-	metricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
@@ -92,12 +88,13 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	n.logger.Debug("peer identity", zap.String("peer", pid.String()),
 		zap.String("oid", identity.OperatorID))
 
-	metricsPeersIdentity.WithLabelValues(identity.OperatorID, identity.NodeVersion(),
+	MetricsPeersIdentity.WithLabelValues(identity.OperatorID, identity.NodeVersion(),
 		pid.String(), identity.NodeType()).Set(1)
 }
 
+//
 //func reportLastMsg(pid string) {
-//	metricsPeerLastMsg.WithLabelValues(pid).Set(float64(timestamp()))
+//	MetricsPeerLastMsg.WithLabelValues(pid).Set(float64(timestamp()))
 //}
 //
 //func timestamp() int64 {

@@ -3,14 +3,15 @@ package v1
 import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/pkg/errors"
 )
 
 // EncodeNetworkMsg encodes network message
 func (v1 *ForkV1) EncodeNetworkMsg(msg message.Encoder) ([]byte, error) {
 	v0Msg, ok := msg.(*network.Message)
 	if !ok {
-		return nil, errors.New("could not convert message")
+		//return nil, errors.New("could not convert message")
+		// already v1
+		return msg.Encode()
 	}
 	v1Msg, err := ToV1Message(v0Msg)
 	if err != nil {

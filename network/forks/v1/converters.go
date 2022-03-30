@@ -76,8 +76,22 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 		signed.Message.Round = message.Round(sm.Message.GetRound())
 		signed.Message.Identifier = sm.Message.GetLambda()
 		signed.Message.Height = message.Height(sm.Message.GetSeqNumber())
-		// TODO: convert type
-		signed.Message.MsgType = message.ConsensusMessageType(sm.Message.GetType())
+		switch sm.Message.GetType() {
+		case proto.RoundState_NotStarted:
+			// TODO
+		case proto.RoundState_PrePrepare:
+			signed.Message.MsgType = message.ProposalMsgType
+		case proto.RoundState_Prepare:
+			signed.Message.MsgType = message.PrepareMsgType
+		case proto.RoundState_Commit:
+			signed.Message.MsgType = message.CommitMsgType
+		case proto.RoundState_ChangeRound:
+			signed.Message.MsgType = message.RoundChangeMsgType
+		case proto.RoundState_Decided:
+			signed.Message.MsgType = message.DecidedMsgType
+		case proto.RoundState_Stopped:
+			// TODO
+		}
 	}
 	return signed
 }
@@ -144,26 +158,23 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 func toSignedMessageV0(signedMsg *message.SignedMessage) *proto.SignedMessage {
 	signedMsgV0 := &proto.SignedMessage{}
 
-	var typeV0 proto.RoundState
-	switch signedMsg.Message.MsgType {
-	case message.ProposalMsgType:
-		typeV0 = proto.RoundState_PrePrepare
-	case message.PrepareMsgType:
-		typeV0 = proto.RoundState_Prepare
-	case message.CommitMsgType:
-		typeV0 = proto.RoundState_Commit
-	case message.RoundChangeMsgType:
-		typeV0 = proto.RoundState_ChangeRound
-	case message.DecidedMsgType:
-		typeV0 = proto.RoundState_Decided
-	}
-
 	signedMsgV0.Message = &proto.Message{
-		Type:      typeV0,
 		Round:     uint64(signedMsg.Message.Round),
 		Lambda:    signedMsg.Message.Identifier,
 		SeqNumber: uint64(signedMsg.Message.Height),
 		Value:     signedMsg.Message.Data,
+	}
+	switch signedMsg.Message.MsgType {
+	case message.ProposalMsgType:
+		signedMsgV0.Message.Type = proto.RoundState_PrePrepare
+	case message.PrepareMsgType:
+		signedMsgV0.Message.Type = proto.RoundState_Prepare
+	case message.CommitMsgType:
+		signedMsgV0.Message.Type = proto.RoundState_Commit
+	case message.RoundChangeMsgType:
+		signedMsgV0.Message.Type = proto.RoundState_ChangeRound
+	case message.DecidedMsgType:
+		signedMsgV0.Message.Type = proto.RoundState_Decided
 	}
 	signedMsgV0.Signature = signedMsg.GetSignature()
 	for _, signer := range signedMsg.GetSigners() {

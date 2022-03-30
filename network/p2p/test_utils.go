@@ -12,11 +12,17 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
 	"sync"
 	"time"
 )
+
+// HostProvider holds host instance
+type HostProvider interface {
+	Host() host.Host
+}
 
 // LoggerFactory helps to inject loggers
 type LoggerFactory func(string) *zap.Logger
@@ -30,7 +36,8 @@ type LocalNet struct {
 	udpRand testing.UDPPortsRandomizer
 }
 
-func (ln *LocalNet) withBootnode(ctx context.Context, logger *zap.Logger) error {
+// WithBootnode adds a bootnode to the network
+func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
 	bnSk, err := commons.GenNetworkKey()
 	if err != nil {
 		return err
@@ -72,7 +79,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n
 			defer cancel()
 			var peers []peer.ID
 			for len(peers) < minConnected && ctx.Err() == nil {
-				peers = node.(*p2pNetwork).host.Network().Peers()
+				peers = node.(HostProvider).Host().Network().Peers()
 				time.Sleep(time.Millisecond * 100)
 			}
 			if ctx.Err() != nil {
@@ -88,28 +95,36 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n
 	return ln, nil
 }
 
+// NewTestP2pNetwork creates a new network.P2PNetwork instance
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (network.P2PNetwork, error) {
+	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
+	if err != nil {
+		return nil, err
+	}
+	cfg := NewNetConfig(logger, keys.NetKey, operatorPubkey, ln.Bootnode,
+		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
+	p := New(ctx, cfg)
+	err = p.Setup()
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 // NewLocalNet creates a new mdns network
 func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDiscv5 bool) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
-		if err := ln.withBootnode(ctx, loggerFactory("bootnode")); err != nil {
+		if err := ln.WithBootnode(ctx, loggerFactory("bootnode")); err != nil {
 			return nil, err
 		}
 	}
-	i := 1
+	i := 0
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
-		logger := loggerFactory(fmt.Sprintf("node-%d", i))
-		operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
-		if err != nil {
-			logger.Error("could not extract public key", zap.Error(err))
-			return nil
-		}
-		cfg := NewNetConfig(logger, keys.NetKey, operatorPubkey, ln.Bootnode,
-			testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), n)
-		p := New(ctx, cfg)
 		i++
-		err = p.Setup()
+		logger := loggerFactory(fmt.Sprintf("node-%d", i))
+		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}

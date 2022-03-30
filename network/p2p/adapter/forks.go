@@ -5,6 +5,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
 	"time"
@@ -12,12 +13,12 @@ import (
 
 // OnFork handles a fork event, it will close the current p2p network
 // and recreate it with while preserving previous state (active validators)
-func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) {
+func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	logger := n.logger.With(zap.String("where", "OnFork"))
 	logger.Info("forking network")
 	atomic.StoreInt32(&n.state, stateForking)
 	if err := n.Close(); err != nil {
-		logger.Panic("could not close network adapter", zap.Error(err))
+		return errors.Wrap(err, "could not close network adapter")
 	}
 	atomic.StoreInt32(&n.state, stateForking)
 	// waiting so for services to be closed
@@ -29,12 +30,13 @@ func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) {
 	n.fork = forksfactory.NewFork(forkVersion)
 	n.v1Cfg.ForkVersion = forkVersion
 	if err := n.Setup(); err != nil {
-		logger.Panic("could not setup network adapter", zap.Error(err))
+		return errors.Wrap(err, "could not create network adapter")
 	}
 	if err := n.Start(); err != nil {
-		logger.Panic("could not start network adapter", zap.Error(err))
+		return errors.Wrap(err, "could not start network adapter")
 	}
 	n.resubscribeValidators()
+	return nil
 }
 
 // resubscribeValidators will resubscribe to all existing validators

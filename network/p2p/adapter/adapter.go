@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	core "github.com/libp2p/go-libp2p-core"
@@ -40,38 +41,50 @@ const (
 // ErrAdapterNotReady is thrown when trying to access the adapter while it's not ready (e.g. initializing, forking..)
 var ErrAdapterNotReady = errors.New("network adapter is not ready")
 
+// Adapter is wrapping v1 components and implementation with a v0 interface
+type Adapter interface {
+	network.Network
+	forksprotocol.ForkHandler
+	Setup() error
+	Start() error
+	Close() error
+	// Listeners returns the list of active listeners
+	Listeners() listeners.Container
+}
+
 // netV0Adapter is an adapter for network v0
+// it implements network.Network (v0) to encapsulate interface change to network.P2PNetwork
+// in addition it implements forksprotocol.ForkHandler to support forks
 type netV0Adapter struct {
-	ctx    context.Context
+	parentCtx context.Context
+	ctx       context.Context
+
 	cancel context.CancelFunc
 
 	logger *zap.Logger
 
 	state int32
 
+	host host.Host
+
 	v1Cfg *p2p.Config
 	fork  forks.Fork
-	host  host.Host
-	// TODO: use index
-	knownOperators *sync.Map
-
-	// TODO: remove after v0
-	streamsLock *sync.Mutex
-	streams     map[string]streams.StreamResponder
-	streamCtrl  streams.StreamController
-
-	// TODO: remove after v0
+	// internal components
+	topicsCtrl topics.Controller
+	streamCtrl streams.StreamController
+	idx        peers.Index
+	disc       discovery.Service
+	ps         *pubsub.PubSub
+	listeners  listeners.Container
+	// v0 helpers
+	knownOperators       *sync.Map
+	streamsLock          *sync.Mutex
+	streams              map[string]streams.StreamResponder
 	activeValidatorsLock *sync.Mutex
 	activeValidators     map[string]bool
-	topicsCtrl           topics.Controller
-	idx                  peers.Index
-	disc                 discovery.Service
-	listeners            listeners.Container
-	ps                   *pubsub.PubSub
-	parentCtx            context.Context
 }
 
-// NewV0Adapter creates a new v0 network with underlying v1 infra
+// NewV0Adapter creates a new adpater
 func NewV0Adapter(pctx context.Context, v1Cfg *p2p.Config) Adapter {
 	ctx, cancel := context.WithCancel(pctx)
 
@@ -176,6 +189,10 @@ func (n *netV0Adapter) HandleMsg(topic string, msg *pubsub.Message) error {
 	}
 
 	cm, ok := raw.(*network.Message)
+	if !ok {
+		n.logger.Debug("could not cast message")
+		return nil
+	}
 	if !ok || cm == nil || cm.SignedMessage == nil {
 		n.logger.Debug("could not propagate nil message")
 		return nil

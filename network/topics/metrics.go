@@ -15,6 +15,14 @@ var (
 		Name: "ssv:network:pubsub:msg:validation",
 		Help: "Traces of pubsub message validation results",
 	}, []string{"type"})
+	metricsPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:pubsub:msg:out",
+		Help: "Count broadcasted messages",
+	}, []string{"topic"})
+	metricsPubsubInbound = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:pubsub:msg:in",
+		Help: "Count incoming messages",
+	}, []string{"topic"})
 )
 
 func init() {
@@ -22,6 +30,12 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsPubsubMsgValidationResults); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsPubsubOutbound); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsPubsubInbound); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

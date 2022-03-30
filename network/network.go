@@ -34,8 +34,8 @@ const (
 	ValidationRejectHigh
 )
 
-// ValidationReporter is the interface for reporting on message validation results
-type ValidationReporter interface {
+// ValidationReporting is the interface for reporting on message validation results
+type ValidationReporting interface {
 	// ReportValidation reports the result for the given message
 	ReportValidation(message message.SSVMessage, res MsgValidationResult)
 }
@@ -45,7 +45,7 @@ type P2PNetwork interface {
 	io.Closer
 	protocol_p2p.Network
 	MessageRouting
-	ValidationReporter
+	ValidationReporting
 	// Setup initialize the network layer and starts the libp2p host
 	Setup() error
 	// Start starts the network
