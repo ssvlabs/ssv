@@ -21,6 +21,7 @@ import (
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,7 +29,15 @@ const (
 	decidedTopic = "decided"
 
 	legacyMsgStream = "/sync/0.0.1"
+
+	stateInitializing int32 = 0
+	stateClosed       int32 = 2
+	stateForking      int32 = 1
+	stateReady        int32 = 10
 )
+
+// ErrAdapterNotReady is thrown when trying to access the adapter while it's not ready (e.g. initializing, forking..)
+var ErrAdapterNotReady = errors.New("network adapter is not ready")
 
 // netV0Adapter is an adapter for network v0
 type netV0Adapter struct {
@@ -36,6 +45,8 @@ type netV0Adapter struct {
 	cancel context.CancelFunc
 
 	logger *zap.Logger
+
+	state int32
 
 	v1Cfg *p2p.Config
 	fork  forks.Fork
@@ -67,9 +78,10 @@ func NewV0Adapter(pctx context.Context, v1Cfg *p2p.Config) Adapter {
 		parentCtx:            pctx,
 		ctx:                  ctx,
 		cancel:               cancel,
+		logger:               v1Cfg.Logger,
+		state:                stateInitializing,
 		v1Cfg:                v1Cfg,
 		fork:                 v1Cfg.Fork,
-		logger:               v1Cfg.Logger,
 		listeners:            listeners.NewListenersContainer(pctx, v1Cfg.Logger),
 		knownOperators:       &sync.Map{},
 		streams:              map[string]streams.StreamResponder{},
@@ -111,7 +123,6 @@ func (n *netV0Adapter) Start() error {
 	go func() {
 		err := tasks.Retry(func() error {
 			return n.disc.Bootstrap(func(e discovery.PeerEvent) {
-				// TODO: check if relevant
 				if err := n.host.Connect(n.ctx, e.AddrInfo); err != nil {
 					n.logger.Warn("could not connect peer",
 						zap.String("peer", e.AddrInfo.String()), zap.Error(err))
@@ -135,11 +146,14 @@ func (n *netV0Adapter) Start() error {
 		n.reportTopics()
 	})
 
+	atomic.StoreInt32(&n.state, stateReady)
+
 	return nil
 }
 
 // Close closes the network
 func (n *netV0Adapter) Close() error {
+	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.idx.Close(); err != nil {
 		return errors.Wrap(err, "could not close index")
@@ -193,6 +207,9 @@ func (n *netV0Adapter) ReceivedSyncMsgChan() (<-chan *network.SyncChanObj, func(
 }
 
 func (n *netV0Adapter) SubscribeToValidatorNetwork(validatorPk *bls.PublicKey) error {
+	if atomic.LoadInt32(&n.state) != stateReady {
+		return ErrAdapterNotReady
+	}
 	n.activeValidatorsLock.Lock()
 	pk := validatorPk.SerializeToHexStr()
 	if !n.activeValidators[pk] {
@@ -237,6 +254,9 @@ func (n *netV0Adapter) MaxBatch() uint64 {
 }
 
 func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) error {
+	if atomic.LoadInt32(&n.state) != stateReady {
+		return ErrAdapterNotReady
+	}
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_IBFTType,
@@ -254,6 +274,9 @@ func (n *netV0Adapter) Broadcast(validatorPK []byte, msg *proto.SignedMessage) e
 }
 
 func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedMessage) error {
+	if atomic.LoadInt32(&n.state) != stateReady {
+		return ErrAdapterNotReady
+	}
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_SignatureType,
@@ -271,6 +294,9 @@ func (n *netV0Adapter) BroadcastSignature(validatorPK []byte, msg *proto.SignedM
 }
 
 func (n *netV0Adapter) BroadcastDecided(validatorPK []byte, msg *proto.SignedMessage) error {
+	if atomic.LoadInt32(&n.state) != stateReady {
+		return ErrAdapterNotReady
+	}
 	msgBytes, err := n.fork.EncodeNetworkMsg(&network.Message{
 		SignedMessage: msg,
 		Type:          network.NetworkMsg_DecidedType,
@@ -308,6 +334,9 @@ func (n *netV0Adapter) GetLastChangeRoundMsg(peerStr string, msg *network.SyncMe
 }
 
 func (n *netV0Adapter) RespondSyncMsg(streamID string, msg *network.SyncMessage) error {
+	if atomic.LoadInt32(&n.state) != stateReady {
+		return ErrAdapterNotReady
+	}
 	msg.FromPeerID = n.host.ID().Pretty()
 	n.streamsLock.Lock()
 	res, ok := n.streams[streamID]
@@ -400,42 +429,4 @@ func (n *netV0Adapter) setLegacyStreamHandler() {
 		cm.StreamID = stream.ID()
 		go propagateSyncMessage(n.listeners.GetListeners(network.NetworkMsg_SyncType), cm)
 	})
-}
-
-// OnFork handles a fork event, it will close the current p2p network
-// and recreate it with while preserving previous state (active validators)
-func (n *netV0Adapter) OnFork(fork forks.Fork) {
-	if err := n.Close(); err != nil {
-		n.logger.Panic("could not close network adapter", zap.Error(err))
-	}
-	ctx, cancel := context.WithCancel(n.parentCtx)
-	n.ctx = ctx
-	n.cancel = cancel
-	n.fork = fork
-	n.streams = map[string]streams.StreamResponder{}
-	if err := n.Setup(); err != nil {
-		n.logger.Panic("could not setup network adapter", zap.Error(err))
-	}
-	if err := n.Start(); err != nil {
-		n.logger.Panic("could not start network adapter", zap.Error(err))
-	}
-	n.resubscribeValidators()
-}
-
-// resubscribeValidators will resubscribe to all existing validators
-func (n *netV0Adapter) resubscribeValidators() {
-	n.activeValidatorsLock.Lock()
-	defer n.activeValidatorsLock.Unlock()
-
-	for pk := range n.activeValidators {
-		pubkey := &bls.PublicKey{}
-		if err := pubkey.DeserializeHexStr(pk); err != nil {
-			n.logger.Warn("could not decode validator public key", zap.Error(err))
-		}
-		if err := n.SubscribeToValidatorNetwork(pubkey); err != nil {
-			n.logger.Warn("could not subscribe to validator's topic'", zap.Error(err))
-			// TODO: handle
-			n.activeValidators[pk] = false
-		}
-	}
 }
