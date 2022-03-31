@@ -1,10 +1,11 @@
 package validator
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestVerifyPartialSignature(t *testing.T) {
