@@ -40,8 +40,6 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add ./docs/resources/cov-badge.svg
-          git commit -m "update code coverage badge"
-          git add ./go.sum
-          git commit -m "update go.sum" || true
+          git add ./docs/resources/cov-badge.svg ./go.sum
+          git commit -m "update code coverage and go.sum"
           git push
