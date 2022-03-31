@@ -113,6 +113,10 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
+        - name: TCP_PORT
+          value: "13002"
+        - name: UDP_PORT
+          value: "12002"
         - name: GENESIS_EPOCH
           value: "1"
         - name: LOGGER_LEVEL
