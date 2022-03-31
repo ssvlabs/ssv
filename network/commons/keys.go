@@ -3,6 +3,7 @@ package commons
 import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
+	gcrypto "github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/pkg/errors"
@@ -15,5 +16,6 @@ func GenNetworkKey() (*ecdsa.PrivateKey, error) {
 		return nil, errors.WithMessage(err, "failed to generate 256k1 key")
 	}
 	privKey := (*ecdsa.PrivateKey)(privInterfaceKey.(*crypto.Secp256k1PrivateKey))
+	privKey.Curve = gcrypto.S256()
 	return privKey, nil
 }

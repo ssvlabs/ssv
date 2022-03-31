@@ -33,8 +33,8 @@ func TestNewService(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
+	logger := zaptest.NewLogger(t)
+	//logger := zap.L()
 	peers := make([]host.Host, n)
 	for i := 0; i < n; i++ {
 		h, err := libp2p.New(ctx,
@@ -72,29 +72,28 @@ func TestNewService(t *testing.T) {
 		})
 		require.NoError(t, err)
 		nodes[i] = node.(*DiscV5Service).Self()
-		// TODO: fix and unmark
-		//wg.Add(1)
-		//go func() {
-		//	_ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-		//	defer cancel()
-		//	go func() {
-		//		<-_ctx.Done()
-		//		cancel()
-		//	}()
-		//	found := 0
-		//	require.NoError(t, node.Bootstrap(func(e PeerEvent) {
-		//		found++
-		//		if found > n/2 {
-		//			wg.Done()
-		//			return
-		//		}
-		//		if err := node.(*DiscV5Service).dv5Listener.Ping(e.Node); err != nil {
-		//			t.Log("could not ping node", e.Node.ID().String(), "with err:", err.Error())
-		//			return
-		//		}
-		//		t.Log("pinged node", e.Node.ID().String(), fmt.Sprintf("; found %d", found))
-		//	}))
-		//}()
+		// start and count connected nodes
+		wg.Add(1)
+		go func() {
+			_ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			go func() {
+				<-_ctx.Done()
+				cancel()
+			}()
+			found := 0
+			require.NoError(t, node.Bootstrap(func(e PeerEvent) {
+				found++
+				if found > n/2 {
+					wg.Done()
+					return
+				}
+				if err := node.(*DiscV5Service).dv5Listener.Ping(e.Node); err != nil {
+					t.Log("could not ping node", e.Node.ID().String(), "with err:", err.Error())
+					return
+				}
+			}))
+		}()
 	}
 	wg.Wait()
 }

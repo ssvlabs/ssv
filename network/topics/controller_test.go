@@ -40,7 +40,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv0.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers + 2)
+		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers+2)
 	})
 
 	// v1 features includes msg_id, msg validator, subnets, scoring
@@ -102,21 +102,22 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 			}
 		}
 		// TODO: remove timeout
-		<-time.After(time.Second * 2)
-		//for _, p := range peers {
-		//	topics := p.tm.Topics()
-		//	for _, topic := range topics {
-		//		topicPeers, err := p.tm.Peers(topic)
-		//		require.NoError(t, err)
-		//		// wait for min peers
-		//		for c.Err() == nil && len(topicPeers) < nPeers/2 {
-		//			time.Sleep(time.Millisecond * 100)
-		//			p.tm.logger.Debug("xxx", zap.Int("len", len(topicPeers)))
-		//			topicPeers, err = p.tm.Peers(topic)
-		//			require.NoError(t, err)
-		//		}
-		//	}
-		//}
+		//<-time.After(time.Second * 2)
+		nPeers := len(peers)
+		for _, p := range peers {
+			topics := p.tm.Topics()
+			for _, topic := range topics {
+				topicPeers, err := p.tm.Peers(topic)
+				require.NoError(t, err)
+				// wait for min peers
+				for c.Err() == nil && len(topicPeers) < nPeers/2 {
+					time.Sleep(time.Millisecond * 100)
+					p.tm.logger.Debug("xxx", zap.Int("len", len(topicPeers)))
+					topicPeers, err = p.tm.Peers(topic)
+					require.NoError(t, err)
+				}
+			}
+		}
 		require.NoError(t, c.Err())
 	}()
 	wg.Wait()
