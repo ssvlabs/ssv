@@ -124,21 +124,20 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 func (ctrl *topicsCtrl) Unsubscribe(name string) error {
 	ctrl.topicsLock.Lock()
+	defer ctrl.topicsLock.Unlock()
+
 	tc := ctrl.getTopicContainerUnsafe(name)
 	if tc == nil {
-		ctrl.topicsLock.Unlock()
 		return nil
 	}
 	if subCount := tc.decSubCount(); subCount > 0 {
 		ctrl.logger.Debug("there are still active subscriptions for this topic",
 			zap.String("topic", name), zap.Int32("subCount", subCount))
 		ctrl.setTopicContainerUnsafe(name, tc)
-		ctrl.topicsLock.Unlock()
 		return nil
 	}
 	ctrl.logger.Debug("unsubscribing topic", zap.String("topic", name))
 	delete(ctrl.containers, name)
-	ctrl.topicsLock.Unlock()
 
 	if err := tc.Close(); err != nil {
 		return err

@@ -40,7 +40,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv0.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers)
+		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers + 2)
 	})
 
 	// v1 features includes msg_id, msg validator, subnets, scoring
