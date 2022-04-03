@@ -26,11 +26,11 @@ type Syncer interface {
 	// RegisterHandler registers handler for the given protocol
 	RegisterHandler(protocol string, handler RequestHandler)
 	// LastDecided fetches last decided from a random set of peers
-	LastDecided(mid message.Identifier) ([]message.SSVMessage, error)
+	LastDecided(mid message.Identifier) ([]*message.SSVMessage, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
-	GetHistory(mid message.Identifier, from, to uint64) ([]message.SSVMessage, error)
+	GetHistory(mid message.Identifier, from, to message.Height) ([]*message.SSVMessage, error)
 	// LastChangeRound fetches last change round message from a random set of peers
-	LastChangeRound(mid message.Identifier) ([]message.SSVMessage, error)
+	LastChangeRound(mid message.Identifier, height message.Height) ([]*message.SSVMessage, error)
 }
 
 // Network holds the networking layer used to complement the underlying protocols
