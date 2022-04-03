@@ -14,7 +14,7 @@ const (
 	peersForSync = 10
 
 	// TODO: add
-	//legacyMsgStream = "/sync/0.0.1"
+	legacyMsgStream = "/sync/0.0.1"
 
 	lastDecidedProtocol = "/ssv/sync/decided/last"
 	changeRoundProtocol = "/ssv/sync/round"
@@ -69,6 +69,15 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 			Identifier: mid,
 		},
 	})
+}
+
+func (n *p2pNetwork) setupLegacySyncHandler() error {
+	n.RegisterHandler(legacyMsgStream, func(ssvMessage *message.SSVMessage) (*message.SSVMessage, error) {
+		// TODO: implement
+		return ssvMessage, nil
+	})
+
+	return nil
 }
 
 // RegisterHandler registers the given handler for the stream

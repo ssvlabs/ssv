@@ -82,7 +82,8 @@ func (n *p2pNetwork) SetupServices() error {
 	if err := n.setupPubsub(); err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
-	if err := n.setupSyncHandlers(); err != nil {
+
+	if err := n.setupLegacySyncHandler(); err != nil {
 		return errors.Wrap(err, "could not setup sync handlers")
 	}
 
@@ -193,10 +194,5 @@ func (n *p2pNetwork) setupPubsub() error {
 	}
 	n.topicsCtrl = tc
 	n.logger.Debug("topics controller is ready")
-	return nil
-}
-
-func (n *p2pNetwork) setupSyncHandlers() error {
-	// TODO: complete
 	return nil
 }
