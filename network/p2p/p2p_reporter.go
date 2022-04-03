@@ -11,6 +11,9 @@ import (
 // ReportValidation reports the result for the given message
 // the result will be converted to a score and reported to peers.ScoreIndex
 func (n *p2pNetwork) ReportValidation(msg message.SSVMessage, res network.MsgValidationResult) {
+	if !n.isReady() {
+		return
+	}
 	peers := n.msgResolver.GetPeers(msg.GetData())
 	for _, pi := range peers {
 		err := n.idx.Score(pi, ssv_peers.NodeScore{Name: "validation", Value: msgValidationScore(res)})

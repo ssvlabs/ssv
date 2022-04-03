@@ -11,18 +11,27 @@ import (
 
 // LastDecided fetches last decided from a random set of peers
 func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]message.SSVMessage, error) {
+	if !n.isReady() {
+		return nil, ErrNetworkIsNotReady
+	}
 	// TODO
 	return nil, errors.New("not implemented")
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
 func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to uint64) ([]message.SSVMessage, error) {
+	if !n.isReady() {
+		return nil, ErrNetworkIsNotReady
+	}
 	// TODO
 	return nil, errors.New("not implemented")
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
 func (n *p2pNetwork) LastChangeRound(mid message.Identifier) ([]message.SSVMessage, error) {
+	if !n.isReady() {
+		return nil, ErrNetworkIsNotReady
+	}
 	// TODO
 	return nil, errors.New("not implemented")
 }

@@ -99,10 +99,6 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		pubsub.WithFloodPublish(true),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
-		pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
-			cfg.Logger.Debug("pubsub: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
-			return true
-		}),
 	}
 
 	if cfg.Discovery != nil {
@@ -113,7 +109,11 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		cfg.initScoring()
 		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams(cfg), peerScoreThresholds()),
-			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
+			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval),
+			pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
+				cfg.Logger.Debug("pubsub: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
+				return true
+			}))
 	}
 
 	if cfg.MsgIDHandler != nil {

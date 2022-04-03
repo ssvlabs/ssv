@@ -1,4 +1,4 @@
-package v1
+package v0
 
 import (
 	"encoding/json"
@@ -27,7 +27,10 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			}
 			for _, sm := range msgV0.SyncMessage.GetSignedMessages() {
 				signed := toSignedMessageV1(sm)
-				syncMsg.Data = append(syncMsg.Data, signed)
+				if signed.Message != nil {
+					syncMsg.Data = append(syncMsg.Data, signed)
+					msg.ID = signed.Message.Identifier
+				}
 			}
 			if err := msgV0.SyncMessage.Error; len(err) > 0 {
 				syncMsg.Status = message.StatusError
@@ -37,7 +40,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				return nil, err
 			}
 			msg.Data = data
-			msg.ID = msgV0.SyncMessage.GetLambda()
+			//msg.ID = msgV0.SyncMessage.GetLambda()
 		}
 		return &msg, nil
 	case network.NetworkMsg_SignatureType:
@@ -55,7 +58,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			return nil, err
 		}
 		msg.Data = data
-		if msgV0.SignedMessage.Message != nil {
+		if signed.Message.Identifier != nil {
 			msg.ID = signed.Message.Identifier
 		}
 	}
@@ -108,12 +111,13 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
 
-		v0Msg.SignedMessage = toSignedMessageV0(signedMsg)
+		v0Msg.SignedMessage = toSignedMessageV0(signedMsg, msg.ID)
 		switch v0Msg.SignedMessage.GetMessage().GetType() {
 		case proto.RoundState_ChangeRound:
 			v0Msg.Type = network.NetworkMsg_IBFTType
 		case proto.RoundState_Decided:
 			v0Msg.Type = network.NetworkMsg_DecidedType
+		default:
 		}
 		//return v.processConsensusMsg(dutyRunner, signedMsg)
 	case message.SSVPostConsensusMsgType:
@@ -142,8 +146,8 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		v0Msg.SyncMessage.Lambda = syncMsg.Params.Identifier
 		if syncMsg.Status == message.StatusSuccess {
 			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
-			for _, msg := range syncMsg.Data {
-				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, toSignedMessageV0(msg))
+			for _, smsg := range syncMsg.Data {
+				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, toSignedMessageV0(smsg, msg.ID))
 			}
 		} else {
 			v0Msg.SyncMessage.Error = "error"
@@ -155,12 +159,12 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	return v0Msg, nil
 }
 
-func toSignedMessageV0(signedMsg *message.SignedMessage) *proto.SignedMessage {
+func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Identifier) *proto.SignedMessage {
 	signedMsgV0 := &proto.SignedMessage{}
 
 	signedMsgV0.Message = &proto.Message{
 		Round:     uint64(signedMsg.Message.Round),
-		Lambda:    signedMsg.Message.Identifier,
+		Lambda:    identifier,
 		SeqNumber: uint64(signedMsg.Message.Height),
 		Value:     signedMsg.Message.Data,
 	}

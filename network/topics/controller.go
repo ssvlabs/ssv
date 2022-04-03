@@ -81,7 +81,8 @@ func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
 	if cont == nil || cont.topic == nil {
 		return nil, ErrTopicNotReady
 	}
-	return cont.topic.ListPeers(), nil
+	peers := cont.topic.ListPeers()
+	return peers, nil
 }
 
 // Topics lists all the available topics

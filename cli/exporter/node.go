@@ -16,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2p "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/network/p2p/adapter"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -110,9 +109,9 @@ var StartExporterNodeCmd = &cobra.Command{
 		}
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.Logger = Logger
-		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(nil)
-		Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
-		network := adapter.NewV0Adapter(cmd.Context(), &cfg.P2pNetworkConfig)
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenUserAgent(nil)
+		//Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+		network := p2p.New(cmd.Context(), &cfg.P2pNetworkConfig)
 		if err := network.Setup(); err != nil {
 			Logger.Fatal("failed to setup network", zap.Error(err))
 		}
@@ -160,7 +159,7 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.Eth1Client = eth1Client
 		exporterOptions.Beacon = beaconClient
 		exporterOptions.Logger = Logger
-		exporterOptions.Network = network
+		//exporterOptions.Network = network // TODO
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
 		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)

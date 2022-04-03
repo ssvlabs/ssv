@@ -1,4 +1,4 @@
-package adapter
+package p2pv1
 
 import (
 	"context"
@@ -13,7 +13,8 @@ import (
 
 // OnFork handles a fork event, it will close the current p2p network
 // and recreate it with while preserving previous state (active validators)
-func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) error {
+// NOTE: ths method MUST be called once per fork version, otherwise we are just restarting the network
+func (n *p2pNetwork) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	logger := n.logger.With(zap.String("where", "OnFork"))
 	logger.Info("forking network")
 	atomic.StoreInt32(&n.state, stateForking)
@@ -23,12 +24,13 @@ func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	atomic.StoreInt32(&n.state, stateForking)
 	// waiting so for services to be closed
 	logger.Info("current network instance was closed")
+
 	<-time.After(time.Second * 5)
 	ctx, cancel := context.WithCancel(n.parentCtx)
 	n.ctx = ctx
 	n.cancel = cancel
 	n.fork = forksfactory.NewFork(forkVersion)
-	n.v1Cfg.ForkVersion = forkVersion
+	n.cfg.ForkVersion = forkVersion
 	if err := n.Setup(); err != nil {
 		return errors.Wrap(err, "could not create network adapter")
 	}
@@ -40,19 +42,28 @@ func (n *netV0Adapter) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 // resubscribeValidators will resubscribe to all existing validators
-func (n *netV0Adapter) resubscribeValidators() {
+func (n *p2pNetwork) resubscribeValidators() {
 	n.activeValidatorsLock.Lock()
 	defer n.activeValidatorsLock.Unlock()
 
+	<-time.After(time.Second * 3)
+	n.logger.Debug("resubscribing validators", zap.Int("total", len(n.activeValidators)))
+
+	success := 0
 	for pk := range n.activeValidators {
 		pubkey := &bls.PublicKey{}
 		if err := pubkey.DeserializeHexStr(pk); err != nil {
 			n.logger.Warn("could not decode validator public key", zap.Error(err))
 		}
-		if err := n.SubscribeToValidatorNetwork(pubkey); err != nil {
-			n.logger.Warn("could not resubscribe to validator's topic'", zap.Error(err))
+		n.logger.Debug("resubscribing validator", zap.String("pk", pk))
+		if err := n.subscribe(pubkey.Serialize()); err != nil {
+			n.logger.Warn("could not resubscribe to validator's topic", zap.Error(err))
 			// TODO: handle
 			n.activeValidators[pk] = false
+			continue
 		}
+		n.logger.Debug("resubscribed validator", zap.String("pk", pk))
+		success++
 	}
+	n.logger.Debug("resubscribed validators", zap.Int("total", len(n.activeValidators)), zap.Int("success", success))
 }

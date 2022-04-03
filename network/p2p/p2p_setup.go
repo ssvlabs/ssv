@@ -6,11 +6,13 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,6 +22,10 @@ const (
 
 // Setup is used to setup the network
 func (n *p2pNetwork) Setup() error {
+	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
+		return errors.New("could not setup network: in ready state")
+	}
+
 	n.logger.Info("configuring p2p network service")
 
 	n.initCfg()
@@ -90,18 +96,23 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	self := peers.NewIdentity(n.host.ID().String(), "", "", make(map[string]string))
+	self := peers.NewIdentity(n.host.ID().String(), n.cfg.OperatorID, string(n.cfg.ForkVersion), make(map[string]string))
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
 	}, 10*time.Minute)
-	n.logger.Debug("peers index is ready")
+	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
 	if err != nil {
 		return errors.Wrap(err, "failed to create ID service")
 	}
 
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids)
+	filters := make([]peers.HandshakeFilter, 0)
+	// v0 was before we checked forks, therefore asking if we are above v0
+	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
+		filters = append(filters, peers.ForkVersionFilter(n.cfg.ForkVersion))
+	}
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids, filters...)
 	n.host.SetStreamHandler(peers.HandshakeProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
@@ -135,6 +146,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		ConnIndex:   n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
+		//ForkVersion: n.cfg.ForkVersion,
 	}
 	disc, err := discovery.NewService(n.ctx, discOpts)
 	if err != nil {
@@ -148,19 +160,11 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupPubsub() error {
-	// creates a msgID handler
-	midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
-		n.fork, time.Minute*2)
-	n.msgResolver = midHandler
-	// run GC every 3 minutes to clear old messages
-	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
-
 	cfg := &topics.PububConfig{
-		Logger:       n.logger,
-		Host:         n.host,
-		TraceLog:     n.cfg.PubSubTrace,
-		StaticPeers:  nil,
-		MsgIDHandler: midHandler,
+		Logger:      n.logger,
+		Host:        n.host,
+		TraceLog:    n.cfg.PubSubTrace,
+		StaticPeers: nil,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
 			logger := n.logger.With(zap.String("who", "MsgValidator"))
 			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
@@ -168,8 +172,20 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 	}
+
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
+	}
+
+	if n.fork.MsgID() != nil {
+		midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
+			n.fork, time.Minute*2)
+		n.msgResolver = midHandler
+		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
+		// run GC every 3 minutes to clear old messages
+		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
+	} else {
+
 	}
 	_, tc, err := topics.NewPubsub(n.ctx, cfg)
 	if err != nil {

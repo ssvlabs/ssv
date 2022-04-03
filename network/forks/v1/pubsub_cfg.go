@@ -17,12 +17,6 @@ func (v1 *ForkV1) MsgID() forks.MsgIDFunc {
 	}
 }
 
-// WithScoring implementation
-// TODO: rethink this, it could be nice to determine scoring params from the fork
-func (v1 *ForkV1) WithScoring() bool {
-	return true
-}
-
 // Subnets returns the subnets count for this fork
 func (v1 *ForkV1) Subnets() int64 {
 	return int64(SubnetsCount)

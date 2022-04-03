@@ -5,7 +5,6 @@ import (
 	"fmt"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/network/p2p/adapter"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"log"
@@ -138,9 +137,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
-		cfg.P2pNetworkConfig.UserAgent = forksv0.GenerateUserAgent(operatorPrivateKey)
-		Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
-		p2pNet := adapter.NewV0Adapter(cmd.Context(), &cfg.P2pNetworkConfig)
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenUserAgentWithOperatorID(cfg.P2pNetworkConfig.OperatorID)
+		//Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
 		if err := p2pNet.Setup(); err != nil {
 			Logger.Fatal("failed to setup network", zap.Error(err))
 		}
@@ -155,7 +154,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = eth2Network
-		cfg.SSVOptions.Network = p2pNet
+		//cfg.SSVOptions.Network = p2pNet // TODO
 
 		cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
@@ -164,8 +163,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
-		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
-		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
+		//cfg.SSVOptions.ValidatorOptions.Network = p2pNet // TODO
+		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 

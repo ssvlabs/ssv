@@ -113,6 +113,9 @@ func (n *discoveryNotifee) HandlePeerFound(pi peer.AddrInfo) {
 }
 
 func (md *localDiscovery) Close() error {
-	//TODO implement me
-	panic("implement me")
+	if err := md.svc.Close(); err != nil {
+		return err
+	}
+	md.peers = nil
+	return nil
 }

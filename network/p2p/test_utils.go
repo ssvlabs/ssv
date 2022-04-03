@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/testing"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -61,8 +62,8 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
-func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-	ln, err := NewLocalNet(pctx, loggerFactory, n, useDiscv5)
+func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, forkVersion forksprotocol.ForkVersion, n, minConnected int, useDiscv5 bool) (*LocalNet, error) {
+	ln, err := NewLocalNet(pctx, loggerFactory, n, forkVersion, useDiscv5)
 	if err != nil {
 		return nil, err
 	}
@@ -96,12 +97,12 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, n
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, forkVersion forksprotocol.ForkVersion, maxPeers int) (network.P2PNetwork, error) {
 	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(logger, keys.NetKey, operatorPubkey, ln.Bootnode,
+	cfg := NewNetConfig(logger, keys.NetKey, operatorPubkey, forkVersion, ln.Bootnode,
 		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	p := New(ctx, cfg)
 	err = p.Setup()
@@ -112,7 +113,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDiscv5 bool) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, forkVersion forksprotocol.ForkVersion, useDiscv5 bool) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
@@ -124,7 +125,7 @@ func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDis
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
 		logger := loggerFactory(fmt.Sprintf("node-%d", i))
-		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n)
+		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, forkVersion, n)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}
@@ -142,10 +143,16 @@ func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, useDis
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID string,
+	forkVersion forksprotocol.ForkVersion, bn *discovery.Bootnode,
+	tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
 	if bn != nil {
 		bns = bn.ENR
+	}
+	ua := ""
+	if forkVersion == forksprotocol.V0ForkVersion { // for v0 using user agent
+		ua = forksv0.GenUserAgentWithOperatorID(operatorID)
 	}
 	return &Config{
 		Bootnodes:         bns,
@@ -160,6 +167,7 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
 		Logger:            logger,
-		ForkVersion:       forksprotocol.V1ForkVersion,
+		ForkVersion:       forkVersion,
+		UserAgent:         ua,
 	}
 }

@@ -16,6 +16,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -40,7 +41,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv0.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, nPeers-2, nPeers+2)
+		baseTest(ctx, t, peers, pks, f, len(pks)-2, len(pks)+2)
 	})
 
 	// v1 features includes msg_id, msg validator, subnets, scoring
@@ -112,7 +113,6 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				// wait for min peers
 				for c.Err() == nil && len(topicPeers) < nPeers/2 {
 					time.Sleep(time.Millisecond * 100)
-					p.tm.logger.Debug("xxx", zap.Int("len", len(topicPeers)))
 					topicPeers, err = p.tm.Peers(topic)
 					require.NoError(t, err)
 				}
@@ -256,8 +256,8 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	require.NoError(t, err)
 
 	var p *P
-	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
+	logger := zaptest.NewLogger(t)
+	//logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
 		midHandler = NewMsgIDHandler(logger, fork, 2*time.Minute)

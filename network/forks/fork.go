@@ -17,7 +17,6 @@ type pubSubMapping interface {
 
 type pubSubConfig interface {
 	MsgID() MsgIDFunc
-	WithScoring() bool
 }
 
 type encoding interface {

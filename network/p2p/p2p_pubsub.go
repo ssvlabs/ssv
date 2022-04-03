@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"encoding/hex"
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -16,12 +17,16 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
+	if !n.isReady() {
+		return ErrNetworkIsNotReady
+	}
 	raw, err := n.fork.EncodeNetworkMsg(&message)
 	if err != nil {
 		return errors.Wrap(err, "could not decode message")
 	}
 	vpk := message.GetID().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
+
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
 			return errors.New("unknown topic")
@@ -36,6 +41,25 @@ func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
 
 // Subscribe subscribes to validator subnet
 func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
+	if !n.isReady() {
+		return ErrNetworkIsNotReady
+	}
+
+	err := n.subscribe(pk)
+	if err == nil {
+		n.activeValidatorsLock.Lock()
+		pkHex := hex.EncodeToString(pk)
+		if !n.activeValidators[pkHex] {
+			n.activeValidators[pkHex] = true
+		}
+		n.activeValidatorsLock.Unlock()
+	}
+
+	return nil
+}
+
+// subscribe subscribes to validator subnet
+func (n *p2pNetwork) subscribe(pk message.ValidatorPK) error {
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
@@ -46,11 +70,15 @@ func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
 // Unsubscribe unsubscribes from the validator subnet
 func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
+	if !n.isReady() {
+		return ErrNetworkIsNotReady
+	}
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
@@ -61,6 +89,10 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 			return err
 		}
 	}
+	n.activeValidatorsLock.Lock()
+	pkHex := hex.EncodeToString(pk)
+	delete(n.activeValidators, pkHex)
+	n.activeValidatorsLock.Unlock()
 	return nil
 }
 
@@ -74,16 +106,17 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		n.logger.Warn("got nil message", zap.String("topic", topic))
 		return nil
 	}
-	parsed, err := n.fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(msg.GetData())
+	parsed, err := n.fork.DecodeNetworkMsg(msg.GetData())
 	if err != nil {
 		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
 		// TODO: handle..
 		return nil
 	}
-	if parsed == nil {
+	ssvMsg, ok := parsed.(*message.SSVMessage)
+	if !ok {
 		// TODO: handle..
 		return nil
 	}
-	n.msgRouter.Route(*parsed)
+	n.msgRouter.Route(*ssvMsg)
 	return nil
 }

@@ -3,6 +3,7 @@ package peers
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/streams"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -97,16 +98,16 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	// check if the peer is known
-	identity, err := h.idx.Identity(conn.RemotePeer())
+	idn, err := h.idx.Identity(conn.RemotePeer())
 	if err != nil && err != ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
-	if identity != nil {
+	if idn != nil {
 		return nil
 	}
 
 	pid := conn.RemotePeer()
-	idn, err := h.handshake(conn)
+	idn, err = h.sendInfo(conn)
 	if err != nil {
 		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
@@ -119,8 +120,8 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if idn == nil {
 		return errors.New("empty identity")
 	}
-	if !h.applyFilters(identity) {
-		h.logger.Debug("filtering peer", zap.Any("identity", identity))
+	if !h.applyFilters(idn) {
+		h.logger.Debug("filtering peer", zap.Any("identity", idn))
 		return errors.New("peer was filtered")
 	}
 	// adding to index
@@ -134,7 +135,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	return err
 }
 
-func (h *handshaker) handshake(conn libp2pnetwork.Conn) (*Identity, error) {
+func (h *handshaker) sendInfo(conn libp2pnetwork.Conn) (*Identity, error) {
 	data, err := h.idx.Self().Encode()
 	if err != nil {
 		return nil, err
@@ -179,6 +180,17 @@ func (h *handshaker) applyFilters(identity *Identity) bool {
 		}
 	}
 	return true
+}
+
+// ForkVersionFilter determines whether we will connect to the given node by the fork version
+func ForkVersionFilter(forkVersion forksprotocol.ForkVersion) HandshakeFilter {
+	fv := string(forkVersion)
+	return func(identity *Identity) (bool, error) {
+		if fv != identity.ForkV {
+			return false, errors.Errorf("fork version '%s' instead of '%s'", identity.ForkV, fv)
+		}
+		return true, nil
+	}
 }
 
 func identityFromUserAgent(ua string, pid string) *Identity {

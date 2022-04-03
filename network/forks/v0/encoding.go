@@ -7,15 +7,24 @@ import (
 
 // EncodeNetworkMsg - genesis version 0
 func (v0 *ForkV0) EncodeNetworkMsg(msg message.Encoder) ([]byte, error) {
-	return msg.Encode()
+	v1Msg, ok := msg.(*message.SSVMessage)
+	if !ok {
+		// already v0 probably
+		return msg.Encode()
+	}
+	v0Msg, err := ToV0Message(v1Msg)
+	if err != nil {
+		return nil, err
+	}
+	return v0Msg.Encode()
 }
 
 // DecodeNetworkMsg - genesis version 0
 func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (message.Encoder, error) {
-	msg := network.Message{}
-	err := msg.Decode(data)
+	v0Msg := &network.Message{}
+	err := v0Msg.Decode(data)
 	if err != nil {
 		return nil, err
 	}
-	return &msg, nil
+	return ToV1Message(v0Msg)
 }

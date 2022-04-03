@@ -42,12 +42,18 @@ func NewIdentifier(pk []byte, role beacon.RoleType) Identifier {
 
 // GetRoleType extracts the role type from the id
 func (msgID Identifier) GetRoleType() beacon.RoleType {
+	if len(msgID) == 0 {
+		return beacon.RoleTypeUnknown
+	}
 	roleByts := msgID[len(msgID)-4:]
 	return beacon.RoleType(binary.LittleEndian.Uint32(roleByts))
 }
 
 // GetValidatorPK extracts the validator public key from the id
 func (msgID Identifier) GetValidatorPK() ValidatorPK {
+	if len(msgID) == 0 {
+		return []byte{}
+	}
 	vpk := msgID[:len(msgID)-4]
 	return ValidatorPK(vpk)
 }
