@@ -1,10 +1,10 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	ibftController "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"

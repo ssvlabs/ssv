@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"sync"
@@ -12,7 +13,7 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 )
 
-func setupController(logger *zap.Logger, validators map[string]*Validator) controller {
+func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
 	return controller{
 		context:                    context.Background(),
 		collection:                 nil,
@@ -33,7 +34,7 @@ func setupController(logger *zap.Logger, validators map[string]*Validator) contr
 
 func TestGetIndices(t *testing.T) {
 	logger := logex.Build("test", zap.InfoLevel, nil)
-	validators := map[string]*Validator{
+	validators := map[string]*validator.Validator{
 		"0": {
 			Share: &validatorstorage.Share{
 				NodeID:    0,

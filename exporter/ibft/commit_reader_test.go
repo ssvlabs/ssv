@@ -1,10 +1,10 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"

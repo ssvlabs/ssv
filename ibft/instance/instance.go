@@ -31,7 +31,7 @@ type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *storage.Share
 	// Me             *proto.Node
-	Network        network.Network
+	Network        network.P2PNetwork
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
@@ -50,7 +50,7 @@ type InstanceOptions struct {
 type Instance struct {
 	ValidatorShare *storage.Share
 	state          *proto.State
-	network        network.Network
+	network        network.P2PNetwork
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Config         *proto.InstanceConfig

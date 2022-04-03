@@ -3,6 +3,7 @@ package controller
 import (
 	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"sync"
 	"time"
 
@@ -29,7 +30,7 @@ type Controller struct {
 	currentInstance ibft.Instance
 	logger          *zap.Logger
 	ibftStorage     collections.Iibft
-	network         network.Network
+	network         network.P2PNetwork
 	msgQueue        *msgqueue.MessageQueue
 	instanceConfig  *proto.InstanceConfig
 	ValidatorShare  *storage.Share
@@ -50,11 +51,11 @@ type Controller struct {
 
 // New is the constructor of Controller
 func New(
-	role beacon.RoleType,
+	role beacon2.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
 	storage collections.Iibft,
-	network network.Network,
+	network network.P2PNetwork,
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
 	validatorShare *storage.Share,

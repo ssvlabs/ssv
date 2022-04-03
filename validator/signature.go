@@ -3,8 +3,8 @@ package validator
 import (
 	"encoding/base64"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -34,7 +34,7 @@ func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []byte, *beacon.DutyData, error) {
+func (v *Validator) signDuty(decidedValue []byte, duty *beacon2.Duty) ([]byte, []byte, *beacon2.DutyData, error) {
 	// get operator pk for sig
 	pk, err := v.Share.OperatorPubKey()
 	if err != nil {
@@ -44,9 +44,9 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []
 	// sign input value
 	var sig []byte
 	var root []byte
-	retValueStruct := &beacon.DutyData{}
+	retValueStruct := &beacon2.DutyData{}
 	switch duty.Type {
-	case beacon.RoleTypeAttester:
+	case beacon2.RoleTypeAttester:
 		s := &spec.AttestationData{}
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
@@ -56,7 +56,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
 
-		sg := &beacon.InputValueAttestation{Attestation: signedAttestation}
+		sg := &beacon2.InputValueAttestation{Attestation: signedAttestation}
 		retValueStruct.SignedData = sg
 		retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 		retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
@@ -100,7 +100,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beacon.Duty) ([]byte, []
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatures map[uint64][]byte, root []byte, inputValue *beacon.DutyData, duty *beacon.Duty) error {
+func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatures map[uint64][]byte, root []byte, inputValue *beacon2.DutyData, duty *beacon2.Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
@@ -115,7 +115,7 @@ func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatu
 
 	// Submit validation to beacon node
 	switch duty.Type {
-	case beacon.RoleTypeAttester:
+	case beacon2.RoleTypeAttester:
 		logger.Debug("submitting attestation")
 		blsSig := spec.BLSSignature{}
 		copy(blsSig[:], signature.Serialize()[:])

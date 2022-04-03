@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/proto"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -12,7 +13,7 @@ import (
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool, error) {
+func UpdateShareMetadata(share *validatorstorage.Share, bc beaconprotocol.Beacon) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beacon.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {

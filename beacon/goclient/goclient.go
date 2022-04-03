@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/goclient/ekm"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	protocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -54,14 +55,14 @@ type goClient struct {
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
-	keyManager     beacon.KeyManager
+	keyManager     protocol.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beacon.Options) (beacon.Beacon, error) {
+func New(opt beacon.Options) (protocol.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 
@@ -126,16 +127,16 @@ func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPub
 	gc.client.ExtendIndexMap(map[spec.ValidatorIndex]spec.BLSPubKey{index: pubKey})
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*protocol.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
 		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
 		}
-		var duties []*beacon.Duty
+		var duties []*protocol.Duty
 		for _, attesterDuty := range attesterDuties {
-			duties = append(duties, &beacon.Duty{
-				Type:                    beacon.RoleTypeAttester,
+			duties = append(duties, &protocol.Duty{
+				Type:                    protocol.RoleTypeAttester,
 				PubKey:                  attesterDuty.PubKey,
 				Slot:                    attesterDuty.Slot,
 				ValidatorIndex:          attesterDuty.ValidatorIndex,

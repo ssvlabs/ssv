@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/pkg/errors"
 )
 

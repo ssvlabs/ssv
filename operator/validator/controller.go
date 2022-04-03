@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/validator"
 	"sync"
 	"time"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	ethprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/eth"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -41,12 +44,12 @@ type ControllerOptions struct {
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncRateLimit       time.Duration `yaml:"HistorySyncRateLimit" env:"HISTORY_SYNC_BACKOFF" env-default:"200ms" env-description:"Interval for updating metadata"`
 	ETHNetwork                 *core.Network
-	Network                    network.Network
-	Beacon                     beacon.Beacon
+	Network                    network.P2PNetwork
+	Beacon                     beaconprotocol.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
-	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	ShareEncryptionKeyProvider ethprotocol.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	KeyManager                 beacon.KeyManager
+	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
@@ -58,7 +61,7 @@ type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
-	GetValidator(pubKey string) (*Validator, bool)
+	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
@@ -71,10 +74,10 @@ type controller struct {
 	collection validatorstorage.ICollection
 	storage    registrystorage.OperatorsCollection
 	logger     *zap.Logger
-	beacon     beacon.Beacon
-	keyManager beacon.KeyManager
+	beacon     beaconprotocol.Beacon
+	keyManager beaconprotocol.KeyManager
 
-	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	shareEncryptionKeyProvider ethprotocol.ShareEncryptionKeyProvider
 	operatorPubKey             string
 
 	validatorsMap         *validatorsMap
@@ -85,7 +88,7 @@ type controller struct {
 
 	networkMediator controller2.Mediator
 	operatorsIDs    *sync.Map
-	network         network.Network
+	network         network.P2PNetwork
 	forkVersion     forksprotocol.ForkVersion
 }
 
@@ -116,7 +119,7 @@ func NewController(options ControllerOptions) Controller {
 		network:                    options.Network,
 		forkVersion:                options.ForkVersion,
 
-		validatorsMap: newValidatorsMap(options.Context, options.Logger, &Options{
+		validatorsMap: newValidatorsMap(options.Context, options.Logger, &validator.Options{
 			Context:                    options.Context,
 			SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 			Logger:                     options.Logger,
@@ -129,7 +132,7 @@ func NewController(options ControllerOptions) Controller {
 			SyncRateLimit:              options.HistorySyncRateLimit,
 			notifyOperatorID:           notifyOperatorID,
 		}),
-		nonCommitteeValidator: NewReader(options.Logger.With(zap.String("who", "nonCommitteeReader")), options.DB),
+		nonCommitteeValidator: validator.NewReader(options.Logger.With(zap.String("who", "nonCommitteeReader")), options.DB),
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -150,7 +153,7 @@ func (c *controller) GetAllValidatorShares() ([]*validatorstorage.Share, error) 
 
 // ListenToEth1Events is listening to events coming from eth1 client
 func (c *controller) ListenToEth1Events(feed *event.Feed) {
-	cn := make(chan *eth1.Event)
+	cn := make(chan *ethprotocol.Event)
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
 
@@ -170,7 +173,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler {
-	return func(e eth1.Event) error {
+	return func(e ethprotocol.Event) error {
 		switch ev := e.Data.(type) {
 		case abiparser.ValidatorAddedEvent:
 			pubKey := hex.EncodeToString(ev.PublicKey)
@@ -320,7 +323,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.Validat
 }
 
 // GetValidator returns a validator instance from validatorsMap
-func (c *controller) GetValidator(pubKey string) (*Validator, bool) {
+func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -330,7 +333,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 
-	err := c.validatorsMap.ForEach(func(v *Validator) error {
+	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
 		if !v.Share.HasMetadata() {
 			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
 		} else if v.Share.Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
@@ -441,7 +444,7 @@ func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(v *Validator) (bool, error) {
+func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
 	if !v.Share.HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")

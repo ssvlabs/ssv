@@ -20,7 +20,7 @@ type Syncer interface {
 type Sync struct {
 	logger              *zap.Logger
 	publicKey           []byte
-	network             network.Network
+	network             network.P2PNetwork
 	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
 	identifier          []byte
@@ -30,7 +30,7 @@ type Sync struct {
 }
 
 // New returns a new instance of Sync
-func New(logger *zap.Logger, publicKey []byte, committeeSize int, identifier []byte, network network.Network, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
+func New(logger *zap.Logger, publicKey []byte, committeeSize int, identifier []byte, network network.P2PNetwork, ibftStorage collections.Iibft, validateDecidedMsgF func(msg *proto.SignedMessage) error) *Sync {
 	return &Sync{
 		logger:              logger.With(zap.String("sync", "history")),
 		publicKey:           publicKey,

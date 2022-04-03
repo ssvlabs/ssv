@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

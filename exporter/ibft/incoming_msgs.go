@@ -3,10 +3,10 @@ package ibft
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"

@@ -3,7 +3,6 @@ package ibft
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft"
 	ibftctl "github.com/bloxapp/ssv/ibft/controller"
@@ -13,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/history"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/tasks"

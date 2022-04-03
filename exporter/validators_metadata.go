@@ -3,7 +3,7 @@ package exporter
 import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/ibft"
-	"github.com/bloxapp/ssv/validator"
+	"github.com/bloxapp/ssv/operator/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"

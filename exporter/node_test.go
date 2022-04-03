@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter/api"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -193,7 +194,7 @@ func newMockExporter() (*exporter, error) {
 
 	opts := Options{
 		Ctx:            context.Background(),
-		Beacon:         beacon.NewMockBeacon(map[uint64][]*beacon.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
+		Beacon:         beacon.NewMockBeacon(map[uint64][]*beacon2.Duty{}, map[spec.BLSPubKey]*v1.Validator{}),
 		Logger:         logger,
 		ETHNetwork:     nil,
 		Eth1Client:     nil,

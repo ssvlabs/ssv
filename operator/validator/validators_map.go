@@ -3,31 +3,32 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/validator"
 	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"sync"
 )
 
 // validatorIterator is the function used to iterate over existing validators
-type validatorIterator func(*Validator) error
+type validatorIterator func(*validator.Validator) error
 
 // validatorsMap manages a collection of running validators
 type validatorsMap struct {
 	logger *zap.Logger
 	ctx    context.Context
 
-	optsTemplate *Options
+	optsTemplate *validator.Options
 
 	lock          sync.RWMutex
-	validatorsMap map[string]*Validator
+	validatorsMap map[string]*validator.Validator
 }
 
-func newValidatorsMap(ctx context.Context, logger *zap.Logger, optsTemplate *Options) *validatorsMap {
+func newValidatorsMap(ctx context.Context, logger *zap.Logger, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
 		logger:        logger.With(zap.String("component", "validatorsMap")),
 		ctx:           ctx,
 		lock:          sync.RWMutex{},
-		validatorsMap: make(map[string]*Validator),
+		validatorsMap: make(map[string]*validator.Validator),
 		optsTemplate:  optsTemplate,
 	}
 
@@ -48,7 +49,7 @@ func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
 }
 
 // GetValidator returns a validator
-func (vm *validatorsMap) GetValidator(pubKey string) (*Validator, bool) {
+func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
 	// main lock
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
@@ -59,7 +60,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*Validator, bool) {
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -68,7 +69,7 @@ func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *Validator {
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
-		vm.validatorsMap[pubKey] = New(opts)
+		vm.validatorsMap[pubKey] = validator.New(opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil
 	} else {

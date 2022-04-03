@@ -1,25 +1,11 @@
 package beacon
 
 import (
-	"context"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"go.uber.org/zap"
-
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/herumi/bls-eth-go-binary/bls"
 )
-
-// Options for controller struct creation
-type Options struct {
-	Context        context.Context
-	Logger         *zap.Logger
-	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
-	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
-	Graffiti       []byte
-	DB             basedb.IDb
-}
 
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {

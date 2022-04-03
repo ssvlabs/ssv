@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/threshold"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -82,8 +83,8 @@ func TestSignAttestation(t *testing.T) {
 	require.NoError(t, sk1.SetHexString(sk1Str))
 	require.NoError(t, km.AddShare(sk1))
 
-	duty := &beacon.Duty{
-		Type:                    beacon.RoleTypeAttester,
+	duty := &beacon2.Duty{
+		Type:                    beacon2.RoleTypeAttester,
 		PubKey:                  [48]byte{},
 		Slot:                    30,
 		ValidatorIndex:          1,

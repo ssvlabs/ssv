@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -39,7 +40,7 @@ func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 	return nil, nil
 }
 
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon2.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 
@@ -135,7 +136,7 @@ func populatedIbft(
 	}
 	forkVersion := forksprotocol.V0ForkVersion
 	ret := New(
-		beacon.RoleTypeAttester,
+		beacon2.RoleTypeAttester,
 		identifier,
 		logex.Build("", zap.DebugLevel, nil),
 		ibftStorage,

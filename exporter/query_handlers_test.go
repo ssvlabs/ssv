@@ -3,11 +3,11 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"

@@ -3,8 +3,8 @@ package validator
 import (
 	"context"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -26,7 +26,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 		name                        string
 		decided                     bool
 		signaturesCount             int
-		role                        beacon.RoleType
+		role                        beacon2.RoleType
 		expectedAttestationDataByts []byte
 		overrideAttestationData     *spec.AttestationData
 		expectedError               string
@@ -35,7 +35,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"valid consensus",
 			true,
 			3,
-			beacon.RoleTypeAttester,
+			beacon2.RoleTypeAttester,
 			marshalInputValueStructForAttestation(t, refAttestationDataByts),
 			nil,
 			"",
@@ -44,7 +44,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"not decided",
 			false,
 			3,
-			beacon.RoleTypeAttester,
+			beacon2.RoleTypeAttester,
 			refAttestationDataByts,
 			nil,
 			"instance did not decide",
@@ -53,7 +53,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"non supported role",
 			false,
 			3,
-			beacon.RoleTypeUnknown,
+			beacon2.RoleTypeUnknown,
 			refAttestationDataByts,
 			nil,
 			"no ibft for this role [UNKNOWN]",
@@ -62,7 +62,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"non supported role",
 			false,
 			3,
-			beacon.RoleTypeUnknown,
+			beacon2.RoleTypeUnknown,
 			refAttestationDataByts,
 			nil,
 			"no ibft for this role [UNKNOWN]",
@@ -71,7 +71,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			"invalid value pre-check",
 			false,
 			3,
-			beacon.RoleTypeAttester,
+			beacon2.RoleTypeAttester,
 			refAttestationDataByts,
 			&spec.AttestationData{
 				Slot: 100,
@@ -89,7 +89,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 				node.beacon.(*testBeacon).refAttestationData = test.overrideAttestationData
 			}
 
-			duty := &beacon.Duty{
+			duty := &beacon2.Duty{
 				Type:                    test.role,
 				PubKey:                  spec.BLSPubKey{},
 				Slot:                    0,
@@ -169,8 +169,8 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 
-			duty := &beacon.Duty{
-				Type:                    beacon.RoleTypeAttester,
+			duty := &beacon2.Duty{
+				Type:                    beacon2.RoleTypeAttester,
 				PubKey:                  spec.BLSPubKey{},
 				Slot:                    0,
 				ValidatorIndex:          0,
@@ -188,7 +188,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			for index, sig := range test.sigs {
 				err := validator.network.BroadcastSignature(nil, &proto.SignedMessage{
 					Message: &proto.Message{
-						Lambda:    validator.ibfts[beacon.RoleTypeAttester].GetIdentifier(),
+						Lambda:    validator.ibfts[beacon2.RoleTypeAttester].GetIdentifier(),
 						SeqNumber: 0,
 					},
 					Signature: sig,

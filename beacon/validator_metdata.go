@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	protocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
@@ -60,7 +61,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 type OnUpdated func(pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
+func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc protocol.Beacon, onUpdated OnUpdated) error {
 	logger := logex.GetLogger(zap.String("who", "UpdateValidatorsMetadata"))
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
@@ -93,7 +94,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 }
 
 // FetchValidatorsMetadata is fetching validators data from beacon
-func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
+func FetchValidatorsMetadata(bc protocol.Beacon, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -126,7 +127,7 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 	queue tasks.Queue,
 	collection ValidatorMetadataStorage,
-	bc Beacon,
+	bc protocol.Beacon,
 	onUpdated OnUpdated,
 	batchSize int) {
 	batch(pubKeys, queue, func(pks [][]byte) func() error {

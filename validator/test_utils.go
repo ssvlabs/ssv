@@ -4,13 +4,13 @@ import (
 	"encoding/hex"
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -125,7 +125,7 @@ func (b *testBeacon) StartReceivingBlocks() {
 
 }
 
-func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon2.Duty, error) {
 	return nil, nil
 }
 
@@ -137,7 +137,7 @@ func (b *testBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return b.refAttestationData, nil
 }
 
-func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon2.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	sig := spec.BLSSignature{}
 	copy(sig[:], refAttestationSplitSigs[0])
 	return &spec.Attestation{
@@ -177,10 +177,10 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.ibfts = make(map[beacon.RoleType]ibft.Controller)
-	ret.ibfts[beacon.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
-	ret.ibfts[beacon.RoleTypeAttester].(*testIBFT).identifier = identifier
-	require.NoError(t, ret.ibfts[beacon.RoleTypeAttester].Init())
+	ret.ibfts = make(map[beacon2.RoleType]ibft.Controller)
+	ret.ibfts[beacon2.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
+	ret.ibfts[beacon2.RoleTypeAttester].(*testIBFT).identifier = identifier
+	require.NoError(t, ret.ibfts[beacon2.RoleTypeAttester].Init())
 	ret.valueCheck = valcheck.New()
 	ret.signer = ret.beacon
 

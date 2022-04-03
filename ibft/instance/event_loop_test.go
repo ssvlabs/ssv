@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/validator/storage"
@@ -35,7 +36,7 @@ func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte,
 	return nil, nil
 }
 
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon2.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 

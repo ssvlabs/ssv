@@ -8,10 +8,11 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -26,10 +27,10 @@ type Node interface {
 type Options struct {
 	ETHNetwork          core.Network
 	Beacon              beacon.Beacon
-	Network             network.Network
+	Network             network.P2PNetwork
 	Context             context.Context
 	Logger              *zap.Logger
-	Eth1Client          eth1.Client
+	Eth1Client          eth.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
@@ -51,9 +52,9 @@ type operatorNode struct {
 	validatorsCtrl validator.Controller
 	logger         *zap.Logger
 	beacon         beacon.Beacon
-	net            network.Network
+	net            network.P2PNetwork
 	storage        Storage
-	eth1Client     eth1.Client
+	eth1Client     eth.Client
 	dutyCtrl       duties.DutyController
 	//fork           *forks.Forker
 

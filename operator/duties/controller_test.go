@@ -4,7 +4,7 @@ import (
 	"context"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
