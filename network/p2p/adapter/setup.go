@@ -80,7 +80,7 @@ func (n *netV0Adapter) setupPubsub() error {
 		MsgHandler:  n.HandleMsg,
 	}
 
-	if n.fork.WithMsgID() {
+	if n.fork.MsgID() != nil {
 		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, cfg.MsgIDHandler.GC)

@@ -1,8 +1,10 @@
 package v0
 
-// WithMsgID implementation
-func (v0 *ForkV0) WithMsgID() bool {
-	return false
+import "github.com/bloxapp/ssv/network/forks"
+
+// MsgID in v0 is nil as we use the default msg_id function by libp2p
+func (v0 *ForkV0) MsgID() forks.MsgIDFunc {
+	return nil
 }
 
 // WithScoring implementation

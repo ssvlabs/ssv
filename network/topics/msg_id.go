@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"github.com/bloxapp/ssv/network/forks"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	scrypto "github.com/bloxapp/ssv/utils/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"go.uber.org/zap"
@@ -22,16 +21,6 @@ const (
 	// MsgIDBadPeerID is the msg_id for messages w/o a valid sender
 	MsgIDBadPeerID = "invalid:peer_id_error"
 )
-
-// SSVMsgID returns msg_id for the given message
-func SSVMsgID(msg []byte) string {
-	if len(msg) == 0 {
-		return ""
-	}
-	// TODO: check performance
-	h := scrypto.Sha256Hash(msg)
-	return string(h[20:])
-}
 
 // MsgPeersResolver will resolve the sending peers of the given message
 type MsgPeersResolver interface {
@@ -75,12 +64,12 @@ func NewMsgIDHandler(logger *zap.Logger, fork forks.Fork, ttl time.Duration) Msg
 }
 
 // MsgID returns the msg_id function that calculates msg_id based on it's content
-func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
+func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 	return func(pmsg *ps_pb.Message) string {
 		if pmsg == nil {
 			return MsgIDEmptyMessage
 		}
-		logger := store.logger.With(zap.ByteString("seq_no", pmsg.GetSeqno()))
+		logger := handler.logger.With(zap.ByteString("seq_no", pmsg.GetSeqno()))
 		if len(pmsg.GetData()) == 0 {
 			logger.Warn("empty message", zap.ByteString("pmsg.From", pmsg.GetFrom()))
 			//return fmt.Sprintf("%s/%s", MsgIDEmptyMessage, pubsub.DefaultMsgIdFn(pmsg))
@@ -93,44 +82,44 @@ func (store *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDBadPeerID
 		}
 		logger = logger.With(zap.String("from", pid.String()))
-		ssvMsg, err := store.fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(pmsg.GetData())
+		ssvMsg, err := handler.fork.(*forksv1.ForkV1).DecodeNetworkMsgV1(pmsg.GetData())
 		if err != nil {
 			logger.Warn("invalid encoding", zap.Error(err))
 			return MsgIDBadEncodedMessage
 		}
-		mid := SSVMsgID(ssvMsg.Data)
+		mid := handler.fork.MsgID()(ssvMsg.Data)
 		if len(mid) == 0 {
 			logger.Warn("could not create msg_id")
 			return MsgIDError
 		}
-		store.add(mid, pid)
+		handler.add(mid, pid)
 		//logger.Debug("msg_id created", zap.String("value", mid))
 		return mid
 	}
 }
 
 // GetPeers returns the peers that are related to the given msg
-func (store *msgIDHandler) GetPeers(msg []byte) []peer.ID {
-	msgID := SSVMsgID(msg)
-	store.locker.Lock()
-	defer store.locker.Unlock()
-	entry, ok := store.ids[msgID]
+func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
+	msgID := handler.fork.MsgID()(msg)
+	handler.locker.Lock()
+	defer handler.locker.Unlock()
+	entry, ok := handler.ids[msgID]
 	if ok {
-		if !entry.t.Add(store.ttl).After(time.Now()) {
+		if !entry.t.Add(handler.ttl).After(time.Now()) {
 			return entry.peers
 		}
 		// otherwise -> expired
-		delete(store.ids, msgID)
+		delete(handler.ids, msgID)
 	}
 	return []peer.ID{}
 }
 
 // add the pair of msg id and peer id
-func (store *msgIDHandler) add(msgID string, pi peer.ID) {
-	store.locker.Lock()
-	defer store.locker.Unlock()
+func (handler *msgIDHandler) add(msgID string, pi peer.ID) {
+	handler.locker.Lock()
+	defer handler.locker.Unlock()
 
-	entry, ok := store.ids[msgID]
+	entry, ok := handler.ids[msgID]
 	if !ok {
 		entry = &msgIDEntry{
 			peers: []peer.ID{},
@@ -138,6 +127,7 @@ func (store *msgIDHandler) add(msgID string, pi peer.ID) {
 	}
 	// extend expiration
 	entry.t = time.Now()
+	// add the peer
 	b := []byte(pi)
 	for _, p := range entry.peers {
 		if bytes.Equal([]byte(p), b) {
@@ -148,15 +138,15 @@ func (store *msgIDHandler) add(msgID string, pi peer.ID) {
 }
 
 // GC performs garbage collection on the given map
-func (store *msgIDHandler) GC() {
-	store.locker.Lock()
-	defer store.locker.Unlock()
+func (handler *msgIDHandler) GC() {
+	handler.locker.Lock()
+	defer handler.locker.Unlock()
 
 	ids := make(map[string]*msgIDEntry)
-	for m, entry := range store.ids {
-		if entry.t.Add(store.ttl).After(time.Now()) {
+	for m, entry := range handler.ids {
+		if entry.t.Add(handler.ttl).After(time.Now()) {
 			ids[m] = entry
 		}
 	}
-	store.ids = ids
+	handler.ids = ids
 }

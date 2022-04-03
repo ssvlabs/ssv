@@ -103,7 +103,7 @@ var StartNodeCmd = &cobra.Command{
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
-
+		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))
 		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
