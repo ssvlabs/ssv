@@ -1,4 +1,4 @@
-package p2p
+package protcolp2p
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"

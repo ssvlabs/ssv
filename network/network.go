@@ -2,7 +2,7 @@ package network
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	protocol_p2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"io"
 )
 
@@ -43,7 +43,7 @@ type ValidationReporting interface {
 // P2PNetwork is a facade interface that provides the entire functionality of the different network interfaces
 type P2PNetwork interface {
 	io.Closer
-	protocol_p2p.Network
+	protocolp2p.Network
 	MessageRouting
 	ValidationReporting
 	// Setup initialize the network layer and starts the libp2p host

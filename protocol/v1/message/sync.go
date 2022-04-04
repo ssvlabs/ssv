@@ -52,6 +52,21 @@ func (sm *SyncMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, sm)
 }
 
+// UpdateResults updates the given sync message with results
+func (sm *SyncMessage) UpdateResults(err error, results ...*SignedMessage) {
+	if err != nil {
+		sm.Status = StatusInternalError
+	} else if len(results) == 0 {
+		sm.Status = StatusNotFound
+	} else {
+		sm.Data = make([]*SignedMessage, len(results))
+		for i, res := range results {
+			sm.Data[i] = res
+		}
+		sm.Status = StatusSuccess
+	}
+}
+
 //// MarshalJSON implements json.Marshaler
 //// the top level values (beside status) will be encoded to hex
 //func (sm *SyncMessage) MarshalJSON() ([]byte, error) {

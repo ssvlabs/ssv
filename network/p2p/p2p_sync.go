@@ -2,7 +2,7 @@ package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	protocol_p2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
@@ -13,12 +13,11 @@ import (
 const (
 	peersForSync = 10
 
-	// TODO: add
 	legacyMsgStream = "/sync/0.0.1"
 
-	lastDecidedProtocol = "/ssv/sync/decided/last"
-	changeRoundProtocol = "/ssv/sync/round"
-	historyProtocol     = "/ssv/sync/decided/history"
+	lastDecidedProtocol = "/ssv/sync/decided/last/0.0.1"
+	changeRoundProtocol = "/ssv/sync/round/0.0.1"
+	historyProtocol     = "/ssv/sync/decided/history/0.0.1"
 )
 
 // LastDecided fetches last decided from a random set of peers
@@ -71,17 +70,8 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 	})
 }
 
-func (n *p2pNetwork) setupLegacySyncHandler() error {
-	n.RegisterHandler(legacyMsgStream, func(ssvMessage *message.SSVMessage) (*message.SSVMessage, error) {
-		// TODO: implement
-		return ssvMessage, nil
-	})
-
-	return nil
-}
-
 // RegisterHandler registers the given handler for the stream
-func (n *p2pNetwork) RegisterHandler(pid string, handler protocol_p2p.RequestHandler) {
+func (n *p2pNetwork) RegisterHandler(pid string, handler protocolp2p.RequestHandler) {
 	n.host.SetStreamHandler(libp2p_protocol.ID(pid), func(stream libp2pnetwork.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
@@ -115,6 +105,47 @@ func (n *p2pNetwork) RegisterHandler(pid string, handler protocol_p2p.RequestHan
 		}
 	})
 }
+
+// setupLegacySyncHandler registers a stream handler for legacy sync protocol
+func (n *p2pNetwork) setupLegacySyncHandler() {
+	n.RegisterHandler(legacyMsgStream, func(ssvMessage *message.SSVMessage) (*message.SSVMessage, error) {
+		// TODO: implement
+		return ssvMessage, nil
+	})
+}
+
+//type LegacySyncHandler func(obj network.SyncChanObj) ([]byte, error)
+//// setupLegacySyncHandlerV0 registers a stream handler for legacy sync protocol,
+//// but uses v0 messages in the interface
+//func (n *p2pNetwork) setupLegacySyncHandlerV0(handler LegacySyncHandler) error {
+//	n.host.SetStreamHandler(legacyMsgStream, func(stream libp2pnetwork.Stream) {
+//		req, respond, done, err := n.streamCtrl.HandleStream(stream)
+//		defer done()
+//		if err != nil {
+//			n.logger.Warn("could not handle stream", zap.Error(err))
+//			return
+//		}
+//		var msgV0 network.Message
+//		if err = json.Unmarshal(req, &msgV0); err != nil {
+//			n.logger.Warn("could not unmarshal data", zap.Error(err))
+//			return
+//		}
+//
+//		result, err := handler(network.SyncChanObj{
+//			Msg:      msgV0.SyncMessage,
+//			StreamID: stream.ID(),
+//		})
+//		if err != nil {
+//			n.logger.Warn("could not handle msg from stream")
+//			return
+//		}
+//		if err := respond(result); err != nil {
+//			n.logger.Warn("could not respond to stream", zap.Error(err))
+//			return
+//		}
+//	})
+//	return nil
+//}
 
 // getSubsetOfPeers returns a subset of the peers from that topic
 func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, filter func(peer.ID) bool) ([]peer.ID, error) {

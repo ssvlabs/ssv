@@ -4,7 +4,7 @@ import "github.com/bloxapp/ssv/protocol/v1/message"
 
 // DecidedMsgStore manages persistence of messages
 type DecidedMsgStore interface {
-	GetLastDecided(identifier message.Identifier)
+	GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error)
 	// SaveLastDecided saves the given decided message, after checking that it is indeed the highest
 	SaveLastDecided(signedMsg ...*message.SignedMessage) error
 	// GetDecided returns historical decided messages in the given range
