@@ -3,8 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/validator"
 	"sync"
 	"time"
 
@@ -14,11 +12,13 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	ethprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/eth"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -90,6 +90,7 @@ type controller struct {
 	operatorsIDs    *sync.Map
 	network         network.P2PNetwork
 	forkVersion     forksprotocol.ForkVersion
+	messageRouter   *messageRouter
 }
 
 // NewController creates a new validator controller instance
@@ -139,6 +140,8 @@ func NewController(options ControllerOptions) Controller {
 
 		networkMediator: controller2.NewMediator(options.Logger),
 		operatorsIDs:    operatorsIDs,
+
+		messageRouter: newMessageRouter(options.Logger),
 	}
 
 	if err := ctrl.initShares(options); err != nil {
@@ -148,7 +151,30 @@ func NewController(options ControllerOptions) Controller {
 }
 
 func (c *controller) GetAllValidatorShares() ([]*validatorstorage.Share, error) {
+	c.network.UseMessageRouter(c.messageRouter)
+	go c.handleRouterMessages()
+
 	return c.collection.GetAllValidatorShares()
+}
+
+func (c *controller) handleRouterMessages() {
+	ch := c.messageRouter.GetMessageChan()
+
+	for {
+		select {
+		case <-c.context.Done():
+			return
+		case msg := <-ch:
+			pk := msg.ID.GetValidatorPK()
+			hexPK := hex.EncodeToString(pk)
+			flagMsg := flaggedMessage{message: msg}
+
+			// TODO(nkryuchkov): pass to validator
+			if _, ok := c.validatorsMap.GetValidator(hexPK); !ok {
+				flagMsg.readOnly = true
+			}
+		}
+	}
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
