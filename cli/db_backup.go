@@ -47,7 +47,7 @@ var restoreCmd = &cobra.Command{
 	RunE:  doRestore,
 }
 
-func doBackup(_ *cobra.Command, _ []string) error {
+func doBackup(_ *cobra.Command, _ []string) (err error) {
 	if dir == "" {
 		return errors.New("no DB directory provided")
 	}
@@ -63,9 +63,13 @@ func doBackup(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
-	f, err := os.Create(backupFile)
+	f, err := os.Create(backupFile) // nolint: gosec
 	if err != nil {
 		return err
 	}
@@ -103,13 +107,21 @@ func doRestore(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
-	f, err := os.Open(restoreFile)
+	f, err := os.Open(restoreFile) // nolint: gosec
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 
 	const maxPendingWrites = 256
 	return db.Load(f, maxPendingWrites)
