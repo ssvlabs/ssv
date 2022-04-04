@@ -1,4 +1,4 @@
-package round
+package handlers
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
