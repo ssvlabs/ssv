@@ -11,7 +11,7 @@ import (
 
 // HistoryHandler handler for decided history protocol
 // TODO: add msg validation
-func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore) protocolp2p.RequestHandler {
+func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, maxBatchSize int) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
 		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
@@ -21,6 +21,10 @@ func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore) prot
 			logger.Debug("could not decode msg data", zap.Error(err))
 			sm.Status = message.StatusBadRequest
 		} else {
+			items := int(sm.Params.Height[1] - sm.Params.Height[0])
+			if items > maxBatchSize {
+				sm.Params.Height[1] = sm.Params.Height[0] + message.Height(maxBatchSize)
+			}
 			results, err := store.GetDecided(msg.ID, sm.Params.Height[0], sm.Params.Height[1])
 			sm.UpdateResults(err, results...)
 		}
