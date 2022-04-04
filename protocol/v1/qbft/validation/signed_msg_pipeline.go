@@ -79,4 +79,3 @@ func (p *pipelineFunc) Run(signedMessage *message.SignedMessage) error {
 func (p *pipelineFunc) Name() string {
 	return p.name
 }
-
