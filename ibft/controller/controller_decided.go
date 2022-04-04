@@ -15,7 +15,7 @@ import (
 // processDecidedQueueMessages is listen for all the ibft decided msg's and process them
 func (i *Controller) processDecidedQueueMessages() {
 	go func() {
-		for {
+		for i.ctx.Err() == nil {
 			if decidedMsg := i.msgQueue.PopMessage(msgqueue.DecidedIndexKey(i.GetIdentifier())); decidedMsg != nil {
 				i.ProcessDecidedMessage(decidedMsg.SignedMessage)
 			}

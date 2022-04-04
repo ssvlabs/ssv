@@ -74,10 +74,16 @@ func (ap AbiParser) ParseValidatorAddedEvent(data []byte, contractAbi abi.ABI) (
 	return ap.Version.ParseValidatorAddedEvent(ap.Logger, data, contractAbi)
 }
 
+// ParseValidatorUpdatedEvent parses ParseValidatorUpdatedEvent
+func (ap AbiParser) ParseValidatorUpdatedEvent(data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error) {
+	return ap.Version.ParseValidatorUpdatedEvent(ap.Logger, data, contractAbi)
+}
+
 // AbiVersion serves as the parser client interface
 type AbiVersion interface {
 	ParseOperatorAddedEvent(logger *zap.Logger, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, error)
 	ParseValidatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error)
+	ParseValidatorUpdatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, error)
 }
 
 // LoadABI enables to load a custom abi json

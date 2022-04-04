@@ -42,6 +42,11 @@ func (km *testKM) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
+func (km *testKM) RemoveShare(pubKey string) error {
+	// TODO: implement
+	return nil
+}
+
 func (km *testKM) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }

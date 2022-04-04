@@ -31,6 +31,10 @@ func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
+func (s *testSigner) RemoveShare(pubSub string) error {
+	return nil
+}
+
 func (s *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
 	return nil, nil
 }

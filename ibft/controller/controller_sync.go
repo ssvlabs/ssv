@@ -19,7 +19,7 @@ const syncRetries = 3
 // processSyncQueueMessages is listen for all the ibft sync msg's and process them
 func (i *Controller) processSyncQueueMessages() {
 	go func() {
-		for {
+		for i.ctx.Err() == nil {
 			if syncMsg := i.msgQueue.PopMessage(msgqueue.SyncIndexKey(i.Identifier)); syncMsg != nil {
 				i.ProcessSyncMessage(&network.SyncChanObj{
 					Msg:      syncMsg.SyncMessage,

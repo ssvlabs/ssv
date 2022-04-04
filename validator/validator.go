@@ -47,6 +47,7 @@ type Options struct {
 // it holds the corresponding ibft controllers to trigger consensus layer (see ExecuteDuty())
 type Validator struct {
 	ctx                        context.Context
+	cancel                     context.CancelFunc
 	logger                     *zap.Logger
 	Share                      *storage.Share
 	ethNetwork                 *core.Network
@@ -69,7 +70,7 @@ func New(opt Options) *Validator {
 
 	msgQueue := msgqueue.New()
 	ibfts := make(map[beacon.RoleType]ibft.Controller)
-	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer, opt.SyncRateLimit)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(opt.Context, beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer, opt.SyncRateLimit)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
@@ -88,8 +89,10 @@ func New(opt Options) *Validator {
 	}
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opsHashList))
 
+	ctx, cancel := context.WithCancel(opt.Context)
 	return &Validator{
-		ctx:                        opt.Context,
+		ctx:                        ctx,
+		cancel:                     cancel,
 		logger:                     logger,
 		msgQueue:                   msgQueue,
 		Share:                      opt.Share,
@@ -132,21 +135,39 @@ func (v *Validator) Start() error {
 	return nil
 }
 
+// Close validator
+func (v *Validator) Close() error {
+	for _, ctrl := range v.ibfts {
+		err := ctrl.StopInstance()
+		if err != nil {
+			return errors.Wrap(err, "could not stop ibft instance")
+		}
+	}
+	v.cancel()
+	return nil
+}
+
 func (v *Validator) listenToSignatureMessages() {
 	sigChan, done := v.network.ReceivedSignatureChan()
 	defer done()
-	for sigMsg := range sigChan {
-		if sigMsg == nil {
-			v.logger.Debug("got nil message")
-			continue
-		}
 
-		if sigMsg.Message != nil && v.oneOfIBFTIdentifiers(sigMsg.Message.Lambda) {
-			v.logger.Debug("adding sig message to msg queue", getFields(sigMsg)...)
-			v.msgQueue.AddMessage(&network.Message{
-				SignedMessage: sigMsg,
-				Type:          network.NetworkMsg_SignatureType,
-			})
+	for {
+		select {
+		case <-v.ctx.Done():
+			return
+		case sigMsg := <-sigChan:
+			if sigMsg == nil {
+				v.logger.Debug("got nil message")
+				continue
+			}
+
+			if sigMsg.Message != nil && v.oneOfIBFTIdentifiers(sigMsg.Message.Lambda) {
+				v.logger.Debug("adding sig message to msg queue", getFields(sigMsg)...)
+				v.msgQueue.AddMessage(&network.Message{
+					SignedMessage: sigMsg,
+					Type:          network.NetworkMsg_SignatureType,
+				})
+			}
 		}
 	}
 }
@@ -202,6 +223,7 @@ func getFields(msg *proto.SignedMessage) []zap.Field {
 }
 
 func setupIbftController(
+	ctx context.Context,
 	role beacon.RoleType,
 	logger *zap.Logger,
 	db basedb.IDb,
@@ -215,6 +237,7 @@ func setupIbftController(
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
 	return ibftctrl.New(
+		ctx,
 		role,
 		identifier,
 		logger,

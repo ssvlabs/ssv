@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 
@@ -167,8 +168,8 @@ func (ec *eth1Client) reconnect() {
 }
 
 // fireEvent notifies observers about some contract event
-func (ec *eth1Client) fireEvent(log types.Log, data interface{}) {
-	e := eth1.Event{Log: log, Data: data}
+func (ec *eth1Client) fireEvent(log types.Log, name string, data interface{}) {
+	e := eth1.Event{Log: log, Name: name, Data: data}
 	_ = ec.eventsFeed.Send(&e)
 	// TODO: add trace
 	//ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
@@ -286,7 +287,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	ec.logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
+	ec.fireEvent(types.Log{}, "SyncEndedEvent", eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
 
 	return nil
 }
@@ -337,20 +338,27 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (bool, er
 	abiParser := eth1.NewParser(ec.logger, ec.abiVersion)
 
 	switch eventName := eventType.Name; eventName {
-	case "OperatorAdded":
+	case abiparser.OperatorAdded:
 		parsed, unpackErr, err := abiParser.ParseOperatorAddedEvent(vLog.Data, vLog.Topics, contractAbi)
 		reportSyncEvent(eventName, err)
 		if err != nil {
 			return unpackErr, errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
-		ec.fireEvent(vLog, *parsed)
-	case "ValidatorAdded":
+		ec.fireEvent(vLog, eventName, *parsed)
+	case abiparser.ValidatorAdded:
 		parsed, unpackErr, err := abiParser.ParseValidatorAddedEvent(vLog.Data, contractAbi)
 		reportSyncEvent(eventName, err)
 		if err != nil {
 			return unpackErr, errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
-		ec.fireEvent(vLog, *parsed)
+		ec.fireEvent(vLog, eventName, *parsed)
+	case abiparser.ValidatorUpdated:
+		parsed, unpackErr, err := abiParser.ParseValidatorUpdatedEvent(vLog.Data, contractAbi)
+		reportSyncEvent(eventName, err)
+		if err != nil {
+			return unpackErr, errors.Wrap(err, "failed to parse ValidatorUpdated event")
+		}
+		ec.fireEvent(vLog, eventName, *parsed)
 	default:
 		ec.logger.Debug("unknown contract event was received", zap.String("hash", vLog.TxHash.Hex()), zap.String("eventName", eventName))
 	}

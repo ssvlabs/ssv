@@ -55,13 +55,20 @@ func (i *Controller) listenToSyncMessages() {
 	syncChan, done := i.network.ReceivedSyncMsgChan()
 	go func() {
 		defer done()
-		for msg := range syncChan {
-			if msg.Msg != nil && i.equalIdentifier(msg.Msg.Lambda) {
-				i.msgQueue.AddMessage(&network.Message{
-					SyncMessage: msg.Msg,
-					StreamID:    msg.StreamID,
-					Type:        network.NetworkMsg_SyncType,
-				})
+		ctx, cancel := context.WithCancel(i.ctx)
+		defer cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg := <-syncChan:
+				if msg.Msg != nil && i.equalIdentifier(msg.Msg.Lambda) {
+					i.msgQueue.AddMessage(&network.Message{
+						SyncMessage: msg.Msg,
+						StreamID:    msg.StreamID,
+						Type:        network.NetworkMsg_SyncType,
+					})
+				}
 			}
 		}
 	}()

@@ -8,8 +8,25 @@ import (
 	"math/big"
 )
 
+// Event names
+const (
+	OperatorAdded    = "OperatorAdded"
+	ValidatorAdded   = "ValidatorAdded"
+	ValidatorUpdated = "ValidatorUpdated"
+)
+
 // ValidatorAddedEvent struct represents event received by the smart contract
 type ValidatorAddedEvent struct {
+	PublicKey          []byte
+	OwnerAddress       common.Address
+	OperatorPublicKeys [][]byte
+	OperatorIds        []*big.Int
+	SharesPublicKeys   [][]byte
+	EncryptedKeys      [][]byte
+}
+
+// ValidatorUpdatedEvent struct represents event received by the smart contract
+type ValidatorUpdatedEvent struct {
 	PublicKey          []byte
 	OwnerAddress       common.Address
 	OperatorPublicKeys [][]byte
@@ -38,7 +55,7 @@ func (v2 *AbiV2) ParseOperatorAddedEvent(
 	contractAbi abi.ABI,
 ) (*OperatorAddedEvent, bool, error) {
 	var operatorAddedEvent OperatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
 	if err != nil {
 		return nil, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
@@ -66,10 +83,23 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(
 	data []byte,
 	contractAbi abi.ABI,
 ) (event *ValidatorAddedEvent, unpackErr bool, error error) {
+	return v2.parseValidatorEvent(logger, data, ValidatorAdded, contractAbi)
+}
+
+// ParseValidatorUpdatedEvent parses ValidatorUpdatedEvent
+func (v2 *AbiV2) ParseValidatorUpdatedEvent(
+	logger *zap.Logger,
+	data []byte,
+	contractAbi abi.ABI,
+) (*ValidatorAddedEvent, bool, error) {
+	return v2.parseValidatorEvent(logger, data, ValidatorUpdated, contractAbi)
+}
+
+func (v2 *AbiV2) parseValidatorEvent(logger *zap.Logger, data []byte, eventName string, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
 	var validatorAddedEvent ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventName, data)
 	if err != nil {
-		return nil, true, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
+		return nil, true, errors.Wrapf(err, "Failed to unpack %s event", eventName)
 	}
 
 	outAbi, err := getOutAbi()

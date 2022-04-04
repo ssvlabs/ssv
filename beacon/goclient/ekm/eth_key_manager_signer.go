@@ -87,6 +87,22 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
+func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
+	km.walletLock.Lock()
+	defer km.walletLock.Unlock()
+
+	acc, err := km.wallet.AccountByPublicKey(pubKey)
+	if err != nil && err.Error() != "account not found" {
+		return errors.Wrap(err, "could not check share existence")
+	}
+	if acc != nil {
+		if err := km.wallet.DeleteAccountByPublicKey(pubKey); err != nil {
+			return errors.Wrap(err, "could not delete share")
+		}
+	}
+	return nil
+}
+
 func (km *ethKeyManagerSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()

@@ -96,11 +96,11 @@ func (s *operatorsStorage) getOperatorDataByPubKey(operatorPubKey string) (*Oper
 
 func (s *operatorsStorage) getOperatorData(index uint64) (*OperatorData, bool, error) {
 	obj, found, err := s.db.Get(s.prefix, buildOperatorKey(index))
-	if !found {
-		return nil, found, nil
-	}
 	if err != nil {
 		return nil, found, err
+	}
+	if !found {
+		return nil, found, nil
 	}
 	var operatorInformation OperatorData
 	err = json.Unmarshal(obj.Value, &operatorInformation)

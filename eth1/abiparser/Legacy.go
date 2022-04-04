@@ -86,6 +86,11 @@ func (a AdapterLegacy) ParseValidatorAddedEvent(
 	}, unpackErr, err
 }
 
+// ParseValidatorUpdatedEvent event is not supported in legacy format
+func (a AdapterLegacy) ParseValidatorUpdatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
+	return nil, false, nil
+}
+
 // AbiLegacy parsing events from legacy abi contract
 type AbiLegacy struct {
 }
@@ -97,7 +102,7 @@ func (a *AbiLegacy) ParseOperatorAddedEvent(
 	contractAbi abi.ABI,
 ) (*OperatorAddedEventLegacy, bool, error) {
 	var operatorAddedEvent OperatorAddedEventLegacy
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
 	if err != nil {
 		return nil, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
@@ -120,7 +125,7 @@ func (a *AbiLegacy) ParseValidatorAddedEvent(
 	contractAbi abi.ABI,
 ) (*ValidatorAddedEventLegacy, bool, error) {
 	var validatorAddedEvent ValidatorAddedEventLegacy
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
 	if err != nil {
 		return nil, true, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
 	}

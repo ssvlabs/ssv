@@ -84,6 +84,11 @@ func (km *testSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
+func (km *testSigner) RemoveShare(pubKey string) error {
+	// TODO: implement
+	return nil
+}
+
 func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
@@ -165,6 +170,7 @@ func main() {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
 		node := controller.New(
+			context.Background(),
 			beacon.RoleTypeAttester,
 			[]byte(identifier),
 			logger.With(zap.Uint64("simulation_node_id", i)),

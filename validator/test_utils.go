@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"encoding/hex"
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -52,6 +53,11 @@ type testIBFT struct {
 	decided         bool
 	signaturesCount int
 	identifier      []byte
+}
+
+func (t *testIBFT) StopInstance() error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (t *testIBFT) Init() error {
@@ -160,6 +166,10 @@ func (b *testBeacon) AddShare(shareKey *bls.SecretKey) error {
 	panic("implement me")
 }
 
+func (b *testBeacon) RemoveShare(pubKey string) error {
+	panic("implement me")
+}
+
 func (b *testBeacon) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
 	panic("implement me")
 }
@@ -175,6 +185,8 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	threshold.Init()
 
 	ret := &Validator{}
+	ctx := context.Background()
+	ret.ctx = ctx
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
 	ret.ibfts = make(map[beacon.RoleType]ibft.Controller)

@@ -78,6 +78,18 @@ func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *Validator {
 	return vm.validatorsMap[pubKey]
 }
 
+// RemoveValidator removes a validator instance from the map
+func (vm *validatorsMap) RemoveValidator(pubKey string) *Validator {
+	if v, found := vm.GetValidator(pubKey); found {
+		vm.lock.Lock()
+		defer vm.lock.Unlock()
+
+		delete(vm.validatorsMap, pubKey)
+		return v
+	}
+	return nil
+}
+
 // Size returns the number of validators in the map
 func (vm *validatorsMap) Size() int {
 	vm.lock.RLock()

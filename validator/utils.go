@@ -31,15 +31,10 @@ func UpdateShareMetadata(share *validatorstorage.Share, bc beacon.Beacon) (bool,
 
 // createShareWithOperatorKey creates a new share object from event
 func createShareWithOperatorKey(
-	operatorsStorage registrystorage.OperatorsCollection,
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
 	operatorPrivateKey *rsa.PrivateKey,
 	operatorPubKey string,
 ) (*validatorstorage.Share, *bls.SecretKey, bool, error) {
-	err := ExtractOperatorPublicKeys(operatorsStorage, &validatorAddedEvent)
-	if err != nil {
-		return nil, nil, false, errors.Wrap(err, "could not extract operator public keys from storage")
-	}
 	validatorShare, shareSecret, isOperatorShare, err := ShareFromValidatorAddedEvent(operatorPrivateKey, operatorPubKey, validatorAddedEvent)
 	if err != nil {
 		return nil, nil, false, errors.Wrap(err, "could not extract validator share from event")
@@ -103,7 +98,7 @@ func ShareFromValidatorAddedEvent(
 	return &validatorShare, shareSecret, isOperatorEvent, nil
 }
 
-// ExtractOperatorPublicKeys extracts the operator public keys from the storage
+// ExtractOperatorPublicKeys extracts the operator public keys from the storage and fill the event
 func ExtractOperatorPublicKeys(
 	storage registrystorage.OperatorsCollection,
 	validatorAddedEvent *abiparser.ValidatorAddedEvent,

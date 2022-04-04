@@ -68,6 +68,11 @@ func (a AdapterV1) ParseValidatorAddedEvent(
 	}, unpackErr, err
 }
 
+// ParseValidatorUpdatedEvent event is not supported in v1 format
+func (a AdapterV1) ParseValidatorUpdatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
+	return nil, false, nil
+}
+
 // AbiV1 parsing events from v1 abi contract
 type AbiV1 struct {
 }
@@ -80,7 +85,7 @@ func (v1 *AbiV1) ParseOperatorAddedEvent(
 	contractAbi abi.ABI,
 ) (*OperatorAddedEventV1, bool, error) {
 	var operatorAddedEvent OperatorAddedEventV1
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
 	if err != nil {
 		return nil, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
 	}
@@ -109,7 +114,7 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(
 	contractAbi abi.ABI,
 ) (event *ValidatorAddedEventV1, unpackErr bool, error error) {
 	var validatorAddedEvent ValidatorAddedEventV1
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
 	if err != nil {
 		return nil, true, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
 	}

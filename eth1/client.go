@@ -22,6 +22,8 @@ type Options struct {
 type Event struct {
 	// Log is the raw event log
 	Log types.Log
+	// Name is the event name used for internal representation.
+	Name string
 	// Data is the parsed event
 	Data interface{}
 }

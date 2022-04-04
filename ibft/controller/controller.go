@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
+	ctx             context.Context
 	currentInstance ibft.Instance
 	logger          *zap.Logger
 	ibftStorage     collections.Iibft
@@ -48,6 +50,7 @@ type Controller struct {
 
 // New is the constructor of Controller
 func New(
+	ctx context.Context,
 	role beacon.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
@@ -62,6 +65,7 @@ func New(
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
 	ret := &Controller{
+		ctx:            ctx,
 		ibftStorage:    storage,
 		logger:         logger,
 		network:        network,
@@ -147,6 +151,17 @@ func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (re
 	}()
 
 	return res, err
+}
+
+// StopInstance - stops an ibft instance or returns error
+func (i *Controller) StopInstance() error {
+	i.currentInstanceLock.Lock()
+	defer i.currentInstanceLock.Unlock()
+
+	if i.currentInstance != nil {
+		i.currentInstance.Stop()
+	}
+	return nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

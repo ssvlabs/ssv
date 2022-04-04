@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
@@ -33,6 +34,10 @@ func newTestSigner() beacon.KeyManager {
 }
 
 func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (s *testSigner) RemoveShare(pubKey string) error {
 	return nil
 }
 
@@ -158,6 +163,7 @@ func populatedIbft(
 		Committee: nodes,
 	}
 	ret := New(
+		context.Background(),
 		beacon.RoleTypeAttester,
 		identifier,
 		logex.Build("", zap.DebugLevel, nil),
