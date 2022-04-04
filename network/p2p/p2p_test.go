@@ -1,14 +1,15 @@
 package p2p
 
 import (
-	"github.com/bloxapp/ssv/fixtures"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"strings"
-	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -21,10 +22,11 @@ func TestP2PNetworker(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	threshold.Init()
 
+	_, refPK := blskeygen.GenBLSKeyPair()
 	peer1, peer2 := testPeers(t, logger)
 
 	pk := &bls.PublicKey{}
-	require.NoError(t, pk.Deserialize(fixtures.RefPk))
+	require.NoError(t, pk.Deserialize(refPK.Serialize()))
 	require.NoError(t, peer1.SubscribeToValidatorNetwork(pk))
 	require.NoError(t, peer2.SubscribeToValidatorNetwork(pk))
 

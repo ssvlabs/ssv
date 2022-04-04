@@ -2,13 +2,13 @@ package validator
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func marshalInputValueStructForAttestation(t *testing.T, attByts []byte) []byte {
@@ -180,10 +180,6 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				ValidatorCommitteeIndex: 0,
 			}
 
-			pk := &bls.PublicKey{}
-			err := pk.Deserialize(refPk)
-			require.NoError(t, err)
-
 			// send sigs
 			for index, sig := range test.sigs {
 				err := validator.network.BroadcastSignature(nil, &proto.SignedMessage{
@@ -197,7 +193,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err = validator.postConsensusDutyExecution(context.Background(), validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty)
+			err := validator.postConsensusDutyExecution(context.Background(), validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
