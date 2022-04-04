@@ -20,7 +20,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	require.NotNil(t, storage)
 	defer done()
 
- 	_, pk := blskeygen.GenBLSKeyPair()
+	_, pk := blskeygen.GenBLSKeyPair()
 
 	operatorData := OperatorData{
 		PublicKey:    string(pk.Serialize()),
