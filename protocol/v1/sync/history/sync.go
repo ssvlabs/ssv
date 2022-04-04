@@ -13,12 +13,44 @@ import (
 // ValidateDecided validates the given decided message
 type ValidateDecided func(signedMessage *message.SignedMessage) error
 
-// SyncDecided syncs decided message with other peers in the network
-func SyncDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validateDecided ValidateDecided, identifier message.Identifier) error {
-	logger = logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
-	localMsg, err := store.GetLastDecided(identifier)
+type History interface {
+	// SyncDecided syncs decided message with other peers in the network
+	SyncDecided(identifier message.Identifier, optimistic bool) (bool, error)
+	// SyncDecidedRange syncs decided messages for the given identifier and range
+	SyncDecidedRange(identifier message.Identifier, from, to message.Height) (bool, error)
+}
+
+type history struct {
+	logger          *zap.Logger
+	store           qbftstorage.DecidedMsgStore
+	syncer          p2pprotocol.Syncer
+	validateDecided ValidateDecided
+}
+
+func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validateDecided ValidateDecided) History {
+	return &history{
+		logger:          logger,
+		store:           store,
+		syncer:          syncer,
+		validateDecided: validateDecided,
+	}
+}
+
+func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (bool, error) {
+	logger := h.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
+
+	remoteMsgs, err := h.syncer.LastDecided(identifier)
+	if err != nil {
+		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
+	}
+	if len(remoteMsgs) == 0 {
+		logger.Info("node is synced: remote highest decided not found, assuming sequence number is 0")
+		return false, nil
+	}
+
+	localMsg, err := h.store.GetLastDecided(identifier)
 	if err != nil && err.Error() != kv.EntryNotFoundError {
-		return errors.Wrap(err, "could not fetch local highest instance during sync")
+		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 	var highest *message.SignedMessage
 	var localHeight message.Height
@@ -27,17 +59,8 @@ func SyncDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p
 	}
 	height := localHeight
 
-	remoteMsgs, err := syncer.LastDecided(identifier)
-	if err != nil {
-		return errors.Wrap(err, "could not fetch local highest instance during sync")
-	}
-	if len(remoteMsgs) == 0 {
-		logger.Info("node is synced: remote highest decided not found, assuming sequence number is 0")
-		return nil
-	}
-
 	for _, remoteMsg := range remoteMsgs {
-		sm, err := getSyncMsg(remoteMsg)
+		sm, err := extractSyncMsg(remoteMsg)
 		if err != nil {
 			logger.Warn("bad sync message", zap.Error(err))
 			continue
@@ -50,62 +73,65 @@ func SyncDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p
 
 	if height <= localHeight {
 		logger.Info("node is synced")
-		return nil
+		return false, nil
 	}
 
-	err = SyncDecidedRange(logger, store, syncer, validateDecided, identifier, localHeight, height)
+	synced, err := h.SyncDecidedRange(identifier, localHeight, height)
 	if err != nil {
-		return errors.Wrapf(err, "could not fetch and save decided in range [%d, %d]", localHeight, height)
+		if !optimistic {
+			return false, errors.Wrapf(err, "could not fetch and save decided in range [%d, %d]", localHeight, height)
+		}
+		// in optimistic approach we ignore failures and updates last decided message
+		h.logger.Debug("could not get decided in range, skipping",
+			zap.Int64("from", int64(localHeight)), zap.Int64("to", int64(height)))
 	}
 
-	err = store.SaveLastDecided(highest)
+	err = h.store.SaveLastDecided(highest)
 	if err != nil {
-		return errors.Wrapf(err, "could not save highest decided (%d)", height)
+		return synced, errors.Wrapf(err, "could not save highest decided (%d)", height)
 	}
 
 	logger.Info("node is synced",
 		zap.Int64("from", int64(localHeight)), zap.Int64("to", int64(height)))
 
-	return nil
+	return synced, nil
 }
 
-// SyncDecidedRange syncs decided messages for the given identifier and range
-func SyncDecidedRange(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validateDecided ValidateDecided,
-	identifier message.Identifier, from, to message.Height) error {
+func (h *history) SyncDecidedRange(identifier message.Identifier, from, to message.Height) (bool, error) {
 	visited := make(map[message.Height]bool)
-	msgs, err := syncer.GetHistory(identifier, from, to)
+	msgs, err := h.syncer.GetHistory(identifier, from, to)
 	if err != nil {
-		return err
+		return false, err
 	}
 	for _, msg := range msgs {
-		sm, err := getSyncMsg(msg)
+		sm, err := extractSyncMsg(msg)
 		if err != nil {
 			continue
 		}
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
-			if err := validateDecided(signedMsg); err != nil {
-				logger.Warn("message not valid", zap.Error(err))
+			if err := h.validateDecided(signedMsg); err != nil {
+				h.logger.Warn("message not valid", zap.Error(err))
 				// TODO: report validation?
 				continue signedMsgLoop
 			}
-			h := signedMsg.Message.Height
-			if visited[h] {
+			height := signedMsg.Message.Height
+			if visited[height] {
 				continue signedMsgLoop
 			}
-			if err := store.SaveDecided(signedMsg); err != nil {
-				logger.Warn("could not save decided", zap.Error(err), zap.Int64("height", int64(h)))
+			if err := h.store.SaveDecided(signedMsg); err != nil {
+				h.logger.Warn("could not save decided", zap.Error(err), zap.Int64("height", int64(height)))
 			}
-			visited[h] = true
+			visited[height] = true
 		}
 	}
 	if len(visited) != int(to-from) {
-		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
+		return false, errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
-	return nil
+	return true, nil
 }
 
-func getSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
+func extractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
 	sm := &message.SyncMessage{}
 	err := sm.Decode(msg.Data)
 	if err != nil {
