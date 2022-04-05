@@ -42,7 +42,6 @@ func NewWorker(cfg *WorkerConfig) *Worker {
 	return w
 }
 
-// Init listen to queue and process each new msg
 func (w *Worker) init() {
 	for i := 1; i <= w.workersCount; i++ {
 		go w.startWorker(w.queue)

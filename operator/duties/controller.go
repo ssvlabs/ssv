@@ -3,17 +3,19 @@ package duties
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"time"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
-	"time"
+
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 const (
@@ -111,12 +113,9 @@ func (dc *dutyController) ExecuteDuty(duty *beacon2.Duty) error {
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
 		go func() {
 			// force the validator to be started (subscribed to validator's topic and synced)
-			if err := v.Start(); err != nil {
-				logger.Error("could not start validator", zap.Error(err))
-				return
-			}
+			v.Start()
 			logger.Info("starting duty processing")
-			v.ExecuteDuty(dc.ctx, uint64(duty.Slot), duty)
+			v.ExecuteDuty(uint64(duty.Slot), duty)
 		}()
 	} else {
 		logger.Warn("could not find validator")
