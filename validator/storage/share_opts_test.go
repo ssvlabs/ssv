@@ -1,16 +1,22 @@
 package storage
 
 import (
-	"github.com/bloxapp/ssv/fixtures"
+	"testing"
+
+	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestShareOptionsToShare(t *testing.T) {
 	threshold.Init()
 
-	origShare, sk := generateRandomValidatorShare()
+	const keysCount = 4
+	refSK, _ := blskeygen.GenBLSKeyPair()
+	splitKeys, err := threshold.Create(refSK.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	origShare, sk := generateRandomValidatorShare(splitKeys)
 
 	shareOpts := ShareOptions{
 		ShareKey:     sk.SerializeToHexStr(),
@@ -21,13 +27,14 @@ func TestShareOptionsToShare(t *testing.T) {
 	}
 
 	t.Run("valid ShareOptions", func(t *testing.T) {
-		for i := 0; i < 4; i++ {
-			shareOpts.Committee[string(fixtures.RefSplitSharesPubKeys[i])] = i + 1
+		for i := 1; i <= keysCount; i++ {
+			key := splitKeys[uint64(i)]
+			shareOpts.Committee[key.GetHexString()] = i
 		}
 		share, err := shareOpts.ToShare()
 		require.NoError(t, err)
 		require.NotNil(t, share)
-		require.Equal(t, len(share.Committee), 4)
+		require.Equal(t, len(share.Committee), keysCount)
 		require.Equal(t, share.PublicKey.GetHexString(), origShare.PublicKey.GetHexString())
 		require.Equal(t, share.OwnerAddress, origShare.OwnerAddress)
 	})
