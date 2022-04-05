@@ -2,10 +2,11 @@ package worker
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWorker(t *testing.T) {
@@ -15,12 +16,12 @@ func TestWorker(t *testing.T) {
 		Buffer:       2,
 	})
 
-	worker.AddHandler(func(msg *message.SignedMessage) {
+	worker.AddHandler(func(msg *message.SSVMessage) {
 		require.NotNil(t, msg)
 	})
 	worker.Init()
 	for i := 0; i < 5; i++ {
-		require.True(t, worker.TryEnqueue(&message.SignedMessage{}))
+		require.True(t, worker.TryEnqueue(&message.SSVMessage{}))
 		time.Sleep(time.Second * 1)
 	}
 }

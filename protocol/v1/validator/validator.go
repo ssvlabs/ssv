@@ -101,7 +101,7 @@ func (v *validator) GetShare() *validatortypes.Share {
 }
 
 // messageHandler process message from queue,
-func messageHandler(msg *message.SignedMessage) {
+func messageHandler(msg *message.SSVMessage) {
 	// validation
 	// check if post consensus
 	// of so, process
