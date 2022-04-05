@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	validatorprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"sync"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/utils"
-	validatorprotocol "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"

@@ -3,7 +3,7 @@ package changeround
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/ibft/pipeline"
@@ -12,11 +12,11 @@ import (
 
 // validateJustification validates change round justifications
 type validateJustification struct {
-	share *types.Share
+	share *keymanager.Share
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *types.Share) pipeline.Pipeline {
+func Validate(share *keymanager.Share) pipeline.Pipeline {
 	return &validateJustification{
 		share: share,
 	}

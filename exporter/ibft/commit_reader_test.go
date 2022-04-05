@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -74,7 +74,7 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 
 	sks, committee := ibftsync.GenerateNodes(4)
 	pk := sks[1].GetPublicKey()
-	require.NoError(t, cr.validatorStorage.SaveValidatorShare(&types.Share{
+	require.NoError(t, cr.validatorStorage.SaveValidatorShare(&keymanager.Share{
 		NodeID:    1,
 		PublicKey: pk,
 		Committee: committee,

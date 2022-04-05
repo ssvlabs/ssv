@@ -7,7 +7,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 )
 
 // ForkV0 is the genesis fork for controller
@@ -25,7 +25,7 @@ func (v0 *ForkV0) InstanceFork() instanceFork.Fork {
 }
 
 // ValidateDecidedMsg impl
-func (v0 *ForkV0) ValidateDecidedMsg(share *types.Share) pipeline.Pipeline {
+func (v0 *ForkV0) ValidateDecidedMsg(share *keymanager.Share) pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),

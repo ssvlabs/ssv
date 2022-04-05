@@ -2,7 +2,7 @@ package controller
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"sync"
 	"testing"
 	"time"
@@ -519,7 +519,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		SeqNumber: 2,
 	})
 
-	share := &types.Share{
+	share := &keymanager.Share{
 		NodeID:    1,
 		PublicKey: validatorPK(secretKeys),
 		Committee: nodes,

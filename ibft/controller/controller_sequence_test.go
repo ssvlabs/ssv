@@ -3,7 +3,7 @@ package controller
 import (
 	"fmt"
 	forksv0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"testing"
 
 	"github.com/bloxapp/ssv/ibft"

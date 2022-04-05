@@ -3,7 +3,7 @@ package storage
 import (
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -63,7 +63,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 }
 
-func generateRandomValidatorShare() (*types.Share, *bls.SecretKey) {
+func generateRandomValidatorShare() (*keymanager.Share, *bls.SecretKey) {
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -87,7 +87,7 @@ func generateRandomValidatorShare() (*types.Share, *bls.SecretKey) {
 		},
 	}
 
-	return &types.Share{
+	return &keymanager.Share{
 		NodeID:       1,
 		PublicKey:    sk.GetPublicKey(),
 		Committee:    ibftCommittee,

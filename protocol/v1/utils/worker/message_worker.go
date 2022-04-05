@@ -20,8 +20,8 @@ type Worker struct {
 	logger       *zap.Logger
 	cancel       context.CancelFunc
 	workersCount int
-	queue        chan *message.SignedMessage
-	handler      workerHandler
+	queue   chan *message.SignedMessage
+	handler workerHandler
 }
 
 func NewWorker(cfg *WorkerConfig) *Worker {

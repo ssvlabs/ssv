@@ -3,7 +3,7 @@ package changeround
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -61,7 +61,7 @@ func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
 
 func TestValidateChangeRound(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
-	share := &types.Share{
+	share := &keymanager.Share{
 		Committee: nodes,
 	}
 	pip := Validate(share)

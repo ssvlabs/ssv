@@ -3,7 +3,7 @@ package signed_msg
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -118,7 +118,7 @@ func TestAuthorizeMsg(t *testing.T) {
 				signed.Signature = test.sig
 			}
 
-			pipeline := AuthorizeMsg(&types.Share{
+			pipeline := AuthorizeMsg(&keymanager.Share{
 				Committee: committee,
 			})
 

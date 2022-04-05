@@ -4,7 +4,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"sync"
 	"time"
 
@@ -33,7 +33,7 @@ type Controller struct {
 	network         network.P2PNetwork
 	msgQueue        *msgqueue.MessageQueue
 	instanceConfig  *proto.InstanceConfig
-	ValidatorShare  *types.Share
+	ValidatorShare  *keymanager.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
 	signer          beacon.Signer
@@ -58,7 +58,7 @@ func New(
 	network network.P2PNetwork,
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
-	validatorShare *types.Share,
+	validatorShare *keymanager.Share,
 	version forksprotocol.ForkVersion,
 	signer beacon.Signer,
 	syncRateLimit time.Duration,

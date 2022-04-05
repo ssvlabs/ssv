@@ -4,7 +4,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/proto"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"strings"

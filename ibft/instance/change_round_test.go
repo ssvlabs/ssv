@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"testing"
@@ -110,7 +110,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare:  &types.Share{Committee: nodes},
+		ValidatorShare:  &keymanager.Share{Committee: nodes},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
@@ -179,7 +179,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	instance := &Instance{
 		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: &types.Share{Committee: nodes},
+		ValidatorShare: &keymanager.Share{Committee: nodes},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),
@@ -483,7 +483,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &types.Share{Committee: map[uint64]*proto.Node{
+		ValidatorShare: &keymanager.Share{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -585,7 +585,7 @@ func TestHighestPrepared(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &types.Share{Committee: map[uint64]*proto.Node{
+		ValidatorShare: &keymanager.Share{Committee: map[uint64]*proto.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -735,7 +735,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 
 	instance := &Instance{
 		Config: proto.DefaultConsensusParams(),
-		ValidatorShare: &types.Share{
+		ValidatorShare: &keymanager.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
@@ -764,7 +764,7 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &types.Share{
+		ValidatorShare: &keymanager.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
@@ -783,7 +783,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &types.Share{
+		ValidatorShare: &keymanager.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},

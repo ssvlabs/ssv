@@ -12,7 +12,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
@@ -31,7 +31,7 @@ import (
 type Options struct {
 	Context                    context.Context
 	Logger                     *zap.Logger
-	Share                      *types.Share
+	Share                      *keymanager.Share
 	SignatureCollectionTimeout time.Duration
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
@@ -49,7 +49,7 @@ type Options struct {
 type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
-	Share                      *types.Share
+	Share                      *keymanager.Share
 	ethNetwork                 *core.Network
 	beacon                     beaconprotocol.Beacon
 	ibfts                      map[beaconprotocol.RoleType]ibft.Controller
@@ -201,7 +201,7 @@ func getFields(msg *proto.SignedMessage) []zap.Field {
 	return res
 }
 
-func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *types.Share, forkVersion forksprotocol.ForkVersion, signer beacon.Signer, syncRateLimit time.Duration) ibft.Controller {
+func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *keymanager.Share, forkVersion forksprotocol.ForkVersion, signer beacon.Signer, syncRateLimit time.Duration) ibft.Controller {
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
 

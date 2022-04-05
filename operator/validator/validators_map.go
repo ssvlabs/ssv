@@ -3,7 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
-	validator2 "github.com/bloxapp/ssv/protocol/v1/validator/types"
+	validator2 "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/validator"
 	"go.uber.org/zap"
 	"sync"

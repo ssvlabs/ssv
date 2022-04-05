@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -192,7 +192,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	pk := &bls.PublicKey{}
 	err := pk.Deserialize(refPk)
 
-	ret.Share = &types.Share{
+	ret.Share = &keymanager.Share{
 		NodeID:    1,
 		PublicKey: pk,
 		Committee: map[uint64]*proto.Node{

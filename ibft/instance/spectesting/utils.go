@@ -10,7 +10,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/protocol/v1/validator/types"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -121,8 +121,8 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
 }
 
 // TestSharesAndSigner generates test nodes for SSV
-func TestSharesAndSigner() (map[uint64]*types.Share, beacon.KeyManager) {
-	shares := map[uint64]*types.Share{
+func TestSharesAndSigner() (map[uint64]*keymanager.Share, beacon.KeyManager) {
+	shares := map[uint64]*keymanager.Share{
 		1: {
 			NodeID:    1,
 			PublicKey: TestValidatorPK(),

@@ -3,10 +3,10 @@ package validator
 import (
 	"context"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	validatortypes "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	validatortypes "github.com/bloxapp/ssv/protocol/v1/validator/types"
-	"github.com/bloxapp/ssv/protocol/v1/validator/worker"
+	"github.com/bloxapp/ssv/protocol/v1/utils/worker"
 	"go.uber.org/zap"
 )
 

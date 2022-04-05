@@ -3,7 +3,7 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/stretchr/testify/require"

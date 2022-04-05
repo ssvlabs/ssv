@@ -4,7 +4,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
