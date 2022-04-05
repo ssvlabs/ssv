@@ -24,7 +24,7 @@ func (r *messageRouter) Route(message message.SSVMessage) {
 	case r.ch <- message:
 	default:
 		// TODO(nkryuchkov): consider doing more than just logging
-		r.logger.Error("Message router buffer is full. Discarding message")
+		r.logger.Warn("Message router buffer is full. Discarding message")
 	}
 }
 
