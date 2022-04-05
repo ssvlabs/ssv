@@ -2,18 +2,21 @@ package validator
 
 import (
 	"context"
+
+	"go.uber.org/zap"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	validatortypes "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/utils/worker"
-	"go.uber.org/zap"
 )
 
 type Validator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SignedMessage)
+	GetShare() *validatortypes.Share
 }
 
 type Options struct {
@@ -91,6 +94,10 @@ func (v *validator) ProcessMsg(msg *message.SignedMessage) /*(bool, []byte, erro
 func (v *validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
 	//TODO implement me
 	panic("implement me")
+}
+
+func (v *validator) GetShare() *validatortypes.Share {
+	return v.Share
 }
 
 // messageHandler process message from queue,
