@@ -21,16 +21,23 @@ type Broadcaster interface {
 // RequestHandler handles p2p requests
 type RequestHandler func(*message.SSVMessage) (*message.SSVMessage, error)
 
+// SyncResult holds the result of a sync request, including the actual message and the sender
+type SyncResult struct {
+	Msg    *message.SSVMessage
+	Sender string
+}
+
 // Syncer holds the interface for syncing data from other peerz
 type Syncer interface {
 	// RegisterHandler registers handler for the given protocol
 	RegisterHandler(protocol string, handler RequestHandler)
 	// LastDecided fetches last decided from a random set of peers
-	LastDecided(mid message.Identifier) ([]*message.SSVMessage, error)
+	LastDecided(mid message.Identifier) ([]SyncResult, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
-	GetHistory(mid message.Identifier, from, to message.Height) ([]*message.SSVMessage, error)
+	// it accepts a list of targets for the request
+	GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, error)
 	// LastChangeRound fetches last change round message from a random set of peers
-	LastChangeRound(mid message.Identifier, height message.Height) ([]*message.SSVMessage, error)
+	LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error)
 }
 
 // Network holds the networking layer used to complement the underlying protocols

@@ -16,8 +16,8 @@ type ChangeRoundFetcher interface {
 
 // changeRoundFetcher implements ChangeRoundFetcher
 type changeRoundFetcher struct {
-	logger *zap.Logger
-	syncer p2pprotocol.Syncer
+	logger   *zap.Logger
+	syncer   p2pprotocol.Syncer
 	validate validation.SignedMessagePipeline
 }
 

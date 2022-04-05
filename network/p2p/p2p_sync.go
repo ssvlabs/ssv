@@ -21,7 +21,7 @@ const (
 )
 
 // LastDecided fetches last decided from a random set of peers
-func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]*message.SSVMessage, error) {
+func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResult, error) {
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
@@ -38,7 +38,7 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]*message.SSVMessage,
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height) ([]*message.SSVMessage, error) {
+func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height) ([]protocolp2p.SyncResult, error) {
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
@@ -56,7 +56,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height)
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
-func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]*message.SSVMessage, error) {
+func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]protocolp2p.SyncResult, error) {
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
@@ -106,14 +106,6 @@ func (n *p2pNetwork) RegisterHandler(pid string, handler protocolp2p.RequestHand
 			n.logger.Warn("could not respond to stream", zap.Error(err))
 			return
 		}
-	})
-}
-
-// setupLegacySyncHandler registers a stream handler for legacy sync protocol
-func (n *p2pNetwork) setupLegacySyncHandler() {
-	n.RegisterHandler(legacyMsgStream, func(ssvMessage *message.SSVMessage) (*message.SSVMessage, error) {
-		// TODO: implement
-		return ssvMessage, nil
 	})
 }
 
@@ -169,8 +161,8 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 	return peers[:peerCount], nil
 }
 
-func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]*message.SSVMessage, error) {
-	var results []*message.SSVMessage
+func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]protocolp2p.SyncResult, error) {
+	var results []protocolp2p.SyncResult
 	data, err := syncMsg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode sync message")
@@ -195,7 +187,10 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 			// TODO: log/trace error?
 			continue
 		}
-		results = append(results, res.(*message.SSVMessage))
+		results = append(results, protocolp2p.SyncResult{
+			Msg:    res.(*message.SSVMessage),
+			Sender: pid.String(),
+		})
 	}
 	return results, nil
 }
