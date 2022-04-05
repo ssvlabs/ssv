@@ -2,14 +2,14 @@ package validator
 
 import (
 	"context"
+	"go.uber.org/zap"
+	"time"
+
 	ibftctrl "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-
-	"go.uber.org/zap"
-
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	keymanagerprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -19,8 +19,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
-	"go.uber.org/zap"
-	"time"
 )
 
 type Validator interface {

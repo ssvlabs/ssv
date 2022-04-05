@@ -5,7 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -24,11 +25,17 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 	return ret
 }
 
+// Node represent committee member info
+type Node struct {
+	IbftId uint64
+	Pk     []byte
+}
+
 // Share storage model
 type Share struct {
-	NodeID       uint64
+	NodeID       OperatorID
 	PublicKey    *bls.PublicKey
-	Committee    map[uint64]*proto.Node
+	Committee    map[OperatorID]*Node
 	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
@@ -36,9 +43,9 @@ type Share struct {
 
 //  serializedShare struct
 type serializedShare struct {
-	NodeID       uint64
+	NodeID       OperatorID
 	ShareKey     []byte
-	Committee    map[uint64]*proto.Node
+	Committee    map[OperatorID]*Node
 	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
@@ -82,7 +89,7 @@ func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
 }
 
 // PubKeysByID returns the public keys with the associated ids
-func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
+func (s *Share) PubKeysByID(ids []OperatorID) (PubKeys, error) {
 	ret := make([]*bls.PublicKey, 0)
 	for _, id := range ids {
 		if val, ok := s.Committee[id]; ok {
@@ -99,8 +106,8 @@ func (s *Share) PubKeysByID(ids []uint64) (PubKeys, error) {
 }
 
 // VerifySignedMessage returns true of signed message verifies against pks
-func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
-	pks, err := s.PubKeysByID(msg.SignerIds)
+func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
+	pks, err := s.PubKeysByID(msg.GetSigners())
 	if err != nil {
 		return err
 	}
@@ -108,13 +115,18 @@ func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
 		return errors.New("could not find public key")
 	}
 
-	res, err := msg.VerifyAggregatedSig(pks)
+	var operators []*Operator
+	for _, id := range msg.GetSigners() {
+		operators = append(operators, &Operator{OperatorID: id})
+	}
+	err = msg.GetSignature().VerifyByOperators(msg, PrimusTestnet, QBFTSigType, operators) // TODO need to check if this is the right verify func
+	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err
 	}
-	if !res {
-		return errors.New("could not verify message signature")
-	}
+	//if !res {
+	//	return errors.New("could not verify message signature")
+	//}
 
 	return nil
 }
@@ -123,16 +135,16 @@ func (s *Share) VerifySignedMessage(msg *proto.SignedMessage) error {
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
 		NodeID:       s.NodeID,
-		Committee:    map[uint64]*proto.Node{},
+		Committee:    map[OperatorID]*Node{},
 		Metadata:     s.Metadata,
 		OwnerAddress: s.OwnerAddress,
 		Operators:    s.Operators,
 	}
 	// copy committee by value
 	for k, n := range s.Committee {
-		value.Committee[k] = &proto.Node{
-			IbftId: n.GetIbftId(),
-			Pk:     n.GetPk()[:],
+		value.Committee[k] = &Node{
+			IbftId: n.IbftId,
+			Pk:     n.Pk[:],
 		}
 	}
 	var b bytes.Buffer
