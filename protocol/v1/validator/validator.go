@@ -79,7 +79,6 @@ func NewValidator(opt *Options) Validator {
 func (v *validator) Start() {
 	// start queue workers
 	v.worker.AddHandler(messageHandler)
-	v.worker.Init()
 }
 
 // ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
@@ -95,7 +94,7 @@ func (v *validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 }
 
 func (v *validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 

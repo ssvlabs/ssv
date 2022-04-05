@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,16 +24,16 @@ type History interface {
 type history struct {
 	logger          *zap.Logger
 	store           qbftstorage.DecidedMsgStore
-	syncer          p2pprotocol.Syncer
-	validateDecided ValidateDecided
+	syncer   p2pprotocol.Syncer
+	validate validation.SignedMessagePipeline
 }
 
-func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validateDecided ValidateDecided) History {
+func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validate validation.SignedMessagePipeline) History {
 	return &history{
-		logger:          logger,
-		store:           store,
-		syncer:          syncer,
-		validateDecided: validateDecided,
+		logger:   logger,
+		store:    store,
+		syncer:   syncer,
+		validate: validate,
 	}
 }
 
@@ -44,7 +45,7 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 	if len(remoteMsgs) == 0 {
-		logger.Info("node is synced: remote highest decided not found, assuming sequence number is 0")
+		logger.Info("node is synced: remote highest decided not found")
 		return false, nil
 	}
 
@@ -65,6 +66,10 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 			logger.Warn("bad sync message", zap.Error(err))
 			continue
 		}
+		if len(sm.Data) == 0 {
+			logger.Warn("empty sync message")
+			continue
+		}
 		if sm.Data[0].Message.Height > height {
 			highest = sm.Data[0]
 			height = highest.Message.Height
@@ -73,7 +78,7 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 
 	if height <= localHeight {
 		logger.Info("node is synced")
-		return false, nil
+		return true, nil
 	}
 
 	synced, err := h.SyncDecidedRange(identifier, localHeight, height)
@@ -110,7 +115,7 @@ func (h *history) SyncDecidedRange(identifier message.Identifier, from, to messa
 		}
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
-			if err := h.validateDecided(signedMsg); err != nil {
+			if err := h.validate.Run(signedMsg); err != nil {
 				h.logger.Warn("message not valid", zap.Error(err))
 				// TODO: report validation?
 				continue signedMsgLoop

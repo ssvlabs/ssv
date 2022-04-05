@@ -19,7 +19,6 @@ func TestWorker(t *testing.T) {
 	worker.AddHandler(func(msg *message.SSVMessage) {
 		require.NotNil(t, msg)
 	})
-	worker.Init()
 	for i := 0; i < 5; i++ {
 		require.True(t, worker.TryEnqueue(&message.SSVMessage{}))
 		time.Sleep(time.Second * 1)
