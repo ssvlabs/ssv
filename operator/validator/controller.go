@@ -151,8 +151,6 @@ func NewController(options ControllerOptions) Controller {
 }
 
 func (c *controller) GetAllValidatorShares() ([]*validatorprotocol.Share, error) {
-	c.network.UseMessageRouter(c.messageRouter)
-	go c.handleRouterMessages()
 	return c.collection.GetAllValidatorShares()
 }
 
@@ -296,11 +294,8 @@ func (c *controller) setupValidators(shares []*validatorprotocol.Share) {
 }
 
 func (c *controller) StartNetworkMediators() {
-	msgChan, msgDone := c.validatorsMap.optsTemplate.Network.ReceivedMsgChan()
-	decidedChan, decidedDone := c.validatorsMap.optsTemplate.Network.ReceivedDecidedChan()
-
-	c.networkMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, c.getReader)
-	c.networkMediator.AddListener(network.NetworkMsg_DecidedType, decidedChan, decidedDone, c.getReader)
+	c.network.UseMessageRouter(c.messageRouter)
+	go c.handleRouterMessages()
 }
 
 func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {
