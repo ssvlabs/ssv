@@ -307,6 +307,7 @@ func (c *controller) StartNetworkMediators() {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
 	c.messageWorker.AddHandler(c.handleWorkerMessages)
+	go c.messageWorker.Init()
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.
