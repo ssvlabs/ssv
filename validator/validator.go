@@ -77,6 +77,7 @@ func New(opt Options) *Validator {
 	if opt.Share.HasMetadata() && opt.Share.Metadata.Index > 0 {
 		blsPubkey := spec.BLSPubKey{}
 		copy(blsPubkey[:], opt.Share.PublicKey.Serialize())
+		// TODO(nkryuchkov): check if ExtendIndexMap is implemented in the original repo, remove fork if so
 		opt.Beacon.ExtendIndexMap(opt.Share.Metadata.Index, blsPubkey)
 	}
 

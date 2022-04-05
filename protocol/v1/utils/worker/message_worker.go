@@ -2,11 +2,12 @@ package worker
 
 import (
 	"context"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"go.uber.org/zap"
 )
 
-type workerHandler func(msg *message.SignedMessage)
+type workerHandler func(msg *message.SSVMessage)
 
 type WorkerConfig struct {
 	Ctx          context.Context
@@ -20,7 +21,7 @@ type Worker struct {
 	logger       *zap.Logger
 	cancel       context.CancelFunc
 	workersCount int
-	queue        chan *message.SignedMessage
+	queue        chan *message.SSVMessage
 	handler      workerHandler
 }
 
@@ -33,7 +34,7 @@ func NewWorker(cfg *WorkerConfig) *Worker {
 		logger:       logger,
 		cancel:       cancel,
 		workersCount: cfg.WorkersCount,
-		queue:        make(chan *message.SignedMessage, cfg.Buffer),
+		queue:        make(chan *message.SSVMessage, cfg.Buffer),
 	}
 }
 
@@ -71,7 +72,7 @@ func (w *Worker) Close() {
 	w.cancel()
 }
 
-func (w *Worker) process(msg *message.SignedMessage) {
+func (w *Worker) process(msg *message.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")
 	}

@@ -25,11 +25,12 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]*message.SSVMessage,
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), allPeersFilter)
+	pid, peerCount := n.fork.LastDecidedProtocol()
+	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
-	return n.makeSyncRequest(peers, mid, lastDecidedProtocol, &message.SyncMessage{
+	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
 		Params: &message.SyncParams{
 			Identifier: mid,
 		},
@@ -41,11 +42,12 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height)
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), n.peersWithProtocolsFilter(historyProtocol))
+	pid, peerCount := n.fork.DecidedHistoryProtocol()
+	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(historyProtocol))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
-	return n.makeSyncRequest(peers, mid, historyProtocol, &message.SyncMessage{
+	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
 		Params: &message.SyncParams{
 			Height:     []message.Height{from, to},
 			Identifier: mid,
@@ -58,11 +60,12 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), allPeersFilter)
+	pid, peerCount := n.fork.LastChangeRoundProtocol()
+	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
-	return n.makeSyncRequest(peers, mid, changeRoundProtocol, &message.SyncMessage{
+	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
 		Params: &message.SyncParams{
 			Height:     []message.Height{height},
 			Identifier: mid,
@@ -148,7 +151,7 @@ func (n *p2pNetwork) setupLegacySyncHandler() {
 //}
 
 // getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, filter func(peer.ID) bool) ([]peer.ID, error) {
+func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, filter func(peer.ID) bool) ([]peer.ID, error) {
 	var peers []peer.ID
 	topics := n.fork.ValidatorTopicID(vpk)
 	for _, topic := range topics {
@@ -163,10 +166,10 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, filter func(peer.
 		}
 	}
 	// TODO: shuffle peers
-	return peers[:peersForSync], nil
+	return peers[:peerCount], nil
 }
 
-func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol string, syncMsg *message.SyncMessage) ([]*message.SSVMessage, error) {
+func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]*message.SSVMessage, error) {
 	var results []*message.SSVMessage
 	data, err := syncMsg.Encode()
 	if err != nil {
@@ -182,7 +185,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 		return nil, err
 	}
 	for _, pid := range peers {
-		raw, err := n.streamCtrl.Request(pid, libp2p_protocol.ID(protocol), encoded)
+		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
 			// TODO: log/trace error?
 			continue

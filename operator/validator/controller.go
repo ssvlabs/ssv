@@ -3,9 +3,14 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	validatorprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"sync"
 	"time"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/eth1"
@@ -14,18 +19,15 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	validatorprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/utils"
+	"github.com/bloxapp/ssv/protocol/v1/utils/worker"
+	"github.com/bloxapp/ssv/protocol/v1/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/bloxapp/ssv/validator"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
-
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
-	"go.uber.org/zap"
 )
 
 const (
@@ -61,7 +63,7 @@ type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
-	GetValidator(pubKey string) (*validator.Validator, bool)
+	GetValidator(pubKey string) (validator.Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
@@ -80,8 +82,8 @@ type controller struct {
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	operatorPubKey             string
 
-	validatorsMap         *validatorsMap
-	nonCommitteeValidator controller2.MediatorReader
+	validatorsMap    *validatorsMap
+	validatorOptions *validator.Options // TODO(nkryuchkov): check if it's needed
 
 	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
@@ -91,6 +93,7 @@ type controller struct {
 	network         network.P2PNetwork
 	forkVersion     forksprotocol.ForkVersion
 	messageRouter   *messageRouter
+	messageWorker   *worker.Worker
 }
 
 // NewController creates a new validator controller instance
@@ -102,12 +105,21 @@ func NewController(options ControllerOptions) Controller {
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
-	notifyOperatorID := func(oid string) {
-		operatorsIDs.Store(oid, true)
-		// TODO: update network in a better way
-		options.Network.NotifyOperatorID(oid)
+
+	workerCfg := &worker.WorkerConfig{
+		Ctx:          options.Context,
+		WorkersCount: 1,   // TODO flag
+		Buffer:       100, // TODO flag
 	}
 
+	validatorOptions := &validator.Options{
+		Context:  options.Context,
+		Logger:   options.Logger,
+		Network:  options.Network,
+		Beacon:   options.Beacon,
+		Share:    nil,   // TODO(nkryuchkov): consider setting
+		ReadMode: false, // TODO(nkryuchkov): check if false is correct value
+	}
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
@@ -120,20 +132,8 @@ func NewController(options ControllerOptions) Controller {
 		network:                    options.Network,
 		forkVersion:                options.ForkVersion,
 
-		validatorsMap: newValidatorsMap(options.Context, options.Logger, &validator.Options{
-			Context:                    options.Context,
-			SignatureCollectionTimeout: options.SignatureCollectionTimeout,
-			Logger:                     options.Logger,
-			Network:                    options.Network,
-			ETHNetwork:                 options.ETHNetwork,
-			Beacon:                     options.Beacon,
-			DB:                         options.DB,
-			ForkVersion:                options.ForkVersion,
-			Signer:                     options.KeyManager,
-			SyncRateLimit:              options.HistorySyncRateLimit,
-			notifyOperatorID:           notifyOperatorID,
-		}),
-		nonCommitteeValidator: validator.NewReader(options.Logger.With(zap.String("who", "nonCommitteeReader")), options.DB),
+		validatorsMap:    newValidatorsMap(options.Context, options.Logger, validatorOptions),
+		validatorOptions: validatorOptions,
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -142,6 +142,7 @@ func NewController(options ControllerOptions) Controller {
 		operatorsIDs:    operatorsIDs,
 
 		messageRouter: newMessageRouter(options.Logger),
+		messageWorker: worker.NewWorker(workerCfg),
 	}
 
 	if err := ctrl.initShares(options); err != nil {
@@ -151,8 +152,6 @@ func NewController(options ControllerOptions) Controller {
 }
 
 func (c *controller) GetAllValidatorShares() ([]*validatorprotocol.Share, error) {
-	c.network.UseMessageRouter(c.messageRouter)
-	go c.handleRouterMessages()
 	return c.collection.GetAllValidatorShares()
 }
 
@@ -166,14 +165,23 @@ func (c *controller) handleRouterMessages() {
 		case msg := <-ch:
 			pk := msg.ID.GetValidatorPK()
 			hexPK := hex.EncodeToString(pk)
-			flagMsg := flaggedMessage{message: msg}
 
-			// TODO(nkryuchkov): pass to validator
-			if _, ok := c.validatorsMap.GetValidator(hexPK); !ok {
-				flagMsg.readOnly = true
+			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
+				v.ProcessMsg(&msg)
+			} else if msg.MsgType == message.SSVPostConsensusMsgType {
+				c.messageWorker.TryEnqueue(&msg)
 			}
 		}
 	}
+}
+
+func (c *controller) handleWorkerMessages(msg *message.SSVMessage) {
+	opts := *c.validatorOptions
+	opts.ReadMode = true
+
+	val := validator.NewValidator(&opts)
+	// TODO(nkryuchkov): we might need to call val.Start(), we need to check it
+	val.ProcessMsg(msg)
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
@@ -272,10 +280,10 @@ func (c *controller) setupValidators(shares []*validatorprotocol.Share) {
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
-		pk := v.Share.PublicKey.SerializeToHexStr()
+		pk := v.GetShare().PublicKey.SerializeToHexStr()
 		logger := c.logger.With(zap.String("pubkey", pk))
-		if !v.Share.HasMetadata() { // fetching index and status in case not exist
-			fetchMetadata = append(fetchMetadata, v.Share.PublicKey.Serialize())
+		if !v.GetShare().HasMetadata() { // fetching index and status in case not exist
+			fetchMetadata = append(fetchMetadata, v.GetShare().PublicKey.Serialize())
 			logger.Warn("could not start validator as metadata not found")
 			continue
 		}
@@ -296,25 +304,9 @@ func (c *controller) setupValidators(shares []*validatorprotocol.Share) {
 }
 
 func (c *controller) StartNetworkMediators() {
-	msgChan, msgDone := c.validatorsMap.optsTemplate.Network.ReceivedMsgChan()
-	decidedChan, decidedDone := c.validatorsMap.optsTemplate.Network.ReceivedDecidedChan()
-
-	c.networkMediator.AddListener(network.NetworkMsg_IBFTType, msgChan, msgDone, c.getReader)
-	c.networkMediator.AddListener(network.NetworkMsg_DecidedType, decidedChan, decidedDone, c.getReader)
-}
-
-func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bool) {
-	v, ok := c.validatorsMap.GetValidator(publicKey)
-	if !ok {
-		// save non committee only after fork
-		// TODO: change
-		if c.forkVersion == forksprotocol.V0ForkVersion {
-			return nil, false
-		}
-		//	return handler for non committee validator to save the decided
-		return c.nonCommitteeValidator, true
-	}
-	return v, ok
+	c.network.UseMessageRouter(c.messageRouter)
+	go c.handleRouterMessages()
+	c.messageWorker.AddHandler(c.handleWorkerMessages)
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.
@@ -335,7 +327,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		return errors.New("could not update empty metadata")
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
-		v.Share.Metadata = metadata
+		v.GetShare().Metadata = metadata
 		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 			return err
 		}
@@ -348,7 +340,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 }
 
 // GetValidator returns a validator instance from validatorsMap
-func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
+func (c *controller) GetValidator(pubKey string) (validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -358,11 +350,11 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 
-	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		if !v.Share.HasMetadata() {
-			toFetch = append(toFetch, v.Share.PublicKey.Serialize())
-		} else if v.Share.Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
-			indices = append(indices, v.Share.Metadata.Index)
+	err := c.validatorsMap.ForEach(func(v validator.Validator) error {
+		if !v.GetShare().HasMetadata() {
+			toFetch = append(toFetch, v.GetShare().PublicKey.Serialize())
+		} else if v.GetShare().Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+			indices = append(indices, v.GetShare().Metadata.Index)
 		}
 		return nil
 	})
@@ -426,12 +418,12 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.Share.HasMetadata() {
-			v.Share.Metadata = meta
+		if !v.GetShare().HasMetadata() {
+			v.GetShare().Metadata = meta
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
-		} else if !v.Share.Metadata.Equals(meta) {
-			v.Share.Metadata.Status = meta.Status
-			v.Share.Metadata.Balance = meta.Balance
+		} else if !v.GetShare().Metadata.Equals(meta) {
+			v.GetShare().Metadata.Status = meta.Status
+			v.GetShare().Metadata.Balance = meta.Balance
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
 		}
 		_, err := c.startValidator(v)
@@ -469,18 +461,15 @@ func (c *controller) onNewShare(share *validatorprotocol.Share, shareSecret *bls
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(v *validator.Validator) (bool, error) {
-	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.Share.Metadata, c.logger)
-	if !v.Share.HasMetadata() {
+func (c *controller) startValidator(v validator.Validator) (bool, error) {
+	ReportValidatorStatus(v.GetShare().PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
+	if !v.GetShare().HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")
 	}
-	if v.Share.Metadata.Index == 0 {
+	if v.GetShare().Metadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	if err := v.Start(); err != nil {
-		metricsValidatorStatus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(validatorStatusError))
-		return false, errors.Wrap(err, "could not start validator")
-	}
+	v.Start()
 	return true, nil
 }
 

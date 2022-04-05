@@ -7,6 +7,9 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+
+	"go.uber.org/zap"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	keymanagerprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -24,6 +27,7 @@ type Validator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
+	GetShare() *keymanagerprotocol.Share
 }
 
 type Options struct {
@@ -97,8 +101,13 @@ func (v *validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
 	panic("implement me")
 }
 
+func (v *validator) GetShare() *keymanagerprotocol.Share {
+	// TODO need lock?
+	return v.Share
+}
+
 // messageHandler process message from queue,
-func messageHandler(msg *message.SignedMessage) {
+func messageHandler(msg *message.SSVMessage) {
 	// validation
 	// check if post consensus
 	// of so, process

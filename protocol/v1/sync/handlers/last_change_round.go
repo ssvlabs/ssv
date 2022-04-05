@@ -1,7 +1,6 @@
-package history
+package handlers
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -9,21 +8,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// HistoryHandler handler for decided history protocol
+// LastChangeRoundHandler handler for last-decided protocol
 // TODO: add msg validation
-func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore) protocolp2p.RequestHandler {
+func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.InstanceStore) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
-		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
+		//logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
-			logger.Debug("could not decode msg data", zap.Error(err))
-			sm.Status = message.StatusBadRequest
-		} else {
-			results, err := store.GetDecided(msg.ID, sm.Params.Height[0], sm.Params.Height[1])
-			sm.UpdateResults(err, results...)
+			return nil, errors.Wrap(err, "could not decode msg data")
 		}
+		res, err := store.GetLastChangeRoundMsg(msg.ID)
+		sm.UpdateResults(err, res)
 
 		data, err := sm.Encode()
 		if err != nil {
