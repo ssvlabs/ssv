@@ -1,7 +1,7 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/validator/storage"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"sync"
 )
 
@@ -15,7 +15,7 @@ var (
 
 // ShareHolder is an interface for components that hold a share
 type ShareHolder interface {
-	Share() *storage.Share
+	Share() *types.Share
 }
 
 // Reader is an interface for ibft in the context of an exporter

@@ -4,9 +4,8 @@ import (
 	"encoding/hex"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	protocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/utils"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math"
@@ -61,7 +60,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 type OnUpdated func(pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc protocol.Beacon, onUpdated OnUpdated) error {
+func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
 	logger := logex.GetLogger(zap.String("who", "UpdateValidatorsMetadata"))
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
@@ -94,7 +93,7 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 }
 
 // FetchValidatorsMetadata is fetching validators data from beacon
-func FetchValidatorsMetadata(bc protocol.Beacon, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
+func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -125,9 +124,9 @@ func FetchValidatorsMetadata(bc protocol.Beacon, pubKeys [][]byte) (map[string]*
 
 // UpdateValidatorsMetadataBatch updates the given public keys in batches
 func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
-	queue tasks.Queue,
+	queue utils.Queue,
 	collection ValidatorMetadataStorage,
-	bc protocol.Beacon,
+	bc Beacon,
 	onUpdated OnUpdated,
 	batchSize int) {
 	batch(pubKeys, queue, func(pks [][]byte) func() error {
@@ -139,7 +138,7 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 
 type batchTask func(pks [][]byte) func() error
 
-func batch(pubKeys [][]byte, queue tasks.Queue, task batchTask, batchSize int) {
+func batch(pubKeys [][]byte, queue utils.Queue, task batchTask, batchSize int) {
 	n := float64(len(pubKeys))
 	// in case the amount of public keys is lower than the batch size
 	batchSize = int(math.Min(n, float64(batchSize)))

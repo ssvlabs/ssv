@@ -14,6 +14,8 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v1/utils"
+	validator2 "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -86,9 +88,9 @@ type exporter struct {
 	ibftSyncEnabled                 bool
 	validatorMetaDataUpdateInterval time.Duration
 
-	decidedReadersQueue  tasks.Queue
-	networkReadersQueue  tasks.Queue
-	metaDataReadersQueue tasks.Queue
+	decidedReadersQueue  utils.Queue
+	networkReadersQueue  utils.Queue
+	metaDataReadersQueue utils.Queue
 
 	networkMsgMediator ibftController.Mediator
 	useMainTopic       bool
@@ -331,7 +333,7 @@ func (exp *exporter) triggerValidator(validatorPubKey *bls.PublicKey) (bool, err
 }
 
 // setup starts all validator readers
-func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
+func (exp *exporter) setup(validatorShare *validator2.Share) error {
 	pubKey := validatorShare.PublicKey.SerializeToHexStr()
 	exp.logger.Debug("setup validator", zap.String("pubKey", pubKey))
 
@@ -347,7 +349,7 @@ func (exp *exporter) setup(validatorShare *validatorstorage.Share) error {
 }
 
 // getOrCreateDecidedReader will create decided reader if not exist
-func (exp *exporter) getOrCreateDecidedReader(validatorShare *validatorstorage.Share) ibft.Reader {
+func (exp *exporter) getOrCreateDecidedReader(validatorShare *validator2.Share) ibft.Reader {
 	exp.readersMut.Lock()
 	defer exp.readersMut.Unlock()
 

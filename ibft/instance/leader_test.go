@@ -5,8 +5,8 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/utils/threadsafe"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"strconv"
 	"testing"
@@ -21,7 +21,7 @@ func TestLeaderCalculation(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare:  &storage.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
+		ValidatorShare:  &types.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedRound: threadsafe.Uint64(0),

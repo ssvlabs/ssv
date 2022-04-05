@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -15,7 +15,7 @@ import (
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, share *storage.Share) (*proto.SignedMessage, error) {
+func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, share *types.Share) (*proto.SignedMessage, error) {
 	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
 		zap.Uint64("seq", msg.Message.SeqNumber), zap.String("identifier", string(msg.Message.Lambda)),
 		zap.Uint64s("signers", msg.SignerIds))
@@ -80,7 +80,7 @@ func (i *Instance) CommitMsgValidationPipelineV0() pipeline.Pipeline {
 }
 
 // CommitMsgValidationPipelineV0 is version 0 of commit message validation
-func CommitMsgValidationPipelineV0(identifier []byte, seq uint64, share *storage.Share) pipeline.Pipeline {
+func CommitMsgValidationPipelineV0(identifier []byte, seq uint64, share *types.Share) pipeline.Pipeline {
 	return pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),

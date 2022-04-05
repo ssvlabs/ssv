@@ -83,19 +83,19 @@ func (m *mockBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]
 }
 
 // NewMockValidatorMetadataStorage creates a new mock implementation of ValidatorMetadataStorage
-func NewMockValidatorMetadataStorage() ValidatorMetadataStorage {
+func NewMockValidatorMetadataStorage() beacon.ValidatorMetadataStorage {
 	return &mockValidatorMetadataStorage{
-		map[string]*ValidatorMetadata{},
+		map[string]*beacon.ValidatorMetadata{},
 		sync.Mutex{},
 	}
 }
 
 type mockValidatorMetadataStorage struct {
-	data map[string]*ValidatorMetadata
+	data map[string]*beacon.ValidatorMetadata
 	lock sync.Mutex
 }
 
-func (m *mockValidatorMetadataStorage) UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error {
+func (m *mockValidatorMetadataStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 

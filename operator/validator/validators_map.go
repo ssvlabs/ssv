@@ -3,8 +3,8 @@ package validator
 import (
 	"context"
 	"fmt"
+	validator2 "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/validator"
-	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -60,7 +60,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *storage.Share) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *validator2.Share) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -87,7 +87,7 @@ func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
 
-func printShare(s *storage.Share, logger *zap.Logger, msg string) {
+func printShare(s *validator2.Share, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
 		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftId, c.Pk))

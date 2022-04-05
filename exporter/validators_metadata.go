@@ -1,10 +1,10 @@
 package exporter
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/operator/validator"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"

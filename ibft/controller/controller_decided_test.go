@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"sync"
 	"testing"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -519,7 +519,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		SeqNumber: 2,
 	})
 
-	share := &storage.Share{
+	share := &types.Share{
 		NodeID:    1,
 		PublicKey: validatorPK(secretKeys),
 		Committee: nodes,

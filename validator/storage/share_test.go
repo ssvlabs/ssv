@@ -2,6 +2,7 @@ package storage
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -41,7 +42,7 @@ func TestThresholdSize(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			share := &Share{
+			share := &types.Share{
 				NodeID:    0,
 				PublicKey: nil,
 				Metadata:  nil,
@@ -59,7 +60,7 @@ func TestThresholdSize(t *testing.T) {
 }
 
 func TestShare_HashOperators(t *testing.T) {
-	share := &Share{
+	share := &types.Share{
 		NodeID:    0,
 		PublicKey: nil,
 		Metadata:  nil,

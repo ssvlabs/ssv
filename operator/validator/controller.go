@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	ethprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/eth"
+	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/utils"
+	validatorprotocol "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -33,7 +33,7 @@ const (
 )
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *validatorstorage.Share)
+type ShareEventHandlerFunc func(share *validatorprotocol.Share)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
@@ -47,7 +47,7 @@ type ControllerOptions struct {
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
-	ShareEncryptionKeyProvider ethprotocol.ShareEncryptionKeyProvider
+	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
@@ -65,7 +65,7 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
-	GetAllValidatorShares() ([]*validatorstorage.Share, error)
+	GetAllValidatorShares() ([]*validatorprotocol.Share, error)
 }
 
 // controller implements Controller
@@ -77,13 +77,13 @@ type controller struct {
 	beacon     beaconprotocol.Beacon
 	keyManager beaconprotocol.KeyManager
 
-	shareEncryptionKeyProvider ethprotocol.ShareEncryptionKeyProvider
+	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	operatorPubKey             string
 
 	validatorsMap         *validatorsMap
 	nonCommitteeValidator controller2.MediatorReader
 
-	metadataUpdateQueue    tasks.Queue
+	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
 
 	networkMediator controller2.Mediator
@@ -150,10 +150,9 @@ func NewController(options ControllerOptions) Controller {
 	return &ctrl
 }
 
-func (c *controller) GetAllValidatorShares() ([]*validatorstorage.Share, error) {
+func (c *controller) GetAllValidatorShares() ([]*validatorprotocol.Share, error) {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
-
 	return c.collection.GetAllValidatorShares()
 }
 
@@ -179,7 +178,7 @@ func (c *controller) handleRouterMessages() {
 
 // ListenToEth1Events is listening to events coming from eth1 client
 func (c *controller) ListenToEth1Events(feed *event.Feed) {
-	cn := make(chan *ethprotocol.Event)
+	cn := make(chan *eth1.Event)
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
 
@@ -199,7 +198,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler {
-	return func(e ethprotocol.Event) error {
+	return func(e eth1.Event) error {
 		switch ev := e.Data.(type) {
 		case abiparser.ValidatorAddedEvent:
 			pubKey := hex.EncodeToString(ev.PublicKey)
@@ -231,7 +230,7 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 	}
 }
 
-func (c *controller) handleShare(share *validatorstorage.Share) {
+func (c *controller) handleShare(share *validatorprotocol.Share) {
 	v := c.validatorsMap.GetOrCreateValidator(share)
 	_, err := c.startValidator(v)
 	if err != nil {
@@ -266,7 +265,7 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*validatorstorage.Share) {
+func (c *controller) setupValidators(shares []*validatorprotocol.Share) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
@@ -324,20 +323,20 @@ func (c *controller) getReader(publicKey string) (controller2.MediatorReader, bo
 func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 	if len(pubKeys) > 0 {
 		c.logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
-		if err := beacon.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+		if err := beaconprotocol.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
 			c.logger.Error("could not update all validators", zap.Error(err))
 		}
 	}
 }
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.Metadata = metadata
-		if err := c.collection.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
+		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 			return err
 		}
 		_, err := c.startValidator(v)
@@ -380,7 +379,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 func (c *controller) handleValidatorAddedEvent(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
 	isOperatorShare bool,
-) (*validatorstorage.Share, error) {
+) (*validatorprotocol.Share, error) {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
@@ -420,7 +419,7 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
-func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata) {
+func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.ValidatorMetadata) {
 	if meta == nil {
 		return
 	}
@@ -445,7 +444,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 
 // onNewShare is called when a new validator was added or during registry sync
 // if the validator was persisted already, this function won't be called
-func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.SecretKey) error {
+func (c *controller) onNewShare(share *validatorprotocol.Share, shareSecret *bls.SecretKey) error {
 	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
 	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 		logger.Warn("could not add validator metadata", zap.Error(err))
@@ -502,7 +501,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			pks = append(pks, share.PublicKey.Serialize())
 		}
 		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
-		beacon.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
+		beaconprotocol.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
 }

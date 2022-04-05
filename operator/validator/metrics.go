@@ -1,7 +1,7 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"

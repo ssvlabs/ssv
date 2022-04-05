@@ -4,6 +4,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"sync"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/validator/storage"
 )
 
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
@@ -33,7 +33,7 @@ type Controller struct {
 	network         network.P2PNetwork
 	msgQueue        *msgqueue.MessageQueue
 	instanceConfig  *proto.InstanceConfig
-	ValidatorShare  *storage.Share
+	ValidatorShare  *types.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
 	signer          beacon.Signer
@@ -58,7 +58,7 @@ func New(
 	network network.P2PNetwork,
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
-	validatorShare *storage.Share,
+	validatorShare *types.Share,
 	version forksprotocol.ForkVersion,
 	signer beacon.Signer,
 	syncRateLimit time.Duration,

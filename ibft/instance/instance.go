@@ -3,6 +3,7 @@ package ibft
 import (
 	"context"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"sync"
 	"time"
 
@@ -23,13 +24,12 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
-	"github.com/bloxapp/ssv/validator/storage"
 )
 
 // InstanceOptions defines option attributes for the Instance
 type InstanceOptions struct {
 	Logger         *zap.Logger
-	ValidatorShare *storage.Share
+	ValidatorShare *types.Share
 	// Me             *proto.Node
 	Network        network.P2PNetwork
 	Queue          *msgqueue.MessageQueue
@@ -48,7 +48,7 @@ type InstanceOptions struct {
 
 // Instance defines the instance attributes
 type Instance struct {
-	ValidatorShare *storage.Share
+	ValidatorShare *types.Share
 	state          *proto.State
 	network        network.P2PNetwork
 	ValueCheck     valcheck.ValueCheck

@@ -1,11 +1,10 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/proto"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"strings"
@@ -15,7 +14,7 @@ import (
 // it will be called only when a new share is created
 func UpdateShareMetadata(share *validatorstorage.Share, bc beaconprotocol.Beacon) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
-	results, err := beacon.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
+	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to fetch metadata for share")
 	}

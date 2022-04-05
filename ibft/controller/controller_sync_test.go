@@ -11,11 +11,11 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
@@ -129,7 +129,7 @@ func populatedIbft(
 	signer beacon.Signer,
 ) ibft.Controller {
 	queue := msgqueue.New()
-	share := &storage.Share{
+	share := &types.Share{
 		NodeID:    nodeID,
 		PublicKey: validatorPK(sks),
 		Committee: nodes,

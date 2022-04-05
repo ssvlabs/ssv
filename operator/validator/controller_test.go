@@ -2,15 +2,14 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/validator"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"sync"
 	"testing"
-
-	"github.com/bloxapp/ssv/beacon"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 )
 
 func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {

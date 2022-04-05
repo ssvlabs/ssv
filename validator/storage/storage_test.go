@@ -3,6 +3,7 @@ package storage
 import (
 	"github.com/bloxapp/ssv/fixtures"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -22,7 +23,7 @@ func TestValidatorSerializer(t *testing.T) {
 		Key:   validatorShare.PublicKey.Serialize(),
 		Value: b,
 	}
-	v, err := validatorShare.Deserialize(obj)
+	v, err := validatorShare.Deserialize(obj.Key, obj.Val)
 	require.NoError(t, err)
 	require.NotNil(t, v.PublicKey)
 	require.Equal(t, v.PublicKey.SerializeToHexStr(), validatorShare.PublicKey.SerializeToHexStr())
@@ -62,7 +63,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 }
 
-func generateRandomValidatorShare() (*Share, *bls.SecretKey) {
+func generateRandomValidatorShare() (*types.Share, *bls.SecretKey) {
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -86,7 +87,7 @@ func generateRandomValidatorShare() (*Share, *bls.SecretKey) {
 		},
 	}
 
-	return &Share{
+	return &types.Share{
 		NodeID:       1,
 		PublicKey:    sk.GetPublicKey(),
 		Committee:    ibftCommittee,

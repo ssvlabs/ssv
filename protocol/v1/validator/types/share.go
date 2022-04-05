@@ -1,13 +1,12 @@
-package storage
+package types
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"math"
@@ -145,9 +144,9 @@ func (s *Share) Serialize() ([]byte, error) {
 }
 
 // Deserialize key/value to Share model
-func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
+func (s *Share) Deserialize(key []byte, val []byte) (*Share, error) {
 	value := serializedShare{}
-	d := gob.NewDecoder(bytes.NewReader(obj.Value))
+	d := gob.NewDecoder(bytes.NewReader(val))
 	if err := d.Decode(&value); err != nil {
 		return nil, errors.Wrap(err, "Failed to get val value")
 	}
@@ -159,7 +158,7 @@ func (s *Share) Deserialize(obj basedb.Obj) (*Share, error) {
 		}
 	}
 	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(obj.Key); err != nil {
+	if err := pubKey.Deserialize(key); err != nil {
 		return nil, errors.Wrap(err, "Failed to get pubkey")
 	}
 	return &Share{

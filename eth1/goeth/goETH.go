@@ -3,7 +3,6 @@ package goeth
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth"
 	"math/big"
 	"strings"
 	"time"
@@ -35,7 +34,7 @@ type ClientOptions struct {
 	RegistryContractAddr       string
 	ContractABI                string
 	ConnectionTimeout          time.Duration
-	ShareEncryptionKeyProvider eth.ShareEncryptionKeyProvider
+	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	OperatorPubKey             string
 
 	AbiVersion eth1.Version
@@ -47,7 +46,7 @@ type eth1Client struct {
 	conn   *ethclient.Client
 	logger *zap.Logger
 
-	shareEncryptionKeyProvider eth.ShareEncryptionKeyProvider
+	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	operatorPubKey             string
 
 	nodeAddr             string
@@ -64,7 +63,7 @@ type eth1Client struct {
 var _ metrics.HealthCheckAgent = &eth1Client{}
 
 // NewEth1Client creates a new instance
-func NewEth1Client(opts ClientOptions) (eth.Client, error) {
+func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	logger := opts.Logger.With(zap.String("component", "eth1GoETH"),
 		zap.String("address", opts.RegistryContractAddr))
 	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr))
@@ -176,7 +175,7 @@ func (ec *eth1Client) reconnect() {
 
 // fireEvent notifies observers about some contract event
 func (ec *eth1Client) fireEvent(log types.Log, data interface{}, isOperatorEvent bool) {
-	e := eth.Event{Log: log, Data: data, IsOperatorEvent: isOperatorEvent}
+	e := eth1.Event{Log: log, Data: data, IsOperatorEvent: isOperatorEvent}
 	_ = ec.eventsFeed.Send(&e)
 	// TODO: add trace
 	//ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
@@ -294,7 +293,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	ec.logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)}, false)
+	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)}, false)
 
 	return nil
 }

@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/stretchr/testify/require"
@@ -91,9 +91,9 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		Status:    v1.ValidatorStateActiveOngoing,
 		Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
 	}
-	bc := NewMockBeacon(map[uint64][]*beacon.Duty{}, data)
+	bc := beacon.NewMockBeacon(map[uint64][]*Duty{}, data)
 
-	storage := NewMockValidatorMetadataStorage()
+	storage := beacon.NewMockValidatorMetadataStorage()
 
 	onUpdated := func(pk string, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
@@ -104,7 +104,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	err := UpdateValidatorsMetadata([][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
 	require.Nil(t, err)
 	require.Equal(t, uint64(2), updateCount)
-	require.Equal(t, 2, storage.(*mockValidatorMetadataStorage).Size())
+	require.Equal(t, 2, storage.(*beacon.mockValidatorMetadataStorage).Size())
 }
 
 func TestBatch(t *testing.T) {

@@ -1,22 +1,13 @@
 package tasks
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/utils"
 	"sync"
 	"time"
 )
 
 // Fn represents a function to execute
 type Fn func() error
-
-// Queue is an interface for event queue
-type Queue interface {
-	Start()
-	Stop()
-	Queue(fn Fn)
-	QueueDistinct(Fn, string)
-	Wait()
-	Errors() []error
-}
 
 // ExecQueueOpt enables to inject more parameters
 type ExecQueueOpt func(*executionQueue)
@@ -44,7 +35,7 @@ type executionQueue struct {
 }
 
 // NewExecutionQueue creates a new instance
-func NewExecutionQueue(interval time.Duration, opt ...ExecQueueOpt) Queue {
+func NewExecutionQueue(interval time.Duration, opt ...ExecQueueOpt) utils.Queue {
 	if interval.Milliseconds() == 0 {
 		interval = 10 * time.Millisecond // default interval
 	}

@@ -10,9 +10,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threadsafe"
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -59,7 +59,7 @@ func TestChangeRoundTimer(t *testing.T) {
 			PreparedValue: threadsafe.Bytes(nil),
 			PreparedRound: threadsafe.Uint64(0),
 		},
-		ValidatorShare: &storage.Share{
+		ValidatorShare: &types.Share{
 			Committee: nodes,
 			NodeID:    1,
 			PublicKey: secretKeys[1].GetPublicKey(),

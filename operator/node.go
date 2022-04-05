@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
@@ -30,7 +29,7 @@ type Options struct {
 	Network             network.P2PNetwork
 	Context             context.Context
 	Logger              *zap.Logger
-	Eth1Client          eth.Client
+	Eth1Client          eth1.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
@@ -54,7 +53,7 @@ type operatorNode struct {
 	beacon         beacon.Beacon
 	net            network.P2PNetwork
 	storage        Storage
-	eth1Client     eth.Client
+	eth1Client     eth1.Client
 	dutyCtrl       duties.DutyController
 	//fork           *forks.Forker
 

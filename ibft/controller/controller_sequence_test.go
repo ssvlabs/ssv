@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	forksv0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
+	validatorstorage "github.com/bloxapp/ssv/protocol/v1/validator/types"
 	"testing"
 
 	"github.com/bloxapp/ssv/ibft"
@@ -12,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threadsafe"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
