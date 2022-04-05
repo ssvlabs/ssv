@@ -15,7 +15,7 @@ import (
 type Validator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
-	ProcessMsg(msg *message.SignedMessage)
+	ProcessMsg(msg *message.SSVMessage)
 	GetShare() *validatortypes.Share
 }
 
@@ -81,7 +81,7 @@ func (v *validator) Start() {
 
 // ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
 // Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
-func (v *validator) ProcessMsg(msg *message.SignedMessage) /*(bool, []byte, error)*/ {
+func (v *validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
 	// check duty type and handle accordingly
 	if v.readMode {
 		// synchronic process

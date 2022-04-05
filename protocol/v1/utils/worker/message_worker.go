@@ -2,11 +2,12 @@ package worker
 
 import (
 	"context"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"go.uber.org/zap"
 )
 
-type workerHandler func(msg *message.SignedMessage)
+type workerHandler func(msg *message.SSVMessage)
 
 type WorkerConfig struct {
 	Ctx          context.Context
@@ -20,8 +21,8 @@ type Worker struct {
 	logger       *zap.Logger
 	cancel       context.CancelFunc
 	workersCount int
-	queue   chan *message.SignedMessage
-	handler workerHandler
+	queue        chan *message.SSVMessage
+	handler      workerHandler
 }
 
 func NewWorker(cfg *WorkerConfig) *Worker {
@@ -33,7 +34,7 @@ func NewWorker(cfg *WorkerConfig) *Worker {
 		logger:       logger,
 		cancel:       cancel,
 		workersCount: cfg.WorkersCount,
-		queue:        make(chan *message.SignedMessage, cfg.Buffer),
+		queue:        make(chan *message.SSVMessage, cfg.Buffer),
 	}
 }
 
@@ -57,7 +58,7 @@ func (w *Worker) AddHandler(handler workerHandler) {
 // TryEnqueue tries to enqueue a job to the given job channel. Returns true if
 // the operation was successful, and false if enqueuing would not have been
 // possible without blocking. Job is not enqueued in the latter case.
-func (w *Worker) TryEnqueue(msg *message.SignedMessage) bool {
+func (w *Worker) TryEnqueue(msg *message.SSVMessage) bool {
 	select {
 	case w.queue <- msg:
 		return true
@@ -71,7 +72,7 @@ func (w *Worker) Close() {
 	w.cancel()
 }
 
-func (w *Worker) process(msg *message.SignedMessage) {
+func (w *Worker) process(msg *message.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")
 	}
