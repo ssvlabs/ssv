@@ -1,10 +1,10 @@
 package v0
 
 import (
-	"github.com/bloxapp/ssv/ibft"
 	ibftinstance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
 	"github.com/bloxapp/ssv/ibft/pipeline"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 )
 
 // ForkV0 is the genesis fork for instances
@@ -18,7 +18,7 @@ func New() forks.Fork {
 }
 
 // Apply - applies instance fork
-func (v0 *ForkV0) Apply(instance ibft.Instance) {
+func (v0 *ForkV0) Apply(instance instance.Instance) {
 	v0.instance = instance.(*ibftinstance.Instance)
 }
 

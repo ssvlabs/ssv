@@ -2,10 +2,11 @@ package scenarios
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
@@ -13,7 +14,7 @@ import (
 
 type changeRoundSpeedup struct {
 	logger     *zap.Logger
-	nodes      []ibft.Controller
+	nodes      []controller.Controller
 	valueCheck valcheck.ValueCheck
 }
 
@@ -25,7 +26,7 @@ func NewChangeRoundSpeedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) I
 	}
 }
 
-func (r *changeRoundSpeedup) Start(nodes []ibft.Controller, _ []collections.Iibft) {
+func (r *changeRoundSpeedup) Start(nodes []controller.Controller, _ []collections.Iibft) {
 	r.nodes = nodes
 	nodeCount := len(nodes)
 
@@ -34,13 +35,13 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.Controller, _ []collections.Iibf
 	}
 
 	// init ibfts
-	go func(node ibft.Controller, index uint64) {
+	go func(node controller.Controller, index uint64) {
 		if err := node.Init(); err != nil {
 			fmt.Printf("error initializing ibft")
 		}
 		r.startNode(node, index)
 	}(nodes[0], 1)
-	go func(node ibft.Controller, index uint64) {
+	go func(node controller.Controller, index uint64) {
 		time.Sleep(time.Second * 13)
 		if err := node.Init(); err != nil {
 			fmt.Printf("error initializing ibft")
@@ -49,7 +50,7 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.Controller, _ []collections.Iibf
 	}(nodes[1], 2)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	go func(node ibft.Controller, index uint64) {
+	go func(node controller.Controller, index uint64) {
 		time.Sleep(time.Second * 60)
 		if err := node.Init(); err != nil {
 			fmt.Printf("error initializing ibft")
@@ -61,8 +62,8 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.Controller, _ []collections.Iibf
 	wg.Wait()
 }
 
-func (r *changeRoundSpeedup) startNode(node ibft.Controller, index uint64) {
-	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
+func (r *changeRoundSpeedup) startNode(node controller.Controller, index uint64) {
+	res, err := node.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:     r.logger,
 		ValueCheck: r.valueCheck,
 		SeqNumber:  1,

@@ -13,6 +13,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
@@ -22,7 +23,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 )
@@ -52,7 +52,7 @@ type Validator struct {
 	Share                      *keymanager.Share
 	ethNetwork                 *core.Network
 	beacon                     beaconprotocol.Beacon
-	ibfts                      map[beaconprotocol.RoleType]ibft.Controller
+	ibfts                      map[beaconprotocol.RoleType]controller.Controller
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.P2PNetwork
 	signatureCollectionTimeout time.Duration
@@ -68,7 +68,7 @@ func New(opt Options) *Validator {
 		With(zap.Uint64("node_id", opt.Share.NodeID))
 
 	msgQueue := msgqueue.New()
-	ibfts := make(map[beaconprotocol.RoleType]ibft.Controller)
+	ibfts := make(map[beaconprotocol.RoleType]controller.Controller)
 	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
@@ -113,7 +113,7 @@ func (v *Validator) Start() error {
 
 	// init all ibft controllers
 	for _, ib := range v.ibfts {
-		go func(ib ibft.Controller) {
+		go func(ib controller.Controller) {
 			if err := ib.Init(); err != nil {
 				if err == ibftctrl.ErrAlreadyRunning {
 					v.logger.Debug("ibft init is already running")
@@ -201,7 +201,7 @@ func getFields(msg *proto.SignedMessage) []zap.Field {
 	return res
 }
 
-func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *keymanager.Share, forkVersion forksprotocol.ForkVersion, signer beacon.Signer, syncRateLimit time.Duration) ibft.Controller {
+func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *keymanager.Share, forkVersion forksprotocol.ForkVersion, signer beacon.Signer, syncRateLimit time.Duration) controller.Controller {
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
 

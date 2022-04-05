@@ -4,7 +4,6 @@ import (
 	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
 	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
@@ -12,6 +11,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -127,7 +127,7 @@ func populatedIbft(
 	sks map[uint64]*bls.SecretKey,
 	nodes map[uint64]*proto.Node,
 	signer beacon.Signer,
-) ibft.Controller {
+) controller.Controller {
 	queue := msgqueue.New()
 	share := &keymanager.Share{
 		NodeID:    nodeID,

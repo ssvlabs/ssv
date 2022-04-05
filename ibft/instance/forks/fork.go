@@ -1,11 +1,12 @@
 package forks
 
 import (
-	"github.com/bloxapp/ssv/ibft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 )
 
 // Fork will apply fork modifications on an ibft instance
 type Fork interface {
-	ibft.Pipelines
-	Apply(instance ibft.Instance)
+	validation.Pipelines
+	Apply(instance instance.Instance)
 }

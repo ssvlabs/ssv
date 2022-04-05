@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
 	"github.com/bloxapp/ssv/ibft/instance/msgcont"
@@ -90,14 +90,14 @@ type Instance struct {
 }
 
 // NewInstanceWithState used for testing, not PROD!
-func NewInstanceWithState(state *proto.State) ibft.Instance {
+func NewInstanceWithState(state *proto.State) instance.Instance {
 	return &Instance{
 		state: state,
 	}
 }
 
 // NewInstance is the constructor of Instance
-func NewInstance(opts *InstanceOptions) ibft.Instance {
+func NewInstance(opts *InstanceOptions) instance.Instance {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", opts.SeqNumber))

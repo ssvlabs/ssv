@@ -6,12 +6,13 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	"github.com/bloxapp/ssv/fixtures"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -60,8 +61,8 @@ func (t *testIBFT) Init() error {
 	return nil
 }
 
-func (t *testIBFT) StartInstance(opts ibft.ControllerStartInstanceOptions) (*ibft.InstanceResult, error) {
-	return &ibft.InstanceResult{
+func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.InstanceResult, error) {
+	return &instance.InstanceResult{
 		Decided: t.decided,
 		Msg: &proto.SignedMessage{
 			Message: &proto.Message{
@@ -177,7 +178,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.ibfts = make(map[beacon2.RoleType]ibft.Controller)
+	ret.ibfts = make(map[beacon2.RoleType]controller.Controller)
 	ret.ibfts[beacon2.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
 	ret.ibfts[beacon2.RoleTypeAttester].(*testIBFT).identifier = identifier
 	require.NoError(t, ret.ibfts[beacon2.RoleTypeAttester].Init())

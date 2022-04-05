@@ -2,18 +2,28 @@ package validator
 
 import (
 	"context"
+	ibftctrl "github.com/bloxapp/ssv/ibft/controller"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/msgqueue"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validatortypes "github.com/bloxapp/ssv/protocol/v1/keymanager"
+	keymanagerprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/utils/worker"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/format"
 	"go.uber.org/zap"
+	"time"
 )
 
 type Validator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
-	ProcessMsg(msg *message.SignedMessage)
+	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
 }
 
 type Options struct {
@@ -21,7 +31,7 @@ type Options struct {
 	Logger   *zap.Logger
 	Network  p2pprotocol.Network
 	Beacon   beaconprotocol.Beacon
-	Share    *validatortypes.Share
+	Share    *keymanagerprotocol.Share
 	ReadMode bool
 }
 
@@ -30,10 +40,10 @@ type validator struct {
 	logger  *zap.Logger
 	network p2pprotocol.Network
 	beacon  beaconprotocol.Beacon
-	Share   *validatortypes.Share
+	Share   *keymanagerprotocol.Share
+	worker  *worker.Worker
 
-	//dutyRunners map[beaconprotocol.RoleType]*DutyRunner
-	worker *worker.Worker
+	ibfts map[beaconprotocol.RoleType]controller.IController
 
 	readMode bool
 }
@@ -42,30 +52,24 @@ func NewValidator(opt *Options) Validator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", opt.Share.NodeID))
 
-	// updating goclient map // TODO move to controller
-	//if opt.Share.HasMetadata() && opt.Share.Metadata.Index > 0 {
-	//	blsPubkey := spec.BLSPubKey{}
-	//	copy(blsPubkey[:], opt.Share.PublicKey.Serialize())
-	//	opt.Beacon.ExtendIndexMap(opt.Share.Metadata.Index, blsPubkey)
-	//}
-
-	//dutyRunners := setupRunners()
 	workerCfg := &worker.WorkerConfig{
 		Ctx:          opt.Context,
 		WorkersCount: 1,   // TODO flag
 		Buffer:       100, // TODO flag
 	}
-	worker := worker.NewWorker(workerCfg)
+	queueWorker := worker.NewWorker(workerCfg)
+
+	ibfts := setupIbfts(opt, logger)
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	return &validator{
-		ctx:     opt.Context,
-		logger:  logger,
-		network: opt.Network,
-		beacon:  opt.Beacon,
-		Share:   opt.Share,
-		//dutyRunners: dutyRunners,
-		worker:   worker,
+		ctx:      opt.Context,
+		logger:   logger,
+		network:  opt.Network,
+		beacon:   opt.Beacon,
+		Share:    opt.Share,
+		ibfts:    ibfts,
+		worker:   queueWorker,
 		readMode: opt.ReadMode,
 	}
 }
@@ -78,7 +82,7 @@ func (v *validator) Start() {
 
 // ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
 // Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
-func (v *validator) ProcessMsg(msg *message.SignedMessage) /*(bool, []byte, error)*/ {
+func (v *validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
 	// check duty type and handle accordingly
 	if v.readMode {
 		// synchronic process
@@ -102,8 +106,26 @@ func messageHandler(msg *message.SignedMessage) {
 }
 
 // setupRunners return duty runners map with all the supported duty types
-//func setupRunners() map[beaconprotocol.RoleType]*DutyRunner {
-//	dutyRunners := map[beaconprotocol.RoleType]*DutyRunner{}
-//	dutyRunners[beaconprotocol.RoleTypeAttester] = NewDutyRunner()
-//	return dutyRunners
-//}
+func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]controller.IController {
+	ibfts := make(map[beaconprotocol.RoleType]controller.IController)
+	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
+	return ibfts
+}
+
+func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *keymanagerprotocol.Share, forkVersion forksprotocol.ForkVersion, signer beaconprotocol.Signer, syncRateLimit time.Duration) controller.IController {
+	ibftStorage := collections.NewIbft(db, logger, role.String())
+	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
+
+	return ibftctrl.New(
+		role,
+		identifier,
+		logger,
+		&ibftStorage,
+		network,
+		msgQueue,
+		proto.DefaultConsensusParams(),
+		share,
+		forkVersion,
+		signer,
+		syncRateLimit)
+}

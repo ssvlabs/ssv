@@ -2,9 +2,10 @@ package scenarios
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
@@ -12,7 +13,7 @@ import (
 
 type farFutureSync struct {
 	logger     *zap.Logger
-	nodes      []ibft.Controller
+	nodes      []controller.Controller
 	dbs        []collections.Iibft
 	valueCheck valcheck.ValueCheck
 }
@@ -25,7 +26,7 @@ func FarFutureSync(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario
 	}
 }
 
-func (r *farFutureSync) Start(nodes []ibft.Controller, dbs []collections.Iibft) {
+func (r *farFutureSync) Start(nodes []controller.Controller, dbs []collections.Iibft) {
 	r.nodes = nodes
 	r.dbs = dbs
 	nodeCount := len(nodes)
@@ -34,7 +35,7 @@ func (r *farFutureSync) Start(nodes []ibft.Controller, dbs []collections.Iibft) 
 	var wg sync.WaitGroup
 	for i := uint64(1); i < uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.Controller) {
+		go func(node controller.Controller) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -52,7 +53,7 @@ loop:
 		r.logger.Info("started instances")
 		for i := uint64(1); i < uint64(nodeCount); i++ {
 			wg.Add(1)
-			go func(node ibft.Controller, index uint64) {
+			go func(node controller.Controller, index uint64) {
 				r.startNode(node, index, seqNumber)
 				wg.Done()
 			}(nodes[i-1], i)
@@ -78,8 +79,8 @@ loop:
 	}
 }
 
-func (r *farFutureSync) startNode(node ibft.Controller, index uint64, seqNumber uint64) {
-	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
+func (r *farFutureSync) startNode(node controller.Controller, index uint64, seqNumber uint64) {
+	res, err := node.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:     r.logger,
 		ValueCheck: r.valueCheck,
 		SeqNumber:  seqNumber,

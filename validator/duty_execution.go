@@ -5,13 +5,13 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/operator/validator"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"time"
 
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"go.uber.org/zap"
 )
@@ -183,7 +183,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	result, err := v.ibfts[duty.Type].StartInstance(ibft.ControllerStartInstanceOptions{
+	result, err := v.ibfts[duty.Type].StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:          logger,
 		ValueCheck:      valCheckInstance,
 		SeqNumber:       seqNumber,

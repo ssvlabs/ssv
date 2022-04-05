@@ -2,9 +2,9 @@ package ibft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"testing"
@@ -21,7 +21,7 @@ type testFork struct {
 	instance *Instance
 }
 
-func (v0 *testFork) Apply(instance ibft.Instance) {
+func (v0 *testFork) Apply(instance instance.Instance) {
 
 }
 

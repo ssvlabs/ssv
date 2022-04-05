@@ -20,8 +20,8 @@ type Worker struct {
 	logger       *zap.Logger
 	cancel       context.CancelFunc
 	workersCount int
-	queue   chan *message.SignedMessage
-	handler workerHandler
+	queue        chan *message.SignedMessage
+	handler      workerHandler
 }
 
 func NewWorker(cfg *WorkerConfig) *Worker {
@@ -57,7 +57,7 @@ func (w *Worker) AddHandler(handler workerHandler) {
 // TryEnqueue tries to enqueue a job to the given job channel. Returns true if
 // the operation was successful, and false if enqueuing would not have been
 // possible without blocking. Job is not enqueued in the latter case.
-func (w *Worker) TryEnqueue(msg *message.SignedMessage) bool {
+func (w *Worker) TryEnqueue(msg *message.SSVMessage) bool {
 	select {
 	case w.queue <- msg:
 		return true

@@ -3,12 +3,12 @@ package controller
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon/valcheck"
-	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
@@ -115,7 +115,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	secretKeys, _ := GenerateNodes(4)
 	tests := []struct {
 		name            string
-		currentInstance ibft.Instance
+		currentInstance instance2.Instance
 		highestDecided  *proto.SignedMessage
 		msg             *proto.SignedMessage
 		expectedRes     bool
@@ -264,7 +264,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	secretKeys, _ := GenerateNodes(4)
 	tests := []struct {
 		name            string
-		currentInstance ibft.Instance
+		currentInstance instance2.Instance
 		msg             *proto.SignedMessage
 		expectedRes     bool
 	}{
@@ -350,7 +350,7 @@ func TestForceDecided(t *testing.T) {
 		i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 	}()
 
-	res, err := i1.StartInstance(ibft.ControllerStartInstanceOptions{
+	res, err := i1.StartInstance(instance2.ControllerStartInstanceOptions{
 		Logger:     logex.GetLogger(),
 		ValueCheck: &valcheck.AttestationValueCheck{},
 		SeqNumber:  4,

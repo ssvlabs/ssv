@@ -1,22 +1,21 @@
 package controller
 
 import (
-	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"time"
 
 	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
+	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -37,7 +36,7 @@ type Controller struct {
 	ValidatorShare  *keymanager.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
-	signer          beacon.Signer
+	signer          beaconprotocol.Signer
 
 	// flags
 	initHandlers *threadsafe.SafeBool
@@ -52,7 +51,7 @@ type Controller struct {
 
 // New is the constructor of Controller
 func New(
-	role beacon2.RoleType,
+	role beaconprotocol.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
 	storage collections.Iibft,
@@ -61,9 +60,9 @@ func New(
 	instanceConfig *proto.InstanceConfig,
 	validatorShare *keymanager.Share,
 	version forksprotocol.ForkVersion,
-	signer beacon.Signer,
+	signer beaconprotocol.Signer,
 	syncRateLimit time.Duration,
-) controller.IController {
+) IController {
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
 	ret := &Controller{
@@ -161,4 +160,8 @@ func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
+}
+
+func (i *Controller) ProcessMsg(msg *message.SSVMessage) {
+
 }
