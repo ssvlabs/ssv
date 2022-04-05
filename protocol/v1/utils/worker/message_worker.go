@@ -18,8 +18,8 @@ type WorkerConfig struct {
 
 type Worker struct {
 	ctx          context.Context
-	logger       *zap.Logger
 	cancel       context.CancelFunc
+	logger       *zap.Logger
 	workersCount int
 	queue        chan *message.SSVMessage
 	handler      workerHandler
@@ -29,23 +29,33 @@ func NewWorker(cfg *WorkerConfig) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 	logger := cfg.Logger.With(zap.String("who", "messageWorker"))
 
-	return &Worker{
+	w := &Worker{
 		ctx:          ctx,
 		logger:       logger,
 		cancel:       cancel,
 		workersCount: cfg.WorkersCount,
 		queue:        make(chan *message.SSVMessage, cfg.Buffer),
 	}
+
+	w.init()
+
+	return w
 }
 
 // Init listen to queue and process each new msg
-func (w *Worker) Init() {
+func (w *Worker) init() {
+	for i := 1; i <= w.workersCount; i++ {
+		go w.startWorker(w.queue)
+	}
+}
+
+func (w *Worker) startWorker(ch <-chan *message.SSVMessage) {
 	for {
 		select {
 		case <-w.ctx.Done():
 			return
 
-		case msg := <-w.queue:
+		case msg := <-ch:
 			w.process(msg)
 		}
 	}

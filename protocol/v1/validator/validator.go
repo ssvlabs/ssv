@@ -35,7 +35,7 @@ type validator struct {
 	beacon  beaconprotocol.Beacon
 	Share   *validatortypes.Share
 
-	//dutyRunners map[beaconprotocol.RoleType]*DutyRunner
+	// dutyRunners map[beaconprotocol.RoleType]*DutyRunner
 	worker *worker.Worker
 
 	readMode bool
@@ -52,7 +52,7 @@ func NewValidator(opt *Options) Validator {
 	//	opt.Beacon.ExtendIndexMap(opt.Share.Metadata.Index, blsPubkey)
 	//}
 
-	//dutyRunners := setupRunners()
+	// dutyRunners := setupRunners()
 	workerCfg := &worker.WorkerConfig{
 		Ctx:          opt.Context,
 		WorkersCount: 1,   // TODO flag
@@ -67,7 +67,7 @@ func NewValidator(opt *Options) Validator {
 		network: opt.Network,
 		beacon:  opt.Beacon,
 		Share:   opt.Share,
-		//dutyRunners: dutyRunners,
+		// dutyRunners: dutyRunners,
 		worker:   worker,
 		readMode: opt.ReadMode,
 	}
@@ -76,7 +76,6 @@ func NewValidator(opt *Options) Validator {
 func (v *validator) Start() {
 	// start queue workers
 	v.worker.AddHandler(messageHandler)
-	v.worker.Init()
 }
 
 // ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
@@ -92,7 +91,7 @@ func (v *validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 }
 
 func (v *validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
