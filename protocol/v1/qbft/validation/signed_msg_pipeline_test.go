@@ -17,18 +17,18 @@ func TestIfFirstTrueContinueToSecond(t *testing.T) {
 	})
 
 	t.Run("a valid, b valid", func(t *testing.T) {
-		require.NoError(t, IfFirstTrueContinueToSecond(validPipline, validPipline).Run(nil))
+		require.NoError(t, CombineQuiet(validPipline, validPipline).Run(nil))
 	})
 
 	t.Run("a valid, b invalid", func(t *testing.T) {
-		require.EqualError(t, IfFirstTrueContinueToSecond(validPipline, invalidPipeline).Run(nil), "error")
+		require.EqualError(t, CombineQuiet(validPipline, invalidPipeline).Run(nil), "error")
 	})
 
 	t.Run("a invalid, b valid", func(t *testing.T) {
-		require.NoError(t, IfFirstTrueContinueToSecond(invalidPipeline, validPipline).Run(nil))
+		require.NoError(t, CombineQuiet(invalidPipeline, validPipline).Run(nil))
 	})
 
 	t.Run("a invalid, b invalid", func(t *testing.T) {
-		require.NoError(t, IfFirstTrueContinueToSecond(invalidPipeline, invalidPipeline).Run(nil))
+		require.NoError(t, CombineQuiet(invalidPipeline, invalidPipeline).Run(nil))
 	})
 }

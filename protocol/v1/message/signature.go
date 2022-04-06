@@ -1,4 +1,4 @@
-package keymanager
+package message
 
 import (
 	"crypto/sha256"

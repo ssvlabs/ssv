@@ -1,4 +1,4 @@
-package change_round
+package changeround
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
