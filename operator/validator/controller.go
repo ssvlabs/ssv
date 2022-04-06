@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
+	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"sync"
 	"time"
 
@@ -21,8 +23,6 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	validatorprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/utils"
-	"github.com/bloxapp/ssv/protocol/v1/utils/worker"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -63,7 +63,7 @@ type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
-	GetValidator(pubKey string) (validator.Validator, bool)
+	GetValidator(pubKey string) (validator.IValidator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
@@ -340,7 +340,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 }
 
 // GetValidator returns a validator instance from validatorsMap
-func (c *controller) GetValidator(pubKey string) (validator.Validator, bool) {
+func (c *controller) GetValidator(pubKey string) (validator.IValidator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -350,7 +350,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 
-	err := c.validatorsMap.ForEach(func(v validator.Validator) error {
+	err := c.validatorsMap.ForEach(func(v validator.IValidator) error {
 		if !v.GetShare().HasMetadata() {
 			toFetch = append(toFetch, v.GetShare().PublicKey.Serialize())
 		} else if v.GetShare().Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
@@ -461,7 +461,7 @@ func (c *controller) onNewShare(share *validatorprotocol.Share, shareSecret *bls
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(v validator.Validator) (bool, error) {
+func (c *controller) startValidator(v validator.IValidator) (bool, error) {
 	ReportValidatorStatus(v.GetShare().PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
 	if !v.GetShare().HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")

@@ -15,7 +15,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/validator"
 	validator2 "github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/protocol/v1/utils"
+	"github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -88,9 +88,9 @@ type exporter struct {
 	ibftSyncEnabled                 bool
 	validatorMetaDataUpdateInterval time.Duration
 
-	decidedReadersQueue  utils.Queue
-	networkReadersQueue  utils.Queue
-	metaDataReadersQueue utils.Queue
+	decidedReadersQueue  queue.Queue
+	networkReadersQueue  queue.Queue
+	metaDataReadersQueue queue.Queue
 
 	networkMsgMediator ibftController.Mediator
 	useMainTopic       bool

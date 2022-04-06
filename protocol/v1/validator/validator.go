@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"go.uber.org/zap"
 	"time"
 
@@ -15,13 +16,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v1/utils/worker"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
-type Validator interface {
+type IValidator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
@@ -37,12 +37,12 @@ type Options struct {
 	ReadMode bool
 }
 
-type validator struct {
+type Validator struct {
 	ctx     context.Context
 	logger  *zap.Logger
 	network p2pprotocol.Network
 	beacon  beaconprotocol.Beacon
-	Share   *keymanagerprotocol.Share
+	share   *keymanagerprotocol.Share
 	worker  *worker.Worker
 
 	ibfts map[beaconprotocol.RoleType]controller.IController
@@ -50,9 +50,9 @@ type validator struct {
 	readMode bool
 }
 
-func NewValidator(opt *Options) Validator {
+func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
-		With(zap.Uint64("node_id", opt.Share.NodeID))
+		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
 
 	workerCfg := &worker.WorkerConfig{
 		Ctx:          opt.Context,
@@ -64,51 +64,31 @@ func NewValidator(opt *Options) Validator {
 	ibfts := setupIbfts(opt, logger)
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
-	return &validator{
+	return &Validator{
 		ctx:      opt.Context,
 		logger:   logger,
 		network:  opt.Network,
 		beacon:   opt.Beacon,
-		Share:    opt.Share,
+		share:    opt.Share,
 		ibfts:    ibfts,
 		worker:   queueWorker,
 		readMode: opt.ReadMode,
 	}
 }
 
-func (v *validator) Start() {
+func (v *Validator) Start() {
 	// start queue workers
-	v.worker.AddHandler(messageHandler)
+	v.worker.AddHandler(v.messageHandler)
 }
 
-// ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
-// Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
-func (v *validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
-	// check duty type and handle accordingly
-	if v.readMode {
-		// synchronic process
-		return
-	}
-	v.worker.TryEnqueue(msg)
-	// put msg to queue in order t release func
-}
-
-func (v *validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
+func (v *Validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
 	// TODO implement me
 	panic("implement me")
 }
 
-func (v *validator) GetShare() *keymanagerprotocol.Share {
+func (v *Validator) GetShare() *keymanagerprotocol.Share {
 	// TODO need lock?
-	return v.Share
-}
-
-// messageHandler process message from queue,
-func messageHandler(msg *message.SSVMessage) {
-	// validation
-	// check if post consensus
-	// of so, process
-	// if not, pass to dutyRunner -> QBFT IController
+	return v.share
 }
 
 // setupRunners return duty runners map with all the supported duty types

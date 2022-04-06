@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v1/utils"
+	"github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -124,7 +124,7 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 
 // UpdateValidatorsMetadataBatch updates the given public keys in batches
 func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
-	queue utils.Queue,
+	queue queue.Queue,
 	collection ValidatorMetadataStorage,
 	bc Beacon,
 	onUpdated OnUpdated,
@@ -138,7 +138,7 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 
 type batchTask func(pks [][]byte) func() error
 
-func batch(pubKeys [][]byte, queue utils.Queue, task batchTask, batchSize int) {
+func batch(pubKeys [][]byte, queue queue.Queue, task batchTask, batchSize int) {
 	n := float64(len(pubKeys))
 	// in case the amount of public keys is lower than the batch size
 	batchSize = int(math.Min(n, float64(batchSize)))

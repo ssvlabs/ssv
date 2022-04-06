@@ -58,3 +58,8 @@ func (s *State) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+type InstanceConfig struct {
+	RoundChangeDurationSeconds   float32
+	LeaderPreprepareDelaySeconds float32
+}

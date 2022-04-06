@@ -13,7 +13,7 @@ import (
 )
 
 // validatorIterator is the function used to iterate over existing validators
-type validatorIterator func(validator.Validator) error
+type validatorIterator func(validator.IValidator) error
 
 // validatorsMap manages a collection of running validators
 type validatorsMap struct {
@@ -23,7 +23,7 @@ type validatorsMap struct {
 	optsTemplate *validator.Options
 
 	lock          sync.RWMutex
-	validatorsMap map[string]validator.Validator
+	validatorsMap map[string]validator.IValidator
 }
 
 func newValidatorsMap(ctx context.Context, logger *zap.Logger, optsTemplate *validator.Options) *validatorsMap {
@@ -31,7 +31,7 @@ func newValidatorsMap(ctx context.Context, logger *zap.Logger, optsTemplate *val
 		logger:        logger.With(zap.String("component", "validatorsMap")),
 		ctx:           ctx,
 		lock:          sync.RWMutex{},
-		validatorsMap: make(map[string]validator.Validator),
+		validatorsMap: make(map[string]validator.IValidator),
 		optsTemplate:  optsTemplate,
 	}
 
@@ -52,7 +52,7 @@ func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
 }
 
 // GetValidator returns a validator
-func (vm *validatorsMap) GetValidator(pubKey string) (validator.Validator, bool) {
+func (vm *validatorsMap) GetValidator(pubKey string) (validator.IValidator, bool) {
 	// main lock
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
@@ -63,7 +63,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (validator.Validator, bool)
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *validator2.Share) validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *validator2.Share) validator.IValidator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()

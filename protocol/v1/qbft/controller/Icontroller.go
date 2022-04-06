@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 )
@@ -19,7 +19,7 @@ type IController interface {
 	NextSeqNumber() (uint64, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-	GetIBFTCommittee() map[uint64]*proto.Node
+	GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte

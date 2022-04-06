@@ -1,4 +1,4 @@
-package utils
+package queue
 
 import "github.com/bloxapp/ssv/utils/tasks"
 

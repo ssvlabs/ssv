@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/utils"
+	"github.com/bloxapp/ssv/protocol/v1/queue"
 	"sync"
 	"time"
 )
@@ -35,7 +35,7 @@ type executionQueue struct {
 }
 
 // NewExecutionQueue creates a new instance
-func NewExecutionQueue(interval time.Duration, opt ...ExecQueueOpt) utils.Queue {
+func NewExecutionQueue(interval time.Duration, opt ...ExecQueueOpt) queue.Queue {
 	if interval.Milliseconds() == 0 {
 		interval = 10 * time.Millisecond // default interval
 	}

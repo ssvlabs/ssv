@@ -1,9 +1,8 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
@@ -11,15 +10,15 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/storage/collections"
 )
 
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
@@ -29,18 +28,17 @@ var ErrAlreadyRunning = errors.New("already running")
 type Controller struct {
 	currentInstance instance.Instance
 	logger          *zap.Logger
-	ibftStorage     collections.Iibft
-	network         network.P2PNetwork
-	msgQueue        *msgqueue.MessageQueue
-	instanceConfig  *proto.InstanceConfig
+	ibftStorage     qbftstorage.Iibft
+	network         p2pprotocol.Network
+	instanceConfig  *qbft.InstanceConfig
 	ValidatorShare  *keymanager.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
 	signer          beaconprotocol.Signer
 
 	// flags
-	initHandlers *threadsafe.SafeBool
-	initSynced   *threadsafe.SafeBool
+	initHandlers atomic.Value // bool
+	initSynced   atomic.Value // bool
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -54,10 +52,9 @@ func New(
 	role beaconprotocol.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
-	storage collections.Iibft,
-	network network.P2PNetwork,
-	queue *msgqueue.MessageQueue,
-	instanceConfig *proto.InstanceConfig,
+	storage qbftstorage.Iibft,
+	network p2pprotocol.Network,
+	instanceConfig *qbft.InstanceConfig,
 	validatorShare *keymanager.Share,
 	version forksprotocol.ForkVersion,
 	signer beaconprotocol.Signer,
@@ -65,20 +62,16 @@ func New(
 ) IController {
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
+
 	ret := &Controller{
 		ibftStorage:    storage,
 		logger:         logger,
 		network:        network,
-		msgQueue:       queue,
 		instanceConfig: instanceConfig,
 		ValidatorShare: validatorShare,
 		Identifier:     identifier,
 		signer:         signer,
 		fork:           fork,
-
-		// flags
-		initHandlers: threadsafe.NewSafeBool(),
-		initSynced:   threadsafe.NewSafeBool(),
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
@@ -87,23 +80,27 @@ func New(
 		syncRateLimit: syncRateLimit,
 	}
 
+	// set flags
+	ret.initHandlers.Store(false)
+	ret.initSynced.Store(false)
+
 	return ret
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
 func (i *Controller) Init() error {
-	if !i.initHandlers.Get() {
-		i.initHandlers.Set(true)
+	if !i.isInitHandlers() {
+		i.initHandlers.Store(true)
 		i.logger.Info("iBFT implementation init started")
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-		i.processDecidedQueueMessages()
+		//i.processDecidedQueueMessages()
 		i.processSyncQueueMessages()
 		i.listenToSyncMessages()
 		i.logger.Debug("managed to setup iBFT handlers")
 	}
 
-	if !i.initSynced.Get() {
+	if !i.synced() {
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := i.SyncIBFT(); err != nil {
 			if err == ErrAlreadyRunning {
@@ -122,8 +119,19 @@ func (i *Controller) Init() error {
 	return nil
 }
 
+// initialized return true is both isInitHandlers and synced
 func (i *Controller) initialized() bool {
-	return i.initHandlers.Get() && i.initSynced.Get()
+	return i.isInitHandlers() && i.synced()
+}
+
+// synced return true if syncer synced
+func (i *Controller) synced() bool {
+	return i.initSynced.Load().(bool)
+}
+
+// isInitHandlers return true if handlers init
+func (i *Controller) isInitHandlers() bool {
+	return i.initHandlers.Load().(bool)
 }
 
 // StartInstance - starts an ibft instance or returns error
@@ -153,7 +161,7 @@ func (i *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
+func (i *Controller) GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node {
 	return i.ValidatorShare.Committee
 }
 
@@ -163,5 +171,9 @@ func (i *Controller) GetIdentifier() []byte {
 }
 
 func (i *Controller) ProcessMsg(msg *message.SSVMessage) {
-
+	switch msg.MsgType {
+	case message.DecidedMsgType:
+		i.ProcessDecidedMessage(msg)
+	}
 }
+
