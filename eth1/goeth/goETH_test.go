@@ -74,12 +74,12 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			}()
 
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(vLogOperatorAdded, contractAbi)
+			err = ec.handleEvent(vLogOperatorAdded, contractAbi)
 			require.NoError(t, err)
 
 			time.Sleep(10 * time.Millisecond)
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(vLogValidatorAdded, contractAbi)
+			err = ec.handleEvent(vLogValidatorAdded, contractAbi)
 			require.NoError(t, err)
 
 			eventsWg.Wait()

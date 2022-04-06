@@ -10,9 +10,10 @@ import (
 
 // Event names
 const (
-	OperatorAdded    = "OperatorAdded"
-	ValidatorAdded   = "ValidatorAdded"
-	ValidatorUpdated = "ValidatorUpdated"
+	OperatorAdded     = "OperatorAdded"
+	ValidatorAdded    = "ValidatorAdded"
+	ValidatorUpdated  = "ValidatorUpdated"
+	AccountLiquidated = "AccountLiquidated"
 )
 
 // ValidatorAddedEvent struct represents event received by the smart contract
@@ -35,6 +36,11 @@ type ValidatorUpdatedEvent struct {
 	EncryptedKeys      [][]byte
 }
 
+// AccountLiquidatedEvent struct represents event received by the smart contract
+type AccountLiquidatedEvent struct {
+	OwnerAddress common.Address
+}
+
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
 	Id           *big.Int //nolint
@@ -47,25 +53,35 @@ type OperatorAddedEvent struct {
 type AbiV2 struct {
 }
 
+type UnpackError struct {
+	Err error
+}
+
+func (e *UnpackError) Error() string {
+	return e.Err.Error()
+}
+
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
 func (v2 *AbiV2) ParseOperatorAddedEvent(
 	logger *zap.Logger,
 	data []byte,
 	topics []common.Hash,
 	contractAbi abi.ABI,
-) (*OperatorAddedEvent, bool, error) {
+) (*OperatorAddedEvent, error) {
 	var operatorAddedEvent OperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
 	if err != nil {
-		return nil, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack OperatorAdded event"),
+		}
 	}
 	outAbi, err := getOutAbi()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
 	if err != nil {
-		return nil, true, errors.Wrap(err, "failed to read OperatorPublicKey")
+		return nil, errors.Wrap(err, "failed to read OperatorPublicKey")
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
 
@@ -74,7 +90,7 @@ func (v2 *AbiV2) ParseOperatorAddedEvent(
 	} else {
 		logger.Error("operator event missing topics. no owner address provided.")
 	}
-	return &operatorAddedEvent, false, nil
+	return &operatorAddedEvent, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
@@ -82,7 +98,7 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(
 	logger *zap.Logger,
 	data []byte,
 	contractAbi abi.ABI,
-) (event *ValidatorAddedEvent, unpackErr bool, error error) {
+) (event *ValidatorAddedEvent, error error) {
 	return v2.parseValidatorEvent(logger, data, ValidatorAdded, contractAbi)
 }
 
@@ -91,31 +107,47 @@ func (v2 *AbiV2) ParseValidatorUpdatedEvent(
 	logger *zap.Logger,
 	data []byte,
 	contractAbi abi.ABI,
-) (*ValidatorAddedEvent, bool, error) {
+) (*ValidatorAddedEvent, error) {
 	return v2.parseValidatorEvent(logger, data, ValidatorUpdated, contractAbi)
 }
 
-func (v2 *AbiV2) parseValidatorEvent(logger *zap.Logger, data []byte, eventName string, contractAbi abi.ABI) (*ValidatorAddedEvent, bool, error) {
+func (v2 *AbiV2) ParseAccountLiquidatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
+	var accountLiquidatedEvent AccountLiquidatedEvent
+	err := contractAbi.UnpackIntoInterface(&accountLiquidatedEvent, AccountLiquidated, data)
+	if err != nil {
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack AccountLiquidated event"),
+		}
+	}
+
+	return &accountLiquidatedEvent, nil
+}
+
+func (v2 *AbiV2) parseValidatorEvent(logger *zap.Logger, data []byte, eventName string, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
 	var validatorAddedEvent ValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventName, data)
 	if err != nil {
-		return nil, true, errors.Wrapf(err, "Failed to unpack %s event", eventName)
+		return nil, &UnpackError{
+			Err: errors.Wrapf(err, "Failed to unpack %s event", eventName),
+		}
 	}
 
 	outAbi, err := getOutAbi()
 	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to define ABI")
+		return nil, errors.Wrap(err, "failed to define ABI")
 	}
 
 	for i, ek := range validatorAddedEvent.EncryptedKeys {
 		out, err := outAbi.Unpack("method", ek)
 		if err != nil {
-			return nil, true, errors.Wrap(err, "failed to unpack EncryptedKey")
+			return nil, &UnpackError{
+				Err: errors.Wrap(err, "failed to unpack EncryptedKey"),
+			}
 		}
 		if encryptedSharePrivateKey, ok := out[0].(string); ok {
 			validatorAddedEvent.EncryptedKeys[i] = []byte(encryptedSharePrivateKey)
 		}
 	}
 
-	return &validatorAddedEvent, false, nil
+	return &validatorAddedEvent, nil
 }
