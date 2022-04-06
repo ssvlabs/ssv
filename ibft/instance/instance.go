@@ -3,15 +3,10 @@ package ibft
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
 	"github.com/bloxapp/ssv/ibft/instance/forks"
 	"github.com/bloxapp/ssv/ibft/instance/msgcont"
@@ -22,8 +17,13 @@ import (
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // InstanceOptions defines option attributes for the Instance
@@ -31,7 +31,7 @@ type InstanceOptions struct {
 	Logger         *zap.Logger
 	ValidatorShare *keymanager.Share
 	// Me             *proto.Node
-	Network        network.P2PNetwork
+	Network        network.Network
 	Queue          *msgqueue.MessageQueue
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
@@ -43,21 +43,21 @@ type InstanceOptions struct {
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
 	Fork   forks.Fork
-	Signer beacon.Signer
+	Signer beaconprotocol.Signer
 }
 
 // Instance defines the instance attributes
 type Instance struct {
 	ValidatorShare *keymanager.Share
 	state          *proto.State
-	network        network.P2PNetwork
+	network        network.Network
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Config         *proto.InstanceConfig
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
-	signer         beacon.Signer
+	signer         beaconprotocol.Signer
 
 	// messages
 	MsgQueue            *msgqueue.MessageQueue
@@ -90,14 +90,14 @@ type Instance struct {
 }
 
 // NewInstanceWithState used for testing, not PROD!
-func NewInstanceWithState(state *proto.State) instance.Instance {
+func NewInstanceWithState(state *proto.State) ibft.Instance {
 	return &Instance{
 		state: state,
 	}
 }
 
 // NewInstance is the constructor of Instance
-func NewInstance(opts *InstanceOptions) instance.Instance {
+func NewInstance(opts *InstanceOptions) ibft.Instance {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", opts.SeqNumber))
@@ -315,7 +315,7 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	signedMessage := &proto.SignedMessage{
 		Message:   msg,
 		Signature: sigByts,
-		SignerIds: []uint64{i.ValidatorShare.NodeID},
+		SignerIds: []uint64{uint64(i.ValidatorShare.NodeID)},
 	}
 
 	// used for instance fast change round catchup

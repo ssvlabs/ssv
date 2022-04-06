@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft"
@@ -19,7 +18,7 @@ import (
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOptions, value []byte) (*instance2.InstanceResult, error) {
+func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOptions, value []byte) (*ibft.InstanceResult, error) {
 	i.currentInstance = instance.NewInstance(instanceOpts)
 	i.currentInstance.Init()
 	stageChan := i.currentInstance.GetStageChan()
@@ -36,7 +35,7 @@ func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOpt
 	go i.fastChangeRoundCatchup(i.currentInstance)
 
 	// main instance callback loop
-	var retRes *instance2.InstanceResult
+	var retRes *ibft.InstanceResult
 	var err error
 instanceLoop:
 	for {
@@ -66,7 +65,7 @@ instanceLoop:
 				err = errors.New("could not fetch decided msg after instance finished")
 				break instanceLoop
 			}
-			retRes = &instance2.InstanceResult{
+			retRes = &ibft.InstanceResult{
 				Decided: true,
 				Msg:     retMsg,
 			}
@@ -88,7 +87,7 @@ instanceLoop:
 }
 
 // afterInstance is triggered after the instance was finished
-func (i *Controller) afterInstance(seq uint64, res *instance2.InstanceResult, err error) {
+func (i *Controller) afterInstance(seq uint64, res *ibft.InstanceResult, err error) {
 	// if instance was decided -> wait for late commit messages
 	decided := res != nil && res.Decided
 	if decided && err == nil {
@@ -187,7 +186,7 @@ func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
-func (i *Controller) fastChangeRoundCatchup(instance instance2.Instance) {
+func (i *Controller) fastChangeRoundCatchup(instance ibft.Instance) {
 	sync := speedup.New(
 		i.logger,
 		i.Identifier,

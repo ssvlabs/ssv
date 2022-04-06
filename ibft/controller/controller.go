@@ -1,12 +1,11 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/ibft"
 	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
@@ -28,16 +26,16 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
-	currentInstance instance.Instance
+	currentInstance ibft.Instance
 	logger          *zap.Logger
 	ibftStorage     collections.Iibft
-	network         network.P2PNetwork
+	network         network.Network
 	msgQueue        *msgqueue.MessageQueue
 	instanceConfig  *proto.InstanceConfig
 	ValidatorShare  *keymanager.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
-	signer          beacon.Signer
+	signer          beaconprotocol.Signer
 
 	// flags
 	initHandlers *threadsafe.SafeBool
@@ -52,18 +50,18 @@ type Controller struct {
 
 // New is the constructor of Controller
 func New(
-	role beacon2.RoleType,
+	role beaconprotocol.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
 	storage collections.Iibft,
-	network network.P2PNetwork,
+	network network.Network,
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
 	validatorShare *keymanager.Share,
 	version forksprotocol.ForkVersion,
-	signer beacon.Signer,
+	signer beaconprotocol.Signer,
 	syncRateLimit time.Duration,
-) controller.IController {
+) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
 	ret := &Controller{
@@ -128,7 +126,7 @@ func (i *Controller) initialized() bool {
 }
 
 // StartInstance - starts an ibft instance or returns error
-func (i *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.InstanceResult, err error) {
+func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (res *ibft.InstanceResult, err error) {
 	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
@@ -154,7 +152,7 @@ func (i *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
+func (i *Controller) GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node {
 	return i.ValidatorShare.Committee
 }
 

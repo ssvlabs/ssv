@@ -1,7 +1,7 @@
 package controller
 
 import (
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/ibft"
 	"strconv"
 
 	instance "github.com/bloxapp/ssv/ibft/instance"
@@ -66,7 +66,7 @@ func (i *Controller) NextSeqNumber() (uint64, error) {
 	return knownDecided.Message.SeqNumber + 1, nil
 }
 
-func (i *Controller) instanceOptionsFromStartOptions(opts instance2.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
+func (i *Controller) instanceOptionsFromStartOptions(opts ibft.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
 	leaderSelectionSeed := append(i.Identifier, []byte(strconv.FormatUint(opts.SeqNumber, 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(i.ValidatorShare.CommitteeSize()))
 	if err != nil {
