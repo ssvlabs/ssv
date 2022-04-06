@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"math"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"math"
 )
 
 // PubKeys defines the type for public keys object representation

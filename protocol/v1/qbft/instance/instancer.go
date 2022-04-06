@@ -24,8 +24,8 @@ type InstanceResult struct {
 	Msg     *proto.SignedMessage
 }
 
-// Instance represents an iBFT instance (a single sequence number)
-type Instance interface {
+// Instancer represents an iBFT instance (a single sequence number)
+type Instancer interface {
 	validation.Pipelines
 	Init()
 	Start(inputValue []byte) error
