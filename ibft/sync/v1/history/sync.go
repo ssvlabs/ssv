@@ -57,31 +57,12 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
-	var sender string
-	var highest *message.SignedMessage
 	var localHeight message.Height
 	if localMsg != nil {
 		localHeight = localMsg.Message.Height
 	}
-	height := localHeight
 
-	for _, remoteMsg := range remoteMsgs {
-		sm, err := extractSyncMsg(remoteMsg.Msg)
-		if err != nil {
-			logger.Warn("bad sync message", zap.Error(err))
-			continue
-		}
-		if len(sm.Data) == 0 {
-			logger.Warn("empty sync message")
-			continue
-		}
-		if sm.Data[0].Message.Height > height {
-			highest = sm.Data[0]
-			height = highest.Message.Height
-			sender = remoteMsg.Sender
-		}
-	}
-
+	highest, height, sender := h.getHighest(localMsg, remoteMsgs...)
 	if height <= localHeight {
 		logger.Info("node is synced")
 		return true, nil
@@ -143,6 +124,32 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		return false, errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	return true, nil
+}
+
+func (h *history) getHighest(localMsg *message.SignedMessage, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, height message.Height, sender string) {
+	var localHeight message.Height
+	if localMsg != nil {
+		localHeight = localMsg.Message.Height
+	}
+	height = localHeight
+
+	for _, remoteMsg := range remoteMsgs {
+		sm, err := extractSyncMsg(remoteMsg.Msg)
+		if err != nil {
+			h.logger.Warn("bad sync message", zap.Error(err))
+			continue
+		}
+		if len(sm.Data) == 0 {
+			h.logger.Warn("empty sync message")
+			continue
+		}
+		if sm.Data[0].Message.Height > height {
+			highest = sm.Data[0]
+			height = highest.Message.Height
+			sender = remoteMsg.Sender
+		}
+	}
+	return
 }
 
 func extractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {

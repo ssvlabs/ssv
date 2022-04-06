@@ -38,16 +38,28 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResu
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height) ([]protocolp2p.SyncResult, error) {
+func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]protocolp2p.SyncResult, error) {
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	pid, peerCount := n.fork.DecidedHistoryProtocol()
-	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(historyProtocol))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get subset of peers")
+	protocolID, peerCount := n.fork.DecidedHistoryProtocol()
+	peers := make([]peer.ID, 0)
+	for _, t := range targets {
+		p, err := peer.Decode(t)
+		if err != nil {
+			continue
+		}
+		peers = append(peers, p)
 	}
-	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
+	// if no peers were provided -> select a random set of peers
+	if len(peers) == 0 {
+		random, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(historyProtocol))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get subset of peers")
+		}
+		peers = random
+	}
+	return n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
 		Params: &message.SyncParams{
 			Height:     []message.Height{from, to},
 			Identifier: mid,

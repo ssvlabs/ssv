@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -13,6 +14,20 @@ import (
 // UseMessageRouter registers a message router to handle incoming messages
 func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 	n.msgRouter = router
+}
+
+// Peers registers a message router to handle incoming messages
+func (n *p2pNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
+	all := make([]peer.ID, 0)
+	topics := n.fork.ValidatorTopicID(pk)
+	for _, topic := range topics {
+		peers, err := n.topicsCtrl.Peers(topic)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, peers...)
+	}
+	return all, nil
 }
 
 // Broadcast publishes the message to all peers in subnet
