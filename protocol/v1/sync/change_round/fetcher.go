@@ -16,8 +16,8 @@ type ChangeRoundFetcher interface {
 
 // changeRoundFetcher implements ChangeRoundFetcher
 type changeRoundFetcher struct {
-	logger *zap.Logger
-	syncer p2pprotocol.Syncer
+	logger   *zap.Logger
+	syncer   p2pprotocol.Syncer
 	validate validation.SignedMessagePipeline
 }
 
@@ -39,7 +39,7 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 	// TODO: report bad/invalid messages
 	for _, msg := range msgs {
 		syncMsg := &message.SyncMessage{}
-		err = syncMsg.Decode(msg.Data)
+		err = syncMsg.Decode(msg.Msg.Data)
 		if err != nil {
 			crf.logger.Warn("could not decode change round message", zap.Error(err))
 			continue

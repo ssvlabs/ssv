@@ -169,7 +169,9 @@ func (c *controller) handleRouterMessages() {
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.ProcessMsg(&msg)
 			} else if msg.MsgType == message.SSVPostConsensusMsgType {
-				c.messageWorker.TryEnqueue(&msg)
+				if !c.messageWorker.TryEnqueue(&msg) {
+					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+				}
 			}
 		}
 	}

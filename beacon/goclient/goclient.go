@@ -3,16 +3,15 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"log"
+	"sync"
+	"time"
+
 	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/beacon/goclient/ekm"
-	"github.com/bloxapp/ssv/monitoring/metrics"
-	protocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -20,9 +19,12 @@ import (
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
-	"log"
-	"sync"
-	"time"
+
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/goclient/ekm"
+	"github.com/bloxapp/ssv/monitoring/metrics"
+	protocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 const (

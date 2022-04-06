@@ -18,12 +18,12 @@ type History interface {
 	// SyncDecided syncs decided message with other peers in the network
 	SyncDecided(identifier message.Identifier, optimistic bool) (bool, error)
 	// SyncDecidedRange syncs decided messages for the given identifier and range
-	SyncDecidedRange(identifier message.Identifier, from, to message.Height) (bool, error)
+	SyncDecidedRange(identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error)
 }
 
 type history struct {
-	logger          *zap.Logger
-	store           qbftstorage.DecidedMsgStore
+	logger   *zap.Logger
+	store    qbftstorage.DecidedMsgStore
 	syncer   p2pprotocol.Syncer
 	validate validation.SignedMessagePipeline
 }
@@ -53,6 +53,7 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
+	var sender string
 	var highest *message.SignedMessage
 	var localHeight message.Height
 	if localMsg != nil {
@@ -61,7 +62,7 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 	height := localHeight
 
 	for _, remoteMsg := range remoteMsgs {
-		sm, err := extractSyncMsg(remoteMsg)
+		sm, err := extractSyncMsg(remoteMsg.Msg)
 		if err != nil {
 			logger.Warn("bad sync message", zap.Error(err))
 			continue
@@ -73,6 +74,7 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 		if sm.Data[0].Message.Height > height {
 			highest = sm.Data[0]
 			height = highest.Message.Height
+			sender = remoteMsg.Sender
 		}
 	}
 
@@ -81,7 +83,7 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 		return true, nil
 	}
 
-	synced, err := h.SyncDecidedRange(identifier, localHeight, height)
+	synced, err := h.SyncDecidedRange(identifier, localHeight, height, sender)
 	if err != nil {
 		if !optimistic {
 			return false, errors.Wrapf(err, "could not fetch and save decided in range [%d, %d]", localHeight, height)
@@ -102,14 +104,14 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 	return synced, nil
 }
 
-func (h *history) SyncDecidedRange(identifier message.Identifier, from, to message.Height) (bool, error) {
+func (h *history) SyncDecidedRange(identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error) {
 	visited := make(map[message.Height]bool)
-	msgs, err := h.syncer.GetHistory(identifier, from, to)
+	msgs, err := h.syncer.GetHistory(identifier, from, to, targetPeers...)
 	if err != nil {
 		return false, err
 	}
 	for _, msg := range msgs {
-		sm, err := extractSyncMsg(msg)
+		sm, err := extractSyncMsg(msg.Msg)
 		if err != nil {
 			continue
 		}
