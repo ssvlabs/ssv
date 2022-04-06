@@ -2,13 +2,12 @@ package controller
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon/valcheck"
+	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
@@ -17,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -115,7 +115,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	secretKeys, _ := GenerateNodes(4)
 	tests := []struct {
 		name            string
-		currentInstance instance2.Instance
+		currentInstance ibft.Instance
 		highestDecided  *proto.SignedMessage
 		msg             *proto.SignedMessage
 		expectedRes     bool
@@ -264,7 +264,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	secretKeys, _ := GenerateNodes(4)
 	tests := []struct {
 		name            string
-		currentInstance instance2.Instance
+		currentInstance ibft.Instance
 		msg             *proto.SignedMessage
 		expectedRes     bool
 	}{
@@ -350,7 +350,7 @@ func TestForceDecided(t *testing.T) {
 		i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 	}()
 
-	res, err := i1.StartInstance(instance2.ControllerStartInstanceOptions{
+	res, err := i1.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:     logex.GetLogger(),
 		ValueCheck: &valcheck.AttestationValueCheck{},
 		SeqNumber:  4,
@@ -519,7 +519,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		SeqNumber: 2,
 	})
 
-	share := &keymanager.Share{
+	share := &storage.Share{
 		NodeID:    1,
 		PublicKey: validatorPK(secretKeys),
 		Committee: nodes,

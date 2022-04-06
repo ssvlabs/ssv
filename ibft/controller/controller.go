@@ -1,24 +1,22 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/ibft"
-	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft"
 	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
 	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/validator/storage"
 )
 
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
@@ -32,10 +30,10 @@ type Controller struct {
 	network         network.Network
 	msgQueue        *msgqueue.MessageQueue
 	instanceConfig  *proto.InstanceConfig
-	ValidatorShare  *keymanager.Share
+	ValidatorShare  *storage.Share
 	Identifier      []byte
 	fork            contollerforks.Fork
-	signer          beaconprotocol.Signer
+	signer          beacon.Signer
 
 	// flags
 	initHandlers *threadsafe.SafeBool
@@ -50,20 +48,19 @@ type Controller struct {
 
 // New is the constructor of Controller
 func New(
-	role beaconprotocol.RoleType,
+	role beacon.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
 	storage collections.Iibft,
 	network network.Network,
 	queue *msgqueue.MessageQueue,
 	instanceConfig *proto.InstanceConfig,
-	validatorShare *keymanager.Share,
-	version forksprotocol.ForkVersion,
-	signer beaconprotocol.Signer,
+	validatorShare *storage.Share,
+	fork contollerforks.Fork,
+	signer beacon.Signer,
 	syncRateLimit time.Duration,
 ) ibft.Controller {
 	logger = logger.With(zap.String("role", role.String()))
-	fork := forksfactory.NewFork(version)
 	ret := &Controller{
 		ibftStorage:    storage,
 		logger:         logger,
@@ -73,7 +70,6 @@ func New(
 		ValidatorShare: validatorShare,
 		Identifier:     identifier,
 		signer:         signer,
-		fork:           fork,
 
 		// flags
 		initHandlers: threadsafe.NewSafeBool(),
@@ -86,6 +82,8 @@ func New(
 		syncRateLimit: syncRateLimit,
 	}
 
+	ret.setFork(fork)
+
 	return ret
 }
 
@@ -93,12 +91,12 @@ func New(
 // if init fails to sync
 func (i *Controller) Init() error {
 	if !i.initHandlers.Get() {
-		i.initHandlers.Set(true)
 		i.logger.Info("iBFT implementation init started")
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		i.processDecidedQueueMessages()
 		i.processSyncQueueMessages()
 		i.listenToSyncMessages()
+		i.initHandlers.Set(true)
 		i.logger.Debug("managed to setup iBFT handlers")
 	}
 
@@ -152,11 +150,20 @@ func (i *Controller) StartInstance(opts ibft.ControllerStartInstanceOptions) (re
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *Controller) GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node {
+func (i *Controller) GetIBFTCommittee() map[uint64]*proto.Node {
 	return i.ValidatorShare.Committee
 }
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
+}
+
+// setFork sets Controller fork for any new instances
+func (i *Controller) setFork(fork contollerforks.Fork) {
+	if fork == nil {
+		return
+	}
+	i.fork = fork
+	i.fork.Apply(i)
 }

@@ -3,7 +3,7 @@ package goclient
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/pkg/errors"
 )
 

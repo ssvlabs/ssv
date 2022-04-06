@@ -4,8 +4,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/bloxapp/ssv/network/local"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/validator/storage"
 	"strconv"
 	"testing"
 	"time"
@@ -31,7 +31,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 		},
@@ -111,7 +111,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 			PreparedRound: threadsafe.Uint64(0),
 			PreparedValue: threadsafe.Bytes(nil),
 		},
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 		},
@@ -178,7 +178,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 			SeqNumber:     threadsafe.Uint64(0),
 			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
 		},
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 			PublicKey: secretKeys[1].GetPublicKey(),
@@ -214,7 +214,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 		},
@@ -272,7 +272,7 @@ func TestPrePreparePipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 			PublicKey: sks[1].GetPublicKey(),

@@ -4,7 +4,6 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"sync"
 )
@@ -14,7 +13,7 @@ func init() {
 }
 
 // NewMockBeacon creates a new mock implementation of beacon client
-func NewMockBeacon(dutiesResults map[uint64][]*beacon.Duty, validatorsData map[spec.BLSPubKey]*v1.Validator) Beacon {
+func NewMockBeacon(dutiesResults map[uint64][]*Duty, validatorsData map[spec.BLSPubKey]*v1.Validator) Beacon {
 	return &mockBeacon{
 		indicesMap:     map[spec.BLSPubKey]spec.ValidatorIndex{},
 		indicesLock:    sync.Mutex{},
@@ -26,7 +25,7 @@ func NewMockBeacon(dutiesResults map[uint64][]*beacon.Duty, validatorsData map[s
 type mockBeacon struct {
 	indicesMap     map[spec.BLSPubKey]spec.ValidatorIndex
 	indicesLock    sync.Mutex
-	dutiesResults  map[uint64][]*beacon.Duty
+	dutiesResults  map[uint64][]*Duty
 	validatorsData map[spec.BLSPubKey]*v1.Validator
 }
 
@@ -37,7 +36,7 @@ func (m *mockBeacon) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPu
 	m.indicesMap[pubKey] = index
 }
 
-func (m *mockBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (m *mockBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error) {
 	return m.dutiesResults[uint64(epoch)], nil
 }
 
@@ -55,7 +54,7 @@ func (m *mockBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return nil, nil
 }
 
-func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (m *mockBeacon) SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 
@@ -83,19 +82,19 @@ func (m *mockBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]
 }
 
 // NewMockValidatorMetadataStorage creates a new mock implementation of ValidatorMetadataStorage
-func NewMockValidatorMetadataStorage() beacon.ValidatorMetadataStorage {
+func NewMockValidatorMetadataStorage() ValidatorMetadataStorage {
 	return &mockValidatorMetadataStorage{
-		map[string]*beacon.ValidatorMetadata{},
+		map[string]*ValidatorMetadata{},
 		sync.Mutex{},
 	}
 }
 
 type mockValidatorMetadataStorage struct {
-	data map[string]*beacon.ValidatorMetadata
+	data map[string]*ValidatorMetadata
 	lock sync.Mutex
 }
 
-func (m *mockValidatorMetadataStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (m *mockValidatorMetadataStorage) UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 

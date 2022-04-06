@@ -3,8 +3,8 @@ package auth
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -118,7 +118,7 @@ func TestAuthorizeMsg(t *testing.T) {
 				signed.Signature = test.sig
 			}
 
-			pipeline := AuthorizeMsg(&keymanager.Share{
+			pipeline := AuthorizeMsg(&storage.Share{
 				Committee: committee,
 			})
 

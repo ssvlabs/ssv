@@ -2,10 +2,9 @@ package scenarios
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -14,7 +13,7 @@ import (
 
 type syncFailover struct {
 	logger     *zap.Logger
-	nodes      []controller.Controller
+	nodes      []ibft.Controller
 	dbs        []collections.Iibft
 	valueCheck valcheck.ValueCheck
 }
@@ -27,7 +26,7 @@ func SyncFailover(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (sf *syncFailover) Start(nodes []controller.Controller, dbs []collections.Iibft) {
+func (sf *syncFailover) Start(nodes []ibft.Controller, dbs []collections.Iibft) {
 	sf.nodes = nodes
 	sf.dbs = dbs
 	nodeCount := len(nodes)
@@ -36,7 +35,7 @@ func (sf *syncFailover) Start(nodes []controller.Controller, dbs []collections.I
 	var wg sync.WaitGroup
 	for i := uint64(1); i < uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node controller.Controller) {
+		go func(node ibft.Controller) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -55,7 +54,7 @@ loop:
 		sf.logger.Info("started instances")
 		for i := uint64(1); i < uint64(nodeCount); i++ {
 			wg.Add(1)
-			go func(node controller.Controller, index uint64) {
+			go func(node ibft.Controller, index uint64) {
 				if msg := sf.startNode(node, index, seqNumber); msg != nil {
 					msgs[seqNumber] = msg
 				}
@@ -103,8 +102,8 @@ loop:
 	}
 }
 
-func (sf *syncFailover) startNode(node controller.Controller, index uint64, seqNumber uint64) *proto.SignedMessage {
-	res, err := node.StartInstance(instance.ControllerStartInstanceOptions{
+func (sf *syncFailover) startNode(node ibft.Controller, index uint64, seqNumber uint64) *proto.SignedMessage {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:     sf.logger,
 		ValueCheck: sf.valueCheck,
 		SeqNumber:  seqNumber,

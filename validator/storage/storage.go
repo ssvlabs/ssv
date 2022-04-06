@@ -2,8 +2,7 @@ package storage
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -14,10 +13,10 @@ import (
 type ICollection interface {
 	basedb.RegistryStore
 
-	SaveValidatorShare(share *keymanager.Share) error
-	GetValidatorShare(key []byte) (*keymanager.Share, bool, error)
-	GetAllValidatorShares() ([]*keymanager.Share, error)
-	GetOperatorValidatorShares(operatorPubKey string) ([]*keymanager.Share, error)
+	SaveValidatorShare(share *Share) error
+	GetValidatorShare(key []byte) (*Share, bool, error)
+	GetAllValidatorShares() ([]*Share, error)
+	GetOperatorValidatorShares(operatorPubKey string) ([]*Share, error)
 }
 
 func collectionPrefix() []byte {
@@ -48,7 +47,7 @@ func NewCollection(options CollectionOptions) ICollection {
 }
 
 // SaveValidatorShare save validator share to db
-func (s *Collection) SaveValidatorShare(share *keymanager.Share) error {
+func (s *Collection) SaveValidatorShare(share *Share) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -60,7 +59,7 @@ func (s *Collection) SaveValidatorShare(share *keymanager.Share) error {
 }
 
 // SaveValidatorShare save validator share to db
-func (s *Collection) saveUnsafe(share *keymanager.Share) error {
+func (s *Collection) saveUnsafe(share *Share) error {
 	value, err := share.Serialize()
 	if err != nil {
 		s.logger.Error("failed serialized validator", zap.Error(err))
@@ -70,7 +69,7 @@ func (s *Collection) saveUnsafe(share *keymanager.Share) error {
 }
 
 // GetValidatorShare by key
-func (s *Collection) GetValidatorShare(key []byte) (*keymanager.Share, bool, error) {
+func (s *Collection) GetValidatorShare(key []byte) (*Share, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -78,7 +77,7 @@ func (s *Collection) GetValidatorShare(key []byte) (*keymanager.Share, bool, err
 }
 
 // GetValidatorShare by key
-func (s *Collection) getUnsafe(key []byte) (*keymanager.Share, bool, error) {
+func (s *Collection) getUnsafe(key []byte) (*Share, bool, error) {
 	obj, found, err := s.db.Get(collectionPrefix(), key)
 	if !found {
 		return nil, false, nil
@@ -86,7 +85,7 @@ func (s *Collection) getUnsafe(key []byte) (*keymanager.Share, bool, error) {
 	if err != nil {
 		return nil, found, err
 	}
-	share, err := (&keymanager.Share{}).Deserialize(obj.Key, obj.Value)
+	share, err := (&Share{}).Deserialize(obj)
 	return share, found, err
 }
 
@@ -100,14 +99,14 @@ func (s *Collection) cleanAllShares() error {
 }
 
 // GetAllValidatorShares returns all shares
-func (s *Collection) GetAllValidatorShares() ([]*keymanager.Share, error) {
+func (s *Collection) GetAllValidatorShares() ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	var res []*keymanager.Share
+	var res []*Share
 
 	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
-		val, err := (&keymanager.Share{}).Deserialize(obj.Key, obj.Value)
+		val, err := (&Share{}).Deserialize(obj)
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize validator")
 		}
@@ -119,14 +118,14 @@ func (s *Collection) GetAllValidatorShares() ([]*keymanager.Share, error) {
 }
 
 // GetOperatorValidatorShares returns all validator shares belongs to operator
-func (s *Collection) GetOperatorValidatorShares(operatorPubKey string) ([]*keymanager.Share, error) {
+func (s *Collection) GetOperatorValidatorShares(operatorPubKey string) ([]*Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	var res []*keymanager.Share
+	var res []*Share
 
 	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
-		val, err := (&keymanager.Share{}).Deserialize(obj.Key, obj.Value)
+		val, err := (&Share{}).Deserialize(obj)
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize validator")
 		}

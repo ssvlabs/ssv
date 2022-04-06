@@ -1,21 +1,28 @@
 package storage
 
 import (
-	"github.com/bloxapp/ssv/fixtures"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"testing"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 func TestValidatorSerializer(t *testing.T) {
-	validatorShare, _ := generateRandomValidatorShare()
+	threshold.Init()
+	sk, _ := blskeygen.GenBLSKeyPair()
+	const keysCount = 4
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	validatorShare, _ := generateRandomValidatorShare(splitKeys)
 	b, err := validatorShare.Serialize()
 	require.NoError(t, err)
 
@@ -23,7 +30,7 @@ func TestValidatorSerializer(t *testing.T) {
 		Key:   validatorShare.PublicKey.Serialize(),
 		Value: b,
 	}
-	v, err := validatorShare.Deserialize(obj.Key, obj.Val)
+	v, err := validatorShare.Deserialize(obj)
 	require.NoError(t, err)
 	require.NotNil(t, v.PublicKey)
 	require.Equal(t, v.PublicKey.SerializeToHexStr(), validatorShare.PublicKey.SerializeToHexStr())
@@ -47,10 +54,16 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 		Logger: options.Logger,
 	})
 
-	validatorShare, _ := generateRandomValidatorShare()
+	threshold.Init()
+	const keysCount = 4
+	sk, _ := blskeygen.GenBLSKeyPair()
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+	require.NoError(t, err)
+
+	validatorShare, _ := generateRandomValidatorShare(splitKeys)
 	require.NoError(t, collection.SaveValidatorShare(validatorShare))
 
-	validatorShare2, _ := generateRandomValidatorShare()
+	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
 	require.NoError(t, collection.SaveValidatorShare(validatorShare2))
 
 	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
@@ -63,7 +76,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 }
 
-func generateRandomValidatorShare() (*keymanager.Share, *bls.SecretKey) {
+func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*Share, *bls.SecretKey) {
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -71,23 +84,23 @@ func generateRandomValidatorShare() (*keymanager.Share, *bls.SecretKey) {
 	ibftCommittee := map[uint64]*proto.Node{
 		1: {
 			IbftId: 1,
-			Pk:     fixtures.RefSplitSharesPubKeys[0],
+			Pk:     splitKeys[1].Serialize(),
 		},
 		2: {
 			IbftId: 2,
-			Pk:     fixtures.RefSplitSharesPubKeys[1],
+			Pk:     splitKeys[2].Serialize(),
 		},
 		3: {
 			IbftId: 3,
-			Pk:     fixtures.RefSplitSharesPubKeys[2],
+			Pk:     splitKeys[3].Serialize(),
 		},
 		4: {
 			IbftId: 4,
-			Pk:     fixtures.RefSplitSharesPubKeys[3],
+			Pk:     splitKeys[4].Serialize(),
 		},
 	}
 
-	return &keymanager.Share{
+	return &Share{
 		NodeID:       1,
 		PublicKey:    sk.GetPublicKey(),
 		Committee:    ibftCommittee,

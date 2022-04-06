@@ -4,7 +4,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +37,7 @@ type Controller interface {
 	NextSeqNumber() (uint64, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-	GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node
+	GetIBFTCommittee() map[uint64]*proto.Node
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte

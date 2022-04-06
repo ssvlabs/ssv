@@ -3,15 +3,15 @@ package goclient
 import (
 	"context"
 	"fmt"
-	"log"
-	"sync"
-	"time"
-
 	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/beacon/goclient/ekm"
+	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -19,12 +19,9 @@ import (
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/beacon/goclient/ekm"
-	"github.com/bloxapp/ssv/monitoring/metrics"
-	protocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"log"
+	"sync"
+	"time"
 )
 
 const (
@@ -57,14 +54,14 @@ type goClient struct {
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
-	keyManager     protocol.KeyManager
+	keyManager     beacon.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beacon.Options) (protocol.Beacon, error) {
+func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 
@@ -91,7 +88,7 @@ func New(opt beacon.Options) (protocol.Beacon, error) {
 		graffiti:       opt.Graffiti,
 	}
 
-	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, core.NetworkFromString(opt.Network))
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, core.PraterNetwork) // TODO need to set dynemic network
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
@@ -129,16 +126,16 @@ func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPub
 	gc.client.ExtendIndexMap(map[spec.ValidatorIndex]spec.BLSPubKey{index: pubKey})
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*protocol.Duty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
 		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
 		}
-		var duties []*protocol.Duty
+		var duties []*beacon.Duty
 		for _, attesterDuty := range attesterDuties {
-			duties = append(duties, &protocol.Duty{
-				Type:                    protocol.RoleTypeAttester,
+			duties = append(duties, &beacon.Duty{
+				Type:                    beacon.RoleTypeAttester,
 				PubKey:                  attesterDuty.PubKey,
 				Slot:                    attesterDuty.Slot,
 				ValidatorIndex:          attesterDuty.ValidatorIndex,

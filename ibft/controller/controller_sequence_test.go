@@ -2,17 +2,16 @@ package controller
 
 import (
 	"fmt"
-	forksv0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"testing"
 
+	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -25,7 +24,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 		// instances: make([]*Instance, 0),
 	}
 
-	ret.fork = forksv0.New()
+	ret.fork = testFork(ret)
 	return ret
 }
 
@@ -34,17 +33,17 @@ func TestCanStartNewInstance(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		opts            instance2.ControllerStartInstanceOptions
+		opts            ibft.ControllerStartInstanceOptions
 		share           *validatorstorage.Share
 		storage         collections.Iibft
 		initFinished    bool
 		initSynced      bool
-		currentInstance instance2.Instance
+		currentInstance ibft.Instance
 		expectedError   string
 	}{
 		{
 			"valid next instance start",
-			instance2.ControllerStartInstanceOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 11,
 			},
 			&validatorstorage.Share{
@@ -60,7 +59,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"valid first instance",
-			instance2.ControllerStartInstanceOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 0,
 			},
 			&validatorstorage.Share{
@@ -76,7 +75,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"didn't finish initialization",
-			instance2.ControllerStartInstanceOptions{},
+			ibft.ControllerStartInstanceOptions{},
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
@@ -90,7 +89,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"didn't finish sync",
-			instance2.ControllerStartInstanceOptions{},
+			ibft.ControllerStartInstanceOptions{},
 			&validatorstorage.Share{
 				NodeID:    1,
 				PublicKey: validatorPK(sks),
@@ -104,7 +103,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"sequence skips",
-			instance2.ControllerStartInstanceOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 12,
 			},
 			&validatorstorage.Share{
@@ -120,7 +119,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"past instance",
-			instance2.ControllerStartInstanceOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 10,
 			},
 			&validatorstorage.Share{
@@ -136,7 +135,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		},
 		{
 			"didn't finish current instance",
-			instance2.ControllerStartInstanceOptions{
+			ibft.ControllerStartInstanceOptions{
 				SeqNumber: 11,
 			},
 			&validatorstorage.Share{

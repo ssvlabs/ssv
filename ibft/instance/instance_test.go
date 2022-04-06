@@ -9,9 +9,9 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -35,7 +35,7 @@ func TestInstanceStop(t *testing.T) {
 			Lambda:    threadsafe.BytesS("Lambda"),
 			SeqNumber: threadsafe.Uint64(1),
 		},
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			Committee: nodes,
 			NodeID:    1,
 			PublicKey: secretKeys[1].GetPublicKey(),
@@ -144,7 +144,7 @@ func TestSetStage(t *testing.T) {
 		},
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(context.Background(), zap.L()),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 	}
@@ -210,7 +210,7 @@ func TestBumpRound(t *testing.T) {
 		},
 		Logger:     zaptest.NewLogger(t),
 		roundTimer: roundtimer.New(context.Background(), zap.L()),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &storage.Share{
 			PublicKey: secretKeys[1].GetPublicKey(),
 		},
 	}

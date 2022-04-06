@@ -3,15 +3,14 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/operator/validator"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"time"
 
 	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
 
+	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"go.uber.org/zap"
 )
@@ -77,7 +76,7 @@ func (v *Validator) postConsensusDutyExecution(
 	seqNumber uint64,
 	decidedValue []byte,
 	signaturesCount int,
-	duty *beacon2.Duty,
+	duty *beacon.Duty,
 ) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := v.signDuty(decidedValue, duty)
@@ -117,7 +116,7 @@ func (v *Validator) postConsensusDutyExecution(
 	return nil
 }
 
-func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon2.Duty) (int, []byte, uint64, error) {
+func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon.Duty) (int, []byte, uint64, error) {
 	var inputByts []byte
 	var err error
 	var valCheckInstance ibftvalcheck.ValueCheck
@@ -127,7 +126,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	}
 
 	switch duty.Type {
-	case beacon2.RoleTypeAttester:
+	case beacon.RoleTypeAttester:
 		attData, err := v.beacon.GetAttestationData(duty.Slot, duty.CommitteeIndex)
 		if err != nil {
 			return 0, nil, 0, errors.Wrap(err, "failed to get attestation data")
@@ -183,7 +182,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	result, err := v.ibfts[duty.Type].StartInstance(instance.ControllerStartInstanceOptions{
+	result, err := v.ibfts[duty.Type].StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:          logger,
 		ValueCheck:      valCheckInstance,
 		SeqNumber:       seqNumber,
@@ -204,13 +203,13 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 }
 
 // ExecuteDuty executes the given duty
-func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon2.Duty) {
+func (v *Validator) ExecuteDuty(ctx context.Context, slot uint64, duty *beacon.Duty) {
 	logger := v.logger.With(zap.Time("start_time", v.getSlotStartTime(slot)),
 		zap.Uint64("committee_index", uint64(duty.CommitteeIndex)),
 		zap.Uint64("slot", slot),
 		zap.String("duty_type", duty.Type.String()))
 
-	validator.metricsCurrentSlot.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(duty.Slot))
+	metricsCurrentSlot.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(duty.Slot))
 
 	logger.Debug("executing duty...")
 	signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)

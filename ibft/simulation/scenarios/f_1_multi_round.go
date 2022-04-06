@@ -2,11 +2,10 @@ package scenarios
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
@@ -14,7 +13,7 @@ import (
 
 type f1MultiRound struct {
 	logger     *zap.Logger
-	nodes      []controller.Controller
+	nodes      []ibft.Controller
 	valueCheck valcheck.ValueCheck
 }
 
@@ -26,16 +25,16 @@ func NewF1MultiRound(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenar
 	}
 }
 
-func (r *f1MultiRound) Start(nodes []controller.Controller, _ []collections.Iibft) {
+func (r *f1MultiRound) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	r.nodes = nodes
 	wg := sync.WaitGroup{}
-	go func(node controller.Controller, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		if err := r.nodes[0].Init(); err != nil {
 			fmt.Printf("error initializing ibft")
 		}
 		r.startNode(node, index)
 	}(r.nodes[0], 1)
-	go func(node controller.Controller, index uint64) {
+	go func(node ibft.Controller, index uint64) {
 		if err := r.nodes[1].Init(); err != nil {
 			fmt.Printf("error initializing ibft")
 		}
@@ -54,8 +53,8 @@ func (r *f1MultiRound) Start(nodes []controller.Controller, _ []collections.Iibf
 	wg.Wait()
 }
 
-func (r *f1MultiRound) startNode(node controller.Controller, index uint64) {
-	res, err := node.StartInstance(instance.ControllerStartInstanceOptions{
+func (r *f1MultiRound) startNode(node ibft.Controller, index uint64) {
+	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
 		Logger:     r.logger,
 		ValueCheck: r.valueCheck,
 		SeqNumber:  1,

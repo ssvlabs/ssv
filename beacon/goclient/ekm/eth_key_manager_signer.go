@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/ibft/proto"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -110,7 +109,7 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *proto.Message, pk []byte
 	return sig, nil
 }
 
-func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *beacon2.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	domain, err := km.signingUtils.GetDomain(data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get domain for signing")

@@ -14,14 +14,21 @@ type ReqHandler struct {
 	paginationMaxSize  uint64
 	identifier         []byte
 	seqNumber          int64 // equals to -1 if not set
-	network            network.P2PNetwork
+	network            network.Network
 	storage            collections.Iibft
 	logger             *zap.Logger
 	lastChangeRoundMsg *proto.SignedMessage
 }
 
 // New returns a new instance of ReqHandler
-func New(logger *zap.Logger, identifier []byte, seqNumber int64, network network.P2PNetwork, storage collections.Iibft, lastChangeRoundMsg *proto.SignedMessage) *ReqHandler {
+func New(
+	logger *zap.Logger,
+	identifier []byte,
+	seqNumber int64,
+	network network.Network,
+	storage collections.Iibft,
+	lastChangeRoundMsg *proto.SignedMessage,
+) *ReqHandler {
 	return &ReqHandler{
 		paginationMaxSize:  network.MaxBatch(),
 		logger:             logger,

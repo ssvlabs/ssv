@@ -1,14 +1,14 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/validator/storage"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"strings"
@@ -121,7 +121,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	instance := &Instance{
 		CommitMessages: msgcontinmem.New(3, 2),
 		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{Committee: nodes},
+		ValidatorShare: &storage.Share{Committee: nodes},
 		state: &proto.State{
 			Round:         threadsafe.Uint64(1),
 			PreparedValue: threadsafe.Bytes(nil),
@@ -181,7 +181,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.SignerIds)
 
 	// test verification
-	share := keymanager.Share{Committee: nodes}
+	share := storage.Share{Committee: nodes}
 	require.NoError(t, share.VerifySignedMessage(msg))
 }
 
@@ -189,7 +189,7 @@ func TestCommitPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
-		ValidatorShare:  &keymanager.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
+		ValidatorShare:  &storage.Share{Committee: nodes, PublicKey: sks[1].GetPublicKey()},
 		state: &proto.State{
 			Round:     threadsafe.Uint64(1),
 			Lambda:    threadsafe.Bytes(nil),
@@ -205,7 +205,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	db := collections.NewIbft(newInMemDb(), zap.L(), "attestation")
 
-	share := keymanager.Share{}
+	share := storage.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
 	share.Committee = make(map[uint64]*proto.Node, 4)
 	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String())

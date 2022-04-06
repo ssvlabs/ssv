@@ -23,7 +23,14 @@ type Speedup struct {
 }
 
 // New returns a new Speedup instance
-func New(logger *zap.Logger, identifier []byte, publicKey []byte, seqNumber uint64, network network.Network, msgValidationPipeline pipeline.Pipeline) *Speedup {
+func New(
+	logger *zap.Logger,
+	identifier []byte,
+	publicKey []byte,
+	seqNumber uint64,
+	network network.Network,
+	msgValidationPipeline pipeline.Pipeline,
+) *Speedup {
 	return &Speedup{
 		logger:                logger.With(zap.String("sync", "fast_catchup")),
 		identifier:            identifier,

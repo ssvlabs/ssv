@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -58,6 +57,6 @@ func (km *testKM) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, er
 	return nil, errors.New("could not find key for pk")
 }
 
-func (km *testKM) SignAttestation(data *spec.AttestationData, duty *beacon2.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *testKM) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }

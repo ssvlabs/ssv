@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/ibft"
 	"strconv"
 
+	"github.com/bloxapp/ssv/ibft"
 	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/pkg/errors"

@@ -10,19 +10,18 @@ import (
 	"github.com/bloxapp/ssv/beacon/valcheck"
 	ibftctrl "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/ibft/proto"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 )
@@ -31,17 +30,17 @@ import (
 type Options struct {
 	Context                    context.Context
 	Logger                     *zap.Logger
-	Share                      *keymanager.Share
+	Share                      *storage.Share
 	SignatureCollectionTimeout time.Duration
-	Network                    network.P2PNetwork
-	Beacon                     beaconprotocol.Beacon
+	Network                    network.Network
+	Beacon                     beacon.Beacon
 	ETHNetwork                 *core.Network
 	DB                         basedb.IDb
-	Signer                     beaconprotocol.Signer
+	Fork                       forks.Fork
+	Signer                     beacon.Signer
 	SyncRateLimit              time.Duration
 
 	notifyOperatorID func(string)
-	ForkVersion      forksprotocol.ForkVersion
 }
 
 // Validator represents a running validator,
@@ -49,16 +48,17 @@ type Options struct {
 type Validator struct {
 	ctx                        context.Context
 	logger                     *zap.Logger
-	Share                      *keymanager.Share
+	Share                      *storage.Share
 	ethNetwork                 *core.Network
-	beacon                     beaconprotocol.Beacon
-	ibfts                      map[beaconprotocol.RoleType]controller.Controller
+	beacon                     beacon.Beacon
+	ibfts                      map[beacon.RoleType]ibft.Controller
 	msgQueue                   *msgqueue.MessageQueue
-	network                    network.P2PNetwork
+	network                    network.Network
 	signatureCollectionTimeout time.Duration
 	valueCheck                 *valcheck.SlashingProtection
 	startOnce                  sync.Once
-	signer                     beaconprotocol.Signer
+	fork                       forks.Fork
+	signer                     beacon.Signer
 }
 
 // New creates a new validator instance and the corresponding ibft controller
@@ -68,8 +68,8 @@ func New(opt Options) *Validator {
 		With(zap.Uint64("node_id", opt.Share.NodeID))
 
 	msgQueue := msgqueue.New()
-	ibfts := make(map[beaconprotocol.RoleType]controller.Controller)
-	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
+	ibfts := make(map[beacon.RoleType]ibft.Controller)
+	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer, opt.SyncRateLimit)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 
@@ -77,7 +77,6 @@ func New(opt Options) *Validator {
 	if opt.Share.HasMetadata() && opt.Share.Metadata.Index > 0 {
 		blsPubkey := spec.BLSPubKey{}
 		copy(blsPubkey[:], opt.Share.PublicKey.Serialize())
-		// TODO(nkryuchkov): check if ExtendIndexMap is implemented in the original repo, remove fork if so
 		opt.Beacon.ExtendIndexMap(opt.Share.Metadata.Index, blsPubkey)
 	}
 
@@ -101,8 +100,8 @@ func New(opt Options) *Validator {
 		beacon:                     opt.Beacon,
 		valueCheck:                 valcheck.New(),
 		startOnce:                  sync.Once{},
-		//forkVersion:                opt.ForkVersion,
-		signer: opt.Signer,
+		fork:                       opt.Fork,
+		signer:                     opt.Signer,
 	}
 }
 
@@ -114,7 +113,7 @@ func (v *Validator) Start() error {
 
 	// init all ibft controllers
 	for _, ib := range v.ibfts {
-		go func(ib controller.Controller) {
+		go func(ib ibft.Controller) {
 			if err := ib.Init(); err != nil {
 				if err == ibftctrl.ErrAlreadyRunning {
 					v.logger.Debug("ibft init is already running")
@@ -202,10 +201,19 @@ func getFields(msg *proto.SignedMessage) []zap.Field {
 	return res
 }
 
-func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *keymanager.Share, forkVersion forksprotocol.ForkVersion, signer beacon.Signer, syncRateLimit time.Duration) controller.Controller {
+func setupIbftController(
+	role beacon.RoleType,
+	logger *zap.Logger,
+	db basedb.IDb,
+	network network.Network,
+	msgQueue *msgqueue.MessageQueue,
+	share *storage.Share,
+	fork forks.Fork,
+	signer beacon.Signer,
+	syncRateLimit time.Duration,
+) ibft.Controller {
 	ibftStorage := collections.NewIbft(db, logger, role.String())
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
-
 	return ibftctrl.New(
 		role,
 		identifier,
@@ -215,7 +223,7 @@ func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db ba
 		msgQueue,
 		proto.DefaultConsensusParams(),
 		share,
-		forkVersion,
+		fork.NewIBFTControllerFork(),
 		signer,
 		syncRateLimit)
 }

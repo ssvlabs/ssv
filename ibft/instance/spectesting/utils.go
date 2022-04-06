@@ -2,21 +2,34 @@ package spectesting
 
 import (
 	"encoding/json"
+	"testing"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/fixtures"
 	ibft2 "github.com/bloxapp/ssv/ibft/instance"
 	v0 "github.com/bloxapp/ssv/ibft/instance/forks/v0"
 	"github.com/bloxapp/ssv/ibft/leader/constant"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
 	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/dataval/bytesval"
 	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-	"testing"
+	"github.com/bloxapp/ssv/validator/storage"
+)
+
+const keysCount = 4
+
+func init() {
+	threshold.Init()
+}
+
+var (
+	refSK, refPK = blskeygen.GenBLSKeyPair()
+	splitKeys, _ = threshold.Create(refSK.Serialize(), keysCount-1, keysCount)
 )
 
 // PrePrepareMsg constructs and signs a pre-prepare msg
@@ -121,8 +134,8 @@ func TestIBFTInstance(t *testing.T, lambda []byte) *ibft2.Instance {
 }
 
 // TestSharesAndSigner generates test nodes for SSV
-func TestSharesAndSigner() (map[uint64]*keymanager.Share, beacon.KeyManager) {
-	shares := map[uint64]*keymanager.Share{
+func TestSharesAndSigner() (map[uint64]*storage.Share, beacon.KeyManager) {
+	shares := map[uint64]*storage.Share{
 		1: {
 			NodeID:    1,
 			PublicKey: TestValidatorPK(),
@@ -185,33 +198,27 @@ func TestNodes() map[uint64]*proto.Node {
 
 // TestValidatorPK returns ref validator pk
 func TestValidatorPK() *bls.PublicKey {
-	threshold.Init()
-	ret := &bls.PublicKey{}
-	if err := ret.Deserialize(fixtures.RefPk); err != nil {
-		panic(err)
-	}
-	return ret
+	return refPK
 }
 
 // TestPKs PKS for TestSKs
 func TestPKs() [][]byte {
 	return [][]byte{
-		fixtures.RefSplitSharesPubKeys[0],
-		fixtures.RefSplitSharesPubKeys[1],
-		fixtures.RefSplitSharesPubKeys[2],
-		fixtures.RefSplitSharesPubKeys[3],
+		splitKeys[1].GetPublicKey().Serialize(),
+		splitKeys[2].GetPublicKey().Serialize(),
+		splitKeys[3].GetPublicKey().Serialize(),
+		splitKeys[4].GetPublicKey().Serialize(),
 	}
 }
 
 // TestSKs returns reference test shares for SSV
 func TestSKs() []*bls.SecretKey {
-	threshold.Init()
 	ret := make([]*bls.SecretKey, 4)
 	for i, skByts := range [][]byte{
-		fixtures.RefSplitShares[0],
-		fixtures.RefSplitShares[1],
-		fixtures.RefSplitShares[2],
-		fixtures.RefSplitShares[3],
+		splitKeys[1].Serialize(),
+		splitKeys[2].Serialize(),
+		splitKeys[3].Serialize(),
+		splitKeys[4].Serialize(),
 	} {
 		sk := &bls.SecretKey{}
 		if err := sk.Deserialize(skByts); err != nil {

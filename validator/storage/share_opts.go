@@ -3,7 +3,6 @@ package storage
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -19,7 +18,7 @@ type ShareOptions struct {
 }
 
 // ToShare creates a Share instance from ShareOptions
-func (options *ShareOptions) ToShare() (*keymanager.Share, error) {
+func (options *ShareOptions) ToShare() (*Share, error) {
 	var err error
 
 	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 && len(options.OwnerAddress) > 0 {
@@ -52,7 +51,7 @@ func (options *ShareOptions) ToShare() (*keymanager.Share, error) {
 			return nil, err
 		}
 
-		share := keymanager.Share{
+		share := Share{
 			NodeID:       options.NodeID,
 			Metadata:     nil,
 			PublicKey:    validatorPk,
