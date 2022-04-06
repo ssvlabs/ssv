@@ -67,7 +67,7 @@ func (spcsm *SignedPostConsensusMessage) GetRoot() ([]byte, error) {
 }
 
 // Aggregate aggregates signatures
-func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg MessageSignature) error {
+func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg MsgSignature) error {
 	//if !bytes.Equal(spcsm.GetRoot(), signedMsg.GetRoot()) {
 	//	return errors.New("can't aggregate msgs with different roots")
 	//}

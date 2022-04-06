@@ -5,7 +5,7 @@ import "github.com/libp2p/go-libp2p-core/protocol"
 const (
 	legacyMsgStream = "/sync/0.0.1"
 
-	peersForSync = 4
+	peersForSync    = 4
 	peersForHistory = 1
 )
 

@@ -1,4 +1,5 @@
 package signedmsg
+
 //
 //import (
 //	"github.com/bloxapp/ssv/ibft/proto"

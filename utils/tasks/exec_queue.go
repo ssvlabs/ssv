@@ -7,7 +7,7 @@ import (
 )
 
 // Fn represents a function to execute
-type Fn func() error
+type Fn = queue.Fn
 
 // ExecQueueOpt enables to inject more parameters
 type ExecQueueOpt func(*executionQueue)

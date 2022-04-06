@@ -31,15 +31,15 @@ type Root interface {
 	GetRoot() ([]byte, error)
 }
 
-// MessageSignature includes all functions relevant for a signed message (QBFT message, post consensus msg, etc)
-type MessageSignature interface {
+// MsgSignature includes all functions relevant for a signed message (QBFT message, post consensus msg, etc)
+type MsgSignature interface {
 	Root
 	GetSignature() Signature
 	GetSigners() []OperatorID
 	// MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
 	MatchedSigners(ids []OperatorID) bool
 	// Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-	Aggregate(signedMsg MessageSignature) error
+	Aggregate(signedMsg MsgSignature) error
 }
 
 // SignatureDomain represents signature domain bytes
@@ -49,7 +49,7 @@ type SignatureDomain []byte
 type Signature []byte
 
 // VerifyByOperators verifies signature by the provided operators
-func (s Signature) VerifyByOperators(data MessageSignature, domain DomainType, sigType SignatureType, operators []*Operator) error {
+func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigType SignatureType, operators []*Operator) error {
 	pks := make([][]byte, 0)
 	for _, id := range data.GetSigners() {
 		found := false

@@ -186,7 +186,7 @@ func (signedMsg *SignedMessage) MatchedSigners(ids []OperatorID) bool {
 }
 
 // MutualSigners returns true if signatures have at least 1 mutual signer
-func (signedMsg *SignedMessage) MutualSigners(sig MessageSignature) bool {
+func (signedMsg *SignedMessage) MutualSigners(sig MsgSignature) bool {
 	for _, id := range signedMsg.Signers {
 		for _, id2 := range sig.GetSigners() {
 			if id == id2 {
@@ -198,7 +198,7 @@ func (signedMsg *SignedMessage) MutualSigners(sig MessageSignature) bool {
 }
 
 // Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-func (signedMsg *SignedMessage) Aggregate(sig MessageSignature) error {
+func (signedMsg *SignedMessage) Aggregate(sig MsgSignature) error {
 	if signedMsg.MutualSigners(sig) {
 		return errors.New("can't aggregate 2 signed messages with mutual signers")
 	}
