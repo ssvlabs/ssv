@@ -341,7 +341,6 @@ func (c *controller) handleValidatorAddedEvent(
 	isOperatorShare bool,
 ) (*validatorstorage.Share, error) {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
@@ -359,6 +358,7 @@ func (c *controller) handleValidatorAddedEvent(
 		if isOperatorShare {
 			logger := c.logger.With(zap.String("pubKey", pubKey))
 			logger.Debug("ValidatorAdded event was handled successfully")
+			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		}
 	}
 	return validatorShare, nil
