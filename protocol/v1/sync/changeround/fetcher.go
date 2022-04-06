@@ -8,13 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// ChangeRoundFetcher is responsible for fetching change round messages from other peers in the subnet
-type ChangeRoundFetcher interface {
+// Fetcher is responsible for fetching change round messages from other peers in the subnet
+type Fetcher interface {
 	// GetChangeRoundMessages fetches change round messages for the given identifier and height
 	GetChangeRoundMessages(identifier message.Identifier, height message.Height) ([]*message.SignedMessage, error)
 }
 
-// changeRoundFetcher implements ChangeRoundFetcher
+// changeRoundFetcher implements Fetcher
 type changeRoundFetcher struct {
 	logger   *zap.Logger
 	syncer   p2pprotocol.Syncer
@@ -22,7 +22,7 @@ type changeRoundFetcher struct {
 }
 
 // NewLastRoundFetcher returns an instance of changeRoundFetcher
-func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer, validate validation.SignedMessagePipeline) ChangeRoundFetcher {
+func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer, validate validation.SignedMessagePipeline) Fetcher {
 	return &changeRoundFetcher{
 		logger:   logger,
 		syncer:   syncer,

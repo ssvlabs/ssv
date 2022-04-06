@@ -10,14 +10,20 @@ const (
 	peersForSync = 10
 )
 
+// LastDecidedProtocol returns the protocol id of last decided protocol,
+// and the amount of peers for distribution
 func (v1 *ForkV1) LastDecidedProtocol() (protocol.ID, int) {
 	return lastDecidedProtocol, peersForSync
 }
 
+// LastChangeRoundProtocol returns the protocol id of last change round protocol,
+// and the amount of peers for distribution
 func (v1 *ForkV1) LastChangeRoundProtocol() (protocol.ID, int) {
 	return changeRoundProtocol, peersForSync
 }
 
+// DecidedHistoryProtocol returns the protocol id of decided history protocol,
+// and the amount of peers for distribution
 func (v1 *ForkV1) DecidedHistoryProtocol() (protocol.ID, int) {
 	return historyProtocol, peersForSync
 }

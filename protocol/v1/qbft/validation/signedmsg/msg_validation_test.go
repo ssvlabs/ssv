@@ -1,4 +1,4 @@
-package signed_msg
+package signedmsg
 
 //
 //func TestBasicMsgValidation(t *testing.T) {
