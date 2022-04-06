@@ -34,6 +34,10 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		opt.ValueDir = ""
 	}
 
+	if options.Logger != nil {
+		opt.Logger = newLogger(options.Logger)
+	}
+
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
 
 	db, err := badger.Open(opt)
