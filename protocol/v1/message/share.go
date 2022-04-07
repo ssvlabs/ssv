@@ -1,4 +1,4 @@
-package keymanager
+package message
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"math"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -27,7 +26,7 @@ func (keys PubKeys) Aggregate() bls.PublicKey {
 
 // Node represent committee member info
 type Node struct {
-	IbftId uint64
+	IbftID uint64
 	Pk     []byte
 }
 
@@ -106,7 +105,7 @@ func (s *Share) PubKeysByID(ids []OperatorID) (PubKeys, error) {
 }
 
 // VerifySignedMessage returns true of signed message verifies against pks
-func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
+func (s *Share) VerifySignedMessage(msg *SignedMessage) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
 	if err != nil {
 		return err
@@ -143,7 +142,7 @@ func (s *Share) Serialize() ([]byte, error) {
 	// copy committee by value
 	for k, n := range s.Committee {
 		value.Committee[k] = &Node{
-			IbftId: n.IbftId,
+			IbftID: n.IbftID,
 			Pk:     n.Pk[:],
 		}
 	}

@@ -8,7 +8,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/pkg/errors"
 
+	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // validateJustification validates change round justifications

@@ -3,7 +3,7 @@ package message
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
 
@@ -188,25 +188,34 @@ func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 	panic("implement")
 }
 
+// Sign takes a secret key and signs the Message
+func (msg *ConsensusMessage) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
+	root, err := msg.GetRoot()
+	if err != nil {
+		return nil, err
+	}
+	return sk.SignByte(root), nil
+}
+
 // SignedMessage contains a message and the corresponding signature + signers list
 type SignedMessage struct {
-	Signature keymanager.Signature
-	Signers   []keymanager.OperatorID
+	Signature Signature
+	Signers   []OperatorID
 	Message   *ConsensusMessage // message for which this signature is for
 }
 
 // GetSignature returns the message signature
-func (signedMsg *SignedMessage) GetSignature() keymanager.Signature {
+func (signedMsg *SignedMessage) GetSignature() Signature {
 	return signedMsg.Signature
 }
 
 // GetSigners returns the message signers
-func (signedMsg *SignedMessage) GetSigners() []keymanager.OperatorID {
+func (signedMsg *SignedMessage) GetSigners() []OperatorID {
 	return signedMsg.Signers
 }
 
 // MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-func (signedMsg *SignedMessage) MatchedSigners(ids []keymanager.OperatorID) bool {
+func (signedMsg *SignedMessage) MatchedSigners(ids []OperatorID) bool {
 	for _, id := range signedMsg.Signers {
 		found := false
 		for _, id2 := range ids {
@@ -223,7 +232,7 @@ func (signedMsg *SignedMessage) MatchedSigners(ids []keymanager.OperatorID) bool
 }
 
 // MutualSigners returns true if signatures have at least 1 mutual signer
-func (signedMsg *SignedMessage) MutualSigners(sig keymanager.MessageSignature) bool {
+func (signedMsg *SignedMessage) MutualSigners(sig MsgSignature) bool {
 	for _, id := range signedMsg.Signers {
 		for _, id2 := range sig.GetSigners() {
 			if id == id2 {
@@ -235,7 +244,7 @@ func (signedMsg *SignedMessage) MutualSigners(sig keymanager.MessageSignature) b
 }
 
 // Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-func (signedMsg *SignedMessage) Aggregate(sig keymanager.MessageSignature) error {
+func (signedMsg *SignedMessage) Aggregate(sig MsgSignature) error {
 	if signedMsg.MutualSigners(sig) {
 		return errors.New("can't aggregate 2 signed messages with mutual signers")
 	}
@@ -268,7 +277,7 @@ func (signedMsg *SignedMessage) GetRoot() ([]byte, error) {
 // DeepCopy returns a new instance of SignedMessage, deep copied
 func (signedMsg *SignedMessage) DeepCopy() *SignedMessage {
 	ret := &SignedMessage{
-		Signers:   make([]keymanager.OperatorID, len(signedMsg.Signers)),
+		Signers:   make([]OperatorID, len(signedMsg.Signers)),
 		Signature: make([]byte, len(signedMsg.Signature)),
 	}
 	copy(ret.Signers, signedMsg.Signers)

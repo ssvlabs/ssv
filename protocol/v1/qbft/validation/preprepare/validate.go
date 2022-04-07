@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// LeaderResolver resolves round's leader
 type LeaderResolver func(round message.Round) uint64
 
 // ValidatePrePrepareMsg validates pre-prepare message

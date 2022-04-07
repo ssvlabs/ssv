@@ -1,4 +1,4 @@
-package signed_msg
+package signedmsg
 
 import (
 	"bytes"

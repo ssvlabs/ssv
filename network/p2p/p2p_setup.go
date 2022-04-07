@@ -83,10 +83,6 @@ func (n *p2pNetwork) SetupServices() error {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
 
-	if err := n.setupLegacySyncHandler(); err != nil {
-		return errors.Wrap(err, "could not setup sync handlers")
-	}
-
 	return nil
 }
 

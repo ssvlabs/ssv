@@ -116,6 +116,7 @@ func (s *State) GetInputValue() []byte {
 	return inputValue
 }
 
+// InstanceConfig is the configuration of the instance
 type InstanceConfig struct {
 	RoundChangeDurationSeconds   float32
 	LeaderPreprepareDelaySeconds float32

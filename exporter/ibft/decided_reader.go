@@ -13,7 +13,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -32,7 +32,7 @@ type DecidedReaderOptions struct {
 	Storage        collections.Iibft
 	Network        network.Network
 	Config         *proto.InstanceConfig
-	ValidatorShare *keymanager.Share
+	ValidatorShare *message.Share
 
 	Out *event.Feed
 }
@@ -44,7 +44,7 @@ type decidedReader struct {
 	network network.Network
 
 	config         *proto.InstanceConfig
-	validatorShare *keymanager.Share
+	validatorShare *message.Share
 
 	out *event.Feed
 
@@ -81,7 +81,7 @@ func (r *decidedReader) newHistorySync() history.Syncer {
 }
 
 // Share returns the reader's share
-func (r *decidedReader) Share() *keymanager.Share {
+func (r *decidedReader) Share() *message.Share {
 	return r.validatorShare
 }
 
@@ -245,15 +245,15 @@ func (r *decidedReader) waitForMinPeers(ctx context.Context, pk *bls.PublicKey, 
 	return commons.WaitForMinPeers(commons.WaitMinPeersCtx{
 		Ctx:    ctx,
 		Logger: r.logger,
-		Net:    r.network,
+		//Net:    r.network, // TODO
 	}, pk.Serialize(), minPeerCount, 1*time.Second, 64*time.Second, false)
 }
 
-func validateDecidedMsg(msg *proto.SignedMessage, share *keymanager.Share) error {
+func validateDecidedMsg(msg *proto.SignedMessage, share *message.Share) error {
 	p := pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.AuthorizeMsg(share),
+		//auth.AuthorizeMsg(share), // TODO
 		auth.ValidateQuorum(share.ThresholdSize()),
 	)
 	return p.Run(msg)

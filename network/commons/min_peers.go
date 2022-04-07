@@ -49,10 +49,14 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 
 // haveMinPeers checks that there are at least <count> connected peers
 func haveMinPeers(logger *zap.Logger, net network.P2PNetwork, validatorPk []byte, count int) (bool, []string) {
-	peers, err := net.AllPeers(validatorPk)
+	peers, err := net.Peers(validatorPk)
 	if err != nil {
 		logger.Error("failed fetching peers", zap.Error(err))
 		return false, []string{}
 	}
-	return len(peers) >= count, peers
+	pids := make([]string, len(peers))
+	for i, pid := range peers {
+		pids[i] = pid.String()
+	}
+	return len(peers) >= count, pids
 }

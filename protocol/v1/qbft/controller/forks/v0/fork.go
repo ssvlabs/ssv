@@ -7,7 +7,7 @@ import (
 	instancefork "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	forkv0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signed_msg"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // ForkV0 is the genesis fork for controller
@@ -27,9 +27,9 @@ func (v0 *ForkV0) InstanceFork() instancefork.Fork {
 // ValidateDecidedMsg impl
 func (v0 *ForkV0) ValidateDecidedMsg(share *keymanager.Share) validation.SignedMessagePipeline {
 	return validation.Combine(
-		signed_msg.BasicMsgValidation(),
-		signed_msg.MsgTypeCheck(message.CommitMsgType),
-		signed_msg.AuthorizeMsg(share),
-		signed_msg.ValidateQuorum(share.ThresholdSize()),
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.CommitMsgType),
+		signedmsg.AuthorizeMsg(share),
+		signedmsg.ValidateQuorum(share.ThresholdSize()),
 	)
 }

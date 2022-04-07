@@ -1,0 +1,216 @@
+package storage
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
+	"log"
+	"strings"
+)
+
+const (
+	highestKey         = "highest"
+	decidedKey         = "decided"
+	currentKey         = "current"
+	lastChangeRoundKey = "last_change_round"
+)
+
+var (
+	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:ibft_highest_decided",
+		Help: "The highest decided sequence number",
+	}, []string{"lambda", "pubKey"})
+)
+
+func init() {
+	if err := prometheus.Register(metricsHighestDecided); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+}
+
+// ibftStorage struct
+// instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
+type ibftStorage struct {
+	prefix []byte
+	db     basedb.IDb
+	logger *zap.Logger
+}
+
+// New create new ibft storage
+func New(db basedb.IDb, logger *zap.Logger, instanceType string) qbftstorage.QBFTStore {
+	ibft := &ibftStorage{
+		prefix: []byte(instanceType),
+		db:     db,
+		logger: logger,
+	}
+	return ibft
+}
+
+// GetLastDecided gets a signed message for an ibft instance which is the highest
+func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
+	val, found, err := i.get(highestKey, identifier)
+	if !found {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	ret := &message.SignedMessage{}
+	if err := json.Unmarshal(val, ret); err != nil {
+		return nil, errors.Wrap(err, "un-marshaling error")
+	}
+	return ret, nil
+}
+
+// SaveLastDecided saves a signed message for an ibft instance which is currently highest
+func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) error {
+	for _, signedMsg := range signedMsgs {
+		value, err := json.Marshal(signedMsg)
+		if err != nil {
+			return errors.Wrap(err, "marshaling error")
+		}
+		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
+			return err
+		}
+		reportHighestDecided(signedMsg)
+	}
+
+	return nil
+}
+
+func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
+	prefix := make([]byte, len(i.prefix))
+	copy(prefix, i.prefix)
+	prefix = append(prefix, identifier...)
+
+	var sequences [][]byte
+	for seq := from; seq <= to; seq++ {
+		sequences = append(sequences, i.key(decidedKey, uInt64ToByteSlice(uint64(seq))))
+	}
+	msgs := make([]*message.SignedMessage, 0)
+	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
+		msg := message.SignedMessage{}
+		if err := json.Unmarshal(obj.Value, &msg); err != nil {
+			return errors.Wrap(err, "un-marshaling error")
+		}
+		msgs = append(msgs, &msg)
+		return nil
+	})
+	if err != nil {
+		return []*message.SignedMessage{}, err
+	}
+	return msgs, nil
+}
+
+func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
+	return i.db.SetMany(i.prefix, len(signedMsg), func(j int) (basedb.Obj, error) {
+		msg := signedMsg[j]
+		k := i.key(decidedKey, uInt64ToByteSlice(uint64(msg.Message.Height)))
+		key := append(msg.Message.Identifier, k...)
+		value, err := json.Marshal(msg)
+		if err != nil {
+			return basedb.Obj{}, err
+		}
+		return basedb.Obj{Key: key, Value: value}, nil
+	})
+}
+
+func (i *ibftStorage) SaveCurrentInstance(identifier message.Identifier, state *qbft.State) error {
+	value, err := json.Marshal(state)
+	if err != nil {
+		return errors.Wrap(err, "marshaling error")
+	}
+	return i.save(value, currentKey, identifier)
+}
+
+func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.State, bool, error) {
+	val, found, err := i.get(currentKey, identifier)
+	if !found {
+		return nil, found, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	ret := &qbft.State{}
+	if err := json.Unmarshal(val, ret); err != nil {
+		return nil, false, errors.Wrap(err, "un-marshaling error")
+	}
+	return ret, false, nil
+}
+
+// SetLastChangeRoundMsg returns last known change round message
+// TODO
+func (i *ibftStorage) SetLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error {
+	value, err := json.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "marshaling error")
+	}
+	return i.save(value, lastChangeRoundKey, identifier)
+}
+
+// GetLastChangeRoundMsg returns last known change round message
+// TODO
+func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
+	val, found, err := i.get(lastChangeRoundKey, identifier)
+	if !found {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	ret := &message.SignedMessage{}
+	if err := json.Unmarshal(val, ret); err != nil {
+		return nil, errors.Wrap(err, "un-marshaling error")
+	}
+	return ret, nil
+}
+
+func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
+	prefix := append(i.prefix, pk...)
+	key := i.key(id, keyParams...)
+	return i.db.Set(prefix, key, value)
+}
+
+func (i *ibftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bool, error) {
+	prefix := append(i.prefix, pk...)
+	key := i.key(id, keyParams...)
+	obj, found, err := i.db.Get(prefix, key)
+	if !found {
+		return nil, found, nil
+	}
+	if err != nil {
+		return nil, found, err
+	}
+	return obj.Value, found, nil
+}
+
+func (i *ibftStorage) key(id string, params ...[]byte) []byte {
+	ret := []byte(id)
+	for _, p := range params {
+		ret = append(ret, p...)
+	}
+	return ret
+}
+
+func uInt64ToByteSlice(n uint64) []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, n)
+	return b
+}
+
+func reportHighestDecided(signedMsg *message.SignedMessage) {
+	l := string(signedMsg.Message.Identifier)
+	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
+	if idx := strings.Index(l, "_"); idx > 0 {
+		pubKey := l[:idx]
+		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Identifier), pubKey).
+			Set(float64(signedMsg.Message.Height))
+	}
+}

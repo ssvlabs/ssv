@@ -1,14 +1,15 @@
 package queue
 
-import "github.com/bloxapp/ssv/utils/tasks"
+// Fn represents a function to execute
+type Fn func() error
 
 // Queue this interface is in protocol cause of the use in validator metadata
 // Queue is an interface for event queue
 type Queue interface {
 	Start()
 	Stop()
-	Queue(fn tasks.Fn)
-	QueueDistinct(tasks.Fn, string)
+	Queue(fn Fn)
+	QueueDistinct(Fn, string)
 	Wait()
 	Errors() []error
 }

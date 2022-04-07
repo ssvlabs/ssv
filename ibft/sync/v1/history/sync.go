@@ -1,6 +1,7 @@
 package history
 
 import (
+	"context"
 	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -14,13 +15,15 @@ import (
 // ValidateDecided validates the given decided message
 type ValidateDecided func(signedMessage *message.SignedMessage) error
 
+// History takes care for syncing decided history
 type History interface {
 	// SyncDecided syncs decided message with other peers in the network
-	SyncDecided(identifier message.Identifier, optimistic bool) (bool, error)
+	SyncDecided(ctx context.Context, identifier message.Identifier, optimistic bool) (bool, error)
 	// SyncDecidedRange syncs decided messages for the given identifier and range
-	SyncDecidedRange(identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error)
+	SyncDecidedRange(ctx context.Context, identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error)
 }
 
+// history implements History
 type history struct {
 	logger   *zap.Logger
 	store    qbftstorage.DecidedMsgStore
@@ -28,6 +31,7 @@ type history struct {
 	validate validation.SignedMessagePipeline
 }
 
+// New creates a new instance of History
 func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validate validation.SignedMessagePipeline) History {
 	return &history{
 		logger:   logger,
@@ -37,7 +41,7 @@ func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotoc
 	}
 }
 
-func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (bool, error) {
+func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, optimistic bool) (bool, error) {
 	logger := h.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
 
 	remoteMsgs, err := h.syncer.LastDecided(identifier)
@@ -53,37 +57,18 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 	if err != nil && err.Error() != kv.EntryNotFoundError {
 		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
-	var sender string
-	var highest *message.SignedMessage
 	var localHeight message.Height
 	if localMsg != nil {
 		localHeight = localMsg.Message.Height
 	}
-	height := localHeight
 
-	for _, remoteMsg := range remoteMsgs {
-		sm, err := extractSyncMsg(remoteMsg.Msg)
-		if err != nil {
-			logger.Warn("bad sync message", zap.Error(err))
-			continue
-		}
-		if len(sm.Data) == 0 {
-			logger.Warn("empty sync message")
-			continue
-		}
-		if sm.Data[0].Message.Height > height {
-			highest = sm.Data[0]
-			height = highest.Message.Height
-			sender = remoteMsg.Sender
-		}
-	}
-
+	highest, height, sender := h.getHighest(localMsg, remoteMsgs...)
 	if height <= localHeight {
 		logger.Info("node is synced")
 		return true, nil
 	}
 
-	synced, err := h.SyncDecidedRange(identifier, localHeight, height, sender)
+	synced, err := h.SyncDecidedRange(ctx, identifier, localHeight, height, sender)
 	if err != nil {
 		if !optimistic {
 			return false, errors.Wrapf(err, "could not fetch and save decided in range [%d, %d]", localHeight, height)
@@ -104,13 +89,16 @@ func (h *history) SyncDecided(identifier message.Identifier, optimistic bool) (b
 	return synced, nil
 }
 
-func (h *history) SyncDecidedRange(identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error) {
+func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error) {
 	visited := make(map[message.Height]bool)
 	msgs, err := h.syncer.GetHistory(identifier, from, to, targetPeers...)
 	if err != nil {
 		return false, err
 	}
 	for _, msg := range msgs {
+		if ctx.Err() != nil {
+			break
+		}
 		sm, err := extractSyncMsg(msg.Msg)
 		if err != nil {
 			continue
@@ -136,6 +124,32 @@ func (h *history) SyncDecidedRange(identifier message.Identifier, from, to messa
 		return false, errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	return true, nil
+}
+
+func (h *history) getHighest(localMsg *message.SignedMessage, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, height message.Height, sender string) {
+	var localHeight message.Height
+	if localMsg != nil {
+		localHeight = localMsg.Message.Height
+	}
+	height = localHeight
+
+	for _, remoteMsg := range remoteMsgs {
+		sm, err := extractSyncMsg(remoteMsg.Msg)
+		if err != nil {
+			h.logger.Warn("bad sync message", zap.Error(err))
+			continue
+		}
+		if len(sm.Data) == 0 {
+			h.logger.Warn("empty sync message")
+			continue
+		}
+		if sm.Data[0].Message.Height > height {
+			highest = sm.Data[0]
+			height = highest.Message.Height
+			sender = remoteMsg.Sender
+		}
+	}
+	return
 }
 
 func extractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
