@@ -11,7 +11,7 @@ func ValidateDecidedMsg(msg *message.SignedMessage, share *message.Share) error 
 	p := validation.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.CommitMsgType), // TODO: decided type?
-		//signed_msg.AuthorizeMsg(share), // TODO: enable after interface is fixed
+		signedmsg.AuthorizeMsg(share),
 		signedmsg.ValidateQuorum(share.ThresholdSize()),
 	)
 	return p.Run(msg)

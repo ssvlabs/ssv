@@ -6,7 +6,7 @@ import (
 )
 
 // AuthorizeMsg is the pipeline to authorize message
-func AuthorizeMsg(share message.Share) validation.SignedMessagePipeline {
+func AuthorizeMsg(share *message.Share) validation.SignedMessagePipeline {
 	return validation.WrapFunc("authorize", func(signedMessage *message.SignedMessage) error {
 		return share.VerifySignedMessage(signedMessage)
 	})

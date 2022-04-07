@@ -3,6 +3,7 @@ package message
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
 
@@ -149,6 +150,15 @@ func (msg *ConsensusMessage) GetRoot() ([]byte, error) {
 // DeepCopy returns a new instance of ConsensusMessage, deep copied
 func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 	panic("implement")
+}
+
+// Sign takes a secret key and signs the Message
+func (msg *ConsensusMessage) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
+	root, err := msg.GetRoot()
+	if err != nil {
+		return nil, err
+	}
+	return sk.SignByte(root), nil
 }
 
 // SignedMessage contains a message and the corresponding signature + signers list
