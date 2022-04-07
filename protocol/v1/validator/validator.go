@@ -27,7 +27,8 @@ type Options struct {
 	Context       context.Context
 	Logger        *zap.Logger
 	IbftStorage   qbftstorage.QBFTStore
-	Network       p2pprotocol.Network
+	Network       beaconprotocol.Network
+	P2pNetwork    p2pprotocol.Network
 	Beacon        beaconprotocol.Beacon
 	Share         *message.Share
 	ForkVersion   forksprotocol.ForkVersion
@@ -37,12 +38,13 @@ type Options struct {
 }
 
 type Validator struct {
-	ctx     context.Context
-	logger  *zap.Logger
-	network p2pprotocol.Network
-	beacon  beaconprotocol.Beacon
-	share   *message.Share
-	worker  *worker.Worker
+	ctx        context.Context
+	logger     *zap.Logger
+	network    beaconprotocol.Network
+	p2pNetwork p2pprotocol.Network
+	beacon     beaconprotocol.Beacon
+	share      *message.Share
+	worker     *worker.Worker
 
 	ibfts controller.Controllers
 
@@ -64,25 +66,21 @@ func NewValidator(opt *Options) IValidator {
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	return &Validator{
-		ctx:      opt.Context,
-		logger:   logger,
-		network:  opt.Network,
-		beacon:   opt.Beacon,
-		share:    opt.Share,
-		ibfts:    ibfts,
-		worker:   queueWorker,
-		readMode: opt.ReadMode,
+		ctx:        opt.Context,
+		logger:     logger,
+		network:    opt.Network,
+		p2pNetwork: opt.P2pNetwork,
+		beacon:     opt.Beacon,
+		share:      opt.Share,
+		ibfts:      ibfts,
+		worker:     queueWorker,
+		readMode:   opt.ReadMode,
 	}
 }
 
 func (v *Validator) Start() {
 	// start queue workers
 	v.worker.AddHandler(v.messageHandler)
-}
-
-func (v *Validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
-	// TODO implement me
-	panic("implement me")
 }
 
 func (v *Validator) GetShare() *message.Share {
@@ -93,7 +91,7 @@ func (v *Validator) GetShare() *message.Share {
 // setupRunners return duty runners map with all the supported duty types
 func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]controller.IController {
 	ibfts := make(map[beaconprotocol.RoleType]controller.IController)
-	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.IbftStorage, opt.Network, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
+	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.IbftStorage, opt.P2pNetwork, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
 	return ibfts
 }
 

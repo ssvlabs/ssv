@@ -2,7 +2,7 @@ package operator
 
 import (
 	"context"
-	"github.com/bloxapp/eth2-key-manager/core"
+
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
@@ -10,8 +10,10 @@ import (
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -24,7 +26,7 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork          core.Network
+	ETHNetwork          beaconprotocol.Network
 	Beacon              beacon.Beacon
 	Network             network.P2PNetwork
 	Context             context.Context
@@ -46,7 +48,7 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork     core.Network
+	ethNetwork     beaconprotocol.Network
 	context        context.Context
 	validatorsCtrl validator.Controller
 	logger         *zap.Logger

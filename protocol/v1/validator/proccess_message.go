@@ -12,7 +12,10 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 	// check duty type and handle accordingly
 	if v.readMode {
 		// synchronize process
-		v.messageHandler(msg)
+		err := v.messageHandler(msg) // TODO return error?
+		if err != nil {
+			return
+		}
 		return
 	}
 	// put msg to queue in order to preform async process and prevent blocking validatorController
