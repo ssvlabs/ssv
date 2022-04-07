@@ -132,7 +132,7 @@ func NewController(options ControllerOptions) Controller {
 		network:                    options.Network,
 		forkVersion:                options.ForkVersion,
 
-		validatorsMap:    newValidatorsMap(options.Context, options.Logger, validatorOptions),
+		validatorsMap:    newValidatorsMap(options.Context, options.Logger, options.DB, validatorOptions),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
@@ -177,13 +177,14 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
-func (c *controller) handleWorkerMessages(msg *message.SSVMessage) {
+func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
 	opts := *c.validatorOptions
 	opts.ReadMode = true
 
 	val := validator.NewValidator(&opts)
 	// TODO(nkryuchkov): we might need to call val.Start(), we need to check it
-	val.ProcessMsg(msg)
+	val.ProcessMsg(msg) // TODO should return error
+	return nil
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client

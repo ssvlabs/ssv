@@ -5,14 +5,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	contollerforks "github.com/bloxapp/ssv/ibft/controller/forks"
-	forksfactory "github.com/bloxapp/ssv/ibft/controller/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
+	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 
@@ -33,7 +33,7 @@ type Controller struct {
 	instanceConfig  *qbft.InstanceConfig
 	ValidatorShare  *keymanager.Share
 	Identifier      []byte
-	fork            contollerforks.Fork
+	fork            forks.Fork
 	signer          beaconprotocol.Signer
 
 	// flags
@@ -170,10 +170,15 @@ func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
 }
 
-func (i *Controller) ProcessMsg(msg *message.SSVMessage) {
-	switch msg.MsgType {
+func (i *Controller) ProcessMsg(msg *message.SignedMessage) {
+	switch msg.Message.MsgType {
+	case message.ProposalMsgType:
+	case message.PrepareMsgType:
+	case message.CommitMsgType:
+		// TODO check if instance nil?
+		i.currentInstance.ProcessMsg(msg)
+	case message.RoundChangeMsgType:
 	case message.DecidedMsgType:
 		i.ProcessDecidedMessage(msg)
 	}
 }
-

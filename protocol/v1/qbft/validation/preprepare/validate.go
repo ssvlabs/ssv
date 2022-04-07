@@ -2,9 +2,9 @@ package preprepare
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/pkg/errors"
-
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+
+	"github.com/pkg/errors"
 )
 
 type LeaderResolver func(round message.Round) uint64

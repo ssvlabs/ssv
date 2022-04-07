@@ -1,9 +1,11 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+
 	"go.uber.org/zap"
 )
 
@@ -21,7 +23,7 @@ type ControllerStartInstanceOptions struct {
 // InstanceResult is a struct holding the result of a single iBFT instance
 type InstanceResult struct {
 	Decided bool
-	Msg     *proto.SignedMessage
+	Msg     *message.SignedMessage
 }
 
 // Instancer represents an iBFT instance (a single sequence number)
@@ -30,9 +32,10 @@ type Instancer interface {
 	Init()
 	Start(inputValue []byte) error
 	Stop()
-	State() *proto.State
-	ForceDecide(msg *proto.SignedMessage)
-	GetStageChan() chan proto.RoundState
-	GetLastChangeRoundMsg() *proto.SignedMessage
-	CommittedAggregatedMsg() (*proto.SignedMessage, error)
+	State() *qbft.State
+	ForceDecide(msg *message.SignedMessage)
+	GetStageChan() chan qbft.RoundState
+	GetLastChangeRoundMsg() *message.SignedMessage
+	CommittedAggregatedMsg() (*message.SignedMessage, error)
+	ProcessMsg(msg *message.SignedMessage)
 }

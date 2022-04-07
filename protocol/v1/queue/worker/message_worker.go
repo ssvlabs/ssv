@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type workerHandler func(msg *message.SSVMessage)
+type workerHandler func(msg *message.SSVMessage) error
 
 type WorkerConfig struct {
 	Ctx          context.Context
@@ -85,5 +85,5 @@ func (w *Worker) process(msg *message.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")
 	}
-	w.handler(msg)
+	w.handler(msg) // TODO handle error
 }

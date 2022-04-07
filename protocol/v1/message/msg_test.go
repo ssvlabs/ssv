@@ -37,5 +37,5 @@ func TestSSVMessage_JSONEncoding(t *testing.T) {
 
 	decoded := SSVMessage{}
 	require.NoError(t, decoded.Decode(encoded))
-	require.True(t, bytes.Equal(msg.GetID(), decoded.GetID()))
+	require.True(t, bytes.Equal(msg.GetIdentifier(), decoded.GetIdentifier()))
 }

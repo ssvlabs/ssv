@@ -1,7 +1,6 @@
 package msgcont
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 

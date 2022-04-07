@@ -43,7 +43,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
-		topics := fork.ValidatorTopicID(msg.GetID().GetValidatorPK())
+		topics := fork.ValidatorTopicID(msg.GetIdentifier().GetValidatorPK())
 		// wrong topic
 		if getTopicName(topics[0]) != pmsg.GetTopic() {
 			// check second topic
@@ -52,7 +52,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 				logger.Debug("invalid: wrong topic",
 					zap.Strings("actual", topics),
 					zap.String("expected", getTopicBaseName(pmsg.GetTopic())),
-					zap.ByteString("smsg.ID", msg.GetID()))
+					zap.ByteString("smsg.ID", msg.GetIdentifier()))
 				reportValidationResult(validationResultTopic)
 				return pubsub.ValidationReject
 			}

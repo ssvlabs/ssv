@@ -24,5 +24,5 @@ type IController interface {
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte
 
-	ProcessMsg(msg *message.SSVMessage)
+	ProcessMsg(msg *message.SignedMessage)
 }

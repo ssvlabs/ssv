@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
@@ -16,14 +17,14 @@ type validateJustification struct {
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *keymanager.Share) pipeline.Pipeline {
+func Validate(share *keymanager.Share) validation.SignedMessagePipeline {
 	return &validateJustification{
 		share: share,
 	}
 }
 
 // Run implements pipeline.Pipeline interface
-func (p *validateJustification) Run(signedMessage *proto.SignedMessage) error {
+func (p *validateJustification) Run(signedMessage *message.SignedMessage) error {
 	// TODO - change to normal prepare pipeline
 	if signedMessage.Message.Value == nil {
 		return errors.New("change round justification msg is nil")

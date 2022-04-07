@@ -76,8 +76,8 @@ func (msg *SSVMessage) GetType() MsgType {
 	return msg.MsgType
 }
 
-// GetID returns a unique msg ID that is used to identify to which validator should the message be sent for processing
-func (msg *SSVMessage) GetID() Identifier {
+// GetIdentifier returns a unique msg Identifier that is used to identify to which validator should the message be sent for processing
+func (msg *SSVMessage) GetIdentifier() Identifier {
 	return msg.ID
 }
 

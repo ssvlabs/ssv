@@ -20,34 +20,38 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 }
 
 // messageHandler process message from queue,
-func (v *Validator) messageHandler(msg *message.SSVMessage) {
+func (v *Validator) messageHandler(msg *message.SSVMessage) error {
 	// validation
 	if err := v.validateMessage(msg); err != nil {
 		// TODO need to return error?
 		v.logger.Error("message validation failed", zap.Error(err))
-		return
+		return nil
 	}
+
+	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
 
 	switch msg.GetType() {
 	case message.SSVPostConsensusMsgType:
 		// use DutyExecution func's to process msg
 		break
 	case message.SSVConsensusMsgType:
-		// pass to ibft controller ProcessMessage()
-
-		break
+		signedMsg := &message.SignedMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
+		}
+		ibftController.ProcessMsg(signedMsg) // TODo should return if decided, error
 	case message.SSVSyncMsgType:
-		// pass to ibft controller ProcessMessage() TODO ?
-		break
+		panic("need to implement!")
 	}
+	return nil
 }
 
 func (v *Validator) validateMessage(msg *message.SSVMessage) error {
-	if !v.share.PublicKey.MessageIDBelongs(msg.GetID()) {
+	if !v.share.PublicKey.MessageIDBelongs(msg.GetIdentifier()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if v.DutyRunners.DutyRunnerForMsgID(msg.GetID()) == nil {
+	if v.DutyRunners.DutyRunnerForMsgID(msg.GetIdentifier()) == nil {
 		return errors.New("could not find duty runner for msg ID")
 	}
 

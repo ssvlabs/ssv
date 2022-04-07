@@ -2,12 +2,10 @@ package instance
 
 import (
 	"context"
-	"encoding/hex"
 	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/ibft/instance/eventqueue"
-	"github.com/bloxapp/ssv/ibft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/ibft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/ibft/instance/roundtimer"
 	"github.com/bloxapp/ssv/ibft/leader"
@@ -17,11 +15,15 @@ import (
 	"github.com/bloxapp/ssv/network/msgqueue"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/threadsafe"
 
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +50,7 @@ type Options struct {
 // Instance defines the instance attributes
 type Instance struct {
 	ValidatorShare *keymanager.Share
-	state          *proto.State
+	state          *qbft.State
 	network        network.P2PNetwork
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
@@ -64,14 +66,14 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
-	lastChangeRoundMsg  *proto.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
-	decidedMsg          *proto.SignedMessage
+	lastChangeRoundMsg  *message.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
+	decidedMsg          *message.SignedMessage
 
 	// event loop
 	eventQueue eventqueue.EventQueue
 
 	// channels
-	stageChangedChan chan proto.RoundState
+	stageChangedChan chan qbft.RoundState
 
 	// flags
 	stopped     bool
@@ -89,7 +91,7 @@ type Instance struct {
 }
 
 // NewInstanceWithState used for testing, not PROD!
-func NewInstanceWithState(state *proto.State) Instancer {
+func NewInstanceWithState(state *qbft.State) Instancer {
 	return &Instance{
 		state: state,
 	}
@@ -100,17 +102,10 @@ func NewInstance(opts *Options) Instancer {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", opts.SeqNumber))
+
 	ret := &Instance{
 		ValidatorShare: opts.ValidatorShare,
-		state: &proto.State{
-			Stage:         threadsafe.Int32(int32(proto.RoundState_NotStarted)),
-			Lambda:        threadsafe.Bytes(opts.Lambda),
-			SeqNumber:     threadsafe.Uint64(opts.SeqNumber),
-			InputValue:    threadsafe.Bytes(nil),
-			PreparedValue: threadsafe.Bytes(nil),
-			PreparedRound: threadsafe.Uint64(0),
-			Round:         threadsafe.Uint64(1),
-		},
+		state:          generateState(opts),
 		network:        opts.Network,
 		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
@@ -156,7 +151,7 @@ func (i *Instance) Init() {
 }
 
 // State returns instance state
-func (i *Instance) State() *proto.State {
+func (i *Instance) State() *qbft.State {
 	return i.state
 }
 
@@ -174,29 +169,29 @@ func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
 		return errors.New("instance not initialized")
 	}
-	if i.State().Lambda.Get() == nil {
+	if i.State().GetIdentifier() == nil {
 		return errors.New("invalid Lambda")
 	}
 	if inputValue == nil {
 		return errors.New("input value is nil")
 	}
 
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State().Lambda.Get())))
-	i.State().InputValue.Set(inputValue)
-	i.State().Round.Set(1) // start from 1
-	pk, role := format.IdentifierUnformat(string(i.State().Lambda.Get()))
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", i.State().Identifier.Load()))
+	i.State().InputValue.Store(inputValue)
+	i.State().Round.Store(message.Round(1)) // start from 1
+	pk, role := format.IdentifierUnformat(i.State().Identifier.Load())
 	metricsIBFTRound.WithLabelValues(role, pk).Set(1)
 
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
-			i.ProcessStageChange(proto.RoundState_PrePrepare)
+			i.ProcessStageChange(qbft.RoundState_PrePrepare)
 
 			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
-			msg := i.generatePrePrepareMessage(i.State().InputValue.Get())
+			msg := i.generatePrePrepareMessage(i.State().GetInputValue())
 			//
 			if err := i.SignAndBroadcast(msg); err != nil {
 				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
@@ -208,7 +203,7 @@ func (i *Instance) Start(inputValue []byte) error {
 }
 
 // ForceDecide will attempt to decide the instance with provided decided signed msg.
-func (i *Instance) ForceDecide(msg *proto.SignedMessage) {
+func (i *Instance) ForceDecide(msg *message.SignedMessage) {
 	i.eventQueue.Add(eventqueue.NewEvent(func() {
 		i.Logger.Info("trying to force instance decision.")
 		if err := i.DecidedMsgPipeline().Run(msg); err != nil {
@@ -236,7 +231,7 @@ func (i *Instance) stop() {
 	i.stopped = true
 	i.roundTimer.Kill()
 	i.Logger.Debug("STOPPING IBFTController -> stopped round timer")
-	i.ProcessStageChange(proto.RoundState_Stopped)
+	i.ProcessStageChange(qbft.RoundState_Stopped)
 	i.Logger.Debug("STOPPING IBFTController -> set stage to stop")
 	i.eventQueue.ClearAndStop()
 	i.Logger.Debug("STOPPING IBFTController -> cleared event queue")
@@ -262,26 +257,45 @@ func (i *Instance) Stopped() bool {
 	return i.stopped
 }
 
+func (i *Instance) ProcessMsg(msg *message.SignedMessage) {
+	var pp validation.SignedMessagePipeline
+
+	switch msg.Message.MsgType {
+	case message.ProposalMsgType:
+		pp := i.PrePrepareMsgPipeline()
+	case message.PrepareMsgType:
+	case message.CommitMsgType:
+	case message.RoundChangeMsgType:
+	default:
+		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
+		//return true, nil
+	}
+	if err := pp.Run(msg); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.bumpToRound(i.State().Round.Get() + 1)
+	i.bumpToRound(uint64(i.State().GetRound() + 1))
 }
 
 func (i *Instance) bumpToRound(round uint64) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	newRound := round
-	i.State().Round.Set(newRound)
-	pk, role := format.IdentifierUnformat(string(i.State().Lambda.Get()))
+	i.State().SetRound(round)
+	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
 	metricsIBFTRound.WithLabelValues(role, pk).Set(float64(newRound))
 }
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
-func (i *Instance) ProcessStageChange(stage proto.RoundState) {
-	pk, role := format.IdentifierUnformat(string(i.State().Lambda.Get()))
+func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
+	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(stage))
 
-	i.State().Stage.Set(int32(stage))
+	i.State().Stage.Store(int32(stage))
 
 	// blocking send to channel
 	i.stageChanCloseChan.Lock()
@@ -292,15 +306,15 @@ func (i *Instance) ProcessStageChange(stage proto.RoundState) {
 }
 
 // GetStageChan returns a RoundState channel added to the stateChangesChans array
-func (i *Instance) GetStageChan() chan proto.RoundState {
+func (i *Instance) GetStageChan() chan qbft.RoundState {
 	if i.stageChangedChan == nil {
-		i.stageChangedChan = make(chan proto.RoundState)
+		i.stageChangedChan = make(chan qbft.RoundState)
 	}
 	return i.stageChangedChan
 }
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
-func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
+func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
 	pk, err := i.ValidatorShare.OperatorPubKey()
 	if err != nil {
 		return errors.Wrap(err, "could not find operator pk for signing msg")
@@ -311,14 +325,14 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 		return err
 	}
 
-	signedMessage := &proto.SignedMessage{
+	signedMessage := &message.SignedMessage{
 		Message:   msg,
 		Signature: sigByts,
-		SignerIds: []uint64{i.ValidatorShare.NodeID},
+		Signers:   []keymanager.OperatorID{i.ValidatorShare.NodeID},
 	}
 
 	// used for instance fast change round catchup
-	if msg.Type == proto.RoundState_ChangeRound {
+	if msg.MsgType == message.RoundChangeMsgType {
 		i.setLastChangeRoundMsg(signedMessage)
 	}
 
@@ -328,21 +342,21 @@ func (i *Instance) SignAndBroadcast(msg *proto.Message) error {
 	return errors.New("no networking, could not broadcast msg")
 }
 
-func (i *Instance) setLastChangeRoundMsg(msg *proto.SignedMessage) {
+func (i *Instance) setLastChangeRoundMsg(msg *message.SignedMessage) {
 	i.lastChangeRoundMsgLock.Lock()
 	defer i.lastChangeRoundMsgLock.Unlock()
 	i.lastChangeRoundMsg = msg
 }
 
 // GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-func (i *Instance) GetLastChangeRoundMsg() *proto.SignedMessage {
+func (i *Instance) GetLastChangeRoundMsg() *message.SignedMessage {
 	i.lastChangeRoundMsgLock.RLock()
 	defer i.lastChangeRoundMsgLock.RUnlock()
 	return i.lastChangeRoundMsg
 }
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
-func (i *Instance) CommittedAggregatedMsg() (*proto.SignedMessage, error) {
+func (i *Instance) CommittedAggregatedMsg() (*message.SignedMessage, error) {
 	if i.State() == nil {
 		return nil, errors.New("missing instance state")
 	}
@@ -358,4 +372,24 @@ func (i *Instance) setFork(fork forks.Fork) {
 	}
 	i.fork = fork
 	i.fork.Apply(i)
+}
+
+func generateState(opts *Options) *qbft.State {
+	var stage atomic.Int32
+	var identifier atomic.Value
+	var height, round atomic.Value
+	height.Store(message.Height(opts.SeqNumber))
+	round.Store(message.Round(1))
+	stage.Store(int32(qbft.RoundState_NotStarted))
+	identifier.Store(opts.Lambda)
+
+	return &qbft.State{
+		Stage:         stage,
+		Identifier:    identifier,
+		Height:        height,
+		InputValue:    atomic.Value{},
+		Round:         round,
+		PreparedRound: atomic.Uint64{},
+		PreparedValue: atomic.String{},
+	}
 }

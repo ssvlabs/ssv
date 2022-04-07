@@ -25,7 +25,7 @@ func New(seed []byte, committeeSize uint64) (*Deterministic, error) {
 
 // Calculate returns the current leader
 func (rr *Deterministic) Calculate(round message.Round) uint64 {
-	return (rr.baseInt + index) % rr.committeeSize
+	return (rr.baseInt + uint64(round)) % rr.committeeSize
 }
 
 // setSeed takes []byte and converts to uint64,returns error if fails.

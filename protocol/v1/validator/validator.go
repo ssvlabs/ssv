@@ -2,22 +2,18 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"go.uber.org/zap"
 	"time"
 
-	ibftctrl "github.com/bloxapp/ssv/ibft/controller"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	keymanagerprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -29,12 +25,16 @@ type IValidator interface {
 }
 
 type Options struct {
-	Context  context.Context
-	Logger   *zap.Logger
-	Network  p2pprotocol.Network
-	Beacon   beaconprotocol.Beacon
-	Share    *keymanagerprotocol.Share
-	ReadMode bool
+	Context       context.Context
+	Logger        *zap.Logger
+	IbftStorage   qbftstorage.Iibft
+	Network       p2pprotocol.Network
+	Beacon        beaconprotocol.Beacon
+	Share         *keymanagerprotocol.Share
+	ForkVersion   forksprotocol.ForkVersion
+	Signer        beaconprotocol.Signer
+	SyncRateLimit time.Duration
+	ReadMode      bool
 }
 
 type Validator struct {
@@ -45,7 +45,7 @@ type Validator struct {
 	share   *keymanagerprotocol.Share
 	worker  *worker.Worker
 
-	ibfts map[beaconprotocol.RoleType]controller.IController
+	ibfts controller.Controllers
 
 	readMode bool
 }
@@ -94,22 +94,28 @@ func (v *Validator) GetShare() *keymanagerprotocol.Share {
 // setupRunners return duty runners map with all the supported duty types
 func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]controller.IController {
 	ibfts := make(map[beaconprotocol.RoleType]controller.IController)
-	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
+	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.IbftStorage, opt.Network, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
 	return ibfts
 }
 
-func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, db basedb.IDb, network network.P2PNetwork, msgQueue *msgqueue.MessageQueue, share *keymanagerprotocol.Share, forkVersion forksprotocol.ForkVersion, signer beaconprotocol.Signer, syncRateLimit time.Duration) controller.IController {
-	ibftStorage := collections.NewIbft(db, logger, role.String())
+func setupIbftController(
+	role beaconprotocol.RoleType,
+	logger *zap.Logger,
+	ibftStorage qbftstorage.Iibft,
+	network p2pprotocol.Network,
+	share *keymanagerprotocol.Share,
+	forkVersion forksprotocol.ForkVersion,
+	signer beaconprotocol.Signer,
+	syncRateLimit time.Duration) controller.IController {
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
 
-	return ibftctrl.New(
+	return controller.New(
 		role,
 		identifier,
 		logger,
-		&ibftStorage,
+		ibftStorage,
 		network,
-		msgQueue,
-		proto.DefaultConsensusParams(),
+		qbft.DefaultConsensusParams(),
 		share,
 		forkVersion,
 		signer,

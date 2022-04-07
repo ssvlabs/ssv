@@ -24,7 +24,7 @@ func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "could not decode message")
 	}
-	vpk := message.GetID().GetValidatorPK()
+	vpk := message.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {

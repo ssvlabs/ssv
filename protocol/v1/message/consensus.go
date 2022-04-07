@@ -73,17 +73,53 @@ func (d *CommitData) Decode(data []byte) error {
 // Round is the QBFT round of the message
 type Round uint64
 
+func (r Round) toUint64() uint64 {
+	return uint64(r)
+}
+
 // Height is the height of the QBFT instance
 type Height int64
 
+func (r Round) toInt64() int64 {
+	return int64(r)
+}
+
 // RoundChangeData represents the data that is sent upon change round
-type RoundChangeData interface {
-	GetPreparedValue() []byte
-	GetPreparedRound() Round
-	// GetNextProposalData returns NOT nil byte array if the signer is the next round's proposal.
-	GetNextProposalData() []byte
-	// GetRoundChangeJustification returns signed prepare messages for the last prepared state
-	GetRoundChangeJustification() []*SignedMessage
+type RoundChangeData struct {
+	PreparedValue            []byte
+	Round                    Round
+	NextProposalData         []byte
+	RoundChangeJustification []*SignedMessage
+}
+
+// GetPreparedValue return prepared value
+func (r RoundChangeData) GetPreparedValue() []byte {
+	return r.PreparedValue
+}
+
+// GetPreparedRound return prepared round
+func (r RoundChangeData) GetPreparedRound() Round {
+	return r.Round
+}
+
+// GetNextProposalData returns NOT nil byte array if the signer is the next round's proposal.
+func (r RoundChangeData) GetNextProposalData() []byte {
+	return r.NextProposalData
+}
+
+// GetRoundChangeJustification returns signed prepare messages for the last prepared state
+func (r RoundChangeData) GetRoundChangeJustification() []*SignedMessage {
+	return r.RoundChangeJustification
+}
+
+// Encode returns a msg encoded bytes or error
+func (r RoundChangeData) Encode() ([]byte, error) {
+	return json.Marshal(r)
+}
+
+// Decode returns error if decoding failed
+func (r RoundChangeData) Decode(data []byte) error {
+	return json.Unmarshal(data, &r)
 }
 
 // ConsensusMessage is the structure used for consensus messages
@@ -123,7 +159,7 @@ func (msg *ConsensusMessage) GetCommitData() (*CommitData, error) {
 }
 
 // GetRoundChangeData returns round change specific data
-func (msg *ConsensusMessage) GetRoundChangeData() RoundChangeData {
+func (msg *ConsensusMessage) GetRoundChangeData() *RoundChangeData {
 	panic("implement")
 }
 

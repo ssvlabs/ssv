@@ -4,6 +4,8 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
 	"sync"
 
 	"go.uber.org/zap"
@@ -19,6 +21,7 @@ type validatorIterator func(validator.IValidator) error
 type validatorsMap struct {
 	logger *zap.Logger
 	ctx    context.Context
+	db     basedb.IDb
 
 	optsTemplate *validator.Options
 
@@ -26,10 +29,11 @@ type validatorsMap struct {
 	validatorsMap map[string]validator.IValidator
 }
 
-func newValidatorsMap(ctx context.Context, logger *zap.Logger, optsTemplate *validator.Options) *validatorsMap {
+func newValidatorsMap(ctx context.Context, logger *zap.Logger, db basedb.IDb, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
 		logger:        logger.With(zap.String("component", "validatorsMap")),
 		ctx:           ctx,
+		db:            db,
 		lock:          sync.RWMutex{},
 		validatorsMap: make(map[string]validator.IValidator),
 		optsTemplate:  optsTemplate,
@@ -71,6 +75,7 @@ func (vm *validatorsMap) GetOrCreateValidator(share *validator2.Share) validator
 	pubKey := share.PublicKey.SerializeToHexStr()
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
+		opts.IbftStorage = collections.NewIbft(vm.db, vm.logger, opts.Share.PublicKey.SerializeToHexStr())
 		opts.Share = share
 		vm.validatorsMap[pubKey] = validator.NewValidator(&opts)
 		printShare(share, vm.logger, "setup validator done")

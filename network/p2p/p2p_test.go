@@ -193,7 +193,7 @@ type dummyRouter struct {
 func (r *dummyRouter) Route(message message.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	r.logger.Debug("got message",
-		zap.String("identifier", hex.EncodeToString(message.GetID())),
+		zap.String("identifier", hex.EncodeToString(message.GetIdentifier())),
 		zap.Uint64("count", c))
 }
 
