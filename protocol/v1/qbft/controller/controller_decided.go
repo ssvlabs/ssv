@@ -3,12 +3,13 @@ package controller
 import (
 	"github.com/bloxapp/ssv/ibft"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // ValidateDecidedMsg - the main decided msg pipeline
-func (i *Controller) ValidateDecidedMsg(msg *proto.SignedMessage) error {
+func (i *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
 	return i.fork.ValidateDecidedMsg(i.ValidatorShare).Run(msg)
 }
 
@@ -22,12 +23,12 @@ upon receiving a valid hROUND-CHANGE, λi, −, −, −i message from pj ∧ pi
 by calling Decide(λi,− , Qcommit) do
 	send Qcommit to process pj
 */
-func (i *Controller) ProcessDecidedMessage(msg *proto.SignedMessage) {
+func (i *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
 	if err := i.ValidateDecidedMsg(msg); err != nil {
-		i.logger.Error("received invalid decided message", zap.Error(err), zap.Uint64s("signer ids", msg.SignerIds))
+		i.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return
 	}
-	logger := i.logger.With(zap.Uint64("seq number", msg.Message.SeqNumber), zap.Uint64s("signer ids", msg.SignerIds))
+	logger := i.logger.With(zap.Uint64("seq number", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
 
 	logger.Debug("received valid decided msg")
 
@@ -95,7 +96,7 @@ func (i *Controller) highestKnownDecided() (*proto.SignedMessage, error) {
 	return highestKnown, nil
 }
 
-func (i *Controller) decidedMsgKnown(msg *proto.SignedMessage) (bool, error) {
+func (i *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, error) {
 	_, found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get decided instance from storage")

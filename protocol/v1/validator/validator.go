@@ -8,7 +8,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	keymanagerprotocol "github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
@@ -21,16 +20,16 @@ type IValidator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
-	GetShare() *keymanagerprotocol.Share
+	GetShare() *message.Share
 }
 
 type Options struct {
 	Context       context.Context
 	Logger        *zap.Logger
-	IbftStorage   qbftstorage.Iibft
+	IbftStorage   qbftstorage.QBFTStore
 	Network       p2pprotocol.Network
 	Beacon        beaconprotocol.Beacon
-	Share         *keymanagerprotocol.Share
+	Share         *message.Share
 	ForkVersion   forksprotocol.ForkVersion
 	Signer        beaconprotocol.Signer
 	SyncRateLimit time.Duration
@@ -42,7 +41,7 @@ type Validator struct {
 	logger  *zap.Logger
 	network p2pprotocol.Network
 	beacon  beaconprotocol.Beacon
-	share   *keymanagerprotocol.Share
+	share   *message.Share
 	worker  *worker.Worker
 
 	ibfts controller.Controllers
@@ -86,7 +85,7 @@ func (v *Validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
 	panic("implement me")
 }
 
-func (v *Validator) GetShare() *keymanagerprotocol.Share {
+func (v *Validator) GetShare() *message.Share {
 	// TODO need lock?
 	return v.share
 }
@@ -101,9 +100,9 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]co
 func setupIbftController(
 	role beaconprotocol.RoleType,
 	logger *zap.Logger,
-	ibftStorage qbftstorage.Iibft,
+	ibftStorage qbftstorage.QBFTStore,
 	network p2pprotocol.Network,
-	share *keymanagerprotocol.Share,
+	share *message.Share,
 	forkVersion forksprotocol.ForkVersion,
 	signer beaconprotocol.Signer,
 	syncRateLimit time.Duration) controller.IController {

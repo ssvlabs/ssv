@@ -7,7 +7,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -28,10 +27,10 @@ var ErrAlreadyRunning = errors.New("already running")
 type Controller struct {
 	currentInstance instance.Instance
 	logger          *zap.Logger
-	ibftStorage     qbftstorage.Iibft
+	ibftStorage     qbftstorage.QBFTStore
 	network         p2pprotocol.Network
 	instanceConfig  *qbft.InstanceConfig
-	ValidatorShare  *keymanager.Share
+	ValidatorShare  *message.Share
 	Identifier      []byte
 	fork            forks.Fork
 	signer          beaconprotocol.Signer
@@ -52,10 +51,10 @@ func New(
 	role beaconprotocol.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
-	storage qbftstorage.Iibft,
+	storage qbftstorage.QBFTStore,
 	network p2pprotocol.Network,
 	instanceConfig *qbft.InstanceConfig,
-	validatorShare *keymanager.Share,
+	validatorShare *message.Share,
 	version forksprotocol.ForkVersion,
 	signer beaconprotocol.Signer,
 	syncRateLimit time.Duration,
@@ -161,7 +160,7 @@ func (i *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *Controller) GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node {
+func (i *Controller) GetIBFTCommittee() map[message.OperatorID]*message.Node {
 	return i.ValidatorShare.Committee
 }
 

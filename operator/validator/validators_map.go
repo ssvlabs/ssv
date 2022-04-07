@@ -4,14 +4,14 @@ package validator
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 	"sync"
 
-	"go.uber.org/zap"
-
-	validator2 "github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
+
+	"go.uber.org/zap"
 )
 
 // validatorIterator is the function used to iterate over existing validators
@@ -67,7 +67,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (validator.IValidator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *validator2.Share) validator.IValidator {
+func (vm *validatorsMap) GetOrCreateValidator(share *message.Share) validator.IValidator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -95,13 +95,13 @@ func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
 
-func printShare(s *validator2.Share, logger *zap.Logger, msg string) {
+func printShare(s *message.Share, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
-		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftId, c.Pk))
+		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftID, c.Pk))
 	}
 	logger.Debug(msg,
 		zap.String("pubKey", s.PublicKey.SerializeToHexStr()),
-		zap.Uint64("nodeID", s.NodeID),
+		zap.Uint64("nodeID", uint64(s.NodeID)),
 		zap.Strings("committee", committee))
 }
