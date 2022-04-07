@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 
 	"go.uber.org/zap"
 )
@@ -75,7 +75,7 @@ func (vm *validatorsMap) GetOrCreateValidator(share *message.Share) validator.IV
 	pubKey := share.PublicKey.SerializeToHexStr()
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
-		opts.IbftStorage = collections.NewIbft(vm.db, vm.logger, opts.Share.PublicKey.SerializeToHexStr())
+		opts.IbftStorage = storage.New(vm.db, vm.logger, opts.Share.PublicKey.SerializeToHexStr())
 		opts.Share = share
 		vm.validatorsMap[pubKey] = validator.NewValidator(&opts)
 		printShare(share, vm.logger, "setup validator done")

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // Deterministic Round robin leader selection is a fair and sequential leader selection.
@@ -24,7 +23,7 @@ func New(seed []byte, committeeSize uint64) (*Deterministic, error) {
 }
 
 // Calculate returns the current leader
-func (rr *Deterministic) Calculate(round message.Round) uint64 {
+func (rr *Deterministic) Calculate(round uint64) uint64 {
 	return (rr.baseInt + index) % rr.committeeSize
 }
 

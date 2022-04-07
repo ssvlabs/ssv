@@ -2,7 +2,6 @@ package inmem
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"sync"
 
 	"github.com/bloxapp/ssv/ibft/instance/msgcont"
@@ -33,7 +32,7 @@ func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContaine
 }
 
 // ReadOnlyMessagesByRound returns messagesByRound by the given round
-func (c *messagesContainer) ReadOnlyMessagesByRound(round uint64) []*message.SignedMessage {
+func (c *messagesContainer) ReadOnlyMessagesByRound(round uint64) []*proto.SignedMessage {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.messagesByRound[round]
@@ -50,7 +49,7 @@ func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round uint64, value 
 	return c.messagesByRoundAndValue[round][valueHex]
 }
 
-func (c *messagesContainer) QuorumAchieved(round uint64, value []byte) (bool, []*message.SignedMessage) {
+func (c *messagesContainer) QuorumAchieved(round uint64, value []byte) (bool, []*proto.SignedMessage) {
 	if msgs := c.readOnlyMessagesByRoundAndValue(round, value); msgs != nil {
 		signers := 0
 		retMsgs := make([]*proto.SignedMessage, 0)
@@ -67,7 +66,7 @@ func (c *messagesContainer) QuorumAchieved(round uint64, value []byte) (bool, []
 }
 
 // AddMessage adds the given message to the container
-func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
+func (c *messagesContainer) AddMessage(msg *proto.SignedMessage) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -112,7 +111,7 @@ func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
 }
 
 // OverrideMessages will override all current msgs in container with the provided msg
-func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage) {
+func (c *messagesContainer) OverrideMessages(msg *proto.SignedMessage) {
 	c.lock.Lock()
 	// reset previous round data
 	delete(c.exitingMsgSigners, msg.Message.Round)
