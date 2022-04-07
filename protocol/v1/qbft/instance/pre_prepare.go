@@ -29,7 +29,7 @@ func (i *Instance) PrePrepareMsgPipelineV0() validation.SignedMessagePipeline {
 			i.PrePrepareMessages.AddMessage(signedMessage)
 			return nil
 		}),
-		validation.IfFirstTrueContinueToSecond(
+		validation.CombineQuiet(
 			signed_msg.ValidateRound(i.State().GetRound()),
 			i.UponPrePrepareMsg(),
 		),
