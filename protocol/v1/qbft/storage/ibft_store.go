@@ -24,6 +24,8 @@ type InstanceStore interface {
 	GetCurrentInstance(identifier message.Identifier) (*qbft.State, bool, error)
 	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
 	GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error)
+	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
+	SaveLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error
 }
 
 // QBFTStore is the store used by QBFT components

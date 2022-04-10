@@ -19,34 +19,11 @@ type MessageRouting interface {
 	UseMessageRouter(router MessageRouter)
 }
 
-// MsgValidationResult helps other components to report message validation with a generic results scheme
-type MsgValidationResult int32
-
-const (
-	// ValidationAccept is the result of a valid message
-	ValidationAccept MsgValidationResult = iota
-	// ValidationIgnore is the result in case we want to ignore the validation
-	ValidationIgnore
-	// ValidationRejectLow is the result for invalid message, with low severity (e.g. late message)
-	ValidationRejectLow
-	// ValidationRejectMedium is the result for invalid message, with medium severity (e.g. wrong height)
-	ValidationRejectMedium
-	// ValidationRejectHigh is the result for invalid message, with high severity (e.g. invalid signature)
-	ValidationRejectHigh
-)
-
-// ValidationReporting is the interface for reporting on message validation results
-type ValidationReporting interface {
-	// ReportValidation reports the result for the given message
-	ReportValidation(message message.SSVMessage, res MsgValidationResult)
-}
-
 // P2PNetwork is a facade interface that provides the entire functionality of the different network interfaces
 type P2PNetwork interface {
 	io.Closer
 	protocolp2p.Network
 	MessageRouting
-	ValidationReporting
 	// Setup initialize the network layer and starts the libp2p host
 	Setup() error
 	// Start starts the network

@@ -166,7 +166,7 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 	for _, topic := range topics {
 		ps, err := n.topicsCtrl.Peers(topic)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "could not read peers")
 		}
 		for _, p := range ps {
 			if filter(p) {
