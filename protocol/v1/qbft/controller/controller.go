@@ -169,17 +169,31 @@ func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
 }
 
-func (i *Controller) ProcessMsg(msg *message.SignedMessage) (bool, []byte, error) {
-	switch msg.Message.MsgType {
-	case message.ProposalMsgType:
-	case message.PrepareMsgType:
-	case message.CommitMsgType:
-		// TODO check if instance nil?
-		i.currentInstance.ProcessMsg(msg)
-	case message.RoundChangeMsgType:
-	case message.DecidedMsgType:
-		i.ProcessDecidedMessage(msg)
+// messageHandler process message from queue,
+func (c *Controller) messageHandler(msg *message.SSVMessage) error {
+	// validation
+	if err := c.validateMessage(msg); err != nil {
+		// TODO need to return error?
+		c.logger.Error("message validation failed", zap.Error(err))
+		return nil
 	}
 
-	return false, nil, errors.Errorf("message type is not suported")
+	switch msg.GetType() {
+	case message.SSVConsensusMsgType:
+		signedMsg := &message.SignedMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
+		}
+		return c.processConsensusMsg(signedMsg)
+
+	case message.SSVPostConsensusMsgType:
+		signedMsg := &message.SignedPostConsensusMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get post consensus Message from network Message")
+		}
+		return c.processPostConsensusSig(signedMsg)
+	case message.SSVSyncMsgType:
+		panic("need to implement!")
+	}
+	return nil
 }

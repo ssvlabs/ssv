@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 
@@ -102,6 +101,7 @@ func (v *Validator) GetShare() *message.Share {
 func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
 	// check duty type and handle accordingly
 	if v.readMode {
+		// TODO check ibft controller and call messageHandler()
 		// synchronize process
 		err := v.messageHandler(msg) // TODO return error?
 		if err != nil {
@@ -110,44 +110,7 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 		return
 	}
 	// put msg to queue in order to preform async process and prevent blocking validatorController
-	switch msg.GetIdentifier() {
-	case // attester
-		v.AttestQueue.TryEnqueue(msg)
-	case // propose
-		v.proposeQueue.TryEnqueue(msg)
-	}
 	v.worker.TryEnqueue(msg)
-}
-
-// messageHandler process message from queue,
-func (v *Validator) messageHandler(msg *message.SSVMessage) error {
-	// validation
-	if err := v.validateMessage(msg); err != nil {
-		// TODO need to return error?
-		v.logger.Error("message validation failed", zap.Error(err))
-		return nil
-	}
-
-	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
-
-	switch msg.GetType() {
-	case message.SSVConsensusMsgType:
-		signedMsg := &message.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
-		}
-		return v.processConsensusMsg(ibftController, signedMsg)
-
-	case message.SSVPostConsensusMsgType:
-		signedMsg := &message.SignedPostConsensusMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from network Message")
-		}
-		return v.processPostConsensusSig(ibftController, signedMsg)
-	case message.SSVSyncMsgType:
-		panic("need to implement!")
-	}
-	return nil
 }
 
 // setupRunners return duty runners map with all the supported duty types
