@@ -10,7 +10,7 @@ import (
 )
 
 func TestWorker(t *testing.T) {
-	worker := NewWorker(&WorkerConfig{
+	worker := NewWorker(&Config{
 		Ctx:          context.Background(),
 		WorkersCount: 1,
 		Buffer:       2,

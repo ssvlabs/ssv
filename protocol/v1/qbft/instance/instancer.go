@@ -13,7 +13,7 @@ import (
 type ControllerStartInstanceOptions struct {
 	Logger     *zap.Logger
 	ValueCheck valcheck.ValueCheck
-	SeqNumber  uint64
+	SeqNumber  message.Height
 	Value      []byte
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking

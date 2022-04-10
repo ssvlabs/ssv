@@ -104,7 +104,7 @@ func NewController(options ControllerOptions) Controller {
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 
-	workerCfg := &worker.WorkerConfig{
+	workerCfg := &worker.Config{
 		Ctx:          options.Context,
 		WorkersCount: 1,   // TODO flag
 		Buffer:       100, // TODO flag

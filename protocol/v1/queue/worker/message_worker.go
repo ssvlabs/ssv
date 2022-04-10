@@ -2,20 +2,22 @@ package worker
 
 import (
 	"context"
-
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"go.uber.org/zap"
 )
 
+// workerHandler func that receive message.SSVMessage to handle
 type workerHandler func(msg *message.SSVMessage) error
 
-type WorkerConfig struct {
+// Config holds all necessary config for worker
+type Config struct {
 	Ctx          context.Context
 	Logger       *zap.Logger
 	WorkersCount int
 	Buffer       int
 }
 
+// Worker listen to queue and process the messages
 type Worker struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -25,14 +27,15 @@ type Worker struct {
 	handler      workerHandler
 }
 
-func NewWorker(cfg *WorkerConfig) *Worker {
+// NewWorker return new Worker
+func NewWorker(cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 	logger := cfg.Logger.With(zap.String("who", "messageWorker"))
 
 	w := &Worker{
 		ctx:          ctx,
-		logger:       logger,
 		cancel:       cancel,
+		logger:       logger,
 		workersCount: cfg.WorkersCount,
 		queue:        make(chan *message.SSVMessage, cfg.Buffer),
 	}
@@ -42,24 +45,26 @@ func NewWorker(cfg *WorkerConfig) *Worker {
 	return w
 }
 
+// init the worker listening process
 func (w *Worker) init() {
 	for i := 1; i <= w.workersCount; i++ {
 		go w.startWorker(w.queue)
 	}
 }
 
+// startWorker process functionality
 func (w *Worker) startWorker(ch <-chan *message.SSVMessage) {
 	for {
 		select {
 		case <-w.ctx.Done():
 			return
-
 		case msg := <-ch:
 			w.process(msg)
 		}
 	}
 }
 
+// AddHandler to work to listen to msg's
 func (w *Worker) AddHandler(handler workerHandler) {
 	w.handler = handler
 }
@@ -76,11 +81,13 @@ func (w *Worker) TryEnqueue(msg *message.SSVMessage) bool {
 	}
 }
 
+// Close queue and worker listener
 func (w *Worker) Close() {
 	close(w.queue)
 	w.cancel()
 }
 
+// process the msg's from queue
 func (w *Worker) process(msg *message.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")

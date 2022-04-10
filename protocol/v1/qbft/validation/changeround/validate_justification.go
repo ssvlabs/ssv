@@ -3,23 +3,20 @@ package changeround
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // validateJustification validates change round justifications
 type validateJustification struct {
-	share *keymanager.Share
+	share *message.Share
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *keymanager.Share) validation.SignedMessagePipeline {
+func Validate(share *message.Share) validation.SignedMessagePipeline {
 	return &validateJustification{
 		share: share,
 	}
@@ -28,29 +25,29 @@ func Validate(share *keymanager.Share) validation.SignedMessagePipeline {
 // Run implements pipeline.Pipeline interface
 func (p *validateJustification) Run(signedMessage *message.SignedMessage) error {
 	// TODO - change to normal prepare pipeline
-	if signedMessage.Message.Value == nil {
+	if signedMessage.Message.Data == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	data := &proto.ChangeRoundData{}
-	if err := json.Unmarshal(signedMessage.Message.Value, data); err != nil {
+	data := &message.RoundChangeData{}
+	if err := json.Unmarshal(signedMessage.Message.Data, data); err != nil {
 		return err
 	}
 	if data.PreparedValue == nil { // no justification
 		return nil
 	}
-	if data.JustificationMsg == nil {
+	if data.RoundChangeJustification == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	if data.JustificationMsg.Type != proto.RoundState_Prepare {
+	if data.RoundChangeJustification.Type != proto.RoundState_Prepare {
 		return errors.New("change round justification msg type not Prepare")
 	}
-	if signedMessage.Message.SeqNumber != data.JustificationMsg.SeqNumber {
+	if signedMessage.Message.Height != data.RoundChangeJustification.SeqNumber {
 		return errors.New("change round justification sequence is wrong")
 	}
-	if signedMessage.Message.Round <= data.JustificationMsg.Round {
+	if signedMessage.Message.Round <= data.RoundChangeJustification.Round {
 		return errors.New("change round justification round lower or equal to message round")
 	}
-	if data.PreparedRound != data.JustificationMsg.Round {
+	if data.Round != data.RoundChangeJustification.Round {
 		return errors.New("change round prepared round not equal to justification msg round")
 	}
 	if !bytes.Equal(signedMessage.Message.Lambda, data.JustificationMsg.Lambda) {
