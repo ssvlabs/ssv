@@ -12,7 +12,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -46,7 +45,6 @@ type Validator struct {
 	beacon     beaconprotocol.Beacon
 	share      *message.Share
 	signer     beaconprotocol.Signer
-	worker     *worker.Worker
 
 	// signature
 	signatureState SignatureState
@@ -61,13 +59,6 @@ func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
 
-	workerCfg := &worker.Config{
-		Ctx:          opt.Context,
-		WorkersCount: 1,   // TODO flag
-		Buffer:       100, // TODO flag
-	}
-	queueWorker := worker.NewWorker(workerCfg)
-
 	ibfts := setupIbfts(opt, logger)
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
@@ -80,15 +71,12 @@ func NewValidator(opt *Options) IValidator {
 		share:          opt.Share,
 		signer:         opt.Signer,
 		ibfts:          ibfts,
-		worker:         queueWorker,
 		signatureState: SignatureState{signatureCollectionTimeout: opt.SignatureCollectionTimeout},
 		readMode:       opt.ReadMode,
 	}
 }
 
 func (v *Validator) Start() {
-	// start queue workers
-	v.worker.AddHandler(v.messageHandler)
 }
 
 func (v *Validator) GetShare() *message.Share {
@@ -99,36 +87,22 @@ func (v *Validator) GetShare() *message.Share {
 // ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
 // Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
 func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
-	// check duty type and handle accordingly
-	if v.readMode {
-		// TODO check ibft controller and call messageHandler()
-		// synchronize process
-		err := v.messageHandler(msg) // TODO return error?
-		if err != nil {
-			return
-		}
+	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
+	// synchronize process
+	processMsg, i, err := ibftController.ProcessMsg(msg)
+	if err != nil {
 		return
 	}
-	// put msg to queue in order to preform async process and prevent blocking validatorController
-	v.worker.TryEnqueue(msg)
 }
 
 // setupRunners return duty runners map with all the supported duty types
 func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]controller.IController {
 	ibfts := make(map[beaconprotocol.RoleType]controller.IController)
-	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.IbftStorage, opt.P2pNetwork, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
+	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.ReadMode, opt.IbftStorage, opt.P2pNetwork, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
 	return ibfts
 }
 
-func setupIbftController(
-	role beaconprotocol.RoleType,
-	logger *zap.Logger,
-	ibftStorage qbftstorage.QBFTStore,
-	network p2pprotocol.Network,
-	share *message.Share,
-	forkVersion forksprotocol.ForkVersion,
-	signer beaconprotocol.Signer,
-	syncRateLimit time.Duration) controller.IController {
+func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, readMode bool, ibftStorage qbftstorage.QBFTStore, network p2pprotocol.Network, share *message.Share, forkVersion forksprotocol.ForkVersion, signer beaconprotocol.Signer, syncRateLimit time.Duration) controller.IController {
 	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
 
 	return controller.New(
@@ -141,5 +115,6 @@ func setupIbftController(
 		share,
 		forkVersion,
 		signer,
-		syncRateLimit)
+		syncRateLimit,
+		readMode)
 }

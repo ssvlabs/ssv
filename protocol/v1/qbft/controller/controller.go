@@ -44,6 +44,9 @@ type Controller struct {
 	syncingLock         *semaphore.Weighted
 
 	syncRateLimit time.Duration
+
+	// flags
+	readMode bool
 }
 
 // New is the constructor of Controller
@@ -58,6 +61,7 @@ func New(
 	version forksprotocol.ForkVersion,
 	signer beaconprotocol.Signer,
 	syncRateLimit time.Duration,
+	readMode bool,
 ) IController {
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
@@ -77,6 +81,8 @@ func New(
 		syncingLock:         semaphore.NewWeighted(1),
 
 		syncRateLimit: syncRateLimit,
+
+		readMode: readMode,
 	}
 
 	// set flags
@@ -167,6 +173,17 @@ func (i *Controller) GetIBFTCommittee() map[message.OperatorID]*message.Node {
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
+}
+
+func (i *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
+	if i.readMode {
+		if err := i.messageHandler(msg); err != nil {
+			return false, nil, err
+		}
+	} else {
+		// TODO add to queue
+	}
+	return false, nil, nil //  TODO need to return default here
 }
 
 // messageHandler process message from queue,
