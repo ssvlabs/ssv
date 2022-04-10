@@ -120,7 +120,8 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 			visited[height] = true
 		}
 	}
-	if len(visited) != int(to-from) {
+	if len(visited) != int(to-from)+1 {
+		h.logger.Warn("not all messages in range", zap.Any("visited", visited), zap.Uint64("to", uint64(to)), zap.Uint64("from", uint64(from)))
 		return false, errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	return true, nil
@@ -143,8 +144,9 @@ func (h *history) getHighest(localMsg *message.SignedMessage, remoteMsgs ...p2pp
 			h.logger.Warn("empty sync message")
 			continue
 		}
-		if sm.Data[0].Message.Height > height {
-			highest = sm.Data[0]
+		signedMsg := sm.Data[0]
+		if signedMsg != nil && signedMsg.Message != nil && signedMsg.Message.Height > height {
+			highest = signedMsg
 			height = highest.Message.Height
 			sender = remoteMsg.Sender
 		}

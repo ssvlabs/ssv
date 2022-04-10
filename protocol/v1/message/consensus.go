@@ -73,16 +73,16 @@ func (d *CommitData) Decode(data []byte) error {
 // Round is the QBFT round of the message
 type Round uint64
 
-func (r Round) toUint64() uint64 {
-	return uint64(r)
-}
+//func (r Round) toUint64() uint64 {
+//	return uint64(r)
+//}
 
 // Height is the height of the QBFT instance
 type Height int64
 
-func (r Round) toInt64() int64 {
-	return int64(r)
-}
+//func (r Height) toInt64() int64 {
+//	return int64(r)
+//}
 
 // RoundChangeData represents the data that is sent upon change round
 type RoundChangeData struct {

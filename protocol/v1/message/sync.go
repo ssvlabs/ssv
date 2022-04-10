@@ -56,12 +56,18 @@ func (sm *SyncMessage) Decode(data []byte) error {
 func (sm *SyncMessage) UpdateResults(err error, results ...*SignedMessage) {
 	if err != nil {
 		sm.Status = StatusInternalError
-	} else if len(results) == 0 {
+	} else if len(results) == 0 || results[0] == nil {
 		sm.Status = StatusNotFound
 	} else {
 		sm.Data = make([]*SignedMessage, len(results))
 		for i, res := range results {
 			sm.Data[i] = res
+		}
+		nResults := len(sm.Data)
+		// updating params with the actual height of the messages
+		sm.Params.Height = []Height{sm.Data[0].Message.Height}
+		if nResults > 1 {
+			sm.Params.Height = []Height{sm.Data[0].Message.Height, sm.Data[nResults-1].Message.Height}
 		}
 		sm.Status = StatusSuccess
 	}

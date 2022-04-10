@@ -10,16 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	peersForSync = 10
-
-	legacyMsgStream = "/sync/0.0.1"
-
-	lastDecidedProtocol = "/ssv/sync/decided/last/0.0.1"
-	changeRoundProtocol = "/ssv/sync/round/0.0.1"
-	historyProtocol     = "/ssv/sync/decided/history/0.0.1"
-)
-
 // LastDecided fetches last decided from a random set of peers
 func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResult, error) {
 	if !n.isReady() {
@@ -53,18 +43,32 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 	}
 	// if no peers were provided -> select a random set of peers
 	if len(peers) == 0 {
-		random, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(historyProtocol))
+		random, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get subset of peers")
 		}
 		peers = random
 	}
-	return n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
-		Params: &message.SyncParams{
-			Height:     []message.Height{from, to},
-			Identifier: mid,
-		},
-	})
+	maxBatchRes := message.Height(n.cfg.MaxBatchResponse)
+	var results []protocolp2p.SyncResult
+	for from < to {
+		currentEnd := to
+		if to-from > maxBatchRes {
+			currentEnd = from + maxBatchRes
+		}
+		batchResults, err := n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
+			Params: &message.SyncParams{
+				Height:     []message.Height{from, currentEnd},
+				Identifier: mid,
+			},
+		})
+		if err != nil {
+			return results, err
+		}
+		results = append(results, batchResults...)
+		from = currentEnd
+	}
+	return results, nil
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
@@ -91,7 +95,7 @@ func (n *p2pNetwork) RegisterHandler(pid string, handler protocolp2p.RequestHand
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
 		if err != nil {
-			//n.logger.Warn("could not handle stream", zap.Error(err))
+			n.logger.Warn("could not handle stream", zap.Error(err))
 			return
 		}
 		msg, err := n.fork.DecodeNetworkMsg(req)
@@ -118,6 +122,7 @@ func (n *p2pNetwork) RegisterHandler(pid string, handler protocolp2p.RequestHand
 			n.logger.Warn("could not respond to stream", zap.Error(err))
 			return
 		}
+		n.logger.Info("stream handler done")
 	})
 }
 
@@ -170,7 +175,11 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 		}
 	}
 	// TODO: shuffle peers
-	return peers[:peerCount], nil
+	i := peerCount
+	if i > len(peers) {
+		i = len(peers)
+	}
+	return peers[:i], nil
 }
 
 func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]protocolp2p.SyncResult, error) {
