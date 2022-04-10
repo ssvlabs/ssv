@@ -24,17 +24,18 @@ type IValidator interface {
 }
 
 type Options struct {
-	Context       context.Context
-	Logger        *zap.Logger
-	IbftStorage   qbftstorage.QBFTStore
-	Network       beaconprotocol.Network
-	P2pNetwork    p2pprotocol.Network
-	Beacon        beaconprotocol.Beacon
-	Share         *message.Share
-	ForkVersion   forksprotocol.ForkVersion
-	Signer        beaconprotocol.Signer
-	SyncRateLimit time.Duration
-	ReadMode      bool
+	Context                    context.Context
+	Logger                     *zap.Logger
+	IbftStorage                qbftstorage.QBFTStore
+	Network                    beaconprotocol.Network
+	P2pNetwork                 p2pprotocol.Network
+	Beacon                     beaconprotocol.Beacon
+	Share                      *message.Share
+	ForkVersion                forksprotocol.ForkVersion
+	Signer                     beaconprotocol.Signer
+	SyncRateLimit              time.Duration
+	SignatureCollectionTimeout time.Duration
+	ReadMode                   bool
 }
 
 type Validator struct {
@@ -44,10 +45,15 @@ type Validator struct {
 	p2pNetwork p2pprotocol.Network
 	beacon     beaconprotocol.Beacon
 	share      *message.Share
+	signer     beaconprotocol.Signer
 	worker     *worker.Worker
 
 	ibfts controller.Controllers
 
+	// config
+	signatureCollectionTimeout time.Duration
+
+	// flags
 	readMode bool
 }
 
@@ -55,7 +61,7 @@ func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
 
-	workerCfg := &worker.WorkerConfig{
+	workerCfg := &worker.Config{
 		Ctx:          opt.Context,
 		WorkersCount: 1,   // TODO flag
 		Buffer:       100, // TODO flag
@@ -66,15 +72,17 @@ func NewValidator(opt *Options) IValidator {
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	return &Validator{
-		ctx:        opt.Context,
-		logger:     logger,
-		network:    opt.Network,
-		p2pNetwork: opt.P2pNetwork,
-		beacon:     opt.Beacon,
-		share:      opt.Share,
-		ibfts:      ibfts,
-		worker:     queueWorker,
-		readMode:   opt.ReadMode,
+		ctx:                        opt.Context,
+		logger:                     logger,
+		network:                    opt.Network,
+		p2pNetwork:                 opt.P2pNetwork,
+		beacon:                     opt.Beacon,
+		share:                      opt.Share,
+		signer:                     opt.Signer,
+		ibfts:                      ibfts,
+		worker:                     queueWorker,
+		signatureCollectionTimeout: opt.SignatureCollectionTimeout,
+		readMode:                   opt.ReadMode,
 	}
 }
 

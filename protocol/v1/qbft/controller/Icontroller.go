@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 )
@@ -16,10 +15,10 @@ type IController interface {
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
-	NextSeqNumber() (uint64, error)
+	NextSeqNumber() (message.Height, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-	GetIBFTCommittee() map[keymanager.OperatorID]*keymanager.Node
+	GetIBFTCommittee() map[message.OperatorID]*message.Node
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"strconv"
 
@@ -55,7 +56,7 @@ func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (i *Controller) NextSeqNumber() (uint64, error) {
+func (i *Controller) NextSeqNumber() (message.Height, error) {
 	knownDecided, err := i.highestKnownDecided()
 	if err != nil {
 		return 0, err
@@ -63,7 +64,7 @@ func (i *Controller) NextSeqNumber() (uint64, error) {
 	if knownDecided == nil {
 		return 0, nil
 	}
-	return knownDecided.Message.SeqNumber + 1, nil
+	return message.Height(knownDecided.Message.SeqNumber + 1), nil
 }
 
 func (i *Controller) instanceOptionsFromStartOptions(opts instance2.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
