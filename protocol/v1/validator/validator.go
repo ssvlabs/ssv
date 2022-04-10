@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 
@@ -48,10 +49,10 @@ type Validator struct {
 	signer     beaconprotocol.Signer
 	worker     *worker.Worker
 
-	ibfts controller.Controllers
+	// signature
+	signatureState SignatureState
 
-	// config
-	signatureCollectionTimeout time.Duration
+	ibfts controller.Controllers
 
 	// flags
 	readMode bool
@@ -72,17 +73,17 @@ func NewValidator(opt *Options) IValidator {
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	return &Validator{
-		ctx:                        opt.Context,
-		logger:                     logger,
-		network:                    opt.Network,
-		p2pNetwork:                 opt.P2pNetwork,
-		beacon:                     opt.Beacon,
-		share:                      opt.Share,
-		signer:                     opt.Signer,
-		ibfts:                      ibfts,
-		worker:                     queueWorker,
-		signatureCollectionTimeout: opt.SignatureCollectionTimeout,
-		readMode:                   opt.ReadMode,
+		ctx:            opt.Context,
+		logger:         logger,
+		network:        opt.Network,
+		p2pNetwork:     opt.P2pNetwork,
+		beacon:         opt.Beacon,
+		share:          opt.Share,
+		signer:         opt.Signer,
+		ibfts:          ibfts,
+		worker:         queueWorker,
+		signatureState: SignatureState{signatureCollectionTimeout: opt.SignatureCollectionTimeout},
+		readMode:       opt.ReadMode,
 	}
 }
 
@@ -94,6 +95,59 @@ func (v *Validator) Start() {
 func (v *Validator) GetShare() *message.Share {
 	// TODO need lock?
 	return v.share
+}
+
+// ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
+// Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
+func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
+	// check duty type and handle accordingly
+	if v.readMode {
+		// synchronize process
+		err := v.messageHandler(msg) // TODO return error?
+		if err != nil {
+			return
+		}
+		return
+	}
+	// put msg to queue in order to preform async process and prevent blocking validatorController
+	switch msg.GetIdentifier() {
+	case // attester
+		v.AttestQueue.TryEnqueue(msg)
+	case // propose
+		v.proposeQueue.TryEnqueue(msg)
+	}
+	v.worker.TryEnqueue(msg)
+}
+
+// messageHandler process message from queue,
+func (v *Validator) messageHandler(msg *message.SSVMessage) error {
+	// validation
+	if err := v.validateMessage(msg); err != nil {
+		// TODO need to return error?
+		v.logger.Error("message validation failed", zap.Error(err))
+		return nil
+	}
+
+	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
+
+	switch msg.GetType() {
+	case message.SSVConsensusMsgType:
+		signedMsg := &message.SignedMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
+		}
+		return v.processConsensusMsg(ibftController, signedMsg)
+
+	case message.SSVPostConsensusMsgType:
+		signedMsg := &message.SignedPostConsensusMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get post consensus Message from network Message")
+		}
+		return v.processPostConsensusSig(ibftController, signedMsg)
+	case message.SSVSyncMsgType:
+		panic("need to implement!")
+	}
+	return nil
 }
 
 // setupRunners return duty runners map with all the supported duty types

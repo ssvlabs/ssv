@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/base64"
+	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -13,7 +14,38 @@ import (
 	"go.uber.org/zap"
 )
 
-func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID uint64, committiee map[uint64]*message.Node) error {
+type SignatureState struct {
+	timer      *time.Timer
+	signatures map[message.OperatorID][]byte
+
+	signatureCollectionTimeout time.Duration
+	sigCount                   int
+	root                       []byte
+	valueStruct                *beaconprotocol.DutyData
+	duty                       *beaconprotocol.Duty
+}
+
+func (s *SignatureState) start(signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
+	// set var's
+	s.sigCount = signaturesCount
+	s.root = root
+	s.valueStruct = valueStruct
+	s.duty = duty
+
+	// start timer
+	s.timer = time.NewTimer(s.signatureCollectionTimeout)
+	// init map
+	s.signatures = make(map[message.OperatorID][]byte, s.sigCount)
+}
+
+func (s *SignatureState) clear() {
+	// stop timer
+	// clear map
+	// clear count
+	panic("need to implement")
+}
+
+func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID message.OperatorID, committiee map[message.OperatorID]*message.Node) error {
 	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
@@ -72,7 +104,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatures map[uint64][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
+func (v *Validator) reconstructAndBroadcastSignature(signatures map[message.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
@@ -83,12 +115,12 @@ func (v *Validator) reconstructAndBroadcastSignature(logger *zap.Logger, signatu
 		return errors.New("could not reconstruct a valid signature")
 	}
 
-	logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
+	v.logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
 
 	// Submit validation to beacon node
 	switch duty.Type {
 	case beaconprotocol.RoleTypeAttester:
-		logger.Debug("submitting attestation")
+		v.logger.Debug("submitting attestation")
 		blsSig := spec.BLSSignature{}
 		copy(blsSig[:], signature.Serialize()[:])
 		inputValue.GetAttestation().Signature = blsSig

@@ -2,74 +2,74 @@ package validator
 
 import (
 	"encoding/hex"
+	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"time"
-
-	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/pkg/errors"
 
 	"go.uber.org/zap"
 )
 
-// waitForSignatureCollection waits for inbound signatures, collects them or times out if not.
-func (v *Validator) waitForSignatureCollection(logger *zap.Logger, identifier []byte, height message.Height, sigRoot []byte, signaturesCount int, committiee map[message.OperatorID]*message.Node) (map[uint64][]byte, error) {
-	// Collect signatures from other nodes
-	// TODO - change signature count to min threshold
-	signatures := make(map[uint64][]byte, signaturesCount)
-	signedIndxes := make([]uint64, 0)
-	var err error
-	timer := time.NewTimer(v.signatureCollectionTimeout)
-	// loop through messages until timeout
-SigCollectionLoop:
-	for {
-		select {
-		case <-timer.C:
-			err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
-			break SigCollectionLoop
-		default:
-			if msg := v.msgQueue.PopMessage(msgqueue.SigRoundIndexKey(identifier, height)); msg != nil {
-				if len(msg.SignedMessage.SignerIds) == 0 { // no KeyManager, empty sig
-					v.logger.Error("missing KeyManager id", zap.Any("msg", msg.SignedMessage))
-					continue SigCollectionLoop
-				}
-				if len(msg.SignedMessage.Signature) == 0 { // no KeyManager, empty sig
-					v.logger.Error("missing sig", zap.Any("msg", msg.SignedMessage))
-					continue SigCollectionLoop
-				}
-				if _, found := signatures[msg.SignedMessage.SignerIds[0]]; found { // sig already exists
-					continue SigCollectionLoop
-				}
+func (v *Validator) processSignatureMessage(msg *message.SignedPostConsensusMessage) error {
+	// TODO do we need to check if signatureState.start() already been called?
 
-				logger.Info("collected valid signature", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]), zap.Any("msg", msg))
+	//if !v.signatureState.timer.Stop() { TODO handle timeout
+	//	<-v.signatureState.timer.C
+	//}
+	//	err = errors.Errorf("timed out waiting for post consensus signatures, received %d", len(signedIndxes))
 
-				// verify sig
-				if err := v.verifyPartialSignature(msg.SignedMessage.Signature, sigRoot, msg.SignedMessage.SignerIds[0], committiee); err != nil {
-					logger.Error("received invalid signature", zap.Error(err))
-					continue SigCollectionLoop
-				}
-				logger.Info("signature verified", zap.Uint64("node_id", msg.SignedMessage.SignerIds[0]))
-
-				signatures[msg.SignedMessage.SignerIds[0]] = msg.SignedMessage.Signature
-				signedIndxes = append(signedIndxes, msg.SignedMessage.SignerIds[0])
-				if len(signedIndxes) >= signaturesCount {
-					timer.Stop()
-					break SigCollectionLoop
-				}
-			} else {
-				time.Sleep(time.Millisecond * 100)
-			}
-		}
+	//	validate message
+	if len(msg.GetSigners()) == 0 { // no KeyManager, empty sig
+		v.logger.Error("missing KeyManager id", zap.Any("msg", msg))
+		return nil
+	}
+	if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
+		v.logger.Error("missing sig", zap.Any("msg", msg))
+		return nil
 	}
 
-	return signatures, err
+	//	check if already exist, if so, ignore
+	if _, found := v.signatureState.signatures[msg.GetSigners()[0]]; found { // sig already exists
+		v.logger.Debug("sig already known, skip")
+		return nil
+	}
+
+	v.logger.Info("collected valid signature", zap.Uint64("node_id", uint64(msg.GetSigners()[0])), zap.Any("msg", msg))
+
+	// 	verifyPartialSignature
+	if err := v.verifyPartialSignature(msg.GetSignature(), v.signatureState.root, msg.GetSigners()[0], v.share.Committee); err != nil {
+		v.logger.Error("received invalid signature", zap.Error(err))
+		return nil
+	}
+
+	v.logger.Info("signature verified", zap.Uint64("node_id", uint64(msg.GetSigners()[0])))
+
+	v.signatureState.signatures[msg.GetSigners()[0]] = msg.GetSignature()
+	if len(v.signatureState.signatures) >= v.signatureState.sigCount {
+		v.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(v.signatureState.signatures)))
+		//	 stop only timer!
+
+		// clean queue for messages, we don't need them anymore. TODo need to check how to dump sig message! (:@niv)
+		//v.msgQueue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier, height))
+
+		return v.broadcastSignature()
+	}
+	return nil
+}
+
+func (v *Validator) broadcastSignature() error {
+	// Reconstruct signatures
+	if err := v.reconstructAndBroadcastSignature(v.signatureState.signatures, v.signatureState.root, v.signatureState.valueStruct, v.signatureState.duty); err != nil {
+		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
+	}
+	v.logger.Info("Successfully submitted role!")
+	return nil
 }
 
 // postConsensusDutyExecution signs the eth2 duty after iBFT came to consensus,
 // waits for others to sign, collect sigs, reconstruct and broadcast the reconstructed signature to the beacon chain
-func (v *Validator) postConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty, ) error {
+func (v *Validator) postConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := v.signDuty(decidedValue, duty)
 	if err != nil {
@@ -93,21 +93,8 @@ func (v *Validator) postConsensusDutyExecution(logger *zap.Logger, height messag
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
-	signatures, err := v.waitForSignatureCollection(logger, identifier, height, root, signaturesCount, v.share.Committee)
-
-	// clean queue for messages, we don't need them anymore. TODo need to check how to dump sig message! (:@niv)
-	//v.msgQueue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier, height))
-
-	if err != nil {
-		return err
-	}
-	logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(signatures)))
-
-	// Reconstruct signatures
-	if err := v.reconstructAndBroadcastSignature(logger, signatures, root, valueStruct, duty); err != nil {
-		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
-	}
-	logger.Info("Successfully submitted role!")
+	//	start timer, clear new map and set var's
+	v.signatureState.start(signaturesCount, root, valueStruct, duty)
 	return nil
 }
 

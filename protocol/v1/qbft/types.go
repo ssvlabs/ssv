@@ -42,23 +42,23 @@ var RoundState_value = map[string]int32{
 type State struct {
 	Stage atomic.Int32 // RoundState
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
-	Identifier atomic.Value // []byte
+	Identifier atomic.Value // message.Identifier
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
 	Height        atomic.Value // message.Height
 	InputValue    atomic.Value // []byte
 	Round         atomic.Value // message.Round
-	PreparedRound atomic.Uint64
-	PreparedValue atomic.String
+	PreparedRound atomic.Value // message.Round
+	PreparedValue atomic.Value // []byte
 }
 
 type unsafeState struct {
 	Stage         int32
-	Identifier    []byte
+	Identifier    message.Identifier
 	height        message.Height
 	InputValue    []byte
 	round         message.Round
-	PreparedRound uint64
-	PreparedValue string
+	PreparedRound message.Round
+	PreparedValue []byte
 }
 
 // MarshalJSON implements marshaling interface
@@ -69,8 +69,8 @@ func (s *State) MarshalJSON() ([]byte, error) {
 		height:        s.GetHeight(),
 		InputValue:    s.GetInputValue(),
 		round:         s.GetRound(),
-		PreparedRound: s.PreparedRound.Load(),
-		PreparedValue: s.PreparedValue.Load(),
+		PreparedRound: s.GetPreparedRound(),
+		PreparedValue: s.GetPreparedValue(),
 	})
 }
 
@@ -102,18 +102,28 @@ func (s *State) GetRound() message.Round {
 	return round
 }
 
+func (s *State) GetPreparedRound() message.Round {
+	round := s.PreparedRound.Load().(message.Round)
+	return round
+}
+
 func (s *State) SetRound(newRound uint64) {
 	s.Round.Store(newRound)
 }
 
-func (s *State) GetIdentifier() []byte {
-	identifier := s.Identifier.Load().([]byte)
+func (s *State) GetIdentifier() message.Identifier {
+	identifier := s.Identifier.Load().(message.Identifier)
 	return identifier
 }
 
 func (s *State) GetInputValue() []byte {
 	inputValue := s.InputValue.Load().([]byte)
 	return inputValue
+}
+
+func (s *State) GetPreparedValue() []byte {
+	value := s.PreparedValue.Load().([]byte)
+	return value
 }
 
 // InstanceConfig is the configuration of the instance

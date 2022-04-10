@@ -30,7 +30,7 @@ import (
 // Options defines option attributes for the Instance
 type Options struct {
 	Logger         *zap.Logger
-	ValidatorShare *keymanager.Share
+	ValidatorShare *message.Share
 	// Me             *proto.Node
 	Network        network.P2PNetwork
 	Queue          *msgqueue.MessageQueue
@@ -49,7 +49,7 @@ type Options struct {
 
 // Instance defines the instance attributes
 type Instance struct {
-	ValidatorShare *keymanager.Share
+	ValidatorShare *message.Share
 	state          *qbft.State
 	network        network.P2PNetwork
 	ValueCheck     valcheck.ValueCheck
@@ -257,23 +257,23 @@ func (i *Instance) Stopped() bool {
 	return i.stopped
 }
 
-func (i *Instance) ProcessMsg(msg *message.SignedMessage) {
+func (i *Instance) ProcessMsg(msg *message.SignedMessage) error {
 	var pp validation.SignedMessagePipeline
 
 	switch msg.Message.MsgType {
 	case message.ProposalMsgType:
-		pp := i.PrePrepareMsgPipeline()
+		pp = i.PrePrepareMsgPipeline()
 	case message.PrepareMsgType:
+		pp = i.PrepareMsgPipeline()
 	case message.CommitMsgType:
+		pp = i.CommitMsgPipeline()
 	case message.RoundChangeMsgType:
+		pp = i.ChangeRoundMsgPipeline()
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-		//return true, nil
+		return errors.Errorf("undefined message type")
 	}
-	if err := pp.Run(msg); err != nil {
-		return true, err
-	}
-	return true, nil
+	return pp.Run(msg)
 }
 
 // BumpRound is used to set bump round by 1

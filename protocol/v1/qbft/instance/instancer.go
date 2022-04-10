@@ -37,5 +37,5 @@ type Instancer interface {
 	GetStageChan() chan qbft.RoundState
 	GetLastChangeRoundMsg() *message.SignedMessage
 	CommittedAggregatedMsg() (*message.SignedMessage, error)
-	ProcessMsg(msg *message.SignedMessage)
+	ProcessMsg(msg *message.SignedMessage) error
 }

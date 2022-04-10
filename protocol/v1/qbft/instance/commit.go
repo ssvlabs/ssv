@@ -2,35 +2,35 @@ package instance
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	ibft2 "github.com/bloxapp/ssv/protocol/v1/qbft"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
-	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/pipeline"
 	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibft, share *keymanager.Share) (*proto.SignedMessage, error) {
+func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFTStore, share *message.Share) (*message.SignedMessage, error) {
 	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
-		zap.Uint64("seq", msg.Message.SeqNumber), zap.String("identifier", string(msg.Message.Lambda)),
-		zap.Uint64s("signers", msg.SignerIds))
+		zap.Uint64("seq", uint64(msg.Message.Height)), zap.String("identifier", string(msg.Message.Identifier)),
+		zap.Any("signers", msg.GetSigners()))
 	// find stored decided
-	decidedMsg, found, err := ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+	decidedMessages, err := qbftStore.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided for late commit")
 	}
-	if !found {
+	if len(decidedMessages) == 0 {
 		// decided message does not exist
 		logger.Debug("could not find decided")
 		return nil, nil
 	}
-	if len(decidedMsg.SignerIds) == share.CommitteeSize() {
+	decidedMsg := decidedMessages[0]
+	if len(decidedMsg.GetSigners()) == share.CommitteeSize() {
 		// msg was signed by the entire committee
 		logger.Debug("msg was signed by the entire committee")
 		return nil, nil
@@ -43,10 +43,10 @@ func ProcessLateCommitMsg(msg *proto.SignedMessage, ibftStorage collections.Iibf
 		}
 		return nil, errors.Wrap(err, "could not aggregate commit message")
 	}
-	if err := ibftStorage.SaveDecided(decidedMsg); err != nil {
+	if err := qbftStore.SaveDecided(decidedMsg); err != nil {
 		return nil, errors.Wrap(err, "could not save aggregated decided message")
 	}
-	ibft.ReportDecided(share.PublicKey.SerializeToHexStr(), msg)
+	ibft2.ReportDecided(share.PublicKey.SerializeToHexStr(), msg)
 	return decidedMsg, nil
 }
 
@@ -57,12 +57,12 @@ func (i *Instance) CommitMsgPipeline() validation.SignedMessagePipeline {
 
 // CommitMsgPipelineV0 - genesis version 0
 func (i *Instance) CommitMsgPipelineV0() validation.SignedMessagePipeline {
-	return pipeline.Combine(
+	return validation.Combine(
 		i.CommitMsgValidationPipeline(),
-		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
+		validation.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
-				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
-				zap.Uint64("round", signedMessage.Message.Round))
+				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
+				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 			i.CommitMessages.AddMessage(signedMessage)
 			return nil
 		}),
@@ -77,17 +77,17 @@ func (i *Instance) CommitMsgValidationPipeline() validation.SignedMessagePipelin
 
 // CommitMsgValidationPipelineV0 is version 0
 func (i *Instance) CommitMsgValidationPipelineV0() validation.SignedMessagePipeline {
-	return CommitMsgValidationPipelineV0(i.State().Lambda.Get(), i.State().SeqNumber.Get(), i.ValidatorShare)
+	return CommitMsgValidationPipelineV0(i.State().GetIdentifier(), i.State().GetHeight(), i.ValidatorShare)
 }
 
 // CommitMsgValidationPipelineV0 is version 0 of commit message validation
-func CommitMsgValidationPipelineV0(identifier []byte, seq uint64, share *keymanager.Share) validation.SignedMessagePipeline {
-	return pipeline.Combine(
-		auth.BasicMsgValidation(),
-		auth.MsgTypeCheck(proto.RoundState_Commit),
-		auth.ValidateLambdas(identifier),
-		auth.ValidateSequenceNumber(seq),
-		auth.AuthorizeMsg(share),
+func CommitMsgValidationPipelineV0(identifier message.Identifier, seq message.Height, share *message.Share) validation.SignedMessagePipeline {
+	return validation.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.CommitMsgType),
+		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateSequenceNumber(seq),
+		signedmsg.AuthorizeMsg(share),
 	)
 }
 
@@ -98,12 +98,12 @@ func (i *Instance) DecidedMsgPipeline() validation.SignedMessagePipeline {
 
 // DecidedMsgPipelineV0 is version 0
 func (i *Instance) DecidedMsgPipelineV0() validation.SignedMessagePipeline {
-	return pipeline.Combine(
+	return validation.Combine(
 		i.CommitMsgValidationPipeline(),
-		pipeline.WrapFunc("add commit msg", func(signedMessage *proto.SignedMessage) error {
+		validation.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid decided message for round",
-				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
-				zap.Uint64("round", signedMessage.Message.Round))
+				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
+				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 			i.CommitMessages.OverrideMessages(signedMessage)
 			return nil
 		}),
@@ -117,8 +117,8 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	Decide(λi , value, Qcommit)
 */
 func (i *Instance) uponCommitMsg() validation.SignedMessagePipeline {
-	return pipeline.WrapFunc("upon commit msg", func(signedMessage *proto.SignedMessage) error {
-		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value)
+	return validation.WrapFunc("upon commit msg", func(signedMessage *message.SignedMessage) error {
+		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Data)
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",

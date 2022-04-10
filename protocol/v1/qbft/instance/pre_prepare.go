@@ -3,11 +3,11 @@ package instance
 import (
 	"bytes"
 
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signed_msg"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -30,7 +30,7 @@ func (i *Instance) PrePrepareMsgPipelineV0() validation.SignedMessagePipeline {
 			return nil
 		}),
 		validation.CombineQuiet(
-			signed_msg.ValidateRound(i.State().GetRound()),
+			signedmsg.ValidateRound(i.State().GetRound()),
 			i.UponPrePrepareMsg(),
 		),
 	)
@@ -38,11 +38,11 @@ func (i *Instance) PrePrepareMsgPipelineV0() validation.SignedMessagePipeline {
 
 func (i *Instance) prePrepareMsgValidationPipeline() validation.SignedMessagePipeline {
 	return validation.Combine(
-		signed_msg.BasicMsgValidation(),
-		signed_msg.MsgTypeCheck(message.ProposalMsgType),
-		signed_msg.ValidateLambdas(i.State().GetIdentifier()),
-		signed_msg.ValidateSequenceNumber(i.State().GetHeight()),
-		signed_msg.AuthorizeMsg(i.ValidatorShare),
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.ProposalMsgType),
+		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
+		signedmsg.AuthorizeMsg(i.ValidatorShare),
 		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.RoundLeader),
 	)
 }
@@ -91,7 +91,7 @@ func (i *Instance) UponPrePrepareMsg() validation.SignedMessagePipeline {
 		}
 
 		// mark state
-		i.ProcessStageChange(proto.RoundState_PrePrepare)
+		i.ProcessStageChange(qbft.RoundState_PrePrepare)
 
 		// broadcast prepare msg
 		broadcastMsg := i.generatePrepareMessage(signedMessage.Message.Data)

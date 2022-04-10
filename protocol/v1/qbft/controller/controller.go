@@ -169,7 +169,7 @@ func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
 }
 
-func (i *Controller) ProcessMsg(msg *message.SignedMessage) {
+func (i *Controller) ProcessMsg(msg *message.SignedMessage) (bool, []byte, error) {
 	switch msg.Message.MsgType {
 	case message.ProposalMsgType:
 	case message.PrepareMsgType:
@@ -180,4 +180,6 @@ func (i *Controller) ProcessMsg(msg *message.SignedMessage) {
 	case message.DecidedMsgType:
 		i.ProcessDecidedMessage(msg)
 	}
+
+	return false, nil, errors.Errorf("message type is not suported")
 }

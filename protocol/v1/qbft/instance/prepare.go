@@ -3,14 +3,14 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/pipeline/auth"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 // PrepareMsgPipeline is the main prepare msg pipeline
@@ -20,48 +20,44 @@ func (i *Instance) PrepareMsgPipeline() validation.SignedMessagePipeline {
 
 // PrepareMsgPipelineV0 is the v0 version
 func (i *Instance) PrepareMsgPipelineV0() validation.SignedMessagePipeline {
-	return pipeline.Combine(
-		auth.BasicMsgValidation(),
-		auth.MsgTypeCheck(proto.RoundState_Prepare),
-		auth.ValidateLambdas(i.State().Lambda.Get()),
-		auth.ValidateSequenceNumber(i.State().SeqNumber.Get()),
-		auth.AuthorizeMsg(i.ValidatorShare),
-		pipeline.WrapFunc("add prepare msg", func(signedMessage *proto.SignedMessage) error {
+	return validation.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.PrepareMsgType),
+		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
+		signedmsg.AuthorizeMsg(i.ValidatorShare),
+		validation.WrapFunc("add prepare msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
-				zap.String("sender_ibft_id", signedMessage.SignersIDString()),
-				zap.Uint64("round", signedMessage.Message.Round))
+				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
+				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 			i.PrepareMessages.AddMessage(signedMessage)
 			return nil
 		}),
-		pipeline.IfFirstTrueContinueToSecond(
-			auth.ValidateRound((i.State().Round.Get())),
+		validation.CombineQuiet(
+			signedmsg.ValidateRound(i.State().GetRound()),
 			i.uponPrepareMsg(),
 		),
 	)
 }
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
-func (i *Instance) PreparedAggregatedMsg() (*proto.SignedMessage, error) {
+func (i *Instance) PreparedAggregatedMsg() (*message.SignedMessage, error) {
 	if !i.isPrepared() {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State().PreparedRound.Get())
+	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State().GetPreparedRound())
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
 
-	var ret *proto.SignedMessage
-	var err error
+	var ret *message.SignedMessage
 	for _, msg := range msgs {
-		if !bytes.Equal(msg.Message.Value, i.State().PreparedValue.Get()) {
+		if !bytes.Equal(msg.Message.Data, i.State().GetPreparedValue()) {
 			continue
 		}
 		if ret == nil {
-			ret, err = msg.DeepCopy()
-			if err != nil {
-				return nil, err
-			}
+			ret = msg.DeepCopy()
 		} else {
 			if err := ret.Aggregate(msg); err != nil {
 				return nil, err
@@ -79,21 +75,21 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
 func (i *Instance) uponPrepareMsg() validation.SignedMessagePipeline {
-	return pipeline.WrapFunc("upon prepare msg", func(signedMessage *proto.SignedMessage) error {
+	return validation.WrapFunc("upon prepare msg", func(signedMessage *message.SignedMessage) error {
 		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Value); quorum {
+		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Data); quorum {
 			var err error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", hex.EncodeToString(i.State().Lambda.Get())), zap.Uint64("round", i.State().Round.Get()))
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
 
 				// set prepared state
-				i.State().PreparedRound.Set(signedMessage.Message.Round)
-				i.State().PreparedValue.Set(signedMessage.Message.Value)
-				i.ProcessStageChange(proto.RoundState_Prepare)
+				i.State().PreparedRound.Store(signedMessage.Message.Round)
+				i.State().PreparedValue.Store(signedMessage.Message.Data)
+				i.ProcessStageChange(qbft.RoundState_Prepare)
 
 				// send commit msg
-				broadcastMsg := i.generateCommitMessage(i.State().PreparedValue.Get())
+				broadcastMsg := i.generateCommitMessage(i.State().GetPreparedValue())
 				if e := i.SignAndBroadcast(broadcastMsg); e != nil {
 					i.Logger.Info("could not broadcast commit message", zap.Error(err))
 					err = e
@@ -105,17 +101,17 @@ func (i *Instance) uponPrepareMsg() validation.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generatePrepareMessage(value []byte) *proto.Message {
-	return &proto.Message{
-		Type:      proto.RoundState_Prepare,
-		Round:     i.State().Round.Get(),
-		Lambda:    i.State().Lambda.Get(),
-		SeqNumber: i.State().SeqNumber.Get(),
-		Value:     value,
+func (i *Instance) generatePrepareMessage(value []byte) *message.ConsensusMessage {
+	return &message.ConsensusMessage{
+		MsgType:    message.PrepareMsgType,
+		Height:     i.State().GetHeight(),
+		Round:      i.State().GetRound(),
+		Identifier: i.State().GetIdentifier(),
+		Data:       value,
 	}
 }
 
 // isPrepared returns true if instance prepared
 func (i *Instance) isPrepared() bool {
-	return i.State().PreparedValue.Get() != nil
+	return i.State().GetPreparedValue() != nil
 }

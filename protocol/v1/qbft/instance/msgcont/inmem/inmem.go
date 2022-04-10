@@ -2,18 +2,18 @@ package inmem
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft/instance/msgcont"
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // messagesContainer is a simple container for messagesByRound used to count messagesByRound and decide if quorum was achieved.
 type messagesContainer struct {
-	messagesByRound         map[uint64][]*proto.SignedMessage
-	messagesByRoundAndValue map[uint64]map[string][]*proto.SignedMessage // map[round]map[valueHex]msgs
-	allChangeRoundMessages  []*proto.SignedMessage
-	exitingMsgSigners       map[uint64]map[uint64]bool
+	messagesByRound         map[message.Round][]*message.SignedMessage
+	messagesByRoundAndValue map[message.Round]map[string][]*message.SignedMessage // map[round]map[valueHex]msgs
+	allChangeRoundMessages  []*message.SignedMessage
+	exitingMsgSigners       map[message.Round]map[message.OperatorID]bool
 	quorumThreshold         uint64
 	partialQuorumThreshold  uint64
 	lock                    sync.RWMutex
@@ -22,23 +22,23 @@ type messagesContainer struct {
 // New is the constructor of MessagesContainer
 func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContainer {
 	return &messagesContainer{
-		messagesByRound:         make(map[uint64][]*proto.SignedMessage),
-		messagesByRoundAndValue: make(map[uint64]map[string][]*proto.SignedMessage),
-		allChangeRoundMessages:  make([]*proto.SignedMessage, 0),
-		exitingMsgSigners:       make(map[uint64]map[uint64]bool),
+		messagesByRound:         make(map[message.Round][]*message.SignedMessage),
+		messagesByRoundAndValue: make(map[message.Round]map[string][]*message.SignedMessage),
+		allChangeRoundMessages:  make([]*message.SignedMessage, 0),
+		exitingMsgSigners:       make(map[message.Round]map[message.OperatorID]bool),
 		quorumThreshold:         quorumThreshold,
 		partialQuorumThreshold:  partialQuorumThreshold,
 	}
 }
 
 // ReadOnlyMessagesByRound returns messagesByRound by the given round
-func (c *messagesContainer) ReadOnlyMessagesByRound(round uint64) []*proto.SignedMessage {
+func (c *messagesContainer) ReadOnlyMessagesByRound(round message.Round) []*message.SignedMessage {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.messagesByRound[round]
 }
 
-func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round uint64, value []byte) []*proto.SignedMessage {
+func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round message.Round, value []byte) []*message.SignedMessage {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	valueHex := hex.EncodeToString(value)
@@ -49,12 +49,12 @@ func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round uint64, value 
 	return c.messagesByRoundAndValue[round][valueHex]
 }
 
-func (c *messagesContainer) QuorumAchieved(round uint64, value []byte) (bool, []*proto.SignedMessage) {
+func (c *messagesContainer) QuorumAchieved(round message.Round, value []byte) (bool, []*message.SignedMessage) {
 	if msgs := c.readOnlyMessagesByRoundAndValue(round, value); msgs != nil {
 		signers := 0
-		retMsgs := make([]*proto.SignedMessage, 0)
+		retMsgs := make([]*message.SignedMessage, 0)
 		for _, msg := range msgs {
-			signers += len(msg.SignerIds)
+			signers += len(msg.GetSigners())
 			retMsgs = append(retMsgs, msg)
 		}
 
@@ -66,15 +66,15 @@ func (c *messagesContainer) QuorumAchieved(round uint64, value []byte) (bool, []
 }
 
 // AddMessage adds the given message to the container
-func (c *messagesContainer) AddMessage(msg *proto.SignedMessage) {
+func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	valueHex := hex.EncodeToString(msg.Message.Value)
+	valueHex := hex.EncodeToString(msg.Message.Data)
 
 	// check msg is not duplicate
 	if c.exitingMsgSigners[msg.Message.Round] != nil {
-		for _, signer := range msg.SignerIds {
+		for _, signer := range msg.GetSigners() {
 			if _, found := c.exitingMsgSigners[msg.Message.Round][signer]; found {
 				return
 			}
@@ -84,34 +84,34 @@ func (c *messagesContainer) AddMessage(msg *proto.SignedMessage) {
 	// add messagesByRound
 	_, found := c.messagesByRound[msg.Message.Round]
 	if !found {
-		c.messagesByRound[msg.Message.Round] = make([]*proto.SignedMessage, 0)
+		c.messagesByRound[msg.Message.Round] = make([]*message.SignedMessage, 0)
 	}
 	c.messagesByRound[msg.Message.Round] = append(c.messagesByRound[msg.Message.Round], msg)
 
 	// add messages by round and value
 	_, found = c.messagesByRoundAndValue[msg.Message.Round]
 	if !found {
-		c.messagesByRoundAndValue[msg.Message.Round] = make(map[string][]*proto.SignedMessage)
-		c.exitingMsgSigners[msg.Message.Round] = make(map[uint64]bool)
+		c.messagesByRoundAndValue[msg.Message.Round] = make(map[string][]*message.SignedMessage)
+		c.exitingMsgSigners[msg.Message.Round] = make(map[message.OperatorID]bool)
 	}
 	_, found = c.messagesByRoundAndValue[msg.Message.Round][valueHex]
 	if !found {
-		c.messagesByRoundAndValue[msg.Message.Round][valueHex] = make([]*proto.SignedMessage, 0)
+		c.messagesByRoundAndValue[msg.Message.Round][valueHex] = make([]*message.SignedMessage, 0)
 	}
 
 	// add to all change round messages
-	if msg.Message.Type == proto.RoundState_ChangeRound {
+	if msg.Message.MsgType == message.RoundChangeMsgType {
 		c.allChangeRoundMessages = append(c.allChangeRoundMessages, msg)
 	}
 
-	for _, signer := range msg.SignerIds {
+	for _, signer := range msg.GetSigners() {
 		c.exitingMsgSigners[msg.Message.Round][signer] = true
 	}
 	c.messagesByRoundAndValue[msg.Message.Round][valueHex] = append(c.messagesByRoundAndValue[msg.Message.Round][valueHex], msg)
 }
 
 // OverrideMessages will override all current msgs in container with the provided msg
-func (c *messagesContainer) OverrideMessages(msg *proto.SignedMessage) {
+func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage) {
 	c.lock.Lock()
 	// reset previous round data
 	delete(c.exitingMsgSigners, msg.Message.Round)
@@ -123,9 +123,9 @@ func (c *messagesContainer) OverrideMessages(msg *proto.SignedMessage) {
 	c.AddMessage(msg)
 }
 
-func (c *messagesContainer) PartialChangeRoundQuorum(stateRound uint64) (found bool, lowestChangeRound uint64) {
-	lowestChangeRound = uint64(100000) // just a random really large round number
-	foundMsgs := make(map[uint64]*proto.SignedMessage)
+func (c *messagesContainer) PartialChangeRoundQuorum(stateRound message.Round) (found bool, lowestChangeRound message.Round) {
+	lowestChangeRound = message.Round(100000) // just a random really large round number
+	foundMsgs := make(map[message.OperatorID]*message.SignedMessage)
 	quorumCount := 0
 
 	c.lock.RLock()
@@ -136,7 +136,7 @@ func (c *messagesContainer) PartialChangeRoundQuorum(stateRound uint64) (found b
 			continue
 		}
 
-		for _, signer := range msg.SignerIds {
+		for _, signer := range msg.GetSigners() {
 			if existingMsg, found := foundMsgs[signer]; found {
 				if existingMsg.Message.Round > msg.Message.Round {
 					foundMsgs[signer] = msg
