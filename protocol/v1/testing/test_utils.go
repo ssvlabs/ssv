@@ -26,12 +26,14 @@ func GenerateBLSKeys(oids ...message.OperatorID) (map[message.OperatorID]*bls.Se
 	return sks, nodes
 }
 
+type MsgGenerator func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage)
+
 // CreateMultipleSignedMessages enables to create multiple decided messages
 func CreateMultipleSignedMessages(sks map[message.OperatorID]*bls.SecretKey, start message.Height, end message.Height,
-	iterator func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage)) ([]*message.SignedMessage, error) {
+	generator MsgGenerator) ([]*message.SignedMessage, error) {
 	results := make([]*message.SignedMessage, 0)
 	for i := start; i <= end; i++ {
-		signers, msg := iterator(i)
+		signers, msg := generator(i)
 		if msg == nil {
 			break
 		}
