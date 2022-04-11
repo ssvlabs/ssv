@@ -160,7 +160,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
-		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
