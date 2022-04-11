@@ -21,10 +21,9 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
-	"github.com/prysmaticlabs/prysm/async/event"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 )
 
@@ -43,7 +42,7 @@ type ControllerOptions struct {
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncRateLimit       time.Duration `yaml:"HistorySyncRateLimit" env:"HISTORY_SYNC_BACKOFF" env-default:"200ms" env-description:"Interval for updating metadata"`
-	ETHNetwork                 *beaconprotocol.Network
+	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
 	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
@@ -66,6 +65,7 @@ type Controller interface {
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*message.Share, error)
+	forksprotocol.ForkHandler
 }
 
 // controller implements Controller
@@ -94,6 +94,21 @@ type controller struct {
 	messageWorker   *worker.Worker
 }
 
+func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	c.forkVersion = forkVersion
+
+	logger := c.logger.With(zap.String("previousFork", string(c.forkVersion)),
+		zap.String("currentFork", string(forkVersion)))
+
+	// set network fork
+	handler, ok := c.network.(forksprotocol.ForkHandler)
+	if !ok {
+		logger.Panic("network instance is not a fork handler")
+	}
+
+	return handler.OnFork(forkVersion)
+}
+
 // NewController creates a new validator controller instance
 func NewController(options ControllerOptions) Controller {
 	collection := validatorstorage.NewCollection(validatorstorage.CollectionOptions{
@@ -111,12 +126,13 @@ func NewController(options ControllerOptions) Controller {
 	}
 
 	validatorOptions := &validator.Options{
-		Context:  options.Context,
-		Logger:   options.Logger,
-		Network:  options.Network,
-		Beacon:   options.Beacon,
-		Share:    nil,   // TODO(nkryuchkov): consider setting
-		ReadMode: false, // TODO(nkryuchkov): check if false is correct value
+		Context:    options.Context,
+		Logger:     options.Logger,
+		Network:    options.ETHNetwork,
+		P2pNetwork: options.Network,
+		Beacon:     options.Beacon,
+		Share:      nil,   // TODO(nkryuchkov): consider setting
+		ReadMode:   false, // TODO(nkryuchkov): check if false is correct value
 	}
 	ctrl := controller{
 		collection:                 collection,
@@ -166,7 +182,7 @@ func (c *controller) handleRouterMessages() {
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.ProcessMsg(&msg)
-			} else if msg.MsgType == message.SSVPostConsensusMsgType {
+			} else if c.forkVersion != forksprotocol.V0ForkVersion && msg.MsgType == message.SSVPostConsensusMsgType {
 				if !c.messageWorker.TryEnqueue(&msg) {
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}

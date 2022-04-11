@@ -130,9 +130,6 @@ func newTestBeacon(t *testing.T) *testBeacon {
 	return ret
 }
 
-func (b *testBeacon) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {
-}
-
 func (b *testBeacon) StartReceivingBlocks() {
 }
 

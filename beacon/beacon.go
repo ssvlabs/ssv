@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -25,9 +26,6 @@ type Options struct {
 type Beacon interface {
 	KeyManager
 	SigningUtil
-
-	// ExtendIndexMap extanding the pubkeys map of the client (in order to prevent redundant call to fetch pubkeys from node)
-	ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey)
 
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error)

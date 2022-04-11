@@ -1,10 +1,11 @@
 package operator
 
 import (
+	"time"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
-	"time"
 )
 
 // getForkVersion returns the fork version of the given slot
@@ -26,12 +27,7 @@ func (n *operatorNode) setFork(slot uint64) {
 
 	n.forkVersion = currentVersion
 
-	// set network fork
-	handler, ok := n.net.(forksprotocol.ForkHandler)
-	if !ok {
-		logger.Panic("network instance is not a fork handler")
-	}
-	if err := handler.OnFork(currentVersion); err != nil {
+	if err := n.validatorsCtrl.OnFork(currentVersion); err != nil {
 		logger.Panic("could not fork network", zap.Error(err))
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"sync"
+	"time"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/beacon/valcheck"
@@ -15,8 +17,6 @@ import (
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/validator/storage"
-	"sync"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -72,13 +72,6 @@ func New(opt Options) *Validator {
 	ibfts[beacon.RoleTypeAttester] = setupIbftController(beacon.RoleTypeAttester, logger, opt.DB, opt.Network, msgQueue, opt.Share, opt.Fork, opt.Signer, opt.SyncRateLimit)
 	//ibfts[beacon.RoleAggregator] = setupIbftController(beacon.RoleAggregator, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
 	//ibfts[beacon.RoleProposer] = setupIbftController(beacon.RoleProposer, logger, db, opt.Network, msgQueue, opt.Share) TODO not supported for now
-
-	// updating goclient map
-	if opt.Share.HasMetadata() && opt.Share.Metadata.Index > 0 {
-		blsPubkey := spec.BLSPubKey{}
-		copy(blsPubkey[:], opt.Share.PublicKey.Serialize())
-		opt.Beacon.ExtendIndexMap(opt.Share.Metadata.Index, blsPubkey)
-	}
 
 	opsHashList := opt.Share.HashOperators()
 	for _, h := range opsHashList {
