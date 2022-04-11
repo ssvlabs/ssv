@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -25,6 +27,8 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
+	ctx         context.Context
+
 	currentInstance instance.Instancer
 	logger          *zap.Logger
 	ibftStorage     qbftstorage.QBFTStore
@@ -47,6 +51,10 @@ type Controller struct {
 
 	// flags
 	readMode bool
+
+	q msgqueue.MsgQueue
+
+	syncDecided SyncDecided
 }
 
 // New is the constructor of Controller
@@ -66,6 +74,14 @@ func New(
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
 
+	q, err := msgqueue.New(
+		logger.With(zap.String("who", "msg_q")),
+		msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+	)
+	if err != nil {
+		// TODO: we should probably stop here, TBD
+		logger.Warn("could not setup msg queue properly", zap.Error(err))
+	}
 	ret := &Controller{
 		ibftStorage:    storage,
 		logger:         logger,
@@ -83,6 +99,8 @@ func New(
 		syncRateLimit: syncRateLimit,
 
 		readMode: readMode,
+
+		q: q,
 	}
 
 	// set flags
@@ -94,20 +112,25 @@ func New(
 
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
-func (c *Controller) Init() error {
-	if !c.isInitHandlers() {
-		c.initHandlers.Store(true)
-		c.logger.Info("iBFT implementation init started")
-		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-		//c.processDecidedQueueMessages()
-		c.processSyncQueueMessages()
-		c.listenToSyncMessages()
-		c.logger.Debug("managed to setup iBFT handlers")
+func (i *Controller) Init() error {
+	if !i.isInitHandlers() {
+		i.initHandlers.Store(true)
+		i.logger.Info("iBFT implementation init started")
+		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+		//i.processDecidedQueueMessages()
+		i.processSyncQueueMessages()
+		i.listenToSyncMessages()
+		i.logger.Debug("managed to setup iBFT handlers")
 	}
 
 	if !c.synced() {
 		// IBFT sync to make sure the operator is aligned for this validator
-		if err := c.SyncIBFT(); err != nil {
+		if err := c.syncDecided(i.ctx, &SyncContext{
+			Store:      i.ibftStorage,
+			Syncer:     i.network,
+			Validate:   i.fork.ValidateDecidedMsg(i.ValidatorShare),
+			Identifier: i.GetIdentifier(),
+		}); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.logger.Debug("iBFT init is already running (syncing history)")
@@ -175,15 +198,14 @@ func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier // TODO should use mutex to lock var?
 }
 
-func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
-	if c.readMode {
-		if err := c.messageHandler(msg); err != nil {
-			return err
-		}
-	} else {
-		// TODO add to queue
+// ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
+func (i *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
+	if i.readMode {
+		err := i.messageHandler(msg)
+		return false, nil, err
 	}
-	return nil
+	i.q.Add(msg)
+	return false, nil, nil
 }
 
 // messageHandler process message from queue,
