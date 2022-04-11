@@ -27,7 +27,12 @@ func (n *operatorNode) setFork(slot uint64) {
 
 	n.forkVersion = currentVersion
 
-	if err := n.validatorsCtrl.OnFork(currentVersion); err != nil {
+	// set network fork
+	handler, ok := n.net.(forksprotocol.ForkHandler)
+	if !ok {
+		logger.Panic("network instance is not a fork handler")
+	}
+	if err := handler.OnFork(currentVersion); err != nil {
 		logger.Panic("could not fork network", zap.Error(err))
 	}
 }
