@@ -21,6 +21,19 @@ const (
 	SSVPostConsensusMsgType
 )
 
+func (mt MsgType) String() string {
+	switch mt {
+	case SSVConsensusMsgType:
+		return "consensus"
+	case SSVPostConsensusMsgType:
+		return "post-consensus"
+	case SSVSyncMsgType:
+		return "sync"
+	default:
+		return "unknown"
+	}
+}
+
 // ValidatorPK is an eth2 validator public key
 type ValidatorPK []byte
 

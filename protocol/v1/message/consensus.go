@@ -23,6 +23,23 @@ const (
 	DecidedMsgType
 )
 
+func (cmt ConsensusMessageType) String() string {
+	switch cmt {
+	case ProposalMsgType:
+		return "propose"
+	case PrepareMsgType:
+		return "prepare"
+	case CommitMsgType:
+		return "commit"
+	case RoundChangeMsgType:
+		return "change_round"
+	case DecidedMsgType:
+		return "decided"
+	default:
+		return "unknown"
+	}
+}
+
 // ProposalData is the structure used for propose messages
 type ProposalData struct {
 	Data                     []byte
