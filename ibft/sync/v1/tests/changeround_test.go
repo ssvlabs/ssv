@@ -50,7 +50,7 @@ func Test_LastChangeRound(t *testing.T) {
 		f := forksv1.New()
 		pid, _ := f.LastChangeRoundProtocol()
 		node.RegisterHandler(string(pid),
-			handlers.LastChangeRoundHandler(loggerFactory(fmt.Sprintf("change-round-%d", i)), store))
+			handlers.LastChangeRoundHandler(loggerFactory(fmt.Sprintf("change-round-%d", i)), store, node))
 	}
 	require.Len(t, lastRoundFetchers, len(ln.Nodes))
 

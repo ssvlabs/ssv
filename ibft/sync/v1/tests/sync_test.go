@@ -46,10 +46,10 @@ func TestHistory_SyncDecided(t *testing.T) {
 		f := forksv1.New()
 		pid, _ := f.DecidedHistoryProtocol()
 		node.RegisterHandler(string(pid),
-			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-%d", i)), store, 10))
+			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-%d", i)), store, node, 10))
 		pid, _ = f.LastDecidedProtocol()
 		node.RegisterHandler(string(pid),
-			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("last-messages-%d", i)), store))
+			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("last-messages-%d", i)), store, node))
 		//pid, _ = f.LastChangeRoundProtocol()
 		//node.RegisterHandler(string(pid),
 		//	handlers.LastChangeRoundHandler(loggerFactory(fmt.Sprintf("change-round-%d", i)), store))

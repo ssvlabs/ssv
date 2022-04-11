@@ -59,7 +59,7 @@ const (
 // ValidationReporting is the interface for reporting on message validation results
 type ValidationReporting interface {
 	// ReportValidation reports the result for the given message
-	ReportValidation(message message.SSVMessage, res MsgValidationResult)
+	ReportValidation(message *message.SSVMessage, res MsgValidationResult)
 }
 
 // Network holds the networking layer used to complement the underlying protocols
