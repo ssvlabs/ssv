@@ -1,11 +1,16 @@
 package msgqueue
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strings"
 	"sync"
 )
+
+// Cleaner is a function for iterating over keys and clean irrelevant ones
+type Cleaner func(string) bool
 
 // Indexer indexes the given message, returns an empty string if not applicable
 // use WithIndexers to inject indexers upon start
@@ -23,6 +28,9 @@ type MsgQueue interface {
 	Pop(idx string, n int) []*message.SSVMessage
 	// Count counts messages for the given index
 	Count(idx string) int
+	// Clean will clean irrelevant keys from the map
+	// TODO: check performance
+	Clean(cleaner Cleaner) int
 }
 
 // New creates a new MsgQueue
@@ -63,6 +71,9 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		msg: msg,
 	}
 	for _, idx := range indexes {
+		if len(idx) == 0 {
+			continue
+		}
 		msgs, ok := q.items[idx]
 		if !ok {
 			msgs = make([]*msgContainer, 0)
@@ -77,6 +88,20 @@ func (q *queue) Purge(idx string) {
 	defer q.itemsLock.Unlock()
 
 	q.items[idx] = make([]*msgContainer, 0)
+}
+
+func (q *queue) Clean(cleaner Cleaner) int {
+	q.itemsLock.Lock()
+	defer q.itemsLock.Unlock()
+
+	cleaned := 0
+	for k := range q.items {
+		if cleaner(k) {
+			cleaned += len(q.items[k])
+			delete(q.items, k)
+		}
+	}
+	return cleaned
 }
 
 func (q *queue) Peek(idx string, n int) []*message.SSVMessage {
@@ -145,4 +170,38 @@ func (q *queue) indexMessage(msg *message.SSVMessage) []string {
 	}
 
 	return indexes
+}
+
+// DefaultMsgCleaner cleans ssv msgs from the queue
+func DefaultMsgCleaner(mt message.MsgType, mid message.Identifier) Cleaner {
+	return func(k string) bool {
+		parts := strings.Split(k, "/")
+		if len(parts) < 2 {
+			return false // unknown
+		}
+		parts = parts[1:]
+		if parts[0] != mt.String() {
+			return false
+		}
+		if parts[2] != fmt.Sprintf("%x", mid) {
+			return false
+		}
+		// clean
+		return true
+	}
+}
+
+// DefaultMsgIndexer returns the default msg indexer to use for message.SSVMessage
+func DefaultMsgIndexer() Indexer {
+	return func(msg *message.SSVMessage) string {
+		if msg == nil {
+			return ""
+		}
+		return DefaultMsgIndex(msg.MsgType, msg.ID)
+	}
+}
+
+// DefaultMsgIndex is the default msg index
+func DefaultMsgIndex(mt message.MsgType, mid message.Identifier) string {
+	return fmt.Sprintf("/%s/id/%x", mt.String(), mid)
 }
