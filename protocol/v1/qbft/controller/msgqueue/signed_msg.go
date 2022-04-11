@@ -8,7 +8,7 @@ import (
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
-//// it will clean messages of the given identifier and under the given height
+// it will clean messages of the given identifier and under the given height
 func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 	return func(k string) bool {
 		parts := strings.Split(k, "/")

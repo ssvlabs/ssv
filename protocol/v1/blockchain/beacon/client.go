@@ -3,7 +3,6 @@ package beacon
 import (
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
@@ -37,8 +36,6 @@ type KeyManager interface {
 
 // Signer is an interface responsible for all signing operations
 type Signer interface {
-	// SignIBFTMessage signs a network iBFT msg
-	SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error)
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }
