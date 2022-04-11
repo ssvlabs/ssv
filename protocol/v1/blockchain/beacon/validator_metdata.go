@@ -2,13 +2,14 @@ package beacon
 
 import (
 	"encoding/hex"
+	"math"
+
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math"
 )
 
 // ValidatorMetadataStorage interface for validator metadata
@@ -108,7 +109,7 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 		return nil, errors.Wrap(err, "failed to get validators data from beacon")
 	}
 	ret := make(map[string]*ValidatorMetadata)
-	for index, v := range validatorsIndexMap {
+	for _, v := range validatorsIndexMap {
 		pk := hex.EncodeToString(v.Validator.PublicKey[:])
 		meta := &ValidatorMetadata{
 			Balance: v.Balance,
@@ -116,8 +117,6 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 			Index:   v.Index,
 		}
 		ret[pk] = meta
-		// once fetched, the internal map in go-client should be updated
-		bc.ExtendIndexMap(index, v.Validator.PublicKey)
 	}
 	return ret, nil
 }

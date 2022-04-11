@@ -3,6 +3,10 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"log"
+	"sync"
+	"time"
+
 	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api/v1"
@@ -19,9 +23,6 @@ import (
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
-	"log"
-	"sync"
-	"time"
 )
 
 const (
@@ -117,13 +118,6 @@ func (gc *goClient) HealthCheck() []string {
 	}
 	metricsBeaconNodeStatus.Set(float64(statusOK))
 	return []string{}
-}
-
-func (gc *goClient) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {
-	gc.indicesMapLock.Lock()
-	defer gc.indicesMapLock.Unlock()
-
-	gc.client.ExtendIndexMap(map[spec.ValidatorIndex]spec.BLSPubKey{index: pubKey})
 }
 
 func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {

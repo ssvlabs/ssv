@@ -12,9 +12,6 @@ type Beacon interface {
 	KeyManager
 	SigningUtil
 
-	// ExtendIndexMap extanding the pubkeys map of the client (in order to prevent redundant call to fetch pubkeys from node)
-	ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey)
-
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error)
 

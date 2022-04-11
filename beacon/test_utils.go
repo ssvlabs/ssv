@@ -1,11 +1,12 @@
 package beacon
 
 import (
+	"sync"
+
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"sync"
 )
 
 func init() {
@@ -27,13 +28,6 @@ type mockBeacon struct {
 	indicesLock    sync.Mutex
 	dutiesResults  map[uint64][]*Duty
 	validatorsData map[spec.BLSPubKey]*v1.Validator
-}
-
-func (m *mockBeacon) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPubKey) {
-	m.indicesLock.Lock()
-	defer m.indicesLock.Unlock()
-
-	m.indicesMap[pubKey] = index
 }
 
 func (m *mockBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error) {

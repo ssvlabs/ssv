@@ -3,15 +3,16 @@ package operator
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
+	"time"
+
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/prysmaticlabs/prysm/time/slots"
-	"log"
-	"net/http"
-	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
