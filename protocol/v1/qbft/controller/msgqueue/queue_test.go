@@ -12,21 +12,24 @@ func TestNewMsgQueue(t *testing.T) {
 	q, err := New(logger, WithIndexers(DefaultMsgIndexer()))
 	require.NoError(t, err)
 
-	q.Add(&message.SSVMessage{
+	msg1 := &message.SSVMessage{
 		MsgType: message.SSVConsensusMsgType,
 		ID:      []byte("dummy-id-1"),
 		Data:    []byte("data"),
-	})
-	q.Add(&message.SSVMessage{
+	}
+	msg2 := &message.SSVMessage{
 		MsgType: message.SSVConsensusMsgType,
 		ID:      []byte("dummy-id-1"),
 		Data:    []byte("data-1"),
-	})
-	q.Add(&message.SSVMessage{
+	}
+	msg3 := &message.SSVMessage{
 		MsgType: message.SSVConsensusMsgType,
 		ID:      []byte("dummy-id-2"),
 		Data:    []byte("data"),
-	})
+	}
+	q.Add(msg1)
+	q.Add(msg2)
+	q.Add(msg3)
 
 	idx := DefaultMsgIndex(message.SSVConsensusMsgType, []byte("dummy-id-1"))
 	require.Equal(t, 2, q.Count(idx))
@@ -39,4 +42,9 @@ func TestNewMsgQueue(t *testing.T) {
 	msgs = q.Pop(idx2, 5)
 	require.Len(t, msgs, 1)
 	require.Equal(t, 0, q.Count(idx2))
+
+	q.Add(msg2)
+	q.Add(msg1)
+	require.Equal(t, 3, q.Clean(DefaultMsgCleaner(message.SSVConsensusMsgType, []byte("dummy-id-1"))))
+	require.Equal(t, 0, q.Clean(DefaultMsgCleaner(message.SSVConsensusMsgType, []byte("dummy-id-1"))))
 }
