@@ -24,3 +24,5 @@ type SyncContext struct {
 }
 
 type SyncDecided func(ctx context.Context, sctx *SyncContext) error
+
+type SyncRound func(ctx context.Context, sctx *SyncContext) ([]*message.SignedMessage, error)
