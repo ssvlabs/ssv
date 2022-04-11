@@ -176,8 +176,12 @@ func (msg *ConsensusMessage) GetCommitData() (*CommitData, error) {
 }
 
 // GetRoundChangeData returns round change specific data
-func (msg *ConsensusMessage) GetRoundChangeData() *RoundChangeData {
-	panic("implement")
+func (msg *ConsensusMessage) GetRoundChangeData() (*RoundChangeData, error) {
+	ret := &RoundChangeData{}
+	if err := ret.Decode(msg.Data); err != nil {
+		return nil, errors.Wrap(err, "could not decode change round data from message")
+	}
+	return ret, nil
 }
 
 // Encode returns a msg encoded bytes or error
@@ -261,18 +265,19 @@ func (signedMsg *SignedMessage) MutualSigners(sig MsgSignature) bool {
 }
 
 // Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-func (signedMsg *SignedMessage) Aggregate(sig MsgSignature) error {
-	if signedMsg.MutualSigners(sig) {
-		return errors.New("can't aggregate 2 signed messages with mutual signers")
-	}
+func (signedMsg *SignedMessage) Aggregate(sigs ...MsgSignature) error {
+	for _, sig := range sigs {
+		if signedMsg.MutualSigners(sig) {
+			return errors.New("can't aggregate 2 signed messages with mutual signers")
+		}
 
-	aggregated, err := signedMsg.Signature.Aggregate(sig.GetSignature())
-	if err != nil {
-		return errors.Wrap(err, "could not aggregate signatures")
+		aggregated, err := signedMsg.Signature.Aggregate(sig.GetSignature())
+		if err != nil {
+			return errors.Wrap(err, "could not aggregate signatures")
+		}
+		signedMsg.Signature = aggregated
+		signedMsg.Signers = append(signedMsg.Signers, sig.GetSigners()...)
 	}
-	signedMsg.Signature = aggregated
-	signedMsg.Signers = append(signedMsg.Signers, sig.GetSigners()...)
-
 	return nil
 }
 

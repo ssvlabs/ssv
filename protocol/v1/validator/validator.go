@@ -89,10 +89,11 @@ func (v *Validator) GetShare() *message.Share {
 func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
 	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
 	// synchronize process
-	processMsg, i, err := ibftController.ProcessMsg(msg)
+	decided, decidedValue, err := ibftController.ProcessMsg(msg)
 	if err != nil {
 		return
 	}
+	//	  TODO need to handle decided and decidedValue
 }
 
 // setupRunners return duty runners map with all the supported duty types

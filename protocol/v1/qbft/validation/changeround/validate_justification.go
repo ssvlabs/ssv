@@ -2,12 +2,9 @@ package changeround
 
 import (
 	"bytes"
-	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 // validateJustification validates change round justifications
@@ -28,53 +25,50 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if signedMessage.Message.Data == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	data := &message.RoundChangeData{}
-	if err := json.Unmarshal(signedMessage.Message.Data, data); err != nil {
-		return err
+	data, err := signedMessage.Message.GetRoundChangeData()
+	if err != nil {
+		return errors.Wrap(err, "failed to get round change data")
 	}
+
 	if data.PreparedValue == nil { // no justification
 		return nil
 	}
-	if data.RoundChangeJustification == nil {
+	if data.GetRoundChangeJustification() == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	if data.RoundChangeJustification.Type != proto.RoundState_Prepare {
+	if data.GetRoundChangeJustification()[0].Message.MsgType != message.RoundChangeMsgType {
 		return errors.New("change round justification msg type not Prepare")
 	}
-	if signedMessage.Message.Height != data.RoundChangeJustification.SeqNumber {
+	if signedMessage.Message.Height != data.GetRoundChangeJustification()[0].Message.Height {
 		return errors.New("change round justification sequence is wrong")
 	}
-	if signedMessage.Message.Round <= data.RoundChangeJustification.Round {
+	if signedMessage.Message.Round <= data.GetRoundChangeJustification()[0].Message.Round {
 		return errors.New("change round justification round lower or equal to message round")
 	}
-	if data.Round != data.RoundChangeJustification.Round {
+	if data.Round != data.GetRoundChangeJustification()[0].Message.Round {
 		return errors.New("change round prepared round not equal to justification msg round")
 	}
-	if !bytes.Equal(signedMessage.Message.Lambda, data.JustificationMsg.Lambda) {
+	if !bytes.Equal(signedMessage.Message.Identifier, data.GetRoundChangeJustification()[0].Message.Identifier) {
 		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
 	}
-	if !bytes.Equal(data.PreparedValue, data.JustificationMsg.Value) {
+	if !bytes.Equal(data.PreparedValue, data.GetRoundChangeJustification()[0].Message.Data) {
 		return errors.New("change round prepared value not equal to justification msg value")
 	}
-	if len(data.SignerIds) < p.share.ThresholdSize() {
+	if len(data.GetRoundChangeJustification()[0].GetSigners()) < p.share.ThresholdSize() {
 		return errors.New("change round justification does not constitute a quorum")
 	}
 
 	// validateJustification justification signature
-	pks, err := p.share.PubKeysByID(data.SignerIds)
+	pks, err := p.share.PubKeysByID(data.GetRoundChangeJustification()[0].GetSigners())
 	if err != nil {
 		return errors.Wrap(err, "change round could not get pubkey")
 	}
 	aggregated := pks.Aggregate()
-	res, err := data.VerifySig(aggregated)
+	err = signedMessage.GetSignature().Verify(signedMessage, message.PrimusTestnet, message.QBFTSigType, aggregated.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "change round could not verify signature")
 
 	}
-	if !res {
-		return errors.New("change round justification signature doesn't verify")
-	}
-
 	return nil
 }
 

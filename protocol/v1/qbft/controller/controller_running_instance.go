@@ -1,39 +1,34 @@
 package controller
 
 import (
-	"context"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"time"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 
-	"github.com/bloxapp/ssv/ibft"
-	instance "github.com/bloxapp/ssv/ibft/instance"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync/speedup"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/msgqueue"
+	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOptions, value []byte) (*instance2.InstanceResult, error) {
-	i.currentInstance = instance.NewInstance(instanceOpts)
-	i.currentInstance.Init()
-	stageChan := i.currentInstance.GetStageChan()
+func (c *Controller) startInstanceWithOptions(instanceOpts *instance2.Options, value []byte) (*instance2.InstanceResult, error) {
+	c.currentInstance = instance2.NewInstance(instanceOpts)
+	c.currentInstance.Init()
+	stageChan := c.currentInstance.GetStageChan()
 
 	// reset leader seed for sequence
-	if err := i.currentInstance.Start(value); err != nil {
+	if err := c.currentInstance.Start(value); err != nil {
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	pk, role := format.IdentifierUnformat(string(i.Identifier))
-	metricsCurrentSequence.WithLabelValues(role, pk).Set(float64(i.currentInstance.State().SeqNumber.Get()))
+	pk, role := format.IdentifierUnformat(string(c.Identifier))
+	metricsCurrentSequence.WithLabelValues(role, pk).Set(float64(c.currentInstance.State().GetHeight()))
 
 	// catch up if we can
-	go i.fastChangeRoundCatchup(i.currentInstance)
+	go c.fastChangeRoundCatchup(c.currentInstance)
 
 	// main instance callback loop
 	var retRes *instance2.InstanceResult
@@ -41,11 +36,11 @@ func (i *Controller) startInstanceWithOptions(instanceOpts *instance.InstanceOpt
 instanceLoop:
 	for {
 		stage := <-stageChan
-		if i.currentInstance == nil {
-			i.logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
+		if c.currentInstance == nil {
+			c.logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
 			break instanceLoop
 		}
-		exit, e := i.instanceStageChange(stage)
+		exit, e := c.instanceStageChange(stage)
 		if e != nil {
 			err = e
 			break instanceLoop
@@ -53,8 +48,8 @@ instanceLoop:
 		if exit {
 			// exited with no error means instance decided
 			// fetch decided msg and return
-			retMsg, found, e := i.ibftStorage.GetDecided(i.Identifier, instanceOpts.SeqNumber)
-			if !found {
+			retMsg, e := c.ibftStorage.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
+			if len(retMsg) == 0 {
 				err = errors.New("could not find decided msg after instance finished")
 				break instanceLoop
 			}
@@ -68,69 +63,82 @@ instanceLoop:
 			}
 			retRes = &instance2.InstanceResult{
 				Decided: true,
-				Msg:     retMsg,
+				Msg:     retMsg[0],
 			}
 			break instanceLoop
 		}
 	}
-	var seq uint64
-	if i.currentInstance != nil {
+	var seq message.Height
+	if c.currentInstance != nil {
 		// saves seq as instance will be cleared
-		seq = i.currentInstance.State().SeqNumber.Get()
+		seq = c.currentInstance.State().GetHeight()
 		// when main instance loop breaks, nil current instance
-		i.currentInstance = nil
+		c.currentInstance = nil
 	}
-	i.logger.Debug("iBFT instance result loop stopped")
+	c.logger.Debug("iBFT instance result loop stopped")
 
-	i.afterInstance(seq, retRes, err)
+	c.afterInstance(seq, retRes, err)
 
 	return retRes, err
 }
 
 // afterInstance is triggered after the instance was finished
-func (i *Controller) afterInstance(seq uint64, res *instance2.InstanceResult, err error) {
+func (c *Controller) afterInstance(height message.Height, res *instance2.InstanceResult, err error) {
 	// if instance was decided -> wait for late commit messages
 	decided := res != nil && res.Decided
 	if decided && err == nil {
-		if seq == uint64(0) {
+		if height == message.Height(0) {
 			if res.Msg == nil || res.Msg.Message == nil {
 				// missing sequence number
 				return
 			}
-			seq = res.Msg.Message.SeqNumber
+			height = res.Msg.Message.Height
 		}
-		go i.listenToLateCommitMsgs(i.Identifier[:], seq)
+		// TODO move to queue strategy
+		go c.listenToLateCommitMsgs(c.Identifier[:], height)
 		return
 	}
 	// didn't decided -> purge messages
-	i.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(i.Identifier[:], seq))
+	//c.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(c.Identifier[:], height)) TODO need to clear worker-queue
 }
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
-func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
+func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	switch stage {
-	case proto.RoundState_Prepare:
-		if err := i.ibftStorage.SaveCurrentInstance(i.GetIdentifier(), i.currentInstance.State()); err != nil {
+	case qbft.RoundState_Prepare:
+		if err := c.ibftStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
-	case proto.RoundState_Decided:
-		agg, err := i.currentInstance.CommittedAggregatedMsg()
+	case qbft.RoundState_Decided:
+		agg, err := c.currentInstance.CommittedAggregatedMsg()
 		if err != nil {
 			return true, errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 		}
-		if err = i.ibftStorage.SaveDecided(agg); err != nil {
+		if err = c.ibftStorage.SaveDecided(agg); err != nil {
 			return true, errors.Wrap(err, "could not save aggregated commit msg to storage")
 		}
-		if err = i.ibftStorage.SaveHighestDecidedInstance(agg); err != nil {
+		if err = c.ibftStorage.SaveLastDecided(agg); err != nil {
 			return true, errors.Wrap(err, "could not save highest decided message to storage")
 		}
-		if err = i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), agg); err != nil {
+		ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
+		if err != nil {
+			return true, errors.Wrap(err, "could not get SSV message aggregated commit msg")
+		}
+		if err = c.network.Broadcast(ssvMsg); err != nil {
 			return true, errors.Wrap(err, "could not broadcast decided message")
 		}
-		i.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Lambda)), zap.Uint64("seqNum", agg.Message.SeqNumber))
+		c.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Identifier)), zap.Uint64("seqNum", uint64(agg.Message.Height)))
 		return false, nil
-	case proto.RoundState_Stopped:
-		i.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", i.currentInstance.State().SeqNumber.Get()))
+	case qbft.RoundState_ChangeRound:
+		// set time for next round change
+		c.currentInstance.ResetRoundTimer()
+		// broadcast round change
+		if err := c.currentInstance.BroadcastChangeRound(); err != nil {
+			c.logger.Error("could not broadcast round change message", zap.Error(err))
+		}
+
+	case qbft.RoundState_Stopped:
+		c.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", uint64(c.currentInstance.State().GetHeight())))
 		return true, nil
 	}
 	return false, nil
@@ -138,9 +146,9 @@ func (i *Controller) instanceStageChange(stage proto.RoundState) (bool, error) {
 
 // listenToLateCommitMsgs handles late arrivals of commit messages and pick up orphan commit messages that
 // were not included in the decided message when quorum was achieved
-func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
-	idxKey := msgqueue.IBFTMessageIndexKey(identifier, seq)
-	defer i.msgQueue.PurgeIndexedMessages(idxKey)
+func (c *Controller) listenToLateCommitMsgs(identifier []byte, seq message.Height) {
+	/*idxKey := msgqueue.IBFTMessageIndexKey(identifier, uint64(seq))
+	//defer c.msgQueue.PurgeIndexedMessages(idxKey) TODO need to clear worker-queue
 
 	f := func(stopper tasks.Stopper) (interface{}, error) {
 	loop:
@@ -148,29 +156,29 @@ func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
 			if stopper.IsStopped() {
 				break loop
 			}
-			if netMsg := i.msgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
+			if netMsg := c.msgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
 				if netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
 					// not a commit message -> skip
 					continue
 				}
-				logger := i.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
+				logger := c.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
 					zap.Uint64s("signers", netMsg.SignedMessage.SignerIds))
 				// TODO: need to use the fork
-				if err := instance.CommitMsgValidationPipelineV0(identifier, seq, i.ValidatorShare).Run(netMsg.SignedMessage); err != nil {
-					i.logger.Error("received invalid late commit message", zap.Error(err))
+				if err := instance.CommitMsgValidationPipelineV0(identifier, seq, c.ValidatorShare).Run(netMsg.SignedMessage); err != nil {
+					c.logger.Error("received invalid late commit message", zap.Error(err))
 					continue
 				}
-				updated, err := instance.ProcessLateCommitMsg(netMsg.SignedMessage, i.ibftStorage,
-					i.ValidatorShare)
+				updated, err := instance.ProcessLateCommitMsg(netMsg.SignedMessage, c.ibftStorage,
+					c.ValidatorShare)
 				if err != nil {
 					logger.Error("failed to process late commit message", zap.Error(err))
 				} else if updated != nil {
 					logger.Debug("decided message was updated", zap.Uint64s("updated signers", updated.SignerIds))
-					if err := i.network.BroadcastDecided(i.ValidatorShare.PublicKey.Serialize(), updated); err != nil {
+					if err := c.network.BroadcastDecided(c.ValidatorShare.PublicKey.Serialize(), updated); err != nil {
 						logger.Error("could not broadcast decided message", zap.Error(err))
 					}
 					logger.Debug("updated decided was broadcasted")
-					ibft.ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
+					ibft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 					break loop
 				}
 			} else {
@@ -180,32 +188,32 @@ func (i *Controller) listenToLateCommitMsgs(identifier []byte, seq uint64) {
 		return nil, nil
 	}
 
-	i.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", seq))
+	c.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", seq))
 	_, _, _ = tasks.ExecWithTimeout(context.Background(), f, time.Minute*6)
-	i.logger.Debug("stopped listening to late commit msgs", zap.Uint64("seq_number", seq))
+	c.logger.Debug("stopped listening to late commit msgs", zap.Uint64("seq_number", seq))*/
 }
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
-func (i *Controller) fastChangeRoundCatchup(instance instance2.Instance) {
+func (c *Controller) fastChangeRoundCatchup(instance instance2.Instancer) {
 	sync := speedup.New(
-		i.logger,
-		i.Identifier,
-		i.ValidatorShare.PublicKey.Serialize(),
-		instance.State().SeqNumber.Get(),
-		i.network,
-		instance.ChangeRoundMsgValidationPipeline(),
+		c.logger,
+		c.Identifier,
+		c.ValidatorShare.PublicKey.Serialize(),
+		instance.State().GetHeight(),
+		c.network,
+		instance2.ChangeRoundMsgValidationPipeline(),
 	)
 	msgs, err := sync.Start()
 	if err != nil {
-		i.logger.Error("failed fast change round catchup", zap.Error(err))
+		c.logger.Error("failed fast change round catchup", zap.Error(err))
 	} else {
 		for _, msg := range msgs {
-			i.msgQueue.AddMessage(&network.Message{
+			c.msgQueue.AddMessage(&network.Message{
 				SignedMessage: msg,
 				Type:          network.NetworkMsg_IBFTType,
 			})
 		}
-		i.logger.Info("fast change round catchup finished", zap.Int("found_msgs", len(msgs)))
+		c.logger.Info("fast change round catchup finished", zap.Int("found_msgs", len(msgs)))
 	}
 }

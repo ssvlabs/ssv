@@ -25,7 +25,7 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
-	currentInstance instance.Instance
+	currentInstance instance.Instancer
 	logger          *zap.Logger
 	ibftStorage     qbftstorage.QBFTStore
 	network         p2pprotocol.Network
@@ -94,70 +94,70 @@ func New(
 
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
-func (i *Controller) Init() error {
-	if !i.isInitHandlers() {
-		i.initHandlers.Store(true)
-		i.logger.Info("iBFT implementation init started")
-		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-		//i.processDecidedQueueMessages()
-		i.processSyncQueueMessages()
-		i.listenToSyncMessages()
-		i.logger.Debug("managed to setup iBFT handlers")
+func (c *Controller) Init() error {
+	if !c.isInitHandlers() {
+		c.initHandlers.Store(true)
+		c.logger.Info("iBFT implementation init started")
+		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+		//c.processDecidedQueueMessages()
+		c.processSyncQueueMessages()
+		c.listenToSyncMessages()
+		c.logger.Debug("managed to setup iBFT handlers")
 	}
 
-	if !i.synced() {
+	if !c.synced() {
 		// IBFT sync to make sure the operator is aligned for this validator
-		if err := i.SyncIBFT(); err != nil {
+		if err := c.SyncIBFT(); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
-				i.logger.Debug("iBFT init is already running (syncing history)")
+				c.logger.Debug("iBFT init is already running (syncing history)")
 				return nil
 			}
-			i.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
-			ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
+			c.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
+			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 			return errors.Wrap(err, "could not sync history")
 		}
-		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-		i.logger.Info("iBFT implementation init finished")
+		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
+		c.logger.Info("iBFT implementation init finished")
 	}
 
 	return nil
 }
 
 // initialized return true is both isInitHandlers and synced
-func (i *Controller) initialized() bool {
-	return i.isInitHandlers() && i.synced()
+func (c *Controller) initialized() bool {
+	return c.isInitHandlers() && c.synced()
 }
 
 // synced return true if syncer synced
-func (i *Controller) synced() bool {
-	return i.initSynced.Load().(bool)
+func (c *Controller) synced() bool {
+	return c.initSynced.Load().(bool)
 }
 
 // isInitHandlers return true if handlers init
-func (i *Controller) isInitHandlers() bool {
-	return i.initHandlers.Load().(bool)
+func (c *Controller) isInitHandlers() bool {
+	return c.initHandlers.Load().(bool)
 }
 
 // StartInstance - starts an ibft instance or returns error
-func (i *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.InstanceResult, err error) {
-	instanceOpts, err := i.instanceOptionsFromStartOptions(opts)
+func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.InstanceResult, err error) {
+	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
 	}
 
-	if err := i.canStartNewInstance(*instanceOpts); err != nil {
+	if err := c.canStartNewInstance(*instanceOpts); err != nil {
 		return nil, errors.WithMessage(err, "can't start new iBFT instance")
 	}
 
-	done := reportIBFTInstanceStart(i.ValidatorShare.PublicKey.SerializeToHexStr())
+	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	res, err = i.startInstanceWithOptions(instanceOpts, opts.Value)
+	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
 	defer func() {
 		done()
 		// report error status if the instance returned error
 		if err != nil {
-			ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), true, true)
+			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, true)
 			return
 		}
 	}()
@@ -166,24 +166,24 @@ func (i *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (i *Controller) GetIBFTCommittee() map[message.OperatorID]*message.Node {
-	return i.ValidatorShare.Committee
+func (c *Controller) GetIBFTCommittee() map[message.OperatorID]*message.Node {
+	return c.ValidatorShare.Committee
 }
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
-func (i *Controller) GetIdentifier() []byte {
-	return i.Identifier // TODO should use mutex to lock var?
+func (c *Controller) GetIdentifier() []byte {
+	return c.Identifier // TODO should use mutex to lock var?
 }
 
-func (i *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
-	if i.readMode {
-		if err := i.messageHandler(msg); err != nil {
-			return false, nil, err
+func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
+	if c.readMode {
+		if err := c.messageHandler(msg); err != nil {
+			return err
 		}
 	} else {
 		// TODO add to queue
 	}
-	return false, nil, nil //  TODO need to return default here
+	return nil
 }
 
 // messageHandler process message from queue,

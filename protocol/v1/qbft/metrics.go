@@ -24,10 +24,8 @@ func init() {
 
 // ReportDecided reports on a decided message
 func ReportDecided(pk string, msg *message.SignedMessage) {
-	_, role := format.IdentifierUnformat(string(msg.Message.GetLambda()))
-	for _, nodeID := range msg.SignerIds {
-		metricsDecidedSigners.WithLabelValues(
-			role, pk,
-			strconv.FormatUint(nodeID, 10)).Set(float64(msg.Message.SeqNumber))
+	_, role := format.IdentifierUnformat(string(msg.Message.Identifier))
+	for _, nodeID := range msg.Signers {
+		metricsDecidedSigners.WithLabelValues(role, pk, strconv.FormatUint(uint64(nodeID), 10)).Set(float64(msg.Message.Height))
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"go.uber.org/atomic"
 	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
@@ -76,16 +75,16 @@ func bytesToChangeRoundData(input []byte) *message.RoundChangeData {
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[keymanager.OperatorID]*keymanager.Node) {
+func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[message.OperatorID]*message.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[keymanager.OperatorID]*keymanager.Node)
+	nodes := make(map[message.OperatorID]*message.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[keymanager.OperatorID(uint64(i))] = &keymanager.Node{
-			IbftId: uint64(i),
+		nodes[message.OperatorID(uint64(i))] = &message.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
 		sks[uint64(i)] = sk
@@ -95,15 +94,15 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[keymanager.OperatorI
 
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
-	sigType := keymanager.QBFTSigType
-	domain := keymanager.ComputeSignatureDomain(keymanager.PrimusTestnet, sigType)
-	sigRoot, err := keymanager.ComputeSigningRoot(msg, domain)
+	sigType := message.QBFTSigType
+	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
+	sigRoot, err := message.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
 	return &message.SignedMessage{
 		Message:   msg,
-		Signers:   []keymanager.OperatorID{keymanager.OperatorID(id)},
+		Signers:   []message.OperatorID{message.OperatorID(id)},
 		Signature: sig.Serialize(),
 	}
 }
@@ -113,17 +112,17 @@ func TestRoundChangeInputValue(t *testing.T) {
 
 	round := atomic.Value{}
 	round.Store(message.Round(1))
-	preparedRound := atomic.Uint64{}
-	preparedRound.Store(0)
+	preparedRound := atomic.Value{}
+	preparedRound.Store(message.Round(0))
 
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
-		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare:  &keymanager.Share{Committee: nodes},
+		Config:          qbft.DefaultConsensusParams(),
+		ValidatorShare:  &message.Share{Committee: nodes},
 		state: &qbft.State{
 			Round:         round,
 			PreparedRound: preparedRound,
-			PreparedValue: atomic.String{},
+			PreparedValue: atomic.Value{},
 		},
 	}
 
@@ -135,9 +134,9 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
 	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.GetPreparedRound())
-	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification())
-	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification())
-	require.Len(t, noPrepareChangeRoundData.SignerIds, 0)
+	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].Message)
+	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSignature())
+	require.Len(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSigners(), 0)
 
 	// add votes
 	instance.PrepareMessages.AddMessage(SignMsg(t, 1, secretKey[1], &message.ConsensusMessage{
@@ -176,8 +175,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       []byte("value"),
 	}))
-	instance.State().PreparedRound.Set(1)
-	instance.State().PreparedValue.Set([]byte("value"))
+	instance.State().PreparedRound.Store(message.Round(1))
+	instance.State().PreparedValue.Store([]byte("value"))
 
 	// with a prepared round
 	byts, err = instance.roundChangeInputValue()
@@ -193,16 +192,16 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 
 	round := atomic.Value{}
 	round.Store(message.Round(1))
-	preparedRound := atomic.Uint64{}
-	preparedRound.Store(0)
+	preparedRound := atomic.Value{}
+	preparedRound.Store(message.Round(0))
 
 	instance := &Instance{
-		Config:         proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{Committee: nodes},
+		Config:         qbft.DefaultConsensusParams(),
+		ValidatorShare: &message.Share{Committee: nodes},
 		state: &qbft.State{
 			Round:         round,
 			PreparedRound: preparedRound,
-			PreparedValue: atomic.String{},
+			PreparedValue: atomic.Value{},
 		},
 	}
 
@@ -283,7 +282,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -312,7 +311,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.ProposalMsgType,
 								Height:     0,
@@ -341,7 +340,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -370,7 +369,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -399,7 +398,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -428,7 +427,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2},
+							Signers:   []message.OperatorID{1, 2},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -457,7 +456,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -486,7 +485,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []keymanager.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -506,9 +505,11 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// sign if needed
-			if test.msg.GetRoundChangeData() != nil {
+			roundChangeData, err := test.msg.GetRoundChangeData()
+			require.NoError(t, err)
+			if roundChangeData != nil {
 				var signature *bls.Sign
-				data := test.msg.GetRoundChangeData()
+				data, _ := test.msg.GetRoundChangeData()
 				if len(test.justificationSigIds) > 0 {
 					for _, id := range test.justificationSigIds {
 						sign, err := data.GetRoundChangeJustification().Sign(secretKeys[id])
@@ -527,9 +528,9 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			signature, err := test.msg.Sign(secretKeys[test.signerID])
 			require.NoError(t, err)
 
-			err = changeround2.Validate(instance.ValidatorShare).Run(&message.SignedMessage{
+			_, err = changeround2.Validate(instance.ValidatorShare).Run(&message.SignedMessage{
 				Signature: signature.Serialize(),
-				Signers:   []keymanager.OperatorID{keymanager.OperatorID(test.signerID)},
+				Signers:   []message.OperatorID{message.OperatorID(test.signerID)},
 				Message:   test.msg,
 			})
 			if len(test.expectedError) > 0 {
@@ -557,7 +558,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{Committee: map[keymanager.OperatorID]*keymanager.Node{
+		ValidatorShare: &message.Share{Committee: map[message.OperatorID]*message.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -579,7 +580,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	t.Run("change round quorum no previous prepare", func(t *testing.T) {
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []keymanager.OperatorID{keymanager.OperatorID(1)},
+			Signers:   []message.OperatorID{message.OperatorID(1)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -589,7 +590,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []keymanager.OperatorID{keymanager.OperatorID(2)},
+			Signers:   []message.OperatorID{message.OperatorID(2)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -599,7 +600,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []keymanager.OperatorID{keymanager.OperatorID(3)},
+			Signers:   []message.OperatorID{message.OperatorID(3)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -624,7 +625,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		instance.ChangeRoundMessages = msgcontinmem.New(3, 2)
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []keymanager.OperatorID{keymanager.OperatorID(1)},
+			Signers:   []message.OperatorID{message.OperatorID(1)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -634,7 +635,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []keymanager.OperatorID{keymanager.OperatorID(2)},
+			Signers:   []message.OperatorID{message.OperatorID(2)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -644,7 +645,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []keymanager.OperatorID{keymanager.OperatorID(3)},
+			Signers:   []message.OperatorID{message.OperatorID(3)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -664,7 +665,7 @@ func TestHighestPrepared(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{Committee: map[keymanager.OperatorID]*keymanager.Node{
+		ValidatorShare: &message.Share{Committee: map[message.OperatorID]*message.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -674,7 +675,7 @@ func TestHighestPrepared(t *testing.T) {
 
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
-		Signers:   []keymanager.OperatorID{keymanager.OperatorID(1)},
+		Signers:   []message.OperatorID{message.OperatorID(1)},
 		Message: &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     1,
@@ -684,7 +685,7 @@ func TestHighestPrepared(t *testing.T) {
 		}})
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
-		Signers:   []keymanager.OperatorID{keymanager.OperatorID(2)},
+		Signers:   []message.OperatorID{message.OperatorID(2)},
 		Message: &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     1,
@@ -703,7 +704,7 @@ func TestHighestPrepared(t *testing.T) {
 	// test 2 equals
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
-		Signers:   []keymanager.OperatorID{keymanager.OperatorID(2)},
+		Signers:   []message.OperatorID{message.OperatorID(2)},
 		Message: &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     1,
@@ -805,7 +806,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 
 	instance := &Instance{
 		Config: proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &message.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
@@ -819,7 +820,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := instance.ChangeRoundMsgValidationPipeline().Run(test.msg)
+			_, err := instance.ChangeRoundMsgValidationPipeline().Run(test.msg)
 			if len(test.expectedError) > 0 {
 				require.EqualError(t, err, test.expectedError)
 			} else {
@@ -840,7 +841,7 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &message.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
@@ -865,7 +866,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &keymanager.Share{
+		ValidatorShare: &message.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},

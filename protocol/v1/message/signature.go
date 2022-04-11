@@ -39,7 +39,7 @@ type MsgSignature interface {
 	// MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
 	MatchedSigners(ids []OperatorID) bool
 	// Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-	Aggregate(signedMsg MsgSignature) error
+	Aggregate(signedMsg ...MsgSignature) error // value should depend on implementation
 }
 
 // SignatureDomain represents signature domain bytes

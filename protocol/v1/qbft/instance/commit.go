@@ -3,7 +3,7 @@ package instance
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	ibft2 "github.com/bloxapp/ssv/protocol/v1/qbft"
+	qbft "github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -46,7 +46,7 @@ func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFT
 	if err := qbftStore.SaveDecided(decidedMsg); err != nil {
 		return nil, errors.Wrap(err, "could not save aggregated decided message")
 	}
-	ibft2.ReportDecided(share.PublicKey.SerializeToHexStr(), msg)
+	qbft.ReportDecided(share.PublicKey.SerializeToHexStr(), msg)
 	return decidedMsg, nil
 }
 
@@ -118,19 +118,31 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *Instance) uponCommitMsg() validation.SignedMessagePipeline {
 	return validation.WrapFunc("upon commit msg", func(signedMessage *message.SignedMessage) error {
-		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Data)
+		msgCommitData, err := signedMessage.Message.GetCommitData()
+		if err != nil {
+			return errors.Wrap(err, "failed to get commit data")
+		}
+		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", hex.EncodeToString(i.State().Lambda.Get())), zap.Uint64("round", i.State().Round.Get()),
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Uint64("round", uint64(i.State().GetRound())),
 					zap.Int("got_votes", len(sigs)))
-				aggMsg, err := proto.AggregateMessages(sigs)
-				if err != nil {
+
+				// need to cant signedMessages to message.MsgSignature TODO other way? (:Niv)
+				var msgSig []message.MsgSignature
+				for _, s := range sigs {
+					msgSig = append(msgSig, s)
+				}
+
+				aggMsg := sigs[0]
+				if err := aggMsg.Aggregate(msgSig...); err != nil {
 					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err))
 				}
+
 				i.decidedMsg = aggMsg
 				// mark instance commit
-				i.ProcessStageChange(proto.RoundState_Decided)
+				i.ProcessStageChange(qbft.RoundState_Decided)
 				i.Stop()
 			})
 		}
@@ -138,12 +150,12 @@ func (i *Instance) uponCommitMsg() validation.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generateCommitMessage(value []byte) *proto.Message {
-	return &proto.Message{
-		Type:      proto.RoundState_Commit,
-		Round:     i.State().Round.Get(),
-		Lambda:    i.State().Lambda.Get(),
-		SeqNumber: i.State().SeqNumber.Get(),
-		Value:     value,
+func (i *Instance) generateCommitMessage(value []byte) *message.ConsensusMessage {
+	return &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
+		Height:     i.State().GetHeight(),
+		Round:      i.State().GetRound(),
+		Identifier: i.State().GetIdentifier(),
+		Data:       value,
 	}
 }

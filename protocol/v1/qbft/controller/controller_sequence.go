@@ -16,15 +16,15 @@ An incremental number for a new iBFT instance.
 A fully synced iBFT node must have all sequences to be fully synced, no skips or missing sequences.
 */
 
-func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
-	if !i.initialized() {
+func (c *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
+	if !c.initialized() {
 		return errors.New("iBFT hasn't initialized yet")
 	}
-	if i.currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", i.currentInstance.State().SeqNumber.Get())
+	if c.currentInstance != nil {
+		return errors.Errorf("current instance (%d) is still running", c.currentInstance.State().SeqNumber.Get())
 	}
 
-	highestKnown, err := i.highestKnownDecided()
+	highestKnown, err := c.highestKnownDecided()
 	if err != nil {
 		return err
 	}
@@ -42,12 +42,12 @@ func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 	}
 
 	if opts.RequireMinPeers {
-		if err := i.waitForMinPeers(1, true); err != nil {
+		if err := c.waitForMinPeers(1, true); err != nil {
 			return err
 		}
 	}
 
-	if !i.ValidatorShare.OperatorReady() {
+	if !c.ValidatorShare.OperatorReady() {
 		return errors.New("operator share not ready")
 	}
 
@@ -56,8 +56,8 @@ func (i *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (i *Controller) NextSeqNumber() (message.Height, error) {
-	knownDecided, err := i.highestKnownDecided()
+func (c *Controller) NextSeqNumber() (message.Height, error) {
+	knownDecided, err := c.highestKnownDecided()
 	if err != nil {
 		return 0, err
 	}
@@ -67,25 +67,25 @@ func (i *Controller) NextSeqNumber() (message.Height, error) {
 	return message.Height(knownDecided.Message.SeqNumber + 1), nil
 }
 
-func (i *Controller) instanceOptionsFromStartOptions(opts instance2.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
-	leaderSelectionSeed := append(i.Identifier, []byte(strconv.FormatUint(opts.SeqNumber, 10))...)
-	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(i.ValidatorShare.CommitteeSize()))
+func (c *Controller) instanceOptionsFromStartOptions(opts instance2.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
+	leaderSelectionSeed := append(c.Identifier, []byte(strconv.FormatUint(opts.SeqNumber, 10))...)
+	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err
 	}
 
 	return &instance.InstanceOptions{
 		Logger:          opts.Logger,
-		ValidatorShare:  i.ValidatorShare,
-		Network:         i.network,
-		Queue:           i.msgQueue,
+		ValidatorShare:  c.ValidatorShare,
+		Network:         c.network,
+		Queue:           c.msgQueue,
 		ValueCheck:      opts.ValueCheck,
 		LeaderSelector:  leaderSelc,
-		Config:          i.instanceConfig,
-		Lambda:          i.Identifier,
+		Config:          c.instanceConfig,
+		Lambda:          c.Identifier,
 		SeqNumber:       opts.SeqNumber,
-		Fork:            i.fork.InstanceFork(),
+		Fork:            c.fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
-		Signer:          i.signer,
+		Signer:          c.signer,
 	}, nil
 }

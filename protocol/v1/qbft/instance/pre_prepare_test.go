@@ -197,7 +197,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Lambda: []byte("Lambda"),
 		Value:  []byte(time.Now().Weekday().String()),
 	})
-	err = instance.PrePrepareMsgPipelineV0().Run(msg)
+	_, err = instance.PrePrepareMsgPipelineV0().Run(msg)
 	require.NoError(t, err)
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
@@ -205,7 +205,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.True(t, instance.State().Stage.Get() == int32(proto.RoundState_PrePrepare))
 
 	// return nil if another pre-prepare received.
-	err = instance.UponPrePrepareMsg().Run(msg)
+	_, err = instance.UponPrePrepareMsg().Run(msg)
 	require.NoError(t, err)
 }
 

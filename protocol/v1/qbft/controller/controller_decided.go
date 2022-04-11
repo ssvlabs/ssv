@@ -1,16 +1,16 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // ValidateDecidedMsg - the main decided msg pipeline
-func (i *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
-	return i.fork.ValidateDecidedMsg(i.ValidatorShare).Run(msg)
+func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
+	return c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
 }
 
 // ProcessDecidedMessage is responsible for processing an incoming decided message.
@@ -23,52 +23,52 @@ upon receiving a valid hROUND-CHANGE, λi, −, −, −i message from pj ∧ pi
 by calling Decide(λi,− , Qcommit) do
 	send Qcommit to process pj
 */
-func (i *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
-	if err := i.ValidateDecidedMsg(msg); err != nil {
-		i.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
+func (c *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
+	if err := c.ValidateDecidedMsg(msg); err != nil {
+		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return
 	}
-	logger := i.logger.With(zap.Uint64("seq number", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
+	logger := c.logger.With(zap.Uint64("seq number", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
 
 	logger.Debug("received valid decided msg")
 
 	// if we already have this in storage, pass
-	known, err := i.decidedMsgKnown(msg)
+	known, err := c.decidedMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return
 	}
 	if known {
 		// if decided is known, check for a more complete message (more signers)
-		if ignore, _ := i.checkDecidedMessageSigners(msg); !ignore {
-			if err := i.ibftStorage.SaveDecided(msg); err != nil {
+		if ignore, _ := c.checkDecidedMessageSigners(msg); !ignore {
+			if err := c.ibftStorage.SaveDecided(msg); err != nil {
 				logger.Error("can't update decided message", zap.Error(err))
 				return
 			}
 			logger.Debug("decided was updated")
-			ibft.ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 			return
 		}
 		logger.Debug("decided is known, skipped")
 		return
 	}
 
-	ibft.ReportDecided(i.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
 	// decided for current instance
-	if i.forceDecideCurrentInstance(msg) {
+	if c.forceDecideCurrentInstance(msg) {
 		return
 	}
 
 	// decided for later instances which require a full sync
-	shouldSync, err := i.decidedRequiresSync(msg)
+	shouldSync, err := c.decidedRequiresSync(msg)
 	if err != nil {
 		logger.Error("can't check decided msg", zap.Error(err))
 		return
 	}
 	if shouldSync {
-		i.logger.Info("stopping current instance and syncing..")
-		if err := i.SyncIBFT(); err != nil {
+		c.logger.Info("stopping current instance and syncing..")
+		if err := c.SyncIBFT(); err != nil {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}
 	}
@@ -76,11 +76,11 @@ func (i *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
 
 // forceDecideCurrentInstance will force the current instance to decide provided a signed decided msg.
 // will return true if executed, false otherwise
-func (i *Controller) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
-	if i.decidedForCurrentInstance(msg) {
+func (c *Controller) forceDecideCurrentInstance(msg *message.SignedMessage) bool {
+	if c.decidedForCurrentInstance(msg) {
 		// stop current instance
-		if i.currentInstance != nil {
-			i.currentInstance.ForceDecide(msg)
+		if c.currentInstance != nil {
+			c.currentInstance.ForceDecide(msg)
 		}
 		return true
 	}
@@ -88,65 +88,65 @@ func (i *Controller) forceDecideCurrentInstance(msg *proto.SignedMessage) bool {
 }
 
 // highestKnownDecided returns the highest known decided instance
-func (i *Controller) highestKnownDecided() (*proto.SignedMessage, error) {
-	highestKnown, _, err := i.ibftStorage.GetHighestDecidedInstance(i.GetIdentifier())
+func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
+	highestKnown, err := c.ibftStorage.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}
 	return highestKnown, nil
 }
 
-func (i *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, error) {
-	_, found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, error) {
+	msgs, err := c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
-	return found, nil
+	return len(msgs) > 0, nil
 }
 
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
-func (i *Controller) checkDecidedMessageSigners(msg *proto.SignedMessage) (bool, error) {
-	decided, found, err := i.ibftStorage.GetDecided(msg.Message.Lambda, msg.Message.SeqNumber)
+func (c *Controller) checkDecidedMessageSigners(msg *message.SignedMessage) (bool, error) {
+	decided, err := c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get decided instance from storage")
 	}
-	if !found {
+	if len(decided) == 0 {
 		return false, nil
 	}
 	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
-	if len(decided.SignerIds) < i.ValidatorShare.CommitteeSize() && len(msg.SignerIds) > len(decided.SignerIds) {
+	if len(decided[0].Signers) < c.ValidatorShare.CommitteeSize() && len(msg.GetSigners()) > len(decided[0].Signers) {
 		return false, nil
 	}
 	return true, nil
 }
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
-func (i *Controller) decidedForCurrentInstance(msg *proto.SignedMessage) bool {
-	return i.currentInstance != nil && i.currentInstance.State().SeqNumber.Get() == msg.Message.SeqNumber
+func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool {
+	return c.currentInstance != nil && c.currentInstance.State().GetHeight() == msg.Message.Height
 }
 
 // decidedRequiresSync returns true if:
 // 		- highest known seq lower than msg seq
 // 		- AND msg is not for current instance
-func (i *Controller) decidedRequiresSync(msg *proto.SignedMessage) (bool, error) {
+func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, error) {
 	// if IBFT sync failed to init, trigger it again
-	if !i.initSynced.Get() {
+	if !c.initSynced.Get() {
 		return true, nil
 	}
-	if i.decidedForCurrentInstance(msg) {
+	if c.decidedForCurrentInstance(msg) {
 		return false, nil
 	}
 
-	if msg.Message.SeqNumber == 0 {
+	if msg.Message.Height == 0 {
 		return false, nil
 	}
 
-	highest, found, err := i.ibftStorage.GetHighestDecidedInstance(msg.Message.Lambda)
-	if !found {
-		return msg.Message.SeqNumber > 0, nil
+	highest, err := c.ibftStorage.GetLastDecided(msg.Message.Identifier)
+	if highest == nil {
+		return msg.Message.Height > 0, nil
 	}
 	if err != nil {
 		return false, errors.Wrap(err, "could not get highest decided instance from storage")
 	}
-	return highest.Message.SeqNumber < msg.Message.SeqNumber, nil
+	return highest.Message.Height < msg.Message.Height, nil
 }

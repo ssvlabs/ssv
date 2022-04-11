@@ -10,24 +10,19 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 	case message.ProposalMsgType:
 	case message.PrepareMsgType:
 	case message.CommitMsgType:
-		// TODO check if instance nil?
-		i.currentInstance.ProcessMsg(msg)
 	case message.RoundChangeMsgType:
+		// TODO check if instance nil?
+		decided, decidedValue, err := c.currentInstance.ProcessMsg(signedMessage)
+		if err != nil {
+			return err
+		}
+
 	case message.DecidedMsgType:
-		i.ProcessDecidedMessage(msg)
+		c.ProcessDecidedMessage(signedMessage)
+	default:
+		return errors.Errorf("message type is not suported")
 	}
 
-	return false, nil, errors.Errorf("message type is not suported")
-
-	decided, decidedValueBytes, err := controller.ProcessMsg(signedMessage)
-	if err != nil {
-		return err
-	}
-	if decided {
-
-	}
-	//	 TODO handle decided and decidedValueBytes
-	return nil
 }
 
 func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message.SignedPostConsensusMessage) error {
@@ -35,11 +30,11 @@ func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message
 }
 
 func (c *Controller) validateMessage(msg *message.SSVMessage) error {
-	if !v.share.PublicKey.MessageIDBelongs(msg.GetIdentifier()) {
+	if !c.ValidatorShare.PublicKey.MessageIDBelongs(msg.GetIdentifier()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if v.DutyRunners.DutyRunnerForMsgID(msg.GetIdentifier()) == nil {
+	if c.DutyRunners.DutyRunnerForMsgID(msg.GetIdentifier()) == nil {
 		return errors.New("could not find duty runner for msg ID")
 	}
 

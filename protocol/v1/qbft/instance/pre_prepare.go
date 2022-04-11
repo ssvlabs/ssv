@@ -113,7 +113,7 @@ func (i *Instance) generatePrePrepareMessage(value []byte) message.ConsensusMess
 	}
 }
 
-func (i *Instance) checkExistingPrePrepare(round uint64) (bool, *message.SignedMessage, error) {
+func (i *Instance) checkExistingPrePrepare(round message.Round) (bool, *message.SignedMessage, error) {
 	msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round)
 	if len(msgs) == 1 {
 		return true, msgs[0], nil

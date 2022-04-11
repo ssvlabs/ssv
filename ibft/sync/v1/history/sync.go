@@ -105,7 +105,7 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		}
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
-			if err := h.validate.Run(signedMsg); err != nil {
+			if _, err := h.validate.Run(signedMsg); err != nil {
 				h.logger.Warn("message not valid", zap.Error(err))
 				// TODO: report validation?
 				continue signedMsgLoop

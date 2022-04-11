@@ -107,7 +107,7 @@ func (s *State) GetPreparedRound() message.Round {
 	return round
 }
 
-func (s *State) SetRound(newRound uint64) {
+func (s *State) SetRound(newRound message.Round) {
 	s.Round.Store(newRound)
 }
 
