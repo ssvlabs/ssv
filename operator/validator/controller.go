@@ -65,7 +65,6 @@ type Controller interface {
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*message.Share, error)
-	forksprotocol.ForkHandler
 }
 
 // controller implements Controller
@@ -96,17 +95,7 @@ type controller struct {
 
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
-
-	logger := c.logger.With(zap.String("previousFork", string(c.forkVersion)),
-		zap.String("currentFork", string(forkVersion)))
-
-	// set network fork
-	handler, ok := c.network.(forksprotocol.ForkHandler)
-	if !ok {
-		logger.Panic("network instance is not a fork handler")
-	}
-
-	return handler.OnFork(forkVersion)
+	return nil
 }
 
 // NewController creates a new validator controller instance
