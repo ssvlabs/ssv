@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"context"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +27,8 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
+	ctx         context.Context
+
 	currentInstance instance.Instance
 	logger          *zap.Logger
 	ibftStorage     qbftstorage.QBFTStore
@@ -47,6 +51,10 @@ type Controller struct {
 
 	// flags
 	readMode bool
+
+	q msgqueue.MsgQueue
+
+	syncDecided SyncDecided
 }
 
 // New is the constructor of Controller
@@ -66,6 +74,14 @@ func New(
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
 
+	q, err := msgqueue.New(
+		logger.With(zap.String("who", "msg_q")),
+		msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+	)
+	if err != nil {
+		// TODO: we should probably stop here, TBD
+		logger.Warn("could not setup msg queue properly", zap.Error(err))
+	}
 	ret := &Controller{
 		ibftStorage:    storage,
 		logger:         logger,
@@ -83,6 +99,8 @@ func New(
 		syncRateLimit: syncRateLimit,
 
 		readMode: readMode,
+
+		q: q,
 	}
 
 	// set flags
@@ -100,14 +118,19 @@ func (i *Controller) Init() error {
 		i.logger.Info("iBFT implementation init started")
 		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//i.processDecidedQueueMessages()
-		i.processSyncQueueMessages()
-		i.listenToSyncMessages()
+		//i.processSyncQueueMessages()
+		//i.listenToSyncMessages()
 		i.logger.Debug("managed to setup iBFT handlers")
 	}
 
 	if !i.synced() {
 		// IBFT sync to make sure the operator is aligned for this validator
-		if err := i.SyncIBFT(); err != nil {
+		if err := i.syncDecided(i.ctx, &SyncContext{
+			Store:      i.ibftStorage,
+			Syncer:     i.network,
+			Validate:   i.fork.ValidateDecidedMsg(i.ValidatorShare),
+			Identifier: i.GetIdentifier(),
+		}); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				i.logger.Debug("iBFT init is already running (syncing history)")
@@ -175,15 +198,14 @@ func (i *Controller) GetIdentifier() []byte {
 	return i.Identifier // TODO should use mutex to lock var?
 }
 
+// ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (i *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
 	if i.readMode {
-		if err := i.messageHandler(msg); err != nil {
-			return false, nil, err
-		}
-	} else {
-		// TODO add to queue
+		err := i.messageHandler(msg)
+		return false, nil, err
 	}
-	return false, nil, nil //  TODO need to return default here
+	i.q.Add(msg)
+	return false, nil, nil
 }
 
 // messageHandler process message from queue,

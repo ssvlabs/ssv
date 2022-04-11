@@ -35,9 +35,11 @@ type MsgQueue interface {
 
 // New creates a new MsgQueue
 func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
+	var err error
+
 	opts := &Options{}
 	if err := opts.Apply(opt...); err != nil {
-		return nil, errors.Wrap(err, "could not apply options")
+		err = errors.Wrap(err, "could not apply options")
 	}
 
 	return &queue{
@@ -45,7 +47,7 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		indexers:  opts.Indexers,
 		itemsLock: &sync.RWMutex{},
 		items:     make(map[string][]*msgContainer),
-	}, nil
+	}, err
 }
 
 type msgContainer struct {
@@ -125,7 +127,6 @@ func (q *queue) Peek(idx string, n int) []*message.SSVMessage {
 	return msgs
 }
 
-// Pop clears and returns the first n messages for an index
 func (q *queue) Pop(idx string, n int) []*message.SSVMessage {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
