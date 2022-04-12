@@ -2,6 +2,7 @@ package protcolp2p
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/libp2p/go-libp2p-core/peer"
 )
 
 // Subscriber manages topics subscription
@@ -10,6 +11,8 @@ type Subscriber interface {
 	Subscribe(pk message.ValidatorPK) error
 	// Unsubscribe unsubscribes from the validator subnet
 	Unsubscribe(pk message.ValidatorPK) error
+	// Peers returns the peers that are connected to the given validator
+	Peers(pk message.ValidatorPK) ([]peer.ID, error)
 }
 
 // Broadcaster enables to broadcast messages

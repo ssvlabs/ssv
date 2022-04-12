@@ -3,7 +3,6 @@ package network
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"io"
 )
 
@@ -28,6 +27,4 @@ type P2PNetwork interface {
 	Setup() error
 	// Start starts the network
 	Start() error
-	// Peers returns the amount of connected to the topic/subnet
-	Peers(pk message.ValidatorPK) ([]peer.ID, error)
 }
