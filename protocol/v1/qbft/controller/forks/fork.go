@@ -1,7 +1,7 @@
 package forks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 )
@@ -9,5 +9,5 @@ import (
 // Fork holds all fork related implementations for the controller
 type Fork interface {
 	InstanceFork() forks.Fork
-	ValidateDecidedMsg(share *keymanager.Share) validation.SignedMessagePipeline
+	ValidateDecidedMsg(share *message.Share) validation.SignedMessagePipeline
 }

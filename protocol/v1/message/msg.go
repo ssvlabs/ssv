@@ -19,6 +19,8 @@ const (
 	SSVSyncMsgType
 	// SSVPostConsensusMsgType are all partial signatures sent after consensus
 	SSVPostConsensusMsgType
+	// SSVDecidedMsgType out of consensus process. holds agg commit messages
+	SSVDecidedMsgType
 )
 
 func (mt MsgType) String() string {
@@ -29,6 +31,8 @@ func (mt MsgType) String() string {
 		return "post-consensus"
 	case SSVSyncMsgType:
 		return "sync"
+	case SSVDecidedMsgType:
+		return "decided"
 	default:
 		return "unknown"
 	}
