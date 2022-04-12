@@ -19,8 +19,8 @@ const (
 	CommitMsgType
 	// RoundChangeMsgType is the type used for change round messages
 	RoundChangeMsgType
-	// DecidedMsgType is the type used for decided messages
-	DecidedMsgType
+	//// DecidedMsgType is the type used for decided messages
+	//DecidedMsgType
 )
 
 func (cmt ConsensusMessageType) String() string {
@@ -33,8 +33,8 @@ func (cmt ConsensusMessageType) String() string {
 		return "commit"
 	case RoundChangeMsgType:
 		return "change_round"
-	case DecidedMsgType:
-		return "decided"
+	//case DecidedMsgType:
+	//	return "decided"
 	default:
 		return "unknown"
 	}

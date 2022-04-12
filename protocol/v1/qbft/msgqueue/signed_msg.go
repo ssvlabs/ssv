@@ -61,3 +61,27 @@ func getIndexHeight(idxParts ...string) message.Height {
 	}
 	return message.Height(h)
 }
+
+// getRound returns the round of the message if applicable
+func getRound(msg *message.SSVMessage) (message.Round, bool) {
+	sm := message.SignedMessage{}
+	if err := sm.Decode(msg.Data); err != nil {
+		return 0, false
+	}
+	if sm.Message == nil {
+		return 0, false
+	}
+	return sm.Message.Round, true
+}
+
+// getConsensusMsgType returns the message.ConsensusMessageType of the message if applicable
+func getConsensusMsgType(msg *message.SSVMessage) (message.ConsensusMessageType, bool) {
+	sm := message.SignedMessage{}
+	if err := sm.Decode(msg.Data); err != nil {
+		return 0, false
+	}
+	if sm.Message == nil {
+		return 0, false
+	}
+	return sm.Message.MsgType, true
+}
