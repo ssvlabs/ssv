@@ -1,4 +1,4 @@
-package validator
+package controller
 
 import (
 	"encoding/base64"
@@ -7,25 +7,47 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/utils/threshold"
-
+	"github.com/bloxapp/ssv/protocol/v1/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
+type TimerState int
+
+const (
+	StateSleep = iota
+	StateRunning
+	StateTimeout
+)
+
+func (s TimerState) toString() string {
+	switch s {
+	case StateSleep:
+		return "sleep"
+	case StateRunning:
+		return "running"
+	case StateTimeout:
+		return "timeout"
+	}
+	return ""
+}
+
 type SignatureState struct {
 	timer      *time.Timer
+	state      atomic.Int32
 	signatures map[message.OperatorID][]byte
 
-	signatureCollectionTimeout time.Duration
+	SignatureCollectionTimeout time.Duration
 	sigCount                   int
 	root                       []byte
 	valueStruct                *beaconprotocol.DutyData
 	duty                       *beaconprotocol.Duty
 }
 
-func (s *SignatureState) start(signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
+func (s *SignatureState) start(logger *zap.Logger, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
 	// set var's
 	s.sigCount = signaturesCount
 	s.root = root
@@ -33,19 +55,39 @@ func (s *SignatureState) start(signaturesCount int, root []byte, valueStruct *be
 	s.duty = duty
 
 	// start timer
-	s.timer = time.NewTimer(s.signatureCollectionTimeout)
+	s.timer = time.NewTimer(s.SignatureCollectionTimeout)
+	s.state.Store(StateRunning)
 	// init map
 	s.signatures = make(map[message.OperatorID][]byte, s.sigCount)
+
+	go func() {
+		<-s.timer.C
+		s.state.Store(StateTimeout)
+		logger.Error("could not process post consensus signature", zap.Error(errors.Errorf("timed out waiting for post consensus signatures, received %d", len(s.signatures))))
+	}()
+}
+
+// stopTimer stops timer from firing and drain the channel. also set state to sleep
+func (s *SignatureState) stopTimer() {
+	if !s.timer.Stop() {
+		<-s.timer.C
+	}
+	s.state.Store(StateSleep)
 }
 
 func (s *SignatureState) clear() {
 	// stop timer
 	// clear map
 	// clear count
+	s.state.Store(StateSleep)
 	panic("need to implement")
 }
 
-func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID message.OperatorID, committiee map[message.OperatorID]*message.Node) error {
+func (s *SignatureState) getState() TimerState {
+	return TimerState(s.state.Load())
+}
+
+func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftID message.OperatorID, committiee map[message.OperatorID]*message.Node) error {
 	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
@@ -68,9 +110,9 @@ func (v *Validator) verifyPartialSignature(signature []byte, root []byte, ibftID
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (v *Validator) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
+func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
 	// get operator pk for sig
-	pk, err := v.share.OperatorPubKey()
+	pk, err := c.ValidatorShare.OperatorPubKey()
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
 	}
@@ -85,7 +127,7 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
 		}
-		signedAttestation, r, err := v.signer.SignAttestation(s, duty, pk.Serialize())
+		signedAttestation, r, err := c.signer.SignAttestation(s, duty, pk.Serialize())
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
@@ -104,27 +146,27 @@ func (v *Validator) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (v *Validator) reconstructAndBroadcastSignature(signatures map[message.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
+func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
-	if res := signature.VerifyByte(v.share.PublicKey, root); !res {
+	if res := signature.VerifyByte(c.ValidatorShare.PublicKey, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}
 
-	v.logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
+	c.logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
 
 	// Submit validation to beacon node
 	switch duty.Type {
 	case beaconprotocol.RoleTypeAttester:
-		v.logger.Debug("submitting attestation")
+		c.logger.Debug("submitting attestation")
 		blsSig := spec.BLSSignature{}
 		copy(blsSig[:], signature.Serialize()[:])
 		inputValue.GetAttestation().Signature = blsSig
-		if err := v.beacon.SubmitAttestation(inputValue.GetAttestation()); err != nil {
+		if err := c.beacon.SubmitAttestation(inputValue.GetAttestation()); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
 	default:

@@ -46,9 +46,6 @@ type Validator struct {
 	share      *message.Share
 	signer     beaconprotocol.Signer
 
-	// signature
-	signatureState SignatureState
-
 	ibfts controller.Controllers
 
 	// flags
@@ -63,16 +60,15 @@ func NewValidator(opt *Options) IValidator {
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	return &Validator{
-		ctx:            opt.Context,
-		logger:         logger,
-		network:        opt.Network,
-		p2pNetwork:     opt.P2pNetwork,
-		beacon:         opt.Beacon,
-		share:          opt.Share,
-		signer:         opt.Signer,
-		ibfts:          ibfts,
-		signatureState: SignatureState{signatureCollectionTimeout: opt.SignatureCollectionTimeout},
-		readMode:       opt.ReadMode,
+		ctx:        opt.Context,
+		logger:     logger,
+		network:    opt.Network,
+		p2pNetwork: opt.P2pNetwork,
+		beacon:     opt.Beacon,
+		share:      opt.Share,
+		signer:     opt.Signer,
+		ibfts:      ibfts,
+		readMode:   opt.ReadMode,
 	}
 }
 
@@ -89,7 +85,7 @@ func (v *Validator) GetShare() *message.Share {
 func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
 	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
 	// synchronize process
-	decided, decidedValue, err := ibftController.ProcessMsg(msg)
+	err := ibftController.ProcessMsg(msg)
 	if err != nil {
 		return
 	}
@@ -99,23 +95,25 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 // setupRunners return duty runners map with all the supported duty types
 func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]controller.IController {
 	ibfts := make(map[beaconprotocol.RoleType]controller.IController)
-	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt.ReadMode, opt.IbftStorage, opt.P2pNetwork, opt.Share, opt.ForkVersion, opt.Signer, opt.SyncRateLimit)
+	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt)
 	return ibfts
 }
 
-func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, readMode bool, ibftStorage qbftstorage.QBFTStore, network p2pprotocol.Network, share *message.Share, forkVersion forksprotocol.ForkVersion, signer beaconprotocol.Signer, syncRateLimit time.Duration) controller.IController {
-	identifier := []byte(format.IdentifierFormat(share.PublicKey.Serialize(), role.String()))
+func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, opt *Options) controller.IController {
+	identifier := []byte(format.IdentifierFormat(opt.Share.PublicKey.Serialize(), role.String()))
 
 	return controller.New(
 		role,
 		identifier,
 		logger,
-		ibftStorage,
-		network,
+		opt.IbftStorage,
+		opt.P2pNetwork,
 		qbft.DefaultConsensusParams(),
-		share,
-		forkVersion,
-		signer,
-		syncRateLimit,
-		readMode)
+		opt.Share,
+		opt.ForkVersion,
+		opt.Beacon,
+		opt.Signer,
+		opt.SyncRateLimit,
+		opt.SignatureCollectionTimeout,
+		opt.ReadMode)
 }

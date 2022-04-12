@@ -108,24 +108,34 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundState_Decided:
-		agg, err := c.currentInstance.CommittedAggregatedMsg()
+		run := func() error {
+			agg, err := c.currentInstance.CommittedAggregatedMsg()
+			if err != nil {
+				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
+			}
+			if err = c.ibftStorage.SaveDecided(agg); err != nil {
+				return errors.Wrap(err, "could not save aggregated commit msg to storage")
+			}
+			if err = c.ibftStorage.SaveLastDecided(agg); err != nil {
+				return errors.Wrap(err, "could not save highest decided message to storage")
+			}
+			ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
+			if err != nil {
+				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
+			}
+			if err = c.network.Broadcast(ssvMsg); err != nil {
+				return errors.Wrap(err, "could not broadcast decided message")
+			}
+			c.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Identifier)), zap.Uint64("seqNum", uint64(agg.Message.Height)))
+			return nil
+		}
+
+		err := run()
+		// call stop after decided in order to prevent race condition
+		c.currentInstance.Stop()
 		if err != nil {
-			return true, errors.Wrap(err, "could not get aggregated commit msg and save to storage")
+			return true, err
 		}
-		if err = c.ibftStorage.SaveDecided(agg); err != nil {
-			return true, errors.Wrap(err, "could not save aggregated commit msg to storage")
-		}
-		if err = c.ibftStorage.SaveLastDecided(agg); err != nil {
-			return true, errors.Wrap(err, "could not save highest decided message to storage")
-		}
-		ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
-		if err != nil {
-			return true, errors.Wrap(err, "could not get SSV message aggregated commit msg")
-		}
-		if err = c.network.Broadcast(ssvMsg); err != nil {
-			return true, errors.Wrap(err, "could not broadcast decided message")
-		}
-		c.logger.Info("decided current instance", zap.String("identifier", string(agg.Message.Identifier)), zap.Uint64("seqNum", uint64(agg.Message.Height)))
 		return false, nil
 	case qbft.RoundState_ChangeRound:
 		// set time for next round change
