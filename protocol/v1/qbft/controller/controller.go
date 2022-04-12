@@ -186,6 +186,49 @@ func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier // TODO should use mutex to lock var?
 }
 
+// ConsumeQueue consumes messages from the msgqueue.Queue of the controller
+// it checks for current state
+func (c *Controller) ConsumeQueue(interval time.Duration) error {
+	ctx, cancel := context.WithCancel(c.ctx)
+	defer cancel()
+
+	for ctx.Err() == nil {
+		time.Sleep(interval)
+		var msgs []*message.SSVMessage
+		// TODO: handle concurrency for currentInstance
+		// if an instance is running -> get the state and get the relevant messages
+		if c.currentInstance != nil {
+			currentState := c.currentInstance.State()
+			switch qbft.RoundState(currentState.Stage.Load()) {
+			case qbft.RoundState_NotStarted:
+				msgs = c.q.Peek(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1)
+			case qbft.RoundState_PrePrepare:
+				msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, currentState.Height.Load().(message.Height), message.ProposalMsgType), 1)
+			case qbft.RoundState_Prepare:
+				msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, currentState.Height.Load().(message.Height), message.PrepareMsgType), 1)
+			case qbft.RoundState_Commit:
+				msgs = c.q.Peek(msgqueue.SignedMsgIndex(c.Identifier, currentState.Height.Load().(message.Height), message.CommitMsgType), 1)
+			case qbft.RoundState_ChangeRound:
+				msgs = c.q.Peek(msgqueue.SignedMsgIndex(c.Identifier, currentState.Height.Load().(message.Height), message.RoundChangeMsgType), 1)
+			//case qbft.RoundState_Decided:
+			case qbft.RoundState_Stopped:
+				//return nil
+			}
+		} else {
+			// TODO: complete, currently just trying to peek any message
+			msgs = c.q.Pop(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1)
+		}
+		if len(msgs) == 0 || msgs[0] == nil {
+			continue
+		}
+		err := c.messageHandler(msgs[0])
+		if err != nil {
+			c.logger.Warn("could not handle msg", zap.Error(err))
+		}
+	}
+	return nil
+}
+
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
 	if c.readMode {
