@@ -162,6 +162,7 @@ func (n *p2pNetwork) RegisterHandler(pid string, handler protocolp2p.RequestHand
 // getSubsetOfPeers returns a subset of the peers from that topic
 func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, filter func(peer.ID) bool) ([]peer.ID, error) {
 	var peers []peer.ID
+	seen := make(map[peer.ID]struct{})
 	topics := n.fork.ValidatorTopicID(vpk)
 	for _, topic := range topics {
 		ps, err := n.topicsCtrl.Peers(topic)
@@ -169,8 +170,9 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 			return nil, errors.Wrap(err, "could not read peers")
 		}
 		for _, p := range ps {
-			if filter(p) {
+			if _, ok := seen[p]; !ok && filter(p) {
 				peers = append(peers, p)
+				seen[p] = struct{}{}
 			}
 		}
 	}
