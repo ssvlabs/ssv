@@ -1,7 +1,9 @@
 package controller
 
 import (
+	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"strconv"
+	"time"
 
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -41,7 +43,8 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	}
 
 	if opts.RequireMinPeers {
-		if err := c.waitForMinPeers(1, true); err != nil {
+		// TODO need to change interval
+		if err := protcolp2p.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), 1, time.Millisecond*2); err != nil {
 			return err
 		}
 	}
