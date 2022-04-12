@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -105,7 +106,7 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		}
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
-			if _, err := h.validate.Run(signedMsg); err != nil {
+			if err := h.validate.Run(signedMsg); err != nil {
 				h.logger.Warn("message not valid", zap.Error(err))
 				// TODO: report validation?
 				continue signedMsgLoop
