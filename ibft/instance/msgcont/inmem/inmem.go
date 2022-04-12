@@ -2,7 +2,6 @@ package inmem
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"sync"
 
 	"github.com/bloxapp/ssv/ibft/instance/msgcont"
@@ -67,7 +66,7 @@ func (c *messagesContainer) QuorumAchieved(round uint64, value []byte) (bool, []
 }
 
 // AddMessage adds the given message to the container
-func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
+func (c *messagesContainer) AddMessage(msg *proto.SignedMessage) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

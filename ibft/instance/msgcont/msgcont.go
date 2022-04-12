@@ -2,7 +2,6 @@ package msgcont
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // MessageContainer represents the behavior of the message container
@@ -16,7 +15,7 @@ type MessageContainer interface {
 	PartialChangeRoundQuorum(stateRound uint64) (found bool, lowestChangeRound uint64)
 
 	// AddMessage adds the given message to the container
-	AddMessage(msg *message.SignedMessage)
+	AddMessage(msg *proto.SignedMessage)
 
 	// OverrideMessages will override all current msgs in container with the provided msg
 	OverrideMessages(msg *proto.SignedMessage)
