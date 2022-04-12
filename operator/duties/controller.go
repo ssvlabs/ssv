@@ -17,6 +17,8 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+
 const (
 	slotChanBuffer = 32
 )

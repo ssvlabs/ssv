@@ -27,6 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+
 const (
 	metadataBatchSize = 25
 )
