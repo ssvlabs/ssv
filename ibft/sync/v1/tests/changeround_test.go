@@ -64,13 +64,13 @@ func Test_LastChangeRound(t *testing.T) {
 
 	<-time.After(time.Second * 3)
 
-	identifier1 := message.NewIdentifier(validators[0].messages[0].Message.Identifier, beacon.RoleTypeAttester)
-	//require.NoError(t, stores[1].SaveLastChangeRoundMsg(identifier1, validators[0].messages[0]))
+	identifier1 := message.Identifier(validators[0].messages[0].Message.Identifier)
+	// require.NoError(t, stores[1].SaveLastChangeRoundMsg(identifier1, validators[0].messages[0]))
 	require.NoError(t, stores[2].SaveLastChangeRoundMsg(identifier1, validators[0].messages[1]))
 	require.NoError(t, stores[3].SaveLastChangeRoundMsg(identifier1, validators[0].messages[1]))
 
-	// TODO: fix an unmark
-	//results, err := lastRoundFetchers[1].GetChangeRoundMessages(identifier1, validators[0].messages[1].Message.Height)
-	//require.NoError(t, err)
-	//require.Len(t, results, 2)
+	// TODO: fix
+	results, err := lastRoundFetchers[1].GetChangeRoundMessages(identifier1, validators[0].messages[1].Message.Height)
+	require.NoError(t, err)
+	require.Len(t, results, 2)
 }
