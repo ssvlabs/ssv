@@ -2,30 +2,29 @@ package controller
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/ibft/proto"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
-	"github.com/bloxapp/ssv/validator/storage"
-	"go.uber.org/atomic"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/bloxapp/ssv/beacon/valcheck"
-	instance "github.com/bloxapp/ssv/ibft/instance"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network/local"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/threadsafe"
+	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
+
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -129,7 +128,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 	tests := []struct {
 		name            string
-		currentInstance instance2.Instancer
+		currentInstance instance.Instancer
 		highestDecided  *message.SignedMessage
 		msg             *message.SignedMessage
 		expectedRes     bool
@@ -138,7 +137,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	}{
 		{
 			"decided from future, requires sync.",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
@@ -186,7 +185,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided from far future, requires sync.",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
@@ -204,7 +203,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided from past, doesn't requires sync.",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
@@ -222,7 +221,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided for current",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
@@ -240,7 +239,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		},
 		{
 			"decided for seq 0",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(0),
 			}),
@@ -279,13 +278,13 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 	tests := []struct {
 		name            string
-		currentInstance instance2.Instancer
+		currentInstance instance.Instancer
 		msg             *message.SignedMessage
 		expectedRes     bool
 	}{
 		{
 			"current instance",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(1),
 			}),
@@ -297,7 +296,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance nil",
-			&instance2.Instance{},
+			&instance.Instance{},
 			SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
@@ -306,7 +305,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance seq lower",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(1),
 			}),
@@ -318,7 +317,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		},
 		{
 			"current instance seq higher",
-			instance2.NewInstanceWithState(&qbft.State{
+			instance.NewInstanceWithState(&qbft.State{
 				Identifier: atomic.Value{},
 				Height:     newHeight(4),
 			}),
@@ -369,7 +368,7 @@ func TestForceDecided(t *testing.T) {
 		i1.(*Controller).ProcessDecidedMessage(decidedMsg)
 	}()
 
-	res, err := i1.StartInstance(instance2.ControllerStartInstanceOptions{
+	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:     logex.GetLogger(),
 		ValueCheck: &valcheck.AttestationValueCheck{},
 		SeqNumber:  4,
@@ -551,7 +550,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 
 	ctrl := Controller{
 		ValidatorShare: share,
-		currentInstance: instance2.NewInstanceWithState(&qbft.State{
+		currentInstance: instance.NewInstanceWithState(&qbft.State{
 			Identifier: newIdentifier(identifier),
 			Height:     newHeight(2),
 		}),
