@@ -361,6 +361,7 @@ func (i *Instance) CommittedAggregatedMsg() (*message.SignedMessage, error) {
 	return nil, errors.New("missing decided message")
 }
 
+// GetCommittedAggSSVMessage returns ssv msg with message.SSVDecidedMsgType and the agg commit signed msg
 func (i *Instance) GetCommittedAggSSVMessage() (message.SSVMessage, error) {
 	decidedMsg, err := i.CommittedAggregatedMsg()
 	if err != nil {
@@ -371,7 +372,7 @@ func (i *Instance) GetCommittedAggSSVMessage() (message.SSVMessage, error) {
 		return message.SSVMessage{}, errors.Wrap(err, "failed to encode agg message")
 	}
 	ssvMsg := message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
+		MsgType: message.SSVDecidedMsgType,
 		ID:      i.State().GetIdentifier(),
 		Data:    encodedAgg,
 	}

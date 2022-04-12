@@ -2,11 +2,10 @@ package controller
 
 import (
 	"context"
+	"go.uber.org/atomic"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -15,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 
 	"github.com/pkg/errors"
@@ -27,7 +27,7 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Controller implements Controller interface
 type Controller struct {
-	ctx         context.Context
+	ctx context.Context
 
 	currentInstance instance.Instancer
 	logger          *zap.Logger
@@ -40,8 +40,8 @@ type Controller struct {
 	signer          beaconprotocol.Signer
 
 	// flags
-	initHandlers atomic.Value // bool
-	initSynced   atomic.Value // bool
+	initHandlers atomic.Bool // bool
+	initSynced   atomic.Bool // bool
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -54,7 +54,8 @@ type Controller struct {
 
 	q msgqueue.MsgQueue
 
-	syncDecided SyncDecided
+	syncDecided SyncDecided // TODO need to init
+	syncRound   SyncRound   // TODO need to init
 }
 
 // New is the constructor of Controller
@@ -112,24 +113,21 @@ func New(
 
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
-func (i *Controller) Init() error {
-	if !i.isInitHandlers() {
-		i.initHandlers.Store(true)
-		i.logger.Info("iBFT implementation init started")
-		ReportIBFTStatus(i.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-		//i.processDecidedQueueMessages()
-		i.processSyncQueueMessages()
-		i.listenToSyncMessages()
-		i.logger.Debug("managed to setup iBFT handlers")
+func (c *Controller) Init() error {
+	if !c.initHandlers.Load() {
+		c.initHandlers.Store(true)
+		c.logger.Info("iBFT implementation init started")
+		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+		c.logger.Debug("managed to setup iBFT handlers")
 	}
 
-	if !c.synced() {
+	if !c.initSynced.Load() {
 		// IBFT sync to make sure the operator is aligned for this validator
-		if err := c.syncDecided(i.ctx, &SyncContext{
-			Store:      i.ibftStorage,
-			Syncer:     i.network,
-			Validate:   i.fork.ValidateDecidedMsg(i.ValidatorShare),
-			Identifier: i.GetIdentifier(),
+		if err := c.syncDecided(c.ctx, &SyncContext{
+			Store:      c.ibftStorage,
+			Syncer:     c.network,
+			Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
+			Identifier: c.GetIdentifier(),
 		}); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
@@ -149,17 +147,7 @@ func (i *Controller) Init() error {
 
 // initialized return true is both isInitHandlers and synced
 func (c *Controller) initialized() bool {
-	return c.isInitHandlers() && c.synced()
-}
-
-// synced return true if syncer synced
-func (c *Controller) synced() bool {
-	return c.initSynced.Load().(bool)
-}
-
-// isInitHandlers return true if handlers init
-func (c *Controller) isInitHandlers() bool {
-	return c.initHandlers.Load().(bool)
+	return c.initHandlers.Load() && c.initSynced.Load()
 }
 
 // StartInstance - starts an ibft instance or returns error
@@ -199,12 +187,12 @@ func (c *Controller) GetIdentifier() []byte {
 }
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
-func (i *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
-	if i.readMode {
-		err := i.messageHandler(msg)
+func (c *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
+	if c.readMode {
+		err := c.messageHandler(msg)
 		return false, nil, err
 	}
-	i.q.Add(msg)
+	c.q.Add(msg)
 	return false, nil, nil
 }
 

@@ -12,7 +12,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 	case message.CommitMsgType:
 	case message.RoundChangeMsgType:
 		// TODO check if instance nil?
-		decided, decidedValue, err := c.currentInstance.ProcessMsg(signedMessage)
+		_, _, err := c.currentInstance.ProcessMsg(signedMessage)
 		if err != nil {
 			return err
 		}

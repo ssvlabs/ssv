@@ -1,12 +1,11 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"strconv"
 
-	instance "github.com/bloxapp/ssv/ibft/instance"
 	"github.com/bloxapp/ssv/ibft/leader/deterministic"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/pkg/errors"
 )
 
@@ -16,12 +15,12 @@ An incremental number for a new iBFT instance.
 A fully synced iBFT node must have all sequences to be fully synced, no skips or missing sequences.
 */
 
-func (c *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
+func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	if !c.initialized() {
 		return errors.New("iBFT hasn't initialized yet")
 	}
 	if c.currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", c.currentInstance.State().SeqNumber.Get())
+		return errors.Errorf("current instance (%d) is still running", c.currentInstance.State().GetIdentifier())
 	}
 
 	highestKnown, err := c.highestKnownDecided()
@@ -29,15 +28,15 @@ func (c *Controller) canStartNewInstance(opts instance.InstanceOptions) error {
 		return err
 	}
 
-	highestSeqKnown := uint64(0)
+	highestSeqKnown := message.Height(0)
 	if highestKnown != nil {
-		highestSeqKnown = highestKnown.Message.SeqNumber
+		highestSeqKnown = highestKnown.Message.Height
 	}
 
-	if opts.SeqNumber == 0 {
+	if opts.Height == 0 {
 		return nil
 	}
-	if opts.SeqNumber != highestSeqKnown+1 {
+	if opts.Height != highestSeqKnown+1 {
 		return errors.New("instance seq invalid")
 	}
 
@@ -64,26 +63,25 @@ func (c *Controller) NextSeqNumber() (message.Height, error) {
 	if knownDecided == nil {
 		return 0, nil
 	}
-	return message.Height(knownDecided.Message.SeqNumber + 1), nil
+	return knownDecided.Message.Height + 1, nil
 }
 
-func (c *Controller) instanceOptionsFromStartOptions(opts instance2.ControllerStartInstanceOptions) (*instance.InstanceOptions, error) {
-	leaderSelectionSeed := append(c.Identifier, []byte(strconv.FormatUint(opts.SeqNumber, 10))...)
+func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerStartInstanceOptions) (*instance.Options, error) {
+	leaderSelectionSeed := append(c.Identifier, []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err
 	}
 
-	return &instance.InstanceOptions{
+	return &instance.Options{
 		Logger:          opts.Logger,
 		ValidatorShare:  c.ValidatorShare,
 		Network:         c.network,
-		Queue:           c.msgQueue,
 		ValueCheck:      opts.ValueCheck,
 		LeaderSelector:  leaderSelc,
 		Config:          c.instanceConfig,
 		Lambda:          c.Identifier,
-		SeqNumber:       opts.SeqNumber,
+		Height:          opts.SeqNumber,
 		Fork:            c.fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
 		Signer:          c.signer,

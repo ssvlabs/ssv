@@ -3,19 +3,17 @@ package controller
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-
-	"github.com/bloxapp/ssv/ibft/sync/speedup"
-	"github.com/bloxapp/ssv/network"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/utils/format"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (c *Controller) startInstanceWithOptions(instanceOpts *instance2.Options, value []byte) (*instance2.InstanceResult, error) {
-	c.currentInstance = instance2.NewInstance(instanceOpts)
+func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.InstanceResult, error) {
+	c.currentInstance = instance.NewInstance(instanceOpts)
 	c.currentInstance.Init()
 	stageChan := c.currentInstance.GetStageChan()
 
@@ -31,7 +29,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance2.Options, v
 	go c.fastChangeRoundCatchup(c.currentInstance)
 
 	// main instance callback loop
-	var retRes *instance2.InstanceResult
+	var retRes *instance.InstanceResult
 	var err error
 instanceLoop:
 	for {
@@ -61,7 +59,7 @@ instanceLoop:
 				err = errors.New("could not fetch decided msg after instance finished")
 				break instanceLoop
 			}
-			retRes = &instance2.InstanceResult{
+			retRes = &instance.InstanceResult{
 				Decided: true,
 				Msg:     retMsg[0],
 			}
@@ -83,7 +81,7 @@ instanceLoop:
 }
 
 // afterInstance is triggered after the instance was finished
-func (c *Controller) afterInstance(height message.Height, res *instance2.InstanceResult, err error) {
+func (c *Controller) afterInstance(height message.Height, res *instance.InstanceResult, err error) {
 	// if instance was decided -> wait for late commit messages
 	decided := res != nil && res.Decided
 	if decided && err == nil {
@@ -195,23 +193,25 @@ func (c *Controller) listenToLateCommitMsgs(identifier []byte, seq message.Heigh
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
-func (c *Controller) fastChangeRoundCatchup(instance instance2.Instancer) {
-	sync := speedup.New(
-		c.logger,
-		c.Identifier,
-		c.ValidatorShare.PublicKey.Serialize(),
-		instance.State().GetHeight(),
-		c.network,
-		instance2.ChangeRoundMsgValidationPipeline(),
-	)
-	msgs, err := sync.Start()
+func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
+	msgs, err := c.syncRound(c.ctx, &SyncContext{
+		Syncer:     c.network,
+		Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
+		Identifier: c.GetIdentifier(),
+	})
 	if err != nil {
 		c.logger.Error("failed fast change round catchup", zap.Error(err))
 	} else {
 		for _, msg := range msgs {
-			c.msgQueue.AddMessage(&network.Message{
-				SignedMessage: msg,
-				Type:          network.NetworkMsg_IBFTType,
+			encodedMsg, err := msg.Encode()
+			if err != nil {
+				c.logger.Warn("failed to encode signed message", zap.Error(err))
+				continue
+			}
+			c.q.Add(&message.SSVMessage{
+				MsgType: message.SSVSyncMsgType,
+				ID:      c.Identifier,
+				Data:    encodedMsg,
 			})
 		}
 		c.logger.Info("fast change round catchup finished", zap.Int("found_msgs", len(msgs)))

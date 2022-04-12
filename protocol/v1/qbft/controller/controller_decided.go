@@ -68,7 +68,11 @@ func (c *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
 	}
 	if shouldSync {
 		c.logger.Info("stopping current instance and syncing..")
-		if err := c.SyncIBFT(); err != nil {
+		if err := c.syncDecided(c.ctx, &SyncContext{
+			Store:      c.ibftStorage,
+			Syncer:     c.network,
+			Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
+			Identifier: c.GetIdentifier()}); err != nil {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}
 	}
@@ -130,7 +134,7 @@ func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool 
 // 		- AND msg is not for current instance
 func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, error) {
 	// if IBFT sync failed to init, trigger it again
-	if !c.initSynced.Get() {
+	if !c.initSynced.Load() {
 		return true, nil
 	}
 	if c.decidedForCurrentInstance(msg) {
