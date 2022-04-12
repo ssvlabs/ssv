@@ -36,9 +36,6 @@ func SignedMsgIndexer() Indexer {
 		if msg == nil {
 			return ""
 		}
-		if msg == nil {
-			return ""
-		}
 		sm := message.SignedMessage{}
 		if err := sm.Decode(msg.Data); err != nil {
 			return ""
