@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// WaitForMinPeers waits until there are minPeers conntected for the given validator
 func WaitForMinPeers(pctx context.Context, logger *zap.Logger, net Network, vpk message.ValidatorPK, minPeers int, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
