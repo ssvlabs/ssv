@@ -20,7 +20,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 )
 
-func TestHistory_SyncDecided(t *testing.T) {
+func TestHistory(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	nNodes := 4
@@ -90,13 +90,26 @@ func TestHistory_SyncDecided(t *testing.T) {
 
 	<-time.After(time.Second * 3)
 
-	// performs sync from the first node
-	for _, pkHex := range pks {
-		pk, err := hex.DecodeString(pkHex)
-		require.NoError(t, err)
-		idn := message.NewIdentifier(pk, beacon.RoleTypeAttester)
-		synced, err := histories[0].SyncDecided(ctx, idn, false)
-		require.NoError(t, err)
-		require.True(t, synced)
-	}
+	t.Run("SyncDecided", func(t *testing.T) {
+		// performs sync from the first node
+		for _, pkHex := range pks {
+			pk, err := hex.DecodeString(pkHex)
+			require.NoError(t, err)
+			idn := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+			synced, err := histories[0].SyncDecided(ctx, idn, false)
+			require.NoError(t, err)
+			require.True(t, synced)
+		}
+	})
+
+	t.Run("SyncDecidedInRange", func(t *testing.T) {
+		for _, pkHex := range pks {
+			pk, err := hex.DecodeString(pkHex)
+			require.NoError(t, err)
+			idn := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+			synced, err := histories[1].SyncDecidedRange(ctx, idn, 0, 10)
+			require.NoError(t, err)
+			require.True(t, synced)
+		}
+	})
 }
