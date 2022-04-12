@@ -22,6 +22,7 @@ var (
 		migrationCleanAllRegistryData,
 		migrationCleanOperatorNodeRegistryData,
 		migrationCleanExporterRegistryData,
+		migrationCleanValidatorRegistryData,
 	}
 )
 
