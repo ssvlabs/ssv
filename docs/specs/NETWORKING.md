@@ -1,8 +1,8 @@
 # SSV Specifications - Networking
 
-| Authors                                    | Status | Last Revision |
+| Contributors                               | Status | Last Revision |
 |:-------------------------------------------|:-------|:--------------|
-| [@amir-blox](https://github.com/amir-blox) | WIP    | FEB 22        |
+| [@amir-blox](https://github.com/amir-blox) | DRAFT  | APR 22        |
 
 This document contains the networking specification for `SSV.Network`.
 
@@ -102,11 +102,6 @@ and can be revoked in case it was compromised.
 
 `Operator Key` is used for decryption of share's keys that are used for signing/verifying consensus messages and duties. \
 Exporter and Bootnode does not hold this key.
-
-Operator nodes will expose an `Operator ID` that is calculated from the operator public key. \
-Note that this value is used as a hint for better observability of the network. 
-Malicious peers with fake operator ID will be pruned due to bad scores 
-as they don't have the key to sign messages.
 
 
 ### Network Discovery
@@ -717,14 +712,15 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 | Key         | Value                                                          | Status          |
 |:------------|:---------------------------------------------------------------|:----------------|
 | `id`        | name of identity scheme, e.g. "v4"                             | Done            |
-| `secp256k1` | compressed secp256k1 public key, 33 bytes                      | Done            |
+| `secp256k1` | compressed secp256k1 public key of the network key, 33 bytes   | Done            |
 | `ip`        | IPv4 address, 4 bytes                                          | Done            |
 | `tcp`       | TCP port, big endian integer                                   | Done            |
 | `udp`       | UDP port, big endian integer                                   | Done            |
-| `type`      | node type, integer; 1 (operator), 2 (exporter), 3 (bootnode)   | Done (`v0.1.9`) |
-| `oid`       | operator id, 32 bytes                                          | Done (`v0.1.9`) |
-| `version`   | fork version, integer                                          | TODO            |
-| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | TODO            |
+| `type`      | node type, integer; 1 (operator), 2 (exporter), 3 (bootnode)   | Done            |
+| `oid`       | operator id, 32 bytes, hash of operator public key             | Done            |
+| `forkv`     | fork version, integer                                          | Done            |
+| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | Done            |
+
 
 
 #### Subnets Discovery
@@ -748,8 +744,6 @@ For more information:
 See [Consensus specs > phase 0 > p2p interface](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/p2p-interface.md#why-are-we-using-discv5-and-not-libp2p-kademlia-dht) 
 for details on why discv5 was chosen over libp2p Kad DHT in Ethereum.
 
-In `v0` discv5 is used, `v1` TBD, this section will be updated once that work is complete.
-
 ---
 
 
@@ -761,6 +755,8 @@ running nodes will consume many resources to process all network related tasks e
 To lower resource consumption, the number of connected peers is limited, configurable via flag. \
 Once reached to peer limit, the node will stop looking for new nodes, 
 but will accept incoming connections from relevant peers.
+
+In addition, the limit of peers per topic is also configurable.
 
 
 #### Connection Gating
@@ -779,8 +775,8 @@ e.g. msg validation will protect from malicious messages, while scoring will cau
 [Gossipsub v1.1 Evaluation Report](https://gateway.ipfs.io/ipfs/QmRAFP5DBnvNjdYSbWhEhVRJJDFCLpPyvew5GwCCB4VxM4)
 describes some potential attacks and how they are mitigated.
 
-Connection gating protects against peers which were pruned in the past and tries to reconnect again before backoff timeout (5 min).
-it kicks in in an early stage, before the other components processes the request to avoid resources consumption.
+Connection gating does IP limiting and protects against known, bad peers.
+The gater is invoked in an early stage, before the other components processes the request to avoid redundant resources allocations.
 
 In addition, the discovery system is naturally a good candidate for security problems. \
 DiscV5 specs specifies potential vulnerabilities in their system and how they were (or will be) mitigated,
