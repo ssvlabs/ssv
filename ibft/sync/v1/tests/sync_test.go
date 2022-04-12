@@ -4,6 +4,13 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
 	"github.com/bloxapp/ssv/ibft/sync/v1/history"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
@@ -11,11 +18,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
-	"testing"
-	"time"
 )
 
 func TestHistory_SyncDecided(t *testing.T) {
@@ -56,18 +58,27 @@ func TestHistory_SyncDecided(t *testing.T) {
 	}
 	require.Len(t, histories, len(ln.Nodes))
 
-	require.NoError(t, stores[0].SaveDecided(validators[0].messages[:5]...))
-	require.NoError(t, stores[0].SaveLastDecided(validators[0].messages[5]))
-	require.NoError(t, stores[3].SaveDecided(validators[0].messages...))
-	require.NoError(t, stores[3].SaveLastDecided(validators[0].messages[9]))
-	require.NoError(t, stores[3].SaveDecided(validators[1].messages...))
-	require.NoError(t, stores[3].SaveLastDecided(validators[1].messages[9]))
-	require.NoError(t, stores[1].SaveDecided(validators[0].messages...))
-	require.NoError(t, stores[1].SaveLastDecided(validators[0].messages[9]))
-	require.NoError(t, stores[1].SaveDecided(validators[1].messages...))
-	require.NoError(t, stores[1].SaveLastDecided(validators[1].messages[9]))
-	require.NoError(t, stores[2].SaveDecided(validators[0].messages...))
-	require.NoError(t, stores[2].SaveLastDecided(validators[0].messages[9]))
+	msgSet1 := [][]*message.SignedMessage{
+		validators[0].messages[:5],
+		{validators[0].messages[5]},
+	}
+
+	msgSet2 := [][]*message.SignedMessage{
+		append(validators[0].messages, validators[1].messages...),
+		{validators[0].messages[9], validators[1].messages[9]},
+	}
+
+	msgSet3 := [][]*message.SignedMessage{
+		validators[0].messages,
+		{validators[0].messages[9]},
+	}
+
+	msgSet4 := msgSet2
+
+	for storeIdx, msgSet := range [][][]*message.SignedMessage{msgSet1, msgSet2, msgSet3, msgSet4} {
+		require.NoError(t, stores[storeIdx].SaveDecided(msgSet[0]...))
+		require.NoError(t, stores[storeIdx].SaveDecided(msgSet[1]...))
+	}
 
 	for _, pkHex := range pks {
 		pk, err := hex.DecodeString(pkHex)
