@@ -143,7 +143,6 @@ func (i *Instance) uponCommitMsg() validation.SignedMessagePipeline {
 				i.decidedMsg = aggMsg
 				// mark instance commit
 				i.ProcessStageChange(qbft.RoundState_Decided)
-				i.Stop()
 			})
 		}
 		return nil

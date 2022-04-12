@@ -37,7 +37,11 @@ type Controller struct {
 	ValidatorShare  *message.Share
 	Identifier      []byte
 	fork            forks.Fork
+	beacon          beaconprotocol.Beacon
 	signer          beaconprotocol.Signer
+
+	// signature
+	signatureState SignatureState
 
 	// flags
 	initHandlers atomic.Bool // bool
@@ -59,8 +63,7 @@ type Controller struct {
 }
 
 // New is the constructor of Controller
-func New(
-	role beaconprotocol.RoleType,
+func New(role beaconprotocol.RoleType,
 	identifier []byte,
 	logger *zap.Logger,
 	storage qbftstorage.QBFTStore,
@@ -68,10 +71,11 @@ func New(
 	instanceConfig *qbft.InstanceConfig,
 	validatorShare *message.Share,
 	version forksprotocol.ForkVersion,
+	beacon beaconprotocol.Beacon,
 	signer beaconprotocol.Signer,
 	syncRateLimit time.Duration,
-	readMode bool,
-) IController {
+	sigTimeout time.Duration,
+	readMode bool) IController {
 	logger = logger.With(zap.String("role", role.String()))
 	fork := forksfactory.NewFork(version)
 
@@ -90,8 +94,10 @@ func New(
 		instanceConfig: instanceConfig,
 		ValidatorShare: validatorShare,
 		Identifier:     identifier,
-		signer:         signer,
 		fork:           fork,
+		beacon:         beacon,
+		signer:         signer,
+		signatureState: SignatureState{SignatureCollectionTimeout: sigTimeout},
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
@@ -188,24 +194,16 @@ func (c *Controller) GetIdentifier() []byte {
 }
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
-func (c *Controller) ProcessMsg(msg *message.SSVMessage) (bool, []byte, error) {
+func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	if c.readMode {
-		err := c.messageHandler(msg)
-		return false, nil, err
+		return c.messageHandler(msg)
 	}
 	c.q.Add(msg)
-	return false, nil, nil
+	return nil
 }
 
 // messageHandler process message from queue,
 func (c *Controller) messageHandler(msg *message.SSVMessage) error {
-	// validation
-	if err := c.validateMessage(msg); err != nil {
-		// TODO need to return error?
-		c.logger.Error("message validation failed", zap.Error(err))
-		return nil
-	}
-
 	switch msg.GetType() {
 	case message.SSVConsensusMsgType:
 		signedMsg := &message.SignedMessage{}
