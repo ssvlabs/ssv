@@ -50,8 +50,7 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			continue
 		}
 		sm := syncMsg.Data[0]
-		_, err = crf.validate.Run(sm)
-		if err != nil {
+		if err := crf.validate.Run(sm); err != nil {
 			crf.logger.Warn("could not validate message", zap.Error(err))
 			continue
 		}

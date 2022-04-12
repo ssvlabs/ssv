@@ -1,16 +1,18 @@
 package p2pv1
 
 import (
+	"math"
+
+	"go.uber.org/zap"
+
 	ssvpeers "github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"go.uber.org/zap"
-	"math"
 )
 
 // ReportValidation reports the result for the given message
 // the result will be converted to a score and reported to peers.ScoreIndex
-func (n *p2pNetwork) ReportValidation(msg message.SSVMessage, res protocolp2p.MsgValidationResult) {
+func (n *p2pNetwork) ReportValidation(msg *message.SSVMessage, res protocolp2p.MsgValidationResult) {
 	if !n.isReady() {
 		return
 	}

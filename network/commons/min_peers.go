@@ -2,10 +2,11 @@ package commons
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 )
 
 // WaitMinPeersCtx represents the context needed for WaitForMinPeers
@@ -49,14 +50,10 @@ func WaitForMinPeers(ctx WaitMinPeersCtx, validatorPk []byte, min int, start, li
 
 // haveMinPeers checks that there are at least <count> connected peers
 func haveMinPeers(logger *zap.Logger, net network.Network, validatorPk []byte, count int) (bool, []string) {
-	peers, err := net.Peers(validatorPk)
+	peers, err := net.AllPeers(validatorPk)
 	if err != nil {
 		logger.Error("failed fetching peers", zap.Error(err))
 		return false, []string{}
 	}
-	pids := make([]string, len(peers))
-	for i, pid := range peers {
-		pids[i] = pid.String()
-	}
-	return len(peers) >= count, pids
+	return len(peers) >= count, peers
 }
