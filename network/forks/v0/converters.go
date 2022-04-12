@@ -89,8 +89,8 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 			signed.Message.MsgType = message.CommitMsgType
 		case proto.RoundState_ChangeRound:
 			signed.Message.MsgType = message.RoundChangeMsgType
-		case proto.RoundState_Decided:
-			signed.Message.MsgType = message.DecidedMsgType
+		//case proto.RoundState_Decided:
+		//	signed.Message.MsgType = message.DecidedMsgType
 		case proto.RoundState_Stopped:
 			// TODO
 		}
@@ -176,8 +176,8 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Iden
 		signedMsgV0.Message.Type = proto.RoundState_Commit
 	case message.RoundChangeMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_ChangeRound
-	case message.DecidedMsgType:
-		signedMsgV0.Message.Type = proto.RoundState_Decided
+	//case message.DecidedMsgType:
+	//	signedMsgV0.Message.Type = proto.RoundState_Decided
 	}
 	signedMsgV0.Signature = signedMsg.GetSignature()
 	for _, signer := range signedMsg.GetSigners() {

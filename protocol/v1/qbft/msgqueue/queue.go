@@ -80,7 +80,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		if !ok {
 			msgs = make([]*msgContainer, 0)
 		}
-		msgs = Add(msgs, mc, ByRound)
+		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
 	}
 }

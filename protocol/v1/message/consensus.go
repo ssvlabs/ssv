@@ -7,6 +7,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Signer is an interface responsible for consensus messages signing
+type Signer interface {
+	// SignIBFTMessage signs a network iBFT msg
+	SignIBFTMessage(message *ConsensusMessage, pk []byte) ([]byte, error)
+}
+
 // ConsensusMessageType is the type of consensus messages
 type ConsensusMessageType int
 
@@ -19,8 +25,8 @@ const (
 	CommitMsgType
 	// RoundChangeMsgType is the type used for change round messages
 	RoundChangeMsgType
-	// DecidedMsgType is the type used for decided messages
-	DecidedMsgType
+	//// DecidedMsgType is the type used for decided messages
+	//DecidedMsgType
 )
 
 func (cmt ConsensusMessageType) String() string {
@@ -33,8 +39,8 @@ func (cmt ConsensusMessageType) String() string {
 		return "commit"
 	case RoundChangeMsgType:
 		return "change_round"
-	case DecidedMsgType:
-		return "decided"
+	//case DecidedMsgType:
+	//	return "decided"
 	default:
 		return "unknown"
 	}

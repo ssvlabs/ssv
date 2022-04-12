@@ -8,8 +8,17 @@ import (
 // By is function to compare messages in clean way
 type By func(a, b *message.SSVMessage) bool
 
+func (by By) Combine(other By) By {
+	return func(a, b *message.SSVMessage) bool {
+		if !by(a, b) {
+			return other(a, b)
+		}
+		return true
+	}
+}
+
 // Sort sorts the given containers
-func Sort(msgs []*msgContainer, by By) {
+func (by By) Sort(msgs []*msgContainer) {
 	sort.Sort(&messageSorter{
 		msgs: msgs,
 		by:   by,
@@ -17,7 +26,7 @@ func Sort(msgs []*msgContainer, by By) {
 }
 
 // Add adds a new container
-func Add(msgs []*msgContainer, msg *msgContainer, by By) []*msgContainer {
+func (by By) Add(msgs []*msgContainer, msg *msgContainer) []*msgContainer {
 	i := sort.Search(len(msgs), func(i int) bool { return by(msgs[i].msg, msg.msg) })
 	var newMsgs []*msgContainer
 	if i > 0 {
@@ -30,28 +39,49 @@ func Add(msgs []*msgContainer, msg *msgContainer, by By) []*msgContainer {
 }
 
 // ByRound implements By for round based priority
-func ByRound(a, b *message.SSVMessage) bool {
-	aRound, ok := getRound(a)
-	if !ok {
-		return false
+func ByRound() By {
+	return func(a, b *message.SSVMessage) bool {
+		aRound, ok := getRound(a)
+		if !ok {
+			return false
+		}
+		bRound, ok := getRound(b)
+		if !ok {
+			return true
+		}
+		return aRound > bRound
 	}
-	bRound, ok := getRound(b)
-	if !ok {
-		return true
-	}
-	return aRound > bRound
 }
 
-// getRound returns the round of the message if applicable
-func getRound(msg *message.SSVMessage) (message.Round, bool) {
-	sm := message.SignedMessage{}
-	if err := sm.Decode(msg.Data); err != nil {
-		return 0, false
+// ByConsensusMsgType implements By for msg type based priority ()
+func ByConsensusMsgType(messageTypes ...message.ConsensusMessageType) By {
+	// using a single map to lookup msg types order
+	m := map[message.ConsensusMessageType]int{}
+	for i, mt := range messageTypes {
+		m[mt] = i + 1
 	}
-	if sm.Message == nil {
-		return 0, false
+	return func(a, b *message.SSVMessage) bool {
+		aMsgType, ok := getConsensusMsgType(a)
+		if !ok {
+			return false
+		}
+		bMsgType, ok := getConsensusMsgType(b)
+		if !ok {
+			return true
+		}
+
+		// check according to predefined set
+		aVal, aOk := m[aMsgType]
+		bVal, bOk := m[bMsgType]
+		if aOk {
+			if bOk {
+				return aVal > bVal
+			}
+			return true
+		}
+		//return aMsgType > bMsgType
+		return false
 	}
-	return sm.Message.Round, true
 }
 
 // messageSorter sorts a list of msg containers
