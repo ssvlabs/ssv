@@ -15,7 +15,7 @@ func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 		if len(parts) < 2 {
 			return false // unknown
 		}
-		parts = parts[1:]
+		parts = parts[1:] // remove empty string
 		if parts[0] != message.SSVConsensusMsgType.String() {
 			return false
 		}
@@ -33,9 +33,6 @@ func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 // SignedMsgIndexer is the Indexer used for message.SignedMessage
 func SignedMsgIndexer() Indexer {
 	return func(msg *message.SSVMessage) string {
-		if msg == nil {
-			return ""
-		}
 		if msg == nil {
 			return ""
 		}

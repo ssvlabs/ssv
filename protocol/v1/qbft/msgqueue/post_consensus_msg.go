@@ -14,7 +14,7 @@ func SignedPostConsensusMsgCleaner(mid message.Identifier, h message.Height) Cle
 		if len(parts) < 2 {
 			return false // unknown
 		}
-		parts = parts[1:]
+		parts = parts[1:] // remove empty string
 		if parts[0] != message.SSVPostConsensusMsgType.String() {
 			return false
 		}

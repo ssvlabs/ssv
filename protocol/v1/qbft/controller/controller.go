@@ -123,6 +123,7 @@ func (c *Controller) Init() error {
 	if !c.initHandlers.Load() {
 		c.initHandlers.Store(true)
 		c.logger.Info("iBFT implementation init started")
+		go c.startQueueConsumer()
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		c.logger.Debug("managed to setup iBFT handlers")
 	}

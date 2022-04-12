@@ -67,12 +67,12 @@ func (q *queue) Add(msg *message.SSVMessage) {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	indexes := q.indexMessage(msg)
+	indices := q.indexMessage(msg)
 
 	mc := &msgContainer{
 		msg: msg,
 	}
-	for _, idx := range indexes {
+	for _, idx := range indices {
 		if len(idx) == 0 {
 			continue
 		}
@@ -80,7 +80,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		if !ok {
 			msgs = make([]*msgContainer, 0)
 		}
-		msgs = append(msgs, mc)
+		msgs = Add(msgs, mc, ByRound)
 		q.items[idx] = msgs
 	}
 }
