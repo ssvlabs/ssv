@@ -7,6 +7,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Signer is an interface responsible for consensus messages signing
+type Signer interface {
+	// SignIBFTMessage signs a network iBFT msg
+	SignIBFTMessage(message *ConsensusMessage, pk []byte) ([]byte, error)
+}
+
 // ConsensusMessageType is the type of consensus messages
 type ConsensusMessageType int
 
