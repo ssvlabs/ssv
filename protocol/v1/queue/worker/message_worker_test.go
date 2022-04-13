@@ -16,8 +16,9 @@ func TestWorker(t *testing.T) {
 		Buffer:       2,
 	})
 
-	worker.AddHandler(func(msg *message.SSVMessage) {
+	worker.AddHandler(func(msg *message.SSVMessage) error {
 		require.NotNil(t, msg)
+		return nil
 	})
 	for i := 0; i < 5; i++ {
 		require.True(t, worker.TryEnqueue(&message.SSVMessage{}))
