@@ -2,21 +2,15 @@ package instance
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"math"
 	"time"
 
-	//"github.com/bloxapp/ssv/ibft/pipeline"
-	//"github.com/bloxapp/ssv/ibft/pipeline/auth"
-	//"github.com/bloxapp/ssv/ibft/pipeline/changeround"
-	//"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
-	"github.com/herumi/bls-eth-go-binary/bls"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -219,7 +213,7 @@ func (i *Instance) JustifyRoundChange(round message.Round) error {
 }
 
 // HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
-func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highestPrepared *proto.ChangeRoundData, err error) {
+func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highestPrepared *message.RoundChangeData, err error) {
 	/**
 	### Algorithm 4 IBFTController pseudocode for process pi: message justification
 		Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
@@ -232,7 +226,7 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 
 	notPrepared = true
 	for _, msg := range i.ChangeRoundMessages.ReadOnlyMessagesByRound(round) {
-		candidateChangeData := &proto.ChangeRoundData{}
+		candidateChangeData := &message.RoundChangeData{}
 		err = json.Unmarshal(msg.Message.Data, candidateChangeData)
 		if err != nil {
 			return false, nil, err
@@ -242,7 +236,7 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 		if candidateChangeData.PreparedValue != nil {
 			notPrepared = false
 			if highestPrepared != nil {
-				if candidateChangeData.PreparedRound > highestPrepared.PreparedRound {
+				if candidateChangeData.GetPreparedRound() > highestPrepared.GetPreparedRound() {
 					highestPrepared = candidateChangeData
 				}
 			} else {

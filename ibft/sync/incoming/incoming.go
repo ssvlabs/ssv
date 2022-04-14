@@ -1,55 +1,56 @@
 package incoming
 
-import (
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/storage/collections"
-	"go.uber.org/zap"
-)
-
-// ReqHandler is responsible for syncing and iBFT instance when needed by
-// fetching decided messages from the network
-type ReqHandler struct {
-	// paginationMaxSize is the max number of returned elements in a single response
-	paginationMaxSize  uint64
-	identifier         []byte
-	seqNumber          int64 // equals to -1 if not set
-	network            network.Network
-	storage            collections.Iibft
-	logger             *zap.Logger
-	lastChangeRoundMsg *proto.SignedMessage
-}
-
-// New returns a new instance of ReqHandler
-func New(
-	logger *zap.Logger,
-	identifier []byte,
-	seqNumber int64,
-	network network.Network,
-	storage collections.Iibft,
-	lastChangeRoundMsg *proto.SignedMessage,
-) *ReqHandler {
-	return &ReqHandler{
-		paginationMaxSize:  network.MaxBatch(),
-		logger:             logger,
-		identifier:         identifier,
-		seqNumber:          seqNumber,
-		network:            network,
-		storage:            storage,
-		lastChangeRoundMsg: lastChangeRoundMsg,
-	}
-}
-
-// Process takes a req and processes it
-func (s *ReqHandler) Process(msg *network.SyncChanObj) {
-	switch msg.Msg.Type {
-	case network.Sync_GetHighestType:
-		s.handleGetHighestReq(msg)
-	case network.Sync_GetInstanceRange:
-		s.handleGetDecidedReq(msg)
-	case network.Sync_GetLatestChangeRound:
-		s.handleGetLatestChangeRoundReq(msg)
-	default:
-		s.logger.Error("sync req handler received un-supported type", zap.Uint64("received type", uint64(msg.Msg.Type)))
-	}
-}
+//
+//import (
+//	"github.com/bloxapp/ssv/ibft/proto"
+//	"github.com/bloxapp/ssv/network"
+//	"github.com/bloxapp/ssv/storage/collections"
+//	"go.uber.org/zap"
+//)
+//
+//// ReqHandler is responsible for syncing and iBFT instance when needed by
+//// fetching decided messages from the network
+//type ReqHandler struct {
+//	// paginationMaxSize is the max number of returned elements in a single response
+//	paginationMaxSize  uint64
+//	identifier         []byte
+//	seqNumber          int64 // equals to -1 if not set
+//	network            network.Network
+//	storage            collections.Iibft
+//	logger             *zap.Logger
+//	lastChangeRoundMsg *proto.SignedMessage
+//}
+//
+//// New returns a new instance of ReqHandler
+//func New(
+//	logger *zap.Logger,
+//	identifier []byte,
+//	seqNumber int64,
+//	network network.Network,
+//	storage collections.Iibft,
+//	lastChangeRoundMsg *proto.SignedMessage,
+//) *ReqHandler {
+//	return &ReqHandler{
+//		paginationMaxSize:  network.MaxBatch(),
+//		logger:             logger,
+//		identifier:         identifier,
+//		seqNumber:          seqNumber,
+//		network:            network,
+//		storage:            storage,
+//		lastChangeRoundMsg: lastChangeRoundMsg,
+//	}
+//}
+//
+//// Process takes a req and processes it
+//func (s *ReqHandler) Process(msg *network.SyncChanObj) {
+//	switch msg.Msg.Type {
+//	case network.Sync_GetHighestType:
+//		s.handleGetHighestReq(msg)
+//	case network.Sync_GetInstanceRange:
+//		s.handleGetDecidedReq(msg)
+//	case network.Sync_GetLatestChangeRound:
+//		s.handleGetLatestChangeRoundReq(msg)
+//	default:
+//		s.logger.Error("sync req handler received un-supported type", zap.Uint64("received type", uint64(msg.Msg.Type)))
+//	}
+//}
