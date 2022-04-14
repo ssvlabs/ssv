@@ -117,7 +117,7 @@ func newIdentifier(identity []byte) atomic.Value {
 }
 
 func TestDecidedRequiresSync(t *testing.T) {
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
 	tests := []struct {
 		name            string
@@ -134,11 +134,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  4,
 			}),
@@ -149,11 +149,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from future, requires sync. current is nil",
 			nil,
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  4,
 			}),
@@ -164,11 +164,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided when init failed to sync",
 			nil,
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
 			}),
@@ -182,11 +182,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  10,
 			}),
@@ -200,11 +200,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
 			}),
@@ -218,11 +218,11 @@ func TestDecidedRequiresSync(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(3),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
 			}),
@@ -237,7 +237,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 				Height:     newHeight(0),
 			}),
 			nil,
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  0,
 			}),
@@ -267,7 +267,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 }
 
 func TestDecideIsCurrentInstance(t *testing.T) {
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
 	tests := []struct {
 		name            string
@@ -281,7 +281,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(1),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
 			}),
@@ -290,7 +290,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance nil",
 			&instance.Instance{},
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
 			}),
@@ -302,7 +302,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(1),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
@@ -314,7 +314,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 				Identifier: atomic.Value{},
 				Height:     newHeight(4),
 			}),
-			testingprotocol.SignMsg(t, secretKeys, []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1)}, &message.ConsensusMessage{
+			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
 			}),
@@ -331,7 +331,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 }
 
 func TestForceDecided(t *testing.T) { // TODo need to align with the new queue process
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	network := local.NewLocalNetwork()
 
@@ -349,7 +349,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 	go func() {
 		time.Sleep(time.Millisecond * 500) // wait for instance to start
 
-		signers := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+		signers := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 		decidedMsg := testingprotocol.AggregateSign(t, sks, signers, &message.ConsensusMessage{
 			MsgType:    message.CommitMsgType,
 			Height:     message.Height(4),
@@ -377,7 +377,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 }
 
 func TestSyncAfterDecided(t *testing.T) {
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	network := local.NewLocalNetwork()
 
@@ -411,7 +411,7 @@ func TestSyncAfterDecided(t *testing.T) {
 }
 
 func TestSyncFromScratchAfterDecided(t *testing.T) {
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	network := local.NewLocalNetwork()
 	db, _ := kv.New(basedb.Options{
@@ -444,7 +444,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 }
 
 func TestValidateDecidedMsg(t *testing.T) {
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	network := local.NewLocalNetwork()
 	identifier := []byte("Identifier_11")
@@ -514,7 +514,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 }
 
 func TestController_checkDecidedMessageSigners(t *testing.T) {
-	uids := []beaconprotocol.OperatorID{beaconprotocol.OperatorID(1), beaconprotocol.OperatorID(2), beaconprotocol.OperatorID(3), beaconprotocol.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	skQuorum := map[uint64]*bls.SecretKey{}
 	for i, sk := range secretKeys {
@@ -561,12 +561,12 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 }
 
 func populatedIbft(
-	nodeID beaconprotocol.OperatorID,
+	nodeID message.OperatorID,
 	identifier []byte,
 	network *local.Local,
 	ibftStorage qbftstorage.QBFTStore,
-	sks map[beaconprotocol.OperatorID]*bls.SecretKey,
-	nodes map[beaconprotocol.OperatorID]*beaconprotocol.Node,
+	sks map[message.OperatorID]*bls.SecretKey,
+	nodes map[message.OperatorID]*beaconprotocol.Node,
 	signer beaconprotocol.Signer,
 ) IController {
 	share := &beaconprotocol.Share{

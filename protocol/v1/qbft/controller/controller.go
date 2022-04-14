@@ -188,7 +188,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (c *Controller) GetIBFTCommittee() map[beaconprotocol.OperatorID]*beaconprotocol.Node {
+func (c *Controller) GetIBFTCommittee() map[message.OperatorID]*beaconprotocol.Node {
 	return c.ValidatorShare.Committee
 }
 

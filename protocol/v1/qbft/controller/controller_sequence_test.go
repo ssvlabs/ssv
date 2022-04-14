@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"testing"
 
@@ -33,7 +34,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 }
 
 func TestCanStartNewInstance(t *testing.T) {
-	uids := []beacon.OperatorID{beacon.OperatorID(1), beacon.OperatorID(2), beacon.OperatorID(3), beacon.OperatorID(4)}
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testing2.GenerateBLSKeys(uids...)
 
 	tests := []struct {

@@ -314,7 +314,7 @@ func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
 	signedMessage := &message.SignedMessage{
 		Message:   msg,
 		Signature: sigByts,
-		Signers:   []beaconprotocol.OperatorID{i.ValidatorShare.NodeID},
+		Signers:   []message.OperatorID{i.ValidatorShare.NodeID},
 	}
 
 	// used for instance fast change round catchup

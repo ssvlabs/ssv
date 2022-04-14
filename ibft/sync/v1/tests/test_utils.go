@@ -18,13 +18,13 @@ import (
 
 type validatorData struct {
 	PK       string
-	sks      map[beacon.OperatorID]*bls.SecretKey
-	nodes    map[beacon.OperatorID]*beacon.Node
+	sks      map[message.OperatorID]*bls.SecretKey
+	nodes    map[message.OperatorID]*beacon.Node
 	messages []*message.SignedMessage
 }
 
 func changeRoundGenerator(rounder func() message.Round) syncMsgGenerator {
-	return func(height message.Height, pk []byte, oids ...beacon.OperatorID) ([]beacon.OperatorID, *message.ConsensusMessage) {
+	return func(height message.Height, pk []byte, oids ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage) {
 		return oids[1:], &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     height,
@@ -35,7 +35,7 @@ func changeRoundGenerator(rounder func() message.Round) syncMsgGenerator {
 	}
 }
 
-func decidedGenerator(height message.Height, pk []byte, oids ...beacon.OperatorID) ([]beacon.OperatorID, *message.ConsensusMessage) {
+func decidedGenerator(height message.Height, pk []byte, oids ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage) {
 	return oids[1:], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     height,
@@ -45,7 +45,7 @@ func decidedGenerator(height message.Height, pk []byte, oids ...beacon.OperatorI
 	}
 }
 
-type syncMsgGenerator func(message.Height, []byte, ...beacon.OperatorID) ([]beacon.OperatorID, *message.ConsensusMessage)
+type syncMsgGenerator func(message.Height, []byte, ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage)
 
 func createNetworkWithValidators(ctx context.Context, loggerFactory func(string) *zap.Logger, nNodes int, pks []string,
 	generator syncMsgGenerator) (*p2p.LocalNet, []*validatorData, error) {
@@ -54,9 +54,9 @@ func createNetworkWithValidators(ctx context.Context, loggerFactory func(string)
 		return nil, nil, err
 	}
 
-	oids := make([]beacon.OperatorID, 0)
+	oids := make([]message.OperatorID, 0)
 	for i := 1; i <= len(ln.NodeKeys); i++ {
-		oids = append(oids, beacon.OperatorID(i))
+		oids = append(oids, message.OperatorID(i))
 	}
 
 	nShares := len(pks)
@@ -70,7 +70,7 @@ func createNetworkWithValidators(ctx context.Context, loggerFactory func(string)
 			return nil, nil, err
 		}
 		messages, err := testingprotocol.CreateMultipleSignedMessages(sks, message.Height(0), message.Height(10),
-			func(height message.Height) ([]beacon.OperatorID, *message.ConsensusMessage) {
+			func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
 				return generator(height, pk, oids...)
 			})
 		if err != nil {

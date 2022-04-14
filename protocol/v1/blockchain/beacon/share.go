@@ -32,9 +32,9 @@ type Node struct {
 
 // Share storage model
 type Share struct {
-	NodeID       OperatorID
+	NodeID       message.OperatorID
 	PublicKey    *bls.PublicKey
-	Committee    map[OperatorID]*Node
+	Committee    map[message.OperatorID]*Node
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
@@ -42,9 +42,9 @@ type Share struct {
 
 //  serializedShare struct
 type serializedShare struct {
-	NodeID       OperatorID
+	NodeID       message.OperatorID
 	ShareKey     []byte
-	Committee    map[OperatorID]*Node
+	Committee    map[message.OperatorID]*Node
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
@@ -88,7 +88,7 @@ func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
 }
 
 // PubKeysByID returns the public keys with the associated ids
-func (s *Share) PubKeysByID(ids []OperatorID) (PubKeys, error) {
+func (s *Share) PubKeysByID(ids []message.OperatorID) (PubKeys, error) {
 	ret := make([]*bls.PublicKey, 0)
 	for _, id := range ids {
 		if val, ok := s.Committee[id]; ok {
@@ -114,9 +114,9 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 		return errors.New("could not find public key")
 	}
 
-	var operators []*Operator
+	var operators []*message.Operator
 	for _, id := range msg.GetSigners() {
-		operators = append(operators, &Operator{OperatorID: id})
+		operators = append(operators, &message.Operator{OperatorID: id})
 	}
 	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators) // TODO need to check if this is the right verify func
 	//res, err := msg.VerifyAggregatedSig(pks)
@@ -134,7 +134,7 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
 		NodeID:       s.NodeID,
-		Committee:    map[OperatorID]*Node{},
+		Committee:    map[message.OperatorID]*Node{},
 		Metadata:     s.Metadata,
 		OwnerAddress: s.OwnerAddress,
 		Operators:    s.Operators,

@@ -2,7 +2,6 @@ package inmem
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"sync"
 
@@ -14,7 +13,7 @@ type messagesContainer struct {
 	messagesByRound         map[message.Round][]*message.SignedMessage
 	messagesByRoundAndValue map[message.Round]map[string][]*message.SignedMessage // map[round]map[valueHex]msgs
 	allChangeRoundMessages  []*message.SignedMessage
-	exitingMsgSigners       map[message.Round]map[beacon.OperatorID]bool
+	exitingMsgSigners       map[message.Round]map[message.OperatorID]bool
 	quorumThreshold         uint64
 	partialQuorumThreshold  uint64
 	lock                    sync.RWMutex
@@ -26,7 +25,7 @@ func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContaine
 		messagesByRound:         make(map[message.Round][]*message.SignedMessage),
 		messagesByRoundAndValue: make(map[message.Round]map[string][]*message.SignedMessage),
 		allChangeRoundMessages:  make([]*message.SignedMessage, 0),
-		exitingMsgSigners:       make(map[message.Round]map[beacon.OperatorID]bool),
+		exitingMsgSigners:       make(map[message.Round]map[message.OperatorID]bool),
 		quorumThreshold:         quorumThreshold,
 		partialQuorumThreshold:  partialQuorumThreshold,
 	}
@@ -93,7 +92,7 @@ func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
 	_, found = c.messagesByRoundAndValue[msg.Message.Round]
 	if !found {
 		c.messagesByRoundAndValue[msg.Message.Round] = make(map[string][]*message.SignedMessage)
-		c.exitingMsgSigners[msg.Message.Round] = make(map[beacon.OperatorID]bool)
+		c.exitingMsgSigners[msg.Message.Round] = make(map[message.OperatorID]bool)
 	}
 	_, found = c.messagesByRoundAndValue[msg.Message.Round][valueHex]
 	if !found {
@@ -126,7 +125,7 @@ func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage) {
 
 func (c *messagesContainer) PartialChangeRoundQuorum(stateRound message.Round) (found bool, lowestChangeRound message.Round) {
 	lowestChangeRound = message.Round(100000) // just a random really large round number
-	foundMsgs := make(map[beacon.OperatorID]*message.SignedMessage)
+	foundMsgs := make(map[message.OperatorID]*message.SignedMessage)
 	quorumCount := 0
 
 	c.lock.RLock()

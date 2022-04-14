@@ -3,7 +3,6 @@ package message
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/pkg/errors"
 )
 
@@ -12,7 +11,7 @@ type PostConsensusMessage struct {
 	Height          Height
 	DutySignature   []byte // The beacon chain partial Signature for a duty
 	DutySigningRoot []byte // the root signed in DutySignature
-	Signers         []beacon.OperatorID
+	Signers         []OperatorID
 }
 
 // Encode returns a msg encoded bytes or error
@@ -39,7 +38,7 @@ func (pcsm *PostConsensusMessage) GetRoot() ([]byte, error) {
 type SignedPostConsensusMessage struct {
 	Message   *PostConsensusMessage
 	Signature Signature
-	Signers   []beacon.OperatorID
+	Signers   []OperatorID
 }
 
 // Encode returns a msg encoded bytes or error
@@ -58,7 +57,7 @@ func (spcsm *SignedPostConsensusMessage) GetSignature() Signature {
 }
 
 // GetSigners returns the message signers
-func (spcsm *SignedPostConsensusMessage) GetSigners() []beacon.OperatorID {
+func (spcsm *SignedPostConsensusMessage) GetSigners() []OperatorID {
 	return spcsm.Signers
 }
 
@@ -103,13 +102,13 @@ func (spcsm *SignedPostConsensusMessage) Aggregate(signedMsg ...MsgSignature) er
 }
 
 // MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []beacon.OperatorID) bool {
-	toMatchCnt := make(map[beacon.OperatorID]int)
+func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []OperatorID) bool {
+	toMatchCnt := make(map[OperatorID]int)
 	for _, id := range ids {
 		toMatchCnt[id]++
 	}
 
-	foundCnt := make(map[beacon.OperatorID]int)
+	foundCnt := make(map[OperatorID]int)
 	for _, id := range spcsm.GetSigners() {
 		foundCnt[id]++
 	}

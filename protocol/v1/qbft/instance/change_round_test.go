@@ -76,15 +76,15 @@ func bytesToChangeRoundData(input []byte) *message.RoundChangeData {
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[beacon.OperatorID]*beacon.Node) {
+func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[beacon.OperatorID]*beacon.Node)
+	nodes := make(map[message.OperatorID]*beacon.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[beacon.OperatorID(uint64(i))] = &beacon.Node{
+		nodes[message.OperatorID(uint64(i))] = &beacon.Node{
 			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
@@ -103,7 +103,7 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusM
 
 	return &message.SignedMessage{
 		Message:   msg,
-		Signers:   []beacon.OperatorID{beacon.OperatorID(id)},
+		Signers:   []message.OperatorID{message.OperatorID(id)},
 		Signature: sig.Serialize(),
 	}
 }
@@ -283,7 +283,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -312,7 +312,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.ProposalMsgType,
 								Height:     0,
@@ -341,7 +341,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -370,7 +370,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -399,7 +399,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -428,7 +428,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2},
+							Signers:   []message.OperatorID{1, 2},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -457,7 +457,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -486,7 +486,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					RoundChangeJustification: []*message.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []beacon.OperatorID{1, 2, 3},
+							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
@@ -531,7 +531,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 
 			_, err = changeround2.Validate(instance.ValidatorShare).Run(&message.SignedMessage{
 				Signature: signature.Serialize(),
-				Signers:   []beacon.OperatorID{beacon.OperatorID(test.signerID)},
+				Signers:   []message.OperatorID{message.OperatorID(test.signerID)},
 				Message:   test.msg,
 			})
 			if len(test.expectedError) > 0 {
@@ -559,7 +559,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &beacon.Share{Committee: map[beacon.OperatorID]*beacon.Node{
+		ValidatorShare: &beacon.Share{Committee: map[message.OperatorID]*beacon.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -581,7 +581,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	t.Run("change round quorum no previous prepare", func(t *testing.T) {
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []beacon.OperatorID{beacon.OperatorID(1)},
+			Signers:   []message.OperatorID{message.OperatorID(1)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -591,7 +591,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []beacon.OperatorID{beacon.OperatorID(2)},
+			Signers:   []message.OperatorID{message.OperatorID(2)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -601,7 +601,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []beacon.OperatorID{beacon.OperatorID(3)},
+			Signers:   []message.OperatorID{message.OperatorID(3)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -626,7 +626,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		instance.ChangeRoundMessages = msgcontinmem.New(3, 2)
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []beacon.OperatorID{beacon.OperatorID(1)},
+			Signers:   []message.OperatorID{message.OperatorID(1)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -636,7 +636,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []beacon.OperatorID{beacon.OperatorID(2)},
+			Signers:   []message.OperatorID{message.OperatorID(2)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -646,7 +646,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}})
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
-			Signers:   []beacon.OperatorID{beacon.OperatorID(3)},
+			Signers:   []message.OperatorID{message.OperatorID(3)},
 			Message: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
@@ -666,7 +666,7 @@ func TestHighestPrepared(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &beacon.Share{Committee: map[beacon.OperatorID]*beacon.Node{
+		ValidatorShare: &beacon.Share{Committee: map[message.OperatorID]*beacon.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -676,7 +676,7 @@ func TestHighestPrepared(t *testing.T) {
 
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
-		Signers:   []beacon.OperatorID{beacon.OperatorID(1)},
+		Signers:   []message.OperatorID{message.OperatorID(1)},
 		Message: &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     1,
@@ -686,7 +686,7 @@ func TestHighestPrepared(t *testing.T) {
 		}})
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
-		Signers:   []beacon.OperatorID{beacon.OperatorID(2)},
+		Signers:   []message.OperatorID{message.OperatorID(2)},
 		Message: &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     1,
@@ -705,7 +705,7 @@ func TestHighestPrepared(t *testing.T) {
 	// test 2 equals
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
-		Signers:   []beacon.OperatorID{beacon.OperatorID(2)},
+		Signers:   []message.OperatorID{message.OperatorID(2)},
 		Message: &message.ConsensusMessage{
 			MsgType:    message.RoundChangeMsgType,
 			Height:     1,

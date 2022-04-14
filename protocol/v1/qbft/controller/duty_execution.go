@@ -88,7 +88,7 @@ func (c *Controller) generateSignatureMessage(sig []byte, height message.Height)
 	// TODO - should we construct it better?
 	SignedMsg := &message.SignedMessage{
 		Signature: sig,
-		Signers:   []beaconprotocol.OperatorID{c.ValidatorShare.NodeID},
+		Signers:   []message.OperatorID{c.ValidatorShare.NodeID},
 		Message: &message.ConsensusMessage{
 			MsgType:    0,
 			Height:     height,
