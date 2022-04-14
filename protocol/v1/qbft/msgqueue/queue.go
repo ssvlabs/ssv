@@ -38,7 +38,7 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 	var err error
 
 	opts := &Options{}
-	if err := opts.Apply(opt...); err != nil {
+	if err = opts.Apply(opt...); err != nil {
 		err = errors.Wrap(err, "could not apply options")
 	}
 

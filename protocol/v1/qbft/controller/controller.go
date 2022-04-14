@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v1/sync/history"
 	"go.uber.org/atomic"
 	"sync"
 	"time"
@@ -39,9 +40,6 @@ type Options struct {
 	SyncRateLimit  time.Duration
 	SigTimeout     time.Duration
 	ReadMode       bool
-
-	SyncDecided SyncDecided
-	SyncRound   SyncRound
 }
 
 // Controller implements Controller interface
@@ -76,9 +74,6 @@ type Controller struct {
 	readMode bool
 
 	q msgqueue.MsgQueue
-
-	syncDecided SyncDecided // TODO need to init
-	syncRound   SyncRound   // TODO need to init
 }
 
 // New is the constructor of Controller
@@ -124,6 +119,29 @@ func New(opts Options) IController {
 	return ret
 }
 
+func (c *Controller) syncDecided() error {
+	h := history.New(c.logger, c.network)
+
+	handler := func(msg *message.SignedMessage) error {
+		err := c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
+		if err != nil {
+			return errors.Wrap(err, "invalid msg")
+		}
+		// TODO: exit if already exist
+		return c.ibftStorage.SaveDecided(msg)
+	}
+
+	highest, err := h.SyncDecided(c.ctx, c.Identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+		return c.ibftStorage.GetLastDecided(i)
+	}, handler)
+
+	if err == nil && highest != nil {
+		err = c.ibftStorage.SaveLastDecided(highest)
+	}
+
+	return err
+}
+
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
 func (c *Controller) Init() error {
@@ -137,12 +155,11 @@ func (c *Controller) Init() error {
 
 	if !c.initSynced.Load() {
 		// IBFT sync to make sure the operator is aligned for this validator
-		if err := c.syncDecided(c.ctx, &SyncContext{
-			Store:      c.ibftStorage,
-			Syncer:     c.network,
-			Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
-			Identifier: c.GetIdentifier(),
-		}); err != nil {
+		if err := c.syncDecided(); err != nil {
+			//Store:      c.ibftStorage,
+			//Syncer:     c.network,
+			//Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
+			//Identifier: c.GetIdentifier(),
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.logger.Debug("iBFT init is already running (syncing history)")
