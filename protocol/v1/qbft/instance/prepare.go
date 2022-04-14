@@ -15,17 +15,8 @@ import (
 
 // PrepareMsgPipeline is the main prepare msg pipeline
 func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.PrepareMsgPipeline()
-}
-
-// PrepareMsgPipelineV0 is the v0 version
-func (i *Instance) PrepareMsgPipelineV0() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
-		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.PrepareMsgType),
-		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
-		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
-		signedmsg.AuthorizeMsg(i.ValidatorShare),
+		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.State()),
 		pipelines.WrapFunc("add prepare msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),

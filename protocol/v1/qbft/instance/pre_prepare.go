@@ -6,7 +6,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 
 	"github.com/pkg/errors"
@@ -15,11 +14,6 @@ import (
 
 // PrePrepareMsgPipeline is the main pre-prepare msg pipeline
 func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.PrePrepareMsgPipeline()
-}
-
-// PrePrepareMsgPipelineV0 is version 0
-func (i *Instance) PrePrepareMsgPipelineV0() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.prePrepareMsgValidationPipeline(),
 		pipelines.WrapFunc("add pre-prepare msg", func(signedMessage *message.SignedMessage) error {
@@ -37,14 +31,7 @@ func (i *Instance) PrePrepareMsgPipelineV0() pipelines.SignedMessagePipeline {
 }
 
 func (i *Instance) prePrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return pipelines.Combine(
-		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.ProposalMsgType),
-		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
-		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
-		signedmsg.AuthorizeMsg(i.ValidatorShare),
-		preprepare.ValidatePrePrepareMsg(i.ValueCheck, i.RoundLeader),
-	)
+	return i.fork.PrePrepareMsgValidationPipeline(i.ValidatorShare, i.State(), i.ValueCheck, i.RoundLeader)
 }
 
 // JustifyPrePrepare implements:
@@ -60,8 +47,8 @@ func (i *Instance) JustifyPrePrepare(round uint64, preparedValue []byte) error {
 		return nil
 	}
 
-	if quorum, _, _ := i.changeRoundQuorum(round); quorum {
-		notPrepared, highest, err := i.HighestPrepared(round)
+	if quorum, _, _ := i.changeRoundQuorum(message.Round(round)); quorum {
+		notPrepared, highest, err := i.HighestPrepared(message.Round(round))
 		if err != nil {
 			return err
 		}
