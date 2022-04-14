@@ -1,4 +1,4 @@
-package validation
+package pipelines
 
 //func TestIfFirstTrueContinueToSecond(t *testing.T) {
 //	validPipline := WrapFunc("valid", func(signedMessage *message.SignedMessage) error {

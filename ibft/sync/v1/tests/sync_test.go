@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"testing"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 )
 
 func TestHistory(t *testing.T) {
@@ -39,7 +39,7 @@ func TestHistory(t *testing.T) {
 		store, err := newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test")
 		require.NoError(t, err)
 		stores = append(stores, store)
-		valPipeline := validation.WrapFunc(fmt.Sprintf("history_sync-validation-%d", i), func(signedMessage *message.SignedMessage) error {
+		valPipeline := pipelines.WrapFunc(fmt.Sprintf("history_sync-validation-%d", i), func(signedMessage *message.SignedMessage) error {
 			return nil
 		})
 		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), store, node, valPipeline)

@@ -2,10 +2,10 @@ package instance
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 
@@ -14,30 +14,30 @@ import (
 )
 
 // PrePrepareMsgPipeline is the main pre-prepare msg pipeline
-func (i *Instance) PrePrepareMsgPipeline() validation.SignedMessagePipeline {
+func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 	return i.fork.PrePrepareMsgPipeline()
 }
 
 // PrePrepareMsgPipelineV0 is version 0
-func (i *Instance) PrePrepareMsgPipelineV0() validation.SignedMessagePipeline {
-	return validation.Combine(
+func (i *Instance) PrePrepareMsgPipelineV0() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		i.prePrepareMsgValidationPipeline(),
-		validation.WrapFunc("add pre-prepare msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add pre-prepare msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid pre-prepare message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 			i.PrePrepareMessages.AddMessage(signedMessage)
 			return nil
 		}),
-		validation.CombineQuiet(
+		pipelines.CombineQuiet(
 			signedmsg.ValidateRound(i.State().GetRound()),
 			i.UponPrePrepareMsg(),
 		),
 	)
 }
 
-func (i *Instance) prePrepareMsgValidationPipeline() validation.SignedMessagePipeline {
-	return validation.Combine(
+func (i *Instance) prePrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.ProposalMsgType),
 		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
@@ -82,8 +82,8 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) UponPrePrepareMsg() validation.SignedMessagePipeline {
-	return validation.WrapFunc("upon pre-prepare msg", func(signedMessage *message.SignedMessage) error {
+func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("upon pre-prepare msg", func(signedMessage *message.SignedMessage) error {
 		// Pre-prepare justification
 		err := i.JustifyPrePrepare(uint64(signedMessage.Message.Round), signedMessage.Message.Data)
 		if err != nil {

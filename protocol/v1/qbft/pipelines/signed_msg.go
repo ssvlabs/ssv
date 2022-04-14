@@ -1,4 +1,4 @@
-package validation
+package pipelines
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"

@@ -2,8 +2,7 @@ package changeround
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
-
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"go.uber.org/zap"
 )
 
@@ -13,7 +12,7 @@ type uponFullQuorum struct {
 }
 
 // UponFullQuorum is the constructor of uponFullQuorum
-func UponFullQuorum(logger *zap.Logger) validation.SignedMessagePipeline {
+func UponFullQuorum(logger *zap.Logger) pipelines.SignedMessagePipeline {
 	return &uponFullQuorum{
 		logger: logger,
 	}

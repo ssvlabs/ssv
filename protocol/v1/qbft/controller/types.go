@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 )
 
 type Controllers map[message.RoleType]IController
@@ -18,7 +18,7 @@ func (c Controllers) ControllerForIdentifier(identifier message.Identifier) ICon
 type SyncContext struct {
 	Store      qbftstorage.DecidedMsgStore
 	Syncer     p2pprotocol.Syncer
-	Validate   validation.SignedMessagePipeline
+	Validate   pipelines.SignedMessagePipeline
 	Identifier message.Identifier
 }
 

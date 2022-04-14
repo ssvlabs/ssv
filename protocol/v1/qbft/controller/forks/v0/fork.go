@@ -6,7 +6,7 @@ import (
 	controcllerfork "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
 	instancefork "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	forkv0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -25,8 +25,8 @@ func (v0 *ForkV0) InstanceFork() instancefork.Fork {
 }
 
 // ValidateDecidedMsg impl
-func (v0 *ForkV0) ValidateDecidedMsg(share *beacon.Share) validation.SignedMessagePipeline {
-	return validation.Combine(
+func (v0 *ForkV0) ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.CommitMsgType),
 		signedmsg.AuthorizeMsg(share),

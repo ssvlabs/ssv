@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"sync"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/utils/format"
 
 	"github.com/pkg/errors"
@@ -235,7 +235,7 @@ func (i *Instance) Stopped() bool {
 }
 
 func (i *Instance) ProcessMsg(msg *message.SignedMessage) (bool, []byte, error) {
-	var pp validation.SignedMessagePipeline
+	var pp pipelines.SignedMessagePipeline
 
 	switch msg.Message.MsgType {
 	case message.ProposalMsgType:
@@ -381,7 +381,7 @@ func (i *Instance) setFork(fork forks.Fork) {
 		return
 	}
 	i.fork = fork
-	i.fork.Apply(i)
+	//i.fork.Apply(i)
 }
 
 func generateState(opts *Options) *qbft.State {

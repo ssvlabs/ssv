@@ -5,8 +5,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbft "github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
@@ -52,15 +52,10 @@ func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFT
 }
 
 // CommitMsgPipeline - the main commit msg pipeline
-func (i *Instance) CommitMsgPipeline() validation.SignedMessagePipeline {
-	return i.fork.CommitMsgPipeline()
-}
-
-// CommitMsgPipelineV0 - genesis version 0
-func (i *Instance) CommitMsgPipelineV0() validation.SignedMessagePipeline {
-	return validation.Combine(
+func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		i.CommitMsgValidationPipeline(),
-		validation.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
@@ -72,36 +67,15 @@ func (i *Instance) CommitMsgPipelineV0() validation.SignedMessagePipeline {
 }
 
 // CommitMsgValidationPipeline is the main commit msg pipeline
-func (i *Instance) CommitMsgValidationPipeline() validation.SignedMessagePipeline {
-	return i.fork.CommitMsgValidationPipeline()
-}
-
-// CommitMsgValidationPipelineV0 is version 0
-func (i *Instance) CommitMsgValidationPipelineV0() validation.SignedMessagePipeline {
-	return CommitMsgValidationPipelineV0(i.State().GetIdentifier(), i.State().GetHeight(), i.ValidatorShare)
-}
-
-// CommitMsgValidationPipelineV0 is version 0 of commit message validation
-func CommitMsgValidationPipelineV0(identifier message.Identifier, seq message.Height, share *beacon.Share) validation.SignedMessagePipeline {
-	return validation.Combine(
-		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier),
-		signedmsg.ValidateSequenceNumber(seq),
-		signedmsg.AuthorizeMsg(share),
-	)
+func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight())
 }
 
 // DecidedMsgPipeline is the main pipeline for decided msgs
-func (i *Instance) DecidedMsgPipeline() validation.SignedMessagePipeline {
-	return i.fork.DecidedMsgPipeline()
-}
-
-// DecidedMsgPipelineV0 is version 0
-func (i *Instance) DecidedMsgPipelineV0() validation.SignedMessagePipeline {
-	return validation.Combine(
+func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		i.CommitMsgValidationPipeline(),
-		validation.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid decided message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
@@ -117,8 +91,8 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	set timer i to stopped
 	Decide(λi , value, Qcommit)
 */
-func (i *Instance) uponCommitMsg() validation.SignedMessagePipeline {
-	return validation.WrapFunc("upon commit msg", func(signedMessage *message.SignedMessage) error {
+func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("upon commit msg", func(signedMessage *message.SignedMessage) error {
 		msgCommitData, err := signedMessage.Message.GetCommitData()
 		if err != nil {
 			return errors.Wrap(err, "failed to get commit data")
