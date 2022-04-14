@@ -2,7 +2,6 @@ package validator
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/validator/storage"
 	"sync"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -18,10 +17,10 @@ import (
 type ICollection interface {
 	eth1.RegistryStore
 
-	SaveValidatorShare(share *storage.Share) error
-	GetValidatorShare(key []byte) (*storage.Share, bool, error)
-	GetAllValidatorShares() ([]*storage.Share, error)
-	GetOperatorValidatorShares(operatorPubKey string) ([]*storage.Share, error)
+	SaveValidatorShare(share *beaconprotocol.Share) error
+	GetValidatorShare(key []byte) (*beaconprotocol.Share, bool, error)
+	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
+	GetOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error)
 }
 
 func collectionPrefix() []byte {
