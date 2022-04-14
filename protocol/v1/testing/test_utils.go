@@ -103,7 +103,7 @@ func AggregateInvalidSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKe
 
 // PopulatedStorage create new QBFTStore instance, save the highest height and then populated from 0 to highestHeight
 func PopulatedStorage(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, round message.Round, highestHeight message.Height) qbftstorage.QBFTStore {
-	s := qbftstorage.NewQBFTStore(newInMemDb(), logex.GetLogger(zap.String("who", "qbftStore")), "test-qbft-storage")
+	s := qbftstorage.NewQBFTStore(NewInMemDb(), logex.GetLogger(zap.String("who", "qbftStore")), "test-qbft-storage")
 
 	signers := make([]message.OperatorID, len(sks))
 	for k := range sks {
