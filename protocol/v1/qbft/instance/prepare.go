@@ -3,10 +3,10 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 
 	"github.com/pkg/errors"
@@ -14,26 +14,26 @@ import (
 )
 
 // PrepareMsgPipeline is the main prepare msg pipeline
-func (i *Instance) PrepareMsgPipeline() validation.SignedMessagePipeline {
+func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 	return i.fork.PrepareMsgPipeline()
 }
 
 // PrepareMsgPipelineV0 is the v0 version
-func (i *Instance) PrepareMsgPipelineV0() validation.SignedMessagePipeline {
-	return validation.Combine(
+func (i *Instance) PrepareMsgPipelineV0() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.PrepareMsgType),
 		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
 		signedmsg.AuthorizeMsg(i.ValidatorShare),
-		validation.WrapFunc("add prepare msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add prepare msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 			i.PrepareMessages.AddMessage(signedMessage)
 			return nil
 		}),
-		validation.CombineQuiet(
+		pipelines.CombineQuiet(
 			signedmsg.ValidateRound(i.State().GetRound()),
 			i.uponPrepareMsg(),
 		),
@@ -74,8 +74,8 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	pvi ← value
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
-func (i *Instance) uponPrepareMsg() validation.SignedMessagePipeline {
-	return validation.WrapFunc("upon prepare msg", func(signedMessage *message.SignedMessage) error {
+func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("upon prepare msg", func(signedMessage *message.SignedMessage) error {
 		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Data); quorum {
 			var err error

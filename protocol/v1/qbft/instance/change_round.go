@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"math"
 	"time"
@@ -13,7 +14,6 @@ import (
 	//"github.com/bloxapp/ssv/ibft/pipeline/changeround"
 	//"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
@@ -22,15 +22,10 @@ import (
 )
 
 // ChangeRoundMsgPipeline - the main change round msg pipeline
-func (i *Instance) ChangeRoundMsgPipeline() validation.SignedMessagePipeline {
-	return i.fork.ChangeRoundMsgPipeline()
-}
-
-// ChangeRoundMsgPipelineV0 - genesis version 0
-func (i *Instance) ChangeRoundMsgPipelineV0() validation.SignedMessagePipeline {
-	return validation.Combine(
+func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
 		i.ChangeRoundMsgValidationPipeline(),
-		validation.WrapFunc("add change round msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add change round msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid change round message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
@@ -43,24 +38,12 @@ func (i *Instance) ChangeRoundMsgPipelineV0() validation.SignedMessagePipeline {
 }
 
 // ChangeRoundMsgValidationPipeline - the main change round msg validation pipeline
-func (i *Instance) ChangeRoundMsgValidationPipeline() validation.SignedMessagePipeline {
-	return i.fork.ChangeRoundMsgValidationPipeline()
+func (i *Instance) ChangeRoundMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return i.fork.ChangeRoundMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight())
 }
 
-// ChangeRoundMsgValidationPipelineV0 - genesis version 0
-func (i *Instance) ChangeRoundMsgValidationPipelineV0() validation.SignedMessagePipeline {
-	return validation.Combine(
-		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(i.State().GetIdentifier()),
-		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
-		signedmsg.AuthorizeMsg(i.ValidatorShare),
-		changeround.Validate(i.ValidatorShare),
-	)
-}
-
-func (i *Instance) changeRoundFullQuorumMsgPipeline() validation.SignedMessagePipeline {
-	return validation.CombineQuiet(
+func (i *Instance) changeRoundFullQuorumMsgPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.CombineQuiet(
 		signedmsg.ValidateRound(i.State().GetRound()),
 		i.uponChangeRoundFullQuorum(),
 	)
@@ -75,8 +58,8 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 			let v such that v = inputValue i
 		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
 */
-func (i *Instance) uponChangeRoundFullQuorum() validation.SignedMessagePipeline {
-	return validation.WrapFunc("upon change round full quorum", func(signedMessage *message.SignedMessage) error {
+func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *message.SignedMessage) error {
 		var err error
 		quorum, msgsCount, committeeSize := i.changeRoundQuorum(signedMessage.Message.Round)
 

@@ -2,6 +2,7 @@ package preprepare
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 
 	"github.com/pkg/errors"
@@ -11,8 +12,8 @@ import (
 type LeaderResolver func(round message.Round) uint64
 
 // ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(valueCheck validation.ValueCheck, resolver LeaderResolver) validation.SignedMessagePipeline {
-	return validation.WrapFunc("validate pre-prepare", func(signedMessage *message.SignedMessage) error {
+func ValidatePrePrepareMsg(valueCheck validation.ValueCheck, resolver LeaderResolver) pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("validate pre-prepare", func(signedMessage *message.SignedMessage) error {
 		signers := signedMessage.GetSigners()
 		if len(signers) != 1 {
 			return errors.New("invalid number of signers for pre-prepare message")

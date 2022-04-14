@@ -3,11 +3,11 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -29,11 +29,11 @@ type history struct {
 	logger   *zap.Logger
 	store    qbftstorage.DecidedMsgStore
 	syncer   p2pprotocol.Syncer
-	validate validation.SignedMessagePipeline
+	validate pipelines.SignedMessagePipeline
 }
 
 // New creates a new instance of History
-func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validate validation.SignedMessagePipeline) History {
+func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validate pipelines.SignedMessagePipeline) History {
 	return &history{
 		logger:   logger,
 		store:    store,

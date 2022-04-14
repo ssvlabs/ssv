@@ -3,7 +3,7 @@ package changeround
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -18,11 +18,11 @@ type Fetcher interface {
 type changeRoundFetcher struct {
 	logger   *zap.Logger
 	syncer   p2pprotocol.Syncer
-	validate validation.SignedMessagePipeline
+	validate pipelines.SignedMessagePipeline
 }
 
 // NewLastRoundFetcher returns an instance of changeRoundFetcher
-func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer, validate validation.SignedMessagePipeline) Fetcher {
+func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer, validate pipelines.SignedMessagePipeline) Fetcher {
 	return &changeRoundFetcher{
 		logger:   logger,
 		syncer:   syncer,

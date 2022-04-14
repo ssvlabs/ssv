@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/pkg/errors"
 )
 
@@ -14,7 +14,7 @@ type validateJustification struct {
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *beacon.Share) validation.SignedMessagePipeline {
+func Validate(share *beacon.Share) pipelines.SignedMessagePipeline {
 	return &validateJustification{
 		share: share,
 	}

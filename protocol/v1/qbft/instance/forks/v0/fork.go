@@ -1,9 +1,16 @@
 package v0
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // ForkV0 is the genesis fork for instances
@@ -21,37 +28,49 @@ func (v0 *ForkV0) Apply(instance *instance.Instance) {
 	v0.instance = instance
 }
 
-// PrePrepareMsgPipeline - is the full processing msg pipeline for a pre-prepare msg
-func (v0 *ForkV0) PrePrepareMsgPipeline() validation.SignedMessagePipeline {
-	return v0.instance.PrePrepareMsgPipelineV0()
+// PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
+func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state qbft.State, valCheck validation.ValueCheck,
+	roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.ProposalMsgType),
+		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.AuthorizeMsg(share),
+		preprepare.ValidatePrePrepareMsg(valCheck, roundLeader),
+	)
 }
 
-// PrepareMsgPipeline - is the full processing msg pipeline for a prepare msg
-func (v0 *ForkV0) PrepareMsgPipeline() validation.SignedMessagePipeline {
-	return v0.instance.PrepareMsgPipelineV0()
+// PrepareMsgValidationPipeline is the validation pipeline for prepare messages
+func (v0 *ForkV0) PrepareMsgValidationPipeline(share *beacon.Share, state qbft.State) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.PrepareMsgType),
+		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.AuthorizeMsg(share),
+	)
 }
 
-// CommitMsgValidationPipeline - is a msg validation ONLY pipeline
-func (v0 *ForkV0) CommitMsgValidationPipeline() validation.SignedMessagePipeline {
-	return v0.instance.CommitMsgValidationPipelineV0()
+// CommitMsgValidationPipeline is the validation pipeline for commit messages
+func (v0 *ForkV0) CommitMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.CommitMsgType),
+		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.AuthorizeMsg(share),
+	)
 }
 
-// CommitMsgPipeline - is the full processing msg pipeline for a commit msg
-func (v0 *ForkV0) CommitMsgPipeline() validation.SignedMessagePipeline {
-	return v0.instance.CommitMsgPipelineV0()
-}
-
-// DecidedMsgPipeline - is a specific full processing pipeline for a decided msg
-func (v0 *ForkV0) DecidedMsgPipeline() validation.SignedMessagePipeline {
-	return v0.instance.DecidedMsgPipelineV0()
-}
-
-// ChangeRoundMsgValidationPipeline - is a msg validation ONLY pipeline for a change round msg
-func (v0 *ForkV0) ChangeRoundMsgValidationPipeline() validation.SignedMessagePipeline {
-	return v0.instance.ChangeRoundMsgValidationPipelineV0()
-}
-
-// ChangeRoundMsgPipeline - is the full processing msg pipeline for a change round msg
-func (v0 *ForkV0) ChangeRoundMsgPipeline() validation.SignedMessagePipeline {
-	return v0.instance.ChangeRoundMsgPipelineV0()
+// ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
+func (v0 *ForkV0) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
+		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.AuthorizeMsg(share),
+		changeround.Validate(share),
+	)
 }
