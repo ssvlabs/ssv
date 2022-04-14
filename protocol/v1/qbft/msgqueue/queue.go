@@ -1,12 +1,14 @@
 package msgqueue
 
 import (
+	"context"
 	"fmt"
+	"strings"
+	"sync"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
 )
 
 // Cleaner is a function for iterating over keys and clean irrelevant ones
@@ -56,6 +58,7 @@ type msgContainer struct {
 
 // queue implements MsgQueue
 type queue struct {
+	ctx      context.Context
 	logger   *zap.Logger
 	indexers []Indexer
 

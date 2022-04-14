@@ -26,6 +26,7 @@ import (
 var ErrAlreadyRunning = errors.New("already running")
 
 type Options struct {
+	Context        context.Context
 	Role           message.RoleType
 	Identifier     []byte
 	Logger         *zap.Logger
@@ -95,6 +96,7 @@ func New(opts Options) IController {
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
 	ret := &Controller{
+		ctx:            opts.Context,
 		ibftStorage:    opts.Storage,
 		logger:         logger,
 		network:        opts.Network,
@@ -119,8 +121,7 @@ func New(opts Options) IController {
 
 	// set flags
 	ret.initHandlers.Store(false)
-	ret.initSynced.Store(false)
-
+	ret.initSynced.Store(true) // TODo need to set false!!
 	return ret
 }
 
@@ -202,6 +203,8 @@ func (c *Controller) GetIdentifier() []byte {
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
+	c.logger.Debug("got msg")
+	c.logger.Debug("get message, process", zap.Any("msg", msg))
 	if c.readMode {
 		return c.messageHandler(msg)
 	}

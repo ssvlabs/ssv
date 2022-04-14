@@ -167,6 +167,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
 	metricsIBFTRound.WithLabelValues(role, pk).Set(1)
 
+	i.Logger.Debug("state", zap.Uint64("height", uint64(i.State().GetHeight())), zap.Uint64("round", uint64(i.State().GetRound())))
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
@@ -268,7 +269,7 @@ func (i *Instance) bumpToRound(round message.Round) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	newRound := round
-	i.State().SetRound(round)
+	i.State().Round.Store(round)
 	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
 	metricsIBFTRound.WithLabelValues(role, pk).Set(float64(newRound))
 }
@@ -319,7 +320,7 @@ func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
 		i.setLastChangeRoundMsg(signedMessage)
 	}
 
-	encodedMsg, err := msg.Encode()
+	encodedMsg, err := signedMessage.Encode()
 	if err != nil {
 		return errors.New("failed to encode consensus message")
 	}
@@ -385,21 +386,20 @@ func (i *Instance) setFork(fork forks.Fork) {
 }
 
 func generateState(opts *Options) *qbft.State {
-	var stage atomic.Int32
-	var identifier atomic.Value
-	var height, round atomic.Value
+	var identifier, height, round, preparedRound, preparedValue atomic.Value
 	height.Store(opts.Height)
-	round.Store(message.Round(1))
-	stage.Store(int32(qbft.RoundState_NotStarted))
+	round.Store(message.Round(0))
 	identifier.Store(opts.Lambda)
+	preparedRound.Store(message.Round(0))
+	preparedValue.Store([]byte{})
 
 	return &qbft.State{
-		Stage:         stage,
+		Stage:         *atomic.NewInt32(int32(qbft.RoundState_NotStarted)),
 		Identifier:    identifier,
 		Height:        height,
 		InputValue:    atomic.Value{},
 		Round:         round,
-		PreparedRound: atomic.Value{},
-		PreparedValue: atomic.Value{},
+		PreparedRound: preparedRound,
+		PreparedValue: preparedRound,
 	}
 }

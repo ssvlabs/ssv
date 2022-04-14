@@ -46,7 +46,7 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 		// if an instance is running -> get the state and get the relevant messages
 		var msg *message.SSVMessage
 		currentState := c.currentInstance.State()
-		height := currentState.Height.Load().(message.Height)
+		height := currentState.GetHeight()
 		sigMsgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, height), 1)
 		if len(sigMsgs) > 0 {
 			// got post consensus message for the current sequence
@@ -54,6 +54,8 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 		} else {
 			msg = c.getNextMsgForState(currentState)
 		}
+		c.logger.Debug("sending msg")
+		c.logger.Debug("send to message handler", zap.Any("msg", msg))
 		err := c.messageHandler(msg)
 		if err != nil {
 			c.logger.Warn("could not handle msg", zap.Error(err))
@@ -63,10 +65,7 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 }
 
 func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
-	height, ok := state.Height.Load().(message.Height)
-	if !ok {
-		return nil
-	}
+	height := state.GetHeight()
 	var msgs []*message.SSVMessage
 	switch qbft.RoundState(state.Stage.Load()) {
 	case qbft.RoundState_NotStarted:

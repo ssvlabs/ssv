@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 )
 
 type IValidator interface {
-	Start()
+	Start() error
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
@@ -74,7 +75,25 @@ func NewValidator(opt *Options) IValidator {
 	}
 }
 
-func (v *Validator) Start() {
+func (v *Validator) Start() error {
+	if err := v.p2pNetwork.Subscribe(v.GetShare().PublicKey.Serialize()); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
+	}
+
+	// init all ibft controllers
+	for _, ib := range v.ibfts {
+		go func(ib controller.IController) {
+			if err := ib.Init(); err != nil {
+				if err == controller.ErrAlreadyRunning {
+					v.logger.Debug("ibft init is already running")
+					return
+				}
+				v.logger.Error("could not initialize ibft instance", zap.Error(err))
+			}
+		}(ib)
+	}
+
+	return nil
 }
 
 func (v *Validator) GetShare() *beaconprotocol.Share {
@@ -105,6 +124,7 @@ func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options
 	identifier := []byte(format.IdentifierFormat(opt.Share.PublicKey.Serialize(), role.String()))
 
 	opts := controller.Options{
+		Context:        opt.Context,
 		Role:           role,
 		Identifier:     identifier,
 		Logger:         logger,

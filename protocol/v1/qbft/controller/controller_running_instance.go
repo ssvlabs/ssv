@@ -26,7 +26,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 	metricsCurrentSequence.WithLabelValues(role, pk).Set(float64(c.currentInstance.State().GetHeight()))
 
 	// catch up if we can
-	go c.fastChangeRoundCatchup(c.currentInstance)
+	//go c.fastChangeRoundCatchup(c.currentInstance) TODO enable!!!!
 
 	// main instance callback loop
 	var retRes *instance.InstanceResult
