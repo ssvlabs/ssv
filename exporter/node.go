@@ -1,5 +1,16 @@
 package exporter
 
+import (
+	"context"
+	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"go.uber.org/zap"
+	"time"
+)
+
 //
 //import (
 //	"context"
@@ -33,38 +44,38 @@ package exporter
 //	metaDataReaderQueuesInterval = 5 * time.Second
 //	metaDataBatchSize            = 25
 //)
+
+// Exporter represents the main interface of this package
+type Exporter interface {
+	Start() error
+	StartEth1(syncOffset *eth1.SyncOffset) error
+}
 //
-//// Exporter represents the main interface of this package
-//type Exporter interface {
-//	Start() error
-//	StartEth1(syncOffset *eth1.SyncOffset) error
-//}
-//
-//// Options contains options to create the node
-//type Options struct {
-//	Ctx context.Context
-//
-//	Logger     *zap.Logger
-//	ETHNetwork *core.Network
-//
-//	Eth1Client eth1.Client
-//	Beacon     beacon.Beacon
-//
-//	Network network.Network
-//
-//	DB basedb.IDb
-//
-//	WS                              api.WebSocketServer
-//	WsAPIPort                       int
-//	IbftSyncEnabled                 bool
-//	CleanRegistryData               bool
-//	ValidatorMetaDataUpdateInterval time.Duration
-//
-//	UseMainTopic bool
-//
-//	NumOfInstances int
-//	InstanceID     int
-//}
+// Options contains options to create the node
+type Options struct {
+	Ctx context.Context
+
+	Logger     *zap.Logger
+	ETHNetwork beacon.Network
+
+	Eth1Client eth1.Client
+	Beacon     beacon.Beacon
+
+	Network network.P2PNetwork
+
+	DB basedb.IDb
+
+	WS                              api.WebSocketServer
+	WsAPIPort                       int
+	IbftSyncEnabled                 bool
+	CleanRegistryData               bool
+	ValidatorMetaDataUpdateInterval time.Duration
+
+	UseMainTopic bool
+
+	NumOfInstances int
+	InstanceID     int
+}
 //
 //// exporter is the internal implementation of Exporter interface
 type exporter struct {

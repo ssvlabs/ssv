@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
@@ -25,7 +24,7 @@ type Node interface {
 // Options contains options to create the node
 type Options struct {
 	ETHNetwork          beaconprotocol.Network
-	Beacon              beacon.Beacon
+	Beacon              beaconprotocol.Beacon
 	Network             network.P2PNetwork
 	Context             context.Context
 	Logger              *zap.Logger
@@ -48,7 +47,7 @@ type operatorNode struct {
 	context        context.Context
 	validatorsCtrl validator.Controller
 	logger         *zap.Logger
-	beacon         beacon.Beacon
+	beacon         beaconprotocol.Beacon
 	net            network.P2PNetwork
 	storage        Storage
 	eth1Client     eth1.Client

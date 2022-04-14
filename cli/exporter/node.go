@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
@@ -150,14 +149,14 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Logger = Logger
 		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 		cfg.ETH2Options.DB = db
-		beaconClient, err := goclient.New(cfg.ETH2Options)
-		if err != nil {
-			Logger.Fatal("failed to create beacon go-client", zap.Error(err))
-		}
+		//beaconClient, err := goclient.New(cfg.ETH2Options)
+		//if err != nil {
+		//	Logger.Fatal("failed to create beacon go-client", zap.Error(err))
+		//}
 
 		exporterOptions := new(exporter.Options)
 		exporterOptions.Eth1Client = eth1Client
-		exporterOptions.Beacon = beaconClient
+		//exporterOptions.Beacon = beaconClient
 		exporterOptions.Logger = Logger
 		//exporterOptions.Network = network // TODO
 		exporterOptions.DB = db
@@ -171,21 +170,21 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.NumOfInstances = cfg.NumOfInstances
 		exporterOptions.InstanceID = cfg.InstanceID
 
-		exporterNode = exporter.New(*exporterOptions)
-
-		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
-		}
-
-		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
-		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
-
-		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
-			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-		if err := exporterNode.Start(); err != nil {
-			Logger.Fatal("failed to start exporter", zap.Error(err))
-		}
+		//exporterNode = exporter.New(*exporterOptions)
+		//
+		//if cfg.MetricsAPIPort > 0 {
+		//	go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
+		//}
+		//
+		//metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
+		//metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
+		//
+		//if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+		//	Logger.Fatal("failed to start eth1", zap.Error(err))
+		//}
+		//if err := exporterNode.Start(); err != nil {
+		//	Logger.Fatal("failed to start exporter", zap.Error(err))
+		//}
 	},
 }
 

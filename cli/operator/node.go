@@ -158,7 +158,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ETHNetwork = eth2Network
 		//cfg.SSVOptions.Network = p2pNet // TODO
 
-		cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
+		//cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network

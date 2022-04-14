@@ -7,7 +7,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
@@ -57,7 +56,7 @@ func newDutyFetcher(logger *zap.Logger, beaconClient beaconDutiesClient, indices
 // dutyFetcher is internal implementation of DutyFetcher
 type dutyFetcher struct {
 	logger         *zap.Logger
-	ethNetwork     core.Network
+	ethNetwork     beacon.Network
 	beaconClient   beaconDutiesClient
 	indicesFetcher validatorsIndicesFetcher
 
