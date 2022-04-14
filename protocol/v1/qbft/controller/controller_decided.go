@@ -23,10 +23,10 @@ upon receiving a valid hROUND-CHANGE, λi, −, −, −i message from pj ∧ pi
 by calling Decide(λi,− , Qcommit) do
 	send Qcommit to process pj
 */
-func (c *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
+func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
 		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
-		return
+		return nil
 	}
 	logger := c.logger.With(zap.Uint64("seq number", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
 
@@ -36,35 +36,35 @@ func (c *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
 	known, err := c.decidedMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
-		return
+		return nil
 	}
 	if known {
 		// if decided is known, check for a more complete message (more signers)
 		if ignore, _ := c.checkDecidedMessageSigners(msg); !ignore {
 			if err := c.ibftStorage.SaveDecided(msg); err != nil {
 				logger.Error("can't update decided message", zap.Error(err))
-				return
+				return nil
 			}
 			logger.Debug("decided was updated")
 			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
-			return
+			return nil
 		}
 		logger.Debug("decided is known, skipped")
-		return
+		return nil
 	}
 
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
 	// decided for current instance
 	if c.forceDecideCurrentInstance(msg) {
-		return
+		return nil
 	}
 
 	// decided for later instances which require a full sync
 	shouldSync, err := c.decidedRequiresSync(msg)
 	if err != nil {
 		logger.Error("can't check decided msg", zap.Error(err))
-		return
+		return nil
 	}
 	if shouldSync {
 		c.logger.Info("stopping current instance and syncing..")
@@ -76,6 +76,7 @@ func (c *Controller) ProcessDecidedMessage(msg *message.SignedMessage) {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}
 	}
+	return nil
 }
 
 // forceDecideCurrentInstance will force the current instance to decide provided a signed decided msg.
