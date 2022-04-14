@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/basedb"
 
@@ -76,7 +75,6 @@ func (vm *validatorsMap) GetOrCreateValidator(share *beacon.Share) validator.IVa
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
-		opts.IbftStorage = storage.New(vm.db, vm.logger, share.PublicKey.SerializeToHexStr())
 		vm.validatorsMap[pubKey] = validator.NewValidator(&opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil

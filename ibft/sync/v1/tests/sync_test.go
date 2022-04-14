@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
-	"github.com/bloxapp/ssv/ibft/sync/v1/history"
+	"github.com/bloxapp/ssv/protocol/v1/sync/history"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -39,10 +39,7 @@ func TestHistory(t *testing.T) {
 		store, err := newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test")
 		require.NoError(t, err)
 		stores = append(stores, store)
-		valPipeline := pipelines.WrapFunc(fmt.Sprintf("history_sync-validation-%d", i), func(signedMessage *message.SignedMessage) error {
-			return nil
-		})
-		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), store, node, valPipeline)
+		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node)
 		histories = append(histories, h)
 		f := forksv1.New()
 		pid, _ := f.DecidedHistoryProtocol()
