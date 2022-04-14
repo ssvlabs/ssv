@@ -47,5 +47,3 @@ func (m *mockSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byt
 func (m *mockSigner) SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	panic("implement me")
 }
-
-

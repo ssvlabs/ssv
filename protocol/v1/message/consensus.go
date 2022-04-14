@@ -7,6 +7,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+var ErrDuplicateMsgSigner = errors.New("can't aggregate 2 signed messages with mutual signers")
+
 // Signer is an interface responsible for consensus messages signing
 type Signer interface {
 	// SignIBFTMessage signs a network iBFT msg

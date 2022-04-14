@@ -1,4 +1,5 @@
 package deterministic
+
 //
 //import (
 //	"fmt"

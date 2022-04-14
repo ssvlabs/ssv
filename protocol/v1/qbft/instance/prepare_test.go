@@ -1,4 +1,5 @@
 package instance
+
 //
 //import (
 //	"github.com/bloxapp/ssv/protocol/v1/keymanager"

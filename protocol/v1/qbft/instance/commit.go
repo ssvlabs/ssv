@@ -7,12 +7,9 @@ import (
 	qbft "github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/ibft/proto"
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
@@ -38,7 +35,7 @@ func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFT
 	}
 	// aggregate message with stored decided
 	if err := decidedMsg.Aggregate(msg); err != nil {
-		if err == proto.ErrDuplicateMsgSigner {
+		if err == message.ErrDuplicateMsgSigner {
 			logger.Debug("duplicated signer")
 			return nil, nil
 		}

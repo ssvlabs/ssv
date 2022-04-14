@@ -1,4 +1,5 @@
 package validator
+
 //
 //import (
 //	"encoding/hex"
