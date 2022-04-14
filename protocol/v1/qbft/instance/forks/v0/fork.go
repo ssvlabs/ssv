@@ -29,7 +29,7 @@ func (v0 *ForkV0) Apply(instance *instance.Instance) {
 }
 
 // PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
-func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state qbft.State, valCheck validation.ValueCheck,
+func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, valCheck validation.ValueCheck,
 	roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
@@ -42,7 +42,7 @@ func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state qbf
 }
 
 // PrepareMsgValidationPipeline is the validation pipeline for prepare messages
-func (v0 *ForkV0) PrepareMsgValidationPipeline(share *beacon.Share, state qbft.State) pipelines.SignedMessagePipeline {
+func (v0 *ForkV0) PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.PrepareMsgType),
