@@ -1,10 +1,10 @@
 package changeround
 
 import (
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 
-	"github.com/bloxapp/ssv/ibft/pipeline"
-	"github.com/bloxapp/ssv/ibft/proto"
+	"go.uber.org/zap"
 )
 
 // uponFullQuorum implements pipeline.Pipeline interface
@@ -13,7 +13,7 @@ type uponFullQuorum struct {
 }
 
 // UponFullQuorum is the constructor of uponFullQuorum
-func UponFullQuorum(logger *zap.Logger) pipeline.Pipeline {
+func UponFullQuorum(logger *zap.Logger) validation.SignedMessagePipeline {
 	return &uponFullQuorum{
 		logger: logger,
 	}
@@ -28,7 +28,7 @@ func UponFullQuorum(logger *zap.Logger) pipeline.Pipeline {
 //		else
 //			let v such that v = inputValue i
 //		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
-func (p *uponFullQuorum) Run(signedMessage *proto.SignedMessage) error {
+func (p *uponFullQuorum) Run(signedMessage *message.SignedMessage) error {
 	panic("not implemented yet")
 }
 

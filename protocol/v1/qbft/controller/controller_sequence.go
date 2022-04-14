@@ -1,13 +1,13 @@
 package controller
 
 import (
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"strconv"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/leader/deterministic"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 	"github.com/pkg/errors"
 )
 
