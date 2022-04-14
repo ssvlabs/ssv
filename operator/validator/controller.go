@@ -9,7 +9,6 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	controller2 "github.com/bloxapp/ssv/ibft/controller"
 	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -20,10 +19,10 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	"github.com/prysmaticlabs/prysm/async/event"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 )
 
@@ -47,7 +46,7 @@ type ControllerOptions struct {
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
-	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
+	Shares                     []beaconprotocol.Share `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	KeyManager                 beaconprotocol.KeyManager
@@ -87,12 +86,11 @@ type controller struct {
 	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
 
-	networkMediator controller2.Mediator
-	operatorsIDs    *sync.Map
-	network         network.P2PNetwork
-	forkVersion     forksprotocol.ForkVersion
-	messageRouter   *messageRouter
-	messageWorker   *worker.Worker
+	operatorsIDs  *sync.Map
+	network       network.P2PNetwork
+	forkVersion   forksprotocol.ForkVersion
+	messageRouter *messageRouter
+	messageWorker *worker.Worker
 }
 
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
@@ -148,8 +146,7 @@ func NewController(options ControllerOptions) Controller {
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 
-		networkMediator: controller2.NewMediator(options.Logger),
-		operatorsIDs:    operatorsIDs,
+		operatorsIDs: operatorsIDs,
 
 		messageRouter: newMessageRouter(options.Logger),
 		messageWorker: worker.NewWorker(workerCfg),
