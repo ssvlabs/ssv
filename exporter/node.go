@@ -67,7 +67,7 @@ package exporter
 //}
 //
 //// exporter is the internal implementation of Exporter interface
-//type exporter struct {
+type exporter struct {
 //	ctx              context.Context
 //	storage          storage.Storage
 //	validatorStorage validator.ICollection
@@ -97,7 +97,7 @@ package exporter
 //
 //	numOfInstances int
 //	instanceID     int
-//}
+}
 //
 //// New creates a new Exporter instance
 //func New(opts Options) Exporter {

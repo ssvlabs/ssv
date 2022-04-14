@@ -14,5 +14,5 @@ func (i *Instance) ThisRoundLeader() uint64 {
 
 // RoundLeader checks the round leader
 func (i *Instance) RoundLeader(round message.Round) uint64 {
-	return i.LeaderSelector.Calculate(round) + 1 // node ids start from 1
+	return i.LeaderSelector.Calculate(uint64(round)) + 1 // node ids start from 1
 }
