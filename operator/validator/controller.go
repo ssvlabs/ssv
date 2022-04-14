@@ -72,7 +72,7 @@ type Controller interface {
 // controller implements Controller
 type controller struct {
 	context    context.Context
-	collection validatorstorage.ICollection
+	collection validator.ICollection
 	storage    registrystorage.OperatorsCollection
 	logger     *zap.Logger
 	beacon     beaconprotocol.Beacon
@@ -102,7 +102,7 @@ func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 // NewController creates a new validator controller instance
 func NewController(options ControllerOptions) Controller {
-	collection := validatorstorage.NewCollection(validatorstorage.CollectionOptions{
+	collection := NewCollection(CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
@@ -117,13 +117,18 @@ func NewController(options ControllerOptions) Controller {
 	}
 
 	validatorOptions := &validator.Options{
-		Context:    options.Context,
-		Logger:     options.Logger,
-		Network:    options.ETHNetwork,
-		P2pNetwork: options.Network,
-		Beacon:     options.Beacon,
-		Share:      nil,   // TODO(nkryuchkov): consider setting
-		ReadMode:   false, // TODO(nkryuchkov): check if false is correct value
+		Context: options.Context,
+		Logger:  options.Logger,
+		//IbftStorage: TODo need to set
+		Network:                    options.ETHNetwork,
+		P2pNetwork:                 options.Network,
+		Beacon:                     options.Beacon,
+		ForkVersion:                options.ForkVersion,
+		Signer:                     options.Beacon,
+		SyncRateLimit:              options.HistorySyncRateLimit,
+		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
+		Share:                      nil,   // set inside validators_map.go
+		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 	}
 	ctrl := controller{
 		collection:                 collection,

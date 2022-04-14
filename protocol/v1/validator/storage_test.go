@@ -1,4 +1,4 @@
-package storage
+package validator
 
 import (
 	"testing"

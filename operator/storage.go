@@ -3,6 +3,7 @@ package operator
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	eth12 "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"math/big"
 
@@ -21,7 +22,7 @@ var (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	eth1.SyncOffsetStorage
-	basedb.RegistryStore
+	eth12.RegistryStore
 	registrystorage.OperatorsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)

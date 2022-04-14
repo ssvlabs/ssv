@@ -1,4 +1,4 @@
-package storage
+package beacon
 
 import (
 	"github.com/bloxapp/ssv/ibft/proto"
