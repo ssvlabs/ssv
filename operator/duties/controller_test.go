@@ -26,7 +26,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	defer func() {
 		secPerSlot = 12
 	}()
-	currentSlot := types.Slot(ctrl.getCurrentSlot())
+	currentSlot := ctrl.ethNetwork.EstimatedCurrentSlot()
 	duties := map[types.Slot][]beacon.Duty{}
 	duties[currentSlot] = []beacon.Duty{
 		{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}},
@@ -48,7 +48,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 func TestDutyController_ShouldExecute(t *testing.T) {
 	ctrl := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
-	currentSlot := uint64(ctrl.getCurrentSlot())
+	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
 	require.True(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
 	require.False(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot - 1000), PubKey: spec.BLSPubKey{}}))
@@ -58,14 +58,14 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 func TestDutyController_GetSlotStartTime(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
-	ts := d.getSlotStartTime(646523)
+	ts := d.ethNetwork.GetSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
 func TestDutyController_GetCurrentSlot(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
 
-	slot := d.getCurrentSlot()
+	slot := d.ethNetwork.EstimatedCurrentSlot()
 	require.Greater(t, slot, int64(646855))
 }
 
