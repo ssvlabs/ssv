@@ -127,8 +127,8 @@ func PopulatedStorage(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, r
 	return s
 }
 
-// newInMemDb returns basedb.IDb with in-memory type
-func newInMemDb() basedb.IDb {
+// NewInMemDb returns basedb.IDb with in-memory type
+func NewInMemDb() basedb.IDb {
 	db, _ := kv.New(basedb.Options{
 		Type:   "badger-memory",
 		Path:   "",

@@ -11,7 +11,6 @@ import (
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -39,7 +38,7 @@ type DutyController interface {
 type ControllerOptions struct {
 	Logger              *zap.Logger
 	Ctx                 context.Context
-	BeaconClient        beacon.Beacon
+	BeaconClient        beaconprotocol.Beacon
 	EthNetwork          beaconprotocol.Network
 	ValidatorController validator.Controller
 	Executor            DutyExecutor
@@ -184,7 +183,7 @@ func (dc *dutyController) shouldExecute(duty *beaconprotocol.Duty) bool {
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beacon.Duty) *zap.Logger {
+func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beaconprotocol.Duty) *zap.Logger {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
