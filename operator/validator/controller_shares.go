@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -22,7 +21,7 @@ func (c *controller) initShares(options ControllerOptions) error {
 	return nil
 }
 
-func (c *controller) loadSharesFromConfig(items []storage.ShareOptions) {
+func (c *controller) loadSharesFromConfig(items []ShareOptions) {
 	var addedValidators []string
 	if len(items) > 0 {
 		c.logger.Info("loading validators share from config", zap.Int("count", len(items)))
@@ -38,7 +37,7 @@ func (c *controller) loadSharesFromConfig(items []storage.ShareOptions) {
 	}
 }
 
-func (c *controller) loadShare(options storage.ShareOptions) (string, error) {
+func (c *controller) loadShare(options ShareOptions) (string, error) {
 	if len(options.PublicKey) == 0 || len(options.ShareKey) == 0 || len(options.Committee) == 0 {
 		return "", errors.New("one or more fields are missing (PublicKey, ShareKey, Committee)")
 	}

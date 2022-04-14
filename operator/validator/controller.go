@@ -46,7 +46,7 @@ type ControllerOptions struct {
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
-	Shares                     []beaconprotocol.Share `yaml:"Shares"`
+	Shares                     []ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	KeyManager                 beaconprotocol.KeyManager

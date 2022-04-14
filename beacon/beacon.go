@@ -3,7 +3,7 @@ package beacon
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
@@ -53,7 +53,7 @@ type KeyManager interface {
 // Signer is an interface responsible for all signing operations
 type Signer interface {
 	// SignIBFTMessage signs a network iBFT msg
-	SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error)
+	SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error)
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }
