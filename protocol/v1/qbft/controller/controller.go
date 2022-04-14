@@ -225,6 +225,12 @@ func (c *Controller) messageHandler(msg *message.SSVMessage) error {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		return c.processPostConsensusSig(signedMsg)
+	case message.SSVDecidedMsgType:
+		signedMsg := &message.SignedMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
+		}
+		return c.processDecidedMessage(signedMsg)
 	case message.SSVSyncMsgType:
 		panic("need to implement!")
 	}
