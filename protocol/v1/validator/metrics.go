@@ -10,11 +10,11 @@ import (
 
 var (
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_current_slot",
+		Name: "ssv:validator:ibft_current_slot1",
 		Help: "Current running slot",
 	}, []string{"pubKey"})
 	metricsValidatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:status",
+		Name: "ssv:validator:status1",
 		Help: "Validator status",
 	}, []string{"pubKey"})
 )

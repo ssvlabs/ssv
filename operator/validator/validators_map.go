@@ -75,8 +75,8 @@ func (vm *validatorsMap) GetOrCreateValidator(share *beacon.Share) validator.IVa
 	pubKey := share.PublicKey.SerializeToHexStr()
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
-		opts.IbftStorage = storage.New(vm.db, vm.logger, opts.Share.PublicKey.SerializeToHexStr())
 		opts.Share = share
+		opts.IbftStorage = storage.New(vm.db, vm.logger, share.PublicKey.SerializeToHexStr())
 		vm.validatorsMap[pubKey] = validator.NewValidator(&opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil

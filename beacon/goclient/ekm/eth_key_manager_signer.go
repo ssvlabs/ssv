@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"sync"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -30,7 +31,7 @@ type ethKeyManagerSigner struct {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, network core.Network) (beacon.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, network beaconprotocol.Network) (beaconprotocol.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -65,9 +66,9 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, netw
 	}, nil
 }
 
-func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network core.Network) (signer.ValidatorSigner, error) {
+func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network beaconprotocol.Network) (signer.ValidatorSigner, error) {
 	slashingProtection := slashingprotection.NewNormalProtection(store)
-	return signer.NewSimpleSigner(wallet, slashingProtection, network), nil
+	return signer.NewSimpleSigner(wallet, slashingProtection, network.Network), nil
 }
 
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
@@ -111,7 +112,7 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage
 	return sig, nil
 }
 
-func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *beaconprotocol.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	domain, err := km.signingUtils.GetDomain(data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get domain for signing")

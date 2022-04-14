@@ -17,9 +17,8 @@ p2p:
 #  HostAddress: example.ip
 #  TcpPort:
 #  UdpPort:
-  # mdns for local network setup
-  DiscoveryType: mdns
-#  HostAddress: 127.0.0.1
+  Bootnodes:
+  HostAddress: 127.0.0.1
 
 ssv:
   GenesisEpoch:

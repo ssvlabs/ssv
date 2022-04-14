@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -26,11 +27,11 @@ const (
 
 type signerStorage struct {
 	db      basedb.IDb
-	network core.Network
+	network beacon.Network
 	lock    sync.RWMutex
 }
 
-func newSignerStorage(db basedb.IDb, network core.Network) *signerStorage {
+func newSignerStorage(db basedb.IDb, network beacon.Network) *signerStorage {
 	return &signerStorage{
 		db:      db,
 		network: network,
@@ -39,7 +40,7 @@ func newSignerStorage(db basedb.IDb, network core.Network) *signerStorage {
 }
 
 func (s *signerStorage) objPrefix(obj string) []byte {
-	return []byte(string(s.network) + obj)
+	return []byte(string(s.network.Network) + obj)
 }
 
 // Name returns storage name.
@@ -49,7 +50,7 @@ func (s *signerStorage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *signerStorage) Network() core.Network {
-	return s.network
+	return s.network.Network
 }
 
 // SaveWallet stores the given wallet.

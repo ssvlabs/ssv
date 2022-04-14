@@ -35,6 +35,8 @@ type Options struct {
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
+	SyncDecided                controller.SyncDecided
+	SyncRound                  controller.SyncRound
 }
 
 type Validator struct {
@@ -116,6 +118,8 @@ func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options
 		SyncRateLimit:  opt.SyncRateLimit,
 		SigTimeout:     opt.SignatureCollectionTimeout,
 		ReadMode:       opt.ReadMode,
+		SyncRound:      opt.SyncRound,
+		SyncDecided:    opt.SyncDecided,
 	}
 	return controller.New(opts)
 }

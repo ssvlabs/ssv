@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	protocolctrl "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"sync"
 	"time"
 
@@ -53,6 +54,8 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
+	SyncDecided                protocolctrl.SyncDecided
+	SyncRound                  protocolctrl.SyncRound
 }
 
 // Controller represent the validators controller,
@@ -110,14 +113,14 @@ func NewController(options ControllerOptions) Controller {
 
 	workerCfg := &worker.Config{
 		Ctx:          options.Context,
+		Logger:       options.Logger,
 		WorkersCount: 1,   // TODO flag
 		Buffer:       100, // TODO flag
 	}
 
 	validatorOptions := &validator.Options{
-		Context: options.Context,
-		Logger:  options.Logger,
-		//IbftStorage: TODo need to set
+		Context:                    options.Context,
+		Logger:                     options.Logger,
 		Network:                    options.ETHNetwork,
 		P2pNetwork:                 options.Network,
 		Beacon:                     options.Beacon,
@@ -125,8 +128,11 @@ func NewController(options ControllerOptions) Controller {
 		Signer:                     options.Beacon,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
-		Share:                      nil,   // set inside validators_map.go
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
+		SyncDecided: func(ctx context.Context, sctx *protocolctrl.SyncContext) error {
+
+		},
+		SyncRound: options.SyncRound,
 	}
 	ctrl := controller{
 		collection:                 collection,

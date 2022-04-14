@@ -3,6 +3,8 @@ package goclient
 import (
 	"context"
 	"fmt"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"sync"
 	"time"
@@ -51,18 +53,18 @@ func init() {
 type goClient struct {
 	ctx            context.Context
 	logger         *zap.Logger
-	network        core.Network
+	network        beaconprotocol.Network
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
-	keyManager     beacon.KeyManager
+	keyManager     beaconprotocol.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beacon.Options) (beacon.Beacon, error) {
+func New(opt beacon.Options) (beaconprotocol.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 
@@ -80,16 +82,17 @@ func New(opt beacon.Options) (beacon.Beacon, error) {
 	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
 	logger.Info("successfully connected to beacon client")
 
+	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network))
 	_client := &goClient{
 		ctx:            opt.Context,
 		logger:         logger,
-		network:        core.NetworkFromString(opt.Network),
+		network:        network,
 		client:         httpClient,
 		indicesMapLock: sync.Mutex{},
 		graffiti:       opt.Graffiti,
 	}
 
-	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, core.PraterNetwork) // TODO need to set dynemic network
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
@@ -120,16 +123,16 @@ func (gc *goClient) HealthCheck() []string {
 	return []string{}
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beaconprotocol.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
 		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
 		}
-		var duties []*beacon.Duty
+		var duties []*beaconprotocol.Duty
 		for _, attesterDuty := range attesterDuties {
-			duties = append(duties, &beacon.Duty{
-				Type:                    beacon.RoleTypeAttester,
+			duties = append(duties, &beaconprotocol.Duty{
+				Type:                    message.RoleTypeAttester,
 				PubKey:                  attesterDuty.PubKey,
 				Slot:                    attesterDuty.Slot,
 				ValidatorIndex:          attesterDuty.ValidatorIndex,

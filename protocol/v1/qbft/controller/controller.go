@@ -39,6 +39,9 @@ type Options struct {
 	SyncRateLimit  time.Duration
 	SigTimeout     time.Duration
 	ReadMode       bool
+
+	SyncDecided SyncDecided
+	SyncRound   SyncRound
 }
 
 // Controller implements Controller interface

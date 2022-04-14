@@ -7,9 +7,9 @@ x-base:
     dockerfile: Dockerfile
   image: ssvnode:latest
   command: make BUILD_PATH=/go/bin/ssvnode start-node
-  network_mode: host
-#  networks:
-#    - blox-docker
+#  network_mode: host
+  networks:
+    - blox-docker
   restart: always
   environment:
     CONFIG_PATH: ./config/config.yaml
@@ -72,16 +72,16 @@ services:
   ssv-node-1-dev:
     << : *default-dev
     container_name: ssv-node-1-dev
-    ports:
-      - "40005:40005"
+#    ports:
+#      - "40005:40005"
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40005
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share1.yaml
-#    networks:
-#      - blox-docker
+    networks:
+      - blox-docker
 
   ssv-node-2-dev:
     << : *default-dev

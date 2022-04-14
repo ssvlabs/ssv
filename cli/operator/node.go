@@ -156,7 +156,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = eth2Network
-		//cfg.SSVOptions.Network = p2pNet // TODO
+		cfg.SSVOptions.Network = p2pNet
 
 		//cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
@@ -165,7 +165,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
-		//cfg.SSVOptions.ValidatorOptions.Network = p2pNet // TODO
+		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
