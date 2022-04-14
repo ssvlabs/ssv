@@ -2,6 +2,8 @@ package ekm
 
 import (
 	"encoding/hex"
+	"sync"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -9,14 +11,14 @@ import (
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
-	"sync"
 )
 
 type ethKeyManagerSigner struct {
@@ -87,11 +89,11 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (km *ethKeyManagerSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	root, err := message.SigningRoot()
+	root, err := message.GetRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}
