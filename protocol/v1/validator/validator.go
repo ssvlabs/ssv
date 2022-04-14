@@ -19,7 +19,7 @@ type IValidator interface {
 	Start()
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
-	GetShare() *message.Share
+	GetShare() *beaconprotocol.Share
 }
 
 type Options struct {
@@ -29,7 +29,7 @@ type Options struct {
 	Network                    beaconprotocol.Network
 	P2pNetwork                 p2pprotocol.Network
 	Beacon                     beaconprotocol.Beacon
-	Share                      *message.Share
+	Share                      *beaconprotocol.Share
 	ForkVersion                forksprotocol.ForkVersion
 	Signer                     beaconprotocol.Signer
 	SyncRateLimit              time.Duration
@@ -43,7 +43,7 @@ type Validator struct {
 	network    beaconprotocol.Network
 	p2pNetwork p2pprotocol.Network
 	beacon     beaconprotocol.Beacon
-	share      *message.Share
+	share      *beaconprotocol.Share
 	signer     beaconprotocol.Signer
 
 	ibfts controller.Controllers
@@ -75,7 +75,7 @@ func NewValidator(opt *Options) IValidator {
 func (v *Validator) Start() {
 }
 
-func (v *Validator) GetShare() *message.Share {
+func (v *Validator) GetShare() *beaconprotocol.Share {
 	// TODO need lock?
 	return v.share
 }
@@ -93,13 +93,13 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 }
 
 // setupRunners return duty runners map with all the supported duty types
-func setupIbfts(opt *Options, logger *zap.Logger) map[beaconprotocol.RoleType]controller.IController {
-	ibfts := make(map[beaconprotocol.RoleType]controller.IController)
-	ibfts[beaconprotocol.RoleTypeAttester] = setupIbftController(beaconprotocol.RoleTypeAttester, logger, opt)
+func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controller.IController {
+	ibfts := make(map[message.RoleType]controller.IController)
+	ibfts[message.RoleTypeAttester] = setupIbftController(message.RoleTypeAttester, logger, opt)
 	return ibfts
 }
 
-func setupIbftController(role beaconprotocol.RoleType, logger *zap.Logger, opt *Options) controller.IController {
+func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
 	identifier := []byte(format.IdentifierFormat(opt.Share.PublicKey.Serialize(), role.String()))
 
 	return controller.New(

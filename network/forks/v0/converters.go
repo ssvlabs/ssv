@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
 )
@@ -70,7 +71,7 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 	signed.Signature = sm.GetSignature()
 	signers := sm.GetSignerIds()
 	for _, s := range signers {
-		signed.Signers = append(signed.Signers, message.OperatorID(s))
+		signed.Signers = append(signed.Signers, beacon.OperatorID(s))
 	}
 	if sm.GetMessage() != nil {
 		signed.Message = new(message.ConsensusMessage)
@@ -176,8 +177,8 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Iden
 		signedMsgV0.Message.Type = proto.RoundState_Commit
 	case message.RoundChangeMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_ChangeRound
-	//case message.DecidedMsgType:
-	//	signedMsgV0.Message.Type = proto.RoundState_Decided
+		//case message.DecidedMsgType:
+		//	signedMsgV0.Message.Type = proto.RoundState_Decided
 	}
 	signedMsgV0.Signature = signedMsg.GetSignature()
 	for _, signer := range signedMsg.GetSigners() {

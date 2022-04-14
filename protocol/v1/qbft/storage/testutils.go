@@ -1,18 +1,13 @@
-package storage
+package qbftstorage
 
 import (
 	"encoding/binary"
 	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
-	"strings"
 )
 
 const (
@@ -22,19 +17,6 @@ const (
 	lastChangeRoundKey = "last_change_round"
 )
 
-var (
-	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_highest_decided",
-		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey"})
-)
-
-func init() {
-	if err := prometheus.Register(metricsHighestDecided); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
-
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
@@ -43,8 +25,8 @@ type ibftStorage struct {
 	logger *zap.Logger
 }
 
-// New create new ibft storage
-func New(db basedb.IDb, logger *zap.Logger, instanceType string) qbftstorage.QBFTStore {
+// NewQBFTStore create new ibft storage
+func NewQBFTStore(db basedb.IDb, logger *zap.Logger, instanceType string) QBFTStore {
 	ibft := &ibftStorage{
 		prefix: []byte(instanceType),
 		db:     db,
@@ -79,7 +61,6 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) erro
 		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
 			return err
 		}
-		reportHighestDecided(signedMsg)
 	}
 
 	return nil
@@ -146,6 +127,7 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 }
 
 // SaveLastChangeRoundMsg updates last change round message
+// TODO
 func (i *ibftStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error {
 	value, err := json.Marshal(msg)
 	if err != nil {
@@ -155,6 +137,7 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg 
 }
 
 // GetLastChangeRoundMsg returns last known change round message
+// TODO
 func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
 	val, found, err := i.get(lastChangeRoundKey, identifier)
 	if !found {
@@ -201,14 +184,4 @@ func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
-}
-
-func reportHighestDecided(signedMsg *message.SignedMessage) {
-	l := string(signedMsg.Message.Identifier)
-	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
-	if idx := strings.Index(l, "_"); idx > 0 {
-		pubKey := l[:idx]
-		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Identifier), pubKey).
-			Set(float64(signedMsg.Message.Height))
-	}
 }

@@ -32,7 +32,7 @@ type DecidedReaderOptions struct {
 	Storage        collections.Iibft
 	Network        network.Network
 	Config         *proto.InstanceConfig
-	ValidatorShare *message.Share
+	ValidatorShare *beacon.Share
 
 	Out *event.Feed
 }
@@ -44,7 +44,7 @@ type decidedReader struct {
 	network network.Network
 
 	config         *proto.InstanceConfig
-	validatorShare *message.Share
+	validatorShare *beacon.Share
 
 	out *event.Feed
 
@@ -67,7 +67,7 @@ func newDecidedReader(opts DecidedReaderOptions) Reader {
 		validatorShare: opts.ValidatorShare,
 		out:            opts.Out,
 		identifier: []byte(format.IdentifierFormat(opts.ValidatorShare.PublicKey.Serialize(),
-			beacon.RoleTypeAttester.String())),
+			message.RoleTypeAttester.String())),
 		lock:  &sync.Mutex{},
 		state: &state{},
 	}
@@ -81,7 +81,7 @@ func (r *decidedReader) newHistorySync() history.Syncer {
 }
 
 // Share returns the reader's share
-func (r *decidedReader) Share() *message.Share {
+func (r *decidedReader) Share() *beacon.Share {
 	return r.validatorShare
 }
 
@@ -249,7 +249,7 @@ func (r *decidedReader) waitForMinPeers(ctx context.Context, pk *bls.PublicKey, 
 	}, pk.Serialize(), minPeerCount, 1*time.Second, 64*time.Second, false)
 }
 
-func validateDecidedMsg(msg *proto.SignedMessage, share *message.Share) error {
+func validateDecidedMsg(msg *proto.SignedMessage, share *beacon.Share) error {
 	p := pipeline.Combine(
 		auth.BasicMsgValidation(),
 		auth.MsgTypeCheck(proto.RoundState_Commit),

@@ -1,4 +1,4 @@
-package beacon
+package message
 
 // RoleType type of the validator role for a specific duty
 type RoleType int

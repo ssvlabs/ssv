@@ -2,11 +2,11 @@ package controller
 
 import (
 	"encoding/base64"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
@@ -38,7 +38,7 @@ func (s TimerState) toString() string {
 type SignatureState struct {
 	timer      *time.Timer
 	state      atomic.Int32
-	signatures map[message.OperatorID][]byte
+	signatures map[beaconprotocol.OperatorID][]byte
 
 	SignatureCollectionTimeout time.Duration
 	sigCount                   int
@@ -58,7 +58,7 @@ func (s *SignatureState) start(logger *zap.Logger, signaturesCount int, root []b
 	s.timer = time.NewTimer(s.SignatureCollectionTimeout)
 	s.state.Store(StateRunning)
 	// init map
-	s.signatures = make(map[message.OperatorID][]byte, s.sigCount)
+	s.signatures = make(map[beaconprotocol.OperatorID][]byte, s.sigCount)
 
 	go func() {
 		<-s.timer.C
@@ -87,7 +87,7 @@ func (s *SignatureState) getState() TimerState {
 	return TimerState(s.state.Load())
 }
 
-func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftID message.OperatorID, committiee map[message.OperatorID]*message.Node) error {
+func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftID beaconprotocol.OperatorID, committiee map[beaconprotocol.OperatorID]*beaconprotocol.Node) error {
 	if val, found := committiee[ibftID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {
@@ -122,7 +122,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 	var root []byte
 	retValueStruct := &beaconprotocol.DutyData{}
 	switch duty.Type {
-	case beaconprotocol.RoleTypeAttester:
+	case message.RoleTypeAttester:
 		s := &spec.AttestationData{}
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
@@ -146,7 +146,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
+func (c *Controller) reconstructAndBroadcastSignature(signatures map[beaconprotocol.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
@@ -161,7 +161,7 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.Ope
 
 	// Submit validation to beacon node
 	switch duty.Type {
-	case beaconprotocol.RoleTypeAttester:
+	case message.RoleTypeAttester:
 		c.logger.Debug("submitting attestation")
 		blsSig := spec.BLSSignature{}
 		copy(blsSig[:], signature.Serialize()[:])

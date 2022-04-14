@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -100,7 +99,7 @@ func dummySSVConsensusMsg(pkHex string, height int) (*message.SSVMessage, error)
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := message.NewIdentifier(pk, message.RoleTypeAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

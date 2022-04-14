@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -214,7 +213,7 @@ func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := message.NewIdentifier(pk, message.RoleTypeAttester)
 	v0SignedMsg := &proto.SignedMessage{
 		Message: &proto.Message{
 			Type:      3,

@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"math"
@@ -158,7 +159,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
 	var justificationMsg *message.SignedMessage
 	var aggSig []byte
-	ids := make([]message.OperatorID, 0)
+	ids := make([]beacon.OperatorID, 0)
 	if i.isPrepared() {
 		_, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		var aggregatedSig *bls.Sign

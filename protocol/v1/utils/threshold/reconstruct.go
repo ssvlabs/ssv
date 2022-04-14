@@ -2,13 +2,13 @@ package threshold
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
 // ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
 // It then reconstructs the original threshold signature using lagrange interpolation
-func ReconstructSignatures(signatures map[message.OperatorID][]byte) (*bls.Sign, error) {
+func ReconstructSignatures(signatures map[beacon.OperatorID][]byte) (*bls.Sign, error) {
 	reconstructedSig := bls.Sign{}
 
 	idVec := make([]bls.ID, 0)

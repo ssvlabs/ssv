@@ -7,7 +7,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/sync"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -246,7 +246,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	sks, _ := sync.GenerateNodes(4)
 	pk := sks[1].GetPublicKey()
-	identifier := format.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester.String())
+	identifier := format.IdentifierFormat(pk.Serialize(), message.RoleTypeAttester.String())
 	decided250Seq := sync.DecidedArr(t, 250, sks, []byte(identifier))
 
 	// save decided

@@ -3,6 +3,7 @@ package message
 import (
 	"crypto/sha256"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -35,9 +36,9 @@ type Root interface {
 type MsgSignature interface {
 	Root
 	GetSignature() Signature
-	GetSigners() []OperatorID
+	GetSigners() []beacon.OperatorID
 	// MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-	MatchedSigners(ids []OperatorID) bool
+	MatchedSigners(ids []beacon.OperatorID) bool
 	// Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
 	Aggregate(signedMsg ...MsgSignature) error // value should depend on implementation
 }
@@ -49,7 +50,7 @@ type SignatureDomain []byte
 type Signature []byte
 
 // VerifyByOperators verifies signature by the provided operators
-func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigType SignatureType, operators []*Operator) error {
+func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigType SignatureType, operators []*beacon.Operator) error {
 	pks := make([][]byte, 0)
 	for _, id := range data.GetSigners() {
 		found := false
@@ -145,7 +146,7 @@ func ComputeSignatureDomain(domain DomainType, sigType SignatureType) SignatureD
 
 // ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
 // It then reconstructs the original threshold signature using lagrange interpolation
-func ReconstructSignatures(signatures map[OperatorID][]byte) (*bls.Sign, error) {
+func ReconstructSignatures(signatures map[beacon.OperatorID][]byte) (*bls.Sign, error) {
 	reconstructedSig := bls.Sign{}
 
 	idVec := make([]bls.ID, 0)

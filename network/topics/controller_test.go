@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -313,7 +312,7 @@ func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := message.NewIdentifier(pk, message.RoleTypeAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

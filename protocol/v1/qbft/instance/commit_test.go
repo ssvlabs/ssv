@@ -1,8 +1,8 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -208,7 +208,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	share := keymanager.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
 	share.Committee = make(map[uint64]*proto.Node, 4)
-	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), beacon.RoleTypeAttester.String())
+	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), message.RoleTypeAttester.String())
 
 	var sigs []*proto.SignedMessage
 	for i := 1; i < 4; i++ {

@@ -3,6 +3,7 @@ package message
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -227,7 +228,7 @@ func (msg *ConsensusMessage) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
 // SignedMessage contains a message and the corresponding signature + signers list
 type SignedMessage struct {
 	Signature Signature
-	Signers   []OperatorID
+	Signers   []beacon.OperatorID
 	Message   *ConsensusMessage // message for which this signature is for
 }
 
@@ -237,12 +238,12 @@ func (signedMsg *SignedMessage) GetSignature() Signature {
 }
 
 // GetSigners returns the message signers
-func (signedMsg *SignedMessage) GetSigners() []OperatorID {
+func (signedMsg *SignedMessage) GetSigners() []beacon.OperatorID {
 	return signedMsg.Signers
 }
 
 // MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-func (signedMsg *SignedMessage) MatchedSigners(ids []OperatorID) bool {
+func (signedMsg *SignedMessage) MatchedSigners(ids []beacon.OperatorID) bool {
 	for _, id := range signedMsg.Signers {
 		found := false
 		for _, id2 := range ids {
@@ -305,7 +306,7 @@ func (signedMsg *SignedMessage) GetRoot() ([]byte, error) {
 // DeepCopy returns a new instance of SignedMessage, deep copied
 func (signedMsg *SignedMessage) DeepCopy() *SignedMessage {
 	ret := &SignedMessage{
-		Signers:   make([]OperatorID, len(signedMsg.Signers)),
+		Signers:   make([]beacon.OperatorID, len(signedMsg.Signers)),
 		Signature: make([]byte, len(signedMsg.Signature)),
 	}
 	copy(ret.Signers, signedMsg.Signers)

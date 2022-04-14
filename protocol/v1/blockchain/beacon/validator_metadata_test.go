@@ -91,7 +91,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		Status:    v1.ValidatorStateActiveOngoing,
 		Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
 	}
-	bc := beacon.NewMockBeacon(map[uint64][]*Duty{}, data)
+	bc := beacon.NewMockBeacon(map[OperatorID][]*Duty{}, data)
 
 	storage := beacon.NewMockValidatorMetadataStorage()
 

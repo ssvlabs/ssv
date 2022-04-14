@@ -1,13 +1,13 @@
-package message
+package beacon
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"math"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -35,7 +35,7 @@ type Share struct {
 	NodeID       OperatorID
 	PublicKey    *bls.PublicKey
 	Committee    map[OperatorID]*Node
-	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
+	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
 }
@@ -45,7 +45,7 @@ type serializedShare struct {
 	NodeID       OperatorID
 	ShareKey     []byte
 	Committee    map[OperatorID]*Node
-	Metadata     *beacon.ValidatorMetadata // pointer in order to support nil
+	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
 }
@@ -105,7 +105,7 @@ func (s *Share) PubKeysByID(ids []OperatorID) (PubKeys, error) {
 }
 
 // VerifySignedMessage returns true of signed message verifies against pks
-func (s *Share) VerifySignedMessage(msg *SignedMessage) error {
+func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func (s *Share) VerifySignedMessage(msg *SignedMessage) error {
 	for _, id := range msg.GetSigners() {
 		operators = append(operators, &Operator{OperatorID: id})
 	}
-	err = msg.GetSignature().VerifyByOperators(msg, PrimusTestnet, QBFTSigType, operators) // TODO need to check if this is the right verify func
+	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators) // TODO need to check if this is the right verify func
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err

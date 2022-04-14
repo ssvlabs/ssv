@@ -197,6 +197,7 @@ func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beacon
 
 // getSlotStartTime returns the start time for the given slot
 func (dc *dutyController) getSlotStartTime(slot uint64) time.Time {
+	dc.ethNetwork.EstimatedCurrentSlot()
 	timeSinceGenesisStart := slot * uint64(dc.ethNetwork.SlotDurationSec().Seconds())
 	start := time.Unix(int64(dc.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start

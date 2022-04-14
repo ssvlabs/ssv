@@ -1,11 +1,14 @@
 package beacon
 
-import spec "github.com/attestantio/go-eth2-client/spec/phase0"
+import (
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+)
 
 // Duty represent data regarding the duty type with the duty data
 type Duty struct {
 	// Type is the duty type (attest, propose)
-	Type RoleType
+	Type message.RoleType
 	// PubKey is the public key of the validator that should attest.
 	PubKey spec.BLSPubKey
 	// Slot is the slot in which the validator should attest.
