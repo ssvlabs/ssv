@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -14,7 +13,7 @@ func TestSSVMessage_JSONEncoding(t *testing.T) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 	require.Greater(t, len(pk), 0)
-	id := NewIdentifier(pk, beacon.RoleTypeAttester)
+	id := NewIdentifier(pk, RoleTypeAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

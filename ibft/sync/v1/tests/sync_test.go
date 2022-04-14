@@ -14,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
 	"github.com/bloxapp/ssv/ibft/sync/v1/history"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
@@ -95,7 +94,7 @@ func TestHistory(t *testing.T) {
 		for _, pkHex := range pks {
 			pk, err := hex.DecodeString(pkHex)
 			require.NoError(t, err)
-			idn := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+			idn := message.NewIdentifier(pk, message.RoleTypeAttester)
 			synced, err := histories[0].SyncDecided(ctx, idn, false)
 			require.NoError(t, err)
 			require.True(t, synced)
@@ -106,7 +105,7 @@ func TestHistory(t *testing.T) {
 		for _, pkHex := range pks {
 			pk, err := hex.DecodeString(pkHex)
 			require.NoError(t, err)
-			idn := message.NewIdentifier(pk, beacon.RoleTypeAttester)
+			idn := message.NewIdentifier(pk, message.RoleTypeAttester)
 			synced, err := histories[1].SyncDecidedRange(ctx, idn, 0, 10)
 			require.NoError(t, err)
 			require.True(t, synced)

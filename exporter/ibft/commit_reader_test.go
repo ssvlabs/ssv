@@ -4,8 +4,8 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/ibft/proto"
 	ibftsync "github.com/bloxapp/ssv/ibft/sync"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -48,7 +48,7 @@ func TestCommitReader_onMessage(t *testing.T) {
 			Type:      proto.RoundState_Prepare,
 			Round:     1,
 			SeqNumber: 25,
-			Lambda:    []byte(format.IdentifierFormat(sk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())),
+			Lambda:    []byte(format.IdentifierFormat(sk.GetPublicKey().Serialize(), message.RoleTypeAttester.String())),
 		})
 		require.False(t, cr.onMessage(msg))
 	})
@@ -80,7 +80,7 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 		Committee: committee,
 		Metadata:  nil,
 	}))
-	identifier := format.IdentifierFormat(pk.Serialize(), beacon.RoleTypeAttester.String())
+	identifier := format.IdentifierFormat(pk.Serialize(), message.RoleTypeAttester.String())
 	var sigs []*proto.SignedMessage
 	for i := 1; i < 4; i++ {
 		sigs = append(sigs, signMsg(t, uint64(i), sks[uint64(i)], &proto.Message{
@@ -150,7 +150,7 @@ func TestCommitReader_onCommitMessage(t *testing.T) {
 				Type:      proto.RoundState_Commit,
 				Round:     1,
 				SeqNumber: 25,
-				Lambda:    []byte(format.IdentifierFormat(sk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())),
+				Lambda:    []byte(format.IdentifierFormat(sk.GetPublicKey().Serialize(), message.RoleTypeAttester.String())),
 			}),
 			nil,
 		},

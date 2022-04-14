@@ -29,7 +29,7 @@ import (
 // Options defines option attributes for the Instance
 type Options struct {
 	Logger         *zap.Logger
-	ValidatorShare *message.Share
+	ValidatorShare *beaconprotocol.Share
 	Network        protcolp2p.Network
 	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader2.Selector
@@ -46,7 +46,7 @@ type Options struct {
 
 // Instance defines the instance attributes
 type Instance struct {
-	ValidatorShare *message.Share
+	ValidatorShare *beaconprotocol.Share
 	state          *qbft.State
 	network        protcolp2p.Network
 	ValueCheck     valcheck.ValueCheck

@@ -25,6 +25,22 @@ import (
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
 var ErrAlreadyRunning = errors.New("already running")
 
+type Options struct {
+	Role           message.RoleType
+	Identifier     []byte
+	Logger         *zap.Logger
+	Storage        qbftstorage.QBFTStore
+	Network        p2pprotocol.Network
+	InstanceConfig *qbft.InstanceConfig
+	ValidatorShare *beaconprotocol.Share
+	Version        forksprotocol.ForkVersion
+	Beacon         beaconprotocol.Beacon
+	Signer         beaconprotocol.Signer
+	SyncRateLimit  time.Duration
+	SigTimeout     time.Duration
+	ReadMode       bool
+}
+
 // Controller implements Controller interface
 type Controller struct {
 	ctx context.Context
@@ -34,7 +50,7 @@ type Controller struct {
 	ibftStorage     qbftstorage.QBFTStore
 	network         p2pprotocol.Network
 	instanceConfig  *qbft.InstanceConfig
-	ValidatorShare  *message.Share
+	ValidatorShare  *beaconprotocol.Share
 	Identifier      []byte
 	fork            forks.Fork
 	beacon          beaconprotocol.Beacon
@@ -63,21 +79,9 @@ type Controller struct {
 }
 
 // New is the constructor of Controller
-func New(role beaconprotocol.RoleType,
-	identifier []byte,
-	logger *zap.Logger,
-	storage qbftstorage.QBFTStore,
-	network p2pprotocol.Network,
-	instanceConfig *qbft.InstanceConfig,
-	validatorShare *message.Share,
-	version forksprotocol.ForkVersion,
-	beacon beaconprotocol.Beacon,
-	signer beaconprotocol.Signer,
-	syncRateLimit time.Duration,
-	sigTimeout time.Duration,
-	readMode bool) IController {
-	logger = logger.With(zap.String("role", role.String()))
-	fork := forksfactory.NewFork(version)
+func New(opts Options) IController {
+	logger := opts.Logger.With(zap.String("role", opts.Role.String()))
+	fork := forksfactory.NewFork(opts.Version)
 
 	q, err := msgqueue.New(
 		logger.With(zap.String("who", "msg_q")),
@@ -88,24 +92,24 @@ func New(role beaconprotocol.RoleType,
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
 	ret := &Controller{
-		ibftStorage:    storage,
+		ibftStorage:    opts.Storage,
 		logger:         logger,
-		network:        network,
-		instanceConfig: instanceConfig,
-		ValidatorShare: validatorShare,
-		Identifier:     identifier,
+		network:        opts.Network,
+		instanceConfig: opts.InstanceConfig,
+		ValidatorShare: opts.ValidatorShare,
+		Identifier:     opts.Identifier,
 		fork:           fork,
-		beacon:         beacon,
-		signer:         signer,
-		signatureState: SignatureState{SignatureCollectionTimeout: sigTimeout},
+		beacon:         opts.Beacon,
+		signer:         opts.Signer,
+		signatureState: SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
 		syncingLock:         semaphore.NewWeighted(1),
 
-		syncRateLimit: syncRateLimit,
+		syncRateLimit: opts.SyncRateLimit,
 
-		readMode: readMode,
+		readMode: opts.ReadMode,
 
 		q: q,
 	}
@@ -184,7 +188,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (c *Controller) GetIBFTCommittee() map[message.OperatorID]*message.Node {
+func (c *Controller) GetIBFTCommittee() map[message.OperatorID]*beaconprotocol.Node {
 	return c.ValidatorShare.Committee
 }
 

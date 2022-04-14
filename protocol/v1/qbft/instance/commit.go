@@ -2,6 +2,7 @@ package instance
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbft "github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -15,7 +16,7 @@ import (
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFTStore, share *message.Share) (*message.SignedMessage, error) {
+func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFTStore, share *beacon.Share) (*message.SignedMessage, error) {
 	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
 		zap.Uint64("seq", uint64(msg.Message.Height)), zap.String("identifier", string(msg.Message.Identifier)),
 		zap.Any("signers", msg.GetSigners()))
@@ -81,7 +82,7 @@ func (i *Instance) CommitMsgValidationPipelineV0() validation.SignedMessagePipel
 }
 
 // CommitMsgValidationPipelineV0 is version 0 of commit message validation
-func CommitMsgValidationPipelineV0(identifier message.Identifier, seq message.Height, share *message.Share) validation.SignedMessagePipeline {
+func CommitMsgValidationPipelineV0(identifier message.Identifier, seq message.Height, share *beacon.Share) validation.SignedMessagePipeline {
 	return validation.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.CommitMsgType),

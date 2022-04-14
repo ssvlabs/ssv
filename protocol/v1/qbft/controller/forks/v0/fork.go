@@ -1,6 +1,7 @@
 package v0
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	controcllerfork "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
 	instancefork "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
@@ -24,7 +25,7 @@ func (v0 *ForkV0) InstanceFork() instancefork.Fork {
 }
 
 // ValidateDecidedMsg impl
-func (v0 *ForkV0) ValidateDecidedMsg(share *message.Share) validation.SignedMessagePipeline {
+func (v0 *ForkV0) ValidateDecidedMsg(share *beacon.Share) validation.SignedMessagePipeline {
 	return validation.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.CommitMsgType),

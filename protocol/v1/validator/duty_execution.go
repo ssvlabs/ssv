@@ -23,7 +23,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	}
 
 	switch duty.Type {
-	case beaconprotocol.RoleTypeAttester:
+	case message.RoleTypeAttester:
 		attData, err := v.beacon.GetAttestationData(duty.Slot, duty.CommitteeIndex)
 		if err != nil {
 			return nil, 0, nil, 0, errors.Wrap(err, "failed to get attestation data")

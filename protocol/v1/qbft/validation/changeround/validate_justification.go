@@ -2,6 +2,7 @@ package changeround
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/pkg/errors"
@@ -9,11 +10,11 @@ import (
 
 // validateJustification validates change round justifications
 type validateJustification struct {
-	share *message.Share
+	share *beacon.Share
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *message.Share) validation.SignedMessagePipeline {
+func Validate(share *beacon.Share) validation.SignedMessagePipeline {
 	return &validateJustification{
 		share: share,
 	}

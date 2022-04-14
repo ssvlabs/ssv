@@ -2,44 +2,49 @@ package controller
 
 import (
 	"fmt"
-	forksv0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
-	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"testing"
 
-	instance "github.com/bloxapp/ssv/ibft/instance"
-	"github.com/bloxapp/ssv/ibft/proto"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
+	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/utils/threadsafe"
 	"github.com/stretchr/testify/require"
+
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
 func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
 		Identifier:   []byte("lambda_11"),
-		initHandlers: threadsafe.NewSafeBool(),
-		initSynced:   threadsafe.NewSafeBool(),
+		initHandlers: atomic.Bool{},
+		initSynced:   atomic.Bool{},
 		// instances: make([]*Instance, 0),
 	}
 
-	ret.fork = forksv0.New()
+	ret.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
 	return ret
 }
 
 func TestCanStartNewInstance(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
+	sks, nodes := testing2.GenerateBLSKeys(uids...)
 
 	tests := []struct {
 		name            string
 		opts            instance2.ControllerStartInstanceOptions
-		share           *validatorstorage.Share
-		storage         collections.Iibft
+		share           *beacon.Share
+		storage         qbftstorage.QBFTStore
 		initFinished    bool
 		initSynced      bool
-		currentInstance instance2.Instance
+		currentInstance instance2.Instancer
 		expectedError   string
 	}{
 		{
@@ -47,9 +52,9 @@ func TestCanStartNewInstance(t *testing.T) {
 			instance2.ControllerStartInstanceOptions{
 				SeqNumber: 11,
 			},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
@@ -63,9 +68,9 @@ func TestCanStartNewInstance(t *testing.T) {
 			instance2.ControllerStartInstanceOptions{
 				SeqNumber: 0,
 			},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			nil,
@@ -77,9 +82,9 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"didn't finish initialization",
 			instance2.ControllerStartInstanceOptions{},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			nil,
@@ -91,9 +96,9 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"didn't finish sync",
 			instance2.ControllerStartInstanceOptions{},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			nil,
@@ -107,9 +112,9 @@ func TestCanStartNewInstance(t *testing.T) {
 			instance2.ControllerStartInstanceOptions{
 				SeqNumber: 12,
 			},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
@@ -123,9 +128,9 @@ func TestCanStartNewInstance(t *testing.T) {
 			instance2.ControllerStartInstanceOptions{
 				SeqNumber: 10,
 			},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
@@ -139,16 +144,16 @@ func TestCanStartNewInstance(t *testing.T) {
 			instance2.ControllerStartInstanceOptions{
 				SeqNumber: 11,
 			},
-			&validatorstorage.Share{
+			&beacon.Share{
 				NodeID:    1,
-				PublicKey: validatorPK(sks),
+				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
 			populatedStorage(t, sks, 10),
 			true,
 			true,
-			instance.NewInstanceWithState(&proto.State{
-				SeqNumber: threadsafe.Uint64(10),
+			instance2.NewInstanceWithState(&qbft.State{
+				Height: newHeight(10),
 			}),
 			fmt.Sprintf("current instance (%d) is still running", 10),
 		},
@@ -157,8 +162,8 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-			i.initHandlers.Set(test.initFinished)
-			i.initSynced.Set(test.initSynced)
+			i.initHandlers.Store(test.initFinished)
+			i.initSynced.Store(test.initSynced)
 			if test.currentInstance != nil {
 				i.currentInstance = test.currentInstance
 			}
@@ -178,7 +183,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			}
 
 			i.ValidatorShare = test.share
-			i.instanceConfig = proto.DefaultConsensusParams()
+			i.instanceConfig = qbft.DefaultConsensusParams()
 			// i.instances = test.prevInstances
 			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
 			require.NoError(t, err)

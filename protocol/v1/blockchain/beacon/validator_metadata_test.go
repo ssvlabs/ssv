@@ -5,6 +5,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/stretchr/testify/require"
@@ -91,7 +92,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		Status:    v1.ValidatorStateActiveOngoing,
 		Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
 	}
-	bc := beacon.NewMockBeacon(map[uint64][]*Duty{}, data)
+	bc := beacon.NewMockBeacon(map[message.OperatorID][]*Duty{}, data)
 
 	storage := beacon.NewMockValidatorMetadataStorage()
 

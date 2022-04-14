@@ -20,7 +20,7 @@ type IController interface {
 	NextSeqNumber() (message.Height, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-	GetIBFTCommittee() map[message.OperatorID]*message.Node
+	GetIBFTCommittee() map[message.OperatorID]*beaconprotocol.Node
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte

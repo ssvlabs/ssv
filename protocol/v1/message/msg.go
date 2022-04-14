@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/pkg/errors"
 )
 
@@ -51,19 +50,19 @@ func (vid ValidatorPK) MessageIDBelongs(msgID Identifier) bool {
 type Identifier []byte
 
 // NewIdentifier creates a new Identifier
-func NewIdentifier(pk []byte, role beacon.RoleType) Identifier {
+func NewIdentifier(pk []byte, role RoleType) Identifier {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
 	return append(pk, roleByts...)
 }
 
 // GetRoleType extracts the role type from the id
-func (msgID Identifier) GetRoleType() beacon.RoleType {
+func (msgID Identifier) GetRoleType() RoleType {
 	if len(msgID) == 0 {
-		return beacon.RoleTypeUnknown
+		return RoleTypeUnknown
 	}
 	roleByts := msgID[len(msgID)-4:]
-	return beacon.RoleType(binary.LittleEndian.Uint32(roleByts))
+	return RoleType(binary.LittleEndian.Uint32(roleByts))
 }
 
 // GetValidatorPK extracts the validator public key from the id

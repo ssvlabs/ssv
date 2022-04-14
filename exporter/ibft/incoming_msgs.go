@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -65,7 +65,7 @@ func (i *incomingMsgsReader) GetMsgResolver(networkMsg network.NetworkMsg) func(
 }
 
 func (i *incomingMsgsReader) onMessage(msg *proto.SignedMessage) {
-	identifier := format.IdentifierFormat(i.publicKey.Serialize(), beacon.RoleTypeAttester.String())
+	identifier := format.IdentifierFormat(i.publicKey.Serialize(), message.RoleTypeAttester.String())
 	if msg == nil || msg.Message == nil {
 		i.logger.Info("received invalid msg")
 		return

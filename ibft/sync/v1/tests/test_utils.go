@@ -19,7 +19,7 @@ import (
 type validatorData struct {
 	PK       string
 	sks      map[message.OperatorID]*bls.SecretKey
-	nodes    map[message.OperatorID]*message.Node
+	nodes    map[message.OperatorID]*beacon.Node
 	messages []*message.SignedMessage
 }
 
@@ -29,7 +29,7 @@ func changeRoundGenerator(rounder func() message.Round) syncMsgGenerator {
 			MsgType:    message.RoundChangeMsgType,
 			Height:     height,
 			Round:      rounder(),
-			Identifier: message.NewIdentifier(pk, beacon.RoleTypeAttester),
+			Identifier: message.NewIdentifier(pk, message.RoleTypeAttester),
 			Data:       []byte("data"),
 		}
 	}
@@ -40,7 +40,7 @@ func decidedGenerator(height message.Height, pk []byte, oids ...message.Operator
 		MsgType:    message.CommitMsgType,
 		Height:     height,
 		Round:      1,
-		Identifier: message.NewIdentifier(pk, beacon.RoleTypeAttester),
+		Identifier: message.NewIdentifier(pk, message.RoleTypeAttester),
 		Data:       []byte("data"),
 	}
 }

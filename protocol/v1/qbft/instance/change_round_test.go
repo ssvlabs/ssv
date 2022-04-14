@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"go.uber.org/atomic"
 	"testing"
 
@@ -75,15 +76,15 @@ func bytesToChangeRoundData(input []byte) *message.RoundChangeData {
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[message.OperatorID]*message.Node) {
+func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*message.Node)
+	nodes := make(map[message.OperatorID]*beacon.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(uint64(i))] = &message.Node{
+		nodes[message.OperatorID(uint64(i))] = &beacon.Node{
 			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
@@ -118,7 +119,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          qbft.DefaultConsensusParams(),
-		ValidatorShare:  &message.Share{Committee: nodes},
+		ValidatorShare:  &beacon.Share{Committee: nodes},
 		state: &qbft.State{
 			Round:         round,
 			PreparedRound: preparedRound,
@@ -197,7 +198,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 
 	instance := &Instance{
 		Config:         qbft.DefaultConsensusParams(),
-		ValidatorShare: &message.Share{Committee: nodes},
+		ValidatorShare: &beacon.Share{Committee: nodes},
 		state: &qbft.State{
 			Round:         round,
 			PreparedRound: preparedRound,
@@ -558,7 +559,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &message.Share{Committee: map[message.OperatorID]*message.Node{
+		ValidatorShare: &beacon.Share{Committee: map[message.OperatorID]*beacon.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -665,7 +666,7 @@ func TestHighestPrepared(t *testing.T) {
 	instance := &Instance{
 		ChangeRoundMessages: msgcontinmem.New(3, 2),
 		Config:              proto.DefaultConsensusParams(),
-		ValidatorShare: &message.Share{Committee: map[message.OperatorID]*message.Node{
+		ValidatorShare: &beacon.Share{Committee: map[message.OperatorID]*beacon.Node{
 			0: {IbftId: 0},
 			1: {IbftId: 1},
 			2: {IbftId: 2},
@@ -806,7 +807,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 
 	instance := &Instance{
 		Config: proto.DefaultConsensusParams(),
-		ValidatorShare: &message.Share{
+		ValidatorShare: &beacon.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
@@ -841,7 +842,7 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &message.Share{
+		ValidatorShare: &beacon.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
@@ -866,7 +867,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 	instance := &Instance{
 		PrepareMessages: msgcontinmem.New(3, 2),
 		Config:          proto.DefaultConsensusParams(),
-		ValidatorShare: &message.Share{
+		ValidatorShare: &beacon.Share{
 			Committee: nodes,
 			PublicKey: sks[1].GetPublicKey(), // just placeholder
 		},
