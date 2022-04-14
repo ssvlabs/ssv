@@ -25,6 +25,7 @@ type ShareHolder interface {
 type Reader interface {
 	Start() error
 }
+
 //
 //// NewNetworkReader factory to create network readers
 //func NewNetworkReader(o IncomingMsgsReaderOptions) Reader {

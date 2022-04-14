@@ -25,15 +25,15 @@ type History interface {
 
 // history implements History
 type history struct {
-	logger   *zap.Logger
-	syncer   p2pprotocol.Syncer
+	logger *zap.Logger
+	syncer p2pprotocol.Syncer
 }
 
 // New creates a new instance of History
 func New(logger *zap.Logger, syncer p2pprotocol.Syncer) History {
 	return &history{
-		logger:   logger,
-		syncer:   syncer,
+		logger: logger,
+		syncer: syncer,
 	}
 }
 

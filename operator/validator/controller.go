@@ -108,7 +108,6 @@ func NewController(options ControllerOptions) Controller {
 
 	qbftStorage := storage.New(options.DB, options.Logger, "qbft/")
 
-
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 
@@ -129,7 +128,7 @@ func NewController(options ControllerOptions) Controller {
 		Signer:                     options.Beacon,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
-		IbftStorage: 				qbftStorage,
+		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 	}
 	ctrl := controller{
