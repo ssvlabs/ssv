@@ -44,9 +44,9 @@ type ibftStorage struct {
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, logger *zap.Logger, instanceType string) qbftstorage.QBFTStore {
+func New(db basedb.IDb, logger *zap.Logger, prefix string) qbftstorage.QBFTStore {
 	ibft := &ibftStorage{
-		prefix: []byte(instanceType),
+		prefix: []byte(prefix),
 		db:     db,
 		logger: logger,
 	}

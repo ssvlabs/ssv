@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 	"github.com/bloxapp/ssv/utils/format"
 
 	"github.com/pkg/errors"
@@ -204,26 +205,34 @@ func (c *Controller) listenToLateCommitMsgs(identifier []byte, seq message.Heigh
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
 func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
-	msgs, err := c.syncRound(c.ctx, &SyncContext{
-		Syncer:     c.network,
-		Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
-		Identifier: c.GetIdentifier(),
-	})
-	if err != nil {
-		c.logger.Error("failed fast change round catchup", zap.Error(err))
-	} else {
-		for _, msg := range msgs {
-			encodedMsg, err := msg.Encode()
-			if err != nil {
-				c.logger.Warn("failed to encode signed message", zap.Error(err))
-				continue
-			}
-			c.q.Add(&message.SSVMessage{
-				MsgType: message.SSVSyncMsgType,
-				ID:      c.Identifier,
-				Data:    encodedMsg,
-			})
+	count := 0
+
+	f := changeround.NewLastRoundFetcher(c.logger, c.network)
+
+	handler := func(msg *message.SignedMessage) error {
+		err := c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
+		if err != nil {
+			return errors.Wrap(err, "invalid msg")
 		}
-		c.logger.Info("fast change round catchup finished", zap.Int("found_msgs", len(msgs)))
+		encodedMsg, err := msg.Encode()
+		if err != nil {
+			return errors.Wrap(err, "could not encode msg")
+		}
+		c.q.Add(&message.SSVMessage{
+			MsgType: message.SSVSyncMsgType,
+			ID:      c.Identifier,
+			Data:    encodedMsg,
+		})
+		count++
+		return nil
 	}
+
+	err := f.GetChangeRoundMessages(c.Identifier, instance.State().GetHeight(), handler)
+
+	if err != nil {
+		c.logger.Warn("failed fast change round catchup", zap.Error(err))
+		return
+	}
+
+	c.logger.Info("fast change round catchup finished", zap.Int("count", count))
 }

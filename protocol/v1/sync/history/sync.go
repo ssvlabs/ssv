@@ -3,60 +3,55 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
-// ValidateDecided validates the given decided message
-type ValidateDecided func(signedMessage *message.SignedMessage) error
+// GetLastDecided reads last decided message from store
+type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
+
+// DecidedHandler handles incoming decided messages
+type DecidedHandler func(*message.SignedMessage) error
 
 // History takes care for syncing decided history
 type History interface {
 	// SyncDecided syncs decided message with other peers in the network
-	SyncDecided(ctx context.Context, identifier message.Identifier, optimistic bool) (bool, error)
+	SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*message.SignedMessage, error)
 	// SyncDecidedRange syncs decided messages for the given identifier and range
-	SyncDecidedRange(ctx context.Context, identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error)
+	SyncDecidedRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to message.Height, targetPeers ...string) error
 }
 
 // history implements History
 type history struct {
-	logger   *zap.Logger
-	store    qbftstorage.DecidedMsgStore
-	syncer   p2pprotocol.Syncer
-	validate pipelines.SignedMessagePipeline
+	logger *zap.Logger
+	syncer p2pprotocol.Syncer
 }
 
 // New creates a new instance of History
-func New(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, validate pipelines.SignedMessagePipeline) History {
+func New(logger *zap.Logger, syncer p2pprotocol.Syncer) History {
 	return &history{
-		logger:   logger,
-		store:    store,
-		syncer:   syncer,
-		validate: validate,
+		logger: logger,
+		syncer: syncer,
 	}
 }
 
-func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, optimistic bool) (bool, error) {
+func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*message.SignedMessage, error) {
 	logger := h.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
 
 	remoteMsgs, err := h.syncer.LastDecided(identifier)
 	if err != nil {
-		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
+		return nil, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 	if len(remoteMsgs) == 0 {
 		logger.Info("node is synced: remote highest decided not found")
-		return false, nil
+		return nil, nil
 	}
 
-	localMsg, err := h.store.GetLastDecided(identifier)
-	if err != nil && err.Error() != kv.EntryNotFoundError {
-		return false, errors.Wrap(err, "could not fetch local highest instance during sync")
+	localMsg, err := getLastDecided(identifier)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 	var localHeight message.Height
 	if localMsg != nil {
@@ -66,35 +61,24 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 	highest, height, sender := h.getHighest(localMsg, remoteMsgs...)
 	if height <= localHeight {
 		logger.Info("node is synced")
-		return true, nil
+		return highest, nil
 	}
 
-	synced, err := h.SyncDecidedRange(ctx, identifier, localHeight, height, sender)
+	err = h.SyncDecidedRange(ctx, identifier, handler, localHeight, height, sender)
 	if err != nil {
-		if !optimistic {
-			return false, errors.Wrapf(err, "could not fetch and save decided in range [%d, %d]", localHeight, height)
-		}
 		// in optimistic approach we ignore failures and updates last decided message
 		h.logger.Debug("could not get decided in range, skipping",
 			zap.Int64("from", int64(localHeight)), zap.Int64("to", int64(height)))
 	}
 
-	err = h.store.SaveLastDecided(highest)
-	if err != nil {
-		return synced, errors.Wrapf(err, "could not save highest decided (%d)", height)
-	}
-
-	logger.Info("node is synced",
-		zap.Int64("from", int64(localHeight)), zap.Int64("to", int64(height)))
-
-	return synced, nil
+	return highest, nil
 }
 
-func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Identifier, from, to message.Height, targetPeers ...string) (bool, error) {
+func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to message.Height, targetPeers ...string) error {
 	visited := make(map[message.Height]bool)
 	msgs, err := h.syncer.GetHistory(identifier, from, to, targetPeers...)
 	if err != nil {
-		return false, err
+		return err
 	}
 	for _, msg := range msgs {
 		if ctx.Err() != nil {
@@ -106,26 +90,22 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		}
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
-			if err := h.validate.Run(signedMsg); err != nil {
-				h.logger.Warn("message not valid", zap.Error(err))
-				// TODO: report validation?
-				continue signedMsgLoop
-			}
 			height := signedMsg.Message.Height
+			if err := handler(signedMsg); err != nil {
+				h.logger.Warn("could not save decided", zap.Error(err), zap.Int64("height", int64(height)))
+				continue
+			}
 			if visited[height] {
 				continue signedMsgLoop
-			}
-			if err := h.store.SaveDecided(signedMsg); err != nil {
-				h.logger.Warn("could not save decided", zap.Error(err), zap.Int64("height", int64(height)))
 			}
 			visited[height] = true
 		}
 	}
 	if len(visited) != int(to-from)+1 {
 		h.logger.Warn("not all messages in range", zap.Any("visited", visited), zap.Uint64("to", uint64(to)), zap.Uint64("from", uint64(from)))
-		return false, errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
+		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
-	return true, nil
+	return nil
 }
 
 func (h *history) getHighest(localMsg *message.SignedMessage, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, height message.Height, sender string) {

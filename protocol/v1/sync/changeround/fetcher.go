@@ -3,40 +3,39 @@ package changeround
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
+// MsgHandler handles incoming change round messages
+type MsgHandler func(*message.SignedMessage) error
+
 // Fetcher is responsible for fetching change round messages from other peers in the subnet
 type Fetcher interface {
 	// GetChangeRoundMessages fetches change round messages for the given identifier and height
-	GetChangeRoundMessages(identifier message.Identifier, height message.Height) ([]*message.SignedMessage, error)
+	GetChangeRoundMessages(identifier message.Identifier, height message.Height, handler MsgHandler) error
 }
 
 // changeRoundFetcher implements Fetcher
 type changeRoundFetcher struct {
-	logger   *zap.Logger
-	syncer   p2pprotocol.Syncer
-	validate pipelines.SignedMessagePipeline
+	logger *zap.Logger
+	syncer p2pprotocol.Syncer
 }
 
 // NewLastRoundFetcher returns an instance of changeRoundFetcher
-func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer, validate pipelines.SignedMessagePipeline) Fetcher {
+func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetcher {
 	return &changeRoundFetcher{
-		logger:   logger,
-		syncer:   syncer,
-		validate: validate,
+		logger: logger,
+		syncer: syncer,
 	}
 }
 
-func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identifier, height message.Height) ([]*message.SignedMessage, error) {
+func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identifier, height message.Height, handler MsgHandler) error {
 	msgs, err := crf.syncer.LastChangeRound(identifier, height)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get change round messages")
+		return errors.Wrap(err, "could not get change round messages")
 	}
-	results := make([]*message.SignedMessage, 0)
-	// TODO: report bad/invalid messages
+
 	for _, msg := range msgs {
 		syncMsg := &message.SyncMessage{}
 		err = syncMsg.Decode(msg.Msg.Data)
@@ -50,13 +49,12 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			continue
 		}
 		sm := syncMsg.Data[0]
-		if err := crf.validate.Run(sm); err != nil {
-			crf.logger.Warn("could not validate message", zap.Error(err))
+		if err := handler(sm); err != nil {
+			crf.logger.Warn("could not handle message", zap.Error(err))
 			continue
 		}
-		results = append(results, sm)
 	}
-	return results, nil
+	return nil
 }
 
 func (crf *changeRoundFetcher) msgError(msg *message.SyncMessage) error {

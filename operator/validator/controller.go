@@ -3,7 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	protocolctrl "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/ibft/storage"
 	"sync"
 	"time"
 
@@ -54,8 +54,6 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
-	SyncDecided                protocolctrl.SyncDecided
-	SyncRound                  protocolctrl.SyncRound
 }
 
 // Controller represent the validators controller,
@@ -108,6 +106,8 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
+	qbftStorage := storage.New(options.DB, options.Logger, "qbft/")
+
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 
@@ -128,8 +128,8 @@ func NewController(options ControllerOptions) Controller {
 		Signer:                     options.Beacon,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
-		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value,
-		SyncRound:                  options.SyncRound,
+		IbftStorage:                qbftStorage,
+		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 	}
 	ctrl := controller{
 		collection:                 collection,

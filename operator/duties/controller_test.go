@@ -17,7 +17,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	f := fetcherMock{}
 	var wg sync.WaitGroup
 	ctrl := &dutyController{
-		logger: zap.L(), ctx: context.Background(), ethNetwork: core.PraterNetwork,
+		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork),
 		executor: execWithWaitGroup(t, &wg), fetcher: &f, genesisEpoch: 0, dutyLimit: 32,
 	}
 	cn := make(chan types.Slot)
@@ -47,7 +47,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 }
 
 func TestDutyController_ShouldExecute(t *testing.T) {
-	ctrl := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	ctrl := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
 	require.True(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
@@ -56,21 +56,21 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 }
 
 func TestDutyController_GetSlotStartTime(t *testing.T) {
-	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
 
 	ts := d.ethNetwork.GetSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
 func TestDutyController_GetCurrentSlot(t *testing.T) {
-	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
 
 	slot := d.ethNetwork.EstimatedCurrentSlot()
 	require.Greater(t, slot, int64(646855))
 }
 
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {
-	d := dutyController{logger: zap.L(), ethNetwork: core.NetworkFromString("prater")}
+	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
 
 	slot := d.getEpochFirstSlot(20203)
 	require.Equal(t, uint64(646496), slot)

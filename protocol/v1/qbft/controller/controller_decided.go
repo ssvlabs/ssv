@@ -68,11 +68,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 	if shouldSync {
 		c.logger.Info("stopping current instance and syncing..")
-		if err := c.syncDecided(c.ctx, &SyncContext{
-			Store:      c.ibftStorage,
-			Syncer:     c.network,
-			Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
-			Identifier: c.GetIdentifier()}); err != nil {
+		if err := c.syncDecided(); err != nil {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}
 	}
