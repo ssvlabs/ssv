@@ -3,27 +3,26 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	scenarios2 "github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/controller"
-	v0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
 	"github.com/bloxapp/ssv/network"
 	networkForks "github.com/bloxapp/ssv/network/forks"
 	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
+	p2p "github.com/bloxapp/ssv/network/p2p"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -40,7 +39,7 @@ The scenario interface can be overriden with any writen scenario to manually tes
 var (
 	nodeCount = 4
 	logger    = logex.Build("simulator", zapcore.DebugLevel, nil)
-	scenario  = scenarios.NewRegularScenario(logger, &alwaysTrueValueCheck{})
+	scenario  = scenarios2.NewRegularScenario(logger, &alwaysTrueValueCheck{})
 )
 
 type alwaysTrueValueCheck struct{}
@@ -88,7 +87,7 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
 		sig, err := message.Sign(key)
 		if err != nil {
@@ -103,43 +102,28 @@ func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.D
 	return nil, nil, nil
 }
 
-func db() collections.Iibft {
-	db, err := storage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Path:   "",
-		Logger: logger,
-	})
-	if err != nil {
-		logger.Fatal("failed to create db", zap.Error(err))
-	}
-
-	ret := collections.NewIbft(db, logger, "attestation")
-
-	return &ret
-}
-
-func generateShares(cnt uint64) (map[uint64]*validatorstorage.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
+func generateShares(cnt uint64) (map[message.OperatorID]*beaconprotocol.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*proto.Node)
+	nodes := make(map[message.OperatorID]*beaconprotocol.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 
-	ret := make(map[uint64]*validatorstorage.Share)
+	ret := make(map[message.OperatorID]*beaconprotocol.Share)
 
-	for i := uint64(1); i <= cnt; i++ {
+	for i := message.OperatorID(1); uint64(i) <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
-		nodes[i] = &proto.Node{
-			IbftId: i,
+		nodes[i] = &beaconprotocol.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[i] = sk
+		sks[uint64(i)] = sk
 	}
 
 	sk := &bls.SecretKey{}
 	sk.SetByCSPRNG()
 
-	for i := uint64(1); i <= cnt; i++ {
-		ret[i] = &validatorstorage.Share{
+	for i := message.OperatorID(1); uint64(i) <= cnt; i++ {
+		ret[i] = &beaconprotocol.Share{
 			NodeID:    i,
 			PublicKey: sk.GetPublicKey(),
 			Committee: nodes,
@@ -152,34 +136,38 @@ func generateShares(cnt uint64) (map[uint64]*validatorstorage.Share, *bls.Secret
 func main() {
 	shares, shareSk, sks := generateShares(uint64(nodeCount))
 	identifier := format.IdentifierFormat(shareSk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())
-	dbs := make([]collections.Iibft, 0)
+	dbs := make([]qbftstorage.QBFTStore, 0)
 	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes
-	nodes := make([]ibft.Controller, 0)
+	nodes := make([]controller.IController, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		net := networking(networkForkV0.New())
-		dbs = append(dbs, db())
+		dbs = append(dbs, qbftstorage.NewQBFTStore(testing.NewInMemDb(), logger, "attestations"))
 		signer := newTestSigner()
 		_ = signer.AddShare(sks[i])
 		if err := net.SubscribeToValidatorNetwork(shareSk.GetPublicKey()); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
-		node := controller.New(
-			beacon.RoleTypeAttester,
-			[]byte(identifier),
-			logger.With(zap.Uint64("simulation_node_id", i)),
-			dbs[i-1],
-			net,
-			msgqueue.New(),
-			&proto.InstanceConfig{
+
+		opts := controller.Options{
+			Role:       message.RoleTypeAttester,
+			Identifier: []byte(identifier),
+			Logger:     logger.With(zap.Uint64("simulation_node_id", i)),
+			Storage:    dbs[i-1],
+			Network:    nil, // TODO add new net mock
+			InstanceConfig: &qbft.InstanceConfig{
 				RoundChangeDurationSeconds:   3,
 				LeaderPreprepareDelaySeconds: 1,
 			},
-			shares[i],
-			v0.New(),
-			signer,
-			time.Millisecond*200,
-		)
+			ValidatorShare: shares[message.OperatorID(i)],
+			Version:        forksprotocol.V0ForkVersion, // TODO need to check v1 version?
+			Beacon:         nil,                         // TODO need to add
+			Signer:         nil,                         // TODO need to add
+			SyncRateLimit:  time.Millisecond * 200,
+			SigTimeout:     time.Second * 5,
+			ReadMode:       false,
+		}
+		node := controller.New(opts)
 		nodes = append(nodes, node)
 	}
 

@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/tasks"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -70,7 +69,7 @@ type Options struct {
 type exporter struct {
 	ctx              context.Context
 	storage          storage.Storage
-	validatorStorage validatorstorage.ICollection
+	validatorStorage validator.ICollection
 	ibftStorage      collections.Iibft
 	logger           *zap.Logger
 	network          network.Network
@@ -102,8 +101,8 @@ type exporter struct {
 // New creates a new Exporter instance
 func New(opts Options) Exporter {
 	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
-	validatorStorage := validatorstorage.NewCollection(
-		validatorstorage.CollectionOptions{
+	validatorStorage := validator.NewCollection(
+		validator.CollectionOptions{
 			DB:     opts.DB,
 			Logger: opts.Logger,
 		},

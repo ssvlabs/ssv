@@ -1,18 +1,19 @@
 package validator
 
 import (
+	"strings"
+
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/ibft/proto"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validatorstorage "github.com/bloxapp/ssv/protocol/v1/keymanager"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"strings"
 )
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func UpdateShareMetadata(share *validatorstorage.Share, bc beaconprotocol.Beacon) (bool, error) {
+func UpdateShareMetadata(share *beaconprotocol.Share, bc beaconprotocol.Beacon) (bool, error) {
 	pk := share.PublicKey.SerializeToHexStr()
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
 	if err != nil {
@@ -31,7 +32,7 @@ func createShareWithOperatorKey(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
 	operatorPubKey string,
 	isOperatorShare bool,
-) (*validatorstorage.Share, *bls.SecretKey, error) {
+) (*beaconprotocol.Share, *bls.SecretKey, error) {
 	validatorShare, shareSecret, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not extract validator share from event")
@@ -54,8 +55,8 @@ func createShareWithOperatorKey(
 func ShareFromValidatorAddedEvent(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
 	operatorPubKey string,
-) (*validatorstorage.Share, *bls.SecretKey, error) {
-	validatorShare := validatorstorage.Share{}
+) (*beaconprotocol.Share, *bls.SecretKey, error) {
+	validatorShare := beaconprotocol.Share{}
 
 	validatorShare.PublicKey = &bls.PublicKey{}
 	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
@@ -64,11 +65,11 @@ func ShareFromValidatorAddedEvent(
 	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
-	ibftCommittee := map[uint64]*proto.Node{}
+	ibftCommittee := map[message.OperatorID]*beaconprotocol.Node{}
 	for i := range validatorAddedEvent.OperatorPublicKeys {
-		nodeID := uint64(i + 1)
-		ibftCommittee[nodeID] = &proto.Node{
-			IbftId: nodeID,
+		nodeID := message.OperatorID(i + 1)
+		ibftCommittee[nodeID] = &beaconprotocol.Node{
+			IbftID: uint64(nodeID),
 			Pk:     validatorAddedEvent.SharesPublicKeys[i],
 		}
 		if strings.EqualFold(string(validatorAddedEvent.OperatorPublicKeys[i]), operatorPubKey) {

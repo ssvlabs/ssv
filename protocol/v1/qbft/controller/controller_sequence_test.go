@@ -11,10 +11,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
+	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/stretchr/testify/require"
 
 	"go.uber.org/atomic"
@@ -35,7 +34,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 
 func TestCanStartNewInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
-	sks, nodes := testing2.GenerateBLSKeys(uids...)
+	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 
 	tests := []struct {
 		name            string
@@ -57,7 +56,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			populatedStorage(t, sks, 10),
+			testingprotocol.PopulatedStorage(t, sks, 3, 10),
 			true,
 			true,
 			nil,
@@ -117,7 +116,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			populatedStorage(t, sks, 10),
+			testingprotocol.PopulatedStorage(t, sks, 3, 10),
 			true,
 			true,
 			nil,
@@ -133,7 +132,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			populatedStorage(t, sks, 10),
+			testingprotocol.PopulatedStorage(t, sks, 3, 10),
 			true,
 			true,
 			nil,
@@ -149,7 +148,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			populatedStorage(t, sks, 10),
+			testingprotocol.PopulatedStorage(t, sks, 3, 10),
 			true,
 			true,
 			instance2.NewInstanceWithState(&qbft.State{
@@ -178,8 +177,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				// creating new db instance each time to get cleared one (without no data)
 				db, err := storage.GetStorageFactory(options)
 				require.NoError(t, err)
-				s := collections.NewIbft(db, options.Logger, "attestation")
-				i.ibftStorage = &s
+				i.ibftStorage = qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
 			}
 
 			i.ValidatorShare = test.share

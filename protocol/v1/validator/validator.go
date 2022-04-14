@@ -102,18 +102,20 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controlle
 func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
 	identifier := []byte(format.IdentifierFormat(opt.Share.PublicKey.Serialize(), role.String()))
 
-	return controller.New(
-		role,
-		identifier,
-		logger,
-		opt.IbftStorage,
-		opt.P2pNetwork,
-		qbft.DefaultConsensusParams(),
-		opt.Share,
-		opt.ForkVersion,
-		opt.Beacon,
-		opt.Signer,
-		opt.SyncRateLimit,
-		opt.SignatureCollectionTimeout,
-		opt.ReadMode)
+	opts := controller.Options{
+		Role:           role,
+		Identifier:     identifier,
+		Logger:         logger,
+		Storage:        opt.IbftStorage,
+		Network:        opt.P2pNetwork,
+		InstanceConfig: qbft.DefaultConsensusParams(),
+		ValidatorShare: opt.Share,
+		Version:        opt.ForkVersion,
+		Beacon:         opt.Beacon,
+		Signer:         opt.Signer,
+		SyncRateLimit:  opt.SyncRateLimit,
+		SigTimeout:     opt.SignatureCollectionTimeout,
+		ReadMode:       opt.ReadMode,
+	}
+	return controller.New(opts)
 }

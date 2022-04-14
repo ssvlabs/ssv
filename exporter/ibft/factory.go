@@ -1,8 +1,9 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/keymanager"
 	"sync"
+
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 // TODO: add to ibft package as most of parts here are code duplicates
@@ -15,7 +16,7 @@ var (
 
 // ShareHolder is an interface for components that hold a share
 type ShareHolder interface {
-	Share() *keymanager.Share
+	Share() *beacon.Share
 }
 
 // Reader is an interface for ibft in the context of an exporter
