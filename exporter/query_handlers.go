@@ -1,14 +1,11 @@
 package exporter
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/utils/format"
 	"go.uber.org/zap"
 )
 
@@ -54,40 +51,40 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 	nm.Msg = res
 }
 
-func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
-	logger.Debug("handles decided request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
-		zap.String("pk", nm.Msg.Filter.PublicKey),
-		zap.String("role", string(nm.Msg.Filter.Role)))
-	res := api.Message{
-		Type:   nm.Msg.Type,
-		Filter: nm.Msg.Filter,
-	}
-	v, found, err := validatorStorage.GetValidatorInformation(nm.Msg.Filter.PublicKey)
-	if err != nil {
-		logger.Warn("failed to get validators", zap.Error(err))
-		res.Data = []string{"internal error - could not get validator"}
-	} else if !found {
-		logger.Warn("validator not found")
-		res.Data = []string{"internal error - could not find validator"}
-	} else {
-		pkRaw, err := hex.DecodeString(v.PublicKey)
-		if err != nil {
-			logger.Warn("failed to decode validator public key", zap.Error(err))
-			res.Data = []string{"internal error - could not read validator key"}
-		} else {
-			identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
-			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
-			if err != nil {
-				logger.Warn("failed to get decided messages", zap.Error(err))
-				res.Data = []string{"internal error - could not get decided messages"}
-			} else {
-				res.Data = msgs
-			}
-		}
-	}
-	nm.Msg = res
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection/*, ibftStorage collections.Iibft*/, nm *api.NetworkMessage) {
+	//logger.Debug("handles decided request",
+	//	zap.Int64("from", nm.Msg.Filter.From),
+	//	zap.Int64("to", nm.Msg.Filter.To),
+	//	zap.String("pk", nm.Msg.Filter.PublicKey),
+	//	zap.String("role", string(nm.Msg.Filter.Role)))
+	//res := api.Message{
+	//	Type:   nm.Msg.Type,
+	//	Filter: nm.Msg.Filter,
+	//}
+	//v, found, err := validatorStorage.GetValidatorInformation(nm.Msg.Filter.PublicKey)
+	//if err != nil {
+	//	logger.Warn("failed to get validators", zap.Error(err))
+	//	res.Data = []string{"internal error - could not get validator"}
+	//} else if !found {
+	//	logger.Warn("validator not found")
+	//	res.Data = []string{"internal error - could not find validator"}
+	//} else {
+	//	pkRaw, err := hex.DecodeString(v.PublicKey)
+	//	if err != nil {
+	//		logger.Warn("failed to decode validator public key", zap.Error(err))
+	//		res.Data = []string{"internal error - could not read validator key"}
+	//	} else {
+	//		identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
+	//		msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
+	//		if err != nil {
+	//			logger.Warn("failed to get decided messages", zap.Error(err))
+	//			res.Data = []string{"internal error - could not get decided messages"}
+	//		} else {
+	//			res.Data = msgs
+	//		}
+	//	}
+	//}
+	//nm.Msg = res
 }
 
 func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
