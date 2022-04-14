@@ -12,8 +12,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/tasks"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -42,8 +40,6 @@ type Options struct {
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 
 	ForkVersion forksprotocol.ForkVersion
-
-	UseMainTopic bool
 }
 
 // operatorNode implements Node interface
@@ -59,8 +55,7 @@ type operatorNode struct {
 	dutyCtrl       duties.DutyController
 	//fork           *forks.Forker
 
-	useMainTopic bool
-	forkVersion  forksprotocol.ForkVersion
+	forkVersion forksprotocol.ForkVersion
 }
 
 // New is the constructor of operatorNode
@@ -88,8 +83,6 @@ func New(opts Options) Node {
 		}),
 
 		forkVersion: opts.ForkVersion,
-
-		useMainTopic: opts.UseMainTopic,
 	}
 
 	if err := node.init(opts); err != nil {
@@ -113,11 +106,6 @@ func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkMediators()
-	if n.useMainTopic {
-		if err := tasks.Retry(n.net.SubscribeToMainTopic, 3); err != nil {
-			n.logger.Error("failed to subscribe to main topic", zap.Error(err))
-		}
-	}
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()
 	n.dutyCtrl.Start()

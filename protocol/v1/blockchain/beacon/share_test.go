@@ -1,7 +1,7 @@
 package beacon
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -45,11 +45,11 @@ func TestThresholdSize(t *testing.T) {
 				NodeID:    0,
 				PublicKey: nil,
 				Metadata:  nil,
-				Committee: map[uint64]*proto.Node{},
+				Committee: map[message.OperatorID]*Node{},
 			}
 			// compile committee
 			for i := uint64(1); i <= test.committeeSize; i++ {
-				share.Committee[i] = &proto.Node{}
+				share.Committee[message.OperatorID(i)] = &Node{}
 			}
 
 			require.EqualValues(t, test.expectedThreshold, share.ThresholdSize())
@@ -63,11 +63,11 @@ func TestShare_HashOperators(t *testing.T) {
 		NodeID:    0,
 		PublicKey: nil,
 		Metadata:  nil,
-		Committee: map[uint64]*proto.Node{},
+		Committee: map[message.OperatorID]*Node{},
 		Operators: make([][]byte, 4),
 	}
-	for i := uint64(1); i <= 4; i++ {
-		share.Committee[i] = &proto.Node{}
+	for i := message.OperatorID(1); i <= 4; i++ {
+		share.Committee[i] = &Node{}
 		share.Operators[int(i-1)] = []byte{byte(i)}
 	}
 
