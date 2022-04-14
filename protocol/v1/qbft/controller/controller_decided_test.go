@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"testing"
 	"time"
@@ -333,7 +334,9 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 func TestForceDecided(t *testing.T) { // TODo need to align with the new queue process
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
-	network := local.NewLocalNetwork()
+	pi, err := protocolp2p.GenPeerID()
+	require.NoError(t, err)
+	network := protocolp2p.NewMockNetwork(logex.GetLogger(), pi, 10)
 
 	identifier := []byte("Identifier_11")
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
@@ -379,7 +382,9 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 func TestSyncAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
-	network := local.NewLocalNetwork()
+	pi, err := protocolp2p.GenPeerID()
+	require.NoError(t, err)
+	network := protocolp2p.NewMockNetwork(logex.GetLogger(), pi, 10)
 
 	identifier := []byte("Identifier_11")
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 4)
@@ -413,12 +418,14 @@ func TestSyncAfterDecided(t *testing.T) {
 func TestSyncFromScratchAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
-	network := local.NewLocalNetwork()
 	db, _ := kv.New(basedb.Options{
 		Type:   "badger-memory",
 		Path:   "",
 		Logger: zap.L(),
 	})
+	pi, err := protocolp2p.GenPeerID()
+	require.NoError(t, err)
+	network := protocolp2p.NewMockNetwork(logex.GetLogger(), pi, 10)
 
 	identifier := []byte("Identifier_11")
 	s1 := collections.NewIbft(db, zap.L(), "attestation")
@@ -446,7 +453,9 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 func TestValidateDecidedMsg(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
-	network := local.NewLocalNetwork()
+	pi, err := protocolp2p.GenPeerID()
+	require.NoError(t, err)
+	network := protocolp2p.NewMockNetwork(logex.GetLogger(), pi, 10)
 	identifier := []byte("Identifier_11")
 	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
@@ -563,7 +572,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 func populatedIbft(
 	nodeID message.OperatorID,
 	identifier []byte,
-	network *local.Local,
+	network protocolp2p.MockNetwork,
 	ibftStorage qbftstorage.QBFTStore,
 	sks map[message.OperatorID]*bls.SecretKey,
 	nodes map[message.OperatorID]*beaconprotocol.Node,
@@ -580,7 +589,7 @@ func populatedIbft(
 		Identifier:     identifier,
 		Logger:         logex.GetLogger(),
 		Storage:        ibftStorage,
-		Network:        nil, // TODO waiting for Amir code | network.CopyWithLocalNodeID(peer.ID(fmt.Sprintf("%d", nodeID-1))),
+		Network:        network,
 		InstanceConfig: qbft.DefaultConsensusParams(),
 		ValidatorShare: share,
 		Version:        forksprotocol.V0ForkVersion, // TODO need to check v1 fork too? (:Niv)
