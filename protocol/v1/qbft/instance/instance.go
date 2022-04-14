@@ -2,19 +2,16 @@ package instance
 
 import (
 	"context"
-	leader2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader"
-
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/leader"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
@@ -32,7 +29,7 @@ type Options struct {
 	ValidatorShare *beaconprotocol.Share
 	Network        protcolp2p.Network
 	ValueCheck     valcheck.ValueCheck
-	LeaderSelector leader2.Selector
+	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
 	Lambda         message.Identifier
 	Height         message.Height
@@ -93,7 +90,7 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 // NewInstance is the constructor of Instance
 func NewInstance(opts *Options) Instancer {
 	pk, role := format.IdentifierUnformat(string(opts.Lambda))
-	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(proto.RoundState_NotStarted))
+	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(qbft.RoundState_NotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
 
 	ret := &Instance{
