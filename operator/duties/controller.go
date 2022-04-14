@@ -171,7 +171,7 @@ func (dc *dutyController) shouldExecute(duty *beaconprotocol.Duty) bool {
 		return false
 	}
 
-	currentSlot := uint64(dc.getCurrentSlot())
+	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
@@ -184,32 +184,15 @@ func (dc *dutyController) shouldExecute(duty *beaconprotocol.Duty) bool {
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beaconprotocol.Duty) *zap.Logger {
-	currentSlot := uint64(dc.getCurrentSlot())
+func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beacon.Duty) *zap.Logger {
+	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(zap.Uint64("current slot", currentSlot)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", dc.getSlotStartTime(uint64(duty.Slot))))
-}
-
-// getSlotStartTime returns the start time for the given slot
-func (dc *dutyController) getSlotStartTime(slot uint64) time.Time {
-	dc.ethNetwork.EstimatedCurrentSlot()
-	timeSinceGenesisStart := slot * uint64(dc.ethNetwork.SlotDurationSec().Seconds())
-	start := time.Unix(int64(dc.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
-	return start
-}
-
-// getCurrentSlot returns the current beacon node slot
-func (dc *dutyController) getCurrentSlot() int64 {
-	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
-	if genesisTime.After(time.Now()) {
-		return 0
-	}
-	return int64(time.Since(genesisTime).Seconds()) / secPerSlot
+		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(uint64(duty.Slot))))
 }
 
 // getEpochFirstSlot returns the beacon node first slot in epoch

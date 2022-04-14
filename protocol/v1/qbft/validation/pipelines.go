@@ -12,7 +12,7 @@ type Pipelines interface {
 	CommitMsgPipeline() SignedMessagePipeline
 	// DecidedMsgPipeline is a specific full processing pipeline for a decided msg
 	DecidedMsgPipeline() SignedMessagePipeline
-	// changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
+	// ChangeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
 	ChangeRoundMsgValidationPipeline() SignedMessagePipeline
 	// ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
 	ChangeRoundMsgPipeline() SignedMessagePipeline
