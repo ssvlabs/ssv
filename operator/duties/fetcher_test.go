@@ -2,13 +2,14 @@ package duties
 
 import (
 	"errors"
+	"testing"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
 )
 
 func TestDutyFetcher_GetDuties(t *testing.T) {
@@ -17,7 +18,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		bcMock := beaconDutiesClientMock{
 			getDutiesErr: expectedErr,
 		}
-		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}}, core.PraterNetwork)
+		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}}, beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
 		require.Len(t, duties, 0)
@@ -32,7 +33,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		bcMock := beaconDutiesClientMock{duties: beaconDuties}
 		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
-			core.NetworkFromString(string(core.PraterNetwork)))
+			beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
@@ -51,7 +52,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		bcMock := beaconDutiesClientMock{duties: fetchedDuties}
 		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
-			core.NetworkFromString(string(core.PraterNetwork)))
+			beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
@@ -73,7 +74,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		bcMock := beaconDutiesClientMock{duties: fetchedDuties}
 		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{}},
-			core.PraterNetwork)
+			beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
@@ -83,7 +84,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	df := dutyFetcher{
 		logger:     zap.L(),
-		ethNetwork: core.PraterNetwork,
+		ethNetwork: beacon.NewNetwork(core.PraterNetwork),
 	}
 	tests := []struct {
 		name string
@@ -100,7 +101,7 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 			entries := map[spec.Slot]cacheEntry{}
 			entries[test.slot] = cacheEntry{[]beacon.Duty{}}
 			df.addMissingSlots(entries)
-			//require.Equal(t, len(entries), 32)
+			// require.Equal(t, len(entries), 32)
 			_, firstExist := entries[spec.Slot(950112)]
 			require.True(t, firstExist)
 			_, lastExist := entries[spec.Slot(950143)]
