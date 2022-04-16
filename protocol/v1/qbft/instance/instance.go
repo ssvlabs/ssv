@@ -400,6 +400,6 @@ func generateState(opts *Options) *qbft.State {
 		InputValue:    atomic.Value{},
 		Round:         round,
 		PreparedRound: preparedRound,
-		PreparedValue: preparedRound,
+		PreparedValue: preparedValue,
 	}
 }

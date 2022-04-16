@@ -104,5 +104,5 @@ func (i *Instance) generatePrepareMessage(value []byte) *message.ConsensusMessag
 
 // isPrepared returns true if instance prepared
 func (i *Instance) isPrepared() bool {
-	return i.State().GetPreparedValue() != nil
+	return len(i.State().GetPreparedValue()) > 0
 }

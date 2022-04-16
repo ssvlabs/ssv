@@ -79,7 +79,7 @@ type Controller struct {
 
 // New is the constructor of Controller
 func New(opts Options) IController {
-	logger := opts.Logger.With(zap.String("role", opts.Role.String()))
+	logger := opts.Logger.With(zap.String("role", opts.Role.String()), zap.Bool("read mode", opts.ReadMode))
 	fork := forksfactory.NewFork(opts.Version)
 
 	q, err := msgqueue.New(
@@ -220,8 +220,7 @@ func (c *Controller) GetIdentifier() []byte {
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
-	c.logger.Debug("got msg")
-	c.logger.Debug("get message, process", zap.Any("msg", msg))
+	c.logger.Debug("get message, process", zap.Bool("msg is not nil", msg != nil), zap.String("type", msg.MsgType.String()), zap.String("id", msg.ID.String()))
 	if c.readMode {
 		return c.messageHandler(msg)
 	}

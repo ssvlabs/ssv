@@ -133,13 +133,14 @@ func (i *Instance) changeRoundQuorum(round message.Round) (quorum bool, t int, n
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
-	var justificationMsg *message.SignedMessage
+	var justificationMsg *message.ConsensusMessage
 	var aggSig []byte
 	ids := make([]message.OperatorID, 0)
 	if i.isPrepared() {
-		_, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
+		qourum, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
+		i.Logger.Debug("change round - checking quorum", zap.Bool("qourum", qourum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
 		var aggregatedSig *bls.Sign
-		justificationMsg = msgs[0]
+		justificationMsg = msgs[0].Message
 		for _, msg := range msgs {
 			// add sig to aggregate
 			sig := &bls.Sign{}
@@ -158,11 +159,15 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		aggSig = aggregatedSig.Serialize()
 	}
 
-	data := message.RoundChangeData{
-		PreparedValue:            i.State().GetPreparedValue(),
-		Round:                    i.State().GetPreparedRound(),
-		NextProposalData:         aggSig,
-		RoundChangeJustification: []*message.SignedMessage{justificationMsg}, // TODO the right message? should be many msg's? (:Niv)
+	data := &message.RoundChangeData{
+		PreparedValue:    i.State().GetPreparedValue(),
+		Round:            i.State().GetPreparedRound(),
+		NextProposalData: nil, // TODO should fill?
+		RoundChangeJustification: []*message.SignedMessage{{
+			Signature: aggSig,
+			Signers:   ids,
+			Message:   justificationMsg,
+		}},
 	}
 	return json.Marshal(data)
 }

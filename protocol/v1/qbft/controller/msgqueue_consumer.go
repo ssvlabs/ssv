@@ -37,6 +37,7 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 			if len(msgs) == 0 || msgs[0] == nil {
 				continue
 			}
+			c.logger.Debug("process message when instance is nil")
 			err := c.messageHandler(msgs[0])
 			if err != nil {
 				c.logger.Warn("could not handle msg", zap.Error(err))
@@ -50,12 +51,17 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 		sigMsgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, height), 1)
 		if len(sigMsgs) > 0 {
 			// got post consensus message for the current sequence
+			c.logger.Debug("queue found sigMsgs", zap.Int("count", len(sigMsgs)))
 			msg = sigMsgs[0]
 		} else {
 			msg = c.getNextMsgForState(currentState)
+			if msg == nil {
+				continue
+			}
+			c.logger.Debug("queue didnt found sigMsgs, getting next for state", zap.Bool("is msg nil", msg == nil), zap.Any("state", currentState))
 		}
-		c.logger.Debug("sending msg")
-		c.logger.Debug("send to message handler", zap.Any("msg", msg))
+
+		c.logger.Debug("queue push to message handler", zap.Any("msg", msg))
 		err := c.messageHandler(msg)
 		if err != nil {
 			c.logger.Warn("could not handle msg", zap.Error(err))

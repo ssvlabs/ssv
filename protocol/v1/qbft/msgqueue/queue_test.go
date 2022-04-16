@@ -27,7 +27,13 @@ func TestNewMsgQueue(t *testing.T) {
 	}
 
 	t.Run("peek and pop", func(t *testing.T) {
-		q, err := New(logger, WithIndexers(DefaultMsgIndexer()))
+		//q, err := New(logger, WithIndexers(DefaultMsgIndexer()))
+
+		q, err := New(
+			logger,
+			WithIndexers(SignedMsgIndexer(), SignedPostConsensusMsgIndexer()),
+		)
+
 		require.NoError(t, err)
 		q.Add(msg1)
 		q.Add(msg2)
