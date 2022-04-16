@@ -2,22 +2,27 @@ package duties
 
 import (
 	"errors"
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"testing"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
+
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv/operator/duties/mocks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 func TestDutyFetcher_GetDuties(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	t.Run("handles error", func(t *testing.T) {
 		expectedErr := errors.New("test duties")
-		bcMock := beaconDutiesClientMock{
-			getDutiesErr: expectedErr,
-		}
-		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}}, core.PraterNetwork)
+		mockClient := createBeaconDutiesClient(ctrl, nil, expectedErr)
+		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
 		require.Len(t, duties, 0)
@@ -30,9 +35,10 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 				PubKey: spec.BLSPubKey{},
 			},
 		}
-		bcMock := beaconDutiesClientMock{duties: beaconDuties}
-		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
-			core.NetworkFromString(string(core.PraterNetwork)))
+		mockClient := createBeaconDutiesClient(ctrl, beaconDuties, nil)
+		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
+
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
@@ -49,15 +55,15 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 				PubKey: spec.BLSPubKey{},
 			},
 		}
-		bcMock := beaconDutiesClientMock{duties: fetchedDuties}
-		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{205238}},
-			core.NetworkFromString(string(core.PraterNetwork)))
+		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
+		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
 		// trying to get duty in another slot, same epoch -> cache should be used
 		// cleanup beacon client so it won't return duties
-		dm.(*dutyFetcher).beaconClient = &beaconDutiesClientMock{}
+		dm.(*dutyFetcher).beaconClient = mockClient
 		// get duties, assuming cache will be used
 		duties, err = dm.GetDuties(893110)
 		require.NoError(t, err)
@@ -71,9 +77,9 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 				PubKey: spec.BLSPubKey{},
 			},
 		}
-		bcMock := beaconDutiesClientMock{duties: fetchedDuties}
-		dm := newDutyFetcher(zap.L(), &bcMock, &indicesFetcher{[]spec.ValidatorIndex{}},
-			core.PraterNetwork)
+		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
+		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{})
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
@@ -83,7 +89,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	df := dutyFetcher{
 		logger:     zap.L(),
-		ethNetwork: core.PraterNetwork,
+		ethNetwork: beacon.NewNetwork(core.PraterNetwork),
 	}
 	tests := []struct {
 		name string
@@ -100,7 +106,7 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 			entries := map[spec.Slot]cacheEntry{}
 			entries[test.slot] = cacheEntry{[]beacon.Duty{}}
 			df.addMissingSlots(entries)
-			//require.Equal(t, len(entries), 32)
+			// require.Equal(t, len(entries), 32)
 			_, firstExist := entries[spec.Slot(950112)]
 			require.True(t, firstExist)
 			_, lastExist := entries[spec.Slot(950143)]
@@ -109,28 +115,17 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	}
 }
 
-type indicesFetcher struct {
-	vIndices []spec.ValidatorIndex
+func createIndexFetcher(ctrl *gomock.Controller, result []spec.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
+	indexFetcher := mocks.NewMockvalidatorsIndicesFetcher(ctrl)
+	indexFetcher.EXPECT().GetValidatorsIndices().Return(result).Times(1)
+
+	return indexFetcher
 }
 
-func (f *indicesFetcher) GetValidatorsIndices() []spec.ValidatorIndex {
-	return f.vIndices[:]
-}
+func createBeaconDutiesClient(ctrl *gomock.Controller, result []*beacon.Duty, err error) *mocks.MockbeaconDutiesClient {
+	client := mocks.NewMockbeaconDutiesClient(ctrl)
+	client.EXPECT().GetDuties(gomock.Any(), gomock.Any()).Return(result, err).MaxTimes(1)
+	client.EXPECT().SubscribeToCommitteeSubnet(gomock.Any()).Return(nil).MaxTimes(1)
 
-type beaconDutiesClientMock struct {
-	duties            []*beacon.Duty
-	getDutiesErr      error
-	subToCommitteeErr error
-	subscribed        bool
-}
-
-// GetDuties returns duties for the passed validators indices
-func (bc *beaconDutiesClientMock) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
-	return bc.duties, bc.getDutiesErr
-}
-
-// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
-func (bc *beaconDutiesClientMock) SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
-	bc.subscribed = true
-	return bc.subToCommitteeErr
+	return client
 }

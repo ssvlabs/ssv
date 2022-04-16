@@ -2,19 +2,19 @@ package beacon
 
 import (
 	"encoding/hex"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -81,20 +81,47 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		blsPubKeys[i] = blsPubKey
 	}
 
-	data := map[spec.BLSPubKey]*v1.Validator{}
-	data[blsPubKeys[0]] = &v1.Validator{
-		Index:     spec.ValidatorIndex(210961),
-		Status:    v1.ValidatorStateWithdrawalPossible,
-		Validator: &spec.Validator{PublicKey: blsPubKeys[0]},
-	}
-	data[blsPubKeys[1]] = &v1.Validator{
-		Index:     spec.ValidatorIndex(213820),
-		Status:    v1.ValidatorStateActiveOngoing,
-		Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
-	}
-	bc := beacon.NewMockBeacon(map[message.OperatorID][]*Duty{}, data)
+	// bc := beacon.NewMockBeacon(map[message.OperatorID][]*Duty{}, data)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	storage := beacon.NewMockValidatorMetadataStorage()
+	bc := NewMockBeacon(ctrl)
+	bc.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*v1.Validator, error) {
+		validatorsData := map[spec.BLSPubKey]*v1.Validator{
+			blsPubKeys[0]: {
+				Index:     spec.ValidatorIndex(210961),
+				Status:    v1.ValidatorStateWithdrawalPossible,
+				Validator: &spec.Validator{PublicKey: blsPubKeys[0]},
+			},
+			blsPubKeys[1]: {
+				Index:     spec.ValidatorIndex(213820),
+				Status:    v1.ValidatorStateActiveOngoing,
+				Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
+			},
+		}
+
+		results := map[spec.ValidatorIndex]*v1.Validator{}
+		for _, pk := range validatorPubKeys {
+			if data, ok := validatorsData[pk]; ok {
+				results[data.Index] = data
+			}
+		}
+		return results, nil
+	})
+
+	storageData := make(map[string]*ValidatorMetadata)
+	storageMu := sync.Mutex{}
+
+	// storage := NewMockValidatorMetadataStorage()
+	storage := NewMockValidatorMetadataStorage(ctrl)
+	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
+		storageMu.Lock()
+		defer storageMu.Unlock()
+
+		storageData[pk] = metadata
+
+		return nil
+	}).AnyTimes()
 
 	onUpdated := func(pk string, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
@@ -105,7 +132,11 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	err := UpdateValidatorsMetadata([][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
 	require.Nil(t, err)
 	require.Equal(t, uint64(2), updateCount)
-	require.Equal(t, 2, storage.(*beacon.mockValidatorMetadataStorage).Size())
+
+	storageMu.Lock()
+	storageSize := len(storageData)
+	storageMu.Unlock()
+	require.Equal(t, 2, storageSize)
 }
 
 func TestBatch(t *testing.T) {
