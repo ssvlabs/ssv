@@ -2,10 +2,13 @@ package eth1
 
 import (
 	"crypto/rsa"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
-	"math/big"
 )
+
+//go:generate mockgen -package=eth1 -destination=./mock_client.go -source=./client.go
 
 // Event represents an eth1 event log in the system
 type Event struct {

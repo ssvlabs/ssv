@@ -1,13 +1,16 @@
 package eth1
 
 import (
-	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"math/big"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
+
+//go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
 
 const (
 	// prod contract genesis
