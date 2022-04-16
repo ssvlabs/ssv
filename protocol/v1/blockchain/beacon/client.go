@@ -7,6 +7,8 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
+//go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
+
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
 	KeyManager

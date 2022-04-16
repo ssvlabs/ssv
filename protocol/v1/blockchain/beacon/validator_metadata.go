@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -package=beacon -destination=./mock_validator_metadata.go -source=./validator_metadata.go
+
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
 	UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error
