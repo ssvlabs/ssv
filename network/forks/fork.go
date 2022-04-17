@@ -2,6 +2,7 @@ package forks
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/libp2p/go-libp2p-core/protocol"
 )
 
@@ -27,15 +28,9 @@ type encoding interface {
 }
 
 type sync interface {
-	// LastDecidedProtocol returns the protocol id of last decided protocol,
+	// ProtocolID returns the protocol id of given protocol,
 	// and the amount of peers for distribution
-	LastDecidedProtocol() (protocol.ID, int)
-	// LastChangeRoundProtocol returns the protocol id of last change round protocol,
-	// and the amount of peers for distribution
-	LastChangeRoundProtocol() (protocol.ID, int)
-	// DecidedHistoryProtocol returns the protocol id of decided history protocol,
-	// and the amount of peers for distribution
-	DecidedHistoryProtocol() (protocol.ID, int)
+	ProtocolID(prot p2pprotocol.SyncProtocol) (protocol.ID, int)
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id

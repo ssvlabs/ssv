@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"testing"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/sync/history"
@@ -40,12 +40,9 @@ func TestHistory(t *testing.T) {
 		stores = append(stores, store)
 		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node)
 		histories = append(histories, h)
-		f := forksv1.New()
-		pid, _ := f.DecidedHistoryProtocol()
-		node.RegisterHandler(string(pid),
+		node.RegisterHandler(p2pprotocol.DecidedHistoryProtocol,
 			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-%d", i)), store, node, 10))
-		pid, _ = f.LastDecidedProtocol()
-		node.RegisterHandler(string(pid),
+		node.RegisterHandler(p2pprotocol.LastDecidedProtocol,
 			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("last-messages-%d", i)), store, node))
 		//pid, _ = f.LastChangeRoundProtocol()
 		//node.RegisterHandler(string(pid),

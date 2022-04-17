@@ -1,6 +1,9 @@
 package v0
 
-import "github.com/libp2p/go-libp2p-core/protocol"
+import (
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/libp2p/go-libp2p-core/protocol"
+)
 
 const (
 	legacyMsgStream = "/sync/0.0.1"
@@ -9,20 +12,16 @@ const (
 	peersForHistory = 1
 )
 
-// LastDecidedProtocol returns the protocol id of last decided protocol,
+// ProtocolID returns the protocol id of the given protocol,
 // and the amount of peers for distribution
-func (v0 *ForkV0) LastDecidedProtocol() (protocol.ID, int) {
-	return legacyMsgStream, peersForSync
-}
-
-// LastChangeRoundProtocol returns the protocol id of last change round protocol,
-// and the amount of peers for distribution
-func (v0 *ForkV0) LastChangeRoundProtocol() (protocol.ID, int) {
-	return legacyMsgStream, peersForSync
-}
-
-// DecidedHistoryProtocol returns the protocol id of decided history protocol,
-// and the amount of peers for distribution
-func (v0 *ForkV0) DecidedHistoryProtocol() (protocol.ID, int) {
-	return legacyMsgStream, peersForHistory
+func (v0 *ForkV0) ProtocolID(prot p2pprotocol.SyncProtocol) (protocol.ID, int) {
+	switch prot {
+	case p2pprotocol.LastDecidedProtocol:
+		return legacyMsgStream, peersForSync
+	case p2pprotocol.LastChangeRoundProtocol:
+		return legacyMsgStream, peersForSync
+	case p2pprotocol.DecidedHistoryProtocol:
+		return legacyMsgStream, peersForHistory
+	}
+	return "", 0
 }

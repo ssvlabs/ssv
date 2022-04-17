@@ -15,7 +15,7 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResu
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	pid, peerCount := n.fork.LastDecidedProtocol()
+	pid, peerCount := n.fork.ProtocolID(protocolp2p.LastDecidedProtocol)
 	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
@@ -32,7 +32,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	protocolID, peerCount := n.fork.DecidedHistoryProtocol()
+	protocolID, peerCount := n.fork.ProtocolID(protocolp2p.DecidedHistoryProtocol)
 	peers := make([]peer.ID, 0)
 	for _, t := range targets {
 		p, err := peer.Decode(t)
@@ -76,7 +76,7 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 	if !n.isReady() {
 		return nil, ErrNetworkIsNotReady
 	}
-	pid, peerCount := n.fork.LastChangeRoundProtocol()
+	pid, peerCount := n.fork.ProtocolID(protocolp2p.LastChangeRoundProtocol)
 	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
@@ -90,8 +90,10 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 }
 
 // RegisterHandler registers the given handler for the stream
-func (n *p2pNetwork) RegisterHandler(pid string, handler protocolp2p.RequestHandler) {
-	n.host.SetStreamHandler(libp2p_protocol.ID(pid), func(stream libp2pnetwork.Stream) {
+func (n *p2pNetwork) RegisterHandler(protocol protocolp2p.SyncProtocol, handler protocolp2p.RequestHandler) {
+	pid, _ := n.fork.ProtocolID(protocol)
+	// TODO: handle the case of multiple handlers for the same protocol (e.g. v0)
+	n.host.SetStreamHandler(pid, func(stream libp2pnetwork.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
 		if err != nil {

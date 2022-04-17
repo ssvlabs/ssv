@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"time"
 
@@ -158,7 +160,21 @@ func NewController(options ControllerOptions) Controller {
 	if err := ctrl.initShares(options); err != nil {
 		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
+
+	if err := ctrl.setupNetworkHandlers(); err != nil {
+		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
+	}
+
 	return &ctrl
+}
+
+// setupNetworkHandlers registers all the required handlers for sync protocols
+func (c *controller) setupNetworkHandlers() error {
+	c.network.RegisterHandler(p2pprotocol.LastDecidedProtocol, handlers.LastDecidedHandler(c.logger, c.validatorOptions.IbftStorage, c.network))
+	c.network.RegisterHandler(p2pprotocol.LastDecidedProtocol, handlers.LastChangeRoundHandler(c.logger, c.validatorOptions.IbftStorage, c.network))
+	// TODO: extract maxBatch to config
+	c.network.RegisterHandler(p2pprotocol.LastDecidedProtocol, handlers.HistoryHandler(c.logger, c.validatorOptions.IbftStorage, c.network, 25))
+	return nil
 }
 
 func (c *controller) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {

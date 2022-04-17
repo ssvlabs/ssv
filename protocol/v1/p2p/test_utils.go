@@ -114,11 +114,21 @@ func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
 	return nil
 }
 
-func (m *mockNetwork) RegisterHandler(protocol string, handler RequestHandler) {
+func (m *mockNetwork) RegisterHandler(protocol SyncProtocol, handler RequestHandler) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.handlers[protocol] = handler
+	var pid string
+	switch protocol {
+	case LastDecidedProtocol:
+		pid = "/decided/last/0.0.1"
+	case LastChangeRoundProtocol:
+		pid = "/changeround/last/0.0.1"
+	case DecidedHistoryProtocol:
+		pid = "/decided/history/0.0.1"
+	}
+
+	m.handlers[pid] = handler
 }
 
 func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) {

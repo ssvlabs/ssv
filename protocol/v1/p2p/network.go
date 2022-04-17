@@ -30,10 +30,18 @@ type SyncResult struct {
 	Sender string
 }
 
+type SyncProtocol int32
+
+const (
+	LastDecidedProtocol SyncProtocol = iota
+	LastChangeRoundProtocol
+	DecidedHistoryProtocol
+)
+
 // Syncer holds the interface for syncing data from other peerz
 type Syncer interface {
 	// RegisterHandler registers handler for the given protocol
-	RegisterHandler(protocol string, handler RequestHandler)
+	RegisterHandler(protocol SyncProtocol, handler RequestHandler)
 	// LastDecided fetches last decided from a random set of peers
 	LastDecided(mid message.Identifier) ([]SyncResult, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
