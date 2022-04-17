@@ -50,6 +50,7 @@ type Exporter interface {
 	Start() error
 	StartEth1(syncOffset *eth1.SyncOffset) error
 }
+
 //
 // Options contains options to create the node
 type Options struct {
@@ -76,39 +77,41 @@ type Options struct {
 	NumOfInstances int
 	InstanceID     int
 }
+
 //
 //// exporter is the internal implementation of Exporter interface
 type exporter struct {
-//	ctx              context.Context
-//	storage          storage.Storage
-//	validatorStorage validator.ICollection
-//	ibftStorage      collections.Iibft
-//	logger           *zap.Logger
-//	network          network.Network
-//	eth1Client       eth1.Client
-//	beacon           beacon.Beacon
-//
-//	ws           api.WebSocketServer
-//	commitReader ibft.Reader
-//
-//	readersMut     sync.RWMutex
-//	decidedReaders map[string]ibft.Reader
-//	netReaders     map[string]ibft.Reader
-//
-//	wsAPIPort                       int
-//	ibftSyncEnabled                 bool
-//	validatorMetaDataUpdateInterval time.Duration
-//
-//	decidedReadersQueue  queue.Queue
-//	networkReadersQueue  queue.Queue
-//	metaDataReadersQueue queue.Queue
-//
-//	networkMsgMediator ibftController.Mediator
-//	useMainTopic       bool
-//
-//	numOfInstances int
-//	instanceID     int
+	//	ctx              context.Context
+	//	storage          storage.Storage
+	//	validatorStorage validator.ICollection
+	//	ibftStorage      collections.Iibft
+	//	logger           *zap.Logger
+	//	network          network.Network
+	//	eth1Client       eth1.Client
+	//	beacon           beacon.Beacon
+	//
+	//	ws           api.WebSocketServer
+	//	commitReader ibft.Reader
+	//
+	//	readersMut     sync.RWMutex
+	//	decidedReaders map[string]ibft.Reader
+	//	netReaders     map[string]ibft.Reader
+	//
+	//	wsAPIPort                       int
+	//	ibftSyncEnabled                 bool
+	//	validatorMetaDataUpdateInterval time.Duration
+	//
+	//	decidedReadersQueue  queue.Queue
+	//	networkReadersQueue  queue.Queue
+	//	metaDataReadersQueue queue.Queue
+	//
+	//	networkMsgMediator ibftController.Mediator
+	//	useMainTopic       bool
+	//
+	//	numOfInstances int
+	//	instanceID     int
 }
+
 //
 //// New creates a new Exporter instance
 //func New(opts Options) Exporter {

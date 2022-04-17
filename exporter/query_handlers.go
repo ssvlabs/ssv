@@ -51,7 +51,7 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 	nm.Msg = res
 }
 
-func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection/*, ibftStorage collections.Iibft*/, nm *api.NetworkMessage) {
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection /*, ibftStorage collections.Iibft*/, nm *api.NetworkMessage) {
 	//logger.Debug("handles decided request",
 	//	zap.Int64("from", nm.Msg.Filter.From),
 	//	zap.Int64("to", nm.Msg.Filter.To),
