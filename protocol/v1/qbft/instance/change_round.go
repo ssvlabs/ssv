@@ -143,24 +143,25 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		qourum, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("qourum", qourum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
 		var aggregatedSig *bls.Sign
-		if len(msgs) == 0 {
-			return nil, errors.New("no messages in prepare messages") // TODO on previews version this check was not exist. why we need it now?
-		}
-		justificationMsg = msgs[0].Message
-		for _, msg := range msgs {
-			// add sig to aggregate
-			sig := &bls.Sign{}
-			if err := sig.Deserialize(msg.Signature); err != nil {
-				return nil, err
-			}
-			if aggregatedSig == nil {
-				aggregatedSig = sig
-			} else {
-				aggregatedSig.Add(sig)
-			}
+		if len(msgs) > 0 {
+			//return nil, errors.New("no messages in prepare messages") // TODO on previews version this check was not exist. why we need it now?
+			//}
+			justificationMsg = msgs[0].Message
+			for _, msg := range msgs {
+				// add sig to aggregate
+				sig := &bls.Sign{}
+				if err := sig.Deserialize(msg.Signature); err != nil {
+					return nil, err
+				}
+				if aggregatedSig == nil {
+					aggregatedSig = sig
+				} else {
+					aggregatedSig.Add(sig)
+				}
 
-			// add id to list
-			ids = append(ids, msg.GetSigners()...)
+				// add id to list
+				ids = append(ids, msg.GetSigners()...)
+			}
 		}
 		aggSig = aggregatedSig.Serialize()
 	}
@@ -261,7 +262,7 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 func (i *Instance) generateChangeRoundMessage() (*message.ConsensusMessage, error) {
 	data, err := i.roundChangeInputValue()
 	if err != nil {
-		return nil, errors.New("failed to create round change data for round")
+		return nil, errors.Wrap(err, "failed to create round change data for round")
 	}
 
 	return &message.ConsensusMessage{

@@ -50,6 +50,11 @@ func (c *controller) loadShare(options ShareOptions) (string, error) {
 		return "", errors.Wrap(err, "failed to set hex private key")
 	}
 	if share != nil {
+		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
+			return "", errors.Wrap(err, "could not update validator metadata")
+		} else if !updated {
+			return "", errors.New("could not find validator metadata")
+		}
 		if err := c.keyManager.AddShare(shareKey); err != nil {
 			return "", errors.Wrap(err, "could not save share key from share options")
 		}

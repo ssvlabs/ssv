@@ -22,7 +22,7 @@ type ShareOptions struct {
 func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 	var err error
 
-	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 && len(options.OwnerAddress) > 0 {
+	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 && len(options.OwnerAddress) > 0 && len(options.Operators) > 0 {
 		validatorPk := &bls.PublicKey{}
 		if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
 			return nil, errors.Wrap(err, "failed to decode validator key")
@@ -62,5 +62,5 @@ func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 		}
 		return &share, nil
 	}
-	return nil, errors.New("empty share")
+	return nil, errors.New("empty or invalid share")
 }
