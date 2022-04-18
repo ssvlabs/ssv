@@ -7,7 +7,7 @@ import (
 
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
-	
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
