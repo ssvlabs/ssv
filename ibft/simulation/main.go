@@ -156,7 +156,7 @@ func main() {
 		}
 
 		nodeOpts := ibft.Options{
-			// Context:        opt.Context,
+			Context:        context.Background(),
 			Role:           message.RoleTypeAttester,
 			Identifier:     []byte(identifier),
 			Logger:         logger.With(zap.Uint64("simulation_node_id", i)),
