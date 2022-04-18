@@ -359,7 +359,6 @@ func (c *controller) handleValidatorAddedEvent(
 	ongoingSync bool,
 ) error {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
 	if err != nil {
 		return errors.Wrap(err, "could not check if validator share exist")
