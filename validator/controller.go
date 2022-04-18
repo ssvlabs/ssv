@@ -375,6 +375,7 @@ func (c *controller) handleValidatorAddedEvent(
 	if isOperatorShare {
 		logger := c.logger.With(zap.String("pubKey", pubKey))
 		logger.Debug("ValidatorAdded event was handled successfully")
+		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		if ongoingSync {
 			c.onShareStart(validatorShare)
 		}
