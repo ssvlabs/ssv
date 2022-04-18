@@ -24,24 +24,56 @@ type Broadcaster interface {
 // RequestHandler handles p2p requests
 type RequestHandler func(*message.SSVMessage) (*message.SSVMessage, error)
 
+// CombineRequestHandlers combines multiple handlers into a single handler
+func CombineRequestHandlers(handlers ...RequestHandler) RequestHandler {
+	return func(ssvMessage *message.SSVMessage) (res *message.SSVMessage, err error) {
+		for _, handler := range handlers {
+			res, err = handler(ssvMessage)
+			if err != nil {
+				return nil, err
+			}
+			if res != nil {
+				return res, nil
+			}
+		}
+		return
+	}
+}
+
 // SyncResult holds the result of a sync request, including the actual message and the sender
 type SyncResult struct {
 	Msg    *message.SSVMessage
 	Sender string
 }
 
+// SyncProtocol represent the type of sync protocols
 type SyncProtocol int32
 
 const (
+	// LastDecidedProtocol is the last decided protocol type
 	LastDecidedProtocol SyncProtocol = iota
+	// LastChangeRoundProtocol is the last change round protocol type
 	LastChangeRoundProtocol
+	// DecidedHistoryProtocol is the decided history protocol type
 	DecidedHistoryProtocol
 )
 
+type HandlerOpt struct {
+	Protocol SyncProtocol
+	Handler  RequestHandler
+}
+
+func WithHandler(protocol SyncProtocol, handler RequestHandler) *HandlerOpt {
+	return &HandlerOpt{
+		Protocol: protocol,
+		Handler:  handler,
+	}
+}
+
 // Syncer holds the interface for syncing data from other peerz
 type Syncer interface {
-	// RegisterHandler registers handler for the given protocol
-	RegisterHandler(protocol SyncProtocol, handler RequestHandler)
+	// RegisterHandlers registers handler for the given protocol
+	RegisterHandlers(handlers ...*HandlerOpt)
 	// LastDecided fetches last decided from a random set of peers
 	LastDecided(mid message.Identifier) ([]SyncResult, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier

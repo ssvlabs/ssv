@@ -32,8 +32,24 @@ type SyncParams struct {
 	Identifier Identifier
 }
 
+// SyncMsgType represent the type of sync messages
+// TODO: remove after v0
+type SyncMsgType int32
+
+const (
+	// LastDecidedType is the last decided message type
+	LastDecidedType SyncMsgType = iota
+	// LastChangeRoundType is the last change round message type
+	LastChangeRoundType
+	// DecidedHistoryType is the decided history message type
+	DecidedHistoryType
+)
+
 // SyncMessage is the message being passed in sync operations
 type SyncMessage struct {
+	// Protocol is the protocol of the message
+	// TODO: remove after v0
+	Protocol SyncMsgType
 	// Params holds request parameters
 	Params *SyncParams
 	// Data holds the results
