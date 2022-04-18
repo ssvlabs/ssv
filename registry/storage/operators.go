@@ -26,6 +26,9 @@ type OperatorData struct {
 	OwnerAddress common.Address `json:"ownerAddress"`
 }
 
+// GetOperatorData is a function that returns the operator data
+type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
+
 // OperatorsCollection is the interface for managing operators data
 type OperatorsCollection interface {
 	GetOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error)

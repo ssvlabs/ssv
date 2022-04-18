@@ -21,7 +21,6 @@ import (
 	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
@@ -30,9 +29,6 @@ import (
 const (
 	metadataBatchSize = 25
 )
-
-// ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *validatorstorage.Share)
 
 // ShareEncryptionKeyProvider is a function that returns the operator private key
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
@@ -66,7 +62,7 @@ type Controller interface {
 	GetValidator(pubKey string) (*Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkMediators()
-	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
+	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*validatorstorage.Share, error)
 }
 
@@ -156,7 +152,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
 
-	handler := c.Eth1EventHandler(c.handleShare)
+	handler := c.Eth1EventHandler(true)
 
 	for {
 		select {
@@ -171,26 +167,36 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 }
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
-func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler {
+func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) error {
 		switch e.Name {
 		case abiparser.ValidatorAdded:
 			ev := e.Data.(abiparser.ValidatorAddedEvent)
 			pubKey := hex.EncodeToString(ev.PublicKey)
-			// TODO: on history sync this should not be called
-			if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
-				c.logger.Debug("validator was loaded already")
-				return nil
+			if ongoingSync {
+				if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
+					c.logger.Debug("validator was loaded already")
+					return nil
+				}
 			}
-			share, IsOperatorShare, err := c.handleValidatorAddedEvent(ev)
+			err := c.handleValidatorAddedEvent(ev, ongoingSync)
 			if err != nil {
 				c.logger.Error("could not handle ValidatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
 				return err
 			}
-			if IsOperatorShare {
-				for _, h := range handlers {
-					h(share)
-				}
+		case abiparser.ValidatorUpdated:
+			ev := e.Data.(abiparser.ValidatorAddedEvent)
+			err := c.handleValidatorUpdatedEvent(ev, ongoingSync)
+			if err != nil {
+				c.logger.Error("could not handle ValidatorUpdated event", zap.Error(err))
+				return err
+			}
+		case abiparser.ValidatorRemoved:
+			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+			err := c.handleValidatorRemovedEvent(ev, ongoingSync)
+			if err != nil {
+				c.logger.Error("could not handle ValidatorRemoved event", zap.Error(err))
+				return err
 			}
 		case abiparser.OperatorAdded:
 			ev := e.Data.(abiparser.OperatorAddedEvent)
@@ -199,11 +205,18 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 				c.logger.Error("could not handle OperatorAdded event", zap.Error(err))
 				return err
 			}
-		case abiparser.ValidatorUpdated:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
-			_, _, err := c.handleValidatorUpdatedEvent(ev)
+		case abiparser.AccountLiquidated:
+			ev := e.Data.(abiparser.AccountLiquidatedEvent)
+			err := c.handleAccountLiquidatedEvent(ev, ongoingSync)
 			if err != nil {
-				c.logger.Error("could not handle ValidatorUpdated event", zap.Error(err))
+				c.logger.Error("could not handle AccountLiquidated event", zap.Error(err))
+				return err
+			}
+		case abiparser.AccountEnabled:
+			ev := e.Data.(abiparser.AccountEnabledEvent)
+			err := c.handleAccountEnabledEvent(ev, ongoingSync)
+			if err != nil {
+				c.logger.Error("could not handle AccountEnabled event", zap.Error(err))
 				return err
 			}
 		default:
@@ -213,17 +226,9 @@ func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.Sy
 	}
 }
 
-func (c *controller) handleShare(share *validatorstorage.Share) {
-	v := c.validatorsMap.GetOrCreateValidator(share)
-	_, err := c.startValidator(v)
-	if err != nil {
-		c.logger.Warn("could not start validator", zap.Error(err))
-	}
-}
-
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey)
+	shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -351,133 +356,122 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 // handleValidatorAddedEvent handles registry contract event for validator added
 func (c *controller) handleValidatorAddedEvent(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
-) (*validatorstorage.Share, bool, error) {
+	ongoingSync bool,
+) error {
 	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "could not check if validator share exist")
+		return errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		operatorPrivateKey, found, err := c.shareEncryptionKeyProvider()
+		validatorShare, _, err = c.onShareCreate(validatorAddedEvent)
 		if err != nil {
-			return nil, false, errors.Wrap(err, "failed to get operator private key")
-		}
-		if !found {
-			return nil, false, errors.New("failed to find operator private key")
-		}
-
-		err = ExtractOperatorPublicKeys(c.storage, &validatorAddedEvent)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "could not extract operator public keys from storage")
-		}
-
-		newValShare, shareSecret, isOperatorShare, err := createShareWithOperatorKey(validatorAddedEvent, operatorPrivateKey, c.operatorPubKey)
-		if err != nil {
-			return nil, false, errors.Wrap(err, "failed to create share")
-		}
-		if err := c.onNewShare(newValShare, shareSecret); err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
-			return nil, false, err
+			return err
 		}
-		validatorShare = newValShare
-		if isOperatorShare {
-			logger := c.logger.With(zap.String("pubKey", pubKey))
-			logger.Debug("ValidatorAdded event was handled successfully")
-		}
-		return newValShare, isOperatorShare, nil
 	}
+
 	isOperatorShare := validatorShare.IsOperatorShare(c.operatorPubKey)
-	return validatorShare, isOperatorShare, nil
+	if isOperatorShare {
+		logger := c.logger.With(zap.String("pubKey", pubKey))
+		logger.Debug("ValidatorAdded event was handled successfully")
+		if ongoingSync {
+			c.onShareStart(validatorShare)
+		}
+	}
+	return nil
 }
 
-// handleValidatorAddedEvent handles registry contract event for validator updated
+// handleValidatorUpdatedEvent handles registry contract event for validator updated
 func (c *controller) handleValidatorUpdatedEvent(
 	validatorUpdatedEvent abiparser.ValidatorAddedEvent,
-) (*validatorstorage.Share, bool, error) {
-	//pubKey := hex.EncodeToString(validatorUpdatedEvent.PublicKey)
-	// TODO: handle metrics
-	//metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
-
+	ongoingSync bool,
+) error {
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorUpdatedEvent.PublicKey)
 	if err != nil {
-		return nil, false, errors.Wrap(err, "could not check if validator share exist")
+		return errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		return nil, false, errors.New("could not find validator share")
+		return errors.New("could not find validator share")
 	}
+
+	validatorUpdated, isOperatorEvent, err := c.onShareCreate(validatorUpdatedEvent)
+	if err != nil {
+		return err
+	}
+
+	if !ongoingSync {
+		return nil
+	}
+
 	// determine if validator share belongs to operator
 	isOperatorShare := validatorShare.IsOperatorShare(c.operatorPubKey)
 
-	operatorPrivateKey, found, err := c.shareEncryptionKeyProvider()
-	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to get operator private key")
-	}
-	if !found {
-		return nil, false, errors.New("failed to find operator private key")
-	}
-
-	err = ExtractOperatorPublicKeys(c.storage, &validatorUpdatedEvent)
-	if err != nil {
-		return nil, false, errors.Wrap(err, "could not extract operator public keys from storage")
-	}
-	validatorToUpdate, shareSecret, isOperatorEvent, err := createShareWithOperatorKey(validatorUpdatedEvent, operatorPrivateKey, c.operatorPubKey)
-	if err != nil {
-		return nil, false, errors.Wrap(err, "failed to create share")
-	}
-
 	// not mine
-	if (!isOperatorShare && !isOperatorEvent) ||
-		// stay mine
-		(isOperatorShare && isOperatorEvent) {
-		// TODO: save validatorToUpdate to db
+	if !isOperatorShare && !isOperatorEvent {
+		// do nothing
 	}
 
+	// stay mine
 	if isOperatorShare && isOperatorEvent {
-		// TODO: save validatorToUpdate to db
+		if err := c.onShareRemove(validatorShare.PublicKey.SerializeToHexStr(), false); err != nil {
+			return err
+		}
+		// TODO: validate removed from map, not running
+
+		// TODO: (wait few epochs logic)
+		c.onShareStart(validatorUpdated)
 	}
 
 	// was mine
 	if isOperatorShare && !isOperatorEvent {
-		// remove from validatorsMap
-		val := c.validatorsMap.RemoveValidator(validatorShare.PublicKey.SerializeToHexStr())
-
-		// stop instance
-		if val != nil {
-			err := val.Close()
-			if err != nil {
-				return nil, false, errors.Wrap(err, "could not close validator")
-			}
+		if err := c.onShareRemove(validatorShare.PublicKey.SerializeToHexStr(), false); err != nil {
+			return err
 		}
-
-		// remove the share secret from key-manager
-		err := c.keyManager.RemoveShare(validatorShare.PublicKey.SerializeToHexStr())
-		if err != nil {
-			return nil, false, errors.Wrap(err, "could not remove share from key manager")
-		}
-		// TODO: validate removed from map, not running
-		// TODO: save validatorToUpdate to db
 	}
 
 	// became mine
 	if !isOperatorShare && isOperatorEvent {
-		if err := c.onNewShare(validatorToUpdate, shareSecret); err != nil {
-			// TODO: handle metrics
-			//metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
-			return nil, false, err
-		}
 		// TODO: validate the validator is not attesting (eth2)
 
-		// add to validatorsMap + start instance
 		// TODO: (wait few epochs logic)
-		c.handleShare(validatorToUpdate)
+		c.onShareStart(validatorUpdated)
 	}
 
-	if err := c.collection.SaveValidatorShare(validatorToUpdate); err != nil {
-		return nil, isOperatorEvent, errors.Wrap(err, "could not update validator share")
+	return nil
+}
+
+// handleValidatorRemovedEvent handles registry contract event for validator removed
+func (c *controller) handleValidatorRemovedEvent(
+	validatorRemovedEvent abiparser.ValidatorRemovedEvent,
+	ongoingSync bool,
+) error {
+	// TODO: handle metrics
+	validatorShare, found, err := c.collection.GetValidatorShare(validatorRemovedEvent.PublicKey)
+	if err != nil {
+		return errors.Wrap(err, "could not check if validator share exist")
+	}
+	if !found {
+		return errors.New("could not find validator share")
 	}
 
-	return validatorShare, isOperatorShare, nil
+	// remove from storage
+	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {
+		return errors.Wrap(err, "could not remove validator share")
+	}
+
+	if ongoingSync {
+		// determine if validator share belongs to operator
+		isOperatorShare := validatorShare.IsOperatorShare(c.operatorPubKey)
+		if isOperatorShare {
+			if err := c.onShareRemove(validatorShare.PublicKey.SerializeToHexStr(), true); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // handleOperatorAddedEvent parses the given event and saves operator information
@@ -489,10 +483,73 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 		OwnerAddress: event.OwnerAddress,
 		Index:        event.Id.Uint64(),
 	}
-	err := c.storage.SaveOperatorData(&od)
-	if err != nil {
-		return errors.Wrap(err, "could not save operator information")
+	if err := c.storage.SaveOperatorData(&od); err != nil {
+		return errors.Wrap(err, "could not save operator data")
 	}
+
+	return nil
+}
+
+// handleAccountLiquidatedEvent handles registry contract event for account liquidated
+func (c *controller) handleAccountLiquidatedEvent(
+	event abiparser.AccountLiquidatedEvent,
+	ongoingSync bool,
+) error {
+	ownerAddress := event.OwnerAddress.String()
+	shares, err := c.collection.GetValidatorSharesByOwnerAddress(ownerAddress)
+	if err != nil {
+		return errors.Wrap(err, "could not get validator shares by owner address")
+	}
+
+	for _, share := range shares {
+		if share.IsOperatorShare(c.operatorPubKey) {
+			share.Liquidated = true
+
+			// save validator data
+			if err := c.collection.SaveValidatorShare(share); err != nil {
+				return errors.Wrap(err, "could not save validator share")
+			}
+
+			if ongoingSync {
+				// we can't remove the share secret from key-manager
+				// due to the fact that after activating the validators (AccountEnabled)
+				// we don't have the encrypted keys to decrypt the secret, but only the owner address
+				if err := c.onShareRemove(share.PublicKey.SerializeToHexStr(), false); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// handle AccountEnabledEvent handles registry contract event for account enabled
+func (c *controller) handleAccountEnabledEvent(
+	event abiparser.AccountEnabledEvent,
+	ongoingSync bool,
+) error {
+	ownerAddress := event.OwnerAddress.String()
+	shares, err := c.collection.GetValidatorSharesByOwnerAddress(ownerAddress)
+	if err != nil {
+		return errors.Wrap(err, "could not get validator shares by owner address")
+	}
+
+	for _, share := range shares {
+		if share.IsOperatorShare(c.operatorPubKey) {
+			share.Liquidated = false
+
+			// save validator data
+			if err := c.collection.SaveValidatorShare(share); err != nil {
+				return errors.Wrap(err, "could not save validator share")
+			}
+
+			if ongoingSync {
+				c.onShareStart(share)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -520,30 +577,78 @@ func (c *controller) onMetadataUpdated(pk string, meta *beacon.ValidatorMetadata
 	}
 }
 
-// onNewShare is called when a new validator was added or during registry sync
-// if the validator was persisted already, this function won't be called
-func (c *controller) onNewShare(share *validatorstorage.Share, shareSecret *bls.SecretKey) error {
-	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
-	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
-		logger.Warn("could not add validator metadata", zap.Error(err))
-	} else if !updated {
-		logger.Warn("could not find validator metadata")
+// onShareCreate is called when a validator was added/updated during registry sync
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent) (*validatorstorage.Share, bool, error) {
+	share, shareSecret, err := ShareFromValidatorEvent(
+		validatorEvent,
+		c.storage.GetOperatorData,
+		c.shareEncryptionKeyProvider,
+		c.operatorPubKey,
+	)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "could not extract validator share from event")
 	}
 
-	// in case this validator belongs to operator, the secret key is not nil
-	if shareSecret != nil {
+	// determine if the share belongs to operator
+	isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+
+	if isOperatorShare {
+		if shareSecret == nil {
+			return nil, isOperatorShare, errors.New("could not decode shareSecret key from ValidatorAdded event")
+		}
+
+		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+
+		// get metadata
+		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
+			logger.Warn("could not add validator metadata", zap.Error(err))
+		} else if !updated {
+			logger.Warn("could not find validator metadata")
+		}
+
 		// save secret key
 		if err := c.keyManager.AddShare(shareSecret); err != nil {
-			return errors.Wrap(err, "failed to save new share secret to key manager")
+			return nil, isOperatorShare, errors.Wrap(err, "could not add share secret to key manager")
 		}
 		logger.Info("share was added successfully to key manager")
 	}
 
 	// save validator data
 	if err := c.collection.SaveValidatorShare(share); err != nil {
-		return errors.Wrap(err, "failed to save new share")
+		return nil, isOperatorShare, errors.Wrap(err, "could not save validator share")
 	}
+
+	return share, isOperatorShare, nil
+}
+
+// onShareRemove is called when a validator was removed
+func (c *controller) onShareRemove(pk string, removeSecret bool) error {
+	// remove from validatorsMap
+	v := c.validatorsMap.RemoveValidator(pk)
+
+	// stop instance
+	if v != nil {
+		if err := v.Close(); err == nil {
+			return errors.Wrap(err, "could not close validator")
+		}
+	}
+
+	// remove the share secret from key-manager
+	if removeSecret {
+		if err := c.keyManager.RemoveShare(pk); err != nil {
+			return errors.Wrap(err, "could not remove share secret from key manager")
+		}
+	}
+
 	return nil
+}
+
+func (c *controller) onShareStart(share *validatorstorage.Share) {
+	v := c.validatorsMap.GetOrCreateValidator(share)
+	_, err := c.startValidator(v)
+	if err != nil {
+		c.logger.Warn("could not start validator", zap.Error(err))
+	}
 }
 
 // startValidator will start the given validator if applicable
@@ -569,7 +674,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey)
+		shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
 		if err != nil {
 			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
 			continue

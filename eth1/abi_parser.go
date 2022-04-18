@@ -79,9 +79,19 @@ func (ap AbiParser) ParseValidatorUpdatedEvent(data []byte, contractAbi abi.ABI)
 	return ap.Version.ParseValidatorUpdatedEvent(ap.Logger, data, contractAbi)
 }
 
+// ParseValidatorRemovedEvent parses ValidatorRemovedEvent
+func (ap AbiParser) ParseValidatorRemovedEvent(data []byte, contractAbi abi.ABI) (*abiparser.ValidatorRemovedEvent, error) {
+	return ap.Version.ParseValidatorRemovedEvent(ap.Logger, data, contractAbi)
+}
+
 // ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
 func (ap AbiParser) ParseAccountLiquidatedEvent(data []byte, contractAbi abi.ABI) (*abiparser.AccountLiquidatedEvent, error) {
 	return ap.Version.ParseAccountLiquidatedEvent(ap.Logger, data, contractAbi)
+}
+
+// ParseAccountEnabledEvent parses AccountEnabledEvent
+func (ap AbiParser) ParseAccountEnabledEvent(data []byte, contractAbi abi.ABI) (*abiparser.AccountEnabledEvent, error) {
+	return ap.Version.ParseAccountEnabledEvent(ap.Logger, data, contractAbi)
 }
 
 // AbiVersion serves as the parser client interface
@@ -89,7 +99,9 @@ type AbiVersion interface {
 	ParseOperatorAddedEvent(logger *zap.Logger, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, error)
 	ParseValidatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, error)
 	ParseValidatorUpdatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, error)
+	ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorRemovedEvent, error)
 	ParseAccountLiquidatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.AccountLiquidatedEvent, error)
+	ParseAccountEnabledEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.AccountEnabledEvent, error)
 }
 
 // LoadABI enables to load a custom abi json

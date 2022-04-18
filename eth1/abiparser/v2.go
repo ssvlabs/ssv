@@ -13,21 +13,13 @@ const (
 	OperatorAdded     = "OperatorAdded"
 	ValidatorAdded    = "ValidatorAdded"
 	ValidatorUpdated  = "ValidatorUpdated"
+	ValidatorRemoved  = "ValidatorRemoved"
 	AccountLiquidated = "AccountLiquidated"
+	AccountEnabled    = "AccountEnabled"
 )
 
 // ValidatorAddedEvent struct represents event received by the smart contract
 type ValidatorAddedEvent struct {
-	PublicKey          []byte
-	OwnerAddress       common.Address
-	OperatorPublicKeys [][]byte
-	OperatorIds        []*big.Int
-	SharesPublicKeys   [][]byte
-	EncryptedKeys      [][]byte
-}
-
-// ValidatorUpdatedEvent struct represents event received by the smart contract
-type ValidatorUpdatedEvent struct {
 	PublicKey          []byte
 	OwnerAddress       common.Address
 	OperatorPublicKeys [][]byte
@@ -41,6 +33,11 @@ type AccountLiquidatedEvent struct {
 	OwnerAddress common.Address
 }
 
+// AccountEnabledEvent struct represents event received by the smart contract
+type AccountEnabledEvent struct {
+	OwnerAddress common.Address
+}
+
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
 	Id           *big.Int //nolint
@@ -49,10 +46,17 @@ type OperatorAddedEvent struct {
 	PublicKey    []byte
 }
 
+// ValidatorRemovedEvent struct represents event received by the smart contract
+type ValidatorRemovedEvent struct {
+	OwnerAddress common.Address
+	PublicKey    []byte
+}
+
 // AbiV2 parsing events from v2 abi contract
 type AbiV2 struct {
 }
 
+// UnpackError is returned when unpacking fails
 type UnpackError struct {
 	Err error
 }
@@ -111,6 +115,20 @@ func (v2 *AbiV2) ParseValidatorUpdatedEvent(
 	return v2.parseValidatorEvent(logger, data, ValidatorUpdated, contractAbi)
 }
 
+// ParseValidatorRemovedEvent parses ValidatorRemovedEvent
+func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+	var validatorRemovedEvent ValidatorRemovedEvent
+	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, data)
+	if err != nil {
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack ValidatorRemoved event"),
+		}
+	}
+
+	return &validatorRemovedEvent, nil
+}
+
+// ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
 func (v2 *AbiV2) ParseAccountLiquidatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
 	var accountLiquidatedEvent AccountLiquidatedEvent
 	err := contractAbi.UnpackIntoInterface(&accountLiquidatedEvent, AccountLiquidated, data)
@@ -121,6 +139,19 @@ func (v2 *AbiV2) ParseAccountLiquidatedEvent(logger *zap.Logger, data []byte, co
 	}
 
 	return &accountLiquidatedEvent, nil
+}
+
+// ParseAccountEnabledEvent parses AccountEnabledEvent
+func (v2 *AbiV2) ParseAccountEnabledEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
+	var accountEnabledEvent AccountEnabledEvent
+	err := contractAbi.UnpackIntoInterface(&accountEnabledEvent, AccountEnabled, data)
+	if err != nil {
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack AccountEnabled event"),
+		}
+	}
+
+	return &accountEnabledEvent, nil
 }
 
 func (v2 *AbiV2) parseValidatorEvent(logger *zap.Logger, data []byte, eventName string, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
