@@ -19,6 +19,10 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.InstanceStore
 		if err != nil {
 			reporting.ReportValidation(msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
+		} else if sm.Protocol != message.LastChangeRoundType {
+			// not this protocol
+			// TODO: remove after v0
+			return nil, nil
 		} else {
 			res, err := store.GetLastChangeRoundMsg(msg.ID)
 			sm.UpdateResults(err, res)

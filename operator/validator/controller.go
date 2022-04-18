@@ -170,10 +170,17 @@ func NewController(options ControllerOptions) Controller {
 
 // setupNetworkHandlers registers all the required handlers for sync protocols
 func (c *controller) setupNetworkHandlers() error {
-	c.network.RegisterHandler(p2pprotocol.LastDecidedProtocol, handlers.LastDecidedHandler(c.logger, c.validatorOptions.IbftStorage, c.network))
-	c.network.RegisterHandler(p2pprotocol.LastDecidedProtocol, handlers.LastChangeRoundHandler(c.logger, c.validatorOptions.IbftStorage, c.network))
-	// TODO: extract maxBatch to config
-	c.network.RegisterHandler(p2pprotocol.LastDecidedProtocol, handlers.HistoryHandler(c.logger, c.validatorOptions.IbftStorage, c.network, 25))
+	c.network.RegisterHandlers(p2pprotocol.WithHandler(
+		p2pprotocol.LastDecidedProtocol,
+		handlers.LastDecidedHandler(c.logger, c.validatorOptions.IbftStorage, c.network),
+	), p2pprotocol.WithHandler(
+		p2pprotocol.LastChangeRoundProtocol,
+		handlers.LastChangeRoundHandler(c.logger, c.validatorOptions.IbftStorage, c.network),
+	), p2pprotocol.WithHandler(
+		p2pprotocol.DecidedHistoryProtocol,
+		// TODO: extract maxBatch to config
+		handlers.HistoryHandler(c.logger, c.validatorOptions.IbftStorage, c.network, 25),
+	))
 	return nil
 }
 
