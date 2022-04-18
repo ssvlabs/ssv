@@ -5,15 +5,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/valcheck"
+	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
 type f1Speedup struct {
 	logger     *zap.Logger
-	nodes      []ibft.Controller
+	nodes      []ibft.IController
 	valueCheck valcheck.ValueCheck
 }
 
@@ -25,7 +27,7 @@ func NewF1Speedup(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (r *f1Speedup) Start(nodes []ibft.Controller, _ []collections.Iibft) {
+func (r *f1Speedup) Start(nodes []ibft.IController, _ []qbftstorage.QBFTStore) {
 	r.nodes = nodes
 	nodeCount := len(nodes)
 
@@ -38,14 +40,14 @@ func (r *f1Speedup) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	for i := uint64(1); i <= uint64(3); i++ {
 		if i <= 2 {
 			wg.Add(1)
-			go func(node ibft.Controller) {
+			go func(node ibft.IController) {
 				if err := node.Init(); err != nil {
 					fmt.Printf("error initializing ibft")
 				}
 				wg.Done()
 			}(nodes[i-1])
 		} else {
-			go func(node ibft.Controller, index uint64) {
+			go func(node ibft.IController, index uint64) {
 				time.Sleep(time.Second * 13)
 				if err := node.Init(); err != nil {
 					fmt.Printf("error initializing ibft")
@@ -61,7 +63,7 @@ func (r *f1Speedup) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	r.logger.Info("start instances")
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.Controller, index uint64) {
+		go func(node ibft.IController, index uint64) {
 			defer wg.Done()
 			r.startNode(node, index)
 		}(nodes[i-1], i)
@@ -70,18 +72,17 @@ func (r *f1Speedup) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	wg.Wait()
 }
 
-func (r *f1Speedup) startNode(node ibft.Controller, index uint64) {
-	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:     r.logger,
-		ValueCheck: r.valueCheck,
-		SeqNumber:  1,
-		Value:      []byte("value"),
+func (r *f1Speedup) startNode(node ibft.IController, index uint64) {
+	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
+		Logger:    r.logger,
+		SeqNumber: 1,
+		Value:     []byte("value"),
 	})
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))
 	} else if !res.Decided {
 		r.logger.Error("instance could not decide")
 	} else {
-		r.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Value)))
+		r.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Data)))
 	}
 }
