@@ -54,6 +54,7 @@ func networking(forkVersion forksprotocol.ForkVersion) network.P2PNetwork {
 	}
 
 	return p2p.New(context.Background(), &p2p.Config{
+		Logger:            logger,
 		MaxBatchResponse:  10,
 		RequestTimeout:    time.Second * 5,
 		NetworkPrivateKey: networkPrivateKey,
