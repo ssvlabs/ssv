@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/ibft/valcheck"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
@@ -11,10 +10,9 @@ import (
 
 // ControllerStartInstanceOptions defines type for Controller instance options
 type ControllerStartInstanceOptions struct {
-	Logger     *zap.Logger
-	ValueCheck valcheck.ValueCheck
-	SeqNumber  message.Height
-	Value      []byte
+	Logger    *zap.Logger
+	SeqNumber message.Height
+	Value     []byte
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool

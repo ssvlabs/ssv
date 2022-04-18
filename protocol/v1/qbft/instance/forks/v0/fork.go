@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -29,15 +28,14 @@ func (v0 *ForkV0) Apply(instance *instance.Instance) {
 }
 
 // PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
-func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, valCheck validation.ValueCheck,
-	roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.ProposalMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
-		preprepare.ValidatePrePrepareMsg(valCheck, roundLeader),
+		preprepare.ValidatePrePrepareMsg(roundLeader),
 	)
 }
 

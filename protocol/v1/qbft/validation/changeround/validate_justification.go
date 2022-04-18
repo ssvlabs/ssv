@@ -60,7 +60,12 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	}
 
 	// validateJustification justification signature
-	pks, err := p.share.PubKeysByID(data.GetRoundChangeJustification()[0].GetSigners())
+	pksMap, err := p.share.PubKeysByID(data.GetRoundChangeJustification()[0].GetSigners())
+	var pks beacon.PubKeys
+	for _, v := range pksMap {
+		pks = append(pks, v)
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "change round could not get pubkey")
 	}

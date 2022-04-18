@@ -31,7 +31,7 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 }
 
 func (i *Instance) prePrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.PrePrepareMsgValidationPipeline(i.ValidatorShare, i.State(), i.ValueCheck, i.RoundLeader)
+	return i.fork.PrePrepareMsgValidationPipeline(i.ValidatorShare, i.State(), i.RoundLeader)
 }
 
 // JustifyPrePrepare implements:
@@ -81,7 +81,14 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 		i.ProcessStageChange(qbft.RoundState_PrePrepare)
 
 		// broadcast prepare msg
-		broadcastMsg := i.generatePrepareMessage(signedMessage.Message.Data)
+		prepareMsg, err := signedMessage.Message.GetProposalData()
+		if err != nil {
+			return errors.Wrap(err, "failed to get prepare message")
+		}
+		broadcastMsg, err := i.generatePrepareMessage(prepareMsg)
+		if err != nil {
+			return errors.Wrap(err, "failed to generate prepare message")
+		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 			i.Logger.Error("could not broadcast prepare message", zap.Error(err))
 			return err
@@ -90,14 +97,24 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generatePrePrepareMessage(value []byte) message.ConsensusMessage {
+func (i *Instance) generatePrePrepareMessage(value []byte) (message.ConsensusMessage, error) {
+	proposalMsg := &message.ProposalData{
+		Data:                     value,
+		RoundChangeJustification: nil,
+		PrepareJustification:     nil,
+	}
+	proposalEncodedMsg, err := proposalMsg.Encode()
+	if err != nil {
+		return message.ConsensusMessage{}, errors.Wrap(err, "failed to encoded proposal message")
+	}
+
 	return message.ConsensusMessage{
 		MsgType:    message.ProposalMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
 		Identifier: i.State().GetIdentifier(),
-		Data:       value,
-	}
+		Data:       proposalEncodedMsg,
+	}, nil
 }
 
 func (i *Instance) checkExistingPrePrepare(round message.Round) (bool, *message.SignedMessage, error) {

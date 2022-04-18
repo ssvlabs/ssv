@@ -253,6 +253,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			continue
 		}
 		metricsPubsubInbound.WithLabelValues(getTopicBaseName(topicName)).Inc()
+		logger.Debug("got message from topic", zap.String("topic", topicName))
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}

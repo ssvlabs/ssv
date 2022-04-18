@@ -2,11 +2,11 @@ package instance
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/valcheck"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -28,10 +28,9 @@ type Options struct {
 	Logger         *zap.Logger
 	ValidatorShare *beaconprotocol.Share
 	Network        protcolp2p.Network
-	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
-	Lambda         message.Identifier
+	Identifier     message.Identifier
 	Height         message.Height
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
@@ -46,7 +45,6 @@ type Instance struct {
 	ValidatorShare *beaconprotocol.Share
 	state          *qbft.State
 	network        protcolp2p.Network
-	ValueCheck     valcheck.ValueCheck
 	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
 	roundTimer     *roundtimer.RoundTimer
@@ -89,7 +87,7 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *Options) Instancer {
-	pk, role := format.IdentifierUnformat(string(opts.Lambda))
+	pk, role := format.IdentifierUnformat(string(opts.Identifier))
 	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(qbft.RoundState_NotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
 
@@ -97,7 +95,6 @@ func NewInstance(opts *Options) Instancer {
 		ValidatorShare: opts.ValidatorShare,
 		state:          generateState(opts),
 		network:        opts.Network,
-		ValueCheck:     opts.ValueCheck,
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
 		Logger:         logger,
@@ -177,8 +174,12 @@ func (i *Instance) Start(inputValue []byte) error {
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
-			msg := i.generatePrePrepareMessage(i.State().GetInputValue())
-			//
+			msg, err := i.generatePrePrepareMessage(i.State().GetInputValue())
+			if err != nil {
+				i.Logger.Error("failed to generate pre-prepare message", zap.Error(err))
+				return
+			}
+
 			if err := i.SignAndBroadcast(&msg); err != nil {
 				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
 			}
@@ -270,14 +271,16 @@ func (i *Instance) bumpToRound(round message.Round) {
 	i.processPrepareQuorumOnce = sync.Once{}
 	newRound := round
 	i.State().Round.Store(round)
-	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
-	metricsIBFTRound.WithLabelValues(role, pk).Set(float64(newRound))
+	role := i.State().GetIdentifier().GetRoleType()
+	pk := i.State().GetIdentifier().GetValidatorPK()
+	metricsIBFTRound.WithLabelValues(role.String(), hex.EncodeToString(pk)).Set(float64(newRound))
 }
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
 func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
-	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
-	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(stage))
+	role := i.State().GetIdentifier().GetRoleType().String()
+	pk := i.State().GetIdentifier().GetValidatorPK()
+	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(stage))
 
 	i.State().Stage.Store(int32(stage))
 
@@ -389,7 +392,7 @@ func generateState(opts *Options) *qbft.State {
 	var identifier, height, round, preparedRound, preparedValue atomic.Value
 	height.Store(opts.Height)
 	round.Store(message.Round(0))
-	identifier.Store(opts.Lambda)
+	identifier.Store(opts.Identifier)
 	preparedRound.Store(message.Round(0))
 	preparedValue.Store([]byte{})
 

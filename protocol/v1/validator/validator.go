@@ -13,7 +13,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/utils/format"
 )
 
 type IValidator interface {
@@ -119,8 +118,7 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controlle
 }
 
 func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
-	identifier := []byte(format.IdentifierFormat(opt.Share.PublicKey.Serialize(), role.String()))
-
+	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
 	opts := controller.Options{
 		Context:        opt.Context,
 		Role:           role,

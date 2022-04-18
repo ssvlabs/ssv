@@ -121,12 +121,17 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generateCommitMessage(value []byte) *message.ConsensusMessage {
+func (i *Instance) generateCommitMessage(value []byte) (*message.ConsensusMessage, error) {
+	commitMsg := &message.CommitData{Data: value}
+	encodedCommitMsg, err := commitMsg.Encode()
+	if err != nil {
+		return nil, err
+	}
 	return &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
 		Identifier: i.State().GetIdentifier(),
-		Data:       value,
-	}
+		Data:       encodedCommitMsg,
+	}, nil
 }

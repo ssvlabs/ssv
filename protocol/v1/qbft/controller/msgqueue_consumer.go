@@ -51,17 +51,16 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 		sigMsgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, height), 1)
 		if len(sigMsgs) > 0 {
 			// got post consensus message for the current sequence
-			c.logger.Debug("queue found sigMsgs", zap.Int("count", len(sigMsgs)))
+			//c.logger.Debug("queue found sigMsgs", zap.Int("count", len(sigMsgs)))
 			msg = sigMsgs[0]
 		} else {
 			msg = c.getNextMsgForState(currentState)
 			if msg == nil {
 				continue
 			}
-			c.logger.Debug("queue didnt found sigMsgs, getting next for state", zap.Bool("is msg nil", msg == nil), zap.Any("state", currentState))
+			//c.logger.Debug("queue found message for state", zap.Int("q count", c.q.Count(msgqueue.SignedMsgIndex(c.Identifier, height, message.RoundChangeMsgType))), zap.Any("state", currentState), zap.Any("msg", msg))
 		}
 
-		c.logger.Debug("queue push to message handler", zap.Any("msg", msg))
 		err := c.messageHandler(msg)
 		if err != nil {
 			c.logger.Warn("could not handle msg", zap.Error(err))
@@ -83,10 +82,10 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	case qbft.RoundState_Commit:
 		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.CommitMsgType), 1)
 	case qbft.RoundState_ChangeRound:
-		msgs = c.q.Peek(msgqueue.SignedMsgIndex(c.Identifier, height, message.RoundChangeMsgType), 1)
+		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.RoundChangeMsgType), 1)
 	//case qbft.RoundState_Decided:
 	case qbft.RoundState_Stopped:
-		//return nil
+		return nil // TODO need's TBD
 	}
 	if len(msgs) > 0 {
 		return msgs[0]

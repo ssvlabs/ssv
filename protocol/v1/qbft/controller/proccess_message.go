@@ -3,19 +3,19 @@ package controller
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
+	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Any("sender", signedMessage.GetSigners()))
 	switch signedMessage.Message.MsgType {
-	case message.ProposalMsgType:
-	case message.PrepareMsgType:
-	case message.CommitMsgType:
-	case message.RoundChangeMsgType:
+	case message.ProposalMsgType, message.PrepareMsgType, message.CommitMsgType, message.RoundChangeMsgType:
 		// TODO check if instance nil?
-		_, _, err := c.currentInstance.ProcessMsg(signedMessage)
+		decided, _, err := c.currentInstance.ProcessMsg(signedMessage)
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
+		c.logger.Debug("current instance processed message", zap.Bool("decided", decided))
 	//
 	//case message.DecidedMsgType:
 	//	c.ProcessDecidedMessage(signedMessage)

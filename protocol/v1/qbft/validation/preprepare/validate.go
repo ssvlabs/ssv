@@ -3,8 +3,6 @@ package preprepare
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
-
 	"github.com/pkg/errors"
 )
 
@@ -12,7 +10,7 @@ import (
 type LeaderResolver func(round message.Round) uint64
 
 // ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(valueCheck validation.ValueCheck, resolver LeaderResolver) pipelines.SignedMessagePipeline {
+func ValidatePrePrepareMsg(resolver LeaderResolver) pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("validate pre-prepare", func(signedMessage *message.SignedMessage) error {
 		signers := signedMessage.GetSigners()
 		if len(signers) != 1 {
@@ -23,11 +21,6 @@ func ValidatePrePrepareMsg(valueCheck validation.ValueCheck, resolver LeaderReso
 		if uint64(signers[0]) != leader {
 			return errors.Errorf("pre-prepare message sender (id %d) is not the round's leader (expected %d)", signers[0], leader)
 		}
-
-		if err := valueCheck.Check(signedMessage.Message.Data); err != nil {
-			return errors.Wrap(err, "failed while validating pre-prepare")
-		}
-
 		return nil
 	})
 }

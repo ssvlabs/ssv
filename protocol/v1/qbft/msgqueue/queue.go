@@ -44,7 +44,8 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		err = errors.Wrap(err, "could not apply options")
 	}
 
-	logger.Debug("queue with", zap.Int("incides count", len(opts.Indexers)))
+	logger.Debug("queue configuration", zap.Any("config", opts))
+
 	return &queue{
 		logger:    logger,
 		indexers:  opts.Indexers,
@@ -72,7 +73,6 @@ func (q *queue) Add(msg *message.SSVMessage) {
 	defer q.itemsLock.Unlock()
 
 	indices := q.indexMessage(msg)
-	q.logger.Debug("add message to queue", zap.Strings("indices", indices))
 	mc := &msgContainer{
 		msg: msg,
 	}

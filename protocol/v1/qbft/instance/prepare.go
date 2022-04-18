@@ -2,7 +2,6 @@ package instance
 
 import (
 	"bytes"
-	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -72,15 +71,23 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			var err error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
+					zap.String("Lambda", string(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
+
+				prepareMsg, err := signedMessage.Message.GetPrepareData()
+				if err != nil {
+					return
+				}
 
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)
-				i.State().PreparedValue.Store(signedMessage.Message.Data)
+				i.State().PreparedValue.Store(prepareMsg.Data)
 				i.ProcessStageChange(qbft.RoundState_Prepare)
 
 				// send commit msg
-				broadcastMsg := i.generateCommitMessage(i.State().GetPreparedValue())
+				broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
+				if err != nil {
+					return
+				}
 				if e := i.SignAndBroadcast(broadcastMsg); e != nil {
 					i.Logger.Info("could not broadcast commit message", zap.Error(err))
 					err = e
@@ -92,14 +99,19 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generatePrepareMessage(value []byte) *message.ConsensusMessage {
+func (i *Instance) generatePrepareMessage(proposalData *message.ProposalData) (*message.ConsensusMessage, error) {
+	prepareMsg := &message.PrepareData{Data: proposalData.Data}
+	encodedPrepare, err := prepareMsg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode prepare data")
+	}
 	return &message.ConsensusMessage{
 		MsgType:    message.PrepareMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
 		Identifier: i.State().GetIdentifier(),
-		Data:       value,
-	}
+		Data:       encodedPrepare,
+	}, nil
 }
 
 // isPrepared returns true if instance prepared

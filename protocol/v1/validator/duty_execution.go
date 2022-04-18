@@ -2,7 +2,6 @@ package validator
 
 import (
 	"encoding/hex"
-	ibftvalcheck "github.com/bloxapp/ssv/ibft/valcheck"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
@@ -15,7 +14,6 @@ import (
 func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beaconprotocol.Duty) (controller.IController, int, []byte, message.Height, error) {
 	var inputByts []byte
 	var err error
-	var valCheckInstance ibftvalcheck.ValueCheck
 
 	qbftCtrl, ok := v.ibfts[duty.Type]
 	if !ok {
@@ -45,7 +43,6 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 
 	result, err := qbftCtrl.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:          logger,
-		ValueCheck:      valCheckInstance,
 		SeqNumber:       seqNumber,
 		Value:           inputByts,
 		RequireMinPeers: true,

@@ -50,6 +50,16 @@ type Signature []byte
 
 // VerifyByOperators verifies signature by the provided operators
 func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigType SignatureType, operators []*Operator) error {
+	if data.GetSignature() == nil || len(data.GetSignature()) == 0 {
+		return errors.New("message signature is invalid")
+	}
+
+	// signer uniqueness
+	err := verifyUniqueSigners(data.GetSigners())
+	if err != nil {
+		return errors.Wrap(err, "signers are not unique")
+	}
+
 	pks := make([][]byte, 0)
 	for _, id := range data.GetSigners() {
 		found := false
@@ -85,7 +95,6 @@ func (s Signature) VerifyMultiPubKey(data Root, domain DomainType, sigType Signa
 	if aggPK == nil {
 		return errors.New("no public keys found")
 	}
-
 	return s.Verify(data, domain, sigType, aggPK.Serialize())
 }
 
@@ -101,7 +110,8 @@ func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, p
 		return errors.Wrap(err, "failed to deserialize public key")
 	}
 
-	computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType))
+	//computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType)) TODO this code is from the new spec. need to align the signing too in order to use domain
+	computedRoot, err := data.GetRoot()
 	if err != nil {
 		return errors.Wrap(err, "could not compute signing root")
 	}
@@ -182,6 +192,18 @@ func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey, root []byte) e
 	// verify reconstructed sig
 	if res := sig.VerifyByte(pk, root); !res {
 		return errors.New("could not reconstruct a valid signature")
+	}
+	return nil
+}
+
+func verifyUniqueSigners(singerIds []OperatorID) error {
+	unique := map[OperatorID]bool{}
+	for _, signer := range singerIds {
+		if _, found := unique[signer]; !found {
+			unique[signer] = true
+		} else {
+			return errors.New("signers are not unique")
+		}
 	}
 	return nil
 }

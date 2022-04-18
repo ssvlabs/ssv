@@ -88,15 +88,16 @@ func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
 }
 
 // PubKeysByID returns the public keys with the associated ids
-func (s *Share) PubKeysByID(ids []message.OperatorID) (PubKeys, error) {
-	ret := make([]*bls.PublicKey, 0)
+func (s *Share) PubKeysByID(ids []message.OperatorID) (map[message.OperatorID]*bls.PublicKey, error) {
+	//ret := make([]*bls.PublicKey, 0)
+	ret := make(map[message.OperatorID]*bls.PublicKey, 0)
 	for _, id := range ids {
 		if val, ok := s.Committee[id]; ok {
 			pk := &bls.PublicKey{}
 			if err := pk.Deserialize(val.Pk); err != nil {
 				return ret, errors.Wrap(err, "failed to deserialize public key")
 			}
-			ret = append(ret, pk)
+			ret[id] = pk
 		} else {
 			return nil, errors.Errorf("pk for id (%d) not found", id)
 		}
@@ -116,8 +117,13 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 
 	var operators []*message.Operator
 	for _, id := range msg.GetSigners() {
-		operators = append(operators, &message.Operator{OperatorID: id})
+		pk := pks[id]
+		operators = append(operators, &message.Operator{
+			OperatorID: id,
+			PubKey:     pk.Serialize(),
+		})
 	}
+
 	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators) // TODO need to check if this is the right verify func
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {

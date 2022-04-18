@@ -220,10 +220,10 @@ func (c *Controller) GetIdentifier() []byte {
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
-	c.logger.Debug("get message, process", zap.Bool("msg is not nil", msg != nil), zap.String("type", msg.MsgType.String()), zap.String("id", msg.ID.String()))
 	if c.readMode {
 		return c.messageHandler(msg)
 	}
+	c.logger.Debug("got message, add to queue", zap.String("type", msg.MsgType.String()))
 	c.q.Add(msg)
 	return nil
 }
