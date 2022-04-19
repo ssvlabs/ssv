@@ -1,0 +1,87 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"github.com/bloxapp/ssv/automation/commons"
+	"github.com/bloxapp/ssv/automation/qbft/scenarios"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
+
+	s := scenarios.NewRegularScenario(logger)
+
+	dbs := make([]basedb.IDb, 0)
+	for i := 0; i < s.NumOfOperators(); i++ {
+		db, err := storage.GetStorageFactory(basedb.Options{
+			Type:   "badger-memory",
+			Path:   "",
+			Logger: logger,
+		})
+		if err != nil {
+			logger.Panic("could not setup storage", zap.Error(err))
+		}
+		dbs = append(dbs, db)
+	}
+
+	if err := Run(ctx, dbs, s); err != nil {
+		logger.Panic("could not run scenario", zap.Error(err))
+	}
+}
+
+func Run(pctx context.Context, dbs []basedb.IDb, scenario scenarios.Scenario) error {
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
+	loggerFactory := func(s string) *zap.Logger {
+		return logex.GetLogger(zap.String("who", s))
+	}
+	logger := loggerFactory(fmt.Sprintf("RUNNER/%s", scenario.Name()))
+	logger.Info("creating resources")
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forksprotocol.V0ForkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, false)
+	if err != nil {
+		return err
+	}
+	stores := make([]qbftstorage.QBFTStore, 0)
+	kms := make([]beacon.KeyManager, 0)
+	for i, _ := range ln.Nodes {
+		store := qbftstorage.NewQBFTStore(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations")
+		stores = append(stores, store)
+		km := commons.NewTestSigner()
+		kms = append(kms, km)
+	}
+
+	sctx := scenarios.ScenarioContext{
+		Ctx:         ctx,
+		LocalNet:    ln,
+		Stores:      stores,
+		KeyManagers: kms,
+	}
+	logger.Info("all resources were created, starting pre-execution of the scenario")
+	if err := scenario.PreExecution(&sctx); err != nil {
+		return err
+	}
+	logger.Info("executing scenario")
+	if err := scenario.Execute(&sctx); err != nil {
+		return err
+	}
+	logger.Info("running post-execution of the scenario")
+	if err := scenario.PostExecution(&sctx); err != nil {
+		return err
+	}
+	logger.Info("done")
+
+	return nil
+}
