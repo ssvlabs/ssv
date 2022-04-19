@@ -21,6 +21,10 @@ func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 			logger.Debug("could not decode msg data", zap.Error(err))
 			reporting.ReportValidation(msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
+		} else if sm.Protocol != message.LastDecidedType {
+			// not this protocol
+			// TODO: remove after v0
+			return nil, nil
 		} else {
 			res, err := store.GetLastDecided(msg.ID)
 			sm.UpdateResults(err, res)

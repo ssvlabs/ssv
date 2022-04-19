@@ -114,7 +114,22 @@ func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
 	return nil
 }
 
-func (m *mockNetwork) RegisterHandler(protocol SyncProtocol, handler RequestHandler) {
+func (m *mockNetwork) RegisterHandlers(handlers ...*HandlerOpt) {
+	all := make(map[SyncProtocol][]RequestHandler)
+	for _, h := range handlers {
+		rhandlers, ok := all[h.Protocol]
+		if !ok {
+			rhandlers = make([]RequestHandler, 0)
+		}
+		rhandlers = append(rhandlers, h.Handler)
+	}
+
+	for p, hs := range all {
+		m.registerHandler(p, hs...)
+	}
+}
+
+func (m *mockNetwork) registerHandler(protocol SyncProtocol, handlers ...RequestHandler) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -128,7 +143,7 @@ func (m *mockNetwork) RegisterHandler(protocol SyncProtocol, handler RequestHand
 		pid = "/decided/history/0.0.1"
 	}
 
-	m.handlers[pid] = handler
+	m.handlers[pid] = CombineRequestHandlers(handlers...)
 }
 
 func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) {

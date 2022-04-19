@@ -34,6 +34,14 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			if err := msgV0.SyncMessage.Error; len(err) > 0 {
 				syncMsg.Status = message.StatusError
 			}
+			switch msgV0.SyncMessage.Type {
+			case network.Sync_GetHighestType:
+				syncMsg.Protocol = message.LastDecidedType
+			case network.Sync_GetLatestChangeRound:
+				syncMsg.Protocol = message.LastChangeRoundType
+			case network.Sync_GetInstanceRange:
+				syncMsg.Protocol = message.DecidedHistoryType
+			}
 			data, err := json.Marshal(syncMsg)
 			if err != nil {
 				return nil, err
@@ -127,7 +135,6 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		v0Msg.SignedMessage = toSignedMessagePostConsensusV0(signedMsg, msg.ID)
-
 		//return v.processPostConsensusSig(dutyRunner, signedMsg)
 	case message.SSVSyncMsgType:
 		v0Msg.Type = network.NetworkMsg_SyncType
@@ -150,6 +157,14 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			}
 		} else {
 			v0Msg.SyncMessage.Error = "error"
+		}
+		switch syncMsg.Protocol {
+		case message.LastDecidedType:
+			v0Msg.SyncMessage.Type = network.Sync_GetHighestType
+		case message.LastChangeRoundType:
+			v0Msg.SyncMessage.Type = network.Sync_GetLatestChangeRound
+		case message.DecidedHistoryType:
+			v0Msg.SyncMessage.Type = network.Sync_GetInstanceRange
 		}
 	default:
 		return nil, errors.New("unknown msg")

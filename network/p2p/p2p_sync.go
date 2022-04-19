@@ -24,6 +24,7 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResu
 		Params: &message.SyncParams{
 			Identifier: mid,
 		},
+		Protocol: message.LastDecidedType,
 	})
 }
 
@@ -61,6 +62,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 				Height:     []message.Height{from, currentEnd},
 				Identifier: mid,
 			},
+			Protocol: message.DecidedHistoryType,
 		})
 		if err != nil {
 			return results, err
@@ -86,13 +88,30 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 			Height:     []message.Height{height},
 			Identifier: mid,
 		},
+		Protocol: message.LastChangeRoundType,
 	})
 }
 
-// RegisterHandler registers the given handler for the stream
-func (n *p2pNetwork) RegisterHandler(protocol protocolp2p.SyncProtocol, handler protocolp2p.RequestHandler) {
-	pid, _ := n.fork.ProtocolID(protocol)
-	// TODO: handle the case of multiple handlers for the same protocol (e.g. v0)
+// RegisterHandlers registers the given handlers
+func (n *p2pNetwork) RegisterHandlers(handlers ...*protocolp2p.HandlerOpt) {
+	m := make(map[libp2p_protocol.ID][]protocolp2p.RequestHandler)
+	for _, handler := range handlers {
+		pid, _ := n.fork.ProtocolID(handler.Protocol)
+		current, ok := m[pid]
+		if !ok {
+			current = make([]protocolp2p.RequestHandler, 0)
+		}
+		current = append(current, handler.Handler)
+		m[pid] = current
+	}
+
+	for pid, phandlers := range m {
+		n.registerHandlers(pid, phandlers...)
+	}
+}
+
+func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...protocolp2p.RequestHandler) {
+	handler := protocolp2p.CombineRequestHandlers(handlers...)
 	n.host.SetStreamHandler(pid, func(stream libp2pnetwork.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
@@ -127,39 +146,6 @@ func (n *p2pNetwork) RegisterHandler(protocol protocolp2p.SyncProtocol, handler 
 		n.logger.Info("stream handler done")
 	})
 }
-
-//type LegacySyncHandler func(obj network.SyncChanObj) ([]byte, error)
-//// setupLegacySyncHandlerV0 registers a stream handler for legacy sync protocol,
-//// but uses v0 messages in the interface
-//func (n *p2pNetwork) setupLegacySyncHandlerV0(handler LegacySyncHandler) error {
-//	n.host.SetStreamHandler(legacyMsgStream, func(stream libp2pnetwork.Stream) {
-//		req, respond, done, err := n.streamCtrl.HandleStream(stream)
-//		defer done()
-//		if err != nil {
-//			n.logger.Warn("could not handle stream", zap.Error(err))
-//			return
-//		}
-//		var msgV0 network.Message
-//		if err = json.Unmarshal(req, &msgV0); err != nil {
-//			n.logger.Warn("could not unmarshal data", zap.Error(err))
-//			return
-//		}
-//
-//		result, err := handler(network.SyncChanObj{
-//			Msg:      msgV0.SyncMessage,
-//			StreamID: stream.ID(),
-//		})
-//		if err != nil {
-//			n.logger.Warn("could not handle msg from stream")
-//			return
-//		}
-//		if err := respond(result); err != nil {
-//			n.logger.Warn("could not respond to stream", zap.Error(err))
-//			return
-//		}
-//	})
-//	return nil
-//}
 
 // getSubsetOfPeers returns a subset of the peers from that topic
 func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, filter func(peer.ID) bool) ([]peer.ID, error) {

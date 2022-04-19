@@ -40,13 +40,12 @@ func TestHistory(t *testing.T) {
 		stores = append(stores, store)
 		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node)
 		histories = append(histories, h)
-		node.RegisterHandler(p2pprotocol.DecidedHistoryProtocol,
-			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-%d", i)), store, node, 10))
-		node.RegisterHandler(p2pprotocol.LastDecidedProtocol,
-			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("last-messages-%d", i)), store, node))
-		//pid, _ = f.LastChangeRoundProtocol()
-		//node.RegisterHandler(string(pid),
-		//	handlers.LastChangeRoundHandler(loggerFactory(fmt.Sprintf("change-round-%d", i)), store))
+		node.RegisterHandlers(
+			p2pprotocol.WithHandler(p2pprotocol.DecidedHistoryProtocol,
+				handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-%d", i)), store, node, 10)),
+			p2pprotocol.WithHandler(p2pprotocol.LastDecidedProtocol,
+				handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("last-messages-%d", i)), store, node)),
+		)
 	}
 	require.Len(t, histories, len(ln.Nodes))
 

@@ -21,6 +21,10 @@ func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, repo
 			logger.Debug("could not decode msg data", zap.Error(err))
 			reporting.ReportValidation(msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
+		} else if sm.Protocol != message.DecidedHistoryType {
+			// not this protocol
+			// TODO: remove after v0
+			return nil, nil
 		} else {
 			items := int(sm.Params.Height[1] - sm.Params.Height[0])
 			if items > maxBatchSize {
