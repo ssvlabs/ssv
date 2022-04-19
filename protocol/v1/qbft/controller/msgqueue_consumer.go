@@ -51,21 +51,23 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 		sigMsgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, height), 1)
 		if len(sigMsgs) > 0 {
 			// got post consensus message for the current sequence
-			//c.logger.Debug("queue found sigMsgs", zap.Int("count", len(sigMsgs)))
+			c.logger.Debug("pop post consensus msg")
 			msg = sigMsgs[0]
 		} else {
 			msg = c.getNextMsgForState(currentState)
 			if msg == nil {
 				continue
 			}
-			//c.logger.Debug("queue found message for state", zap.Int("q count", c.q.Count(msgqueue.SignedMsgIndex(c.Identifier, height, message.RoundChangeMsgType))), zap.Any("state", currentState), zap.Any("msg", msg))
+			c.logger.Debug("queue found message for state", zap.Int32("stage", currentState.Stage.Load()), zap.Int32("seq", int32(currentState.GetHeight())), zap.Int32("round", int32(currentState.GetRound())))
 		}
 
 		err := c.messageHandler(msg)
 		if err != nil {
 			c.logger.Warn("could not handle msg", zap.Error(err))
 		}
+		c.logger.Debug("message handler is done")
 	}
+	c.logger.Warn("queue consumer is closed")
 	return nil
 }
 
@@ -74,13 +76,13 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	var msgs []*message.SSVMessage
 	switch qbft.RoundState(state.Stage.Load()) {
 	case qbft.RoundState_NotStarted:
-		msgs = c.q.Peek(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1)
+		msgs = c.q.Peek(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1) // TODO here waiting for prePrepare msg // TODO when move to prePrepare, the same msg called twice
 	case qbft.RoundState_PrePrepare:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.ProposalMsgType), 1)
-	case qbft.RoundState_Prepare:
 		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.PrepareMsgType), 1)
-	case qbft.RoundState_Commit:
+	case qbft.RoundState_Prepare:
 		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.CommitMsgType), 1)
+	case qbft.RoundState_Commit:
+		return nil // qbft.RoundState_Commit stage is NEVER set
 	case qbft.RoundState_ChangeRound:
 		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.RoundChangeMsgType), 1)
 	//case qbft.RoundState_Decided:

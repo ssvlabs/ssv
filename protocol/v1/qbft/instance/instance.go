@@ -270,7 +270,7 @@ func (i *Instance) bumpToRound(round message.Round) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	newRound := round
-	i.State().Round.Store(round)
+	i.State().Round.Store(newRound)
 	role := i.State().GetIdentifier().GetRoleType()
 	pk := i.State().GetIdentifier().GetValidatorPK()
 	metricsIBFTRound.WithLabelValues(role.String(), hex.EncodeToString(pk)).Set(float64(newRound))
