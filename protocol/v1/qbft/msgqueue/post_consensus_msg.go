@@ -35,6 +35,9 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if msg == nil {
 			return ""
 		}
+		if msg.MsgType != message.SSVPostConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
+			return ""
+		}
 		sm := message.SignedPostConsensusMessage{}
 		if err := sm.Decode(msg.Data); err != nil {
 			return ""

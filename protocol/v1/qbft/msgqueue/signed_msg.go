@@ -36,6 +36,9 @@ func SignedMsgIndexer() Indexer {
 		if msg == nil {
 			return ""
 		}
+		if msg.MsgType != message.SSVConsensusMsgType {
+			return ""
+		}
 		sm := message.SignedMessage{}
 		if err := sm.Decode(msg.Data); err != nil {
 			return ""
