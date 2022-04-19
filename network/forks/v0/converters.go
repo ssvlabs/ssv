@@ -21,8 +21,9 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			syncMsg.Params = new(message.SyncParams)
 			syncMsg.Params.Identifier = msgV0.SyncMessage.GetLambda()
 			params := msgV0.SyncMessage.GetParams()
-			for i, p := range params {
-				syncMsg.Params.Height[i] = message.Height(p)
+			syncMsg.Params.Height = make([]message.Height, 0)
+			for _, p := range params {
+				syncMsg.Params.Height = append(syncMsg.Params.Height, message.Height(p))
 			}
 			for _, sm := range msgV0.SyncMessage.GetSignedMessages() {
 				signed := toSignedMessageV1(sm)
@@ -143,11 +144,11 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
 		v0Msg.SyncMessage = new(network.SyncMessage)
-		v0Msg.SyncMessage.Params = make([]uint64, 0)
 		if len(syncMsg.Params.Height) > 0 {
+			v0Msg.SyncMessage.Params = make([]uint64, 1)
 			v0Msg.SyncMessage.Params[0] = uint64(syncMsg.Params.Height[0])
 			if len(syncMsg.Params.Height) > 1 {
-				v0Msg.SyncMessage.Params[1] = uint64(syncMsg.Params.Height[1])
+				v0Msg.SyncMessage.Params = append(v0Msg.SyncMessage.Params, uint64(syncMsg.Params.Height[1]))
 			}
 		}
 		v0Msg.SyncMessage.Lambda = syncMsg.Params.Identifier
