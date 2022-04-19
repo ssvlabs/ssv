@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/scenarios"
+	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -56,11 +58,21 @@ func Run(pctx context.Context, dbs []basedb.IDb, scenario scenarios.Scenario) er
 	}
 	stores := make([]qbftstorage.QBFTStore, 0)
 	kms := make([]beacon.KeyManager, 0)
-	for i, _ := range ln.Nodes {
+	for i, node := range ln.Nodes {
 		store := qbftstorage.NewQBFTStore(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations")
 		stores = append(stores, store)
 		km := commons.NewTestSigner()
 		kms = append(kms, km)
+		node.RegisterHandlers(p2pprotocol.WithHandler(
+			p2pprotocol.LastDecidedProtocol,
+			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", i+1)), store, node),
+		), p2pprotocol.WithHandler(
+			p2pprotocol.LastChangeRoundProtocol,
+			handlers.LastChangeRoundHandler(loggerFactory(fmt.Sprintf("changeround-handler-%d", i+1)), store, node),
+		), p2pprotocol.WithHandler(
+			p2pprotocol.DecidedHistoryProtocol,
+			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-handler-%d", i+1)), store, node, 25),
+		))
 	}
 
 	sctx := scenarios.ScenarioContext{

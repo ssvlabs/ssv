@@ -40,11 +40,10 @@ func New(logger *zap.Logger, syncer p2pprotocol.Syncer) History {
 
 func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*message.SignedMessage, error) {
 	logger := h.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
-
 	var err error
 	var remoteMsgs []p2pprotocol.SyncResult
 	retries := 2
-	for retries > 0 && len(remoteMsgs) > 0 {
+	for retries > 0 && len(remoteMsgs) == 0 {
 		retries--
 		remoteMsgs, err = h.syncer.LastDecided(identifier)
 		if err != nil {

@@ -116,7 +116,7 @@ func New(opts Options) IController {
 
 	// set flags
 	ret.initHandlers.Store(false)
-	ret.initSynced.Store(true) // TODo need to set false!!
+	ret.initSynced.Store(false) // TODo need to set false!!
 	return ret
 }
 
@@ -151,7 +151,7 @@ func (c *Controller) Init() error {
 		c.logger.Info("iBFT implementation init started")
 		go c.startQueueConsumer()
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-		c.logger.Debug("managed to setup iBFT handlers")
+		//c.logger.Debug("managed to setup iBFT handlers")
 	}
 
 	if !c.initSynced.Load() {

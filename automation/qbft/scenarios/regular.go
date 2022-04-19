@@ -109,7 +109,7 @@ func (r *regularScenario) PostExecution(ctx *ScenarioContext) error {
 	if err != nil {
 		return err
 	}
-	if len(msgs) < 2 {
+	if len(msgs) < 4 {
 		return errors.New("node-0 didn't sync all messages")
 	}
 	r.logger.Debug("msgs", zap.Any("msgs", msgs))
