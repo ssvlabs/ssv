@@ -75,6 +75,10 @@ type Controller struct {
 	readMode bool
 
 	q msgqueue.MsgQueue
+
+	//	TODO - test var needs to be removed
+	incomeMsgs    atomic.Int32
+	processedMsgs atomic.Int32
 }
 
 // New is the constructor of Controller
@@ -84,7 +88,7 @@ func New(opts Options) IController {
 
 	q, err := msgqueue.New(
 		logger.With(zap.String("who", "msg_q")),
-		msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+		msgqueue.WithIndexers(msgqueue.DefaultMsgIndexer(), msgqueue.SignedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
 	)
 	if err != nil {
 		// TODO: we should probably stop here, TBD
@@ -111,7 +115,9 @@ func New(opts Options) IController {
 
 		readMode: opts.ReadMode,
 
-		q: q,
+		q:             q,
+		incomeMsgs:    *atomic.NewInt32(0),
+		processedMsgs: *atomic.NewInt32(0),
 	}
 
 	// set flags
@@ -223,13 +229,22 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	if c.readMode {
 		return c.messageHandler(msg)
 	}
-	c.logger.Debug("got message, add to queue", zap.String("type", msg.MsgType.String()))
+	c.incomeMsgs.Inc()
+	var fields []zap.Field
+	if c.currentInstance != nil && c.currentInstance.State() != nil {
+		state := c.currentInstance.State()
+		fields = append(fields, zap.String("stage", state.Stage.String()), zap.Uint32("height", uint32(state.GetHeight())), zap.Uint32("round", uint32(state.GetRound())))
+	}
+	fields = append(fields, zap.Int32("incoming messages count", c.incomeMsgs.Load()), zap.String("type", msg.MsgType.String()))
+	c.logger.Debug("got message, add to queue", fields...)
 	c.q.Add(msg)
 	return nil
 }
 
 // messageHandler process message from queue,
 func (c *Controller) messageHandler(msg *message.SSVMessage) error {
+	c.processedMsgs.Inc()
+	c.logger.Debug("message handling", zap.Int32("processed messages count", c.processedMsgs.Load()))
 	switch msg.GetType() {
 	case message.SSVConsensusMsgType:
 		signedMsg := &message.SignedMessage{}

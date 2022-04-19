@@ -44,7 +44,7 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		err = errors.Wrap(err, "could not apply options")
 	}
 
-	logger.Debug("queue configuration", zap.Any("config", opts))
+	logger.Debug("queue configuration", zap.Any("indexers", len(opts.Indexers)))
 
 	return &queue{
 		logger:    logger,
@@ -87,6 +87,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
 	}
+	q.logger.Debug("message added to queue", zap.Strings("indices", indices))
 }
 
 func (q *queue) Purge(idx string) {

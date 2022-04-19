@@ -22,7 +22,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 		return errors.New("iBFT hasn't initialized yet")
 	}
 	if c.currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", string(c.currentInstance.State().GetIdentifier()))
+		return errors.Errorf("current instance (%s) is still running", c.currentInstance.State().GetIdentifier().String())
 	}
 
 	highestKnown, err := c.highestKnownDecided()
