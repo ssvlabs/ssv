@@ -87,8 +87,9 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *Options) Instancer {
-	pk, role := format.IdentifierUnformat(string(opts.Identifier))
-	metricsIBFTStage.WithLabelValues(role, pk).Set(float64(qbft.RoundState_NotStarted))
+	pk := opts.Identifier.GetValidatorPK()
+	role := opts.Identifier.GetRoleType().String()
+	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundState_NotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
 
 	ret := &Instance{

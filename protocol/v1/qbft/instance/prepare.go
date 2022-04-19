@@ -73,14 +73,9 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 				i.Logger.Info("prepared instance",
 					zap.String("Lambda", string(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
 
-				prepareMsg, err := signedMessage.Message.GetPrepareData()
-				if err != nil {
-					return
-				}
-
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)
-				i.State().PreparedValue.Store(prepareMsg.Data)
+				i.State().PreparedValue.Store(signedMessage.Message.Data) // passing the data as is and not get the message.PrepareData cause of msgCount saves that way
 				i.ProcessStageChange(qbft.RoundState_Prepare)
 
 				// send commit msg
