@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"net"
 	"sync/atomic"
 	"time"
 )
@@ -128,7 +129,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 	if len(n.cfg.Bootnodes) > 0 { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
 			IP:         ipAddr.String(),
-			BindIP:     "", // net.IPv4zero.String()
+			BindIP:     net.IPv4zero.String(),
 			Port:       n.cfg.UDPPort,
 			TCPPort:    n.cfg.TCPPort,
 			NetworkKey: n.cfg.NetworkPrivateKey,
@@ -168,6 +169,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		},
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
+		//Discovery: n.disc,
 	}
 
 	if !n.cfg.PubSubScoring {
@@ -181,8 +183,6 @@ func (n *p2pNetwork) setupPubsub() error {
 		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
-	} else {
-
 	}
 	_, tc, err := topics.NewPubsub(n.ctx, cfg)
 	if err != nil {

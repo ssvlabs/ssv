@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -147,7 +148,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 		logger := zap.L().With(zap.String("who", who))
 		return logger
 	}
-	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n/2, false)
+	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n-1, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -177,8 +178,23 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 		}
 	}
 	// let the nodes subscribe
-	// TODO: remove timeout
-	<-time.After(time.Second * 3)
+	<-time.After(time.Second)
+	for _, pk := range pks {
+		vpk, err := hex.DecodeString(pk)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "could not decode validator public key")
+		}
+		for _, node := range ln.Nodes {
+			peers := make([]peer.ID, 0)
+			for len(peers) < 2 {
+				peers, err = node.Peers(vpk)
+				if err != nil {
+					return nil, nil, err
+				}
+				time.Sleep(time.Millisecond*100)
+			}
+		}
+	}
 
 	return ln, routers, nil
 }
