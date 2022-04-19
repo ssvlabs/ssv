@@ -40,7 +40,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv0.New()
 		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, len(pks)-2, len(pks)+2)
+		baseTest(ctx, t, peers, pks, f, 2, len(pks)+2)
 	})
 
 	// v1 features includes msg_id, msg validator, subnets, scoring
@@ -101,8 +101,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				time.Sleep(time.Millisecond * 100)
 			}
 		}
-		// TODO: remove timeout
-		//<-time.After(time.Second * 2)
+
 		nPeers := len(peers)
 		for _, p := range peers {
 			topics := p.tm.Topics()
@@ -110,7 +109,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				topicPeers, err := p.tm.Peers(topic)
 				require.NoError(t, err)
 				// wait for min peers
-				for c.Err() == nil && len(topicPeers) < nPeers/2 {
+				for c.Err() == nil && len(topicPeers) < nPeers-1 {
 					time.Sleep(time.Millisecond * 100)
 					topicPeers, err = p.tm.Peers(topic)
 					require.NoError(t, err)
