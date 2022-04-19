@@ -38,13 +38,13 @@ type MsgQueue interface {
 // New creates a new MsgQueue
 func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 	var err error
-
 	opts := &Options{}
 	if err = opts.Apply(opt...); err != nil {
 		err = errors.Wrap(err, "could not apply options")
 	}
-
-	logger.Debug("queue configuration", zap.Any("config", opts))
+	if err != nil {
+		return nil, err
+	}
 
 	return &queue{
 		logger:    logger,

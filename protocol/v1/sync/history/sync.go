@@ -7,6 +7,7 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 )
 
 // GetLastDecided reads last decided message from store
@@ -40,9 +41,18 @@ func New(logger *zap.Logger, syncer p2pprotocol.Syncer) History {
 func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*message.SignedMessage, error) {
 	logger := h.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
 
-	remoteMsgs, err := h.syncer.LastDecided(identifier)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not fetch local highest instance during sync")
+	var err error
+	var remoteMsgs []p2pprotocol.SyncResult
+	retries := 2
+	for retries > 0 && len(remoteMsgs) > 0 {
+		retries--
+		remoteMsgs, err = h.syncer.LastDecided(identifier)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not fetch local highest instance during sync")
+		}
+		if len(remoteMsgs) == 0 {
+			time.Sleep(250 * time.Millisecond)
+		}
 	}
 	if len(remoteMsgs) == 0 {
 		logger.Info("node is synced: remote highest decided not found")
