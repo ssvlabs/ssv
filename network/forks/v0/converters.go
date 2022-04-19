@@ -142,6 +142,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		if err := syncMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
+		v0Msg.SyncMessage = new(network.SyncMessage)
 		v0Msg.SyncMessage.Params = make([]uint64, 0)
 		if len(syncMsg.Params.Height) > 0 {
 			v0Msg.SyncMessage.Params[0] = uint64(syncMsg.Params.Height[0])
