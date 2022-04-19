@@ -176,6 +176,7 @@ func (c *Controller) Init() error {
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 			return errors.Wrap(err, "could not sync history")
 		}
+		c.initSynced.Store(true)
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
 		c.logger.Info("iBFT implementation init finished")
 	}
