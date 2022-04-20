@@ -191,7 +191,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 				if err != nil {
 					return nil, nil, err
 				}
-				time.Sleep(time.Millisecond*100)
+				time.Sleep(time.Millisecond * 100)
 			}
 		}
 	}

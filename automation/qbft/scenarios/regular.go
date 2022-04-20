@@ -76,7 +76,6 @@ func (r *regularScenario) PreExecution(ctx *ScenarioContext) error {
 		if err := store.SaveLastDecided(msgs[len(msgs)-1]); err != nil {
 			return errors.Wrap(err, "could not save decided messages")
 		}
-
 	}
 
 	return nil
