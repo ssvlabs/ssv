@@ -2,6 +2,9 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -10,8 +13,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 // regularScenario is the most basic scenario where 4 operators starts qbft for a single validator
@@ -51,7 +52,7 @@ func (r *regularScenario) PreExecution(ctx *ScenarioContext) error {
 
 	oids := make([]message.OperatorID, 0)
 	keys := make(map[message.OperatorID]*bls.SecretKey)
-	for oid, _ := range share.Committee {
+	for oid := range share.Committee {
 		keys[oid] = sks[uint64(oid)]
 		oids = append(oids, oid)
 	}
@@ -100,7 +101,7 @@ func (r *regularScenario) Execute(ctx *ScenarioContext) error {
 	}
 	wg.Wait()
 
-	return nil
+	return startErr
 }
 
 func (r *regularScenario) PostExecution(ctx *ScenarioContext) error {
