@@ -23,7 +23,6 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
-	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -53,13 +52,23 @@ func networking(forkVersion forksprotocol.ForkVersion) network.P2PNetwork {
 		logger.Fatal("failed to generate network key", zap.Error(err))
 	}
 
-	return p2p.New(context.Background(), &p2p.Config{
+	net := p2p.New(context.Background(), &p2p.Config{
 		Logger:            logger,
 		MaxBatchResponse:  10,
 		RequestTimeout:    time.Second * 5,
 		NetworkPrivateKey: networkPrivateKey,
 		ForkVersion:       forkVersion,
 	})
+
+	if err := net.Setup(); err != nil {
+		panic(err)
+	}
+
+	if err := net.Start(); err != nil {
+		panic(err)
+	}
+
+	return net
 }
 
 type testSigner struct {
@@ -142,7 +151,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 
 func main() {
 	shares, shareSk, sks := generateShares(uint64(nodeCount))
-	identifier := format.IdentifierFormat(shareSk.GetPublicKey().Serialize(), message.RoleTypeAttester.String())
+	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), message.RoleTypeAttester)
 	dbs := make([]qbftstorage.QBFTStore, 0)
 	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes
@@ -159,7 +168,7 @@ func main() {
 		nodeOpts := ibft.Options{
 			Context:        context.Background(),
 			Role:           message.RoleTypeAttester,
-			Identifier:     []byte(identifier),
+			Identifier:     identifier,
 			Logger:         logger.With(zap.Uint64("simulation_node_id", i)),
 			Storage:        dbs[i-1],
 			Network:        net,
@@ -167,6 +176,7 @@ func main() {
 			ValidatorShare: shares[i],
 			Version:        forksprotocol.V0ForkVersion,
 			SyncRateLimit:  time.Millisecond * 200,
+			Signer:         signer,
 		}
 
 		nodes = append(nodes, ibft.New(nodeOpts))
