@@ -92,12 +92,12 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		return nil, nil, err
 	}
 
-	sf := newSubFilter(subscriptionRequestLimit)
+	sf := newSubFilter(cfg.Logger, subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
 		pubsub.WithPeerOutboundQueueSize(outboundQueueSize),
 		pubsub.WithValidateQueueSize(validationQueueSize),
 		pubsub.WithFloodPublish(true),
-		pubsub.WithSubscriptionFilter(sf),
+		//pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
 		pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 			cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))

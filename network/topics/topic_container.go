@@ -2,9 +2,7 @@ package topics
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/utils/logex"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 )
@@ -56,6 +54,5 @@ func (tc *topicContainer) Publish(ctx context.Context, data []byte) error {
 	if err == nil {
 		metricsPubsubOutbound.WithLabelValues(getTopicBaseName(tc.topic.String())).Inc()
 	}
-	logex.GetLogger().Debug("broadcast success", zap.Error(err))
 	return err
 }

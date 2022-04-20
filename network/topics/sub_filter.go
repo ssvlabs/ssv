@@ -4,6 +4,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"go.uber.org/zap"
 	"sync"
 )
 
@@ -20,12 +21,14 @@ type SubFilter interface {
 }
 
 type subFilter struct {
+	logger    *zap.Logger
 	whitelist *sync.Map
 	subsLimit int
 }
 
-func newSubFilter(subsLimit int) SubFilter {
+func newSubFilter(logger *zap.Logger, subsLimit int) SubFilter {
 	return &subFilter{
+		logger:    logger,
 		whitelist: &sync.Map{},
 		subsLimit: subsLimit,
 	}
@@ -43,9 +46,11 @@ func (sf *subFilter) Deregister(topic string) {
 
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	if _, ok := sf.whitelist.Load(topic); ok {
+	_, ok := sf.whitelist.Load(topic)
+	if ok {
 		return true
 	}
+	sf.logger.Debug("filtering irrelevant topic", zap.String("topic", topic))
 	return false
 }
 
@@ -57,5 +62,11 @@ func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_S
 		return nil, pubsub.ErrTooManySubscriptions
 	}
 
-	return pubsub.FilterSubscriptions(subs, sf.CanSubscribe), nil
+	res := pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
+
+	if len(res) == 0 {
+		sf.logger.Debug("no relevant subscriptions", zap.Any("res", res))
+	}
+
+	return res, nil
 }
