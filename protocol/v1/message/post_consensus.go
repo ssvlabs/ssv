@@ -48,7 +48,7 @@ func (spcsm *SignedPostConsensusMessage) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (spcsm *SignedPostConsensusMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, &spcsm)
+	return json.Unmarshal(data, spcsm)
 }
 
 // GetSignature returns the message signature

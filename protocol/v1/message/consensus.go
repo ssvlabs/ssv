@@ -62,7 +62,7 @@ func (d *ProposalData) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (d *ProposalData) Decode(data []byte) error {
-	return json.Unmarshal(data, &d)
+	return json.Unmarshal(data, d)
 }
 
 // PrepareData is the structure used for prepare messages
@@ -77,7 +77,7 @@ func (d *PrepareData) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (d *PrepareData) Decode(data []byte) error {
-	return json.Unmarshal(data, &d)
+	return json.Unmarshal(data, d)
 }
 
 // CommitData is the structure used for commit messages
@@ -92,7 +92,7 @@ func (d *CommitData) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (d *CommitData) Decode(data []byte) error {
-	return json.Unmarshal(data, &d)
+	return json.Unmarshal(data, d)
 }
 
 // Round is the QBFT round of the message
@@ -118,33 +118,33 @@ type RoundChangeData struct {
 }
 
 // GetPreparedValue return prepared value
-func (r RoundChangeData) GetPreparedValue() []byte {
+func (r *RoundChangeData) GetPreparedValue() []byte {
 	return r.PreparedValue
 }
 
 // GetPreparedRound return prepared round
-func (r RoundChangeData) GetPreparedRound() Round {
+func (r *RoundChangeData) GetPreparedRound() Round {
 	return r.Round
 }
 
 // GetNextProposalData returns NOT nil byte array if the signer is the next round's proposal.
-func (r RoundChangeData) GetNextProposalData() []byte {
+func (r *RoundChangeData) GetNextProposalData() []byte {
 	return r.NextProposalData
 }
 
 // GetRoundChangeJustification returns signed prepare messages for the last prepared state
-func (r RoundChangeData) GetRoundChangeJustification() []*SignedMessage {
+func (r *RoundChangeData) GetRoundChangeJustification() []*SignedMessage {
 	return r.RoundChangeJustification
 }
 
 // Encode returns a msg encoded bytes or error
-func (r RoundChangeData) Encode() ([]byte, error) {
+func (r *RoundChangeData) Encode() ([]byte, error) {
 	return json.Marshal(r)
 }
 
 // Decode returns error if decoding failed
-func (r RoundChangeData) Decode(data []byte) error {
-	return json.Unmarshal(data, &r)
+func (r *RoundChangeData) Decode(data []byte) error {
+	return json.Unmarshal(data, r)
 }
 
 // ConsensusMessage is the structure used for consensus messages
@@ -199,7 +199,7 @@ func (msg *ConsensusMessage) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (msg *ConsensusMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, &msg)
+	return json.Unmarshal(data, msg)
 }
 
 // GetRoot returns the root used for signing and verification
@@ -296,7 +296,7 @@ func (signedMsg *SignedMessage) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (signedMsg *SignedMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, &signedMsg)
+	return json.Unmarshal(data, signedMsg)
 }
 
 // GetRoot returns the root used for signing and verification

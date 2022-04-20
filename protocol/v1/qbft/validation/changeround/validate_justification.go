@@ -34,28 +34,29 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if data.PreparedValue == nil { // no justification
 		return nil
 	}
-	if data.GetRoundChangeJustification() == nil {
+	roundChangeJust := data.GetRoundChangeJustification()
+	if roundChangeJust == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	if data.GetRoundChangeJustification()[0].Message.MsgType != message.RoundChangeMsgType {
-		return errors.New("change round justification msg type not Prepare")
+	if roundChangeJust[0].Message.MsgType != message.RoundChangeMsgType {
+		return errors.Errorf("change round justification msg type not Prepare (%d)", roundChangeJust[0].Message.MsgType)
 	}
-	if signedMessage.Message.Height != data.GetRoundChangeJustification()[0].Message.Height {
+	if signedMessage.Message.Height != roundChangeJust[0].Message.Height {
 		return errors.New("change round justification sequence is wrong")
 	}
-	if signedMessage.Message.Round <= data.GetRoundChangeJustification()[0].Message.Round {
+	if signedMessage.Message.Round <= roundChangeJust[0].Message.Round {
 		return errors.New("change round justification round lower or equal to message round")
 	}
-	if data.Round != data.GetRoundChangeJustification()[0].Message.Round {
+	if data.Round != roundChangeJust[0].Message.Round {
 		return errors.New("change round prepared round not equal to justification msg round")
 	}
-	if !bytes.Equal(signedMessage.Message.Identifier, data.GetRoundChangeJustification()[0].Message.Identifier) {
+	if !bytes.Equal(signedMessage.Message.Identifier, roundChangeJust[0].Message.Identifier) {
 		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
 	}
-	if !bytes.Equal(data.PreparedValue, data.GetRoundChangeJustification()[0].Message.Data) {
+	if !bytes.Equal(data.PreparedValue, roundChangeJust[0].Message.Data) {
 		return errors.New("change round prepared value not equal to justification msg value")
 	}
-	if len(data.GetRoundChangeJustification()[0].GetSigners()) < p.share.ThresholdSize() {
+	if len(roundChangeJust[0].GetSigners()) < p.share.ThresholdSize() {
 		return errors.New("change round justification does not constitute a quorum")
 	}
 
