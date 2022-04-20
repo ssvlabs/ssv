@@ -107,9 +107,9 @@ Exporter and Bootnode does not hold this key.
 ### Network Discovery
 
 [discv5](https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md) 
-is used in `SSV.Network` as the discovery system.
+is used in `SSV.Network` as the discovery component.
 
-More information is available in [Networking > Discovery](#discovery)
+More information is available in [Discovery section](#discovery)
 
 
 ### Peer Scoring
@@ -536,8 +536,7 @@ which will reduce the overhead created by hashing the entire message:
 the idea is that each individual peer maintains a score for other peers. 
 The score is locally computed by each individual peer based on observed behaviour and is not shared.
 
-`SSV.network` injects application specific scoring to apply connection and message scoring as part of pubsub scoring system. \
-See [Connection Scoring](#connection-scoring) and [Message Scoring](#message-scoring) for more information.
+An application specific scoring is used to apply scoring asynchronuously as specified below in [consensus scoring](#consensus-scoring).
 
 Score thresholds are used by libp2p to determine whether a peer should be removed from topic's mesh, 
 penalized or even ignored if the score drops too low. \
@@ -555,7 +554,6 @@ Pubsub runs a `Score Function` periodically to determine the score of peers.
 During heartbeat, the score it checked and bad peers are handled accordingly. see
 [gossipsub v1.1 spec](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#the-score-function)
 for more information.
-
 
 
 #### Consensus Scoring
@@ -656,8 +654,6 @@ The amount of message a peer will get from a single subnet is defined in
 `Subnet - Messages` column, and in `Total Messages` 
 you can find the amount of messages for a peer that is subscribed to all subnets.
 
-**TBD** number of subnets (32 / 64 / 128 / 256)
-
 On the other hand, more nodes in a topic results
 increased reliability and security as more nodes will validate messages 
 and score peers accordingly.
@@ -709,17 +705,17 @@ Records contain a signature, sequence (for republishing record) and arbitrary ke
 
 `ENR` structure in `SSV.Network` consists of the following key/value pairs:
 
-| Key         | Value                                                          | Status          |
-|:------------|:---------------------------------------------------------------|:----------------|
-| `id`        | name of identity scheme, e.g. "v4"                             | Done            |
-| `secp256k1` | compressed secp256k1 public key of the network key, 33 bytes   | Done            |
-| `ip`        | IPv4 address, 4 bytes                                          | Done            |
-| `tcp`       | TCP port, big endian integer                                   | Done            |
-| `udp`       | UDP port, big endian integer                                   | Done            |
-| `type`      | node type, integer; 1 (operator), 2 (exporter), 3 (bootnode)   | Done            |
-| `oid`       | operator id, 32 bytes, hash of operator public key             | Done            |
-| `forkv`     | fork version, integer                                          | Done            |
-| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            | Done            |
+| Key         | Description                                                    |
+|:------------|:---------------------------------------------------------------|
+| `id`        | name of identity scheme, e.g. "v4"                             |
+| `secp256k1` | compressed secp256k1 public key of the network key, 33 bytes   |
+| `ip`        | IPv4 address, 4 bytes                                          |
+| `tcp`       | TCP port, big endian integer                                   |
+| `udp`       | UDP port, big endian integer                                   |
+| `type`      | node type, integer; 1 (operator), 2 (exporter), 3 (bootnode)   |
+| `oid`       | operator id, 32 bytes, hash of operator public key             |
+| `forkv`     | fork version, integer                                          |
+| `subnets`   | bitlist, 0 for irrelevant and 1 for assigned subnet            |
 
 
 
@@ -792,6 +788,7 @@ known and ignored all over the system.
 Future network forks will follow the general forks mechanism and design in SSV, where fork versions will be applied on their target epoch.
 
 The following procedures will be part of each fork:
+
 
 **validator topic mapping**
 
