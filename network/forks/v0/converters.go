@@ -81,13 +81,16 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 	for _, s := range signers {
 		signed.Signers = append(signed.Signers, message.OperatorID(s))
 	}
-	if sm.GetMessage() != nil {
+	if msg := sm.GetMessage(); msg != nil {
 		signed.Message = new(message.ConsensusMessage)
-		signed.Message.Data = sm.Message.GetValue()
-		signed.Message.Round = message.Round(sm.Message.GetRound())
-		signed.Message.Identifier = sm.Message.GetLambda()
-		signed.Message.Height = message.Height(sm.Message.GetSeqNumber())
-		switch sm.Message.GetType() {
+		data := msg.GetValue()
+		target := make([]byte, len(data))
+		copy(target, data)
+		signed.Message.Data = target
+		signed.Message.Round = message.Round(msg.GetRound())
+		signed.Message.Identifier = msg.GetLambda()
+		signed.Message.Height = message.Height(msg.GetSeqNumber())
+		switch msg.GetType() {
 		case proto.RoundState_NotStarted:
 			// TODO
 		case proto.RoundState_PrePrepare:
@@ -182,8 +185,9 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Iden
 		Round:     uint64(signedMsg.Message.Round),
 		Lambda:    identifier,
 		SeqNumber: uint64(signedMsg.Message.Height),
-		Value:     signedMsg.Message.Data,
+		Value:     make([]byte, len(signedMsg.Message.Data)),
 	}
+	copy(signedMsgV0.Message.Value, signedMsg.Message.Data)
 	switch signedMsg.Message.MsgType {
 	case message.ProposalMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_PrePrepare

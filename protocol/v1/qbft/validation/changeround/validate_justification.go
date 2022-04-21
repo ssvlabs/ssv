@@ -38,7 +38,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if roundChangeJust == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	if roundChangeJust[0].Message.MsgType != message.RoundChangeMsgType {
+	if roundChangeJust[0].Message.MsgType != message.PrepareMsgType {
 		return errors.Errorf("change round justification msg type not Prepare (%d)", roundChangeJust[0].Message.MsgType)
 	}
 	if signedMessage.Message.Height != roundChangeJust[0].Message.Height {

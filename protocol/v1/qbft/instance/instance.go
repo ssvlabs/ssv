@@ -396,12 +396,13 @@ func generateState(opts *Options) *qbft.State {
 	identifier.Store(opts.Identifier)
 	preparedRound.Store(message.Round(0))
 	preparedValue.Store([]byte{})
-
+	iv := atomic.Value{}
+	iv.Store([]byte{})
 	return &qbft.State{
 		Stage:         *atomic.NewInt32(int32(qbft.RoundState_NotStarted)),
 		Identifier:    identifier,
 		Height:        height,
-		InputValue:    atomic.Value{},
+		InputValue:    iv,
 		Round:         round,
 		PreparedRound: preparedRound,
 		PreparedValue: preparedValue,

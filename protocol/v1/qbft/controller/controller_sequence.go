@@ -24,6 +24,9 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	if c.currentInstance != nil {
 		return errors.Errorf("current instance (%s) is still running", c.currentInstance.State().GetIdentifier().String())
 	}
+	if !c.ValidatorShare.OperatorReady() {
+		return errors.New("operator share not ready")
+	}
 
 	highestKnown, err := c.highestKnownDecided()
 	if err != nil {
@@ -47,10 +50,6 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 		if err := protcolp2p.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), 1, time.Millisecond*2); err != nil {
 			return err
 		}
-	}
-
-	if !c.ValidatorShare.OperatorReady() {
-		return errors.New("operator share not ready")
 	}
 
 	return nil

@@ -2,6 +2,7 @@ package instance
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"time"
 
@@ -22,6 +23,7 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 		pipelines.WrapFunc("add change round msg", func(signedMessage *message.SignedMessage) error {
 			i.Logger.Info("received valid change round message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
+				zap.Any("msg", signedMessage.Message),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 			i.ChangeRoundMessages.AddMessage(signedMessage)
 			return nil
@@ -63,6 +65,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				zap.Uint64("round", uint64(signedMessage.Message.Round)),
 				zap.Int("msgsCount", msgsCount),
 				zap.Int("committeeSize", committeeSize),
+				zap.Uint64("leader", i.ThisRoundLeader()),
 			)
 			return nil
 		}
@@ -94,10 +97,10 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 			var value []byte
 			if notPrepared {
 				value = i.State().GetInputValue()
-				logger.Info("broadcasting pre-prepare as leader after round change with input value")
+				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", value)))
 			} else {
 				value = highest.PreparedValue
-				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value")
+				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", value)))
 			}
 
 			// send pre-prepare msg

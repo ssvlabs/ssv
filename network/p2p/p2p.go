@@ -128,7 +128,6 @@ func (n *p2pNetwork) startDiscovery() {
 			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
 			defer cancel()
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
-				n.logger.Debug("should not connect", zap.Any("peer", e))
 				return
 			}
 			if err := n.host.Connect(ctx, e.AddrInfo); err != nil {
