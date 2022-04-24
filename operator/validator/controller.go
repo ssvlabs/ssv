@@ -189,11 +189,13 @@ func (c *controller) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
 }
 
 func (c *controller) handleRouterMessages() {
+	ctx, cancel := context.WithCancel(c.context)
+	defer cancel()
 	ch := c.messageRouter.GetMessageChan()
 
 	for {
 		select {
-		case <-c.context.Done():
+		case <-ctx.Done():
 			return
 		case msg := <-ch:
 			pk := msg.ID.GetValidatorPK()

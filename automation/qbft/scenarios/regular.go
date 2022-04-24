@@ -66,6 +66,9 @@ func (r *regularScenario) PreExecution(ctx *ScenarioContext) error {
 			Data:       []byte(fmt.Sprintf("msg-data-%d", height)),
 		}
 	})
+	if err != nil {
+		return err
+	}
 
 	for i, store := range ctx.Stores {
 		if i == 0 { // skip first store

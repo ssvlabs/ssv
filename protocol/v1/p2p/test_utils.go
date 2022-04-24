@@ -11,6 +11,7 @@ import (
 	"sync"
 )
 
+// MockMessageEvent is an abstraction used to push stream/pubsub messages
 type MockMessageEvent struct {
 	From     peer.ID
 	Topic    string
@@ -18,6 +19,7 @@ type MockMessageEvent struct {
 	Msg      *message.SSVMessage
 }
 
+// MockNetwork is a wrapping interface that enables tests to run with local network
 type MockNetwork interface {
 	Network
 
@@ -45,6 +47,7 @@ type mockNetwork struct {
 	peers map[peer.ID]MockNetwork
 }
 
+// NewMockNetwork creates a new instance of MockNetwork
 func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int) MockNetwork {
 	return &mockNetwork{
 		logger:    logger,
@@ -114,7 +117,7 @@ func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
 	return nil
 }
 
-func (m *mockNetwork) RegisterHandlers(handlers ...*HandlerOpt) {
+func (m *mockNetwork) RegisterHandlers(handlers ...*SyncHandler) {
 	all := make(map[SyncProtocol][]RequestHandler)
 	for _, h := range handlers {
 		rhandlers, ok := all[h.Protocol]

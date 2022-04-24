@@ -104,7 +104,8 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 			}
 
 			// send pre-prepare msg
-			broadcastMsg, err := i.generatePrePrepareMessage(value)
+			var broadcastMsg message.ConsensusMessage
+			broadcastMsg, err = i.generatePrePrepareMessage(value)
 			if err != nil {
 				return
 			}
