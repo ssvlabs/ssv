@@ -2,7 +2,7 @@
 
 | Contributors                               | Status | Last Revision |
 |:-------------------------------------------|:-------|:--------------|
-| [@amir-blox](https://github.com/amir-blox) | WIP    | APR 22        |
+| [@amir-blox](https://github.com/amir-blox) | DRAFT  | APR 22        |
 
 This document contains the networking specification for `SSV.Network`.
 
@@ -19,7 +19,6 @@ This document contains the networking specification for `SSV.Network`.
 - [Wire](#wire)
   - [Consensus](#consensus-protocol)
   - [Sync](#sync-protocols)
-  - [Handshake](#handshake-protocol)
 - [Networking](#networking)
   - [PubSub](#pubsub)
   - [PubSub Scoring](#pubsub-scoring)
@@ -96,7 +95,7 @@ It has a stable ENR that is provided with default configuration, so other peers 
 Identity in the network is based on two types of keys:
 
 `Network Key` is used to create network/[libp2p identity](https://docs.libp2p.io/concepts/peer-id) (`peer.ID`), 
-will be used by all network peers to setup a secured connection. \
+will be used by all network peers to set up a secured connection. \
 Unless provided, the key will be generated and stored locally for future use, 
 and can be revoked in case it was compromised. 
 
@@ -445,55 +444,6 @@ All the nodes in the network should support this protocol.
 
 ---
 
-## Handshake protocol
-
-**WIP**
-
-`/ssv/handshake/0.0.1`
-
-The handshake protocol allows peers to identify by exchanging information 
-when a new connection is established.
-
-### Message Structure
-
-The following information will be exchanged as part of the handshake:
-
-<details>
-  <summary><b>protobuf</b></summary>
-
-```protobuf
-syntax = "proto3";
-import "gogo.proto";
-
-// NodeIdentity contains node's identity information
-message NodeIdentity {
-  // peer_id of the authenticating node
-  bytes peer_id       = 1 [(gogoproto.nullable) = false];
-  // operator_id of the authenticating node
-  bytes operator_id   = 2 [(gogoproto.nullable) = true];
-  // node_type is the type of the authenticating node
-  uint64 node_type    = 3 [(gogoproto.nullable) = false];
-  // fork_version is the current fork used by the node
-  uint32 fork_version = 4;
-  // metadata is the NodeMetadata in bytes, to allow future flexibility
-  bytes metadata      = 5;
-}
-
-// NodeMetadata contains node's general information
-message NodeMetadata {
-  // execution_node is the "name/version" of the eth1 node
-  string execution_node  = 1;
-  // consensus_node is the "name/version" of the eth2 node
-  string consesnsus_node = 2;
-  // fork_version is the current ssv-node version
-  string node_version    = 3;
-}
-
-```
-</details>
-
-
----
 
 
 ## Networking
@@ -536,7 +486,7 @@ which will reduce the overhead created by hashing the entire message:
 the idea is that each individual peer maintains a score for other peers. 
 The score is locally computed by each individual peer based on observed behaviour and is not shared.
 
-An application specific scoring is used to apply scoring asynchronuously as specified below in [consensus scoring](#consensus-scoring).
+An application specific scoring is used to apply scoring asynchronously as specified below in [consensus scoring](#consensus-scoring).
 
 Score thresholds are used by libp2p to determine whether a peer should be removed from topic's mesh, 
 penalized or even ignored if the score drops too low. \
@@ -696,7 +646,8 @@ established in a separate [handshake process](https://github.com/ethereum/devp2p
 
 A peer that have a public, static ENR to enable new peers to join the network. For the sake of flexibility, 
 bootnode/s ENR values are configurable and can be changed on demand by operators. \
-Bootnode doesn't start a libp2p host for TCP communication, its role ends once a new peer finds existing peers in the network.
+Bootnode doesn't start a libp2p host for TCP communication, 
+its role ends once a new peer finds existing peers in the network.
 
 #### ENR
 
@@ -772,7 +723,8 @@ e.g. msg validation will protect from malicious messages, while scoring will cau
 describes some potential attacks and how they are mitigated.
 
 Connection gating does IP limiting and protects against known, bad peers.
-The gater is invoked in an early stage, before the other components processes the request to avoid redundant resources allocations.
+The gater is invoked in an early stage, before the other components processes 
+the request to avoid redundant resources allocations.
 
 In addition, the discovery system is naturally a good candidate for security problems. \
 DiscV5 specs specifies potential vulnerabilities in their system and how they were (or will be) mitigated,
@@ -785,7 +737,8 @@ known and ignored all over the system.
 
 ### Forks
 
-Future network forks will follow the general forks mechanism and design in SSV, where fork versions will be applied on their target epoch.
+Future network forks will follow the general forks mechanism and design in SSV, 
+where fork versions will be applied on their target epoch.
 
 The following procedures will be part of each fork:
 
@@ -805,7 +758,7 @@ Number of subnets for this version is 128
 
 `v0` - all protocols resides on a single stream protocol `/sync/0.0.1` 
 
-`v1` - each protocol has it's own id, as specified in [Sync Protocols](#sync-protocols)
+`v1` - each protocol has its own id, as specified in [Sync Protocols](#sync-protocols)
 
 
 **message encoding**
@@ -813,7 +766,8 @@ Number of subnets for this version is 128
 `v0` - JSON is used for encoding/decoding of messages.
 
 `v1` - **TBD** \
-[SSZ](https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/simple-serialize.md) will be used to encode/decode network messages.
+[SSZ](https://github.com/ethereum/consensus-specs/blob/v0.11.1/ssz/simple-serialize.md) 
+will be used to encode/decode network messages.
 It is efficient with traversing on fields, and is the standard encoding in ETH 2.0.
 
 
@@ -832,7 +786,7 @@ msgID function to use by libp2p's `pubsub.Router` for calculating `msg_id`:
 `v0` - User Agent contains the node version and type, and in addition the operator id.
 `SSV-Node:v0.x.x:<node-type>:<?operator-id>`
 
-`v1` - User Agent will be reduced in the favor of the custom handshake process.
+`v1` - User Agent will be reduced in the favor of the custom handshake process (TBD).
 
-A short and simple user agent is kept for acheiving libp2p interoperability: \
+A short and simple user agent is kept for achieving libp2p interoperability: \
 `SSV-Node/v0.x.x`
