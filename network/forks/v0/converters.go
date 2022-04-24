@@ -54,9 +54,9 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	case network.NetworkMsg_SignatureType:
 		msg.MsgType = message.SSVPostConsensusMsgType
 	case network.NetworkMsg_IBFTType:
-		fallthrough
-	case network.NetworkMsg_DecidedType:
 		msg.MsgType = message.SSVConsensusMsgType
+	case network.NetworkMsg_DecidedType:
+		msg.MsgType = message.SSVDecidedMsgType
 	}
 
 	if msgV0.SignedMessage != nil {
@@ -115,8 +115,13 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	v0Msg := &network.Message{}
 
 	switch msg.GetType() {
+	case message.SSVDecidedMsgType:
+		v0Msg.Type = network.NetworkMsg_DecidedType // TODO need to provide the proper type (under consensus or post consensus?)
+		fallthrough
 	case message.SSVConsensusMsgType:
-		v0Msg.Type = network.NetworkMsg_IBFTType
+		if v0Msg.Type != network.NetworkMsg_DecidedType {
+			v0Msg.Type = network.NetworkMsg_IBFTType
+		}
 		signedMsg := &message.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
@@ -130,16 +135,16 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			v0Msg.Type = network.NetworkMsg_DecidedType
 		default:
 		}
-		//return v.processConsensusMsg(dutyRunner, signedMsg)
+		break // cause of fallthrough
+	//return v.processConsensusMsg(dutyRunner, signedMsg)
 	case message.SSVPostConsensusMsgType:
-		v0Msg.Type = network.NetworkMsg_DecidedType // TODO need to provide the proper type (under consensus or post consensus?)
 		v0Msg.Type = network.NetworkMsg_SignatureType
 		signedMsg := &message.SignedPostConsensusMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		v0Msg.SignedMessage = toSignedMessagePostConsensusV0(signedMsg, msg.ID)
-		//return v.processPostConsensusSig(dutyRunner, signedMsg)
+	//return v.processPostConsensusSig(dutyRunner, signedMsg)
 	case message.SSVSyncMsgType:
 		v0Msg.Type = network.NetworkMsg_SyncType
 		syncMsg := &message.SyncMessage{}

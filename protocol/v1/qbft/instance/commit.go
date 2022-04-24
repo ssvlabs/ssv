@@ -56,7 +56,12 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-			i.CommitMessages.AddMessage(signedMessage)
+
+			commitData, err := signedMessage.Message.GetCommitData()
+			if err != nil {
+				return err
+			}
+			i.CommitMessages.AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
 		i.uponCommitMsg(),
@@ -76,7 +81,12 @@ func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 			i.Logger.Info("received valid decided message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-			i.CommitMessages.OverrideMessages(signedMessage)
+
+			commitData, err := signedMessage.Message.GetCommitData()
+			if err != nil {
+				return err
+			}
+			i.CommitMessages.OverrideMessages(signedMessage, commitData.Data)
 			return nil
 		}),
 		i.uponCommitMsg(),
@@ -108,8 +118,8 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 				}
 
 				aggMsg := sigs[0]
-				if err := aggMsg.Aggregate(msgSig...); err != nil {
-					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err))
+				if err := aggMsg.Aggregate(msgSig[1:]...); err != nil {
+					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
 				}
 
 				i.decidedMsg = aggMsg

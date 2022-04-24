@@ -57,7 +57,12 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, seqNumber, errors.New("instance did not decide")
 	}
 
-	return qbftCtrl, len(result.Msg.Signers), result.Msg.Message.Data, seqNumber, nil
+	commitData, err := result.Msg.Message.GetCommitData()
+	if err != nil {
+		return nil, 0, nil, 0, err
+	}
+
+	return qbftCtrl, len(result.Msg.Signers), commitData.Data, seqNumber, nil
 }
 
 // ExecuteDuty executes the given duty

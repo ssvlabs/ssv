@@ -40,6 +40,7 @@ type SignatureState struct {
 	state      atomic.Int32
 	signatures map[message.OperatorID][]byte
 
+	height                     message.Height
 	SignatureCollectionTimeout time.Duration
 	sigCount                   int
 	root                       []byte
@@ -47,8 +48,9 @@ type SignatureState struct {
 	duty                       *beaconprotocol.Duty
 }
 
-func (s *SignatureState) start(logger *zap.Logger, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
+func (s *SignatureState) start(logger *zap.Logger, height message.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
 	// set var's
+	s.height = height
 	s.sigCount = signaturesCount
 	s.root = root
 	s.valueStruct = valueStruct
@@ -76,11 +78,11 @@ func (s *SignatureState) stopTimer() {
 }
 
 func (s *SignatureState) clear() {
-	// stop timer
-	// clear map
-	// clear count
+	s.sigCount = 0
+	s.root = nil
+	s.valueStruct = nil
+	s.duty = nil
 	s.state.Store(StateSleep)
-	panic("need to implement")
 }
 
 func (s *SignatureState) getState() TimerState {

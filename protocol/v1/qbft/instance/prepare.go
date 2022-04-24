@@ -20,7 +20,12 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-			i.PrepareMessages.AddMessage(signedMessage)
+
+			prepareMsg, err := signedMessage.Message.GetPrepareData()
+			if err != nil {
+				return err
+			}
+			i.PrepareMessages.AddMessage(signedMessage, prepareMsg.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -66,8 +71,14 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 */
 func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon prepare msg", func(signedMessage *message.SignedMessage) error {
+
+		prepareData, err := signedMessage.Message.GetPrepareData()
+		if err != nil {
+			return err
+		}
+
 		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, signedMessage.Message.Data); quorum {
+		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
 			var err error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
@@ -75,7 +86,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)
-				i.State().PreparedValue.Store(signedMessage.Message.Data) // passing the data as is and not get the message.PrepareData cause of msgCount saves that way
+				i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the message.PrepareData cause of msgCount saves that way
 				i.ProcessStageChange(qbft.RoundState_Prepare)
 
 				// send commit msg
@@ -94,8 +105,8 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generatePrepareMessage(proposalData *message.ProposalData) (*message.ConsensusMessage, error) {
-	prepareMsg := &message.PrepareData{Data: proposalData.Data}
+func (i *Instance) generatePrepareMessage(value []byte) (*message.ConsensusMessage, error) {
+	prepareMsg := &message.PrepareData{Data: value}
 	encodedPrepare, err := prepareMsg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode prepare data")

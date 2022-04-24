@@ -216,14 +216,18 @@ func (i *Instance) stop() {
 	i.roundTimer.Kill()
 	i.Logger.Debug("STOPPING IBFTController -> stopped round timer")
 	i.ProcessStageChange(qbft.RoundState_Stopped)
+	i.Logger.Debug("STOPPING IBFTController -> round stage stopped")
 	// stop stage chan
-	i.Logger.Debug("STOPPING IBFTController -> passed stageLock")
 	if i.stageChangedChan != nil {
+		i.Logger.Debug("STOPPING IBFTController -> lock stage chan")
 		i.stageChanCloseChan.Lock() // in order to prevent from sending to a close chan
+		i.Logger.Debug("STOPPING IBFTController -> closing stage changed chan")
 		close(i.stageChangedChan)
 		i.Logger.Debug("STOPPING IBFTController -> closed stageChangedChan")
 		i.stageChangedChan = nil
+		i.Logger.Debug("STOPPING IBFTController -> stageChangedChan nilled")
 		i.stageChanCloseChan.Unlock()
+		i.Logger.Debug("STOPPING IBFTController -> stageChangedChan chan unlocked")
 	}
 
 	i.Logger.Info("stopped iBFT instance")
@@ -296,7 +300,7 @@ func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 // GetStageChan returns a RoundState channel added to the stateChangesChans array
 func (i *Instance) GetStageChan() chan qbft.RoundState {
 	if i.stageChangedChan == nil {
-		i.stageChangedChan = make(chan qbft.RoundState)
+		i.stageChangedChan = make(chan qbft.RoundState, 1) // buffer of 1 in order to support process stop stage right after decided
 	}
 	return i.stageChangedChan
 }

@@ -276,7 +276,7 @@ func (signedMsg *SignedMessage) MutualSigners(sig MsgSignature) bool {
 func (signedMsg *SignedMessage) Aggregate(sigs ...MsgSignature) error {
 	for _, sig := range sigs {
 		if signedMsg.MutualSigners(sig) {
-			return errors.New("can't aggregate 2 signed messages with mutual signers")
+			return ErrDuplicateMsgSigner
 		}
 
 		aggregated, err := signedMsg.Signature.Aggregate(sig.GetSignature())

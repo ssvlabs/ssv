@@ -15,8 +15,8 @@ type MessageContainer interface {
 	PartialChangeRoundQuorum(stateRound message.Round) (found bool, lowestChangeRound message.Round)
 
 	// AddMessage adds the given message to the container
-	AddMessage(msg *message.SignedMessage)
+	AddMessage(msg *message.SignedMessage, data []byte)
 
 	// OverrideMessages will override all current msgs in container with the provided msg
-	OverrideMessages(msg *message.SignedMessage)
+	OverrideMessages(msg *message.SignedMessage, data []byte)
 }

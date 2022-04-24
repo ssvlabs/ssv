@@ -66,11 +66,11 @@ func (c *messagesContainer) QuorumAchieved(round message.Round, value []byte) (b
 }
 
 // AddMessage adds the given message to the container
-func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
+func (c *messagesContainer) AddMessage(msg *message.SignedMessage, data []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	valueHex := hex.EncodeToString(msg.Message.Data)
+	valueHex := hex.EncodeToString(data)
 
 	// check msg is not duplicate
 	if c.exitingMsgSigners[msg.Message.Round] != nil {
@@ -111,7 +111,7 @@ func (c *messagesContainer) AddMessage(msg *message.SignedMessage) {
 }
 
 // OverrideMessages will override all current msgs in container with the provided msg
-func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage) {
+func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage, data []byte) {
 	c.lock.Lock()
 	// reset previous round data
 	delete(c.exitingMsgSigners, msg.Message.Round)
@@ -120,7 +120,7 @@ func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage) {
 	c.lock.Unlock()
 
 	// override
-	c.AddMessage(msg)
+	c.AddMessage(msg, data)
 }
 
 func (c *messagesContainer) PartialChangeRoundQuorum(stateRound message.Round) (found bool, lowestChangeRound message.Round) {

@@ -33,7 +33,10 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 			// TODO: complete, currently just trying to peek any message
 			// 		it might be better to get last state (c.ibftStorage.GetCurrentInstance())
 			//		and try to get messages from that height
-			msgs := c.q.Pop(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1)
+			msgs := c.q.Pop(msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType), 1)
+			if len(msgs) == 0 || msgs[0] == nil {
+				msgs = c.q.Pop(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1)
+			}
 			if len(msgs) == 0 || msgs[0] == nil {
 				continue
 			}
@@ -78,16 +81,15 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	case qbft.RoundState_NotStarted:
 		msgs = c.q.Peek(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1) // TODO here waiting for prePrepare msg // TODO when move to prePrepare, the same msg called twice
 	case qbft.RoundState_PrePrepare:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.PrepareMsgType), 1)
+		msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType), 1)
 	case qbft.RoundState_Prepare:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.CommitMsgType), 1)
+		msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType), 1)
 	case qbft.RoundState_Commit:
 		return nil // qbft.RoundState_Commit stage is NEVER set
 	case qbft.RoundState_ChangeRound:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(c.Identifier, height, message.RoundChangeMsgType), 1)
-	//case qbft.RoundState_Decided:
-	case qbft.RoundState_Stopped:
-		return nil // TODO need's TBD
+		msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType), 1)
+		//case qbft.RoundState_Decided: only after instance is nilled
+		//case qbft.RoundState_Stopped:
 	}
 	if len(msgs) > 0 {
 		return msgs[0]

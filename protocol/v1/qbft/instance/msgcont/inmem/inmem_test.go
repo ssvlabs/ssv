@@ -126,7 +126,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 		t.Run(test.name, func(tt *testing.T) {
 			c := New(3, 2)
 			for _, msg := range test.msgs {
-				c.AddMessage(msg.SignedMessage)
+				c.AddMessage(msg.SignedMessage, nil)
 			}
 
 			found, lowest := c.PartialChangeRoundQuorum(1)
@@ -146,7 +146,7 @@ func TestMessagesContainer_OverrideMessages(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 4},
-	})
+	}, nil)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Round:  1,
@@ -155,7 +155,7 @@ func TestMessagesContainer_OverrideMessages(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{2, 3},
-	})
+	}, nil)
 
 	c.OverrideMessages(&proto.SignedMessage{
 		Message: &proto.Message{
@@ -165,7 +165,7 @@ func TestMessagesContainer_OverrideMessages(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{1},
-	})
+	}, nil)
 	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
 }
 
@@ -179,7 +179,7 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2, 3, 4},
-	})
+	}, nil)
 
 	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
 	require.Len(t, c.ReadOnlyMessagesByRound(2), 0)
@@ -193,7 +193,7 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{4, 5},
-	})
+	}, nil)
 	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
 	require.Len(t, c.ReadOnlyMessagesByRound(2), 0)
 	c.AddMessage(&proto.SignedMessage{
@@ -204,7 +204,7 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{4},
-	})
+	}, nil)
 	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
 	require.Len(t, c.ReadOnlyMessagesByRound(2), 0)
 }
@@ -219,7 +219,7 @@ func TestMessagesContainer_ReadOnlyMessagesByRound(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2, 3, 4},
-	})
+	}, nil)
 	c.AddMessage(&proto.SignedMessage{
 		Message: &proto.Message{
 			Round:  1,
@@ -228,7 +228,7 @@ func TestMessagesContainer_ReadOnlyMessagesByRound(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{5},
-	})
+	}, nil)
 
 	msgs := c.ReadOnlyMessagesByRound(1)
 	require.EqualValues(t, 1, msgs[0].Message.Round)
@@ -249,7 +249,7 @@ func TestMessagesContainer_QuorumAchieved(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2, 3},
-	})
+	}, nil)
 	res, _ := c.QuorumAchieved(1, []byte{1, 1, 1, 1})
 	require.True(t, res)
 	res, _ = c.QuorumAchieved(0, []byte{1, 1, 1, 1})
@@ -265,7 +265,7 @@ func TestMessagesContainer_QuorumAchieved(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{1, 2},
-	})
+	}, nil)
 	res, _ = c.QuorumAchieved(2, []byte{1, 1, 1, 1})
 	require.False(t, res)
 	c.AddMessage(&proto.SignedMessage{
@@ -276,7 +276,7 @@ func TestMessagesContainer_QuorumAchieved(t *testing.T) {
 		},
 		Signature: nil,
 		SignerIds: []uint64{3},
-	})
+	}, nil)
 	res, _ = c.QuorumAchieved(2, []byte{1, 1, 1, 1})
 	require.True(t, res)
 	res, _ = c.QuorumAchieved(3, []byte{1, 1, 1, 1})

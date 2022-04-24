@@ -3,6 +3,7 @@ package controller
 import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -44,10 +45,12 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
 		c.signatureState.stopTimer()
 
-		// clean queue for messages, we don't need them anymore. TODo need to check how to dump sig message! (:@niv)
-		//c.msgQueue.PurgeIndexedMessages(msgqueue.SigRoundIndexKey(identifier, height))
+		// clean queue for messages, we don't need them anymore.
+		c.q.Purge(msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType))
 
-		return c.broadcastSignature()
+		err := c.broadcastSignature()
+		c.signatureState.clear()
+		return err
 	}
 	return nil
 }
@@ -79,24 +82,24 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 	logger.Info("broadcasting partial signature post consensus")
 
 	//	start timer, clear new map and set var's
-	c.signatureState.start(c.logger, signaturesCount, root, valueStruct, duty)
+	c.signatureState.start(c.logger, height, signaturesCount, root, valueStruct, duty)
 	return nil
 }
 
 // generateSignatureMessage returns postConsensus type ssv message with signature signed message
 func (c *Controller) generateSignatureMessage(sig []byte, height message.Height) (message.SSVMessage, error) {
 	// TODO - should we construct it better?
-	SignedMsg := &message.SignedMessage{
-		Signature: sig,
-		Signers:   []message.OperatorID{c.ValidatorShare.NodeID},
-		Message: &message.ConsensusMessage{
-			MsgType:    0,
-			Height:     height,
-			Round:      0,
-			Identifier: c.GetIdentifier(),
-			Data:       nil,
+	SignedMsg := &message.SignedPostConsensusMessage{
+		Message: &message.PostConsensusMessage{
+			Height:          height,
+			DutySignature:   sig,
+			DutySigningRoot: nil,
+			Signers:         nil,
 		},
+		Signature: nil,
+		Signers:   []message.OperatorID{c.ValidatorShare.NodeID},
 	}
+
 	encodedSignedMsg, err := SignedMsg.Encode()
 	if err != nil {
 		return message.SSVMessage{}, err

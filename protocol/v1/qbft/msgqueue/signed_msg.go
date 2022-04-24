@@ -36,7 +36,7 @@ func SignedMsgIndexer() Indexer {
 		if msg == nil {
 			return ""
 		}
-		if msg.MsgType != message.SSVConsensusMsgType {
+		if msg.MsgType != message.SSVConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
 			return ""
 		}
 		sm := message.SignedMessage{}
@@ -46,12 +46,12 @@ func SignedMsgIndexer() Indexer {
 		if sm.Message == nil {
 			return ""
 		}
-		return SignedMsgIndex(msg.ID, sm.Message.Height, sm.Message.MsgType)
+		return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)
 	}
 }
 
 // SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(mid message.Identifier, h message.Height, cmt message.ConsensusMessageType) string {
+func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt message.ConsensusMessageType) string {
 	return fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", message.SSVConsensusMsgType.String(),
 		mid, h, cmt.String())
 }

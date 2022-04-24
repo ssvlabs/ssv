@@ -20,7 +20,12 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 			i.Logger.Info("received valid pre-prepare message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-			i.PrePrepareMessages.AddMessage(signedMessage)
+
+			proposalData, err := signedMessage.Message.GetProposalData()
+			if err != nil {
+				return err
+			}
+			i.PrePrepareMessages.AddMessage(signedMessage, proposalData.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -85,7 +90,7 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 		if err != nil {
 			return errors.Wrap(err, "failed to get prepare message")
 		}
-		broadcastMsg, err := i.generatePrepareMessage(prepareMsg)
+		broadcastMsg, err := i.generatePrepareMessage(prepareMsg.Data)
 		if err != nil {
 			return errors.Wrap(err, "failed to generate prepare message")
 		}

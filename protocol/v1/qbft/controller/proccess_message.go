@@ -18,9 +18,6 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 			return errors.Wrap(err, "failed to process message")
 		}
 		c.logger.Debug("current instance processed message", zap.Bool("decided", decided))
-	//
-	//case message.DecidedMsgType:
-	//	c.ProcessDecidedMessage(signedMessage)
 	default:
 		return errors.Errorf("message type is not suported")
 	}

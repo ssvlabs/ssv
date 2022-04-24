@@ -121,8 +121,7 @@ func (q *queue) Peek(idx string, n int) []*message.SSVMessage {
 	if !ok {
 		return nil
 	}
-
-	if n == 0 {
+	if n == 0 || n > len(containers) {
 		n = len(containers)
 	}
 	containers = containers[:n]

@@ -25,7 +25,12 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Any("msg", signedMessage.Message),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-			i.ChangeRoundMessages.AddMessage(signedMessage)
+
+			changeRoundData, err := signedMessage.Message.GetRoundChangeData()
+			if err != nil {
+				return err
+			}
+			i.ChangeRoundMessages.AddMessage(signedMessage, changeRoundData.GetPreparedValue())
 			return nil
 		}),
 		i.ChangeRoundPartialQuorumMsgPipeline(),

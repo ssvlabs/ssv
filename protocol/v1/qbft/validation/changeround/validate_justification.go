@@ -23,20 +23,22 @@ func Validate(share *beacon.Share) pipelines.SignedMessagePipeline {
 // Run implements pipeline.Pipeline interface
 func (p *validateJustification) Run(signedMessage *message.SignedMessage) error {
 	// TODO - change to normal prepare pipeline
-	if signedMessage.Message.Data == nil {
-		return errors.New("change round justification msg is nil")
-	}
 	data, err := signedMessage.Message.GetRoundChangeData()
 	if err != nil {
 		return errors.Wrap(err, "failed to get round change data")
 	}
-
-	if data.PreparedValue == nil { // no justification
+	if data == nil {
+		return errors.New("change round justification msg is nil")
+	}
+	if data.GetPreparedValue() == nil { // no justification
 		return nil
 	}
 	roundChangeJust := data.GetRoundChangeJustification()
 	if roundChangeJust == nil {
 		return errors.New("change round justification msg is nil")
+	}
+	if len(roundChangeJust) == 0 {
+		return errors.New("change round justification msg array is empty")
 	}
 	if roundChangeJust[0].Message.MsgType != message.PrepareMsgType {
 		return errors.Errorf("change round justification msg type not Prepare (%d)", roundChangeJust[0].Message.MsgType)
