@@ -18,7 +18,7 @@ This document contains the networking specification for `SSV.Network`.
   - [Peer Scoring](#peer-scoring)
 - [Wire](#wire)
   - [Consensus](#consensus-protocol)
-  - [Sync](#sync-protocol)
+  - [Sync](#sync-protocols)
   - [Handshake](#handshake-protocol)
 - [Networking](#networking)
   - [PubSub](#pubsub)
@@ -447,14 +447,12 @@ All the nodes in the network should support this protocol.
 
 ## Handshake protocol
 
+**WIP**
+
 `/ssv/handshake/0.0.1`
 
 The handshake protocol allows peers to identify by exchanging information 
 when a new connection is established.
-
-**TBD** The operator ID will be validated at a later point in time, 
-when the peer will send consensus or decided messages.
-
 
 ### Message Structure
 
@@ -493,6 +491,8 @@ message NodeMetadata {
 
 ```
 </details>
+
+
 ---
 
 
