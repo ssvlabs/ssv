@@ -1,7 +1,6 @@
 package msgqueue
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -62,7 +61,6 @@ type msgContainer struct {
 
 // queue implements MsgQueue
 type queue struct {
-	ctx      context.Context
 	logger   *zap.Logger
 	indexers []Indexer
 

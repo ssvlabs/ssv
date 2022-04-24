@@ -90,7 +90,7 @@ func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
 // PubKeysByID returns the public keys with the associated ids
 func (s *Share) PubKeysByID(ids []message.OperatorID) (map[message.OperatorID]*bls.PublicKey, error) {
 	//ret := make([]*bls.PublicKey, 0)
-	ret := make(map[message.OperatorID]*bls.PublicKey, 0)
+	ret := make(map[message.OperatorID]*bls.PublicKey)
 	for _, id := range ids {
 		if val, ok := s.Committee[id]; ok {
 			pk := &bls.PublicKey{}

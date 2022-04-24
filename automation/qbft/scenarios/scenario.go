@@ -9,6 +9,7 @@ import (
 
 type ScenarioFactory func(name string) Scenario
 
+// ScenarioContext is the context object that is passed in execution
 type ScenarioContext struct {
 	Ctx         context.Context
 	LocalNet    *p2pv1.LocalNet
@@ -17,15 +18,21 @@ type ScenarioContext struct {
 }
 
 type scenarioCfg interface {
+	// NumOfOperators returns the desired number of operators for the test
 	NumOfOperators() int
+	// NumOfExporters returns the desired number of operators for the test
 	NumOfExporters() int
 }
 
+// Scenario represents a testplan for a specific scenario
 type Scenario interface {
 	scenarioCfg
-
+	// Name is the name of the scenario
 	Name() string
+	// PreExecution is invoked prior to the scenario, used for setup
 	PreExecution(ctx *ScenarioContext) error
+	// Execute is the actual test scenario to run
 	Execute(ctx *ScenarioContext) error
+	// PostExecution is invoked after execution, used for cleanup etc.
 	PostExecution(ctx *ScenarioContext) error
 }

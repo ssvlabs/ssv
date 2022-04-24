@@ -93,7 +93,7 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 }
 
 // RegisterHandlers registers the given handlers
-func (n *p2pNetwork) RegisterHandlers(handlers ...*protocolp2p.HandlerOpt) {
+func (n *p2pNetwork) RegisterHandlers(handlers ...*protocolp2p.SyncHandler) {
 	m := make(map[libp2p_protocol.ID][]protocolp2p.RequestHandler)
 	for _, handler := range handlers {
 		pid, _ := n.fork.ProtocolID(handler.Protocol)

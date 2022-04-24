@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
 var ErrDuplicateMsgSigner = errors.New("can't aggregate 2 signed messages with mutual signers")
 
 // Signer is an interface responsible for consensus messages signing
@@ -31,6 +32,7 @@ const (
 	//DecidedMsgType
 )
 
+// String is the string representation of ConsensusMessageType
 func (cmt ConsensusMessageType) String() string {
 	switch cmt {
 	case ProposalMsgType:

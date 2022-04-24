@@ -58,13 +58,15 @@ const (
 	DecidedHistoryProtocol
 )
 
-type HandlerOpt struct {
+// SyncHandler is a wrapper for RequestHandler, that enables to specify the protocol
+type SyncHandler struct {
 	Protocol SyncProtocol
 	Handler  RequestHandler
 }
 
-func WithHandler(protocol SyncProtocol, handler RequestHandler) *HandlerOpt {
-	return &HandlerOpt{
+// WithHandler enables to inject an SyncHandler
+func WithHandler(protocol SyncProtocol, handler RequestHandler) *SyncHandler {
+	return &SyncHandler{
 		Protocol: protocol,
 		Handler:  handler,
 	}
@@ -73,7 +75,7 @@ func WithHandler(protocol SyncProtocol, handler RequestHandler) *HandlerOpt {
 // Syncer holds the interface for syncing data from other peerz
 type Syncer interface {
 	// RegisterHandlers registers handler for the given protocol
-	RegisterHandlers(handlers ...*HandlerOpt)
+	RegisterHandlers(handlers ...*SyncHandler)
 	// LastDecided fetches last decided from a random set of peers
 	LastDecided(mid message.Identifier) ([]SyncResult, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier

@@ -44,6 +44,7 @@ func main() {
 	}
 }
 
+// Run runs the given scenario
 func Run(pctx context.Context, dbs []basedb.IDb, scenario scenarios.Scenario) error {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()

@@ -90,7 +90,8 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 				i.ProcessStageChange(qbft.RoundState_Prepare)
 
 				// send commit msg
-				broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
+				var broadcastMsg *message.ConsensusMessage
+				broadcastMsg, err = i.generateCommitMessage(i.State().GetPreparedValue())
 				if err != nil {
 					return
 				}
