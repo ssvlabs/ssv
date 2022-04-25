@@ -1,10 +1,6 @@
 # SSV - Networking
 
-| Contributors                               | Status | Last Revision |
-|:-------------------------------------------|:-------|:--------------|
-| [@amir-blox](https://github.com/amir-blox) | DRAFT  | APR 22        |
-
-This document contains the networking specification for `SSV.Network`.
+This document contains the networking layer design.
 
 ## Overview
 
