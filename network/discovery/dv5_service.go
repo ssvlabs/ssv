@@ -152,12 +152,25 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	if err != nil {
 		return err
 	}
+	cn := make(chan discover.ReadPacket, 10)
+	go func() {
+		for dvs.ctx.Err() == nil {
+			select {
+			case p := <-cn:
+				dvs.logger.Debug("unhandled packet", zap.Any("packet", p))
+			}
+		}
+	}()
+	dv5Cfg.Unhandled = cn
 	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not create discV5 listener")
 	}
 	dvs.dv5Listener = dv5Listener
 	dvs.bootnodes = dv5Cfg.Bootnodes
+
+	dvs.logger.Debug("started discv5 listener (UDP)", zap.String("bindIP", bindIP.String()),
+		zap.Int("UdpPort", opts.Port), zap.String("enr", localNode.Node().String()))
 
 	dvs.logger.Debug("discv5 listener is ready", zap.String("enr", localNode.Node().String()))
 
