@@ -56,7 +56,7 @@ func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.H
 }
 
 func getIndexHeight(idxParts ...string) message.Height {
-	hraw := idxParts[4]
+	hraw := idxParts[2]
 	h, err := strconv.Atoi(hraw)
 	if err != nil {
 		return 0
