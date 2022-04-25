@@ -48,8 +48,8 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
 		c.signatureState.stopTimer()
 
-		// clean queue for messages, we don't need them anymore.
-		c.q.Purge(msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType))
+		// clean queue for messages, we don't need them anymore
+		c.q.Clean(msgqueue.SignedMsgCleaner(c.Identifier, c.signatureState.height))
 
 		err := c.broadcastSignature()
 		c.signatureState.clear()
