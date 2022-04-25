@@ -127,7 +127,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	// adding to index
 	added, err := h.idx.Add(idn)
 	if added {
-		h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()))
+		h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()), zap.Any("identity", idn))
 	}
 	if err != nil {
 		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()))
@@ -195,7 +195,7 @@ func ForkVersionFilter(forkVersion forksprotocol.ForkVersion) HandshakeFilter {
 
 func identityFromUserAgent(ua string, pid string) *Identity {
 	parts := strings.Split(ua, ":")
-	if len(parts) < 3 { // too old
+	if len(parts) < 2 { // too old
 		return nil
 	}
 	idn := new(Identity)

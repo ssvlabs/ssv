@@ -13,9 +13,9 @@ func TestForkV0_Encoding(t *testing.T) {
 	msg := &network.Message{
 		SignedMessage: &proto.SignedMessage{
 			Message: &proto.Message{
-				Type:   proto.RoundState_Decided,
+				Type:   proto.RoundState_Commit,
 				Round:  1,
-				Lambda: []byte("xxxxxxxx_ATTESTER"),
+				Lambda: []byte("YTAyZjNhNGQ5ZDg2NTZkMmI0NDI3NzVjM2JlNDliMzU1ZDc0MDU5OGNiYjM5NzAyNmZhNzRkYzUxZTFlN2FhOGVmZTJjZjk3ZTQ0ZjZmYWQxMTE4NWY2M2I2MTUxY2Q0X0FUVEVTVEVS"),
 				Value:  []byte("data"),
 			},
 			Signature: []byte("sig"),

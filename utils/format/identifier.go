@@ -12,7 +12,7 @@ func IdentifierFormat(pubKey []byte, roleType string) string {
 }
 
 var (
-	identifierRegexp = regexp.MustCompile("(.+)_(ATTESTER)|(PROPOSER)|(AGGREGATOR)")
+	identifierRegexp = regexp.MustCompile("(.+)_(ATTESTER)|(PROPOSER)|(AGGREGATOR)|(UNKNOWN)")
 )
 
 // IdentifierUnformat return parts of the given lambda

@@ -19,6 +19,21 @@ func (r RoleType) String() string {
 	}
 }
 
+func RoleTypeFromString(rt string) RoleType {
+	switch rt {
+	case "UNKNOWN":
+		return RoleTypeUnknown
+	case "ATTESTER":
+		return RoleTypeAttester
+	case "AGGREGATOR":
+		return RoleTypeAggregator
+	case "PROPOSER":
+		return RoleTypeProposer
+	default:
+		return RoleTypeUnknown
+	}
+}
+
 // List of roles
 const (
 	RoleTypeUnknown RoleType = iota

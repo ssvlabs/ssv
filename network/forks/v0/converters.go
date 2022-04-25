@@ -1,10 +1,12 @@
 package v0
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/pkg/errors"
 )
 
@@ -16,10 +18,11 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	case network.NetworkMsg_SyncType:
 		msg.MsgType = message.SSVSyncMsgType
 		if msgV0.SyncMessage != nil {
-			msg.ID = msgV0.SyncMessage.GetLambda()
+			identifier := toIdentifierV1(msgV0.SyncMessage.GetLambda())
+			msg.ID = identifier
 			syncMsg := new(message.SyncMessage)
 			syncMsg.Params = new(message.SyncParams)
-			syncMsg.Params.Identifier = msgV0.SyncMessage.GetLambda()
+			syncMsg.Params.Identifier = identifier
 			params := msgV0.SyncMessage.GetParams()
 			syncMsg.Params.Height = make([]message.Height, 0)
 			for _, p := range params {
@@ -29,7 +32,6 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				signed := toSignedMessageV1(sm)
 				if signed.Message != nil {
 					syncMsg.Data = append(syncMsg.Data, signed)
-					msg.ID = signed.Message.Identifier
 				}
 			}
 			if err := msgV0.SyncMessage.Error; len(err) > 0 {
@@ -59,8 +61,8 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			return nil, err
 		}
 		msg.Data = data
-		if msgV0.SignedMessage.GetMessage().Lambda != nil {
-			msg.ID = msgV0.SignedMessage.GetMessage().Lambda
+		if identifierV0 := msgV0.SignedMessage.GetMessage().GetLambda(); identifierV0 != nil {
+			msg.ID = toIdentifierV1(identifierV0)
 		}
 		return &msg, nil
 	case network.NetworkMsg_IBFTType:
@@ -71,13 +73,13 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 
 	if msgV0.SignedMessage != nil {
 		signed := toSignedMessageV1(msgV0.SignedMessage)
-		data, err := json.Marshal(signed)
+		data, err := signed.Encode()
 		if err != nil {
 			return nil, err
 		}
 		msg.Data = data
-		if signed.Message.Identifier != nil {
-			msg.ID = signed.Message.Identifier
+		if len(msg.ID) == 0 {
+			msg.ID = toIdentifierV1(signed.Message.Identifier)
 		}
 	}
 
@@ -119,7 +121,7 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 		copy(target, data)
 		signed.Message.Data = target
 		signed.Message.Round = message.Round(msg.GetRound())
-		signed.Message.Identifier = msg.GetLambda()
+		signed.Message.Identifier = toIdentifierV1(msg.GetLambda())
 		signed.Message.Height = message.Height(msg.GetSeqNumber())
 		switch msg.GetType() {
 		case proto.RoundState_NotStarted:
@@ -144,7 +146,7 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 // ToV0Message converts v1 message to v0
 func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	v0Msg := &network.Message{}
-
+	identifierV0 := toIdentifierV0(msg.GetIdentifier())
 	switch msg.GetType() {
 	case message.SSVDecidedMsgType:
 		v0Msg.Type = network.NetworkMsg_DecidedType // TODO need to provide the proper type (under consensus or post consensus?)
@@ -158,7 +160,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
 
-		v0Msg.SignedMessage = toSignedMessageV0(signedMsg, msg.ID)
+		v0Msg.SignedMessage = toSignedMessageV0(signedMsg, identifierV0)
 		switch v0Msg.SignedMessage.GetMessage().GetType() {
 		case proto.RoundState_ChangeRound:
 			v0Msg.Type = network.NetworkMsg_IBFTType
@@ -174,7 +176,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
-		v0Msg.SignedMessage = toSignedMessagePostConsensusV0(signedMsg, msg.ID)
+		v0Msg.SignedMessage = toSignedMessagePostConsensusV0(signedMsg, identifierV0)
 	//return v.processPostConsensusSig(dutyRunner, signedMsg)
 	case message.SSVSyncMsgType:
 		v0Msg.Type = network.NetworkMsg_SyncType
@@ -190,11 +192,11 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 				v0Msg.SyncMessage.Params = append(v0Msg.SyncMessage.Params, uint64(syncMsg.Params.Height[1]))
 			}
 		}
-		v0Msg.SyncMessage.Lambda = syncMsg.Params.Identifier
+		v0Msg.SyncMessage.Lambda = identifierV0
 		if syncMsg.Status == message.StatusSuccess {
 			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
 			for _, smsg := range syncMsg.Data {
-				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, toSignedMessageV0(smsg, msg.ID))
+				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, toSignedMessageV0(smsg, identifierV0))
 			}
 		} else {
 			v0Msg.SyncMessage.Error = "error"
@@ -214,12 +216,11 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	return v0Msg, nil
 }
 
-func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Identifier) *proto.SignedMessage {
+func toSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) *proto.SignedMessage {
 	signedMsgV0 := &proto.SignedMessage{}
-
 	signedMsgV0.Message = &proto.Message{
 		Round:     uint64(signedMsg.Message.Round),
-		Lambda:    identifier,
+		Lambda:    identifierV0,
 		SeqNumber: uint64(signedMsg.Message.Height),
 		Value:     make([]byte, len(signedMsg.Message.Data)),
 	}
@@ -245,10 +246,10 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Iden
 	return signedMsgV0
 }
 
-func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessage, identifier []byte) *proto.SignedMessage {
+func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessage, identifierV0 []byte) *proto.SignedMessage {
 	signedMsgV0 := &proto.SignedMessage{}
 	signedMsgV0.Message = &proto.Message{
-		Lambda:    identifier,
+		Lambda:    identifierV0,
 		SeqNumber: uint64(signedMsg.Message.Height),
 		// TODO: complete
 	}
@@ -257,4 +258,17 @@ func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessag
 		signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
 	}
 	return signedMsgV0
+}
+
+func toIdentifierV0(mid message.Identifier) []byte {
+	return []byte(format.IdentifierFormat(mid.GetValidatorPK(), mid.GetRoleType().String()))
+}
+
+func toIdentifierV1(old []byte) message.Identifier {
+	pk, rt := format.IdentifierUnformat(string(old))
+	pkraw, err := hex.DecodeString(pk)
+	if err != nil {
+		return nil
+	}
+	return message.NewIdentifier(pkraw, message.RoleTypeFromString(rt))
 }
