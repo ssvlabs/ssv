@@ -114,7 +114,7 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
 		msg := signedMsg[j]
 		k := i.key(decidedKey, uInt64ToByteSlice(uint64(msg.Message.Height)))
 		key := append(msg.Message.Identifier, k...)
-		value, err := json.Marshal(msg)
+		value, err := msg.Encode()
 		if err != nil {
 			return basedb.Obj{}, err
 		}

@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 	"github.com/bloxapp/ssv/utils/format"
 
@@ -98,7 +99,8 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 		return
 	}
 	// didn't decided -> purge messages
-	//c.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(c.Identifier[:], height)) TODO need to clear worker-queue
+	c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO that the right indexer? might need be height and all messages
+	//c.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(c.Identifier[:], height))
 }
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.

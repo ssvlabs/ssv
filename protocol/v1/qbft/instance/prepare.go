@@ -48,7 +48,12 @@ func (i *Instance) PreparedAggregatedMsg() (*message.SignedMessage, error) {
 
 	var ret *message.SignedMessage
 	for _, msg := range msgs {
-		if !bytes.Equal(msg.Message.Data, i.State().GetPreparedValue()) {
+		p, err := msg.Message.GetPrepareData()
+		if err != nil {
+			i.Logger.Warn("failed to get prepare data", zap.Error(err))
+			continue
+		}
+		if !bytes.Equal(p.Data, i.State().GetPreparedValue()) {
 			continue
 		}
 		if ret == nil {
@@ -90,8 +95,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 				i.ProcessStageChange(qbft.RoundState_Prepare)
 
 				// send commit msg
-				var broadcastMsg *message.ConsensusMessage
-				broadcastMsg, err = i.generateCommitMessage(i.State().GetPreparedValue())
+				broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
 				if err != nil {
 					return
 				}

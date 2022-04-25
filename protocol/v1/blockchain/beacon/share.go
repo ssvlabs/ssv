@@ -75,8 +75,8 @@ func (s *Share) PartialThresholdSize() int {
 	return int(math.Ceil(float64(s.CommitteeSize()) * 1 / 3))
 }
 
-// OperatorPubKey returns the operator's public key based on the node id
-func (s *Share) OperatorPubKey() (*bls.PublicKey, error) {
+// OperatorSharePubKey returns the operator's public key based on the node id
+func (s *Share) OperatorSharePubKey() (*bls.PublicKey, error) {
 	if val, found := s.Committee[s.NodeID]; found {
 		pk := &bls.PublicKey{}
 		if err := pk.Deserialize(val.Pk); err != nil {

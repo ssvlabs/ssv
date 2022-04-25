@@ -40,6 +40,9 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if len(roundChangeJust) == 0 {
 		return errors.New("change round justification msg array is empty")
 	}
+	if roundChangeJust[0].Message == nil {
+		return errors.New("change round justification msg is nil")
+	}
 	if roundChangeJust[0].Message.MsgType != message.PrepareMsgType {
 		return errors.Errorf("change round justification msg type not Prepare (%d)", roundChangeJust[0].Message.MsgType)
 	}
@@ -55,7 +58,11 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if !bytes.Equal(signedMessage.Message.Identifier, roundChangeJust[0].Message.Identifier) {
 		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
 	}
-	if !bytes.Equal(data.PreparedValue, roundChangeJust[0].Message.Data) {
+	prepareMsg, err := roundChangeJust[0].Message.GetPrepareData()
+	if err != nil {
+		return errors.Wrap(err, "failed to get prepare data")
+	}
+	if !bytes.Equal(data.PreparedValue, prepareMsg.Data) {
 		return errors.New("change round prepared value not equal to justification msg value")
 	}
 	if len(roundChangeJust[0].GetSigners()) < p.share.ThresholdSize() {

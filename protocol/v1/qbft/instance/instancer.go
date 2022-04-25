@@ -36,7 +36,7 @@ type Instancer interface {
 	GetLastChangeRoundMsg() *message.SignedMessage
 	CommittedAggregatedMsg() (*message.SignedMessage, error)
 	GetCommittedAggSSVMessage() (message.SSVMessage, error)
-	ProcessMsg(msg *message.SignedMessage) (bool, []byte, error)
+	ProcessMsg(msg *message.SignedMessage) (bool, error)
 	ResetRoundTimer()            // TODO temp solution for race condition with message process
 	BroadcastChangeRound() error // TODO temp solution for race condition with message process
 }

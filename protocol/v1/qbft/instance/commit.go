@@ -117,7 +117,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 					msgSig = append(msgSig, s)
 				}
 
-				aggMsg := sigs[0]
+				aggMsg := sigs[0].DeepCopy()
 				if err := aggMsg.Aggregate(msgSig[1:]...); err != nil {
 					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
 				}

@@ -33,10 +33,13 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 			// TODO: complete, currently just trying to peek any message
 			// 		it might be better to get last state (c.ibftStorage.GetCurrentInstance())
 			//		and try to get messages from that height
-			msgs := c.q.Pop(msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType), 1)
+			msgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, c.signatureState.height), 1) // sigs
 			if len(msgs) == 0 || msgs[0] == nil {
-				msgs = c.q.Pop(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1)
+				msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType), 1) // decided
 			}
+			//if len(msgs) == 0 || msgs[0] == nil {
+			//	msgs = c.q.Pop(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1) // other ibft msgs
+			//}
 			if len(msgs) == 0 || msgs[0] == nil {
 				continue
 			}

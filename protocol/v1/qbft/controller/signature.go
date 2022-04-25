@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"time"
 
@@ -114,7 +115,7 @@ func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftI
 // signDuty signs the duty after iBFT came to consensus
 func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
 	// get operator pk for sig
-	pk, err := c.ValidatorShare.OperatorPubKey()
+	pk, err := c.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
 	}
@@ -155,6 +156,7 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.Ope
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
+	c.logger.Debug(" -------- TEST reconstructAndBroadcastSignature-----", zap.String("sig", signature.SerializeToHexStr()), zap.String("root", hex.EncodeToString(root)))
 	if res := signature.VerifyByte(c.ValidatorShare.PublicKey, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}

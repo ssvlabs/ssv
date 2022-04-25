@@ -241,7 +241,7 @@ func (i *Instance) Stopped() bool {
 	return i.stopped
 }
 
-func (i *Instance) ProcessMsg(msg *message.SignedMessage) (bool, []byte, error) {
+func (i *Instance) ProcessMsg(msg *message.SignedMessage) (bool, error) {
 	var pp pipelines.SignedMessagePipeline
 
 	switch msg.Message.MsgType {
@@ -255,15 +255,16 @@ func (i *Instance) ProcessMsg(msg *message.SignedMessage) (bool, []byte, error) 
 		pp = i.ChangeRoundMsgPipeline()
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-		return false, nil, errors.Errorf("undefined message type")
+		return false, errors.Errorf("undefined message type")
 	}
 	if err := pp.Run(msg); err != nil {
-		return false, nil, err
+		return false, err
 	}
+
 	if i.State().Stage.Load() == int32(qbft.RoundState_Decided) { // TODO better way to compare? (:Niv)
-		return true, i.decidedMsg.Message.Data, nil // TODO that's the right decidedValue? (:Niv)
+		return true, nil // TODO that's the right decidedValue? (:Niv)
 	}
-	return false, nil, nil
+	return false, nil
 }
 
 // BumpRound is used to set bump round by 1
@@ -307,7 +308,7 @@ func (i *Instance) GetStageChan() chan qbft.RoundState {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
-	pk, err := i.ValidatorShare.OperatorPubKey()
+	pk, err := i.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
 		return errors.Wrap(err, "could not find operator pk for signing msg")
 	}

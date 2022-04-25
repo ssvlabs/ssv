@@ -76,8 +76,13 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon pre-prepare msg", func(signedMessage *message.SignedMessage) error {
+		prepareMsg, err := signedMessage.Message.GetProposalData()
+		if err != nil {
+			return errors.Wrap(err, "failed to get prepare message")
+		}
+
 		// Pre-prepare justification
-		err := i.JustifyPrePrepare(uint64(signedMessage.Message.Round), signedMessage.Message.Data)
+		err = i.JustifyPrePrepare(uint64(signedMessage.Message.Round), prepareMsg.Data)
 		if err != nil {
 			return errors.Wrap(err, "Unjustified pre-prepare")
 		}
@@ -86,10 +91,6 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 		i.ProcessStageChange(qbft.RoundState_PrePrepare)
 
 		// broadcast prepare msg
-		prepareMsg, err := signedMessage.Message.GetProposalData()
-		if err != nil {
-			return errors.Wrap(err, "failed to get prepare message")
-		}
 		broadcastMsg, err := i.generatePrepareMessage(prepareMsg.Data)
 		if err != nil {
 			return errors.Wrap(err, "failed to generate prepare message")

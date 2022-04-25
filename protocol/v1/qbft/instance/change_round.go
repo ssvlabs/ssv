@@ -244,14 +244,13 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 
 	notPrepared = true
 	for _, msg := range i.ChangeRoundMessages.ReadOnlyMessagesByRound(round) {
-		candidateChangeData := &message.RoundChangeData{}
-		err := candidateChangeData.Decode(msg.Message.Data)
+		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
 			return false, nil, err
 		}
 
 		// compare to highest found
-		if candidateChangeData.PreparedValue != nil {
+		if candidateChangeData.GetPreparedValue() != nil {
 			notPrepared = false
 			if highestPrepared != nil {
 				if candidateChangeData.GetPreparedRound() > highestPrepared.GetPreparedRound() {

@@ -53,6 +53,16 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 		return &msg, nil
 	case network.NetworkMsg_SignatureType:
 		msg.MsgType = message.SSVPostConsensusMsgType
+		postConMsg := toSignedPostConsensusMessageV1(msgV0.SignedMessage)
+		data, err := postConMsg.Encode()
+		if err != nil {
+			return nil, err
+		}
+		msg.Data = data
+		if msgV0.SignedMessage.GetMessage().Lambda != nil {
+			msg.ID = msgV0.SignedMessage.GetMessage().Lambda
+		}
+		return &msg, nil
 	case network.NetworkMsg_IBFTType:
 		msg.MsgType = message.SSVConsensusMsgType
 	case network.NetworkMsg_DecidedType:
@@ -72,6 +82,27 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	}
 
 	return &msg, nil
+}
+
+func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *message.SignedPostConsensusMessage {
+	signed := new(message.SignedPostConsensusMessage)
+	consensus := &message.PostConsensusMessage{
+		Height:          message.Height(sm.Message.SeqNumber),
+		DutySignature:   sm.GetSignature(),
+		DutySigningRoot: nil,
+	}
+
+	var signers []message.OperatorID
+	for _, signer := range sm.GetSignerIds() {
+		signers = append(signers, message.OperatorID(signer))
+	}
+	consensus.Signers = signers
+
+	signed.Message = consensus
+	signed.Signers = signers
+	signed.Signature = sm.GetSignature() // TODO should be message sign and not duty sign
+
+	return signed
 }
 
 func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
@@ -193,6 +224,7 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Iden
 		Value:     make([]byte, len(signedMsg.Message.Data)),
 	}
 	copy(signedMsgV0.Message.Value, signedMsg.Message.Data)
+
 	switch signedMsg.Message.MsgType {
 	case message.ProposalMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_PrePrepare
@@ -205,6 +237,7 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifier message.Iden
 		//case message.DecidedMsgType:
 		//	signedMsgV0.Message.Type = proto.RoundState_Decided
 	}
+
 	signedMsgV0.Signature = signedMsg.GetSignature()
 	for _, signer := range signedMsg.GetSigners() {
 		signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
@@ -219,7 +252,7 @@ func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessag
 		SeqNumber: uint64(signedMsg.Message.Height),
 		// TODO: complete
 	}
-	signedMsgV0.Signature = signedMsg.GetSignature()
+	signedMsgV0.Signature = signedMsg.Message.DutySignature
 	for _, signer := range signedMsg.Signers {
 		signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
 	}

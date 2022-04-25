@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/hex"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
@@ -19,10 +20,12 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 		c.logger.Error("missing KeyManager id", zap.Any("msg", msg))
 		return nil
 	}
-	if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
+	//if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
+	if len(msg.Message.DutySignature) == 0 { // TODO need to add sig to msg and not use this sig
 		c.logger.Error("missing sig", zap.Any("msg", msg))
 		return nil
 	}
+	logger := c.logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
 
 	//	check if already exist, if so, ignore
 	if _, found := c.signatureState.signatures[msg.GetSigners()[0]]; found { // sig already exists
@@ -30,17 +33,17 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 		return nil
 	}
 
-	c.logger.Info("collected valid signature", zap.Uint64("node_id", uint64(msg.GetSigners()[0])), zap.Any("msg", msg))
+	logger.Info("collected valid signature", zap.String("sig", hex.EncodeToString(msg.Message.DutySignature)), zap.Any("msg", msg))
 
 	// 	verifyPartialSignature
-	if err := c.verifyPartialSignature(msg.GetSignature(), c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil {
+	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
 		c.logger.Error("received invalid signature", zap.Error(err))
 		return nil
 	}
 
-	c.logger.Info("signature verified", zap.Uint64("node_id", uint64(msg.GetSigners()[0])))
+	logger.Info("signature verified")
 
-	c.signatureState.signatures[msg.GetSigners()[0]] = msg.GetSignature()
+	c.signatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
 	if len(c.signatureState.signatures) >= c.signatureState.sigCount {
 		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
 		c.signatureState.stopTimer()
@@ -72,7 +75,7 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
-	ssvMsg, err := c.generateSignatureMessage(sig, height)
+	ssvMsg, err := c.generateSignatureMessage(sig, root, height)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate sig message")
 	}
@@ -87,16 +90,15 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 }
 
 // generateSignatureMessage returns postConsensus type ssv message with signature signed message
-func (c *Controller) generateSignatureMessage(sig []byte, height message.Height) (message.SSVMessage, error) {
-	// TODO - should we construct it better?
+func (c *Controller) generateSignatureMessage(sig []byte, root []byte, height message.Height) (message.SSVMessage, error) {
 	SignedMsg := &message.SignedPostConsensusMessage{
 		Message: &message.PostConsensusMessage{
 			Height:          height,
 			DutySignature:   sig,
-			DutySigningRoot: nil,
-			Signers:         nil,
+			DutySigningRoot: root,
+			Signers:         []message.OperatorID{c.ValidatorShare.NodeID},
 		},
-		Signature: nil,
+		Signature: sig, // TODO should be msg sig and not decided sig
 		Signers:   []message.OperatorID{c.ValidatorShare.NodeID},
 	}
 

@@ -13,7 +13,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 		if c.currentInstance == nil {
 			return errors.New("current instance is nil")
 		}
-		decided, _, err := c.currentInstance.ProcessMsg(signedMessage)
+		decided, err := c.currentInstance.ProcessMsg(signedMessage)
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
@@ -25,5 +25,6 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 }
 
 func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message.SignedPostConsensusMessage) error {
+	c.logger.Debug("process post consensus message", zap.Int64("height", int64(signedPostConsensusMessage.Message.Height)), zap.Int64("signer_id", int64(signedPostConsensusMessage.Message.Signers[0])))
 	return c.ProcessSignatureMessage(signedPostConsensusMessage)
 }

@@ -52,8 +52,7 @@ func SignedMsgIndexer() Indexer {
 
 // SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
 func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt message.ConsensusMessageType) string {
-	return fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", message.SSVConsensusMsgType.String(),
-		mid, h, cmt.String())
+	return fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, cmt.String())
 }
 
 func getIndexHeight(idxParts ...string) message.Height {
