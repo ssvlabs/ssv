@@ -193,12 +193,15 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			}
 		}
 		v0Msg.SyncMessage.Lambda = identifierV0
-		if syncMsg.Status == message.StatusSuccess {
+		switch syncMsg.Status {
+		case message.StatusSuccess:
 			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
 			for _, smsg := range syncMsg.Data {
 				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, toSignedMessageV0(smsg, identifierV0))
 			}
-		} else {
+		case message.StatusNotFound:
+			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
+		default:
 			v0Msg.SyncMessage.Error = "error"
 		}
 		switch syncMsg.Protocol {
