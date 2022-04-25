@@ -40,7 +40,11 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if len(roundChangeJust) == 0 {
 		return errors.New("change round justification msg array is empty")
 	}
-	if roundChangeJust[0].Message.MsgType != message.PrepareMsgType {
+	rcj := roundChangeJust[0]
+	if rcj.Message == nil {
+		return errors.New("change round justification empty msg")
+	}
+	if rcj.Message.MsgType != message.PrepareMsgType {
 		return errors.Errorf("change round justification msg type not Prepare (%d)", roundChangeJust[0].Message.MsgType)
 	}
 	if signedMessage.Message.Height != roundChangeJust[0].Message.Height {

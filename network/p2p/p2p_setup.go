@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
@@ -136,6 +137,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 			Bootnodes:  n.cfg.TransformBootnodes(),
 			Logger:     n.logger,
 		}
+		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
+	} else {
+		n.logger.Debug("no bootnodes were configured, using mdns discovery")
 	}
 	discOpts := discovery.Options{
 		Logger:      n.logger,
@@ -159,10 +163,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() error {
 	cfg := &topics.PububConfig{
-		Logger:      n.logger,
-		Host:        n.host,
-		TraceLog:    n.cfg.PubSubTrace,
-		StaticPeers: nil,
+		Logger:   n.logger,
+		Host:     n.host,
+		TraceLog: n.cfg.PubSubTrace,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
 			logger := n.logger.With(zap.String("who", "MsgValidator"))
 			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
@@ -170,6 +173,15 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
+	}
+
+	if len(n.cfg.ExporterPeerID) > 0 {
+		//cfg.StaticPeers =
+		eid, err := peer.Decode(n.cfg.ExporterPeerID)
+		if err != nil {
+			return errors.Wrap(err, "could not decode exporter peer id")
+		}
+		cfg.StaticPeers = []peer.AddrInfo{{ID: eid}}
 	}
 
 	if !n.cfg.PubSubScoring {
