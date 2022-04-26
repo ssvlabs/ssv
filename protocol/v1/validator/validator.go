@@ -52,6 +52,10 @@ type Validator struct {
 	readMode bool
 }
 
+func (v *Validator) Ibfts() controller.Controllers {
+	return v.ibfts
+}
+
 func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
