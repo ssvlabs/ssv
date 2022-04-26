@@ -46,13 +46,17 @@ func SignedMsgIndexer() Indexer {
 		if sm.Message == nil {
 			return ""
 		}
-		return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)
+		return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)[0]
 	}
 }
 
 // SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt message.ConsensusMessageType) string {
-	return fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, cmt.String())
+func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt ...message.ConsensusMessageType) []string {
+	var res []string
+	for _, mt := range cmt {
+		res = append(res, fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
+	}
+	return res
 }
 
 func getIndexHeight(idxParts ...string) message.Height {

@@ -169,7 +169,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
-			i.ProcessStageChange(qbft.RoundState_PrePrepare)
+			//i.ProcessStageChange(qbft.RoundState_PrePrepare)
 
 			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.

@@ -78,8 +78,9 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 		// in optimistic approach we ignore failures and updates last decided message
 		h.logger.Debug("could not get decided in range, skipping",
 			zap.Int64("from", int64(localHeight)), zap.Int64("to", int64(height)))
+	} else {
+		logger.Debug("node is synced: remote highest found", zap.Int64("height", int64(height)))
 	}
-
 	return highest, nil
 }
 

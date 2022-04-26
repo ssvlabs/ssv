@@ -28,14 +28,14 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 		return errors.Wrap(err, "failed to get round change data")
 	}
 	if data == nil {
-		return errors.New("change round justification msg is nil")
+		return errors.New("change round data is nil")
 	}
 	if data.GetPreparedValue() == nil { // no justification
 		return nil
 	}
 	roundChangeJust := data.GetRoundChangeJustification()
 	if roundChangeJust == nil {
-		return errors.New("change round justification msg is nil")
+		return errors.New("change round justification is nil")
 	}
 	if len(roundChangeJust) == 0 {
 		return errors.New("change round justification msg array is empty")
