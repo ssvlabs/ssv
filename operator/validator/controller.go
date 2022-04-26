@@ -69,6 +69,7 @@ type Controller interface {
 	StartNetworkMediators()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
+	OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 // controller implements Controller
@@ -96,6 +97,7 @@ type controller struct {
 	messageWorker *worker.Worker
 }
 
+// OnFork preform action when fork happen
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
 	return nil
@@ -108,7 +110,7 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	qbftStorage := storage.New(options.DB, options.Logger, "qbft/")
+	qbftStorage := storage.New(options.DB, options.Logger, message.RoleTypeAttester.String()) // TODO need to support multi duties
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}

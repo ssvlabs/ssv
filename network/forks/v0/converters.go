@@ -29,7 +29,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				syncMsg.Params.Height = append(syncMsg.Params.Height, message.Height(p))
 			}
 			for _, sm := range msgV0.SyncMessage.GetSignedMessages() {
-				signed := toSignedMessageV1(sm)
+				signed := ToSignedMessageV1(sm)
 				if signed.Message != nil {
 					syncMsg.Data = append(syncMsg.Data, signed)
 				}
@@ -72,7 +72,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	}
 
 	if msgV0.SignedMessage != nil {
-		signed := toSignedMessageV1(msgV0.SignedMessage)
+		signed := ToSignedMessageV1(msgV0.SignedMessage)
 		data, err := signed.Encode()
 		if err != nil {
 			return nil, err
@@ -107,7 +107,7 @@ func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *message.SignedPost
 	return signed
 }
 
-func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
+func ToSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 	signed := new(message.SignedMessage)
 	signed.Signature = sm.GetSignature()
 	signers := sm.GetSignerIds()

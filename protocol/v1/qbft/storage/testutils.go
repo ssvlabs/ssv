@@ -44,6 +44,7 @@ func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.Si
 	if err != nil {
 		return nil, err
 	}
+
 	ret := &message.SignedMessage{}
 	if err := json.Unmarshal(val, ret); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling error")
