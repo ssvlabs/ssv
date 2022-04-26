@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -43,6 +44,18 @@ func (r *changeRoundSpeedupScenario) Name() string {
 	return "changeRoundSpeedup"
 }
 
+type router struct {
+	logger      *zap.Logger
+	controllers controller.Controllers
+}
+
+func (r *router) Route(message message.SSVMessage) {
+	if err := r.controllers.ControllerForIdentifier(message.GetIdentifier()).ProcessMsg(&message); err != nil {
+		r.logger.Error("failed to process message",
+			zap.String("identifier", hex.EncodeToString(message.GetIdentifier())))
+	}
+}
+
 func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
@@ -52,6 +65,21 @@ func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {
 	r.validators = validators
 	r.sks = sks
 	r.share = share
+
+	routers := make([]*router, r.NumOfOperators())
+
+	loggerFactory := func(who string) *zap.Logger {
+		logger := zap.L().With(zap.String("who", who))
+		return logger
+	}
+
+	for i, node := range ctx.LocalNet.Nodes {
+		routers[i] = &router{
+			logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			controllers: r.validators[i].(*validator.Validator).Ibfts(),
+		}
+		node.UseMessageRouter(routers[i])
+	}
 
 	return nil
 }
