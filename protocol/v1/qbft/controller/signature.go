@@ -2,7 +2,6 @@ package controller
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"time"
 
@@ -156,7 +155,6 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.Ope
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
 	// verify reconstructed sig
-	c.logger.Debug(" -------- TEST reconstructAndBroadcastSignature-----", zap.String("sig", signature.SerializeToHexStr()), zap.String("root", hex.EncodeToString(root)))
 	if res := signature.VerifyByte(c.ValidatorShare.PublicKey, root); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}

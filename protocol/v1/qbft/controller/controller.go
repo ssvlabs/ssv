@@ -122,7 +122,7 @@ func New(opts Options) IController {
 
 	// set flags
 	ret.initHandlers.Store(false)
-	ret.initSynced.Store(false) // TODo need to set false!!
+	ret.initSynced.Store(false)
 	return ret
 }
 
