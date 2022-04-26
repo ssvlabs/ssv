@@ -33,13 +33,10 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 			// TODO: complete, currently just trying to peek any message
 			// 		it might be better to get last state (c.ibftStorage.GetCurrentInstance())
 			//		and try to get messages from that height
-			msgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, c.signatureState.height), 1) // sigs
+			msgs := c.q.Pop(1, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, c.signatureState.height)) // sigs
 			if len(msgs) == 0 || msgs[0] == nil {
-				msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType), 1) // decided
+				msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType)...) // decided
 			}
-			//if len(msgs) == 0 || msgs[0] == nil {
-			//	msgs = c.q.Pop(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1) // other ibft msgs
-			//}
 			if len(msgs) == 0 || msgs[0] == nil {
 				continue
 			}
@@ -54,7 +51,7 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 		var msg *message.SSVMessage
 		currentState := c.currentInstance.State()
 		height := currentState.GetHeight()
-		sigMsgs := c.q.Pop(msgqueue.SignedPostConsensusMsgIndex(c.Identifier, height), 1)
+		sigMsgs := c.q.Pop(1, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, height))
 		if len(sigMsgs) > 0 {
 			// got post consensus message for the current sequence
 			c.logger.Debug("pop post consensus msg")
@@ -82,15 +79,15 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	var msgs []*message.SSVMessage
 	switch qbft.RoundState(state.Stage.Load()) {
 	case qbft.RoundState_NotStarted:
-		msgs = c.q.Peek(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier), 1) // TODO here waiting for prePrepare msg // TODO when move to prePrepare, the same msg called twice
+		msgs = c.q.Pop(1, msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier))
 	case qbft.RoundState_PrePrepare:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType), 1)
+		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType)...) // looking for propose in case is leader
 	case qbft.RoundState_Prepare:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType), 1)
+		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType)...)
 	case qbft.RoundState_Commit:
 		return nil // qbft.RoundState_Commit stage is NEVER set
 	case qbft.RoundState_ChangeRound:
-		msgs = c.q.Pop(msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType), 1)
+		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)...)
 		//case qbft.RoundState_Decided: only after instance is nilled
 		//case qbft.RoundState_Stopped:
 	}

@@ -138,14 +138,13 @@ func (c *Controller) syncDecided() error {
 		return c.ibftStorage.SaveDecided(msg)
 	}
 
+	c.logger.Debug("syncing heights decided")
 	highest, err := h.SyncDecided(c.ctx, c.Identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return c.ibftStorage.GetLastDecided(i)
 	}, handler)
-
 	if err == nil && highest != nil {
 		err = c.ibftStorage.SaveLastDecided(highest)
 	}
-
 	return err
 }
 
@@ -163,10 +162,6 @@ func (c *Controller) Init() error {
 	if !c.initSynced.Load() {
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := c.syncDecided(); err != nil {
-			//Store:      c.ibftStorage,
-			//Syncer:     c.network,
-			//Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
-			//Identifier: c.GetIdentifier(),
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.logger.Debug("iBFT init is already running (syncing history)")
