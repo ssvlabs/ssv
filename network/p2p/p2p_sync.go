@@ -164,6 +164,10 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 			}
 		}
 	}
+	if len(peers) == 0 {
+		n.logger.Debug("could not find peers", zap.Any("topics", topics))
+		return nil, nil
+	}
 	// TODO: shuffle peers
 	i := peerCount
 	if i > len(peers) {
