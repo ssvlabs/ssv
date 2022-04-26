@@ -49,7 +49,7 @@ func (vid ValidatorPK) MessageIDBelongs(msgID Identifier) bool {
 // Identifier is used to identify and route messages to the right validator and DutyRunner
 type Identifier []byte
 
-// NewIdentifier creates a new Identifier
+// NewIdentifier creates a new Identifier. expect pk hex sting as byte[]
 func NewIdentifier(pk []byte, role RoleType) Identifier {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))

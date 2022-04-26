@@ -159,7 +159,7 @@ func (i *Instance) Start(inputValue []byte) error {
 		return errors.New("input value is nil")
 	}
 
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", string(i.State().GetIdentifier())))
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", i.State().GetIdentifier().String()))
 	i.State().InputValue.Store(inputValue)
 	i.State().Round.Store(message.Round(1)) // start from 1
 	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))

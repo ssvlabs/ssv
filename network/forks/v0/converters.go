@@ -79,7 +79,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 		}
 		msg.Data = data
 		if len(msg.ID) == 0 {
-			msg.ID = toIdentifierV1(signed.Message.Identifier)
+			msg.ID = signed.Message.Identifier
 		}
 	}
 

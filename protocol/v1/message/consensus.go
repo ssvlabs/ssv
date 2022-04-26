@@ -152,9 +152,9 @@ func (r *RoundChangeData) Decode(data []byte) error {
 // ConsensusMessage is the structure used for consensus messages
 type ConsensusMessage struct {
 	MsgType    ConsensusMessageType
-	Height     Height // QBFT instance Height
-	Round      Round  // QBFT round for which the msg is for
-	Identifier []byte // instance Identifier this msg belongs to
+	Height     Height     // QBFT instance Height
+	Round      Round      // QBFT round for which the msg is for
+	Identifier Identifier // instance Identifier this msg belongs to
 	Data       []byte
 }
 
