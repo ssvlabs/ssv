@@ -2,6 +2,8 @@ package commons
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -14,7 +16,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 )
 
 // CreateShareAndValidators creates a share and the corresponding validators objects
@@ -76,6 +77,7 @@ func CreateShare(operators [][]byte) (*beacon.Share, map[uint64]*bls.SecretKey, 
 		}
 	}
 	return &beacon.Share{
+		NodeID:       1,
 		PublicKey:    sk.GetPublicKey(),
 		Committee:    committee,
 		OwnerAddress: "0x0",
