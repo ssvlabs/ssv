@@ -1,6 +1,7 @@
 package controller
 
 import (
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
@@ -32,4 +33,7 @@ type IController interface {
 
 	// PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
 	PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error
+
+	// OnFork called when fork occur.
+	OnFork(forkVersion forksprotocol.ForkVersion) error
 }

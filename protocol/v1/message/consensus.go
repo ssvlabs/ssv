@@ -3,6 +3,7 @@ package message
 import (
 	"crypto/sha256"
 	"encoding/json"
+	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -11,10 +12,10 @@ import (
 var ErrDuplicateMsgSigner = errors.New("can't aggregate 2 signed messages with mutual signers")
 
 // Signer is an interface responsible for consensus messages signing
-type Signer interface {
+/*type Signer interface { TODO already have this interface in beaconprotocol.client
 	// SignIBFTMessage signs a network iBFT msg
 	SignIBFTMessage(message *ConsensusMessage, pk []byte) ([]byte, error)
-}
+}*/
 
 // ConsensusMessageType is the type of consensus messages
 type ConsensusMessageType int
@@ -205,7 +206,13 @@ func (msg *ConsensusMessage) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (msg *ConsensusMessage) GetRoot() ([]byte, error) {
+func (msg *ConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
+	// using string version for checking in order to prevent cycle dependency
+	if forkVersion == "v0" {
+		return v0.ConsensusToV0ProtoMessage(msg)
+	}
+
+	// use v1 encoded struct
 	marshaledRoot, err := msg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode message")
@@ -220,8 +227,8 @@ func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 }
 
 // Sign takes a secret key and signs the Message
-func (msg *ConsensusMessage) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
-	root, err := msg.GetRoot()
+func (msg *ConsensusMessage) Sign(sk *bls.SecretKey, forkVersion string) (*bls.Sign, error) {
+	root, err := msg.GetRoot(forkVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -302,8 +309,8 @@ func (signedMsg *SignedMessage) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (signedMsg *SignedMessage) GetRoot() ([]byte, error) {
-	return signedMsg.Message.GetRoot()
+func (signedMsg *SignedMessage) GetRoot(forkVersion string) ([]byte, error) {
+	return signedMsg.Message.GetRoot(forkVersion)
 }
 
 // DeepCopy returns a new instance of SignedMessage, deep copied

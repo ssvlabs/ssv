@@ -25,7 +25,12 @@ func (pcsm *PostConsensusMessage) Decode(data []byte) error {
 }
 
 // GetRoot returns the root of the message
-func (pcsm *PostConsensusMessage) GetRoot() ([]byte, error) {
+func (pcsm *PostConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
+	// using string version for checking in order to prevent cycle dependency
+	/*if forkVersion == "v0" { TODo currently we do not signing postConsensus msgs so no need to change root
+		return v0.PostConsensusToV0ProtoMessage(pcsm)
+	}*/
+
 	marshaledRoot, err := pcsm.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode PostConsensusMessage")
@@ -62,8 +67,8 @@ func (spcsm *SignedPostConsensusMessage) GetSigners() []OperatorID {
 }
 
 // GetRoot returns the signature root
-func (spcsm *SignedPostConsensusMessage) GetRoot() ([]byte, error) {
-	return spcsm.Message.GetRoot()
+func (spcsm *SignedPostConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
+	return spcsm.Message.GetRoot(forkVersion)
 }
 
 // Aggregate aggregates signatures

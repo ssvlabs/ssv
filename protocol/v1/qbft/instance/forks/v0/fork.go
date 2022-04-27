@@ -27,6 +27,10 @@ func (v0 *ForkV0) Apply(instance *instance.Instance) {
 	v0.instance = instance
 }
 
+func (v0 *ForkV0) VersionName() string {
+	return "v0"
+}
+
 // PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
 func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
@@ -34,7 +38,7 @@ func (v0 *ForkV0) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qb
 		signedmsg.MsgTypeCheck(message.ProposalMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
 		preprepare.ValidatePrePrepareMsg(roundLeader),
 	)
 }
@@ -46,7 +50,7 @@ func (v0 *ForkV0) PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.
 		signedmsg.MsgTypeCheck(message.PrepareMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
 	)
 }
 
@@ -57,7 +61,7 @@ func (v0 *ForkV0) CommitMsgValidationPipeline(share *beacon.Share, identifier me
 		signedmsg.MsgTypeCheck(message.CommitMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.ValidateSequenceNumber(height),
-		signedmsg.AuthorizeMsg(share),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
 	)
 }
 
@@ -68,7 +72,7 @@ func (v0 *ForkV0) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifi
 		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.ValidateSequenceNumber(height),
-		signedmsg.AuthorizeMsg(share),
-		changeround.Validate(share),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		changeround.Validate(share, v0.VersionName()),
 	)
 }

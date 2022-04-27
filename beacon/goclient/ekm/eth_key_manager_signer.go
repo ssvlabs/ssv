@@ -90,11 +90,11 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
+func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	root, err := message.GetRoot()
+	root, err := message.GetRoot(forkVersion)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}

@@ -313,7 +313,7 @@ func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
 		return errors.Wrap(err, "could not find operator pk for signing msg")
 	}
 
-	sigByts, err := i.signer.SignIBFTMessage(msg, pk.Serialize())
+	sigByts, err := i.signer.SignIBFTMessage(msg, pk.Serialize(), i.fork.VersionName())
 	if err != nil {
 		return err
 	}

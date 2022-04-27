@@ -100,7 +100,11 @@ type controller struct {
 // OnFork preform action when fork happen
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
-	return nil
+
+	// call onFork for each validator in order to update the fork instance
+	return c.validatorsMap.ForEach(func(iValidator validator.IValidator) error {
+		return iValidator.OnFork(forkVersion)
+	})
 }
 
 // NewController creates a new validator controller instance

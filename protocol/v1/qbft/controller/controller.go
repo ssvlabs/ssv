@@ -126,6 +126,14 @@ func New(opts Options) IController {
 	return ret
 }
 
+// OnFork called when fork occur.
+func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	c.fork = forksfactory.NewFork(forkVersion)
+	// TODO needs to lock fork?
+	// TODO need to stop instance?
+	return nil
+}
+
 func (c *Controller) syncDecided() error {
 	h := history.New(c.logger, c.network)
 
