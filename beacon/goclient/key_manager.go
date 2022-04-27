@@ -10,6 +10,6 @@ func (gc *goClient) AddShare(shareKey *bls.SecretKey) error {
 	return gc.keyManager.AddShare(shareKey)
 }
 
-func (gc *goClient) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
-	return gc.keyManager.SignIBFTMessage(message, pk)
+func (gc *goClient) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+	return gc.keyManager.SignIBFTMessage(message, pk, forkVersion)
 }

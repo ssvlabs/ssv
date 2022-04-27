@@ -126,6 +126,14 @@ func New(opts Options) IController {
 	return ret
 }
 
+// OnFork called when fork occur.
+func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	c.fork = forksfactory.NewFork(forkVersion)
+	// TODO needs to lock fork?
+	// TODO need to stop instance?
+	return nil
+}
+
 func (c *Controller) syncDecided() error {
 	h := history.New(c.logger, c.network)
 
@@ -138,14 +146,13 @@ func (c *Controller) syncDecided() error {
 		return c.ibftStorage.SaveDecided(msg)
 	}
 
+	c.logger.Debug("syncing heights decided")
 	highest, err := h.SyncDecided(c.ctx, c.Identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return c.ibftStorage.GetLastDecided(i)
 	}, handler)
-
 	if err == nil && highest != nil {
 		err = c.ibftStorage.SaveLastDecided(highest)
 	}
-
 	return err
 }
 
@@ -163,10 +170,6 @@ func (c *Controller) Init() error {
 	if !c.initSynced.Load() {
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := c.syncDecided(); err != nil {
-			//Store:      c.ibftStorage,
-			//Syncer:     c.network,
-			//Validate:   c.fork.ValidateDecidedMsg(c.ValidatorShare),
-			//Identifier: c.GetIdentifier(),
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.logger.Debug("iBFT init is already running (syncing history)")

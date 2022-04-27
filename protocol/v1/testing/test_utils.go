@@ -3,6 +3,7 @@ package testing
 import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	v0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -61,7 +62,7 @@ func MultiSignMsg(sks map[message.OperatorID]*bls.SecretKey, signers []message.O
 	var operators = make([]message.OperatorID, 0)
 	var agg *bls.Sign
 	for _, oid := range signers {
-		signature, err := msg.Sign(sks[oid])
+		signature, err := msg.Sign(sks[oid], (&v0.ForkV0{}).VersionName()) // TODO need to check v1?
 		if err != nil {
 			return nil, err
 		}

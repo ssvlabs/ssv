@@ -76,10 +76,11 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 	err = h.SyncDecidedRange(ctx, identifier, handler, localHeight, height, sender)
 	if err != nil {
 		// in optimistic approach we ignore failures and updates last decided message
-		h.logger.Debug("could not get decided in range, skipping",
+		h.logger.Debug("could not get decided in range, skipping", zap.Error(err),
 			zap.Int64("from", int64(localHeight)), zap.Int64("to", int64(height)))
+	} else {
+		logger.Debug("node is synced: remote highest found", zap.Int64("height", int64(height)))
 	}
-
 	return highest, nil
 }
 
@@ -95,6 +96,7 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		}
 		sm, err := extractSyncMsg(msg.Msg)
 		if err != nil {
+			h.logger.Warn("failed to extract sync msg", zap.Error(err))
 			continue
 		}
 	signedMsgLoop:

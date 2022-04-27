@@ -5,6 +5,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	v0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"sync"
@@ -34,12 +35,12 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	km.lock.Lock()
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key)
+		sig, err := message.Sign(key, (&v0.ForkV0{}).VersionName()) // TODO need to check fork v1?
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign ibft msg")
 		}

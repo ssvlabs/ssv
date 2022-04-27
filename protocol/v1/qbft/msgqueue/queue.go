@@ -26,7 +26,7 @@ type MsgQueue interface {
 	// Peek returns the first n messages for an index
 	Peek(idx string, n int) []*message.SSVMessage
 	// Pop clears and returns the first n messages for an index
-	Pop(idx string, n int) []*message.SSVMessage
+	Pop(n int, idx ...string) []*message.SSVMessage
 	// Count counts messages for the given index
 	Count(idx string) int
 	// Clean will clean irrelevant keys from the map
@@ -131,25 +131,33 @@ func (q *queue) Peek(idx string, n int) []*message.SSVMessage {
 	return msgs
 }
 
-func (q *queue) Pop(idx string, n int) []*message.SSVMessage {
+// Pop message by index. if no messages found within the index and more than 1 idxs passed, search on the next one.
+func (q *queue) Pop(n int, idxs ...string) []*message.SSVMessage {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	containers, ok := q.items[idx]
-	if !ok {
-		return nil
-	}
-	if n == 0 || n > len(containers) {
-		n = len(containers)
-	}
-	q.items[idx] = containers[n:]
-	containers = containers[:n]
-	msgs := make([]*message.SSVMessage, 0)
-	for _, mc := range containers {
-		msgs = append(msgs, mc.msg)
-	}
+	for i, idx := range idxs {
+		containers, ok := q.items[idx]
+		if !ok {
+			return nil
+		}
+		if n == 0 || n > len(containers) {
+			n = len(containers)
+		}
+		q.items[idx] = containers[n:]
+		containers = containers[:n]
+		msgs := make([]*message.SSVMessage, 0)
+		for _, mc := range containers {
+			msgs = append(msgs, mc.msg)
+		}
 
-	return msgs
+		// check if there are more idxs to search for and if msgs not found
+		if i < len(idxs)-1 && (len(msgs) == 0 || msgs[0] == nil) {
+			continue // move to next idx
+		}
+		return msgs
+	}
+	return []*message.SSVMessage{}
 }
 
 func (q *queue) Count(idx string) int {

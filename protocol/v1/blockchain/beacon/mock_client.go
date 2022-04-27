@@ -37,7 +37,7 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
+func (m *MockBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
 	ret0, _ := ret[0].([]byte)
@@ -208,7 +208,7 @@ func (m *MockKeyManager) EXPECT() *MockKeyManagerMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockKeyManager) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
+func (m *MockKeyManager) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
 	ret0, _ := ret[0].([]byte)
@@ -276,7 +276,7 @@ func (m *MockSigner) EXPECT() *MockSignerMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte) ([]byte, error) {
+func (m *MockSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
 	ret0, _ := ret[0].([]byte)

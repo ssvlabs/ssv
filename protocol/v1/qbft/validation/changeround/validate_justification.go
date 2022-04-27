@@ -10,13 +10,15 @@ import (
 
 // validateJustification validates change round justifications
 type validateJustification struct {
-	share *beacon.Share
+	share       *beacon.Share
+	forkVersion string
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *beacon.Share) pipelines.SignedMessagePipeline {
+func Validate(share *beacon.Share, forkVersion string) pipelines.SignedMessagePipeline {
 	return &validateJustification{
-		share: share,
+		share:       share,
+		forkVersion: forkVersion,
 	}
 }
 
@@ -28,14 +30,14 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 		return errors.Wrap(err, "failed to get round change data")
 	}
 	if data == nil {
-		return errors.New("change round justification msg is nil")
+		return errors.New("change round data is nil")
 	}
 	if data.GetPreparedValue() == nil { // no justification
 		return nil
 	}
 	roundChangeJust := data.GetRoundChangeJustification()
 	if roundChangeJust == nil {
-		return errors.New("change round justification msg is nil")
+		return errors.New("change round justification is nil")
 	}
 	if len(roundChangeJust) == 0 {
 		return errors.New("change round justification msg array is empty")
@@ -80,7 +82,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 		return errors.Wrap(err, "change round could not get pubkey")
 	}
 	aggregated := pks.Aggregate()
-	err = signedMessage.GetSignature().Verify(signedMessage, message.PrimusTestnet, message.QBFTSigType, aggregated.Serialize())
+	err = signedMessage.GetSignature().Verify(signedMessage, message.PrimusTestnet, message.QBFTSigType, aggregated.Serialize(), p.forkVersion)
 	if err != nil {
 		return errors.Wrap(err, "change round could not verify signature")
 

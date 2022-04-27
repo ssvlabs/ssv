@@ -11,6 +11,7 @@ import (
 // Fork will apply fork modifications on an ibft instance
 type Fork interface {
 	msgValidation
+	VersionName() string
 }
 
 type msgValidation interface {

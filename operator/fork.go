@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"github.com/bloxapp/ssv/operator/validator"
 	"time"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -28,11 +29,20 @@ func (n *operatorNode) setFork(slot uint64) {
 	n.forkVersion = currentVersion
 
 	// set network fork
-	handler, ok := n.net.(forksprotocol.ForkHandler)
+	netHandler, ok := n.net.(forksprotocol.ForkHandler)
 	if !ok {
 		logger.Panic("network instance is not a fork handler")
 	}
-	if err := handler.OnFork(currentVersion); err != nil {
+	if err := netHandler.OnFork(currentVersion); err != nil {
+		logger.Panic("could not fork network", zap.Error(err))
+	}
+
+	// set validator controller fork
+	vCtrlHandler, ok := n.net.(validator.Controller)
+	if !ok {
+		logger.Panic("network instance is not a fork handler")
+	}
+	if err := vCtrlHandler.OnFork(currentVersion); err != nil {
 		logger.Panic("could not fork network", zap.Error(err))
 	}
 }

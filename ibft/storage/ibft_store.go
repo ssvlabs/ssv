@@ -3,10 +3,13 @@ package storage
 import (
 	"encoding/binary"
 	"encoding/json"
+	"github.com/bloxapp/ssv/ibft/proto"
+	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -55,13 +58,28 @@ func New(db basedb.IDb, logger *zap.Logger, prefix string) qbftstorage.QBFTStore
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
 func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
-	val, found, err := i.get(highestKey, identifier)
+	// use the old identifier, if not found use the new one. this is to support old msg types when sync history
+	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
+	val, found, err := i.get(highestKey, oldIdentifier)
+	if found && err == nil {
+		// old val found, unmarshal with old struct and convert to v1
+		ret := &proto.SignedMessage{}
+		if err := json.Unmarshal(val, ret); err != nil {
+			return nil, errors.Wrap(err, "un-marshaling error")
+		}
+		return v0.ToSignedMessageV1(ret), nil
+	}
+
+	// old not found, try with new identifier
+	val, found, err = i.get(highestKey, identifier)
 	if !found {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+
+	// old one not found, just unmarshal v1
 	ret := &message.SignedMessage{}
 	if err := json.Unmarshal(val, ret); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling error")
@@ -90,12 +108,34 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 	copy(prefix, i.prefix)
 	prefix = append(prefix, identifier...)
 
+	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
+	oldPrefix := append(prefix, oldIdentifier...)
+
 	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
 		sequences = append(sequences, i.key(decidedKey, uInt64ToByteSlice(uint64(seq))))
 	}
 	msgs := make([]*message.SignedMessage, 0)
-	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
+	err := i.db.GetMany(oldPrefix, sequences, func(obj basedb.Obj) error {
+		// old val found, unmarshal with old struct and convert to v1
+		ret := &proto.SignedMessage{}
+		if err := json.Unmarshal(obj.Value, ret); err != nil {
+			return errors.Wrap(err, "un-marshaling error")
+		}
+
+		msg := v0.ToSignedMessageV1(ret)
+		msgs = append(msgs, msg)
+		return nil
+	})
+
+	if err == nil && len(msgs) > 0 {
+		// old struct found
+		return msgs, nil
+	}
+
+	msgs = make([]*message.SignedMessage, 0)
+	// old one not found, get new identifier and unmarshal v1
+	err = i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
 		msg := message.SignedMessage{}
 		if err := json.Unmarshal(obj.Value, &msg); err != nil {
 			return errors.Wrap(err, "un-marshaling error")
@@ -156,7 +196,20 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg 
 
 // GetLastChangeRoundMsg returns last known change round message
 func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
-	val, found, err := i.get(lastChangeRoundKey, identifier)
+	// use the old identifier, if not found use the new one. this is to support old msg types when sync history
+	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
+	val, found, err := i.get(lastChangeRoundKey, oldIdentifier)
+	if found && err == nil {
+		// old val found, unmarshal with old struct and convert to v1
+		ret := &proto.SignedMessage{}
+		if err := json.Unmarshal(val, ret); err != nil {
+			return nil, errors.Wrap(err, "un-marshaling error")
+		}
+		return v0.ToSignedMessageV1(ret), nil
+	}
+
+	// old not found, try with new identifier
+	val, found, err = i.get(lastChangeRoundKey, identifier)
 	if !found {
 		return nil, nil
 	}

@@ -19,6 +19,10 @@ func New() controcllerfork.Fork {
 	return &ForkV0{}
 }
 
+func (v0 *ForkV0) VersionName() string {
+	return "v0"
+}
+
 // InstanceFork returns instance fork
 func (v0 *ForkV0) InstanceFork() instancefork.Fork {
 	return forkv0.New()
@@ -29,7 +33,7 @@ func (v0 *ForkV0) ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMessag
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.CommitMsgType),
-		signedmsg.AuthorizeMsg(share),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
 		signedmsg.ValidateQuorum(share.ThresholdSize()),
 	)
 }

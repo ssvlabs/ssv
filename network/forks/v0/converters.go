@@ -29,7 +29,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				syncMsg.Params.Height = append(syncMsg.Params.Height, message.Height(p))
 			}
 			for _, sm := range msgV0.SyncMessage.GetSignedMessages() {
-				signed := toSignedMessageV1(sm)
+				signed := ToSignedMessageV1(sm)
 				if signed.Message != nil {
 					syncMsg.Data = append(syncMsg.Data, signed)
 				}
@@ -72,7 +72,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	}
 
 	if msgV0.SignedMessage != nil {
-		signed := toSignedMessageV1(msgV0.SignedMessage)
+		signed := ToSignedMessageV1(msgV0.SignedMessage)
 		data, err := signed.Encode()
 		if err != nil {
 			return nil, err
@@ -107,7 +107,7 @@ func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *message.SignedPost
 	return signed
 }
 
-func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
+func ToSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 	signed := new(message.SignedMessage)
 	signed.Signature = sm.GetSignature()
 	signers := sm.GetSignerIds()
@@ -269,4 +269,95 @@ func toIdentifierV1(old []byte) message.Identifier {
 		return nil
 	}
 	return message.NewIdentifier(pkraw, message.RoleTypeFromString(rt))
+}
+
+// non network convertors
+
+// ConsensusToV0ProtoMessage converts consensus msg to proto msg
+func ConsensusToV0ProtoMessage(cm *message.ConsensusMessage) ([]byte, error) {
+	oldMsg := &proto.Message{
+		Round:     uint64(cm.Round),
+		Lambda:    toIdentifierV0(cm.Identifier),
+		SeqNumber: uint64(cm.Height),
+	}
+
+	switch cm.MsgType {
+	case message.ProposalMsgType:
+		oldMsg.Type = proto.RoundState_PrePrepare
+		if p, err := cm.GetProposalData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = p.Data
+		}
+	case message.PrepareMsgType:
+		oldMsg.Type = proto.RoundState_Prepare
+		if p, err := cm.GetPrepareData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = p.Data
+		}
+	case message.CommitMsgType:
+		oldMsg.Type = proto.RoundState_Commit
+		if c, err := cm.GetCommitData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = c.Data
+		}
+	case message.RoundChangeMsgType:
+		oldMsg.Type = proto.RoundState_ChangeRound
+		if cr, err := cm.GetRoundChangeData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = cr.PreparedValue
+		}
+	default:
+		return nil, errors.Errorf("consensus type is not known. type - %s", cm.MsgType.String())
+	}
+
+	return oldMsg.SigningRoot()
+}
+
+// PostConsensusToV0ProtoMessage converts consensus msg to proto msg
+func PostConsensusToV0ProtoMessage(pcm *message.PostConsensusMessage) ([]byte, error) {
+	/*oldMsg := &proto.Message{
+		Round:     uint64(pcm.Height),
+		Lambda:    toIdentifierV0(pcm.Identifier),
+		SeqNumber: uint64(pcm.Height),
+	}
+
+	switch pcm.MsgType {
+	case message.ProposalMsgType:
+		oldMsg.Type = proto.RoundState_PrePrepare
+		if p, err := pcm.GetProposalData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = p.Data
+		}
+	case message.PrepareMsgType:
+		oldMsg.Type = proto.RoundState_Prepare
+		if p, err := pcm.GetPrepareData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = p.Data
+		}
+	case message.CommitMsgType:
+		oldMsg.Type = proto.RoundState_Commit
+		if c, err := pcm.GetCommitData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = c.Data
+		}
+	case message.RoundChangeMsgType:
+		oldMsg.Type = proto.RoundState_ChangeRound
+		if cr, err := pcm.GetRoundChangeData(); err != nil {
+			return nil, err
+		} else {
+			oldMsg.Value = cr.PreparedValue
+		}
+	default:
+		return nil, errors.Errorf("consensus type is not known. type - %s", pcm.MsgType.String())
+	}
+
+	return oldMsg.SigningRoot()*/
+	panic("not implemented yet")
 }

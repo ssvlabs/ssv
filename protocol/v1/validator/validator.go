@@ -20,6 +20,7 @@ type IValidator interface {
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
+	OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 type Options struct {
@@ -74,6 +75,13 @@ func NewValidator(opt *Options) IValidator {
 		ibfts:      ibfts,
 		readMode:   opt.ReadMode,
 	}
+}
+
+func (v *Validator) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	for _, ctrl := range v.ibfts {
+		return ctrl.OnFork(forkVersion)
+	}
+	return nil
 }
 
 func (v *Validator) Start() error {
