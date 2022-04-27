@@ -34,6 +34,9 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 					syncMsg.Data = append(syncMsg.Data, signed)
 				}
 			}
+			if len(syncMsg.Data) == 0 {
+				syncMsg.Status = message.StatusNotFound
+			}
 			if err := msgV0.SyncMessage.Error; len(err) > 0 {
 				syncMsg.Status = message.StatusError
 			}
