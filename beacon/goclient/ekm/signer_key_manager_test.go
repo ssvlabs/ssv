@@ -3,8 +3,8 @@ package ekm
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft/proto"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/threshold"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -56,10 +56,10 @@ func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []b
 	return container.HashTreeRoot()
 }
 
-func testKeyManager(t *testing.T) beacon.KeyManager {
+func testKeyManager(t *testing.T) beacon2.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, core.PraterNetwork)
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork))
 	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
 	require.NoError(t, err)
 
@@ -82,8 +82,8 @@ func TestSignAttestation(t *testing.T) {
 	require.NoError(t, sk1.SetHexString(sk1Str))
 	require.NoError(t, km.AddShare(sk1))
 
-	duty := &beacon.Duty{
-		Type:                    beacon.RoleTypeAttester,
+	duty := &beacon2.Duty{
+		Type:                    message.RoleTypeAttester,
 		PubKey:                  [48]byte{},
 		Slot:                    30,
 		ValidatorIndex:          1,
@@ -126,12 +126,12 @@ func TestSignIBFTMessage(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
 
-		msg := &proto.Message{
-			Type:      proto.RoundState_Commit,
-			Round:     2,
-			Lambda:    []byte("lambda1"),
-			SeqNumber: 3,
-			Value:     []byte("value1"),
+		msg := &message.ConsensusMessage{
+			MsgType:    message.CommitMsgType,
+			Height:     message.Height(3),
+			Round:      message.Round(2),
+			Identifier: []byte("lambda1"),
+			Data:       []byte("value1"),
 		}
 
 		// sign
@@ -139,26 +139,28 @@ func TestSignIBFTMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		// verify
-		signed := &proto.SignedMessage{
-			Message:   msg,
+		signed := &message.SignedMessage{
 			Signature: sig,
-			SignerIds: []uint64{1},
+			Signers:   []message.OperatorID{message.OperatorID(1)},
+			Message:   msg,
 		}
-		res, err := signed.VerifySig(pk)
+
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
+		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		require.True(t, res)
+		//require.True(t, res)
 	})
 
 	t.Run("pk 2", func(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
 
-		msg := &proto.Message{
-			Type:      proto.RoundState_ChangeRound,
-			Round:     3,
-			Lambda:    []byte("lambda2"),
-			SeqNumber: 1,
-			Value:     []byte("value2"),
+		msg := &message.ConsensusMessage{
+			MsgType:    message.CommitMsgType,
+			Height:     message.Height(1),
+			Round:      message.Round(3),
+			Identifier: []byte("lambda2"),
+			Data:       []byte("value2"),
 		}
 
 		// sign
@@ -166,13 +168,15 @@ func TestSignIBFTMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		// verify
-		signed := &proto.SignedMessage{
-			Message:   msg,
+		signed := &message.SignedMessage{
 			Signature: sig,
-			SignerIds: []uint64{1},
+			Signers:   []message.OperatorID{message.OperatorID(1)},
+			Message:   msg,
 		}
-		res, err := signed.VerifySig(pk)
+
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
+		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		require.True(t, res)
+		//require.True(t, res)
 	})
 }
