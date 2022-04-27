@@ -152,6 +152,9 @@ func extractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decode sync message")
 	}
+	if sm.Status != message.StatusSuccess {
+		return nil, errors.Errorf("failed to get sync message: %s", sm.Status.String())
+	}
 	if len(sm.Data) == 0 {
 		return nil, errors.New("empty decided message")
 	}

@@ -24,6 +24,25 @@ const (
 	StatusBackoff
 )
 
+func (sc *StatusCode) String() string {
+	switch *sc {
+	case StatusUnknown:
+		return "Unknown"
+	case StatusSuccess:
+		return "Success"
+	case StatusNotFound:
+		return "NotFound"
+	case StatusError:
+		return "Error"
+	case StatusBadRequest:
+		return "BadRequest"
+	case StatusInternalError:
+		return "InternalError"
+	case StatusBackoff:
+		return "Backoff"
+	}
+}
+
 // SyncParams holds parameters for sync operations
 type SyncParams struct {
 	// Height of the message, it can hold up to 2 items to specify a range or a single item for specific height
