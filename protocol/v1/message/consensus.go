@@ -3,7 +3,8 @@ package message
 import (
 	"crypto/sha256"
 	"encoding/json"
-	v0 "github.com/bloxapp/ssv/network/forks/v0"
+	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -205,11 +206,57 @@ func (msg *ConsensusMessage) Decode(data []byte) error {
 	return json.Unmarshal(data, msg)
 }
 
+func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
+	m := make(map[string]interface{})
+
+	m["round"] = int64(msg.Round)
+	m["lambda"] = []byte(format.IdentifierFormat(msg.Identifier.GetValidatorPK(), msg.Identifier.GetRoleType().String()))
+
+	switch msg.MsgType {
+	case ProposalMsgType:
+		m["type"] = proto.RoundState_PrePrepare
+		if p, err := msg.GetProposalData(); err != nil {
+			return nil, err
+		} else {
+			m["value"] = p.Data
+		}
+	case PrepareMsgType:
+		m["type"] = proto.RoundState_Prepare
+		if p, err := msg.GetPrepareData(); err != nil {
+			return nil, err
+		} else {
+			m["value"] = p.Data
+		}
+	case CommitMsgType:
+		m["type"] = proto.RoundState_Commit
+		if c, err := msg.GetCommitData(); err != nil {
+			return nil, err
+		} else {
+			m["value"] = c.Data
+		}
+	case RoundChangeMsgType:
+		m["type"] = proto.RoundState_ChangeRound
+		if cr, err := msg.GetRoundChangeData(); err != nil {
+			return nil, err
+		} else {
+			m["value"] = cr.PreparedValue
+		}
+	default:
+		return nil, errors.Errorf("consensus type is not known. type - %s", msg.MsgType.String())
+	}
+
+	m["type"] = int(msg.MsgType)
+	m["value"] = msg.Data
+
+	return json.Marshal(m)
+}
+
 // GetRoot returns the root used for signing and verification
 func (msg *ConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
 	// using string version for checking in order to prevent cycle dependency
+
 	if forkVersion == "v0" {
-		return v0.ConsensusToV0ProtoMessage(msg)
+		return msg.convertToV0Root()
 	}
 
 	// use v1 encoded struct
