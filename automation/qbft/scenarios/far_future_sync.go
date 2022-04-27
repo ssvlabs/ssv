@@ -31,7 +31,7 @@ func NewFarFutureSyncScenario(logger *zap.Logger) Scenario {
 }
 
 func (r *farFutureSyncScenario) NumOfOperators() int {
-	return 3
+	return 4
 }
 
 func (r *farFutureSyncScenario) NumOfExporters() int {
