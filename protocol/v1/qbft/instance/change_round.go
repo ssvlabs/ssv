@@ -170,6 +170,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 			ids = append(ids, msg.GetSigners()...)
 		}
 		aggSig = aggregatedSig.Serialize()
+		// TODO(nkryuchkov): consider returning an error
+		// return nil, errors.New("not prepared")
 	}
 
 	data := &message.RoundChangeData{

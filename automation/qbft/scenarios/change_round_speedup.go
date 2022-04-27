@@ -126,11 +126,6 @@ func (r *changeRoundSpeedupScenario) PostExecution(ctx *ScenarioContext) error {
 }
 
 func (r *changeRoundSpeedupScenario) startNode(val validator.IValidator, net network.P2PNetwork) {
-	if err := val.Start(); err != nil {
-		r.logger.Error("could not start validator")
-		return
-	}
-
 	if err := net.Subscribe(val.GetShare().PublicKey.Serialize()); err != nil {
 		r.logger.Error("failed to subscribe topic")
 		return
