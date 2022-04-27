@@ -41,6 +41,7 @@ func (sc *StatusCode) String() string {
 	case StatusBackoff:
 		return "Backoff"
 	}
+	return ""
 }
 
 // SyncParams holds parameters for sync operations
