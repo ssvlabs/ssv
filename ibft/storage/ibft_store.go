@@ -133,6 +133,7 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 		return msgs, nil
 	}
 
+	msgs = make([]*message.SignedMessage, 0)
 	// old one not found, get new identifier and unmarshal v1
 	err = i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
 		msg := message.SignedMessage{}
