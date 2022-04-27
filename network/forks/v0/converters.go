@@ -134,8 +134,6 @@ func toSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 			signed.Message.MsgType = message.CommitMsgType
 		case proto.RoundState_ChangeRound:
 			signed.Message.MsgType = message.RoundChangeMsgType
-		//case proto.RoundState_Decided:
-		//	signed.Message.MsgType = message.DecidedMsgType
 		case proto.RoundState_Stopped:
 			// TODO
 		}
@@ -169,7 +167,6 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		default:
 		}
 		break // cause of fallthrough
-	//return v.processConsensusMsg(dutyRunner, signedMsg)
 	case message.SSVPostConsensusMsgType:
 		v0Msg.Type = network.NetworkMsg_SignatureType
 		signedMsg := &message.SignedPostConsensusMessage{}
@@ -177,7 +174,6 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		v0Msg.SignedMessage = toSignedMessagePostConsensusV0(signedMsg, identifierV0)
-	//return v.processPostConsensusSig(dutyRunner, signedMsg)
 	case message.SSVSyncMsgType:
 		v0Msg.Type = network.NetworkMsg_SyncType
 		syncMsg := &message.SyncMessage{}
@@ -254,7 +250,6 @@ func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessag
 	signedMsgV0.Message = &proto.Message{
 		Lambda:    identifierV0,
 		SeqNumber: uint64(signedMsg.Message.Height),
-		// TODO: complete
 	}
 	signedMsgV0.Signature = signedMsg.Message.DutySignature
 	for _, signer := range signedMsg.Signers {
