@@ -24,7 +24,7 @@ func main() {
 
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
 
-	s := scenarios.NewRegularScenario(logger)
+	s := scenarios.NewChangeRoundSpeedupScenario(logger)
 
 	dbs := make([]basedb.IDb, 0)
 	for i := 0; i < s.NumOfOperators(); i++ {
