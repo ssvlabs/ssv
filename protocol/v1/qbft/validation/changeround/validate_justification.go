@@ -32,7 +32,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if data == nil {
 		return errors.New("change round data is nil")
 	}
-	if data.GetPreparedValue() == nil { // no justification
+	if data.GetPreparedValue() == nil || len(data.GetPreparedValue()) == 0 { // no justification
 		return nil
 	}
 	roundChangeJust := data.GetRoundChangeJustification()
