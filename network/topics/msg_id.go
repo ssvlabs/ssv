@@ -3,7 +3,6 @@ package topics
 import (
 	"bytes"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"go.uber.org/zap"
@@ -82,14 +81,9 @@ func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDBadPeerID
 		}
 		logger = logger.With(zap.String("from", pid.String()))
-		msg, err := handler.fork.DecodeNetworkMsg(pmsg.GetData())
+		ssvMsg, err := handler.fork.DecodeNetworkMsg(pmsg.GetData())
 		if err != nil {
 			logger.Warn("invalid encoding", zap.Error(err))
-			return MsgIDBadEncodedMessage
-		}
-		ssvMsg, ok := msg.(*message.SSVMessage)
-		if !ok {
-			logger.Warn("invalid encoding: could not cast to ssv message", zap.Error(err))
 			return MsgIDBadEncodedMessage
 		}
 		mid := handler.fork.MsgID()(ssvMsg.Data)

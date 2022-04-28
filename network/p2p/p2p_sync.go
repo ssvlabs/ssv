@@ -119,14 +119,9 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...protoc
 			n.logger.Warn("could not handle stream", zap.Error(err))
 			return
 		}
-		msg, err := n.fork.DecodeNetworkMsg(req)
+		smsg, err := n.fork.DecodeNetworkMsg(req)
 		if err != nil {
 			n.logger.Warn("could not decode msg from stream", zap.Error(err))
-			return
-		}
-		smsg, ok := msg.(*message.SSVMessage)
-		if !ok {
-			n.logger.Warn("could not cast msg from stream", zap.Error(err))
 			return
 		}
 		result, err := handler(smsg)
@@ -205,7 +200,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 			continue
 		}
 		results = append(results, protocolp2p.SyncResult{
-			Msg:    res.(*message.SSVMessage),
+			Msg:    res,
 			Sender: pid.String(),
 		})
 	}

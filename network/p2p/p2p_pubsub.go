@@ -121,14 +121,9 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		n.logger.Warn("got nil message", zap.String("topic", topic))
 		return nil
 	}
-	parsed, err := n.fork.DecodeNetworkMsg(msg.GetData())
+	ssvMsg, err := n.fork.DecodeNetworkMsg(msg.GetData())
 	if err != nil {
 		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
-		// TODO: handle..
-		return nil
-	}
-	ssvMsg, ok := parsed.(*message.SSVMessage)
-	if !ok {
 		// TODO: handle..
 		return nil
 	}

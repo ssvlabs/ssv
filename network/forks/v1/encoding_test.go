@@ -21,6 +21,6 @@ func TestForkV1_Encoding(t *testing.T) {
 
 	res, err := f.DecodeNetworkMsg(b)
 	require.NoError(t, err)
-	require.Equal(t, msg.MsgType, res.(*message.SSVMessage).MsgType)
-	require.True(t, bytes.Equal(msg.Data, res.(*message.SSVMessage).Data))
+	require.Equal(t, msg.MsgType, res.MsgType)
+	require.True(t, bytes.Equal(msg.Data, res.Data))
 }
