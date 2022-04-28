@@ -139,32 +139,32 @@ func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) 
 			// TODO
 		case proto.RoundState_PrePrepare:
 			signed.Message.MsgType = message.ProposalMsgType
-			if p, err := (&message.ProposalData{Data: data}).Encode(); err != nil {
+			p, err := (&message.ProposalData{Data: data}).Encode()
+			if err != nil {
 				return nil, err
-			} else {
-				signed.Message.Data = p
 			}
+			signed.Message.Data = p
 		case proto.RoundState_Prepare:
 			signed.Message.MsgType = message.PrepareMsgType
-			if p, err := (&message.PrepareData{Data: data}).Encode(); err != nil {
+			p, err := (&message.PrepareData{Data: data}).Encode()
+			if err != nil {
 				return nil, err
-			} else {
-				signed.Message.Data = p
 			}
+			signed.Message.Data = p
 		case proto.RoundState_Commit:
 			signed.Message.MsgType = message.CommitMsgType
-			if c, err := (&message.CommitData{Data: data}).Encode(); err != nil {
+			c, err := (&message.CommitData{Data: data}).Encode()
+			if err != nil {
 				return nil, err
-			} else {
-				signed.Message.Data = c
 			}
+			signed.Message.Data = c
 		case proto.RoundState_ChangeRound:
 			signed.Message.MsgType = message.RoundChangeMsgType
-			if rc, err := (&message.RoundChangeData{PreparedValue: data}).Encode(); err != nil {
+			rc, err := (&message.RoundChangeData{PreparedValue: data}).Encode()
+			if err != nil {
 				return nil, err
-			} else {
-				signed.Message.Data = rc
 			}
+			signed.Message.Data = rc
 		case proto.RoundState_Stopped:
 			// TODO
 		}
@@ -265,34 +265,33 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 	switch signedMsg.Message.MsgType {
 	case message.ProposalMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_PrePrepare
-		if p, err := signedMsg.Message.GetProposalData(); err != nil {
+		p, err := signedMsg.Message.GetProposalData()
+		if err != nil {
 			return nil, err
-		} else {
-			signedMsgV0.Message.Value = p.Data
 		}
+		signedMsgV0.Message.Value = p.Data
 	case message.PrepareMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_Prepare
-		if p, err := signedMsg.Message.GetPrepareData(); err != nil {
+		p, err := signedMsg.Message.GetPrepareData()
+		if err != nil {
 			return nil, err
-		} else {
-			signedMsgV0.Message.Value = p.Data
 		}
+		signedMsgV0.Message.Value = p.Data
 	case message.CommitMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_Commit
-		if c, err := signedMsg.Message.GetCommitData(); err != nil {
+		c, err := signedMsg.Message.GetCommitData()
+		if err != nil {
 			return nil, err
-		} else {
-			signedMsgV0.Message.Value = c.Data
 		}
+		signedMsgV0.Message.Value = c.Data
+
 	case message.RoundChangeMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_ChangeRound
-		if cr, err := signedMsg.Message.GetRoundChangeData(); err != nil {
+		cr, err := signedMsg.Message.GetRoundChangeData()
+		if err != nil {
 			return nil, err
-		} else {
-			signedMsgV0.Message.Value = cr.GetPreparedValue()
 		}
-		//case message.DecidedMsgType:
-		//	signedMsgV0.Message.Type = proto.RoundState_Decided
+		signedMsgV0.Message.Value = cr.GetPreparedValue()
 	}
 
 	signedMsgV0.Signature = signedMsg.GetSignature()
