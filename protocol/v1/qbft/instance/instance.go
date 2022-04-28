@@ -16,8 +16,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
-	"github.com/bloxapp/ssv/utils/format"
-
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -162,8 +160,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", i.State().GetIdentifier().String()))
 	i.State().InputValue.Store(inputValue)
 	i.State().Round.Store(message.Round(1)) // start from 1
-	pk, role := format.IdentifierUnformat(string(i.State().GetIdentifier()))
-	metricsIBFTRound.WithLabelValues(role, pk).Set(1)
+	metricsIBFTRound.WithLabelValues(i.State().GetIdentifier().GetRoleType().String(), hex.EncodeToString(i.State().GetIdentifier().GetValidatorPK())).Set(1)
 
 	i.Logger.Debug("state", zap.Uint64("height", uint64(i.State().GetHeight())), zap.Uint64("round", uint64(i.State().GetRound())))
 	if i.IsLeader() {

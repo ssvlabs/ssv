@@ -1,13 +1,12 @@
 package controller
 
 import (
+	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
-	"github.com/bloxapp/ssv/utils/format"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -24,8 +23,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	pk, role := format.IdentifierUnformat(string(c.Identifier))
-	metricsCurrentSequence.WithLabelValues(role, pk).Set(float64(c.currentInstance.State().GetHeight()))
+	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetValidatorPK())).Set(float64(c.currentInstance.State().GetHeight()))
 
 	// catch up if we can
 	//go c.fastChangeRoundCatchup(c.currentInstance) TODO enable!!!!
