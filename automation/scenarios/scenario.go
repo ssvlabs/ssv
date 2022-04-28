@@ -5,10 +5,26 @@ import (
 	"time"
 )
 
-// Bootstrapper creates scenario context with the relevant components
+
+// Scenario represents a testplan for a specific scenario.
+type Scenario interface {
+	// Name is the name of the scenario
+	Name() string
+	// PreExecution is invoked prior to the scenario, used for setup
+	PreExecution(ctx *Context) error
+	// Execute is the actual test scenario to run
+	Execute(ctx *Context) error
+	// PostExecution is invoked after execution, used for cleanup etc.
+	PostExecution(ctx *Context) error
+}
+
+// Bootstrapper creates scenario context with the relevant components.
+// Each automation package should have a Bootstrap function/s that creates
+// a Context with the needed resources for the scenarios.
 type Bootstrapper func(ctx context.Context) (*Context, error)
 
-// Context is the context object that is passed in execution
+// Context is the context object that is passed to the scenario.
+// It holds a context.Context and use it to save references for the resources used by the scenario.
 type Context struct {
 	ctx context.Context
 }
@@ -43,22 +59,3 @@ func (c *Context) WithValue(key string, val interface{}) {
 	context.WithValue(c.ctx, key, val)
 }
 
-type scenarioCfg interface {
-	// NumOfOperators returns the desired number of operators for the test
-	NumOfOperators() int
-	// NumOfExporters returns the desired number of operators for the test
-	NumOfExporters() int
-	// Name is the name of the scenario
-	Name() string
-}
-
-// Scenario represents a testplan for a specific scenario
-type Scenario interface {
-	scenarioCfg
-	// PreExecution is invoked prior to the scenario, used for setup
-	PreExecution(ctx *Context) error
-	// Execute is the actual test scenario to run
-	Execute(ctx *Context) error
-	// PostExecution is invoked after execution, used for cleanup etc.
-	PostExecution(ctx *Context) error
-}
