@@ -183,22 +183,24 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 		signers = append(signers, message.OperatorID(signer))
 	}
 
-	consensusMsg := &message.ConsensusMessage{
-		Height:     message.Height(ret.GetJustificationMsg().SeqNumber),
-		Round:      message.Round(ret.GetJustificationMsg().Round),
-		Identifier: toIdentifierV1(ret.GetJustificationMsg().Lambda),
-		Data:       ret.GetJustificationMsg().Value,
-	}
+	consensusMsg := &message.ConsensusMessage{}
 
-	switch ret.GetJustificationMsg().GetType() {
-	case proto.RoundState_PrePrepare:
-		consensusMsg.MsgType = message.ProposalMsgType
-	case proto.RoundState_Prepare:
-		consensusMsg.MsgType = message.PrepareMsgType
-	case proto.RoundState_Commit:
-		consensusMsg.MsgType = message.CommitMsgType
-	case proto.RoundState_ChangeRound:
-		consensusMsg.MsgType = message.RoundChangeMsgType
+	if ret.GetJustificationMsg() != nil {
+		consensusMsg.Height = message.Height(ret.GetJustificationMsg().SeqNumber)
+		consensusMsg.Round = message.Round(ret.GetJustificationMsg().Round)
+		consensusMsg.Identifier = toIdentifierV1(ret.GetJustificationMsg().Lambda)
+		consensusMsg.Data = ret.GetJustificationMsg().Value
+
+		switch ret.GetJustificationMsg().GetType() {
+		case proto.RoundState_PrePrepare:
+			consensusMsg.MsgType = message.ProposalMsgType
+		case proto.RoundState_Prepare:
+			consensusMsg.MsgType = message.PrepareMsgType
+		case proto.RoundState_Commit:
+			consensusMsg.MsgType = message.CommitMsgType
+		case proto.RoundState_ChangeRound:
+			consensusMsg.MsgType = message.RoundChangeMsgType
+		}
 	}
 
 	crm := &message.RoundChangeData{
