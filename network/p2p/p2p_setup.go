@@ -136,6 +136,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 			NetworkKey: n.cfg.NetworkPrivateKey,
 			Bootnodes:  n.cfg.TransformBootnodes(),
 			Logger:     n.logger,
+			OperatorID: n.cfg.OperatorID,
 		}
 		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {

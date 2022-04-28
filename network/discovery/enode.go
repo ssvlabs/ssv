@@ -44,9 +44,9 @@ func decorateLocalNode(node *enode.LocalNode, subnets []bool, operatorID string)
 	}
 	if len(subnets) > 0 {
 		err = setSubnetsEntry(node, subnets)
-	} else if len(operatorID) == 0 {
+	} /* else if len(operatorID) == 0 {
 		err = setNodeTypeEntry(node, Exporter)
-	}
+	}*/
 	return err
 }
 

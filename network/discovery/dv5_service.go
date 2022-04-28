@@ -152,20 +152,20 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	if err != nil {
 		return err
 	}
-	cn := make(chan discover.ReadPacket, 10)
-	go func() {
-		ctx, cancel := context.WithCancel(dvs.ctx)
-		defer cancel()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case p := <-cn:
-				dvs.logger.Debug("unhandled packet", zap.Any("packet", p))
-			}
-		}
-	}()
-	dv5Cfg.Unhandled = cn
+	//cn := make(chan discover.ReadPacket, 10)
+	//go func() {
+	//	ctx, cancel := context.WithCancel(dvs.ctx)
+	//	defer cancel()
+	//	for {
+	//		select {
+	//		case <-ctx.Done():
+	//			return
+	//		case p := <-cn:
+	//			dvs.logger.Debug("unhandled packet", zap.Any("packet", p))
+	//		}
+	//	}
+	//}()
+	//dv5Cfg.Unhandled = cn
 	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not create discV5 listener")
@@ -174,7 +174,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	dvs.logger.Debug("started discv5 listener (UDP)", zap.String("bindIP", bindIP.String()),
-		zap.Int("UdpPort", opts.Port), zap.String("enr", localNode.Node().String()))
+		zap.Int("UdpPort", opts.Port), zap.String("enr", localNode.Node().String()), zap.String("OperatorID", opts.OperatorID))
 
 	dvs.logger.Debug("discv5 listener is ready", zap.String("enr", localNode.Node().String()))
 
@@ -238,7 +238,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int64) error {
 	if err := dvs.updateSubnetsEntry(smap); err != nil {
 		return err
 	}
-	go dvs.publishENR()
+	//go dvs.publishENR()
 	return nil
 }
 
@@ -254,6 +254,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 	if err := dvs.updateSubnetsEntry(smap); err != nil {
 		return err
 	}
+	//go dvs.publishENR()
 	return nil
 }
 
