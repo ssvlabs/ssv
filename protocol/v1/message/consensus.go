@@ -376,7 +376,9 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 
 	m = append(m, KeyVal{"round", int64(msg.Round)})
 	m = append(m, KeyVal{"lambda", []byte(format.IdentifierFormat(msg.Identifier.GetValidatorPK(), msg.Identifier.GetRoleType().String()))})
-	m = append(m, KeyVal{"seq_number", int64(msg.Height)}) // TODO seq 0 is not showing on old struct?
+	if msg.Height > 0 { // v0 version saves root without seq_number when height is 0.
+		m = append(m, KeyVal{"seq_number", int64(msg.Height)})
+	}
 	m = append(m, KeyVal{"value", data})
 
 	marshaledRoot, err := m.MarshalJSON()

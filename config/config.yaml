@@ -19,6 +19,7 @@ p2p:
 #  UdpPort:
   Bootnodes:
   HostAddress: 127.0.0.1
+#  DiscoveryType: mdns
 
 ssv:
   GenesisEpoch:
