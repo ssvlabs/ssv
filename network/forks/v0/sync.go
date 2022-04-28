@@ -9,7 +9,7 @@ const (
 	legacyMsgStream = "/sync/0.0.1"
 
 	peersForSync    = 4
-	peersForHistory = 1
+	peersForHistory = 3
 )
 
 // ProtocolID returns the protocol id of the given protocol,
