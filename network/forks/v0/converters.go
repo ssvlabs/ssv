@@ -24,6 +24,7 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			identifier := toIdentifierV1(msgV0.SyncMessage.GetLambda())
 			msg.ID = identifier
 			syncMsg := new(message.SyncMessage)
+			syncMsg.Status = message.StatusSuccess
 			syncMsg.Params = new(message.SyncParams)
 			syncMsg.Params.Identifier = identifier
 			params := msgV0.SyncMessage.GetParams()
@@ -32,7 +33,10 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				syncMsg.Params.Height = append(syncMsg.Params.Height, message.Height(p))
 			}
 			for _, sm := range msgV0.SyncMessage.GetSignedMessages() {
-				signed := ToSignedMessageV1(sm)
+				signed, err := ToSignedMessageV1(sm)
+				if err != nil {
+					return nil, err
+				}
 				if signed.Message != nil {
 					syncMsg.Data = append(syncMsg.Data, signed)
 				}
@@ -78,7 +82,10 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	}
 
 	if msgV0.SignedMessage != nil {
-		signed := ToSignedMessageV1(msgV0.SignedMessage)
+		signed, err := ToSignedMessageV1(msgV0.SignedMessage)
+		if err != nil {
+			return nil, err
+		}
 		data, err := signed.Encode()
 		if err != nil {
 			return nil, err
@@ -114,7 +121,7 @@ func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *message.SignedPost
 }
 
 // ToSignedMessageV1 converts a signed message from v0 to v1
-func ToSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
+func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) {
 	signed := new(message.SignedMessage)
 	signed.Signature = sm.GetSignature()
 	signers := sm.GetSignerIds()
@@ -124,9 +131,6 @@ func ToSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 	if msg := sm.GetMessage(); msg != nil {
 		signed.Message = new(message.ConsensusMessage)
 		data := msg.GetValue()
-		target := make([]byte, len(data))
-		copy(target, data)
-		signed.Message.Data = target
 		signed.Message.Round = message.Round(msg.GetRound())
 		signed.Message.Identifier = toIdentifierV1(msg.GetLambda())
 		signed.Message.Height = message.Height(msg.GetSeqNumber())
@@ -135,17 +139,37 @@ func ToSignedMessageV1(sm *proto.SignedMessage) *message.SignedMessage {
 			// TODO
 		case proto.RoundState_PrePrepare:
 			signed.Message.MsgType = message.ProposalMsgType
+			if p, err := (&message.ProposalData{Data: data}).Encode(); err != nil {
+				return nil, err
+			} else {
+				signed.Message.Data = p
+			}
 		case proto.RoundState_Prepare:
 			signed.Message.MsgType = message.PrepareMsgType
+			if p, err := (&message.PrepareData{Data: data}).Encode(); err != nil {
+				return nil, err
+			} else {
+				signed.Message.Data = p
+			}
 		case proto.RoundState_Commit:
 			signed.Message.MsgType = message.CommitMsgType
+			if c, err := (&message.CommitData{Data: data}).Encode(); err != nil {
+				return nil, err
+			} else {
+				signed.Message.Data = c
+			}
 		case proto.RoundState_ChangeRound:
 			signed.Message.MsgType = message.RoundChangeMsgType
+			if rc, err := (&message.RoundChangeData{PreparedValue: data}).Encode(); err != nil {
+				return nil, err
+			} else {
+				signed.Message.Data = rc
+			}
 		case proto.RoundState_Stopped:
 			// TODO
 		}
 	}
-	return signed
+	return signed, nil
 }
 
 // ToV0Message converts v1 message to v0
@@ -165,7 +189,11 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
 
-		v0Msg.SignedMessage = toSignedMessageV0(signedMsg, identifierV0)
+		sm, err := toSignedMessageV0(signedMsg, identifierV0)
+		if err != nil {
+			return nil, err
+		}
+		v0Msg.SignedMessage = sm
 		switch v0Msg.SignedMessage.GetMessage().GetType() {
 		case proto.RoundState_ChangeRound:
 			v0Msg.Type = network.NetworkMsg_IBFTType
@@ -199,7 +227,11 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		case message.StatusSuccess:
 			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
 			for _, smsg := range syncMsg.Data {
-				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, toSignedMessageV0(smsg, identifierV0))
+				sm, err := toSignedMessageV0(smsg, identifierV0)
+				if err != nil {
+					return nil, err
+				}
+				v0Msg.SyncMessage.SignedMessages = append(v0Msg.SyncMessage.SignedMessages, sm)
 			}
 		case message.StatusNotFound:
 			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
@@ -221,32 +253,53 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	return v0Msg, nil
 }
 
-func toSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) *proto.SignedMessage {
+func toSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*proto.SignedMessage, error) {
 	signedMsgV0 := &proto.SignedMessage{}
 	signedMsgV0.Message = &proto.Message{
 		Round:     uint64(signedMsg.Message.Round),
 		Lambda:    identifierV0,
 		SeqNumber: uint64(signedMsg.Message.Height),
-		Value:     make([]byte, len(signedMsg.Message.Data)),
+		Value:     nil,
 	}
-	copy(signedMsgV0.Message.Value, signedMsg.Message.Data)
 
 	switch signedMsg.Message.MsgType {
 	case message.ProposalMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_PrePrepare
+		if p, err := signedMsg.Message.GetProposalData(); err != nil {
+			return nil, err
+		} else {
+			signedMsgV0.Message.Value = p.Data
+		}
 	case message.PrepareMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_Prepare
+		if p, err := signedMsg.Message.GetPrepareData(); err != nil {
+			return nil, err
+		} else {
+			signedMsgV0.Message.Value = p.Data
+		}
 	case message.CommitMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_Commit
+		if c, err := signedMsg.Message.GetCommitData(); err != nil {
+			return nil, err
+		} else {
+			signedMsgV0.Message.Value = c.Data
+		}
 	case message.RoundChangeMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_ChangeRound
+		if cr, err := signedMsg.Message.GetRoundChangeData(); err != nil {
+			return nil, err
+		} else {
+			signedMsgV0.Message.Value = cr.GetPreparedValue()
+		}
+		//case message.DecidedMsgType:
+		//	signedMsgV0.Message.Type = proto.RoundState_Decided
 	}
 
 	signedMsgV0.Signature = signedMsg.GetSignature()
 	for _, signer := range signedMsg.GetSigners() {
 		signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
 	}
-	return signedMsgV0
+	return signedMsgV0, nil
 }
 
 func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessage, identifierV0 []byte) *proto.SignedMessage {
