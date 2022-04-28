@@ -3,6 +3,7 @@ package message
 import (
 	"crypto/sha256"
 	"fmt"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )

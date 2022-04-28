@@ -59,15 +59,15 @@ func New(db basedb.IDb, logger *zap.Logger, prefix string) qbftstorage.QBFTStore
 // GetLastDecided gets a signed message for an ibft instance which is the highest
 func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
 	// use the old identifier, if not found use the new one. this is to support old msg types when sync history
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	val, found, err := i.get(highestKey, oldIdentifier)
+	oldIdentifier := format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String())
+	val, found, err := i.get(highestKey, []byte(oldIdentifier))
 	if found && err == nil {
 		// old val found, unmarshal with old struct and convert to v1
 		ret := &proto.SignedMessage{}
 		if err := json.Unmarshal(val, ret); err != nil {
 			return nil, errors.Wrap(err, "un-marshaling error")
 		}
-		return v0.ToSignedMessageV1(ret), nil
+		return v0.ToSignedMessageV1(ret)
 	}
 
 	// old not found, try with new identifier
@@ -90,7 +90,7 @@ func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.Si
 // SaveLastDecided saves a signed message for an ibft instance which is currently highest
 func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) error {
 	for _, signedMsg := range signedMsgs {
-		value, err := json.Marshal(signedMsg)
+		value, err := signedMsg.Encode()
 		if err != nil {
 			return errors.Wrap(err, "marshaling error")
 		}
@@ -108,8 +108,10 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 	copy(prefix, i.prefix)
 	prefix = append(prefix, identifier...)
 
+	oldPrefix := make([]byte, len(i.prefix))
+	copy(oldPrefix, i.prefix)
 	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	oldPrefix := append(prefix, oldIdentifier...)
+	oldPrefix = append(oldPrefix, oldIdentifier...)
 
 	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
@@ -118,12 +120,14 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 	msgs := make([]*message.SignedMessage, 0)
 	err := i.db.GetMany(oldPrefix, sequences, func(obj basedb.Obj) error {
 		// old val found, unmarshal with old struct and convert to v1
-		ret := &proto.SignedMessage{}
-		if err := json.Unmarshal(obj.Value, ret); err != nil {
+		ret := proto.SignedMessage{}
+		if err := json.Unmarshal(obj.Value, &ret); err != nil {
 			return errors.Wrap(err, "un-marshaling error")
 		}
-
-		msg := v0.ToSignedMessageV1(ret)
+		msg, err := v0.ToSignedMessageV1(&ret)
+		if err != nil {
+			return err
+		}
 		msgs = append(msgs, msg)
 		return nil
 	})
@@ -205,7 +209,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 		if err := json.Unmarshal(val, ret); err != nil {
 			return nil, errors.Wrap(err, "un-marshaling error")
 		}
-		return v0.ToSignedMessageV1(ret), nil
+		return v0.ToSignedMessageV1(ret)
 	}
 
 	// old not found, try with new identifier

@@ -29,7 +29,7 @@ var ErrAlreadyRunning = errors.New("already running")
 type Options struct {
 	Context        context.Context
 	Role           message.RoleType
-	Identifier     []byte
+	Identifier     message.Identifier
 	Logger         *zap.Logger
 	Storage        qbftstorage.QBFTStore
 	Network        p2pprotocol.Network
@@ -53,7 +53,7 @@ type Controller struct {
 	network         p2pprotocol.Network
 	instanceConfig  *qbft.InstanceConfig
 	ValidatorShare  *beaconprotocol.Share
-	Identifier      []byte
+	Identifier      message.Identifier
 	fork            forks.Fork
 	beacon          beaconprotocol.Beacon
 	signer          beaconprotocol.Signer
@@ -146,7 +146,7 @@ func (c *Controller) syncDecided() error {
 		return c.ibftStorage.SaveDecided(msg)
 	}
 
-	c.logger.Debug("syncing heights decided")
+	c.logger.Debug("syncing heights decided", zap.String("identifier", c.Identifier.String()))
 	highest, err := h.SyncDecided(c.ctx, c.Identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return c.ibftStorage.GetLastDecided(i)
 	}, handler)
