@@ -18,7 +18,8 @@ const (
 	// localDiscoveryInterval is how often we re-publish our mDNS records.
 	localDiscoveryInterval = time.Second / 2
 	// LocalDiscoveryServiceTag is used in our mDNS advertisements to discover other peers
-	LocalDiscoveryServiceTag = "ssv.discovery"
+	LocalDiscoveryServiceTag = "bloxstaking.ssv"
+	//LocalDiscoveryServiceTag = "ssv.discovery" // TODO: change
 )
 
 // localDiscovery implements ssv_discovery.Service using mDNS and KAD-DHT
