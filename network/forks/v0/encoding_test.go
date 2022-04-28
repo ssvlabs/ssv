@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -34,6 +33,6 @@ func TestForkV0_Encoding(t *testing.T) {
 
 	res, err := f.DecodeNetworkMsg(b)
 	require.NoError(t, err)
-	require.Equal(t, v1Msg.MsgType, res.(*message.SSVMessage).MsgType)
-	require.True(t, bytes.Equal(v1Msg.Data, res.(*message.SSVMessage).Data))
+	require.Equal(t, v1Msg.MsgType, res.MsgType)
+	require.True(t, bytes.Equal(v1Msg.Data, res.Data))
 }

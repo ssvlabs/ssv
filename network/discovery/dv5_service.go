@@ -227,13 +227,13 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
+func (dvs *DiscV5Service) RegisterSubnets(subnets ...int64) error {
 	if len(subnets) == 0 {
 		return nil
 	}
 	smap := make(map[int]bool)
 	for _, sn := range subnets {
-		smap[sn] = true
+		smap[int(sn)] = true
 	}
 	if err := dvs.updateSubnetsEntry(smap); err != nil {
 		return err
@@ -243,13 +243,13 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int) error {
+func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 	if len(subnets) == 0 {
 		return nil
 	}
 	smap := make(map[int]bool)
 	for _, sn := range subnets {
-		smap[sn] = false
+		smap[int(sn)] = false
 	}
 	if err := dvs.updateSubnetsEntry(smap); err != nil {
 		return err
