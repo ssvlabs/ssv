@@ -374,29 +374,31 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 			if cr.GetRoundChangeJustification() != nil && len(cr.GetRoundChangeJustification()) > 0 {
 				var justificationMsg OrderedMap
 				rcj := cr.GetRoundChangeJustification()[0]
-				var rcjData []byte
-				switch rcj.Message.MsgType {
-				case PrepareMsgType:
-					justificationMsg = append(justificationMsg, KeyVal{Key: "type", Val: 2})
-					p, err := rcj.Message.GetPrepareData()
+				if rcj.Message != nil {
+					var rcjData []byte
+					switch rcj.Message.MsgType {
+					case PrepareMsgType: // can only be PrepareMsgType in change round justification msg
+						justificationMsg = append(justificationMsg, KeyVal{Key: "type", Val: 2})
+						p, err := rcj.Message.GetPrepareData()
+						if err != nil {
+							return nil, err
+						}
+						rcjData = p.Data
+					}
+
+					justificationMsg = append(justificationMsg, KeyVal{Key: "round", Val: uint64(rcj.Message.Round)})
+					justificationMsg = append(justificationMsg, KeyVal{Key: "lambda", Val: []byte(format.IdentifierFormat(rcj.Message.Identifier.GetValidatorPK(), rcj.Message.Identifier.GetRoleType().String()))})
+					justificationMsg = append(justificationMsg, KeyVal{Key: "seq_number", Val: uint64(rcj.Message.Height)})
+					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: rcjData})
+					mJustificationMsg, err := json.Marshal(justificationMsg)
 					if err != nil {
 						return nil, err
 					}
-					rcjData = p.Data
-				}
 
-				justificationMsg = append(justificationMsg, KeyVal{Key: "round", Val: uint64(rcj.Message.Round)})
-				justificationMsg = append(justificationMsg, KeyVal{Key: "lambda", Val: []byte(format.IdentifierFormat(rcj.Message.Identifier.GetValidatorPK(), rcj.Message.Identifier.GetRoleType().String()))})
-				justificationMsg = append(justificationMsg, KeyVal{Key: "seq_number", Val: uint64(rcj.Message.Height)})
-				justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: rcjData})
-				mJustificationMsg, err := json.Marshal(justificationMsg)
-				if err != nil {
-					return nil, err
+					value = append(value, KeyVal{Key: "justification_sig", Val: []byte(rcj.GetSignature())})
+					value = append(value, KeyVal{Key: "signer_ids", Val: rcj.GetSigners()})
+					value = append(value, KeyVal{Key: "justification_msg", Val: mJustificationMsg})
 				}
-
-				value = append(value, KeyVal{Key: "justification_sig", Val: []byte(rcj.GetSignature())})
-				value = append(value, KeyVal{Key: "signer_ids", Val: rcj.GetSigners()})
-				value = append(value, KeyVal{Key: "justification_msg", Val: mJustificationMsg})
 			}
 
 			mValue, err := value.MarshalJSON()
