@@ -23,8 +23,8 @@ type pubSubConfig interface {
 }
 
 type encoding interface {
-	EncodeNetworkMsg(msg message.Encoder) ([]byte, error)
-	DecodeNetworkMsg(data []byte) (message.Encoder, error)
+	EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error)
+	DecodeNetworkMsg(data []byte) (*message.SSVMessage, error)
 }
 
 type sync interface {

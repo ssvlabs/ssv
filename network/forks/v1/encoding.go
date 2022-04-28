@@ -5,12 +5,12 @@ import (
 )
 
 // EncodeNetworkMsg encodes network message
-func (v1 *ForkV1) EncodeNetworkMsg(msg message.Encoder) ([]byte, error) {
+func (v1 *ForkV1) EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error) {
 	return msg.Encode()
 }
 
 // DecodeNetworkMsg decodes network message
-func (v1 *ForkV1) DecodeNetworkMsg(data []byte) (message.Encoder, error) {
+func (v1 *ForkV1) DecodeNetworkMsg(data []byte) (*message.SSVMessage, error) {
 	msg := message.SSVMessage{}
 	err := msg.Decode(data)
 	if err != nil {

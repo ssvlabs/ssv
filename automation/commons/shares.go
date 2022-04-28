@@ -41,12 +41,19 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			return nil, nil, nil, err
 		}
 		val := validator.NewValidator(&validator.Options{
-			Context:                    ctx,
-			Logger:                     logger,
-			IbftStorage:                stores[i],
-			P2pNetwork:                 net.Nodes[i],
-			Network:                    beacon.NewNetwork(core.NetworkFromString("prater")),
-			Share:                      share,
+			Context:     ctx,
+			Logger:      logger,
+			IbftStorage: stores[i],
+			P2pNetwork:  net.Nodes[i],
+			Network:     beacon.NewNetwork(core.NetworkFromString("prater")),
+			Share: &beacon.Share{
+				NodeID:       message.OperatorID(i + 1),
+				PublicKey:    share.PublicKey,
+				Committee:    share.Committee,
+				Metadata:     share.Metadata,
+				OwnerAddress: share.OwnerAddress,
+				Operators:    share.Operators,
+			},
 			ForkVersion:                forksprotocol.V0ForkVersion,
 			Beacon:                     nil,
 			Signer:                     km,

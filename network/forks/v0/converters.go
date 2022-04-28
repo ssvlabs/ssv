@@ -10,6 +10,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// converters are used to encapsulate the struct of the messages
+// that are passed in the network (v0), until v1 fork
+
 // ToV1Message converts an old message to v1
 func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	msg := message.SSVMessage{}
@@ -79,7 +82,10 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	}
 
 	if msgV0.SignedMessage != nil {
-		signed, _ := ToSignedMessageV1(msgV0.SignedMessage)
+		signed, err := ToSignedMessageV1(msgV0.SignedMessage)
+		if err != nil {
+			return nil, err
+		}
 		data, err := signed.Encode()
 		if err != nil {
 			return nil, err
@@ -114,6 +120,7 @@ func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *message.SignedPost
 	return signed
 }
 
+// ToSignedMessageV1 converts a signed message from v0 to v1
 func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) {
 	signed := new(message.SignedMessage)
 	signed.Signature = sm.GetSignature()
@@ -169,11 +176,11 @@ func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) 
 func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	v0Msg := &network.Message{}
 	identifierV0 := toIdentifierV0(msg.GetIdentifier())
-	switch msg.GetType() {
-	case message.SSVDecidedMsgType:
+	if msg.GetType() == message.SSVDecidedMsgType {
 		v0Msg.Type = network.NetworkMsg_DecidedType // TODO need to provide the proper type (under consensus or post consensus?)
-		fallthrough
-	case message.SSVConsensusMsgType:
+	}
+	switch msg.GetType() {
+	case message.SSVConsensusMsgType, message.SSVDecidedMsgType:
 		if v0Msg.Type != network.NetworkMsg_DecidedType {
 			v0Msg.Type = network.NetworkMsg_IBFTType
 		}
@@ -194,7 +201,6 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			v0Msg.Type = network.NetworkMsg_DecidedType
 		default:
 		}
-		break // cause of fallthrough
 	case message.SSVPostConsensusMsgType:
 		v0Msg.Type = network.NetworkMsg_SignatureType
 		signedMsg := &message.SignedPostConsensusMessage{}

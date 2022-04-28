@@ -154,8 +154,12 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	}
 	cn := make(chan discover.ReadPacket, 10)
 	go func() {
-		for dvs.ctx.Err() == nil {
+		ctx, cancel := context.WithCancel(dvs.ctx)
+		defer cancel()
+		for {
 			select {
+			case <-ctx.Done():
+				return
 			case p := <-cn:
 				dvs.logger.Debug("unhandled packet", zap.Any("packet", p))
 			}

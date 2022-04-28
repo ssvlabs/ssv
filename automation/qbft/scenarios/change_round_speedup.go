@@ -33,7 +33,7 @@ func NewChangeRoundSpeedupScenario(logger *zap.Logger) Scenario {
 }
 
 func (r *changeRoundSpeedupScenario) NumOfOperators() int {
-	return 3
+	return 4
 }
 
 func (r *changeRoundSpeedupScenario) NumOfExporters() int {
@@ -92,7 +92,10 @@ func (r *changeRoundSpeedupScenario) Execute(ctx *ScenarioContext) error {
 	var wg sync.WaitGroup
 	var startErr error
 
-	r.startNode(r.validators[0], ctx.LocalNet.Nodes[0])
+	go func(val validator.IValidator, net network.P2PNetwork) {
+		time.Sleep(time.Second * 13)
+		r.startNode(val, net)
+	}(r.validators[0], ctx.LocalNet.Nodes[0])
 
 	go func(val validator.IValidator, net network.P2PNetwork) {
 		time.Sleep(time.Second * 13)
