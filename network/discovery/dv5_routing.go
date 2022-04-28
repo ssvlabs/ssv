@@ -21,13 +21,13 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	if opts.Ttl == 0 {
 		opts.Ttl = time.Hour
 	}
-	if !isSubnet(ns) {
+	subnet := nsToSubnet(ns)
+	if subnet < 0 {
 		dvs.logger.Debug("not a subnet", zap.String("ns", ns))
 		return opts.Ttl, nil
 	}
-	subnet := nsToSubnet(ns)
 
-	if err := dvs.RegisterSubnets(int(subnet)); err != nil {
+	if err := dvs.RegisterSubnets(subnet); err != nil {
 		return 0, err
 	}
 
@@ -37,15 +37,16 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 // FindPeers discovers peers providing a service
 // implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
-	if !isSubnet(ns) {
+	subnet := nsToSubnet(ns)
+	if subnet < 0 {
 		dvs.logger.Debug("not a subnet", zap.String("ns", ns))
 		return nil, nil
 	}
 	cn := make(chan peer.AddrInfo, 32)
-	subnet := nsToSubnet(ns)
+
 	dvs.discover(ctx, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.badNodeFilter, dvs.findBySubnetFilter(subnet))
+	}, time.Millisecond, dvs.badNodeFilter, dvs.findBySubnetFilter(uint64(subnet)))
 
 	return cn, nil
 }

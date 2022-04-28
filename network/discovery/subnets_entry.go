@@ -20,18 +20,18 @@ var regPool = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
 
 // nsToSubnet converts the given topic to subnet
 // TODO: return other value than zero upon failure?
-func nsToSubnet(ns string) uint64 {
+func nsToSubnet(ns string) int64 {
 	r, done := regPool.Get()
 	defer done()
 	found := r.FindStringSubmatch(ns)
 	if len(found) != 2 {
-		return 0
+		return -1
 	}
 	val, err := strconv.ParseUint(found[1], 10, 64)
 	if err != nil {
-		return 0
+		return -1
 	}
-	return val
+	return int64(val)
 }
 
 // isSubnet checks if the given string is a subnet string

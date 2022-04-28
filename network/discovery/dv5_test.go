@@ -33,8 +33,8 @@ func TestNewService(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	logger := zaptest.NewLogger(t)
-	//logger := zap.L()
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
 	peers := make([]host.Host, n)
 	for i := 0; i < n; i++ {
 		h, err := libp2p.New(ctx,
@@ -75,16 +75,19 @@ func TestNewService(t *testing.T) {
 		// start and count connected nodes
 		wg.Add(1)
 		go func() {
-			_ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			_ctx, cancel := context.WithTimeout(ctx, time.Second*10)
 			defer cancel()
-			go func() {
-				<-_ctx.Done()
-				cancel()
-			}()
+			expected := 3
 			found := 0
+			go func() {
+				err := <-_ctx.Done()
+				require.NotEqual(t, context.DeadlineExceeded, err)
+				require.GreaterOrEqual(t, found, expected)
+			}()
 			require.NoError(t, node.Bootstrap(func(e PeerEvent) {
 				found++
-				if found > n/2 {
+				logger.Debug("found node", zap.Any("e", e))
+				if found >= expected {
 					wg.Done()
 					return
 				}
