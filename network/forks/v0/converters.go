@@ -160,16 +160,63 @@ func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) 
 			signed.Message.Data = c
 		case proto.RoundState_ChangeRound:
 			signed.Message.MsgType = message.RoundChangeMsgType
-			rc, err := (&message.RoundChangeData{PreparedValue: data}).Encode()
+			rcd, err := toV1ChangeRound(data)
 			if err != nil {
 				return nil, err
 			}
-			signed.Message.Data = rc
+			signed.Message.Data = rcd
 		case proto.RoundState_Stopped:
 			// TODO
 		}
 	}
 	return signed, nil
+}
+
+func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
+	ret := &proto.ChangeRoundData{}
+	if err := json.Unmarshal(changeRoundData, ret); err != nil {
+		return nil, err
+	}
+
+	var signers []message.OperatorID
+	for _, signer := range ret.GetSignerIds() {
+		signers = append(signers, message.OperatorID(signer))
+	}
+
+	consensusMsg := &message.ConsensusMessage{
+		Height:     message.Height(ret.GetJustificationMsg().SeqNumber),
+		Round:      message.Round(ret.GetJustificationMsg().Round),
+		Identifier: toIdentifierV1(ret.GetJustificationMsg().Lambda),
+		Data:       ret.GetJustificationMsg().Value,
+	}
+
+	switch ret.GetJustificationMsg().GetType() {
+	case proto.RoundState_PrePrepare:
+		consensusMsg.MsgType = message.ProposalMsgType
+	case proto.RoundState_Prepare:
+		consensusMsg.MsgType = message.PrepareMsgType
+	case proto.RoundState_Commit:
+		consensusMsg.MsgType = message.CommitMsgType
+	case proto.RoundState_ChangeRound:
+		consensusMsg.MsgType = message.RoundChangeMsgType
+	}
+
+	crm := &message.RoundChangeData{
+		PreparedValue:    ret.GetPreparedValue(),
+		Round:            message.Round(ret.GetPreparedRound()),
+		NextProposalData: nil,
+		RoundChangeJustification: []*message.SignedMessage{{
+			Signature: ret.GetJustificationSig(),
+			Signers:   signers,
+			Message:   consensusMsg,
+		}},
+	}
+
+	encoded, err := crm.Encode()
+	if err != nil {
+		return nil, err
+	}
+	return encoded, nil
 }
 
 // ToV0Message converts v1 message to v0
