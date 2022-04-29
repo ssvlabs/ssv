@@ -1,7 +1,6 @@
 package scenarios
 
 import (
-	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -42,18 +41,6 @@ func (r *changeRoundSpeedupScenario) NumOfExporters() int {
 
 func (r *changeRoundSpeedupScenario) Name() string {
 	return "changeRoundSpeedup"
-}
-
-type router struct {
-	logger      *zap.Logger
-	controllers controller.Controllers
-}
-
-func (r *router) Route(message message.SSVMessage) {
-	if err := r.controllers.ControllerForIdentifier(message.GetIdentifier()).ProcessMsg(&message); err != nil {
-		r.logger.Error("failed to process message",
-			zap.String("identifier", hex.EncodeToString(message.GetIdentifier())))
-	}
 }
 
 func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {

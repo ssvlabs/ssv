@@ -16,8 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// farFutureSyncScenario is the scenario when new nodes are created with a delay after other nodes already started.
-// It tests the exchange of ChangeRound message between nodes.
 type farFutureSyncScenario struct {
 	logger     *zap.Logger
 	sks        map[uint64]*bls.SecretKey

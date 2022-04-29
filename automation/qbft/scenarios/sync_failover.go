@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// syncFailoverScenario is the scenario when new nodes are created with a delay after other nodes already started.
 type syncFailoverScenario struct {
 	logger     *zap.Logger
 	sks        map[uint64]*bls.SecretKey
