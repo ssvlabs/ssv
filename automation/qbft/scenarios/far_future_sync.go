@@ -156,6 +156,7 @@ func (r *farFutureSyncScenario) initNode(val validator.IValidator, net network.P
 		if err := ib.Init(); err != nil {
 			if err == controller.ErrAlreadyRunning {
 				r.logger.Debug("ibft init is already running")
+				continue
 			}
 			r.logger.Error("could not initialize ibft instance", zap.Error(err))
 			return err
