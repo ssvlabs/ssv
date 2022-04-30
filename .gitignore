@@ -24,6 +24,8 @@ vendor/
 .idea/**/tasks.xml
 .idea/watcherTasks.xml
 .idea/dictionaries
+.idea/codeStyles
+.idea/shelf
 
 # Sensitive or high-churn files:
 .idea/**/dataSources/
