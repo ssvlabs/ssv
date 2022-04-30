@@ -1,15 +1,11 @@
-package scenarios
+package runner
 
 import (
 	"context"
-	"encoding/hex"
 
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"go.uber.org/zap"
 )
 
 type ScenarioFactory func(name string) Scenario
@@ -40,16 +36,4 @@ type Scenario interface {
 	Execute(ctx *ScenarioContext) error
 	// PostExecution is invoked after execution, used for cleanup etc.
 	PostExecution(ctx *ScenarioContext) error
-}
-
-type router struct {
-	logger      *zap.Logger
-	controllers controller.Controllers
-}
-
-func (r *router) Route(message message.SSVMessage) {
-	if err := r.controllers.ControllerForIdentifier(message.GetIdentifier()).ProcessMsg(&message); err != nil {
-		r.logger.Error("failed to process message",
-			zap.String("identifier", hex.EncodeToString(message.GetIdentifier())))
-	}
 }

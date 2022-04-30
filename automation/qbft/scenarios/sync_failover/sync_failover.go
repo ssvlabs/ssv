@@ -1,20 +1,29 @@
-package scenarios
+package main
 
 import (
 	"fmt"
 	"sync"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/automation/commons"
+	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func main() {
+	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
+	runner.Start(logger, newSyncFailoverScenario(logger))
+}
 
 type syncFailoverScenario struct {
 	logger     *zap.Logger
@@ -23,8 +32,8 @@ type syncFailoverScenario struct {
 	validators []validator.IValidator
 }
 
-// NewSyncFailoverScenario creates a syncFailover scenario instance
-func NewSyncFailoverScenario(logger *zap.Logger) Scenario {
+// newSyncFailoverScenario creates a syncFailover scenario instance
+func newSyncFailoverScenario(logger *zap.Logger) runner.Scenario {
 	return &syncFailoverScenario{logger: logger}
 }
 
@@ -40,7 +49,7 @@ func (r *syncFailoverScenario) Name() string {
 	return "syncFailover"
 }
 
-func (r *syncFailoverScenario) PreExecution(ctx *ScenarioContext) error {
+func (r *syncFailoverScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
@@ -50,7 +59,7 @@ func (r *syncFailoverScenario) PreExecution(ctx *ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	routers := make([]*router, r.NumOfOperators())
+	routers := make([]*runner.Router, r.NumOfOperators())
 
 	loggerFactory := func(who string) *zap.Logger {
 		logger := zap.L().With(zap.String("who", who))
@@ -58,9 +67,9 @@ func (r *syncFailoverScenario) PreExecution(ctx *ScenarioContext) error {
 	}
 
 	for i, node := range ctx.LocalNet.Nodes {
-		routers[i] = &router{
-			logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
-			controllers: r.validators[i].(*validator.Validator).Ibfts(),
+		routers[i] = &runner.Router{
+			Logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			Controllers: r.validators[i].(*validator.Validator).Ibfts(),
 		}
 		node.UseMessageRouter(routers[i])
 	}
@@ -89,7 +98,7 @@ func (r *syncFailoverScenario) PreExecution(ctx *ScenarioContext) error {
 	return nil
 }
 
-func (r *syncFailoverScenario) Execute(ctx *ScenarioContext) error {
+func (r *syncFailoverScenario) Execute(ctx *runner.ScenarioContext) error {
 	var wg sync.WaitGroup
 
 	msgs := map[message.Height]*message.SignedMessage{}
@@ -154,7 +163,7 @@ loop:
 	return nil
 }
 
-func (r *syncFailoverScenario) PostExecution(ctx *ScenarioContext) error {
+func (r *syncFailoverScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
 	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
 	if err != nil {

@@ -1,21 +1,30 @@
-package scenarios
+package main
 
 import (
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/automation/commons"
+	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func main() {
+	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
+	runner.Start(logger, newF1MultiRoundScenario(logger))
+}
 
 // f1MultiRoundScenario is the scenario when new nodes are created with a delay after other nodes already started.
 type f1MultiRoundScenario struct {
@@ -25,8 +34,8 @@ type f1MultiRoundScenario struct {
 	validators []validator.IValidator
 }
 
-// NewF1MultiRoundScenario creates a f1MultiRound scenario instance
-func NewF1MultiRoundScenario(logger *zap.Logger) Scenario {
+// newF1MultiRoundScenario creates a f1MultiRound scenario instance
+func newF1MultiRoundScenario(logger *zap.Logger) runner.Scenario {
 	return &f1MultiRoundScenario{logger: logger}
 }
 
@@ -42,7 +51,7 @@ func (r *f1MultiRoundScenario) Name() string {
 	return "f1MultiRound"
 }
 
-func (r *f1MultiRoundScenario) PreExecution(ctx *ScenarioContext) error {
+func (r *f1MultiRoundScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
@@ -52,7 +61,7 @@ func (r *f1MultiRoundScenario) PreExecution(ctx *ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	routers := make([]*router, r.NumOfOperators())
+	routers := make([]*runner.Router, r.NumOfOperators())
 
 	loggerFactory := func(who string) *zap.Logger {
 		logger := zap.L().With(zap.String("who", who))
@@ -60,9 +69,9 @@ func (r *f1MultiRoundScenario) PreExecution(ctx *ScenarioContext) error {
 	}
 
 	for i, node := range ctx.LocalNet.Nodes {
-		routers[i] = &router{
-			logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
-			controllers: r.validators[i].(*validator.Validator).Ibfts(),
+		routers[i] = &runner.Router{
+			Logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			Controllers: r.validators[i].(*validator.Validator).Ibfts(),
 		}
 		node.UseMessageRouter(routers[i])
 	}
@@ -70,7 +79,7 @@ func (r *f1MultiRoundScenario) PreExecution(ctx *ScenarioContext) error {
 	return nil
 }
 
-func (r *f1MultiRoundScenario) Execute(ctx *ScenarioContext) error {
+func (r *f1MultiRoundScenario) Execute(ctx *runner.ScenarioContext) error {
 	if len(r.sks) == 0 || r.share == nil {
 		return errors.New("pre-execution failed")
 	}
@@ -100,7 +109,7 @@ func (r *f1MultiRoundScenario) Execute(ctx *ScenarioContext) error {
 	return startErr
 }
 
-func (r *f1MultiRoundScenario) PostExecution(ctx *ScenarioContext) error {
+func (r *f1MultiRoundScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i := range ctx.Stores {
 		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
 		if err != nil {

@@ -1,19 +1,28 @@
-package scenarios
+package main
 
 import (
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/automation/commons"
+	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func main() {
+	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
+	runner.Start(logger, newRegularScenario(logger))
+}
 
 // regularScenario is the most basic scenario where 4 operators starts qbft for a single validator
 type regularScenario struct {
@@ -23,8 +32,8 @@ type regularScenario struct {
 	validators []validator.IValidator
 }
 
-// NewRegularScenario creates a regular scenario instance
-func NewRegularScenario(logger *zap.Logger) Scenario {
+// newRegularScenario creates a regular scenario instance
+func newRegularScenario(logger *zap.Logger) runner.Scenario {
 	return &regularScenario{logger: logger}
 }
 
@@ -40,7 +49,7 @@ func (r *regularScenario) Name() string {
 	return "regular"
 }
 
-func (r *regularScenario) PreExecution(ctx *ScenarioContext) error {
+func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
@@ -85,7 +94,7 @@ func (r *regularScenario) PreExecution(ctx *ScenarioContext) error {
 	return nil
 }
 
-func (r *regularScenario) Execute(ctx *ScenarioContext) error {
+func (r *regularScenario) Execute(_ *runner.ScenarioContext) error {
 	if len(r.sks) == 0 || r.share == nil {
 		return errors.New("pre-execution failed")
 	}
@@ -107,7 +116,7 @@ func (r *regularScenario) Execute(ctx *ScenarioContext) error {
 	return startErr
 }
 
-func (r *regularScenario) PostExecution(ctx *ScenarioContext) error {
+func (r *regularScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
 	if err != nil {
 		return err

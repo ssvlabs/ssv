@@ -2,15 +2,16 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"time"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
@@ -18,7 +19,7 @@ import (
 type IValidator interface {
 	Start() error
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
-	ProcessMsg(msg *message.SSVMessage) //TODO need to be as separate interface?
+	ProcessMsg(msg *message.SSVMessage) // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
 	OnFork(forkVersion forksprotocol.ForkVersion) error
 }

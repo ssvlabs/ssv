@@ -1,20 +1,29 @@
-package scenarios
+package main
 
 import (
 	"fmt"
 	"sync"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/automation/commons"
+	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func main() {
+	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
+	runner.Start(logger, newFarFutureSyncScenario(logger))
+}
 
 type farFutureSyncScenario struct {
 	logger     *zap.Logger
@@ -23,8 +32,8 @@ type farFutureSyncScenario struct {
 	validators []validator.IValidator
 }
 
-// NewFarFutureSyncScenario creates a farFutureSync scenario instance
-func NewFarFutureSyncScenario(logger *zap.Logger) Scenario {
+// newFarFutureSyncScenario creates a farFutureSync scenario instance
+func newFarFutureSyncScenario(logger *zap.Logger) runner.Scenario {
 	return &farFutureSyncScenario{logger: logger}
 }
 
@@ -40,7 +49,7 @@ func (r *farFutureSyncScenario) Name() string {
 	return "farFutureSync"
 }
 
-func (r *farFutureSyncScenario) PreExecution(ctx *ScenarioContext) error {
+func (r *farFutureSyncScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
@@ -50,7 +59,7 @@ func (r *farFutureSyncScenario) PreExecution(ctx *ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	routers := make([]*router, r.NumOfOperators())
+	routers := make([]*runner.Router, r.NumOfOperators())
 
 	loggerFactory := func(who string) *zap.Logger {
 		logger := zap.L().With(zap.String("who", who))
@@ -58,9 +67,9 @@ func (r *farFutureSyncScenario) PreExecution(ctx *ScenarioContext) error {
 	}
 
 	for i, node := range ctx.LocalNet.Nodes {
-		routers[i] = &router{
-			logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
-			controllers: r.validators[i].(*validator.Validator).Ibfts(),
+		routers[i] = &runner.Router{
+			Logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			Controllers: r.validators[i].(*validator.Validator).Ibfts(),
 		}
 		node.UseMessageRouter(routers[i])
 	}
@@ -111,7 +120,7 @@ loop:
 	return nil
 }
 
-func (r *farFutureSyncScenario) Execute(ctx *ScenarioContext) error {
+func (r *farFutureSyncScenario) Execute(ctx *runner.ScenarioContext) error {
 	r.logger.Info("starting node $4")
 	if err := r.initNode(r.validators[3], ctx.LocalNet.Nodes[3]); err != nil {
 		return err
@@ -130,7 +139,7 @@ func (r *farFutureSyncScenario) Execute(ctx *ScenarioContext) error {
 	return nil
 }
 
-func (r *farFutureSyncScenario) PostExecution(ctx *ScenarioContext) error {
+func (r *farFutureSyncScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
 	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
 	if err != nil {

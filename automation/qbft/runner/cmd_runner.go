@@ -1,10 +1,12 @@
-package main
+package runner
 
 import (
 	"context"
 	"fmt"
+
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
-	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -14,20 +16,14 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
-func main() {
+func Start(logger *zap.Logger, scenario Scenario) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-
-	s := scenarios.NewChangeRoundSpeedupScenario(logger)
-
 	dbs := make([]basedb.IDb, 0)
-	for i := 0; i < s.NumOfOperators(); i++ {
+	for i := 0; i < scenario.NumOfOperators(); i++ {
 		db, err := storage.GetStorageFactory(basedb.Options{
 			Type:   "badger-memory",
 			Path:   "",
@@ -39,13 +35,12 @@ func main() {
 		dbs = append(dbs, db)
 	}
 
-	if err := Run(ctx, dbs, s); err != nil {
+	if err := run(ctx, dbs, scenario); err != nil {
 		logger.Panic("could not run scenario", zap.Error(err))
 	}
 }
 
-// Run runs the given scenario
-func Run(pctx context.Context, dbs []basedb.IDb, scenario scenarios.Scenario) error {
+func run(pctx context.Context, dbs []basedb.IDb, scenario Scenario) error {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
 	loggerFactory := func(s string) *zap.Logger {
@@ -76,7 +71,7 @@ func Run(pctx context.Context, dbs []basedb.IDb, scenario scenarios.Scenario) er
 		))
 	}
 
-	sctx := scenarios.ScenarioContext{
+	sctx := ScenarioContext{
 		Ctx:         ctx,
 		LocalNet:    ln,
 		Stores:      stores,

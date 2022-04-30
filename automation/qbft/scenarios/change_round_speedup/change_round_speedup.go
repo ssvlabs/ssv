@@ -1,21 +1,30 @@
-package scenarios
+package main
 
 import (
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/automation/commons"
+	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func main() {
+	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
+	runner.Start(logger, newChangeRoundSpeedupScenario(logger))
+}
 
 // changeRoundSpeedupScenario is the scenario when new nodes are created with a delay after other nodes already started.
 // It tests the exchange of ChangeRound message between nodes.
@@ -26,8 +35,8 @@ type changeRoundSpeedupScenario struct {
 	validators []validator.IValidator
 }
 
-// NewChangeRoundSpeedupScenario creates a changeRoundSpeedup scenario instance
-func NewChangeRoundSpeedupScenario(logger *zap.Logger) Scenario {
+// newChangeRoundSpeedupScenario creates a changeRoundSpeedup scenario instance
+func newChangeRoundSpeedupScenario(logger *zap.Logger) runner.Scenario {
 	return &changeRoundSpeedupScenario{logger: logger}
 }
 
@@ -43,7 +52,7 @@ func (r *changeRoundSpeedupScenario) Name() string {
 	return "changeRoundSpeedup"
 }
 
-func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {
+func (r *changeRoundSpeedupScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
@@ -53,7 +62,7 @@ func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	routers := make([]*router, r.NumOfOperators())
+	routers := make([]*runner.Router, r.NumOfOperators())
 
 	loggerFactory := func(who string) *zap.Logger {
 		logger := zap.L().With(zap.String("who", who))
@@ -61,9 +70,9 @@ func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {
 	}
 
 	for i, node := range ctx.LocalNet.Nodes {
-		routers[i] = &router{
-			logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
-			controllers: r.validators[i].(*validator.Validator).Ibfts(),
+		routers[i] = &runner.Router{
+			Logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			Controllers: r.validators[i].(*validator.Validator).Ibfts(),
 		}
 		node.UseMessageRouter(routers[i])
 	}
@@ -71,7 +80,7 @@ func (r *changeRoundSpeedupScenario) PreExecution(ctx *ScenarioContext) error {
 	return nil
 }
 
-func (r *changeRoundSpeedupScenario) Execute(ctx *ScenarioContext) error {
+func (r *changeRoundSpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 	if len(r.sks) == 0 || r.share == nil {
 		return errors.New("pre-execution failed")
 	}
@@ -101,7 +110,7 @@ func (r *changeRoundSpeedupScenario) Execute(ctx *ScenarioContext) error {
 	return startErr
 }
 
-func (r *changeRoundSpeedupScenario) PostExecution(ctx *ScenarioContext) error {
+func (r *changeRoundSpeedupScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i := range ctx.Stores {
 		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
 		if err != nil {
