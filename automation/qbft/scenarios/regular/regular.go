@@ -67,12 +67,18 @@ func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	}
 
 	msgs, err := testing.CreateMultipleSignedMessages(keys, message.Height(0), message.Height(4), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
+		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
+		commitDataBytes, err := commitData.Encode()
+		if err != nil {
+			panic(err)
+		}
+
 		return oids, &message.ConsensusMessage{
 			MsgType:    message.CommitMsgType,
 			Height:     height,
 			Round:      1,
 			Identifier: message.NewIdentifier(share.PublicKey.Serialize(), message.RoleTypeAttester),
-			Data:       []byte(fmt.Sprintf("msg-data-%d", height)),
+			Data:       commitDataBytes,
 		}
 	})
 	if err != nil {
