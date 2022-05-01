@@ -2,7 +2,10 @@ package storage
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"log"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -10,12 +13,11 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/format"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
-	"strings"
 )
 
 const (
@@ -261,11 +263,8 @@ func uInt64ToByteSlice(n uint64) []byte {
 }
 
 func reportHighestDecided(signedMsg *message.SignedMessage) {
-	l := string(signedMsg.Message.Identifier)
 	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
-	if idx := strings.Index(l, "_"); idx > 0 {
-		pubKey := l[:idx]
-		metricsHighestDecided.WithLabelValues(string(signedMsg.Message.Identifier), pubKey).
-			Set(float64(signedMsg.Message.Height))
-	}
+	pk := hex.EncodeToString(signedMsg.Message.Identifier.GetValidatorPK())
+	metricsHighestDecided.WithLabelValues(signedMsg.Message.Identifier.String(), pk).
+		Set(float64(signedMsg.Message.Height))
 }
