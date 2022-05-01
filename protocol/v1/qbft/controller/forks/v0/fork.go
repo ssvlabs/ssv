@@ -8,6 +8,7 @@ import (
 	forkv0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 // ForkV0 is the genesis fork for controller
@@ -36,4 +37,9 @@ func (v0 *ForkV0) ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMessag
 		signedmsg.AuthorizeMsg(share, v0.VersionName()),
 		signedmsg.ValidateQuorum(share.ThresholdSize()),
 	)
+}
+
+// Identifier return the proper identifier
+func (v0 *ForkV0) Identifier(pk []byte, role message.RoleType) []byte {
+	return []byte(format.IdentifierFormat(pk, role.String())) // need to support same seed as v0 versions
 }

@@ -23,7 +23,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 		return errors.New("iBFT hasn't initialized yet")
 	}
 	if c.currentInstance != nil {
-		return errors.Errorf("current instance (%s) is still running", c.currentInstance.State().GetIdentifier().String())
+		return errors.Errorf("current instance (%d) is still running", c.currentInstance.State().GetHeight())
 	}
 	if !c.ValidatorShare.OperatorReady() {
 		return errors.New("operator share not ready")
@@ -73,7 +73,7 @@ func (c *Controller) NextSeqNumber() (message.Height, error) {
 }
 
 func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerStartInstanceOptions) (*instance.Options, error) {
-	leaderSelectionSeed := append(c.Identifier, []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
+	leaderSelectionSeed := append(c.fork.Identifier(c.Identifier.GetValidatorPK(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err
