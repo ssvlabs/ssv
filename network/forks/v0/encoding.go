@@ -3,6 +3,7 @@ package v0
 import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/pkg/errors"
 )
 
 // EncodeNetworkMsg converts the message to v0 and encodes it
@@ -19,7 +20,7 @@ func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (*message.SSVMessage, error) {
 	v0Msg := &network.Message{}
 	err := v0Msg.Decode(data)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "failed to decode v0 message")
 	}
 	return ToV1Message(v0Msg)
 }

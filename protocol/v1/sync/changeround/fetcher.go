@@ -36,6 +36,7 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 		return errors.Wrap(err, "could not get change round messages")
 	}
 
+	crf.logger.Debug("---- got last change round msgs -----", zap.Int("msgs count", len(msgs)), zap.Any("msgs", msgs))
 	for _, msg := range msgs {
 		syncMsg := &message.SyncMessage{}
 		err = syncMsg.Decode(msg.Msg.Data)

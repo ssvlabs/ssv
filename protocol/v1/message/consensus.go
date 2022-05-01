@@ -365,16 +365,17 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 		}
 	case RoundChangeMsgType:
 		m = append(m, KeyVal{"type", proto.RoundState_ChangeRound})
-		if cr, err := msg.GetRoundChangeData(); err != nil {
-			return nil, err
-		} else {
-			var value OrderedMap
-			value = append(value, KeyVal{Key: "prepared_round", Val: uint64(cr.GetPreparedRound())})
-			value = append(value, KeyVal{Key: "prepared_value", Val: cr.GetPreparedValue()})
+		var value OrderedMap
+		if cr, err := msg.GetRoundChangeData(); err == nil {
+			if cr.GetPreparedValue() != nil && len(cr.GetPreparedValue()) > 0 {
+				value = append(value, KeyVal{Key: "prepared_round", Val: uint64(cr.GetPreparedRound())})
+				value = append(value, KeyVal{Key: "prepared_value", Val: cr.GetPreparedValue()})
+			}
+
 			if cr.GetRoundChangeJustification() != nil && len(cr.GetRoundChangeJustification()) > 0 {
 				var justificationMsg OrderedMap
 				rcj := cr.GetRoundChangeJustification()[0]
-				if rcj.Message != nil {
+				if rcj.Message != nil && rcj.Message.MsgType != 0 { // make sure message is not "empty" ConsensusMessage TODO need to set better checking
 					var rcjData []byte
 					switch rcj.Message.MsgType {
 					case PrepareMsgType: // can only be PrepareMsgType in change round justification msg
@@ -400,12 +401,13 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 					value = append(value, KeyVal{Key: "justification_msg", Val: mJustificationMsg})
 				}
 			}
-
-			mValue, err := value.MarshalJSON()
-			if err != nil {
-				return nil, err
-			}
-			m = append(m, KeyVal{"value", mValue})
+		} else {
+			// no change round data. (could be?)
+		}
+		var err error
+		data, err = value.MarshalJSON()
+		if err != nil {
+			return nil, err
 		}
 	default:
 		return nil, errors.Errorf("consensus type is not known. type - %s", msg.MsgType.String())
@@ -416,9 +418,7 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 	if msg.Height > 0 { // v0 version saves root without seq_number when height is 0.
 		m = append(m, KeyVal{"seq_number", int64(msg.Height)})
 	}
-	if len(data) > 0 {
-		m = append(m, KeyVal{"value", data})
-	}
+	m = append(m, KeyVal{"value", data})
 
 	marshaledRoot, err := m.MarshalJSON()
 	if err != nil {

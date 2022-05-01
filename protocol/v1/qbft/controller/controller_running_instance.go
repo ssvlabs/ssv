@@ -26,7 +26,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetValidatorPK())).Set(float64(c.currentInstance.State().GetHeight()))
 
 	// catch up if we can
-	//go c.fastChangeRoundCatchup(c.currentInstance) TODO enable!!!!
+	go c.fastChangeRoundCatchup(c.currentInstance)
 
 	// main instance callback loop
 	var retRes *instance.InstanceResult
@@ -207,11 +207,10 @@ func (c *Controller) listenToLateCommitMsgs(identifier []byte, seq message.Heigh
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
 func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	count := 0
-
 	f := changeround.NewLastRoundFetcher(c.logger, c.network)
 
 	handler := func(msg *message.SignedMessage) error {
-		err := c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
+		err := c.currentInstance.ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}

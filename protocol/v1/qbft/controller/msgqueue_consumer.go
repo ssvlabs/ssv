@@ -35,7 +35,7 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 			//		and try to get messages from that height
 			msgs := c.q.Pop(1, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, c.signatureState.height)) // sigs
 			if len(msgs) == 0 || msgs[0] == nil {
-				msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType)...) // decided
+				msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, c.signatureState.height, message.CommitMsgType, message.RoundChangeMsgType)...)
 			}
 			if len(msgs) == 0 || msgs[0] == nil {
 				continue

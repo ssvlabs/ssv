@@ -175,7 +175,8 @@ func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) 
 func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 	ret := &proto.ChangeRoundData{}
 	if err := json.Unmarshal(changeRoundData, ret); err != nil {
-		return nil, err
+		r := &message.RoundChangeData{} // should return empty struct
+		return r.Encode()
 	}
 
 	var signers []message.OperatorID
@@ -340,7 +341,16 @@ func toSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 		if err != nil {
 			return nil, err
 		}
-		signedMsgV0.Message.Value = cr.GetPreparedValue()
+		if cr.GetPreparedValue() != nil && len(cr.GetPreparedValue()) > 0 {
+			signedMsgV0.Message.Value = cr.GetPreparedValue()
+		} else {
+			v := make(map[string]interface{})
+			marshaledV, err := json.Marshal(v)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to marshal empty map")
+			}
+			signedMsgV0.Message.Value = marshaledV // adding empty json in order to support v0 root
+		}
 	}
 
 	signedMsgV0.Signature = signedMsg.GetSignature()
