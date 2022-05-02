@@ -219,7 +219,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 			return errors.Wrap(err, "could not encode msg")
 		}
 		c.q.Add(&message.SSVMessage{
-			MsgType: message.SSVSyncMsgType,
+			MsgType: message.SSVConsensusMsgType, // should be consensus type as it change round msg
 			ID:      c.Identifier,
 			Data:    encodedMsg,
 		})

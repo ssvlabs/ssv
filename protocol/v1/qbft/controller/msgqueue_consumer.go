@@ -81,15 +81,15 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	case qbft.RoundState_NotStarted:
 		msgs = c.q.Pop(1, msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier))
 	case qbft.RoundState_PrePrepare:
-		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType)...) // looking for propose in case is leader
+		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType, message.RoundChangeMsgType)...) // looking for propose in case is leader
 	case qbft.RoundState_Prepare:
-		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType)...)
+		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType, message.RoundChangeMsgType)...)
 	case qbft.RoundState_Commit:
 		return nil // qbft.RoundState_Commit stage is NEVER set
 	case qbft.RoundState_ChangeRound:
 		msgs = c.q.Pop(1, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)...)
 		//case qbft.RoundState_Decided: only after instance is nilled
-		//case qbft.RoundState_Stopped:
+		//case qbft.RoundState_Stopped: only after instance is nilled
 	}
 	if len(msgs) > 0 {
 		return msgs[0]
