@@ -193,7 +193,7 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 
 // SaveLastChangeRoundMsg updates last change round message
 func (i *ibftStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error {
-	value, err := json.Marshal(msg)
+	value, err := msg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
@@ -208,10 +208,11 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 	if found && err == nil {
 		// old val found, unmarshal with old struct and convert to v1
 		ret := &proto.SignedMessage{}
-		if err := json.Unmarshal(val, ret); err != nil {
-			return nil, errors.Wrap(err, "un-marshaling error")
+		if err := json.Unmarshal(val, ret); err == nil { // if error, try v1 version
+			if msg, err := v0.ToSignedMessageV1(ret); err == nil { // if error, try v1 version
+				return msg, nil
+			}
 		}
-		return v0.ToSignedMessageV1(ret)
 	}
 
 	// old not found, try with new identifier
@@ -223,7 +224,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 		return nil, err
 	}
 	ret := &message.SignedMessage{}
-	if err := json.Unmarshal(val, ret); err != nil {
+	if err := ret.Decode(val); err != nil {
 		return nil, errors.Wrap(err, "un-marshaling error")
 	}
 	return ret, nil
@@ -263,7 +264,6 @@ func uInt64ToByteSlice(n uint64) []byte {
 }
 
 func reportHighestDecided(signedMsg *message.SignedMessage) {
-	// in order to extract the public key, the role (e.g. '_ATTESTER') is removed
 	pk := hex.EncodeToString(signedMsg.Message.Identifier.GetValidatorPK())
 	metricsHighestDecided.WithLabelValues(signedMsg.Message.Identifier.String(), pk).
 		Set(float64(signedMsg.Message.Height))
