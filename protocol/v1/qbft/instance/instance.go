@@ -305,6 +305,7 @@ func (i *Instance) GetStageChan() chan qbft.RoundState {
 
 // SignAndBroadcast checks and adds the signed message to the appropriate round state type
 func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
+	i.Logger.Debug("broadcasting consensus msg", zap.String("type", msg.MsgType.String()), zap.Int64("height", int64(msg.Height)), zap.Int64("round", int64(msg.Round)))
 	pk, err := i.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
 		return errors.Wrap(err, "could not find operator pk for signing msg")

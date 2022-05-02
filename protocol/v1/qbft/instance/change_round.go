@@ -203,7 +203,6 @@ func (i *Instance) BroadcastChangeRound() error {
 	if err := i.SignAndBroadcast(broadcastMsg); err != nil {
 		return err
 	}
-	i.Logger.Info("broadcasted change round", zap.Uint64("round", uint64(broadcastMsg.Round)))
 	return nil
 }
 
