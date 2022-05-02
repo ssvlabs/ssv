@@ -81,7 +81,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 		}
 
 		i.processChangeRoundQuorumOnce.Do(func() {
-			i.ProcessStageChange(qbft.RoundState_PrePrepare)
+			//i.ProcessStageChange(qbft.RoundState_PrePrepare) we need to process the proposal msg in order to broadcast to prepare msg
 			logger := i.Logger.With(zap.Uint64("round", uint64(signedMessage.Message.Round)),
 				zap.Bool("is_leader", i.IsLeader()),
 				zap.Uint64("leader", i.ThisRoundLeader()),
