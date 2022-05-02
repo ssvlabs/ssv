@@ -23,6 +23,7 @@ vendor/
 .idea/**/workspace.xml
 .idea/**/tasks.xml
 .idea/watcherTasks.xml
+.idea/misc.xml
 .idea/dictionaries
 .idea/codeStyles
 .idea/shelf
