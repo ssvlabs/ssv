@@ -25,6 +25,7 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.InstanceStore
 			return nil, nil
 		} else {
 			res, err := store.GetLastChangeRoundMsg(msg.ID)
+			plogger.Debug("last change round handler", zap.Any("msgs", res))
 			sm.UpdateResults(err, res)
 		}
 

@@ -36,14 +36,15 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	}
 
 	// calculate next seq
-	seqNumber, err := qbftCtrl.NextSeqNumber()
+	height, err := qbftCtrl.NextSeqNumber()
 	if err != nil {
 		return nil, 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
+	logger.Debug("start instance", zap.Int64("height", int64(height)))
 	result, err := qbftCtrl.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:          logger,
-		SeqNumber:       seqNumber,
+		SeqNumber:       height,
 		Value:           inputByts,
 		RequireMinPeers: true,
 	})
@@ -51,10 +52,10 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
 	}
 	if result == nil {
-		return nil, 0, nil, seqNumber, errors.Wrap(err, "instance result returned nil")
+		return nil, 0, nil, height, errors.Wrap(err, "instance result returned nil")
 	}
 	if !result.Decided {
-		return nil, 0, nil, seqNumber, errors.New("instance did not decide")
+		return nil, 0, nil, height, errors.New("instance did not decide")
 	}
 
 	commitData, err := result.Msg.Message.GetCommitData()
@@ -62,7 +63,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, 0, err
 	}
 
-	return qbftCtrl, len(result.Msg.Signers), commitData.Data, seqNumber, nil
+	return qbftCtrl, len(result.Msg.Signers), commitData.Data, height, nil
 }
 
 // ExecuteDuty executes the given duty
