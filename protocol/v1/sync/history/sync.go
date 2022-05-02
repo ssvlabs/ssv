@@ -73,6 +73,7 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 		return highest, nil
 	}
 
+	logger.Debug("syncing decided range...", zap.Int64("local height", int64(localHeight)), zap.Int64("remote height", int64(height)))
 	err = h.SyncDecidedRange(ctx, identifier, handler, localHeight, height, sender)
 	if err != nil {
 		// in optimistic approach we ignore failures and updates last decided message
