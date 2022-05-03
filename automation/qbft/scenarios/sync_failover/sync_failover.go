@@ -127,9 +127,11 @@ loop:
 	}
 
 	r.logger.Info("starting node $4")
-	ibftc := r.validators[3].(*validator.Validator).Ibfts()[message.RoleTypeAttester]
+	if err := ctx.LocalNet.Nodes[3].Subscribe(r.validators[3].GetShare().PublicKey.Serialize()); err != nil {
+		return errors.Wrap(err, "failed to subscribe topic")
+	}
 
-	if err := ibftc.Init(); err != nil {
+	if err := r.initNode(r.validators[3], ctx.LocalNet.Nodes[3]); err != nil {
 		r.logger.Debug("error initializing ibft (as planned)", zap.Error(err))
 		// fill DBs with correct highest decided and trying to init again
 
@@ -139,11 +141,12 @@ loop:
 			}
 		}
 
-		if err := ibftc.Init(); err != nil {
+		if err := r.initNode(r.validators[3], ctx.LocalNet.Nodes[3]); err != nil {
 			r.logger.Error("failed to reinitialize IBFT", zap.Error(err))
 		}
 	}
 
+	ibftc := r.validators[3].(*validator.Validator).Ibfts()[message.RoleTypeAttester]
 	nextSeq, err := ibftc.NextSeqNumber()
 	if err != nil {
 		r.logger.Error("node #4 could not get state")
@@ -165,11 +168,11 @@ loop:
 
 func (r *syncFailoverScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
+	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(11))
 	if err != nil {
 		return err
 	}
-	if len(msgs) < 3 {
+	if len(msgs) < 11 {
 		return fmt.Errorf("node-%d didn't sync all messages", i)
 	}
 
