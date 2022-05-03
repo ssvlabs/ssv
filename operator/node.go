@@ -37,6 +37,7 @@ type Options struct {
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
+	ForceHistory     bool                        `yaml:"ForceHistory" env:"FORCE_HISTORY_KEY" env-default:"false" env-description:"whether to save decided history or just the latest."`
 
 	ForkVersion forksprotocol.ForkVersion
 }

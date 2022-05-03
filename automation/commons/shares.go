@@ -54,7 +54,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 				OwnerAddress: share.OwnerAddress,
 				Operators:    share.Operators,
 			},
-			ForkVersion:                forksprotocol.V0ForkVersion,
+			ForkVersion:                forksprotocol.V0ForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
 			Signer:                     km,
 			SyncRateLimit:              time.Millisecond * 10,

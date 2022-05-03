@@ -37,6 +37,7 @@ type Options struct {
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
+	ForceHistory               bool
 }
 
 type Validator struct {
@@ -51,7 +52,8 @@ type Validator struct {
 	ibfts controller.Controllers
 
 	// flags
-	readMode bool
+	readMode    bool
+	saveHistory bool
 }
 
 func (v *Validator) Ibfts() controller.Controllers {
@@ -66,23 +68,17 @@ func NewValidator(opt *Options) IValidator {
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	return &Validator{
-		ctx:        opt.Context,
-		logger:     logger,
-		network:    opt.Network,
-		p2pNetwork: opt.P2pNetwork,
-		beacon:     opt.Beacon,
-		share:      opt.Share,
-		signer:     opt.Signer,
-		ibfts:      ibfts,
-		readMode:   opt.ReadMode,
+		ctx:         opt.Context,
+		logger:      logger,
+		network:     opt.Network,
+		p2pNetwork:  opt.P2pNetwork,
+		beacon:      opt.Beacon,
+		share:       opt.Share,
+		signer:      opt.Signer,
+		ibfts:       ibfts,
+		readMode:    opt.ReadMode,
+		saveHistory: opt.ForceHistory,
 	}
-}
-
-func (v *Validator) OnFork(forkVersion forksprotocol.ForkVersion) error {
-	for _, ctrl := range v.ibfts {
-		return ctrl.OnFork(forkVersion)
-	}
-	return nil
 }
 
 func (v *Validator) Start() error {
@@ -120,7 +116,14 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 	if err != nil {
 		return
 	}
-	//	  TODO need to handle decided and decidedValue
+}
+
+// OnFork updates all QFBT controllers with the new fork version
+func (v *Validator) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	for _, ctrl := range v.ibfts {
+		return ctrl.OnFork(forkVersion)
+	}
+	return nil
 }
 
 // setupRunners return duty runners map with all the supported duty types
@@ -147,6 +150,7 @@ func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options
 		SyncRateLimit:  opt.SyncRateLimit,
 		SigTimeout:     opt.SignatureCollectionTimeout,
 		ReadMode:       opt.ReadMode,
+		ForceHistory:   opt.ForceHistory,
 	}
 	return controller.New(opts)
 }

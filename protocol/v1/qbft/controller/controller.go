@@ -41,6 +41,7 @@ type Options struct {
 	SyncRateLimit  time.Duration
 	SigTimeout     time.Duration
 	ReadMode       bool
+	ForceHistory   bool
 }
 
 // Controller implements Controller interface
@@ -72,7 +73,8 @@ type Controller struct {
 	syncRateLimit time.Duration
 
 	// flags
-	readMode bool
+	readMode     bool
+	forceHistory bool
 
 	q msgqueue.MsgQueue
 }
@@ -109,7 +111,8 @@ func New(opts Options) IController {
 
 		syncRateLimit: opts.SyncRateLimit,
 
-		readMode: opts.ReadMode,
+		readMode:     opts.ReadMode,
+		forceHistory: opts.ForceHistory,
 
 		q: q,
 	}
@@ -122,14 +125,18 @@ func New(opts Options) IController {
 
 // OnFork called when fork occur.
 func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	// get new QBFT controller fork
 	c.fork = forksfactory.NewFork(forkVersion)
-	// TODO needs to lock fork?
-	// TODO need to stop instance?
 	return nil
 }
 
 func (c *Controller) syncDecided() error {
-	h := history.New(c.logger, c.network)
+	syncHistory := c.fork.VersionName() == "v0" // until the fork, need to keep saving history
+	if c.forceHistory {
+		syncHistory = true // only if force history is set to true
+	}
+
+	h := history.New(c.logger, c.network, syncHistory)
 
 	handler := func(msg *message.SignedMessage) error {
 		err := c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)

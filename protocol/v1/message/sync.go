@@ -24,6 +24,8 @@ const (
 	StatusBackoff
 )
 
+const EntryNotFoundError = "EntryNotFoundError"
+
 func (sc *StatusCode) String() string {
 	switch *sc {
 	case StatusUnknown:

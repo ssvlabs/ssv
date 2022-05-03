@@ -38,7 +38,7 @@ func TestHistory(t *testing.T) {
 		store, err := newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test")
 		require.NoError(t, err)
 		stores = append(stores, store)
-		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node)
+		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node, true) // TODO need to check false too?
 		histories = append(histories, h)
 		node.RegisterHandlers(
 			p2pprotocol.WithHandler(p2pprotocol.DecidedHistoryProtocol,

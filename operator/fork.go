@@ -2,18 +2,15 @@ package operator
 
 import (
 	"github.com/bloxapp/ssv/operator/validator"
-	"time"
-
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/prysmaticlabs/prysm/time/slots"
+	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 )
 
 // getForkVersion returns the fork version of the given slot
 func (n *operatorNode) getForkVersion(slot uint64) forksprotocol.ForkVersion {
-	// TODO: use slot instead of current or remove slot
-	currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(n.ethNetwork.MinGenesisTime()), 0))
-	return forksprotocol.GetCurrentForkVersion(currentEpoch)
+	epoch := n.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
+	return forksprotocol.GetCurrentForkVersion(epoch)
 }
 
 // listenForCurrentSlot updates forkVersion and checks if a fork is needed

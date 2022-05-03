@@ -52,6 +52,7 @@ type ControllerOptions struct {
 	Shares                     []ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
+	ForceHistory               bool
 	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -138,6 +139,7 @@ func NewController(options ControllerOptions) Controller {
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
+		ForceHistory:               options.ForceHistory,
 	}
 	ctrl := controller{
 		collection:                 collection,
@@ -209,8 +211,8 @@ func (c *controller) handleRouterMessages() {
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.ProcessMsg(&msg)
-			} else if c.forkVersion != forksprotocol.V0ForkVersion && msg.MsgType == message.SSVPostConsensusMsgType {
-				if !c.messageWorker.TryEnqueue(&msg) {
+			} else if c.forkVersion != forksprotocol.V0ForkVersion && msg.MsgType == message.SSVDecidedMsgType {
+				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
 			}
