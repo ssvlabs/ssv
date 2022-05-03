@@ -8,6 +8,13 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
+// TODO:
+// Add following cases for every scenario:
+// the requesting node's version is new, others' versions are old
+// the requesting node's version is new, others' versions are mixed of new and old
+// the requesting node's version is old, others' versions are new
+// the requesting node's version is old, others' versions are mixed of new and old
+
 type ScenarioFactory func(name string) Scenario
 
 // ScenarioContext is the context object that is passed in execution

@@ -3,13 +3,15 @@ package v0
 import (
 	"encoding/hex"
 	"encoding/json"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // converters are used to encapsulate the struct of the messages
@@ -266,6 +268,9 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		syncMsg := &message.SyncMessage{}
 		if err := syncMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
+		}
+		if syncMsg.Status == message.StatusUnknown {
+			syncMsg.Status = message.StatusSuccess
 		}
 		v0Msg.SyncMessage = new(network.SyncMessage)
 		if len(syncMsg.Params.Height) > 0 {
