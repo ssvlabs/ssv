@@ -92,7 +92,8 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 			wg.Add(1)
 			go func(node validator.IValidator, net network.P2PNetwork) {
 				if err := r.initNode(node, net); err != nil {
-					fmt.Printf("error initializing ibft")
+					r.logger.Error("error initializing ibft")
+					return
 				}
 				wg.Done()
 			}(r.validators[i-1], ctx.LocalNet.Nodes[i-1])
@@ -100,10 +101,12 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 			go func(node validator.IValidator, net network.P2PNetwork) {
 				time.Sleep(time.Second * 13)
 				if err := r.initNode(node, net); err != nil {
-					fmt.Printf("error initializing ibft")
+					r.logger.Error("error initializing ibft")
+					return
 				}
 				if err := r.startNode(node); err != nil {
-					fmt.Printf("error starting ibft")
+					r.logger.Error("error starting ibft")
+					return
 				}
 			}(r.validators[i-1], ctx.LocalNet.Nodes[i-1])
 		}
@@ -118,7 +121,8 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 		go func(node validator.IValidator) {
 			defer wg.Done()
 			if err := r.startNode(node); err != nil {
-				fmt.Printf("error starting ibft")
+				r.logger.Error("error starting ibft")
+				return
 			}
 		}(r.validators[i-1])
 	}
