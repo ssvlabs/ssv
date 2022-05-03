@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
@@ -35,7 +34,7 @@ func (n *operatorNode) setFork(slot uint64) {
 	}
 
 	// set validator controller fork
-	vCtrlHandler, ok := n.net.(validator.Controller)
+	vCtrlHandler, ok := n.validatorsCtrl.(forksprotocol.ForkHandler)
 	if !ok {
 		logger.Panic("network instance is not a fork handler")
 	}
