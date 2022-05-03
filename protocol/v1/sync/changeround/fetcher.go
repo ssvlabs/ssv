@@ -1,11 +1,16 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"fmt"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
+
+var ErrNotFound = fmt.Errorf("not found")
 
 // MsgHandler handles incoming change round messages
 type MsgHandler func(*message.SignedMessage) error
@@ -45,6 +50,9 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			continue
 		}
 		err = crf.msgError(syncMsg)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
 		if err != nil {
 			crf.logger.Warn("change round api error", zap.Error(err))
 			continue
@@ -61,6 +69,8 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 func (crf *changeRoundFetcher) msgError(msg *message.SyncMessage) error {
 	if msg == nil {
 		return errors.New("msg is nil")
+	} else if msg.Status == message.StatusNotFound {
+		return ErrNotFound
 	} else if msg.Status != message.StatusSuccess {
 		return errors.Errorf("failed with status %d", msg.Status)
 	} else if len(msg.Data) != 1 { // TODO: extract to validation
