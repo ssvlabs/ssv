@@ -169,6 +169,7 @@ func (c *Controller) Init() error {
 	}
 
 	if !c.initSynced.Load() {
+		// TODO wait for peers?
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := c.syncDecided(); err != nil {
 			if err == ErrAlreadyRunning {
