@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
@@ -380,6 +382,8 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 					switch rcj.Message.MsgType {
 					case PrepareMsgType: // can only be PrepareMsgType in change round justification msg
 						justificationMsg = append(justificationMsg, KeyVal{Key: "type", Val: 2})
+						m, err := json.Marshal(rcj.Message.Data)
+						logex.GetLogger().Debug("building root: getting prepare data from GetRoundChangeJustification", zap.String("r", string(m)), zap.Error(err))
 						p, err := rcj.Message.GetPrepareData()
 						if err != nil {
 							return nil, err
