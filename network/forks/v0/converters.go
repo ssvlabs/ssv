@@ -195,34 +195,7 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 		consensusMsg.Height = message.Height(ret.GetJustificationMsg().SeqNumber)
 		consensusMsg.Round = message.Round(ret.GetJustificationMsg().Round)
 		consensusMsg.Identifier = toIdentifierV1(ret.GetJustificationMsg().Lambda)
-
-		data := []byte("")
-		switch ret.GetJustificationMsg().GetType() {
-		case proto.RoundState_PrePrepare:
-			consensusMsg.MsgType = message.ProposalMsgType
-			p, err := (&message.ProposalData{Data: ret.GetJustificationMsg().Value}).Encode()
-			if err == nil {
-				return nil, err
-			}
-			data = p
-		case proto.RoundState_Prepare:
-			consensusMsg.MsgType = message.PrepareMsgType
-			p, err := (&message.PrepareData{Data: ret.GetJustificationMsg().Value}).Encode()
-			if err == nil {
-				return nil, err
-			}
-			data = p
-		case proto.RoundState_Commit:
-			consensusMsg.MsgType = message.CommitMsgType
-			c, err := (&message.CommitData{Data: ret.GetJustificationMsg().Value}).Encode()
-			if err == nil {
-				return nil, err
-			}
-			data = c
-			//case proto.RoundState_ChangeRound: can's be change round inside change round
-		}
-
-		consensusMsg.Data = data
+		consensusMsg.Data = ret.GetJustificationMsg().Value
 	}
 
 	crm := &message.RoundChangeData{
