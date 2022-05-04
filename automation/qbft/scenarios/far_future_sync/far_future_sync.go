@@ -141,11 +141,12 @@ func (r *farFutureSyncScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *farFutureSyncScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
+	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(26))
 	if err != nil {
 		return err
 	}
-	if len(msgs) < 3 {
+
+	if len(msgs) < 26 {
 		return fmt.Errorf("node-%d didn't sync all messages", i)
 	}
 

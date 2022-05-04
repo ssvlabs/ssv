@@ -87,28 +87,37 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 
 	// init ibfts
 	var wg sync.WaitGroup
-	for i := uint64(1); i <= uint64(3); i++ {
+	for i := uint64(1); i <= uint64(r.NumOfOperators()); i++ {
 		if i <= 2 {
 			wg.Add(1)
-			go func(node validator.IValidator, net network.P2PNetwork) {
-				if err := r.initNode(node, net); err != nil {
-					r.logger.Error("error initializing ibft")
+			go func(i uint64) {
+				defer wg.Done()
+				if err := r.initNode(r.validators[i-1], ctx.LocalNet.Nodes[i-1]); err != nil {
+					r.logger.Error("error initializing ibft",
+						zap.Uint64("index", i),
+						zap.Error(err),
+					)
 					return
 				}
-				wg.Done()
-			}(r.validators[i-1], ctx.LocalNet.Nodes[i-1])
+			}(i)
 		} else {
-			go func(node validator.IValidator, net network.P2PNetwork) {
+			go func(i uint64) {
 				time.Sleep(time.Second * 13)
-				if err := r.initNode(node, net); err != nil {
-					r.logger.Error("error initializing ibft")
+				if err := r.initNode(r.validators[i-1], ctx.LocalNet.Nodes[i-1]); err != nil {
+					r.logger.Error("error initializing ibft",
+						zap.Uint64("index", i),
+						zap.Error(err),
+					)
 					return
 				}
-				if err := r.startNode(node); err != nil {
-					r.logger.Error("error starting ibft")
+				if err := r.startNode(r.validators[i-1]); err != nil {
+					r.logger.Error("error starting ibft",
+						zap.Uint64("index", i),
+						zap.Error(err),
+					)
 					return
 				}
-			}(r.validators[i-1], ctx.LocalNet.Nodes[i-1])
+			}(i)
 		}
 	}
 
@@ -118,25 +127,30 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 	r.logger.Info("start instances")
 	for i := uint64(1); i <= uint64(r.NumOfOperators()); i++ {
 		wg.Add(1)
-		go func(node validator.IValidator) {
+		go func(i uint64) {
 			defer wg.Done()
-			if err := r.startNode(node); err != nil {
-				r.logger.Error("error starting ibft")
+			if err := r.startNode(r.validators[i-1]); err != nil {
+				r.logger.Error("error starting ibft",
+					zap.Uint64("index", i),
+					zap.Error(err),
+				)
 				return
 			}
-		}(r.validators[i-1])
+		}(i)
 	}
+
+	wg.Wait()
 
 	return startErr
 }
 
 func (r *f1SpeedupScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	for i := range ctx.Stores {
-		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
+	for i := range ctx.Stores[:2] {
+		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
 		if err != nil {
 			return err
 		}
-		if len(msgs) < 3 {
+		if len(msgs) < 1 {
 			return fmt.Errorf("node-%d didn't sync all messages", i)
 		}
 	}

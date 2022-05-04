@@ -111,12 +111,12 @@ func (r *changeRoundSpeedupScenario) Execute(ctx *runner.ScenarioContext) error 
 }
 
 func (r *changeRoundSpeedupScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	for i := range ctx.Stores {
-		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(0))
+	for i := range ctx.Stores[:len(ctx.Stores)-1] {
+		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(1), message.Height(1))
 		if err != nil {
 			return err
 		}
-		if len(msgs) < 3 {
+		if len(msgs) < 1 {
 			return fmt.Errorf("node-%d didn't sync all messages", i)
 		}
 	}
