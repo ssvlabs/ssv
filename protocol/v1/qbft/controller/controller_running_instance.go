@@ -211,6 +211,9 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	f := changeround.NewLastRoundFetcher(c.logger, c.network)
 
 	handler := func(msg *message.SignedMessage) error {
+		if c.currentInstance == nil {
+			return errors.New("current instance is nil.")
+		}
 		err := c.currentInstance.ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {
 			return errors.Wrap(err, "invalid msg")
