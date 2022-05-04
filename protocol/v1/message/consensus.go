@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/utils/format"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/ibft/proto"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 // ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
@@ -211,7 +214,7 @@ func (msg *ConsensusMessage) Decode(data []byte) error {
 func (msg *ConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
 	// using string version for checking in order to prevent cycle dependency
 
-	if forkVersion == "v0" {
+	if forkVersion == string(forksprotocol.V0ForkVersion) {
 		return msg.convertToV0Root()
 	}
 
