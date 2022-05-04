@@ -240,7 +240,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 		state := c.currentInstance.State()
 		fields = append(fields, zap.String("stage", state.Stage.String()), zap.Uint32("height", uint32(state.GetHeight())), zap.Uint32("round", uint32(state.GetRound())))
 	}
-	fields = append(fields, zap.String("type", msg.MsgType.String()))
+	fields = append(fields, zap.Any("msg", msg))
 	c.logger.Debug("got message, add to queue", fields...)
 	c.q.Add(msg)
 	return nil

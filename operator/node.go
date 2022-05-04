@@ -105,7 +105,7 @@ func (n *operatorNode) init(opts Options) error {
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 	n.validatorsCtrl.StartValidators()
-	n.validatorsCtrl.StartNetworkMediators()
+	n.validatorsCtrl.StartNetworkHandlers()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()
 	n.dutyCtrl.Start()

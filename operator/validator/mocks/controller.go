@@ -106,13 +106,13 @@ func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call
 // StartNetworkMediators mocks base method
 func (m *MockController) StartNetworkMediators() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartNetworkMediators")
+	m.ctrl.Call(m, "StartNetworkHandlers")
 }
 
 // StartNetworkMediators indicates an expected call of StartNetworkMediators
 func (mr *MockControllerMockRecorder) StartNetworkMediators() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkMediators", reflect.TypeOf((*MockController)(nil).StartNetworkMediators))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkMediators))
 }
 
 // Eth1EventHandler mocks base method

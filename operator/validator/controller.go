@@ -67,7 +67,7 @@ type Controller interface {
 	GetValidatorsIndices() []spec.ValidatorIndex
 	GetValidator(pubKey string) (validator.IValidator, bool)
 	UpdateValidatorMetaDataLoop()
-	StartNetworkMediators()
+	StartNetworkHandlers()
 	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
 	OnFork(forkVersion forksprotocol.ForkVersion) error
@@ -349,7 +349,8 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 	go c.updateValidatorsMetadata(fetchMetadata)
 }
 
-func (c *controller) StartNetworkMediators() {
+// StartNetworkHandlers init msg worker that handles network messages
+func (c *controller) StartNetworkHandlers() {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
 	c.messageWorker.AddHandler(c.handleWorkerMessages)
