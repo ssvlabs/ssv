@@ -214,7 +214,7 @@ func (msg *ConsensusMessage) Decode(data []byte) error {
 func (msg *ConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
 	// using string version for checking in order to prevent cycle dependency
 
-	if forkVersion == string(forksprotocol.V0ForkVersion) {
+	if forkVersion == forksprotocol.V0ForkVersion.String() {
 		return msg.convertToV0Root()
 	}
 
