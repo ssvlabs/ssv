@@ -171,7 +171,7 @@ func (h *handshaker) applyFilters(identity *Identity) bool {
 	for _, filter := range h.filters {
 		ok, err := filter(identity)
 		if err != nil {
-			h.logger.Warn("could not filter identity", zap.Error(err))
+			h.logger.Warn("could not filter identity", zap.Error(err), zap.Any("identity", identity))
 			return false
 		}
 		if !ok {
