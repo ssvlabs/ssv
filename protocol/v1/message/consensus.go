@@ -381,7 +381,7 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 				if rcj.Message != nil && rcj.Message.MsgType != 0 { // make sure message is not "empty" ConsensusMessage TODO need to set better checking
 					switch rcj.Message.MsgType {
 					case PrepareMsgType: // can only be PrepareMsgType in change round justification msg
-						justificationMsg = append(justificationMsg, KeyVal{Key: "type", Val: 2})
+						justificationMsg = append(justificationMsg, KeyVal{Key: "type", Val: 2}) // 2 is the v0 status for prepare
 					}
 
 					justificationMsg = append(justificationMsg, KeyVal{Key: "round", Val: uint64(rcj.Message.Round)})

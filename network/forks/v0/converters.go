@@ -178,10 +178,17 @@ func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) 
 }
 
 func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
+	// TODO need to remove log once done with testing
+	r, err := json.Marshal(changeRoundData)
+	if err == nil {
+		logex.GetLogger().Debug("------ convert change round v0 -> v1", zap.String("data marshaled", string(r)), zap.ByteString("data byte", changeRoundData))
+	} else {
+		logex.GetLogger().Debug("------ FAILED convert change round v0 -> v1", zap.Error(err))
+	}
 	ret := &proto.ChangeRoundData{}
 	if err := json.Unmarshal(changeRoundData, ret); err != nil {
-		r := &message.RoundChangeData{} // should return empty struct
-		return r.Encode()
+		logex.GetLogger().Warn("failed to unmarshal v0 change round struct", zap.Error(err))
+		return new(message.RoundChangeData).Encode() // should return empty struct
 	}
 
 	var signers []message.OperatorID
@@ -190,12 +197,12 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 	}
 
 	consensusMsg := &message.ConsensusMessage{}
-
 	if ret.GetJustificationMsg() != nil {
 		consensusMsg.Height = message.Height(ret.GetJustificationMsg().SeqNumber)
 		consensusMsg.Round = message.Round(ret.GetJustificationMsg().Round)
 		consensusMsg.Identifier = toIdentifierV1(ret.GetJustificationMsg().Lambda)
 		consensusMsg.Data = ret.GetJustificationMsg().Value
+		consensusMsg.MsgType = message.PrepareMsgType // can be only prepare
 	}
 
 	crm := &message.RoundChangeData{
