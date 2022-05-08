@@ -197,12 +197,12 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 	}
 
 	consensusMsg := &message.ConsensusMessage{}
-
 	if ret.GetJustificationMsg() != nil {
 		consensusMsg.Height = message.Height(ret.GetJustificationMsg().SeqNumber)
 		consensusMsg.Round = message.Round(ret.GetJustificationMsg().Round)
 		consensusMsg.Identifier = toIdentifierV1(ret.GetJustificationMsg().Lambda)
 		consensusMsg.Data = ret.GetJustificationMsg().Value
+		consensusMsg.MsgType = message.PrepareMsgType // can be only prepare
 	}
 
 	crm := &message.RoundChangeData{
