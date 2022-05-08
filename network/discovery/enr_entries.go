@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-// TODO: clear this file in the future
+// TODO: clear this file in the future as we won't need node type and operator id entries post fork v1
 
 // NodeType indicate node operation type. In purpose for distinguish between different types of peers
 type NodeType int32
