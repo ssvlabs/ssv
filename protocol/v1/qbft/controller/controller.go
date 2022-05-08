@@ -237,9 +237,12 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 		return c.messageHandler(msg)
 	}
 	var fields []zap.Field
-	if c.currentInstance != nil && c.currentInstance.State() != nil {
-		state := c.currentInstance.State()
-		fields = append(fields, zap.String("stage", state.Stage.String()), zap.Uint32("height", uint32(state.GetHeight())), zap.Uint32("round", uint32(state.GetRound())))
+	cInstance := c.currentInstance
+	if cInstance != nil {
+		currentState := cInstance.State()
+		if currentState != nil {
+			fields = append(fields, zap.String("stage", currentState.Stage.String()), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
+		}
 	}
 	fields = append(fields, zap.Any("msg", msg))
 	c.logger.Debug("got message, add to queue", fields...)
