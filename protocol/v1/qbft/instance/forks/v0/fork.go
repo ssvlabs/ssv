@@ -1,6 +1,7 @@
 package v0
 
 import (
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -28,7 +29,7 @@ func (v0 *ForkV0) Apply(instance *instance.Instance) {
 }
 
 func (v0 *ForkV0) VersionName() string {
-	return "v0"
+	return forksprotocol.V0ForkVersion.String()
 }
 
 // PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
