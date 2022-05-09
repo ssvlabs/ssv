@@ -31,8 +31,14 @@ func createLocalNode(privKey *ecdsa.PrivateKey, storagePath string, ipAddr net.I
 }
 
 // decorateLocalNode adds more entries to the ENR
-func decorateLocalNode(node *enode.LocalNode, subnets []bool, operatorID string) error {
+func decorateLocalNode(node *enode.LocalNode, subnets []byte, operatorID string) error {
 	var err error
+	if len(subnets) > 0 {
+		err = SetSubnetsEntry(node, subnets)
+		if err != nil {
+			return err
+		}
+	}
 	if len(operatorID) > 0 {
 		if err = setOperatorIDEntry(node, operatorID); err != nil {
 			return err
@@ -42,11 +48,9 @@ func decorateLocalNode(node *enode.LocalNode, subnets []bool, operatorID string)
 		}
 		return nil
 	}
-	if len(subnets) > 0 {
-		err = setSubnetsEntry(node, subnets)
-	} /* else if len(operatorID) == 0 {
-		err = setNodeTypeEntry(node, Exporter)
-	}*/
+	if err = setNodeTypeEntry(node, Exporter); err != nil {
+		return err
+	}
 	return err
 }
 

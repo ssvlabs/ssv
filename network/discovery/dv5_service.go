@@ -231,12 +231,9 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int64) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	smap := make(map[int]bool)
-	for _, sn := range subnets {
-		smap[int(sn)] = true
-	}
-	if err := dvs.updateSubnetsEntry(smap); err != nil {
-		return err
+	err := UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, subnets, nil)
+	if err != nil {
+		return errors.Wrap(err, "could not update ENR")
 	}
 	//go dvs.publishENR()
 	return nil
@@ -247,12 +244,9 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	smap := make(map[int]bool)
-	for _, sn := range subnets {
-		smap[int(sn)] = false
-	}
-	if err := dvs.updateSubnetsEntry(smap); err != nil {
-		return err
+	err := UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, nil, subnets)
+	if err != nil {
+		return errors.Wrap(err, "could not update ENR")
 	}
 	//go dvs.publishENR()
 	return nil
@@ -275,23 +269,6 @@ func (dvs *DiscV5Service) publishENR() {
 	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 
-// updateSubnetsEntry updates the given subnets in the node's ENR
-func (dvs *DiscV5Service) updateSubnetsEntry(subnets map[int]bool) error {
-	ln := dvs.dv5Listener.LocalNode()
-	subnetsEntry, err := getSubnetsEntry(ln.Node())
-	if err != nil {
-		return errors.Wrap(err, "could not get subnets entry")
-	}
-	for sn, val := range subnets {
-		subnetsEntry[sn] = val
-	}
-
-	if err := setSubnetsEntry(ln, subnetsEntry); err != nil {
-		return errors.Wrap(err, "could not set subnets entry")
-	}
-	return nil
-}
-
 // limitNodeFilter checks if limit exceeded
 //func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 //	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
@@ -309,11 +286,11 @@ func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
 
 func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
-		subnets, err := getSubnetsEntry(node)
+		subnets, err := GetSubnetsEntry(node.Record())
 		if err != nil {
 			return false
 		}
-		return subnets[int(subnet)]
+		return subnets[subnet] > 0
 	}
 }
 

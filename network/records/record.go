@@ -24,10 +24,6 @@ func init() {
 type NodeRecord struct {
 	// ForkV is the current fork version used by the node
 	ForkV string
-	// PeerID is the peer.ID of the node, based on network key
-	PeerID string
-	// OperatorID holds a hash of the operator public key, based on operator key
-	OperatorID string
 	// ENR the node record used by discv5
 	ENR string
 	//// Metadata contains node's general information
@@ -35,9 +31,9 @@ type NodeRecord struct {
 }
 
 // NewNodeRecord creates a new NodeRecord with the given fields
-func NewNodeRecord(forkv, pid, oid, enr string) *NodeRecord {
+func NewNodeRecord(forkv, enr string) *NodeRecord {
 	return &NodeRecord{
-		forkv, pid, oid, enr,
+		forkv, enr,
 	}
 }
 
@@ -91,8 +87,6 @@ func (nr *NodeRecord) MarshalRecord() ([]byte, error) {
 	//}
 	ser := newSerializable(
 		nr.ForkV,
-		nr.PeerID,
-		nr.OperatorID,
 		nr.ENR,
 		//hex.EncodeToString(metadata),
 	)
@@ -108,14 +102,12 @@ func (nr *NodeRecord) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
-	if len(ser.Entries) < 4 {
+	if len(ser.Entries) < 2 {
 		return errors.New("not enough entries in node record")
 	}
 	nr.ForkV = ser.Entries[0]
-	nr.PeerID = ser.Entries[1]
-	nr.OperatorID = ser.Entries[2]
-	nr.ENR = ser.Entries[3]
-	//rawMetadata, err := hex.DecodeString(ser.Entries[4])
+	nr.ENR = ser.Entries[1]
+	//rawMetadata, err := hex.DecodeString(ser.Entries[3])
 	//if err != nil {
 	//	return errors.Wrap(err, "could not decode metadata hex")
 	//}

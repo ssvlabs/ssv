@@ -1,16 +1,19 @@
 package discovery
 
 import (
+	"encoding/hex"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/pkg/errors"
+	"io"
 	"strconv"
 )
 
 const (
 	// SubnetsCount is the count of subnets in the network
 	SubnetsCount = 128
-	// ENRKeySubnets is the entry key for saving subnets
-	ENRKeySubnets = "subnets"
 )
 
 var regPool = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
@@ -38,45 +41,60 @@ func isSubnet(ns string) bool {
 	return r.MatchString(ns)
 }
 
-func setSubnetsEntry(node *enode.LocalNode, subnets []bool) error {
-	//bl := bitfield.NewBitlist(uint64(SubnetsCount))
-	//for i, state := range subnets {
-	//	bl.SetBitAt(uint64(i), state)
-	//}
-	//node.Set(enr.WithEntry(ENRKeySubnets, bl))
+// UpdateSubnets updates subnets entry according to the given changes.
+// count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
+func UpdateSubnets(node *enode.LocalNode, count int, added []int64, removed []int64) error {
+	subnets, err := GetSubnetsEntry(node.Node().Record())
+	if err != nil {
+		return errors.Wrap(err, "could not read subnets entry from enr")
+	}
+	if len(subnets) == 0 { // not exist, creating slice
+		subnets = make([]byte, count)
+	}
+	for _, i := range added {
+		subnets[i] = 1
+	}
+	for _, i := range removed {
+		subnets[i] = 0
+	}
+	return SetSubnetsEntry(node, subnets)
+}
+
+// SetSubnetsEntry adds subnets entry to our enode.LocalNode
+func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
+	node.Set(SubnetsEntry(hex.EncodeToString(subnets)))
 	return nil
 }
 
-func getSubnetsEntry(node *enode.Node) ([]bool, error) {
-	var subnets []bool
-	// TODO: fix and unmark
-	//bl := bitfield.NewBitlist(uint64(SubnetsCount))
-	//err := node.Record().Load(enr.WithEntry(ENRKeySubnets, &bl))
-	//if err != nil {
-	//	return subnets, err
-	//}
-	//l := len(bl)
-	//if l == 0 {
-	//	return nil, errors.New("subnets entry not found")
-	//}
-	//if l > byteCount(SubnetsCount)+1 || l < byteCount(SubnetsCount)-1 {
-	//	return subnets, errors.Errorf("invalid bitvector provided, it has a size of %d", l)
-	//}
-	//for i := 0; i < SubnetsCount; i++ {
-	//	subnets = append(subnets, bl.BitAt(uint64(i)))
-	//}
-	for i := 0; i < SubnetsCount; i++ {
-		subnets = append(subnets, true)
+// GetSubnetsEntry extracts the value of subnets entry from some record
+func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
+	se := new(SubnetsEntry)
+	if err := record.Load(se); err != nil {
+		if enr.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return subnets, nil
+	return hex.DecodeString(string(*se))
 }
 
-//// Determines the number of bytes that are used
-//// to represent the provided number of bits.
-//func byteCount(bitCount int) int {
-//	numOfBytes := bitCount / 8
-//	if bitCount%8 != 0 {
-//		numOfBytes++
-//	}
-//	return numOfBytes
-//}
+// SubnetsEntry holds the subnets that the operator is subscribed to
+type SubnetsEntry string
+
+// ENRKey implements enr.Entry, returns the entry key
+func (se SubnetsEntry) ENRKey() string { return "subnets" }
+
+// EncodeRLP implements rlp.Encoder
+func (se SubnetsEntry) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, []byte(se))
+}
+
+// DecodeRLP implements rlp.Decoder
+func (se *SubnetsEntry) DecodeRLP(s *rlp.Stream) error {
+	buf, err := s.Bytes()
+	if err != nil {
+		return err
+	}
+	*se = SubnetsEntry(buf)
+	return nil
+}

@@ -114,7 +114,6 @@ func (pi *peersIndex) Add(identity *Identity) (bool, error) {
 func (pi *peersIndex) Identity(id peer.ID) (*Identity, error) {
 	switch pi.state(id.String()) {
 	case StateIndexing:
-		// TODO: handle
 		return nil, ErrIndexingInProcess
 	case StatePruned:
 		return nil, ErrWasPruned

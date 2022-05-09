@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/log"
 	"go.uber.org/zap"
 )
@@ -13,10 +14,12 @@ type dv5Logger struct {
 // Log takes a record and uses the zap.Logger to print it
 func (dvl *dv5Logger) Log(r *log.Record) error {
 	logger := dvl.logger.With(zap.Any("context", r.Ctx))
+	for _, v := range r.Ctx {
+		logger = dvl.logger.With(zap.Any("v", v))
+	}
 	switch r.Lvl {
 	case log.LvlTrace:
-		//logger.Debug(r.Msg)
-		return nil
+		logger.Debug(fmt.Sprintf("TRACE: %s", r.Msg))
 	case log.LvlDebug:
 		logger.Debug(r.Msg)
 	case log.LvlInfo:
