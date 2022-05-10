@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/peers"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -38,6 +39,8 @@ type Options struct {
 	ConnIndex   peers.ConnectionIndex
 	HostAddress string
 	HostDNS     string
+
+	ForkVersion forksprotocol.ForkVersion
 }
 
 // Service is the interface for discovery

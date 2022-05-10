@@ -1,4 +1,4 @@
-package discovery
+package records
 
 import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-// TODO: clear this file in the future as we won't need node type and operator id entries post fork v1
+// TODO: remove this file in the future as we won't need node type and operator id entries post fork v1
 
 // NodeType indicate node operation type. In purpose for distinguish between different types of peers
 type NodeType int32
@@ -35,14 +35,14 @@ type NodeTypeEntry uint16
 // ENRKey implements enr.Entry, returns the entry key
 func (nte NodeTypeEntry) ENRKey() string { return "type" }
 
-// setNodeTypeEntry adds operator-public-key-hash entry ('oid') to the node
-func setNodeTypeEntry(node *enode.LocalNode, nodeType NodeType) error {
+// SetNodeTypeEntry adds operator-public-key-hash entry ('oid') to the node
+func SetNodeTypeEntry(node *enode.LocalNode, nodeType NodeType) error {
 	node.Set(NodeTypeEntry(nodeType))
 	return nil
 }
 
-// getNodeTypeEntry extracts the value of operator-public-key-hash entry ('oid')
-func getNodeTypeEntry(record *enr.Record) (NodeType, error) {
+// GetNodeTypeEntry extracts the value of operator-public-key-hash entry ('oid')
+func GetNodeTypeEntry(record *enr.Record) (NodeType, error) {
 	var nte NodeTypeEntry
 	if err := record.Load(&nte); err != nil {
 		if enr.IsNotFound(err) {
@@ -74,14 +74,14 @@ func (oid *OperatorIDEntry) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
-// setOperatorIDEntry adds operator-id entry ('oid') to the node
-func setOperatorIDEntry(node *enode.LocalNode, operatorID string) error {
+// SetOperatorIDEntry adds operator-id entry ('oid') to the node
+func SetOperatorIDEntry(node *enode.LocalNode, operatorID string) error {
 	node.Set(OperatorIDEntry(operatorID))
 	return nil
 }
 
-// getOperatorIDEntry extracts the value of operator-id entry ('oid')
-func getOperatorIDEntry(record *enr.Record) (string, error) {
+// GetOperatorIDEntry extracts the value of operator-id entry ('oid')
+func GetOperatorIDEntry(record *enr.Record) (string, error) {
 	oid := new(OperatorIDEntry)
 	if err := record.Load(oid); err != nil {
 		if enr.IsNotFound(err) {

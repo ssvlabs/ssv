@@ -3,6 +3,7 @@ package forks
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p-core/protocol"
 )
 
@@ -12,6 +13,12 @@ type Fork interface {
 	pubSubMapping
 	pubSubConfig
 	sync
+	nodeRecord
+}
+
+type nodeRecord interface {
+	// DecorateNode decorates the given node's record
+	DecorateNode(node *enode.LocalNode, args map[string]interface{}) error
 }
 
 type pubSubMapping interface {

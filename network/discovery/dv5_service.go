@@ -2,9 +2,12 @@ package discovery
 
 import (
 	"context"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -52,7 +55,7 @@ func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) 
 	dvs := DiscV5Service{
 		ctx:          ctx,
 		cancel:       cancel,
-		logger:       discOpts.Logger,
+		logger:       discOpts.Logger.With(zap.String("where", "discv5")),
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 	}
@@ -68,7 +71,9 @@ func (dvs *DiscV5Service) Close() error {
 	if dvs.cancel != nil {
 		dvs.cancel()
 	}
-	dvs.dv5Listener.Close()
+	if dvs.dv5Listener != nil {
+		dvs.dv5Listener.Close()
+	}
 	return nil
 }
 
@@ -99,22 +104,9 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 	return node, nil
 }
 
-// Bootstrap connects to bootnodes and start looking for new nodes
+// Bootstrap start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	//pinged := 0
-	//for _, bn := range dvs.bootnodes {
-	//	err := dvs.dv5Listener.Ping(bn)
-	//	if err != nil {
-	//		dvs.logger.Warn("could not ping bootnode", zap.Error(err))
-	//		continue
-	//	}
-	//	pinged++
-	//}
-	//if pinged == 0 {
-	//	dvs.logger.Warn("could not ping bootnodes")
-	//}
-
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval)
 	//dvs.limitNodeFilter, dvs.badNodeFilter)
 
@@ -143,29 +135,19 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	if err != nil {
 		return errors.Wrap(err, "could not add configured addresses")
 	}
-	err = decorateLocalNode(localNode, opts.Subnets, opts.OperatorID)
+	f := forksfactory.NewFork(discOpts.ForkVersion)
+	err = f.DecorateNode(localNode, map[string]interface{}{
+		"operatorID": opts.OperatorID,
+		"subnets":    opts.Subnets,
+	})
 	if err != nil {
 		return errors.Wrap(err, "could not decorate local node")
 	}
-
+	dvs.logger.Debug("node record is ready", zap.String("enr", localNode.Node().String()), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
 	dv5Cfg, err := opts.DiscV5Cfg()
 	if err != nil {
 		return err
 	}
-	//cn := make(chan discover.ReadPacket, 10)
-	//go func() {
-	//	ctx, cancel := context.WithCancel(dvs.ctx)
-	//	defer cancel()
-	//	for {
-	//		select {
-	//		case <-ctx.Done():
-	//			return
-	//		case p := <-cn:
-	//			dvs.logger.Debug("unhandled packet", zap.Any("packet", p))
-	//		}
-	//	}
-	//}()
-	//dv5Cfg.Unhandled = cn
 	dv5Listener, err := discover.ListenV5(udpConn, localNode, *dv5Cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not create discV5 listener")
@@ -175,8 +157,6 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 
 	dvs.logger.Debug("started discv5 listener (UDP)", zap.String("bindIP", bindIP.String()),
 		zap.Int("UdpPort", opts.Port), zap.String("enr", localNode.Node().String()), zap.String("OperatorID", opts.OperatorID))
-
-	dvs.logger.Debug("discv5 listener is ready", zap.String("enr", localNode.Node().String()))
 
 	return nil
 }
@@ -231,7 +211,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int64) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	err := UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, subnets, nil)
+	err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, subnets, nil)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
@@ -244,7 +224,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	err := UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, nil, subnets)
+	err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, nil, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
@@ -270,9 +250,9 @@ func (dvs *DiscV5Service) publishENR() {
 }
 
 // limitNodeFilter checks if limit exceeded
-//func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-//	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
-//}
+func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
+	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
+}
 
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
@@ -286,7 +266,7 @@ func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
 
 func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
-		subnets, err := GetSubnetsEntry(node.Record())
+		subnets, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {
 			return false
 		}

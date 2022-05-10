@@ -151,7 +151,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		ConnIndex:   n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
-		//ForkVersion: n.cfg.ForkVersion,
+		ForkVersion: n.cfg.ForkVersion,
 	}
 	disc, err := discovery.NewService(n.ctx, discOpts)
 	if err != nil {

@@ -94,6 +94,7 @@ func (opts *DiscV5Options) DiscV5Cfg() (*discover.Config, error) {
 	}
 
 	if opts.Logger != nil {
+		opts.Logger.Info("discovery trace is active")
 		logger := log.New()
 		logger.SetHandler(&dv5Logger{opts.Logger.With(zap.String("who", "dv5Logger"))})
 		dv5Cfg.Log = logger
