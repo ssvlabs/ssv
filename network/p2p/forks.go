@@ -2,9 +2,9 @@ package p2pv1
 
 import (
 	"context"
+	"encoding/hex"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
@@ -19,23 +19,23 @@ func (n *p2pNetwork) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	logger.Info("forking network")
 	atomic.StoreInt32(&n.state, stateForking)
 	if err := n.Close(); err != nil {
-		return errors.Wrap(err, "could not close network adapter")
+		return errors.Wrap(err, "could not close network")
 	}
 	atomic.StoreInt32(&n.state, stateForking)
 	// waiting so for services to be closed
 	logger.Info("current network instance was closed")
 
-	<-time.After(time.Second * 5)
+	<-time.After(time.Second * 6)
 	ctx, cancel := context.WithCancel(n.parentCtx)
 	n.ctx = ctx
 	n.cancel = cancel
 	n.fork = forksfactory.NewFork(forkVersion)
 	n.cfg.ForkVersion = forkVersion
 	if err := n.Setup(); err != nil {
-		return errors.Wrap(err, "could not create network adapter")
+		return errors.Wrap(err, "could not setup network")
 	}
 	if err := n.Start(); err != nil {
-		return errors.Wrap(err, "could not start network adapter")
+		return errors.Wrap(err, "could not start network")
 	}
 	n.resubscribeValidators()
 	return nil
@@ -47,16 +47,18 @@ func (n *p2pNetwork) resubscribeValidators() {
 	defer n.activeValidatorsLock.Unlock()
 
 	<-time.After(time.Second * 3)
-	n.logger.Debug("resubscribing validators", zap.Int("total", len(n.activeValidators)))
+	n.logger.Debug("resubscribing validators", zap.Int("total", len(n.activeValidators)), zap.Any("values", n.activeValidators))
 
 	success := 0
 	for pk := range n.activeValidators {
-		pubkey := &bls.PublicKey{}
-		if err := pubkey.DeserializeHexStr(pk); err != nil {
-			n.logger.Warn("could not decode validator public key", zap.Error(err))
-		}
 		n.logger.Debug("resubscribing validator", zap.String("pk", pk))
-		if err := n.subscribe(pubkey.Serialize()); err != nil {
+		pkRaw, err := hex.DecodeString(pk)
+		if err != nil {
+			n.logger.Warn("could not decode validator public key", zap.Error(err))
+			n.activeValidators[pk] = false
+			continue
+		}
+		if err := n.subscribe(pkRaw); err != nil {
 			n.logger.Warn("could not resubscribe to validator's topic", zap.Error(err))
 			// TODO: handle
 			n.activeValidators[pk] = false

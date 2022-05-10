@@ -60,7 +60,7 @@ func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) 
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 	}
-	dvs.logger.Debug("configuring discv5 discovery")
+	dvs.logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
 		return nil, err
 	}
@@ -72,13 +72,13 @@ func (dvs *DiscV5Service) Close() error {
 	if dvs.cancel != nil {
 		dvs.cancel()
 	}
-	if dvs.dv5Listener != nil {
-		dvs.dv5Listener.Close()
-	}
 	if dvs.conn != nil {
 		if err := dvs.conn.Close(); err != nil {
 			return err
 		}
+	}
+	if dvs.dv5Listener != nil {
+		dvs.dv5Listener.Close()
 	}
 	return nil
 }
@@ -134,23 +134,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	}
 	dvs.conn = udpConn
 
-	localNode, err := createLocalNode(opts.NetworkKey, opts.StoragePath, ipAddr, opts.Port, opts.TCPPort)
-	if err != nil {
-		return errors.Wrap(err, "could not create local node")
-	}
-	err = addAddresses(localNode, discOpts.HostAddress, discOpts.HostDNS)
-	if err != nil {
-		return errors.Wrap(err, "could not add configured addresses")
-	}
-	f := forksfactory.NewFork(discOpts.ForkVersion)
-	err = f.DecorateNode(localNode, map[string]interface{}{
-		"operatorID": opts.OperatorID,
-		"subnets":    opts.Subnets,
-	})
-	if err != nil {
-		return errors.Wrap(err, "could not decorate local node")
-	}
-	dvs.logger.Debug("node record is ready", zap.String("enr", localNode.Node().String()), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
+	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
 	dv5Cfg, err := opts.DiscV5Cfg()
 	if err != nil {
 		return err
@@ -279,6 +263,28 @@ func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Nod
 		}
 		return subnets[subnet] > 0
 	}
+}
+
+func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
+	opts := discOpts.DiscV5Opts
+	localNode, err := createLocalNode(opts.NetworkKey, opts.StoragePath, ipAddr, opts.Port, opts.TCPPort)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create local node")
+	}
+	err = addAddresses(localNode, discOpts.HostAddress, discOpts.HostDNS)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not add configured addresses")
+	}
+	f := forksfactory.NewFork(discOpts.ForkVersion)
+	err = f.DecorateNode(localNode, map[string]interface{}{
+		"operatorID": opts.OperatorID,
+		"subnets":    opts.Subnets,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not decorate local node")
+	}
+	dvs.logger.Debug("node record is ready", zap.String("enr", localNode.Node().String()), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
+	return localNode, nil
 }
 
 // newUDPListener creates a udp server

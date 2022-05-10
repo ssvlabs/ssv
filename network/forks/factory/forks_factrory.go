@@ -15,6 +15,6 @@ func NewFork(forkVersion forksprotocol.ForkVersion) forks.Fork {
 	case forksprotocol.V1ForkVersion:
 		return &forksv1.ForkV1{}
 	default:
-		return nil
+		return &forksv0.ForkV0{}
 	}
 }

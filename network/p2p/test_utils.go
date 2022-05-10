@@ -11,6 +11,7 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/testing"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -102,7 +103,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(logger, keys.NetKey, operatorPubkey, forkVersion, ln.Bootnode,
+	cfg := NewNetConfig(logger, keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode,
 		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	p := New(ctx, cfg)
 	err = p.Setup()

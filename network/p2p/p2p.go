@@ -81,10 +81,7 @@ func (n *p2pNetwork) Host() host.Host {
 
 // Close implements io.Closer
 func (n *p2pNetwork) Close() error {
-	// exit if network was already closed or currently closing
-	if current := atomic.SwapInt32(&n.state, stateClosing); current == stateClosed || current == stateClosing {
-		return nil
-	}
+	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.disc.Close(); err != nil {
