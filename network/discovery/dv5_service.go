@@ -48,6 +48,7 @@ type DiscV5Service struct {
 	conns peers.ConnectionIndex
 
 	publishState int32
+	conn         *net.UDPConn
 }
 
 func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) {
@@ -73,6 +74,11 @@ func (dvs *DiscV5Service) Close() error {
 	}
 	if dvs.dv5Listener != nil {
 		dvs.dv5Listener.Close()
+	}
+	if dvs.conn != nil {
+		if err := dvs.conn.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -126,6 +132,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	if err != nil {
 		return errors.Wrap(err, "could not listen UDP")
 	}
+	dvs.conn = udpConn
 
 	localNode, err := createLocalNode(opts.NetworkKey, opts.StoragePath, ipAddr, opts.Port, opts.TCPPort)
 	if err != nil {
