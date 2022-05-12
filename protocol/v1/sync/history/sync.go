@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -71,7 +72,7 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 		localHeight = localMsg.Message.Height
 	}
 
-	highest, height, sender := h.getHighest(localMsg, remoteMsgs...)
+	highest, height, sender := sync.GetHighest(h.logger, localMsg, remoteMsgs...)
 	if highest == nil {
 		logger.Info("node is synced: remote highest decided not found (V1), assuming 0")
 		return nil, nil
@@ -109,7 +110,7 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		if ctx.Err() != nil {
 			break
 		}
-		sm, err := extractSyncMsg(msg.Msg)
+		sm, err := sync.ExtractSyncMsg(msg.Msg)
 		if err != nil {
 			h.logger.Warn("failed to extract sync msg", zap.Error(err))
 			continue
@@ -133,53 +134,4 @@ func (h *history) SyncDecidedRange(ctx context.Context, identifier message.Ident
 		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	return nil
-}
-
-func (h *history) getHighest(localMsg *message.SignedMessage, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, height message.Height, sender string) {
-	var localHeight message.Height
-	if localMsg != nil {
-		localHeight = localMsg.Message.Height
-	}
-	height = localHeight
-
-	for _, remoteMsg := range remoteMsgs {
-		sm, err := extractSyncMsg(remoteMsg.Msg)
-		if err != nil {
-			h.logger.Warn("bad sync message", zap.Error(err))
-			continue
-		}
-		if sm == nil {
-			h.logger.Debug("sync message not found because node is synced")
-			continue
-		}
-		if len(sm.Data) == 0 {
-			h.logger.Warn("empty sync message")
-			continue
-		}
-		signedMsg := sm.Data[0]
-		if signedMsg != nil && signedMsg.Message != nil && signedMsg.Message.Height > height {
-			highest = signedMsg
-			height = highest.Message.Height
-			sender = remoteMsg.Sender
-		}
-	}
-	return
-}
-
-func extractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
-	sm := &message.SyncMessage{}
-	err := sm.Decode(msg.Data)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not decode sync message")
-	}
-	if sm.Status == message.StatusNotFound {
-		return nil, nil
-	}
-	if sm.Status != message.StatusSuccess {
-		return nil, errors.Errorf("failed to get sync message: %s", sm.Status.String())
-	}
-	if len(sm.Data) == 0 {
-		return nil, errors.New("empty decided message")
-	}
-	return sm, nil
 }
