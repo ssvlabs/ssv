@@ -139,7 +139,7 @@ func (q *queue) Pop(n int, idxs ...string) []*message.SSVMessage {
 	for i, idx := range idxs {
 		containers, ok := q.items[idx]
 		if !ok {
-			return nil
+			return []*message.SSVMessage{}
 		}
 		if n == 0 || n > len(containers) {
 			n = len(containers)

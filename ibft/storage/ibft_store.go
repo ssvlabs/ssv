@@ -163,7 +163,7 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
 }
 
 func (i *ibftStorage) SaveCurrentInstance(identifier message.Identifier, state *qbft.State) error {
-	value, err := json.Marshal(state)
+	value, err := state.MarshalJSON()
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
@@ -179,10 +179,10 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 		return nil, false, err
 	}
 	ret := &qbft.State{}
-	if err := json.Unmarshal(val, ret); err != nil {
+	if err := ret.UnmarshalJSON(val); err != nil {
 		return nil, false, errors.Wrap(err, "un-marshaling error")
 	}
-	return ret, false, nil
+	return ret, found, nil
 }
 
 // SaveLastChangeRoundMsg updates last change round message

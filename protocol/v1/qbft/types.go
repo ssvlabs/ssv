@@ -54,9 +54,9 @@ type State struct {
 type unsafeState struct {
 	Stage         int32
 	Identifier    message.Identifier
-	height        message.Height
+	Height        message.Height
 	InputValue    []byte
-	round         message.Round
+	Round         message.Round
 	PreparedRound message.Round
 	PreparedValue []byte
 }
@@ -66,9 +66,9 @@ func (s *State) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&unsafeState{
 		Stage:         s.Stage.Load(),
 		Identifier:    s.GetIdentifier(),
-		height:        s.GetHeight(),
+		Height:        s.GetHeight(),
 		InputValue:    s.GetInputValue(),
-		round:         s.GetRound(),
+		Round:         s.GetRound(),
 		PreparedRound: s.GetPreparedRound(),
 		PreparedValue: s.GetPreparedValue(),
 	})
@@ -83,9 +83,9 @@ func (s *State) UnmarshalJSON(data []byte) error {
 
 	s.Stage.Store(d.Stage)
 	s.Identifier.Store(d.Identifier)
-	s.Height.Store(d.height)
+	s.Height.Store(d.Height)
 	s.InputValue.Store(d.InputValue)
-	s.Round.Store(d.round)
+	s.Round.Store(d.Round)
 	s.PreparedRound.Store(d.PreparedRound)
 	s.PreparedValue.Store(d.PreparedValue)
 

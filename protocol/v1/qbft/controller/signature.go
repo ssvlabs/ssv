@@ -83,6 +83,7 @@ func (s *SignatureState) clear() {
 	s.valueStruct = nil
 	s.duty = nil
 	s.state.Store(StateSleep)
+	// don't reset height until new height set
 }
 
 func (s *SignatureState) getState() TimerState {

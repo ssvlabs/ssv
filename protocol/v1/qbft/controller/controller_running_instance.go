@@ -115,8 +115,10 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if err = c.ibftStorage.SaveDecided(agg); err != nil {
-				return errors.Wrap(err, "could not save aggregated commit msg to storage")
+			if c.isFullSync() {
+				if err = c.ibftStorage.SaveDecided(agg); err != nil { // TODO after fork should do only if full sync flag
+					return errors.Wrap(err, "could not save aggregated commit msg to storage")
+				}
 			}
 			if err = c.ibftStorage.SaveLastDecided(agg); err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")

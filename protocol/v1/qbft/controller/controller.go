@@ -131,7 +131,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 func (c *Controller) syncDecided() error {
-	syncHistory := c.fork.VersionName() == "v0" // until the fork, need to keep saving history
+	syncHistory := c.fork.VersionName() == forksprotocol.V0ForkVersion.String() // until the fork, need to force saving history
 	if c.forceHistory {
 		syncHistory = true // only if force history is set to true
 	}
