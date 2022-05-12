@@ -52,7 +52,7 @@ type ControllerOptions struct {
 	Shares                     []ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	ForceHistory               bool
+	FullNode                   bool `yaml:"FullNode" env:"FORCE_HISTORY_KEY" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
 	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -139,7 +139,7 @@ func NewController(options ControllerOptions) Controller {
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
-		ForceHistory:               options.ForceHistory,
+		FullNode:                   options.FullNode,
 	}
 	ctrl := controller{
 		collection:                 collection,

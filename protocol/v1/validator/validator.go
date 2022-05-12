@@ -37,7 +37,7 @@ type Options struct {
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
-	ForceHistory               bool
+	FullNode                   bool
 }
 
 type Validator struct {
@@ -77,7 +77,7 @@ func NewValidator(opt *Options) IValidator {
 		signer:      opt.Signer,
 		ibfts:       ibfts,
 		readMode:    opt.ReadMode,
-		saveHistory: opt.ForceHistory,
+		saveHistory: opt.FullNode,
 	}
 }
 
@@ -150,7 +150,7 @@ func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options
 		SyncRateLimit:  opt.SyncRateLimit,
 		SigTimeout:     opt.SignatureCollectionTimeout,
 		ReadMode:       opt.ReadMode,
-		ForceHistory:   opt.ForceHistory,
+		FullNode:       opt.FullNode,
 	}
 	return controller.New(opts)
 }

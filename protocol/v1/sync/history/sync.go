@@ -28,17 +28,17 @@ type History interface {
 
 // history implements History
 type history struct {
-	logger       *zap.Logger
-	syncer       p2pprotocol.Syncer
-	forceHistory bool
+	logger   *zap.Logger
+	syncer   p2pprotocol.Syncer
+	fullNode bool
 }
 
 // New creates a new instance of History
-func New(logger *zap.Logger, syncer p2pprotocol.Syncer, forceHistory bool) History {
+func New(logger *zap.Logger, syncer p2pprotocol.Syncer, fullNode bool) History {
 	return &history{
-		logger:       logger,
-		syncer:       syncer,
-		forceHistory: forceHistory,
+		logger:   logger,
+		syncer:   syncer,
+		fullNode: fullNode,
 	}
 }
 
@@ -81,7 +81,7 @@ func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier
 		logger.Info("node is synced: local is higher or equal to remote")
 		return nil, nil // no need to save the latest
 	}
-	if !h.forceHistory {
+	if !h.fullNode {
 		logger.Info("got highest remote and saving as latest.", zap.Int64("highest", int64(height)))
 		return highest, nil // return the remote heights decided in order to save as latest
 	}

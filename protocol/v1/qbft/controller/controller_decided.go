@@ -1,7 +1,6 @@
 package controller
 
 import (
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 
@@ -29,7 +28,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
-	logger := c.logger.With(zap.String("who", "processDecided"), zap.Bool("is_full_sync", c.isFullSync()), zap.Uint64("height", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
+	logger := c.logger.With(zap.String("who", "processDecided"), zap.Bool("is_full_sync", c.isFullNode()), zap.Uint64("height", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
 
 	if valid, err := c.validateHeight(msg); err != nil {
@@ -47,7 +46,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if known {
 		// if decided is known, check for a more complete message (more signers)
 		if ignore := c.checkDecidedMessageSigners(knownMsg, msg); !ignore {
-			if c.isFullSync() {
+			if c.isFullNode() {
 				if err := c.ibftStorage.SaveDecided(msg); err != nil {
 					logger.Error("can't update decided message", zap.Error(err))
 					return nil
@@ -115,7 +114,7 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
 	var msgs []*message.SignedMessage
 	var err error
-	if c.isFullSync() {
+	if c.isFullNode() {
 		msgs, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	} else {
 		var lastDecided *message.SignedMessage
@@ -137,7 +136,7 @@ func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, *message
 
 // validateHeight when post fork and not full sync flag. checks if msg is >= to the last decided msg. if not, return and don't handle msg
 func (c *Controller) validateHeight(msg *message.SignedMessage) (bool, error) {
-	if !c.isFullSync() { // only when not full sync mode
+	if !c.isFullNode() { // only when not full sync mode
 		// only update last decided
 		lastDecided, err := c.ibftStorage.GetLastDecided(msg.Message.Identifier)
 		if err != nil {
@@ -190,13 +189,4 @@ func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, erro
 		return false, errors.Wrap(err, "could not get highest decided instance from storage")
 	}
 	return highest.Message.Height < msg.Message.Height, nil
-}
-
-func (c *Controller) isFullSync() bool {
-	isPostFork := c.fork.VersionName() == forksprotocol.V1ForkVersion.String()
-	fullSync := !isPostFork // by default when pre fork, full sync is true
-	if c.forceHistory {     // if full sync flag is true, force full sync
-		fullSync = true
-	}
-	return fullSync
 }

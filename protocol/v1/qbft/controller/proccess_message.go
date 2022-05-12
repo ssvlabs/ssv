@@ -54,7 +54,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	}
 
 	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
-		zap.Bool("is_full_sync", c.isFullSync()),
+		zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)), zap.String("identifier", string(signedMessage.Message.Identifier)),
 		zap.Any("signers", signedMessage.GetSigners()))
 
@@ -62,7 +62,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
 
-		if c.isFullSync() {
+		if c.isFullNode() {
 			// process late commit for all range of heights
 			if err := c.ibftStorage.SaveDecided(updated); err != nil {
 				return false, errors.Wrap(err, "could not save aggregated decided message")
@@ -101,7 +101,7 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.Signe
 	// find stored decided
 	var err error
 	var decidedMessages []*message.SignedMessage
-	if c.isFullSync() {
+	if c.isFullNode() {
 		decidedMessages, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	} else {
 		var lastDecided *message.SignedMessage

@@ -41,7 +41,7 @@ type Options struct {
 	SyncRateLimit  time.Duration
 	SigTimeout     time.Duration
 	ReadMode       bool
-	ForceHistory   bool
+	FullNode       bool
 }
 
 // Controller implements Controller interface
@@ -73,8 +73,8 @@ type Controller struct {
 	syncRateLimit time.Duration
 
 	// flags
-	readMode     bool
-	forceHistory bool
+	readMode bool
+	fullNode bool
 
 	q msgqueue.MsgQueue
 }
@@ -111,8 +111,8 @@ func New(opts Options) IController {
 
 		syncRateLimit: opts.SyncRateLimit,
 
-		readMode:     opts.ReadMode,
-		forceHistory: opts.ForceHistory,
+		readMode: opts.ReadMode,
+		fullNode: opts.FullNode,
 
 		q: q,
 	}
@@ -131,12 +131,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 func (c *Controller) syncDecided() error {
-	syncHistory := c.fork.VersionName() == forksprotocol.V0ForkVersion.String() // until the fork, need to force saving history
-	if c.forceHistory {
-		syncHistory = true // only if force history is set to true
-	}
-
-	h := history.New(c.logger, c.network, syncHistory)
+	h := history.New(c.logger, c.network, c.isFullNode())
 
 	handler := func(msg *message.SignedMessage) error {
 		err := c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
@@ -276,4 +271,16 @@ func (c *Controller) messageHandler(msg *message.SSVMessage) error {
 		panic("need to implement!")
 	}
 	return nil
+}
+
+func (c *Controller) isFullNode() bool {
+	isPostFork := c.fork.VersionName() != forksprotocol.V0ForkVersion.String()
+	if !isPostFork { // by default when pre fork, full sync is true
+		return true
+	}
+	// otherwise, checking flag
+	if c.fullNode {
+		return true
+	}
+	return false
 }
