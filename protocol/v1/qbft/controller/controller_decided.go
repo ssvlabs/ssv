@@ -162,7 +162,9 @@ func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage,
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
 func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool {
-	return c.currentInstance != nil && c.currentInstance.State().GetHeight() == msg.Message.Height
+	return c.currentInstance != nil &&
+		c.currentInstance.State() != nil &&
+		c.currentInstance.State().GetHeight() == msg.Message.Height
 }
 
 // decidedRequiresSync returns true if:
