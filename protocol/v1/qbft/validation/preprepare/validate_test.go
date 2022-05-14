@@ -34,7 +34,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
 	bls.Init(bls.BLS12_381)
 
-	signature, err := msg.Sign(sk, string(forksprotocol.V1ForkVersion))
+	signature, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
 	require.NoError(t, err)
 	sm := &message.SignedMessage{
 		Message:   msg,
