@@ -1,17 +1,18 @@
 package testing
 
 import (
+	"testing"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	v0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"testing"
 )
 
 // GenerateBLSKeys generates randomly nodes
@@ -91,7 +92,8 @@ func SignMsg(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, signers []
 // AggregateSign sign message.ConsensusMessage and then aggregate
 func AggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, signers []message.OperatorID, consensusMessage *message.ConsensusMessage) *message.SignedMessage {
 	signedMsg := SignMsg(t, sks, signers, consensusMessage)
-	require.NoError(t, signedMsg.Aggregate(signedMsg))
+	// TODO: use SignMsg instead of AggregateSign
+	//require.NoError(t, signedMsg.Aggregate(signedMsg))
 	return signedMsg
 }
 
@@ -104,20 +106,20 @@ func AggregateInvalidSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKe
 
 // PopulatedStorage create new QBFTStore instance, save the highest height and then populated from 0 to highestHeight
 func PopulatedStorage(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, round message.Round, highestHeight message.Height) qbftstorage.QBFTStore {
-	s := qbftstorage.NewQBFTStore(NewInMemDb(), logex.GetLogger(zap.String("who", "qbftStore")), "test-qbft-storage")
+	s := qbftstorage.NewQBFTStore(NewInMemDb(), zap.L(), "test-qbft-storage")
 
-	signers := make([]message.OperatorID, len(sks))
+	signers := make([]message.OperatorID, 0, len(sks))
 	for k := range sks {
 		signers = append(signers, k)
 	}
 
-	lambda := []byte("lambda_11")
+	identifier := []byte("Identifier_11")
 	for i := 0; i <= int(highestHeight); i++ {
 		signedMsg := AggregateSign(t, sks, signers, &message.ConsensusMessage{
 			MsgType:    message.CommitMsgType,
 			Height:     message.Height(i),
 			Round:      round,
-			Identifier: lambda,
+			Identifier: identifier,
 			Data:       []byte("value"),
 		})
 		require.NoError(t, s.SaveDecided(signedMsg))
