@@ -150,8 +150,8 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	var aggSig []byte
 	ids := make([]message.OperatorID, 0)
 	if i.isPrepared() {
-		qourum, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
-		i.Logger.Debug("change round - checking quorum", zap.Bool("qourum", qourum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
+		quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
+		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
 		var aggregatedSig *bls.Sign
 		justificationMsg = msgs[0].Message
 		for _, msg := range msgs {
