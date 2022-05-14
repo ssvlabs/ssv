@@ -3,7 +3,7 @@ package v0
 import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	controcllerfork "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
+	controllerfork "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
 	instancefork "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	forkv0 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -16,7 +16,7 @@ type ForkV0 struct {
 }
 
 // New returns new ForkV0
-func New() controcllerfork.Fork {
+func New() controllerfork.Fork {
 	return &ForkV0{}
 }
 
