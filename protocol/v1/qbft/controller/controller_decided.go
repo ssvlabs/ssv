@@ -114,28 +114,28 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 	return highestKnown, nil
 }
 
-//func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
-//	var msgs []*message.SignedMessage
-//	var err error
-//	if c.isFullNode() {
-//		msgs, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-//	} else {
-//		var lastDecided *message.SignedMessage
-//		lastDecided, err = c.ibftStorage.GetLastDecided(msg.Message.Identifier)
-//		if lastDecided != nil {
-//			if lastDecided.Message.Height == msg.Message.Height {
-//				msgs = append(msgs, msg)
-//			}
-//		}
-//	}
-//	if err != nil {
-//		return false, nil, errors.Wrap(err, "could not get decided instance from storage")
-//	}
-//	if len(msgs) == 0 {
-//		return false, nil, nil
-//	}
-//	return len(msgs) > 0, msgs[0], nil
-//}
+func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
+	var msgs []*message.SignedMessage
+	var err error
+	if c.isFullNode() {
+		msgs, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	} else {
+		var lastDecided *message.SignedMessage
+		lastDecided, err = c.ibftStorage.GetLastDecided(msg.Message.Identifier)
+		if lastDecided != nil {
+			if lastDecided.Message.Height == msg.Message.Height {
+				msgs = append(msgs, msg)
+			}
+		}
+	}
+	if err != nil {
+		return false, nil, errors.Wrap(err, "could not get decided instance from storage")
+	}
+	if len(msgs) == 0 {
+		return false, nil, nil
+	}
+	return len(msgs) > 0, msgs[0], nil
+}
 
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
