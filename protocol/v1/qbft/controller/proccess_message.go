@@ -67,12 +67,12 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			if err := c.ibftStorage.SaveDecided(updated); err != nil {
 				return false, errors.Wrap(err, "could not save aggregated decided message")
 			}
-			c.logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
+			logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
 		} else {
 			if err := c.ibftStorage.SaveLastDecided(updated); err != nil {
 				return false, errors.Wrap(err, "could not save aggregated decided message")
 			}
-			c.logger.Debug("last decided message was updated", zap.Any("updated signers", updated.GetSigners()))
+			logger.Debug("last decided message was updated", zap.Any("updated signers", updated.GetSigners()))
 		}
 
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
@@ -87,9 +87,9 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			Data:    data,
 		}
 		if err := c.network.Broadcast(ssvMsg); err != nil {
-			c.logger.Error("could not broadcast decided message", zap.Error(err))
+			logger.Error("could not broadcast decided message", zap.Error(err))
 		}
-		c.logger.Debug("updated decided was broadcasted")
+		logger.Debug("updated decided was broadcasted")
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 	}
 	return true, nil

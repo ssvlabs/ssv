@@ -153,7 +153,6 @@ func (c *Controller) validateHeight(msg *message.SignedMessage) (bool, error) {
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
 	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
-	c.logger.Debug("---- check decided ----", zap.Int("committee size", c.ValidatorShare.CommitteeSize()), zap.Int("known", len(knownMsg.Signers)), zap.Int("new", len(msg.Signers)))
 	if len(knownMsg.Signers) < c.ValidatorShare.CommitteeSize() && len(msg.GetSigners()) > len(knownMsg.Signers) {
 		return false
 	}
