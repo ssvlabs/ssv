@@ -122,7 +122,7 @@ func New(opts Options) IController {
 	}
 
 	// create strategy
-	if opts.FullNode {
+	if ctrl.isFullNode() {
 		ctrl.strategy = fullnode.NewFullNodeStrategy(logger, opts.Storage, opts.Network)
 	} else {
 		ctrl.strategy = node.NewRegularNodeStrategy(logger, opts.Storage, opts.Network)
@@ -139,6 +139,12 @@ func New(opts Options) IController {
 func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	// get new QBFT controller fork
 	c.fork = forksfactory.NewFork(forkVersion)
+	// update strategy
+	if c.isFullNode() {
+		c.strategy = fullnode.NewFullNodeStrategy(c.logger, c.ibftStorage, c.network)
+	} else {
+		c.strategy = node.NewRegularNodeStrategy(c.logger, c.ibftStorage, c.network)
+	}
 	return nil
 }
 
