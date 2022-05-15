@@ -2,6 +2,7 @@ package fullnode
 
 import (
 	"context"
+	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -36,6 +37,11 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get last decided from peers")
+	}
+	if highest == nil {
+		f.logger.Debug("could not find highest decided from peers",
+			zap.String("identifier", fmt.Sprintf("%x", identifier)))
+		return nil, nil
 	}
 	if highest.Message.Height > h {
 		err := f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {

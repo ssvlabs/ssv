@@ -7,12 +7,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/automation/commons"
-	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"

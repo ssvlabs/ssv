@@ -68,7 +68,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		if err := c.strategy.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not update decided message")
 		}
-		logger.Debug("decided was updated")
+		logger.Debug("decided was updated for controller with read only mode")
 		return nil
 	}
 
