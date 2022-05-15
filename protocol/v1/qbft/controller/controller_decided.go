@@ -28,17 +28,20 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
-	logger := c.logger.With(zap.String("who", "processDecided"), zap.Bool("is_full_sync", c.isFullNode()), zap.Uint64("height", uint64(msg.Message.Height)), zap.Any("signer ids", msg.Signers))
+	logger := c.logger.With(zap.String("who", "processDecided"),
+		//zap.Bool("is_full_sync", c.isFullNode()),
+		zap.Uint64("height", uint64(msg.Message.Height)),
+		zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
 
-	if valid, err := c.validateHeight(msg); err != nil {
+	if valid, err := c.strategy.ValidateHeight(msg); err != nil {
 		return errors.Wrap(err, "failed to check msg height")
 	} else if !valid {
 		return nil // msg is too old, do nothing
 	}
 
 	// if we already have this in storage, pass
-	known, knownMsg, err := c.decidedMsgKnown(msg)
+	known, knownMsg, err := c.strategy.IsMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return nil
@@ -46,19 +49,11 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if known {
 		// if decided is known, check for a more complete message (more signers)
 		if ignore := c.checkDecidedMessageSigners(knownMsg, msg); !ignore {
-			if c.isFullNode() {
-				if err := c.ibftStorage.SaveDecided(msg); err != nil {
-					logger.Error("can't update decided message", zap.Error(err))
-					return nil
-				}
-				logger.Debug("decided was updated")
-			} else {
-				if err := c.ibftStorage.SaveLastDecided(msg); err != nil {
-					logger.Error("can't update decided message", zap.Error(err))
-					return nil
-				}
-				logger.Debug("last decided was updated")
+			if err := c.strategy.UpdateDecided(msg); err != nil {
+				logger.Error("can't update decided message", zap.Error(err))
+				return nil
 			}
+			logger.Debug("decided was updated")
 
 			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 			return nil
@@ -111,44 +106,28 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 	return highestKnown, nil
 }
 
-func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
-	var msgs []*message.SignedMessage
-	var err error
-	if c.isFullNode() {
-		msgs, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	} else {
-		var lastDecided *message.SignedMessage
-		lastDecided, err = c.ibftStorage.GetLastDecided(msg.Message.Identifier)
-		if lastDecided != nil {
-			if lastDecided.Message.Height == msg.Message.Height {
-				msgs = append(msgs, msg)
-			}
-		}
-	}
-	if err != nil {
-		return false, nil, errors.Wrap(err, "could not get decided instance from storage")
-	}
-	if len(msgs) == 0 {
-		return false, nil, nil
-	}
-	return len(msgs) > 0, msgs[0], nil
-}
-
-// validateHeight when post fork and not full sync flag. checks if msg is >= to the last decided msg. if not, return and don't handle msg
-func (c *Controller) validateHeight(msg *message.SignedMessage) (bool, error) {
-	if !c.isFullNode() { // only when not full sync mode
-		// only update last decided
-		lastDecided, err := c.ibftStorage.GetLastDecided(msg.Message.Identifier)
-		if err != nil {
-			return false, errors.Wrap(err, "failed to get last decided")
-		}
-		if msg.Message.Height < lastDecided.Message.Height {
-			c.logger.Warn("node is not full sync and message height is lower than the last decided. do nothing", zap.Int64("expectedHeight", int64(lastDecided.Message.Height)), zap.Int64("actualHeight", int64(msg.Message.Height)))
-			return false, nil
-		}
-	}
-	return true, nil
-}
+//func (c *Controller) decidedMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
+//	var msgs []*message.SignedMessage
+//	var err error
+//	if c.isFullNode() {
+//		msgs, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+//	} else {
+//		var lastDecided *message.SignedMessage
+//		lastDecided, err = c.ibftStorage.GetLastDecided(msg.Message.Identifier)
+//		if lastDecided != nil {
+//			if lastDecided.Message.Height == msg.Message.Height {
+//				msgs = append(msgs, msg)
+//			}
+//		}
+//	}
+//	if err != nil {
+//		return false, nil, errors.Wrap(err, "could not get decided instance from storage")
+//	}
+//	if len(msgs) == 0 {
+//		return false, nil, nil
+//	}
+//	return len(msgs) > 0, msgs[0], nil
+//}
 
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {

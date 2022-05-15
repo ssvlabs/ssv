@@ -2,13 +2,14 @@ package controller
 
 import (
 	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strings"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
@@ -97,8 +98,14 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 		return
 	}
 	// didn't decided -> purge messages
-	c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO that the right indexer? might need be height and all messages
-	//c.msgQueue.PurgeIndexedMessages(msgqueue.IBFTMessageIndexKey(c.Identifier[:], height))
+	//c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO: that's the right indexer? might need be height and all messages
+	idn := hex.EncodeToString(c.Identifier)
+	c.q.Clean(func(s string) bool {
+		if strings.Contains(s, idn) && strings.Contains(s, fmt.Sprintf("%d", height)) {
+			return true
+		}
+		return false
+	})
 }
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
@@ -115,14 +122,10 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if c.isFullNode() {
-				if err = c.ibftStorage.SaveDecided(agg); err != nil { // TODO after fork should do only if full sync flag
-					return errors.Wrap(err, "could not save aggregated commit msg to storage")
-				}
-			}
-			if err = c.ibftStorage.SaveLastDecided(agg); err != nil {
+			if err = c.strategy.SaveDecided(agg); err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
+
 			ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
 			c.logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
 			if err != nil {

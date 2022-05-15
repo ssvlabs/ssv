@@ -16,7 +16,7 @@ type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
 
 // Fetcher is responsible for fetching last/highest decided messages from other peers in the network
 type Fetcher interface {
-	GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, error)
+	GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, message.Height, error)
 }
 
 type lastDecidedFetcher struct {
@@ -33,8 +33,7 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 }
 
 // GetLastDecided returns last decided message from other peers in the network
-// TODO: resolve code duplication with history sync
-func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, error) {
+func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, message.Height, error) {
 	logger := l.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
 	var err error
 	var remoteMsgs []p2pprotocol.SyncResult
@@ -43,7 +42,7 @@ func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier mess
 		retries--
 		remoteMsgs, err = l.syncer.LastDecided(identifier)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not get local highest decided")
+			return nil, 0, errors.Wrap(err, "could not get local highest decided")
 		}
 		if len(remoteMsgs) == 0 {
 			time.Sleep(250 * time.Millisecond)
@@ -51,12 +50,12 @@ func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier mess
 	}
 	if len(remoteMsgs) == 0 {
 		logger.Info("node is synced: remote highest decided not found (V0), assuming 0")
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	localMsg, err := getLastDecided(identifier)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not fetch local highest instance during sync")
+		return nil, 0, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
 	var localHeight message.Height
 	if localMsg != nil {
@@ -65,14 +64,14 @@ func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier mess
 
 	highest, height, _ := sync.GetHighest(l.logger, localMsg, remoteMsgs...)
 	if highest == nil {
-		logger.Info("node is synced: remote highest decided not found (V1), assuming 0")
-		return nil, nil
+		logger.Info("node is synced: remote highest decided not found (V1)")
+		return nil, localHeight, nil
 	}
 
 	if height <= localHeight {
 		logger.Info("node is synced: local is higher or equal to remote")
-		return nil, nil
+		return nil, height, nil
 	}
 
-	return highest, nil
+	return highest, localHeight, nil
 }

@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/sync/history"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/node"
 	"go.uber.org/atomic"
 	"sync"
 	"time"
@@ -77,6 +79,8 @@ type Controller struct {
 	fullNode bool
 
 	q msgqueue.MsgQueue
+
+	strategy strategy.Decided
 }
 
 // New is the constructor of Controller
@@ -92,7 +96,7 @@ func New(opts Options) IController {
 		// TODO: we should probably stop here, TBD
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
-	ret := &Controller{
+	ctrl := &Controller{
 		ctx:            opts.Context,
 		ibftStorage:    opts.Storage,
 		logger:         logger,
@@ -117,10 +121,18 @@ func New(opts Options) IController {
 		q: q,
 	}
 
+	// create strategy
+	if opts.FullNode {
+		ctrl.strategy = fullnode.NewFullNodeStrategy(logger, opts.Storage, opts.Network)
+	} else {
+		ctrl.strategy = node.NewRegularNodeStrategy(logger, opts.Storage, opts.Network)
+	}
+
 	// set flags
-	ret.initHandlers.Store(false)
-	ret.initSynced.Store(false)
-	return ret
+	ctrl.initHandlers.Store(false)
+	ctrl.initSynced.Store(false)
+
+	return ctrl
 }
 
 // OnFork called when fork occur.
@@ -131,24 +143,13 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 func (c *Controller) syncDecided() error {
-	h := history.New(c.logger, c.network, c.isFullNode())
+	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
 
-	handler := func(msg *message.SignedMessage) error {
-		err := c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
-		if err != nil {
-			return errors.Wrap(err, "invalid msg")
-		}
-		// TODO: exit if already exist
-		return c.ibftStorage.SaveDecided(msg)
-	}
-
-	c.logger.Debug("syncing heights decided", zap.String("identifier", c.Identifier.String()))
-	highest, err := h.SyncDecided(c.ctx, c.Identifier, func(i message.Identifier) (*message.SignedMessage, error) {
-		return c.ibftStorage.GetLastDecided(i)
-	}, handler)
+	highest, err := c.strategy.Sync(c.ctx, c.Identifier, c.fork.ValidateDecidedMsg(c.ValidatorShare))
 	if err == nil && highest != nil {
 		err = c.ibftStorage.SaveLastDecided(highest)
 	}
+
 	return err
 }
 

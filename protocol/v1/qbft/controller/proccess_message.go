@@ -54,26 +54,17 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	}
 
 	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
-		zap.Bool("is_full_sync", c.isFullNode()),
+		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)), zap.String("identifier", string(signedMessage.Message.Identifier)),
 		zap.Any("signers", signedMessage.GetSigners()))
 
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-
-		if c.isFullNode() {
-			// process late commit for all range of heights
-			if err := c.ibftStorage.SaveDecided(updated); err != nil {
-				return false, errors.Wrap(err, "could not save aggregated decided message")
-			}
-			c.logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
-		} else {
-			if err := c.ibftStorage.SaveLastDecided(updated); err != nil {
-				return false, errors.Wrap(err, "could not save aggregated decided message")
-			}
-			c.logger.Debug("last decided message was updated", zap.Any("updated signers", updated.GetSigners()))
+		if err := c.strategy.SaveLateCommit(updated); err != nil {
+			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
+		c.logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
 
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 
@@ -96,20 +87,8 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 }
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-// if not is "fullSync" mode, checks that last decided msg height is the same as the new msg. if not, pass
 func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.SignedMessage) (*message.SignedMessage, error) {
-	// find stored decided
-	var err error
-	var decidedMessages []*message.SignedMessage
-	if c.isFullNode() {
-		decidedMessages, err = c.ibftStorage.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	} else {
-		var lastDecided *message.SignedMessage
-		lastDecided, err = c.ibftStorage.GetLastDecided(msg.Message.Identifier)
-		if lastDecided != nil && msg.Message.Height == lastDecided.Message.Height { // make sure the same height. if not, pass
-			decidedMessages = append(decidedMessages, lastDecided)
-		}
-	}
+	decidedMessages, err := c.strategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided for late commit")
@@ -120,6 +99,9 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.Signe
 		return nil, nil
 	}
 	decidedMsg := decidedMessages[0]
+	if msg.Message.Height == decidedMsg.Message.Height { // make sure the same height. if not, pass
+		return nil, nil
+	}
 	if len(decidedMsg.GetSigners()) == c.ValidatorShare.CommitteeSize() {
 		// msg was signed by the entire committee
 		logger.Debug("msg was signed by the entire committee")
