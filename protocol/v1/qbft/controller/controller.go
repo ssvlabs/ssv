@@ -171,7 +171,12 @@ func (c *Controller) Init() error {
 	}
 
 	if !c.initSynced.Load() {
-		// TODO wait for peers?
+		minPeers := 1
+		c.logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
+		if err := p2pprotocol.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
+			return err
+		}
+		c.logger.Debug("found enough peers")
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := c.syncDecided(); err != nil {
 			if err == ErrAlreadyRunning {
