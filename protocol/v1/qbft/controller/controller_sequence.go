@@ -47,10 +47,9 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	}
 
 	if opts.RequireMinPeers {
-		// TODO need to change interval
 		minPeers := 1
 		c.logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
-		if err := protcolp2p.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*2); err != nil {
+		if err := protcolp2p.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
 			return err
 		}
 		c.logger.Debug("found enough peers")
