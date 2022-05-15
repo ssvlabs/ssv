@@ -64,6 +64,14 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
+	if c.readMode {
+		if err := c.strategy.SaveDecided(msg); err != nil {
+			return errors.Wrap(err, "could not update decided message")
+		}
+		logger.Debug("decided was updated")
+		return nil
+	}
+
 	// decided for current instance
 	if c.forceDecideCurrentInstance(msg) {
 		return nil
