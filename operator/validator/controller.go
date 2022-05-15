@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"sync"
 	"time"
 
