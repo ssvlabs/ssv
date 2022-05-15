@@ -4,14 +4,20 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func init() {
+	logex.Build("test", zap.InfoLevel, nil)
+}
 
 func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
 	ret, _ := json.Marshal(input)

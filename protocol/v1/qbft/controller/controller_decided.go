@@ -132,7 +132,6 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
 	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
-	c.logger.Debug("---- check decided ----", zap.Int("committee size", c.ValidatorShare.CommitteeSize()), zap.Int("known", len(knownMsg.Signers)), zap.Int("new", len(msg.Signers)))
 	if len(knownMsg.Signers) < c.ValidatorShare.CommitteeSize() && len(msg.GetSigners()) > len(knownMsg.Signers) {
 		return false
 	}
@@ -141,7 +140,9 @@ func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage,
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
 func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool {
-	return c.currentInstance != nil && c.currentInstance.State().GetHeight() == msg.Message.Height
+	return c.currentInstance != nil &&
+		c.currentInstance.State() != nil &&
+		c.currentInstance.State().GetHeight() == msg.Message.Height
 }
 
 // decidedRequiresSync returns true if:

@@ -2,11 +2,13 @@ package controller
 
 import (
 	"encoding/hex"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // ProcessSignatureMessage aggregate signature messages and broadcasting when quorum achieved
@@ -36,7 +38,6 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 
 	logger.Info("collected valid signature", zap.String("sig", hex.EncodeToString(msg.Message.DutySignature)), zap.Any("msg", msg))
 
-	// 	verifyPartialSignature
 	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
 		c.logger.Error("received invalid signature", zap.Error(err))
 		return nil
