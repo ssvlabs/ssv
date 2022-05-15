@@ -30,13 +30,9 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 	for ctx.Err() == nil {
 		time.Sleep(interval)
 
-		// once get consensus instance is closed, but we need to pop sigs, decided msgs and might be also change round. the only way to get the height is using the last instance
-		lastState, _, err := c.ibftStorage.GetCurrentInstance(c.Identifier)
-		if err != nil {
-			c.logger.Warn("failed to get current instance", zap.Error(err))
-		}
+		lastHeight := c.signatureState.height
 
-		if processed := c.processNoRunningInstance(lastState); processed {
+		if processed := c.processNoRunningInstance(lastHeight); processed {
 			c.logger.Debug("process none running instance is done")
 			continue
 		}
@@ -44,7 +40,7 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 			c.logger.Debug("process by state is done")
 			continue
 		}
-		if processed := c.processDefault(lastState); processed {
+		if processed := c.processDefault(lastHeight); processed {
 			c.logger.Debug("process default is done")
 			continue
 		}
@@ -54,15 +50,15 @@ func (c *Controller) ConsumeQueue(interval time.Duration) error {
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
-func (c *Controller) processNoRunningInstance(lastState *qbft.State) bool {
-	if c.currentInstance != nil || lastState == nil {
+func (c *Controller) processNoRunningInstance(lastHeight message.Height) bool {
+	if c.currentInstance != nil {
 		return false // only pop when no instance running
 	}
 
 	var indexes []string
-	indexes = append(indexes, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, lastState.GetHeight()))                                                                       // looking for last height sig msg's or late commit
-	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastState.GetHeight(), message.CommitMsgType)...)                               // looking for last height decided msgs or late decided
-	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastState.GetHeight(), message.CommitMsgType, message.RoundChangeMsgType)...) // looking for late commit msg's or might be change round between duties
+	indexes = append(indexes, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, lastHeight))                                                                       // looking for last height sig msg's or late commit
+	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastHeight, message.CommitMsgType)...)                               // looking for last height decided msgs or late decided
+	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight, message.CommitMsgType, message.RoundChangeMsgType)...) // looking for late commit msg's or might be change round between duties
 	msgs := c.popByPriority(indexes...)
 
 	if len(msgs) == 0 || msgs[0] == nil {
@@ -106,13 +102,10 @@ func (c *Controller) processByState() bool {
 
 // processDefault this phase is to allow late commit and decided msg's
 // we allow late commit and decided up to 1 height back. (only to support pre fork. after fork no need to support previews height)
-func (c *Controller) processDefault(lastState *qbft.State) bool {
-	if lastState == nil {
-		return false
-	}
+func (c *Controller) processDefault(lastHeight message.Height) bool {
 	var indexes []string
-	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastState.GetHeight()-1, message.CommitMsgType)...)
-	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastState.GetHeight()-1, message.CommitMsgType)...)
+	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)...)
+	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)...)
 	msgs := c.popByPriority(indexes...)
 	if len(msgs) > 0 {
 		err := c.messageHandler(msgs[0])
