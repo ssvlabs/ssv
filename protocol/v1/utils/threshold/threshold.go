@@ -2,8 +2,11 @@ package threshold
 
 import (
 	"fmt"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math/big"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (
@@ -20,7 +23,7 @@ func Init() {
 
 // Create receives a bls.SecretKey hex and count.
 // Will split the secret key into count shares
-func Create(skBytes []byte, threshold uint64, count uint64) (map[uint64]*bls.SecretKey, error) {
+func Create(skBytes []byte, threshold uint64, count uint64) (map[message.OperatorID]*bls.SecretKey, error) {
 	// master key Polynomial
 	msk := make([]bls.SecretKey, threshold)
 
@@ -38,7 +41,7 @@ func Create(skBytes []byte, threshold uint64, count uint64) (map[uint64]*bls.Sec
 	}
 
 	// evaluate shares - starting from 1 because 0 is master key
-	shares := make(map[uint64]*bls.SecretKey)
+	shares := make(map[message.OperatorID]*bls.SecretKey)
 	for i := uint64(1); i <= count; i++ {
 		blsID := bls.ID{}
 
@@ -54,7 +57,7 @@ func Create(skBytes []byte, threshold uint64, count uint64) (map[uint64]*bls.Sec
 			return nil, err
 		}
 
-		shares[i] = &sk
+		shares[message.OperatorID(i)] = &sk
 	}
 	return shares, nil
 }
