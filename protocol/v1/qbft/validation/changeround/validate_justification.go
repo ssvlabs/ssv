@@ -26,6 +26,9 @@ func Validate(share *beacon.Share, forkVersion string) pipelines.SignedMessagePi
 
 // Run implements pipeline.Pipeline interface
 func (p *validateJustification) Run(signedMessage *message.SignedMessage) error {
+	if signedMessage.Message.Data == nil {
+		return errors.New("change round justification msg is nil")
+	}
 	// TODO - change to normal prepare pipeline
 	data, err := signedMessage.Message.GetRoundChangeData()
 	if err != nil {
