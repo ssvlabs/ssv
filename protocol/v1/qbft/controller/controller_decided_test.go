@@ -119,6 +119,13 @@ func newIdentifier(identity []byte) atomic.Value {
 func TestDecidedRequiresSync(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
+
+	height0 := atomic.Value{}
+	height0.Store(0)
+
+	height3 := atomic.Value{}
+	height3.Store(3)
+
 	tests := []struct {
 		name            string
 		currentInstance instance.Instancer
@@ -131,7 +138,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from future, requires sync.",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 3,
+				Height: height3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -178,7 +185,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from far future, requires sync.",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 3,
+				Height: height3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -195,7 +202,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from past, doesn't requires sync.",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 3,
+				Height: height3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -212,7 +219,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided for current",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 3,
+				Height: height3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -229,7 +236,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided for seq 0",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 0,
+				Height: height0,
 			}),
 			nil,
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
@@ -264,6 +271,13 @@ func TestDecidedRequiresSync(t *testing.T) {
 func TestDecideIsCurrentInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
+
+	height1 := atomic.Value{}
+	height1.Store(1)
+
+	height4 := atomic.Value{}
+	height1.Store(4)
+
 	tests := []struct {
 		name            string
 		currentInstance instance.Instancer
@@ -273,7 +287,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 1,
+				Height: height1,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -302,7 +316,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance seq lower",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 1,
+				Height: height1,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -313,7 +327,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance seq higher",
 			instance.NewInstanceWithState(&qbft.State{
-				Height: 4,
+				Height: height4,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -549,11 +563,17 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		Committee: nodes,
 	}
 
+	id := atomic.Value{}
+	id.Store(identifier)
+
+	height := atomic.Value{}
+	height.Store(2)
+
 	ctrl := Controller{
 		ValidatorShare: share,
 		currentInstance: instance.NewInstanceWithState(&qbft.State{
-			Identifier: identifier,
-			Height:     2,
+			Identifier: id,
+			Height:     height,
 		}),
 		ibftStorage: newTestStorage(nil),
 	}

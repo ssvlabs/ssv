@@ -36,6 +36,9 @@ func TestCanStartNewInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 
+	height10 := atomic.Value{}
+	height10.Store(10)
+
 	tests := []struct {
 		name            string
 		opts            instance2.ControllerStartInstanceOptions
@@ -152,7 +155,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			true,
 			true,
 			instance2.NewInstanceWithState(&qbft.State{
-				Height: 10,
+				Height: height10,
 			}),
 			fmt.Sprintf("current instance (%d) is still running", 10),
 		},
