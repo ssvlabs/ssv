@@ -149,16 +149,18 @@ loop:
 	ibftc := r.validators[3].(*validator.Validator).Ibfts()[message.RoleTypeAttester]
 	nextSeq, err := ibftc.NextSeqNumber()
 	if err != nil {
-		r.logger.Error("node #4 could not get state")
+		r.logger.Error("xxx node #4 could not get state", zap.Int64("highest decided", int64(nextSeq)-1))
 		return errors.New("node #4 could not get state")
 	} else {
-		r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
+		r.logger.Info("xxx node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 	}
 
-	decides, err := ctx.Stores[3].GetDecided(msgs[1].Message.Identifier, 0, 0)
+	decides, err := ctx.Stores[3].GetDecided(msgs[1].Message.Identifier, 0, nextSeq)
 	if err != nil {
 		r.logger.Error("node #4 could not get decided in range", zap.Error(err))
 		return errors.New("node #4 could not get decided in range")
+	} else if len(decides) < int(nextSeq) {
+		r.logger.Info("node #4 is not synced, could not find all messages", zap.Int("count", len(decides)))
 	} else {
 		r.logger.Info("node #4 synced, found decided messages", zap.Int("count", len(decides)))
 	}
