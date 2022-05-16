@@ -112,7 +112,7 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
 func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
-	c.logger.Debug("instance stage has been changed!", zap.String("stage", stage.String()))
+	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundState_name[int32(stage)]))
 	switch stage {
 	case qbft.RoundState_Prepare:
 		if err := c.ibftStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {

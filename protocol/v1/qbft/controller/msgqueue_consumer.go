@@ -93,7 +93,7 @@ func (c *Controller) processByState() bool {
 			return false // no msg found
 		}
 		c.logger.Debug("queue found message for state",
-			zap.Int32("stage", currentState.GetStage().Int32()),
+			zap.Int32("stage", currentState.Stage.Load()),
 			zap.Int32("seq", int32(currentState.GetHeight())),
 			zap.Int32("round", int32(currentState.GetRound())),
 		)
@@ -127,7 +127,7 @@ func (c *Controller) processDefault(lastHeight message.Height) bool {
 func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	height := state.GetHeight()
 	var indexed []string
-	switch state.GetStage() {
+	switch qbft.RoundState(state.Stage.Load()) {
 	case qbft.RoundState_NotStarted:
 		indexed = append(indexed, msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier))
 	case qbft.RoundState_PrePrepare:
