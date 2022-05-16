@@ -22,12 +22,6 @@ func TestLeaderCalculation(t *testing.T) {
 
 	round := atomic.Value{}
 	round.Store(message.Round(1))
-	preparedRound := atomic.Value{}
-	preparedRound.Store(message.Round(0))
-	preparedValue := atomic.Value{}
-	preparedValue.Store([]byte(nil))
-	identifier := atomic.Value{}
-	identifier.Store([]byte(nil))
 
 	sk, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -35,10 +29,7 @@ func TestLeaderCalculation(t *testing.T) {
 		Config:          qbft.DefaultConsensusParams(),
 		ValidatorShare:  &beacon.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
 		state: &qbft.State{
-			Round:         round,
-			PreparedRound: preparedRound,
-			PreparedValue: preparedValue,
-			Identifier:    identifier,
+			Round: round,
 		},
 		LeaderSelector: l,
 	}
@@ -47,7 +38,7 @@ func TestLeaderCalculation(t *testing.T) {
 		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
 			instance.BumpRound()
 			require.EqualValues(t, uint64(i%4+1), instance.ThisRoundLeader())
-			require.EqualValues(t, uint64(i+1), instance.State().Round.Load())
+			require.EqualValues(t, uint64(i+1), instance.State().GetRound())
 
 			if instance.ThisRoundLeader() == 1 {
 				require.True(t, instance.IsLeader())

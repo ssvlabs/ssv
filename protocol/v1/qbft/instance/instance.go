@@ -3,9 +3,15 @@ package instance
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"sync"
 	"time"
+
+	"go.uber.org/atomic"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -16,9 +22,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
-	"github.com/pkg/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 // Options defines option attributes for the Instance
@@ -273,7 +276,7 @@ func (i *Instance) bumpToRound(round message.Round) {
 	i.processChangeRoundQuorumOnce = sync.Once{}
 	i.processPrepareQuorumOnce = sync.Once{}
 	newRound := round
-	i.State().Round.Store(newRound)
+	i.State().SetRound(newRound)
 	role := i.State().GetIdentifier().GetRoleType()
 	pk := i.State().GetIdentifier().GetValidatorPK()
 	metricsIBFTRound.WithLabelValues(role.String(), hex.EncodeToString(pk)).Set(float64(newRound))
