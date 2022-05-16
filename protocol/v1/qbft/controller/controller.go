@@ -171,6 +171,8 @@ func (c *Controller) Init() error {
 	}
 
 	if !c.initSynced.Load() {
+		// warmup to avoid network errors
+		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
 		c.logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
 		if err := p2pprotocol.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
