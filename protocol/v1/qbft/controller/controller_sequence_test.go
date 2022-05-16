@@ -2,22 +2,22 @@ package controller
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/stretchr/testify/require"
-
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 func testIBFTInstance(t *testing.T) *Controller {
@@ -152,7 +152,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			true,
 			true,
 			instance2.NewInstanceWithState(&qbft.State{
-				Height: newHeight(10),
+				Height: 10,
 			}),
 			fmt.Sprintf("current instance (%d) is still running", 10),
 		},

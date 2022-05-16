@@ -7,22 +7,21 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/node"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -132,8 +131,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from future, requires sync.",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(3),
+				Height: 3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -180,8 +178,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from far future, requires sync.",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(3),
+				Height: 3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -198,8 +195,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided from past, doesn't requires sync.",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(3),
+				Height: 3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -216,8 +212,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided for current",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(3),
+				Height: 3,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -234,8 +229,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		{
 			"decided for seq 0",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(0),
+				Height: 0,
 			}),
 			nil,
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
@@ -279,8 +273,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(1),
+				Height: 1,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -309,8 +302,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance seq lower",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(1),
+				Height: 1,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -321,8 +313,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		{
 			"current instance seq higher",
 			instance.NewInstanceWithState(&qbft.State{
-				Identifier: atomic.Value{},
-				Height:     newHeight(4),
+				Height: 4,
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
@@ -561,17 +552,24 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	ctrl := Controller{
 		ValidatorShare: share,
 		currentInstance: instance.NewInstanceWithState(&qbft.State{
-			Identifier: newIdentifier(identifier),
-			Height:     newHeight(2),
+			Identifier: identifier,
+			Height:     2,
 		}),
 		ibftStorage: newTestStorage(nil),
 	}
+
+	if ctrl.isFullNode() {
+		ctrl.strategy = fullnode.NewFullNodeStrategy(zap.L(), ctrl.ibftStorage, nil)
+	} else {
+		ctrl.strategy = node.NewRegularNodeStrategy(zap.L(), ctrl.ibftStorage, nil)
+	}
+
 	require.NoError(t, ctrl.ibftStorage.SaveDecided(incompleteDecided))
 
-	_, incompleteKnownMsg, err := ctrl.decidedMsgKnown(incompleteDecided)
+	_, incompleteKnownMsg, err := ctrl.strategy.IsMsgKnown(incompleteDecided)
 	require.NoError(t, err)
 
-	_, completeKnownMsg, err := ctrl.decidedMsgKnown(completeDecided)
+	_, completeKnownMsg, err := ctrl.strategy.IsMsgKnown(completeDecided)
 	require.NoError(t, err)
 
 	// check message with similar number of signers

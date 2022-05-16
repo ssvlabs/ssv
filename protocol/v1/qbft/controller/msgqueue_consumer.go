@@ -2,11 +2,13 @@ package controller
 
 import (
 	"context"
+	"time"
+
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
-	"go.uber.org/zap"
-	"time"
 )
 
 func (c *Controller) startQueueConsumer() {
@@ -90,7 +92,11 @@ func (c *Controller) processByState() bool {
 		if msg == nil {
 			return false // no msg found
 		}
-		c.logger.Debug("queue found message for state", zap.Int32("stage", currentState.Stage.Load()), zap.Int32("seq", int32(currentState.GetHeight())), zap.Int32("round", int32(currentState.GetRound())))
+		c.logger.Debug("queue found message for state",
+			zap.Int32("stage", currentState.GetStage().Int32()),
+			zap.Int32("seq", int32(currentState.GetHeight())),
+			zap.Int32("round", int32(currentState.GetRound())),
+		)
 	}
 
 	err := c.messageHandler(msg)
@@ -121,7 +127,7 @@ func (c *Controller) processDefault(lastHeight message.Height) bool {
 func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	height := state.GetHeight()
 	var indexed []string
-	switch qbft.RoundState(state.Stage.Load()) {
+	switch state.GetStage() {
 	case qbft.RoundState_NotStarted:
 		indexed = append(indexed, msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier))
 	case qbft.RoundState_PrePrepare:

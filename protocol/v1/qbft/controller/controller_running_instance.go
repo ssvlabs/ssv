@@ -3,13 +3,15 @@ package controller
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"strings"
 )
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
@@ -110,7 +112,7 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
 func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
-	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundState_name[int32(stage)]))
+	c.logger.Debug("instance stage has been changed!", zap.String("stage", stage.String()))
 	switch stage {
 	case qbft.RoundState_Prepare:
 		if err := c.ibftStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
