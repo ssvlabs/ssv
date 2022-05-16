@@ -6,7 +6,9 @@ import (
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -63,6 +66,8 @@ type testIBFT struct {
 	decided         bool
 	signaturesCount int
 	identifier      []byte
+	beacon          beacon.Beacon
+	share           *beaconprotocol.Share
 }
 
 func (t *testIBFT) Init() error {
@@ -118,7 +123,33 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
-	return nil
+	// get operator pk for sig
+	pk, err := t.share.OperatorSharePubKey()
+	if err != nil {
+		return errors.Wrap(err, "could not find operator pk for signing duty")
+	}
+
+	retValueStruct := &beaconprotocol.DutyData{}
+	if duty.Type != message.RoleTypeAttester {
+		return errors.New("unsupported role, can't sign")
+	}
+
+	s := &spec.AttestationData{}
+	if err := s.UnmarshalSSZ(decidedValue); err != nil {
+		return errors.Wrap(err, "failed to marshal attestation")
+	}
+
+	signedAttestation, _, err := t.beacon.SignAttestation(s, duty, pk.Serialize())
+	if err != nil {
+		return errors.Wrap(err, "failed to sign attestation")
+	}
+
+	sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
+	retValueStruct.SignedData = sg
+	retValueStruct.GetAttestation().Signature = signedAttestation.Signature
+	retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
+
+	return t.beacon.SubmitAttestation(retValueStruct.GetAttestation())
 }
 
 func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
@@ -201,21 +232,12 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	ret := &Validator{}
 	ret.beacon = newTestBeacon(t)
 	ret.logger = zap.L()
-	ret.ibfts = make(controller.Controllers)
-	ret.ibfts[message.RoleTypeAttester] = &testIBFT{decided: decided, signaturesCount: signaturesCount}
-	ret.ibfts[message.RoleTypeAttester].(*testIBFT).identifier = identifier
-	require.NoError(t, ret.ibfts[message.RoleTypeAttester].Init())
-	ret.signer = ret.beacon
-
-	// nodes
-	// TODO:
-	//ret.network = network
 
 	// validatorStorage pk
 	pk := &bls.PublicKey{}
 	require.NoError(t, pk.Deserialize(refPk))
 
-	ret.share = &beaconprotocol.Share{
+	share := &beaconprotocol.Share{
 		NodeID:    1,
 		PublicKey: pk,
 		Committee: map[message.OperatorID]*beaconprotocol.Node{
@@ -237,6 +259,28 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 			},
 		},
 	}
+
+	pi, err := protocolp2p.GenPeerID()
+	require.NoError(t, err)
+	p2pNet := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+
+	ret.ibfts = make(controller.Controllers)
+	ret.ibfts[message.RoleTypeAttester] = &testIBFT{
+		decided:         decided,
+		signaturesCount: signaturesCount,
+		beacon:          ret.beacon,
+		share:           share,
+	}
+	ret.ibfts[message.RoleTypeAttester].(*testIBFT).identifier = identifier
+	require.NoError(t, ret.ibfts[message.RoleTypeAttester].Init())
+	ret.signer = ret.beacon
+
+	// nodes
+	ret.network = beacon.NewNetwork(core.NetworkFromString("prater"))
+
+	ret.p2pNetwork = p2pNet
+
+	ret.share = share
 
 	return ret
 }
