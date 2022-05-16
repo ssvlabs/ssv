@@ -2,6 +2,7 @@ package commons
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -42,7 +43,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 		}
 		val := validator.NewValidator(&validator.Options{
 			Context:     ctx,
-			Logger:      logger,
+			Logger:      logger.With(zap.String("who", fmt.Sprintf("node-%d", i))),
 			IbftStorage: stores[i],
 			P2pNetwork:  net.Nodes[i],
 			Network:     beacon.NewNetwork(core.NetworkFromString("prater")),

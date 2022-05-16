@@ -32,29 +32,40 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.QBFTStore, syncer
 }
 
 func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) (*message.SignedMessage, error) {
-	highest, h, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+	f.logger.Debug("sync", zap.String("identifier", fmt.Sprintf("%x", identifier)))
+	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get last decided from peers")
 	}
+	f.logger.Debug("highest decided", zap.String("identifier", fmt.Sprintf("%x", identifier)), zap.Int64("h", int64(localHeight)), zap.Any("highest", highest))
 	if highest == nil {
 		f.logger.Debug("could not find highest decided from peers",
 			zap.String("identifier", fmt.Sprintf("%x", identifier)))
 		return nil, nil
 	}
-	if highest.Message.Height > h {
+	if highest.Message.Height > localHeight {
+		counter := 0
 		err := f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
 			if err := pip.Run(msg); err != nil {
 				return errors.Wrap(err, "invalid msg")
 			}
+			//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
 			if err := f.store.SaveDecided(msg); err != nil {
 				return errors.Wrap(err, "could not save decided msg to storage")
 			}
+			counter++
 			return nil
-		}, h, highest.Message.Height)
+		}, localHeight, highest.Message.Height, sender)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not complete sync")
+		}
+		if message.Height(counter-1) >= highest.Message.Height-localHeight {
+			f.logger.Warn("could not sync all messages in range",
+				zap.String("identifier", fmt.Sprintf("%x", identifier)),
+				zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
+				zap.Int64("to", int64(highest.Message.Height)))
 		}
 	}
 	return highest, nil
