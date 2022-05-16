@@ -1,9 +1,9 @@
 package qbft
 
 import (
-	"sync"
-
+	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"go.uber.org/atomic"
 )
 
 type RoundState int32
@@ -38,126 +38,92 @@ var RoundState_value = map[string]int32{
 	"Stopped":     6,
 }
 
-func (r RoundState) String() string {
-	if v, ok := RoundState_name[int32(r)]; ok {
-		return v
-	}
-
-	return RoundState_name[0]
-}
-
-func (r RoundState) Int32() int32 {
-	return int32(r)
-}
-
 // State holds an iBFT state, thread safe
 type State struct {
-	mu            sync.Mutex
-	Stage         RoundState
-	Identifier    message.Identifier // instance unique identifier, much like a block hash in a blockchain
-	Height        message.Height     // incremental number for each instance, much like a block number would be in a blockchain
+	Stage atomic.Int32 // RoundState
+	// lambda is an instance unique identifier, much like a block hash in a blockchain
+	Identifier atomic.Value // message.Identifier
+	// Height is an incremental number for each instance, much like a block number would be in a blockchain
+	Height        atomic.Value // message.Height
+	InputValue    atomic.Value // []byte
+	Round         atomic.Value // message.Round
+	PreparedRound atomic.Value // message.Round
+	PreparedValue atomic.Value // []byte
+}
+
+type unsafeState struct {
+	Stage         int32
+	Identifier    message.Identifier
+	Height        message.Height
 	InputValue    []byte
 	Round         message.Round
 	PreparedRound message.Round
 	PreparedValue []byte
 }
 
-func (s *State) GetStage() RoundState {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// MarshalJSON implements marshaling interface
+func (s *State) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&unsafeState{
+		Stage:         s.Stage.Load(),
+		Identifier:    s.GetIdentifier(),
+		Height:        s.GetHeight(),
+		InputValue:    s.GetInputValue(),
+		Round:         s.GetRound(),
+		PreparedRound: s.GetPreparedRound(),
+		PreparedValue: s.GetPreparedValue(),
+	})
+}
 
-	return s.Stage
+// UnmarshalJSON implements marshaling interface
+func (s *State) UnmarshalJSON(data []byte) error {
+	d := &unsafeState{}
+	if err := json.Unmarshal(data, d); err != nil {
+		return err
+	}
+
+	s.Stage.Store(d.Stage)
+	s.Identifier.Store(d.Identifier)
+	s.Height.Store(d.Height)
+	s.InputValue.Store(d.InputValue)
+	s.Round.Store(d.Round)
+	s.PreparedRound.Store(d.PreparedRound)
+	s.PreparedValue.Store(d.PreparedValue)
+
+	return nil
 }
 
 func (s *State) GetHeight() message.Height {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.Height
+	height := s.Height.Load().(message.Height)
+	return height
 }
 
 func (s *State) GetRound() message.Round {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.Round
+	round := s.Round.Load().(message.Round)
+	return round
 }
 
 func (s *State) GetPreparedRound() message.Round {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.PreparedRound
-}
-
-func (s *State) GetInputValue() []byte {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.InputValue
-}
-
-func (s *State) GetPreparedValue() []byte {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.PreparedValue
-}
-
-func (s *State) GetIdentifier() message.Identifier {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.Identifier
+	round := s.PreparedRound.Load().(message.Round)
+	return round
 }
 
 func (s *State) SetRound(newRound message.Round) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Round = newRound
+	s.Round.Store(newRound)
 }
 
-func (s *State) SetStage(newStage RoundState) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Stage = newStage
+func (s *State) GetIdentifier() message.Identifier {
+	identifier := s.Identifier.Load().(message.Identifier)
+	return identifier
 }
 
-func (s *State) SetInputValue(newValue []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.InputValue = newValue
+func (s *State) GetInputValue() []byte {
+	inputValue := s.InputValue.Load().([]byte)
+	return inputValue
 }
 
-func (s *State) SetPreparedRound(newRound message.Round) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.PreparedRound = newRound
-}
-
-func (s *State) SetPreparedValue(newValue []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.PreparedValue = newValue
-}
-
-func (s *State) SetIdentifier(identifier message.Identifier) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Identifier = identifier
-}
-
-func (s *State) SetHeight(height message.Height) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Height = height
+func (s *State) GetPreparedValue() []byte {
+	value := s.PreparedValue.Load().([]byte)
+	return value
 }
 
 // InstanceConfig is the configuration of the instance
