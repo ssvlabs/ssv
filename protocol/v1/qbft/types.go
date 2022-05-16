@@ -97,9 +97,21 @@ func (s *State) GetHeight() message.Height {
 	return height
 }
 
+func NewHeight(height message.Height) atomic.Value {
+	h := atomic.Value{}
+	h.Store(height)
+	return h
+}
+
 func (s *State) GetRound() message.Round {
 	round := s.Round.Load().(message.Round)
 	return round
+}
+
+func NewRound(round message.Round) atomic.Value {
+	value := atomic.Value{}
+	value.Store(round)
+	return value
 }
 
 func (s *State) GetPreparedRound() message.Round {

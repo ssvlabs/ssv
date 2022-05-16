@@ -30,23 +30,31 @@ func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 	}
 }
 
+func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
+	if msg == nil {
+		return nil
+	}
+	if msg.MsgType != message.SSVConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
+		return nil
+	}
+	sm := &message.SignedMessage{}
+	if err := sm.Decode(msg.Data); err != nil {
+		return nil
+	}
+	if sm.Message == nil {
+		return nil
+	}
+	return sm
+}
+
 // SignedMsgIndexer is the Indexer used for message.SignedMessage
 func SignedMsgIndexer() Indexer {
 	return func(msg *message.SSVMessage) string {
-		if msg == nil {
+		if sm := signedMsgIndexValidator(msg); sm == nil {
 			return ""
+		} else {
+			return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)[0]
 		}
-		if msg.MsgType != message.SSVConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
-			return ""
-		}
-		sm := message.SignedMessage{}
-		if err := sm.Decode(msg.Data); err != nil {
-			return ""
-		}
-		if sm.Message == nil {
-			return ""
-		}
-		return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)[0]
 	}
 }
 
@@ -57,6 +65,25 @@ func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.H
 		res = append(res, fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
 	}
 	return res
+}
+
+// DecidedMsgIndexer is the Indexer used for decided message.SignedMessage
+func DecidedMsgIndexer() Indexer {
+	return func(msg *message.SSVMessage) string {
+		if msg.MsgType != message.SSVDecidedMsgType {
+			return ""
+		}
+		if sm := signedMsgIndexValidator(msg); sm == nil {
+			return ""
+		} else {
+			return DecidedMsgIndex(msg.ID)
+		}
+	}
+}
+
+// DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
+func DecidedMsgIndex(mid message.Identifier) string {
+	return fmt.Sprintf("/%s/id/%x/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 func getIndexHeight(idxParts ...string) message.Height {
