@@ -101,6 +101,8 @@ func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage
 					zap.String("identifier", hex.EncodeToString(s.identifier)))
 				return
 			}
+			// save a reference of the peer id
+			res.FromPeerID = peer
 
 			lock.Lock()
 			results = append(results, res)
