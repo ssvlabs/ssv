@@ -567,8 +567,8 @@ func TestRoundChangeJustification(t *testing.T) {
 		prepareData, err := msg.GetPrepareData()
 		require.NoError(t, err)
 
-		instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[1], msg), prepareData.Data)
-		instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[2], msg), prepareData.Data)
+		instance.ChangeRoundMessages.AddMessage(SignMsg(t, 1, sks[1], msg), prepareData.Data)
+		instance.ChangeRoundMessages.AddMessage(SignMsg(t, 1, sks[2], msg), prepareData.Data)
 
 		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 			Signature: nil,
