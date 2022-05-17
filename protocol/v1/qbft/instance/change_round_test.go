@@ -182,6 +182,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.EqualValues(t, []byte("value"), data.PreparedValue)
 }
 
+// TODO(nkryuchkov): fix this test
 func TestValidateChangeRoundMessage(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	round := atomic.Value{}
@@ -520,6 +521,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	}
 }
 
+// TODO(nkryuchkov): fix this test
 func TestRoundChangeJustification(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 
@@ -646,6 +648,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 }
 
+// TODO(nkryuchkov): fix this test
 func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
@@ -665,7 +668,7 @@ func TestHighestPrepared(t *testing.T) {
 		Height:     1,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("data"), /*changeRoundDataToBytes(&message.RoundChangeData{PreparedRound: 1,PreparedValue: inputValue,})*/
+		Data:       changeRoundDataToBytes(&message.RoundChangeData{Round: 1, PreparedValue: inputValue}),
 	}
 
 	roundChangeData, err := msg.GetRoundChangeData()
@@ -686,7 +689,7 @@ func TestHighestPrepared(t *testing.T) {
 	notPrepared, highest, err := instance.HighestPrepared(3)
 	require.NoError(t, err)
 	require.False(t, notPrepared)
-	require.EqualValues(t, 2, highest.Round)
+	require.EqualValues(t, message.Round(2), highest.Round)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 
 	// test 2 equals
@@ -699,10 +702,11 @@ func TestHighestPrepared(t *testing.T) {
 	notPrepared, highest, err = instance.HighestPrepared(3)
 	require.NoError(t, err)
 	require.False(t, notPrepared)
-	require.EqualValues(t, 2, highest.Round)
+	require.EqualValues(t, message.Round(2), highest.Round)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 }
 
+// TODO(nkryuchkov): fix this test
 func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 
@@ -840,6 +844,7 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 	require.EqualValues(t, "if first pipeline non error, continue to second", pipeline.Name())
 }
 
+// TODO(nkryuchkov): fix this test
 func TestChangeRoundPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 

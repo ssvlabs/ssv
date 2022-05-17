@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 )
 
+// TODO(nkryuchkov): fix this test
 func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -44,7 +45,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		MsgType:    message.PrepareMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
 	}
 
 	prepareData, err := consensusMessage.GetPrepareData()
@@ -57,15 +58,16 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	// test aggregation
 	msg, err := instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.Signers)
+	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
 
 	// test that doesn't aggregate different value
 	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []uint64{1, 2, 3}, msg.Signers)
+	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
 }
 
+// TODO(nkryuchkov): fix this test
 func TestPreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{

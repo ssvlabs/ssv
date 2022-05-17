@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
+// TODO(nkryuchkov): fix this test
 func TestVerifyPartialSignature(t *testing.T) {
 	tests := []struct {
 		name          string

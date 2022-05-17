@@ -32,6 +32,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 	return ret
 }
 
+// TODO(nkryuchkov): fix this test
 func TestCanStartNewInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)

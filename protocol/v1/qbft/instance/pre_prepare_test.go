@@ -146,6 +146,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	})
 }
 
+// TODO(nkryuchkov): fix this test
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	leader, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)
@@ -263,6 +264,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TODO(nkryuchkov): fix this test
 func TestPrePreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{

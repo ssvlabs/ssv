@@ -269,6 +269,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 	}
 }
 
+// TODO(nkryuchkov): fix this test
 func TestDecideIsCurrentInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
@@ -346,6 +347,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	}
 }
 
+// TODO(nkryuchkov): fix this test
 func TestForceDecided(t *testing.T) { // TODo need to align with the new queue process
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
@@ -393,6 +395,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 	require.EqualValues(t, 4, highest.Message.Height)
 }
 
+// TODO(nkryuchkov): fix this test
 func TestSyncAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
@@ -429,6 +432,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.EqualValues(t, 10, highest.Message.Height)
 }
 
+// TODO(nkryuchkov): fix this test
 func TestSyncFromScratchAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
@@ -536,6 +540,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 	}
 }
 
+// TODO(nkryuchkov): fix this test
 func TestController_checkDecidedMessageSigners(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, nodes := testingprotocol.GenerateBLSKeys(uids...)

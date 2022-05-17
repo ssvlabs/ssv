@@ -34,6 +34,7 @@ func newInMemDb() basedb.IDb {
 	return db
 }
 
+// TODO(nkryuchkov): fix this test
 func TestAggregatedMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	msg1 := SignMsg(t, 1, sks[1], &message.ConsensusMessage{
@@ -117,6 +118,7 @@ func TestAggregatedMsg(t *testing.T) {
 	}
 }
 
+// TODO(nkryuchkov): fix this test
 func TestCommittedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -186,6 +188,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.NoError(t, share.VerifySignedMessage(msg, forksprotocol.V1ForkVersion.String()))
 }
 
+// TODO(nkryuchkov): fix this test
 func TestCommitPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
