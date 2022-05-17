@@ -122,10 +122,10 @@ func TestDecidedRequiresSync(t *testing.T) {
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
 
 	height0 := atomic.Value{}
-	height0.Store(0)
+	height0.Store(message.Height(0))
 
 	height3 := atomic.Value{}
-	height3.Store(3)
+	height3.Store(message.Height(3))
 
 	tests := []struct {
 		name            string
@@ -275,10 +275,10 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
 
 	height1 := atomic.Value{}
-	height1.Store(1)
+	height1.Store(message.Height(1))
 
 	height4 := atomic.Value{}
-	height1.Store(4)
+	height1.Store(message.Height(4))
 
 	tests := []struct {
 		name            string
@@ -573,7 +573,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	id.Store(identifier)
 
 	height := atomic.Value{}
-	height.Store(2)
+	height.Store(message.Height(2))
 
 	ctrl := Controller{
 		ValidatorShare: share,

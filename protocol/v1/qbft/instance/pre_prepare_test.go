@@ -179,6 +179,8 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	instance.state.Height.Store(message.Height(0))
 	instance.state.Stage.Store(int32(qbft.RoundState_NotStarted))
 
+	instance.fork = testingFork(instance)
+
 	// test happy flow
 	msg := SignMsg(t, 1, secretKeys[1], &message.ConsensusMessage{
 		MsgType:    message.ProposalMsgType,

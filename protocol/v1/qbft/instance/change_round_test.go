@@ -593,7 +593,7 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	t.Run("change round quorum not prepared, instance prepared previously", func(t *testing.T) {
-		instance.State().PreparedRound.Store(1)
+		instance.State().PreparedRound.Store(message.Round(1))
 		instance.State().PreparedValue.Store([]byte("hello"))
 		err := instance.JustifyRoundChange(2)
 		require.EqualError(t, err, "highest prepared doesn't match prepared state")
