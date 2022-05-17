@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
@@ -81,7 +82,7 @@ func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (
 		Decided: t.decided,
 		Msg: &message.SignedMessage{
 			Message: &message.ConsensusMessage{
-				Data: opts.Value,
+				Data: commitDataToBytes(&message.CommitData{Data: opts.Value}),
 			},
 			Signers: make([]message.OperatorID, t.signaturesCount),
 		},
@@ -301,4 +302,9 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 		sks[uint64(i)] = sk
 	}
 	return sks, nodes
+}
+
+func commitDataToBytes(input *message.CommitData) []byte {
+	ret, _ := json.Marshal(input)
+	return ret
 }
