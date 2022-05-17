@@ -21,7 +21,6 @@ func marshalInputValueStructForAttestation(t *testing.T, attByts []byte) []byte 
 	return val
 }
 
-// TODO(nkryuchkov): fix this test
 func TestConsensusOnInputValue(t *testing.T) {
 	tests := []struct {
 		name                        string
