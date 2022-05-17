@@ -209,7 +209,7 @@ func (pi *peersIndex) GC() {
 // Close closes peer index
 func (pi *peersIndex) Close() error {
 	pi.statesLock.Lock()
-	pi.states = nil
+	pi.states = make(map[string]nodeStateObj)
 	pi.statesLock.Unlock()
 	return nil
 }
