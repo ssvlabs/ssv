@@ -11,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 )
 
-// TODO(nkryuchkov): fix this test
 func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -41,19 +40,19 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "no prepare msgs")
 
 	// test valid aggregation
-	consensusMessage := &message.ConsensusMessage{
+	consensusMessage1 := &message.ConsensusMessage{
 		MsgType:    message.PrepareMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
 		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
 	}
 
-	prepareData, err := consensusMessage.GetPrepareData()
+	prepareData, err := consensusMessage1.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage1), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage1), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage1), prepareData.Data)
 
 	// test aggregation
 	msg, err := instance.PreparedAggregatedMsg()
@@ -61,7 +60,13 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
 
 	// test that doesn't aggregate different value
-	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage), prepareData.Data)
+	consensusMessage2 := &message.ConsensusMessage{
+		MsgType:    message.PrepareMsgType,
+		Round:      1,
+		Identifier: []byte("Lambda"),
+		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value2")}),
+	}
+	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage2), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
