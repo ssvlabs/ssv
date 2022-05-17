@@ -153,25 +153,27 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
 		var aggregatedSig *bls.Sign
-		justificationMsg = msgs[0].Message
-		for _, msg := range msgs {
-			// add sig to aggregate
-			sig := &bls.Sign{}
-			if err := sig.Deserialize(msg.Signature); err != nil {
-				return nil, err
-			}
-			if aggregatedSig == nil {
-				aggregatedSig = sig
-			} else {
-				aggregatedSig.Add(sig)
-			}
+		if len(msgs) != 0 {
+			justificationMsg = msgs[0].Message
+			for _, msg := range msgs {
+				// add sig to aggregate
+				sig := &bls.Sign{}
+				if err := sig.Deserialize(msg.Signature); err != nil {
+					return nil, err
+				}
+				if aggregatedSig == nil {
+					aggregatedSig = sig
+				} else {
+					aggregatedSig.Add(sig)
+				}
 
-			// add id to list
-			ids = append(ids, msg.GetSigners()...)
+				// add id to list
+				ids = append(ids, msg.GetSigners()...)
+			}
+			aggSig = aggregatedSig.Serialize()
+			// TODO(nkryuchkov): consider returning an error if not prepared
+			// return nil, errors.New("not prepared")
 		}
-		aggSig = aggregatedSig.Serialize()
-		// TODO(nkryuchkov): consider returning an error
-		// return nil, errors.New("not prepared")
 	}
 
 	data := &message.RoundChangeData{
@@ -184,6 +186,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 			Message:   justificationMsg,
 		}},
 	}
+
 	return json.Marshal(data)
 }
 
