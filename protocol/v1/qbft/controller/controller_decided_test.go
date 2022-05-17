@@ -306,6 +306,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
+				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			true,
 		},
@@ -315,6 +316,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
+				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -324,6 +326,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
+				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -335,6 +338,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
+				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -346,6 +350,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
+				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -432,7 +437,7 @@ func TestSyncAfterDecided(t *testing.T) {
 		Height:     message.Height(10),
 		Round:      message.Round(3),
 		Identifier: identifier,
-		Data:       []byte("value"),
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -441,7 +446,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	highest, err = i1.(*Controller).ibftStorage.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
-	require.EqualValues(t, 10, highest.Message.Height)
+	require.EqualValues(t, message.Height(10), highest.Message.Height)
 }
 
 // TODO(nkryuchkov): fix this test
