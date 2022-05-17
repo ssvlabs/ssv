@@ -371,7 +371,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 			MsgType:    message.CommitMsgType,
 			Height:     message.Height(4),
 			Round:      message.Round(1),
-			Identifier: []byte("value"),
+			Identifier: identifier,
 			Data:       []byte("value"),
 		})
 
