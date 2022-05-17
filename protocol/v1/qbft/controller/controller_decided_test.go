@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -484,7 +485,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(11),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       []byte("value"),
+				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			nil,
 		},
@@ -495,7 +496,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(11),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       []byte("value"),
+				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			errors.New("message type is wrong"),
 		},
@@ -506,9 +507,9 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(11),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       []byte("value"),
+				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
-			errors.New("could not verify message signature"),
+			errors.New("failed to verify signature"),
 		},
 		{
 			"valid first decided",
@@ -517,7 +518,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(0),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       []byte("value"),
+				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 			}),
 			nil,
 		},
@@ -652,4 +653,9 @@ func (s *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byt
 
 func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beaconprotocol.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
+}
+
+func commitDataToBytes(input *message.CommitData) []byte {
+	ret, _ := json.Marshal(input)
+	return ret
 }
