@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"log"
 
 	"github.com/bloxapp/ssv/ibft/proto"
-	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"

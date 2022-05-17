@@ -1,6 +1,7 @@
 package v0
 
 import (
+	"github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
@@ -8,7 +9,7 @@ import (
 
 // EncodeNetworkMsg converts the message to v0 and encodes it
 func (v0 *ForkV0) EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error) {
-	v0Msg, err := ToV0Message(msg)
+	v0Msg, err := conversion.ToV0Message(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -22,5 +23,5 @@ func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (*message.SSVMessage, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode v0 message")
 	}
-	return ToV1Message(v0Msg)
+	return conversion.ToV1Message(v0Msg)
 }

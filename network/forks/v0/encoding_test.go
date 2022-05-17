@@ -2,6 +2,7 @@ package v0
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestForkV0_Encoding(t *testing.T) {
 	}
 	f := &ForkV0{}
 
-	v1Msg, err := ToV1Message(msg)
+	v1Msg, err := conversion.ToV1Message(msg)
 	require.NoError(t, err)
 
 	b, err := f.EncodeNetworkMsg(v1Msg)

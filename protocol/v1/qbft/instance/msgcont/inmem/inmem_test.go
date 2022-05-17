@@ -2,6 +2,7 @@ package inmem
 
 import (
 	"encoding/json"
+	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/network"
-	v0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/logex"
 )
