@@ -269,7 +269,6 @@ func TestDecidedRequiresSync(t *testing.T) {
 	}
 }
 
-// TODO(nkryuchkov): fix this test
 func TestDecideIsCurrentInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
@@ -278,7 +277,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	height1.Store(message.Height(1))
 
 	height4 := atomic.Value{}
-	height1.Store(message.Height(4))
+	height4.Store(message.Height(4))
 
 	tests := []struct {
 		name            string
