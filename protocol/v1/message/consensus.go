@@ -100,6 +100,9 @@ func (d *CommitData) Encode() ([]byte, error) {
 
 // Decode returns error if decoding failed
 func (d *CommitData) Decode(data []byte) error {
+	if d.Data == nil {
+		return nil
+	}
 	return json.Unmarshal(data, d)
 }
 
@@ -167,6 +170,9 @@ type ConsensusMessage struct {
 // GetProposalData returns proposal specific data
 func (msg *ConsensusMessage) GetProposalData() (*ProposalData, error) {
 	ret := &ProposalData{}
+	if msg.Data == nil {
+		return ret, nil
+	}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode proposal data from message")
 	}
@@ -176,6 +182,9 @@ func (msg *ConsensusMessage) GetProposalData() (*ProposalData, error) {
 // GetPrepareData returns prepare specific data
 func (msg *ConsensusMessage) GetPrepareData() (*PrepareData, error) {
 	ret := &PrepareData{}
+	if msg.Data == nil {
+		return ret, nil
+	}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode prepare data from message")
 	}
@@ -185,6 +194,9 @@ func (msg *ConsensusMessage) GetPrepareData() (*PrepareData, error) {
 // GetCommitData returns commit specific data
 func (msg *ConsensusMessage) GetCommitData() (*CommitData, error) {
 	ret := &CommitData{}
+	if msg.Data == nil {
+		return ret, nil
+	}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode commit data from message")
 	}
@@ -194,6 +206,9 @@ func (msg *ConsensusMessage) GetCommitData() (*CommitData, error) {
 // GetRoundChangeData returns round change specific data
 func (msg *ConsensusMessage) GetRoundChangeData() (*RoundChangeData, error) {
 	ret := &RoundChangeData{}
+	if msg.Data == nil {
+		return ret, nil
+	}
 	if err := ret.Decode(msg.Data); err != nil {
 		return nil, errors.Wrap(err, "could not decode change round data from message")
 	}
