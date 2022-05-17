@@ -21,7 +21,6 @@ func marshalInputValueStructForAttestation(t *testing.T, attByts []byte) []byte 
 	return val
 }
 
-// TODO(nkryuchkov): fix this test
 func TestConsensusOnInputValue(t *testing.T) {
 	tests := []struct {
 		name                        string
@@ -90,16 +89,16 @@ func TestConsensusOnInputValue(t *testing.T) {
 				ValidatorCommitteeIndex: 0,
 			}
 
-			_, signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(node.logger, duty)
+			_, signaturesCount, decidedBytes, _, err := node.comeToConsensusOnInputValue(node.logger, duty)
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
 				return
 			}
 			require.NoError(t, err)
 			require.EqualValues(t, 3, signaturesCount)
-			require.NotNil(t, decidedByts)
+			require.NotNil(t, decidedBytes)
 
-			require.EqualValues(t, test.expectedAttestationDataByts, decidedByts)
+			require.EqualValues(t, test.expectedAttestationDataByts, decidedBytes)
 		})
 	}
 }

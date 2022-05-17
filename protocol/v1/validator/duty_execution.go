@@ -2,13 +2,14 @@ package validator
 
 import (
 	"encoding/hex"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/pkg/errors"
-
-	"go.uber.org/zap"
 )
 
 func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beaconprotocol.Duty) (controller.IController, int, []byte, message.Height, error) {
@@ -58,12 +59,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, height, errors.New("instance did not decide")
 	}
 
-	commitData, err := result.Msg.Message.GetCommitData()
-	if err != nil {
-		return nil, 0, nil, 0, err
-	}
-
-	return qbftCtrl, len(result.Msg.Signers), commitData.Data, height, nil
+	return qbftCtrl, len(result.Msg.Signers), result.Msg.Message.Data, height, nil
 }
 
 // ExecuteDuty executes the given duty
