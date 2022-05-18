@@ -861,7 +861,6 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 	require.EqualValues(t, "if first pipeline non error, continue to second", pipeline.Name())
 }
 
-// TODO(nkryuchkov): fix this test
 func TestChangeRoundPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 
