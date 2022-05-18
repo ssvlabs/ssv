@@ -97,8 +97,9 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 		v0Stores = append(v0Stores, &v0Store)
 	}
 	v0Fork := &v0.ForkV0{}
-	for j, msg := range msgs {
-		v0Msg, err := conversion.ToSignedMessageV0(msg, v0Fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType()))
+	for _, msg := range msgs {
+		v0Msg, err := conversion.ToSignedMessageV0(msg, v0Fork.Identifier(msg.Message.Identifier.GetValidatorPK(),
+			msg.Message.Identifier.GetRoleType()))
 		if err != nil {
 			return errors.Wrap(err, "could not convert message to v0")
 		}
@@ -110,13 +111,26 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 				return errors.Wrap(err, "could not save decided messages")
 			}
 			// save highest
-			if j == len(msgs)-1 {
-				err := store.SaveHighestDecidedInstance(v0Msg)
-				if err != nil {
-					return errors.Wrap(err, "could not save decided messages")
-				}
+			err := store.SaveHighestDecidedInstance(v0Msg)
+			if err != nil {
+				return errors.Wrap(err, "could not save decided messages")
 			}
 		}
+	}
+
+	// setting up routers
+	routers := make([]*runner.Router, f.NumOfOperators())
+	loggerFactory := func(who string) *zap.Logger {
+		logger := zap.L().With(zap.String("who", who))
+		return logger
+	}
+
+	for i, node := range ctx.LocalNet.Nodes {
+		routers[i] = &runner.Router{
+			Logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			Controllers: f.validators[i].(*validator.Validator).Ibfts(),
+		}
+		node.UseMessageRouter(routers[i])
 	}
 
 	return nil
@@ -204,7 +218,7 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 			}
 			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
 				if err := f.startNode(node, seqNumber); err != nil {
-					f.logger.Panic("could not start node", zap.Error(err))
+					f.logger.Fatal("could not start node", zap.Error(err))
 				}
 				wg.Done()
 			}(f.validators[i-1], i, h)

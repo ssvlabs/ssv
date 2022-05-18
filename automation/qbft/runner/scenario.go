@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/bloxapp/ssv/automation/commons"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -29,7 +30,7 @@ type ScenarioFactory func(name string) Scenario
 type ScenarioContext struct {
 	Ctx         context.Context
 	LocalNet    *p2pv1.LocalNet
-	Stores      []qbftstorage.QBFTStore
+	Stores      []qbftstorageprotocol.QBFTStore
 	KeyManagers []beacon.KeyManager
 	DBs         []basedb.IDb
 }
@@ -62,10 +63,10 @@ func QBFTScenarioBootstrapper() Bootstrapper {
 		if err != nil {
 			return nil, err
 		}
-		stores := make([]qbftstorage.QBFTStore, 0)
+		stores := make([]qbftstorageprotocol.QBFTStore, 0)
 		kms := make([]beacon.KeyManager, 0)
 		for i, node := range ln.Nodes {
-			store := qbftstorage.NewQBFTStore(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations")
+			store := qbftstorage.New(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations")
 			stores = append(stores, store)
 			km := commons.NewTestSigner()
 			kms = append(kms, km)

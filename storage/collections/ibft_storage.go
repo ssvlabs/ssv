@@ -35,7 +35,7 @@ type Iibft interface {
 
 var (
 	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_highest_decided",
+		Name: "ssv:validator:ibft_highest_decided:v0",
 		Help: "The highest decided sequence number",
 	}, []string{"lambda", "pubKey"})
 )
