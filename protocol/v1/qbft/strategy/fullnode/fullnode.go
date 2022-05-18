@@ -79,6 +79,9 @@ func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get last decided")
 	}
+	if lastDecided == nil {
+		return true, nil
+	}
 	if msg.Message.Height < lastDecided.Message.Height {
 		return false, nil
 	}
