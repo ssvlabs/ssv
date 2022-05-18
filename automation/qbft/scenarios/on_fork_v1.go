@@ -4,15 +4,12 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
-	"github.com/bloxapp/ssv/ibft/conversion"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	v0 "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/v0"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -90,33 +87,33 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 	}
 	f.msgs = msgs
 
-	// using old ibft storage to populate db with v0 data
-	var v0Stores []collections.Iibft
-	for i, _ := range ctx.Stores {
-		v0Store := collections.NewIbft(ctx.DBs[i], f.logger.With(zap.String("who", fmt.Sprintf("qbft-store-%d", i+1))), "attestations")
-		v0Stores = append(v0Stores, &v0Store)
-	}
-	v0Fork := &v0.ForkV0{}
-	for _, msg := range msgs {
-		v0Msg, err := conversion.ToSignedMessageV0(msg, v0Fork.Identifier(msg.Message.Identifier.GetValidatorPK(),
-			msg.Message.Identifier.GetRoleType()))
-		if err != nil {
-			return errors.Wrap(err, "could not convert message to v0")
-		}
-		for i, store := range v0Stores {
-			if i == 0 { // skip first store
-				continue
-			}
-			if err := store.SaveDecided(v0Msg); err != nil {
-				return errors.Wrap(err, "could not save decided messages")
-			}
-			// save highest
-			err := store.SaveHighestDecidedInstance(v0Msg)
-			if err != nil {
-				return errors.Wrap(err, "could not save decided messages")
-			}
-		}
-	}
+	//// using old ibft storage to populate db with v0 data
+	//var v0Stores []collections.Iibft
+	//for i, _ := range ctx.Stores {
+	//	v0Store := collections.NewIbft(ctx.DBs[i], f.logger.With(zap.String("who", fmt.Sprintf("qbft-store-%d", i+1))), "attestations")
+	//	v0Stores = append(v0Stores, &v0Store)
+	//}
+	//v0Fork := &v0.ForkV0{}
+	//for _, msg := range msgs {
+	//	v0Msg, err := conversion.ToSignedMessageV0(msg, v0Fork.Identifier(msg.Message.Identifier.GetValidatorPK(),
+	//		msg.Message.Identifier.GetRoleType()))
+	//	if err != nil {
+	//		return errors.Wrap(err, "could not convert message to v0")
+	//	}
+	//	for i, store := range v0Stores {
+	//		if i == 0 { // skip first store
+	//			continue
+	//		}
+	//		if err := store.SaveDecided(v0Msg); err != nil {
+	//			return errors.Wrap(err, "could not save decided messages")
+	//		}
+	//		// save highest
+	//		err := store.SaveHighestDecidedInstance(v0Msg)
+	//		if err != nil {
+	//			return errors.Wrap(err, "could not save decided messages")
+	//		}
+	//	}
+	//}
 
 	// setting up routers
 	routers := make([]*runner.Router, f.NumOfOperators())
@@ -160,7 +157,7 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	}
 
 	// running instances pre-fork
-	if err := f.startInstances(message.Height(5), message.Height(6)); err != nil {
+	if err := f.startInstances(message.Height(0), message.Height(6)); err != nil {
 		return errors.Wrap(err, "could not start instances")
 	}
 
@@ -213,9 +210,6 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 		f.logger.Info("started instances")
 		for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
 			wg.Add(1)
-			if err := f.validators[i-1].OnFork(forksprotocol.V1ForkVersion); err != nil {
-				return errors.Wrap(err, "could not fork to v1")
-			}
 			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
 				if err := f.startNode(node, seqNumber); err != nil {
 					f.logger.Fatal("could not start node", zap.Error(err))
