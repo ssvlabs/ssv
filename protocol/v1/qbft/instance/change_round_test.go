@@ -232,7 +232,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		expectedError       string
 	}{
 		{
-			name:     "valid",
+			name:     "valid 1",
 			signerID: 1,
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
@@ -243,7 +243,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:     "valid",
+			name:     "valid 2",
 			signerID: 1,
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
@@ -254,7 +254,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:     "valid",
+			name:     "valid 3",
 			signerID: 1,
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
@@ -265,7 +265,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:     "valid",
+			name:     "valid 4",
 			signerID: 1,
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
@@ -276,7 +276,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:                "valid justification",
+			name:                "valid justification 1",
 			signerID:            1,
 			justificationSigIds: []uint64{1, 2, 3},
 			msg: &message.ConsensusMessage{
@@ -427,7 +427,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("lambdas"),
 				Data: changeRoundDataToBytes(&message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
@@ -441,7 +441,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       []byte("value"),
+								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
 							},
 						},
 					},
@@ -450,13 +450,13 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "change round justification does not constitute a quorum",
 		},
 		{
-			name:                "valid justification",
+			name:                "valid justification 2",
 			signerID:            1,
 			justificationSigIds: []uint64{1, 2, 3},
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("lambdas"),
 				Data: changeRoundDataToBytes(&message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
@@ -470,7 +470,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       []byte("value"),
+								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("values")}),
 							},
 						},
 					},
