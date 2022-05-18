@@ -35,17 +35,36 @@ func (v0 *testFork) Apply(instance Instance) {
 
 // PrePrepareMsgPipelineV0 is the full processing msg pipeline for a pre-prepare msg
 func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
-	return v0.instance.PrePrepareMsgPipeline()
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.ProposalMsgType),
+		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		preprepare.ValidatePrePrepareMsg(roundLeader),
+	)
 }
 
 // PrepareMsgPipeline is the full processing msg pipeline for a prepare msg
 func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
-	return v0.instance.PrepareMsgPipeline()
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.PrepareMsgType),
+		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+	)
 }
 
 // CommitMsgValidationPipeline is a msg validation ONLY pipeline
 func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
-	return v0.instance.CommitMsgValidationPipeline()
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.CommitMsgType),
+		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+	)
 }
 
 // CommitMsgPipeline is the full processing msg pipeline for a commit msg

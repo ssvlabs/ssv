@@ -72,7 +72,6 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestPreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -92,5 +91,6 @@ func TestPreparePipeline(t *testing.T) {
 
 	instance.fork = testingFork(instance)
 	pipeline := instance.PrepareMsgPipeline()
-	require.EqualValues(t, "combination of: basic msg validation, type check, lambda, sequence, authorize, add prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
+	// TODO: fix bad-looking name
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }
