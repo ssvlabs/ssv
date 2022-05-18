@@ -154,7 +154,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 	return ret, nil
 }
 
-func (i *ibftStorage) Clean(identifier message.Identifier) {
+func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
 	panic("implement me")
 }
 
