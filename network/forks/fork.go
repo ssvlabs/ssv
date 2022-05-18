@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/protocol"
 )
 
@@ -14,6 +15,7 @@ type Fork interface {
 	pubSubConfig
 	sync
 	nodeRecord
+	libp2pConfig
 }
 
 type nodeRecord interface {
@@ -27,6 +29,11 @@ type pubSubMapping interface {
 
 type pubSubConfig interface {
 	MsgID() MsgIDFunc
+}
+
+type libp2pConfig interface {
+	// AddOptions enables to inject libp2p options according to the given fork
+	AddOptions(opts []libp2p.Option) []libp2p.Option
 }
 
 type encoding interface {

@@ -116,29 +116,29 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...protoc
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
 		if err != nil {
-			n.logger.Warn("xxx could not handle stream", zap.Error(err))
+			n.logger.Warn("could not handle stream", zap.Error(err))
 			return
 		}
 		smsg, err := n.fork.DecodeNetworkMsg(req)
 		if err != nil {
-			n.logger.Warn("xxx could not decode msg from stream", zap.Error(err))
+			n.logger.Warn("could not decode msg from stream", zap.Error(err))
 			return
 		}
 		result, err := handler(smsg)
 		if err != nil {
-			n.logger.Warn("xxx could not handle msg from stream")
+			n.logger.Warn("could not handle msg from stream")
 			return
 		}
 		resultBytes, err := n.fork.EncodeNetworkMsg(result)
 		if err != nil {
-			n.logger.Warn("xxx could not encode msg", zap.Error(err))
+			n.logger.Warn("could not encode msg", zap.Error(err))
 			return
 		}
 		if err := respond(resultBytes); err != nil {
-			n.logger.Warn("xxx could not respond to stream", zap.Error(err))
+			n.logger.Warn("could not respond to stream", zap.Error(err))
 			return
 		}
-		n.logger.Info("xxx stream handler done")
+		n.logger.Info("stream handler done")
 	})
 }
 
@@ -191,15 +191,15 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			logger.Debug("xxx could not make stream request")
+			logger.Debug("could not make stream request")
 			continue
 		}
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
-			logger.Debug("xxx could not decode stream response")
+			logger.Debug("could not decode stream response")
 			continue
 		}
-		logger.Debug("xxx got stream response", zap.String("res identifier", res.ID.String()), zap.Any("res", res))
+		logger.Debug("got stream response", zap.String("res identifier", res.ID.String()), zap.Any("res", res))
 		results = append(results, protocolp2p.SyncResult{
 			Msg:    res,
 			Sender: pid.String(),

@@ -58,7 +58,7 @@ func (n *p2pNetwork) initCfg() {
 
 // SetupHost configures a libp2p host
 func (n *p2pNetwork) SetupHost() error {
-	opts, err := n.cfg.Libp2pOptions()
+	opts, err := n.cfg.Libp2pOptions(n.fork)
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
