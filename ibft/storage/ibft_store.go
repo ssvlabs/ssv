@@ -204,51 +204,29 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 
 // SaveLastChangeRoundMsg updates last change round message
 func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
-	value, err := msg.Encode()
+	identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
+	signedMsg, err := i.fork.EncodeSignedMsg(msg)
 	if err != nil {
-		return errors.Wrap(err, "marshaling error")
+		return errors.Wrap(err, "could not encode signed message")
 	}
-	return i.save(value, lastChangeRoundKey, msg.Message.Identifier)
+	return i.save(signedMsg, lastChangeRoundKey, identifier)
 }
 
 // GetLastChangeRoundMsg returns last known change round message
 func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	val, found, err := i.get(lastChangeRoundKey, identifier)
-	if found && err == nil {
-		ret := &message.SignedMessage{}
-		if err := ret.Decode(val); err == nil {
-			return ret, nil
-		}
-	}
-
-	// v1 not found, try with v0 identifier
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	val, found, err = i.get(lastChangeRoundKey, oldIdentifier)
-	if !found {
-		return nil, nil
-	}
+	val, found, err := i.get(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		return nil, err
 	}
-	// old val found, unmarshal with old struct and convert to v1
-	ret := &proto.SignedMessage{}
-	if err := json.Unmarshal(val, ret); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal signed message")
+	if !found {
+		return nil, nil
 	}
-	return v0.ToSignedMessageV1(ret)
+	return i.fork.DecodeSignedMsg(val)
 }
 
 // Clean cleans last change round message of some validator, should be called upon controller init
 func (i *ibftStorage) Clean(identifier message.Identifier) {
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	err := i.delete(lastChangeRoundKey, identifier)
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
-	}
-	// doing the same for v0
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	err = i.delete(lastChangeRoundKey, oldIdentifier)
+	err := i.delete(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}
