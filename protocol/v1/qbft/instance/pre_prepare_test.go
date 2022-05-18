@@ -266,7 +266,6 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestPrePreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -284,6 +283,8 @@ func TestPrePreparePipeline(t *testing.T) {
 	instance.state.Round.Store(message.Round(1))
 	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.Height.Store(message.Height(0))
+
+	instance.fork = testingFork(instance)
 
 	pipeline := instance.PrePrepareMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
