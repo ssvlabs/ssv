@@ -125,6 +125,7 @@ func (m *mockNetwork) RegisterHandlers(handlers ...*SyncHandler) {
 			rhandlers = make([]RequestHandler, 0)
 		}
 		rhandlers = append(rhandlers, h.Handler)
+		all[h.Protocol] = rhandlers
 	}
 
 	for p, hs := range all {

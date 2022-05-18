@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/bloxapp/ssv/network/forks"
 	"strings"
 	"time"
 
@@ -59,7 +60,7 @@ type Config struct {
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
+func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -78,13 +79,7 @@ func (c *Config) Libp2pOptions() ([]libp2p.Option, error) {
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
 
-	if len(c.Bootnodes) > 0 { // not a local node
-		// TODO: check
-		opts = append(opts, libp2p.EnableNATService())
-		opts = append(opts, libp2p.AutoNATServiceRateLimit(15, 3, 1*time.Minute))
-		opts = append(opts, libp2p.DisableRelay())
-		//opts = append(opts, libp2p.Ping(false))
-	}
+	opts = fork.AddOptions(opts)
 
 	return opts, nil
 }

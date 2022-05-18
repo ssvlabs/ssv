@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
+// DecorateNode decorates the given node's record with version specific fields
 func (f *ForkV0) DecorateNode(node *enode.LocalNode, args map[string]interface{}) error {
 	if err := records.SetForkVersionEntry(node, forksprotocol.V0ForkVersion.String()); err != nil {
 		return err

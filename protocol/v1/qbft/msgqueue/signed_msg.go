@@ -19,7 +19,7 @@ func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 		if parts[0] != message.SSVConsensusMsgType.String() {
 			return false
 		}
-		if parts[2] != fmt.Sprintf("%x", mid) {
+		if parts[2] != mid.String() {
 			return false
 		}
 		if getIndexHeight(parts...) > h {
@@ -62,7 +62,7 @@ func SignedMsgIndexer() Indexer {
 func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt ...message.ConsensusMessageType) []string {
 	var res []string
 	for _, mt := range cmt {
-		res = append(res, fmt.Sprintf("/%s/id/%x/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
+		res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid.String(), h, mt.String()))
 	}
 	return res
 }
@@ -83,7 +83,7 @@ func DecidedMsgIndexer() Indexer {
 
 // DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
 func DecidedMsgIndex(mid message.Identifier) string {
-	return fmt.Sprintf("/%s/id/%x/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
+	return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid.String(), message.CommitMsgType.String())
 }
 
 func getIndexHeight(idxParts ...string) message.Height {

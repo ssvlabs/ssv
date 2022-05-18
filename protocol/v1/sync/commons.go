@@ -22,7 +22,7 @@ func GetHighest(logger *zap.Logger, localMsg *message.SignedMessage, remoteMsgs 
 			continue
 		}
 		if sm == nil {
-			logger.Debug("sync message not found because node is synced")
+			logger.Debug("sync message not found")
 			continue
 		}
 		if len(sm.Data) == 0 {

@@ -2,7 +2,6 @@ package lastdecided
 
 import (
 	"context"
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
@@ -34,7 +33,7 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 
 // GetLastDecided returns last decided message from other peers in the network
 func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
-	logger := l.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
+	logger := l.logger.With(zap.String("identifier", identifier.String()))
 	var err error
 	var remoteMsgs []p2pprotocol.SyncResult
 	retries := 2

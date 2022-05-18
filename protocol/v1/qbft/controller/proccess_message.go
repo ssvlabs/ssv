@@ -55,7 +55,8 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 
 	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
 		//zap.Bool("is_full_sync", c.isFullNode()),
-		zap.Uint64("seq", uint64(signedMessage.Message.Height)), zap.String("identifier", string(signedMessage.Message.Identifier)),
+		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
+		zap.String("identifier", signedMessage.Message.Identifier.String()),
 		zap.Any("signers", signedMessage.GetSigners()))
 
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
