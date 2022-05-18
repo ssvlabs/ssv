@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/storage/basedb"
 
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -23,6 +24,7 @@ type ScenarioContext struct {
 	LocalNet    *p2pv1.LocalNet
 	Stores      []qbftstorage.QBFTStore
 	KeyManagers []beacon.KeyManager
+	DBs         []basedb.IDb
 }
 
 type scenarioCfg interface {

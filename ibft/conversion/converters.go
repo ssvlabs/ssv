@@ -240,7 +240,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
 
-		sm, err := toSignedMessageV0(signedMsg, identifierV0)
+		sm, err := ToSignedMessageV0(signedMsg, identifierV0)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +281,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		case message.StatusSuccess:
 			v0Msg.SyncMessage.SignedMessages = make([]*proto.SignedMessage, 0)
 			for _, smsg := range syncMsg.Data {
-				sm, err := toSignedMessageV0(smsg, identifierV0)
+				sm, err := ToSignedMessageV0(smsg, identifierV0)
 				if err != nil {
 					return nil, err
 				}
@@ -307,7 +307,8 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	return v0Msg, nil
 }
 
-func toSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*proto.SignedMessage, error) {
+// ToSignedMessageV0 converts a signed message from v1 to v0
+func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*proto.SignedMessage, error) {
 	signedMsgV0 := &proto.SignedMessage{}
 	signedMsgV0.Message = &proto.Message{
 		Round:     uint64(signedMsg.Message.Round),

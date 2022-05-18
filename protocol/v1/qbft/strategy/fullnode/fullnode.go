@@ -2,7 +2,6 @@ package fullnode
 
 import (
 	"context"
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -32,17 +31,16 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.QBFTStore, syncer
 }
 
 func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) (*message.SignedMessage, error) {
-	f.logger.Debug("sync", zap.String("identifier", fmt.Sprintf("%x", identifier)))
+	logger := f.logger.With(zap.String("identifier", identifier.String()))
 	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get last decided from peers")
 	}
-	f.logger.Debug("highest decided", zap.String("identifier", fmt.Sprintf("%x", identifier)), zap.Int64("h", int64(localHeight)), zap.Any("highest", highest))
+	logger.Debug("highest decided", zap.Int64("h", int64(localHeight)), zap.Any("highest", highest))
 	if highest == nil {
-		f.logger.Debug("could not find highest decided from peers",
-			zap.String("identifier", fmt.Sprintf("%x", identifier)))
+		logger.Debug("could not find highest decided from peers")
 		return nil, nil
 	}
 	if highest.Message.Height > localHeight {
@@ -62,8 +60,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 			return nil, errors.Wrap(err, "could not complete sync")
 		}
 		if message.Height(counter-1) >= highest.Message.Height-localHeight {
-			f.logger.Warn("could not sync all messages in range",
-				zap.String("identifier", fmt.Sprintf("%x", identifier)),
+			logger.Warn("could not sync all messages in range",
 				zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
 				zap.Int64("to", int64(highest.Message.Height)))
 		}

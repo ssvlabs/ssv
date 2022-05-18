@@ -76,6 +76,7 @@ func run(pctx context.Context, dbs []basedb.IDb, scenario Scenario) error {
 		LocalNet:    ln,
 		Stores:      stores,
 		KeyManagers: kms,
+		DBs:         dbs,
 	}
 	logger.Info("all resources were created, starting pre-execution of the scenario")
 	if err := scenario.PreExecution(&sctx); err != nil {

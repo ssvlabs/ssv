@@ -136,7 +136,8 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err = c.network.Broadcast(ssvMsg); err != nil {
 				return errors.Wrap(err, "could not broadcast decided message")
 			}
-			c.logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()), zap.Uint64("seqNum", uint64(agg.Message.Height)))
+			c.logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
+				zap.Uint64("seqNum", uint64(agg.Message.Height)))
 			return nil
 		}
 
