@@ -100,10 +100,11 @@ func (s *testStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 	return nil, nil
 }
 
-// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
-func (s *testStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error {
+func (s *testStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 	return nil
 }
+
+func (s *testStorage) Clean(identifier message.Identifier) {}
 
 func newHeight(height message.Height) atomic.Value {
 	res := atomic.Value{}
@@ -392,7 +393,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 			Height:     message.Height(4),
 			Round:      message.Round(1),
 			Identifier: identifier,
-			Data:       []byte("value"),
+			Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 		})
 
 		require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -401,7 +402,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:    zap.L(),
 		SeqNumber: 4,
-		Value:     []byte("value"),
+		Value:     commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)
@@ -473,7 +474,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Height:     message.Height(10),
 		Round:      message.Round(3),
 		Identifier: identifier,
-		Data:       []byte("value"),
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -572,12 +573,14 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(2),
 		Identifier: identifier[:],
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	completeDecided := testingprotocol.AggregateSign(t, secretKeys, uids, &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(2),
 		Identifier: identifier[:],
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	share := &beaconprotocol.Share{
