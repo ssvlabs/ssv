@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 )
 
+// Router is an helper router to read messages
 type Router struct {
 	Logger      *zap.Logger
 	Controllers controller.Controllers
