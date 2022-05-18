@@ -87,7 +87,7 @@ func TestPreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte(nil))
+	instance.state.Identifier.Store(message.Identifier(nil))
 	instance.state.Height.Store(message.Height(0))
 
 	instance.fork = testingFork(instance)

@@ -37,7 +37,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 
@@ -104,7 +104,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 
@@ -173,7 +173,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 	instance.state.Height.Store(message.Height(0))
@@ -282,7 +282,7 @@ func TestPrePreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.Height.Store(message.Height(0))
 
 	pipeline := instance.PrePrepareMsgPipeline()
