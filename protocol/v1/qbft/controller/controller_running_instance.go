@@ -50,15 +50,11 @@ instanceLoop:
 			// exited with no error means instance decided
 			// fetch decided msg and return
 			retMsg, e := c.ibftStorage.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
-			if len(retMsg) == 0 {
-				err = errors.New("could not find decided msg after instance finished")
-				break instanceLoop
-			}
 			if e != nil {
 				err = e
 				break instanceLoop
 			}
-			if retMsg == nil {
+			if len(retMsg) == 0 {
 				err = errors.New("could not fetch decided msg after instance finished")
 				break instanceLoop
 			}
