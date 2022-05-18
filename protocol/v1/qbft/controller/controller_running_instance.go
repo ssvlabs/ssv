@@ -50,15 +50,11 @@ instanceLoop:
 			// exited with no error means instance decided
 			// fetch decided msg and return
 			retMsg, e := c.ibftStorage.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
-			if len(retMsg) == 0 {
-				err = errors.New("could not find decided msg after instance finished")
-				break instanceLoop
-			}
 			if e != nil {
 				err = e
 				break instanceLoop
 			}
-			if retMsg == nil {
+			if len(retMsg) == 0 {
 				err = errors.New("could not fetch decided msg after instance finished")
 				break instanceLoop
 			}
@@ -136,7 +132,8 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err = c.network.Broadcast(ssvMsg); err != nil {
 				return errors.Wrap(err, "could not broadcast decided message")
 			}
-			c.logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()), zap.Uint64("seqNum", uint64(agg.Message.Height)))
+			c.logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
+				zap.Uint64("seqNum", uint64(agg.Message.Height)))
 			return nil
 		}
 

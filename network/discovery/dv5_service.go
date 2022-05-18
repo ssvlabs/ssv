@@ -135,6 +135,9 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	dvs.conn = udpConn
 
 	localNode, err := dvs.createLocalNode(discOpts, ipAddr)
+	if err != nil {
+		return errors.Wrap(err, "could not create local node")
+	}
 	dv5Cfg, err := opts.DiscV5Cfg()
 	if err != nil {
 		return err

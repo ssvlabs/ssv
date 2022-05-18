@@ -307,7 +307,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	return v0Msg, nil
 }
 
-// ToSignedMessageV0 converts signed message to v0
+// ToSignedMessageV0 converts a signed message from v1 to v0
 func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*proto.SignedMessage, error) {
 	signedMsgV0 := &proto.SignedMessage{}
 	signedMsgV0.Message = &proto.Message{

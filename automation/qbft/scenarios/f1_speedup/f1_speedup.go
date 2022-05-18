@@ -23,7 +23,7 @@ import (
 
 func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newF1SpeedupScenario(logger))
+	runner.Start(logger, newF1SpeedupScenario(logger), runner.QBFTScenarioBootstrapper())
 }
 
 type f1SpeedupScenario struct {

@@ -22,7 +22,7 @@ import (
 
 func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newFarFutureSyncScenario(logger))
+	runner.Start(logger, newFarFutureSyncScenario(logger), runner.QBFTScenarioBootstrapper())
 }
 
 type farFutureSyncScenario struct {

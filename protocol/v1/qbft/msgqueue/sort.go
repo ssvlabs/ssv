@@ -5,9 +5,10 @@ import (
 	"sort"
 )
 
-// By is function to compare messages in clean way
+// By is function to compare messages
 type By func(a, b *message.SSVMessage) bool
 
+// Combine runs current By and if result is negative, tries to run the other By.
 func (by By) Combine(other By) By {
 	return func(a, b *message.SSVMessage) bool {
 		if !by(a, b) {
@@ -73,14 +74,13 @@ func ByConsensusMsgType(messageTypes ...message.ConsensusMessageType) By {
 		// check according to predefined set
 		aVal, aOk := m[aMsgType]
 		bVal, bOk := m[bMsgType]
-		if aOk {
-			if bOk {
-				return aVal > bVal
-			}
+		if !aOk {
+			return false
+		}
+		if !bOk {
 			return true
 		}
-		//return aMsgType > bMsgType
-		return false
+		return aVal > bVal
 	}
 }
 

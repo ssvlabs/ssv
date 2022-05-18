@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -34,7 +35,6 @@ func newInMemDb() basedb.IDb {
 	return db
 }
 
-// TODO(nkryuchkov): fix this test
 func TestAggregatedMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 	msg1 := SignMsg(t, 1, sks[1], &message.ConsensusMessage{
@@ -55,17 +55,11 @@ func TestAggregatedMsg(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       []byte("value"),
 	})
-	msgDiff := SignMsg(t, 4, sks[4], &message.ConsensusMessage{
-		MsgType:    message.CommitMsgType,
-		Round:      2,
-		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
-	})
 
 	tests := []struct {
 		name            string
 		msgs            []*message.SignedMessage
-		expectedSigners []uint64
+		expectedSigners []message.OperatorID
 		expectedError   string
 	}{
 		{
@@ -73,7 +67,7 @@ func TestAggregatedMsg(t *testing.T) {
 			[]*message.SignedMessage{
 				msg1, msg2, msg3,
 			},
-			[]uint64{1, 2, 3},
+			[]message.OperatorID{1, 2, 3},
 			"",
 		},
 		{
@@ -81,7 +75,7 @@ func TestAggregatedMsg(t *testing.T) {
 			[]*message.SignedMessage{
 				msg1, msg2,
 			},
-			[]uint64{1, 2},
+			[]message.OperatorID{1, 2},
 			"",
 		},
 		{
@@ -89,20 +83,14 @@ func TestAggregatedMsg(t *testing.T) {
 			[]*message.SignedMessage{
 				msg1,
 			},
-			[]uint64{1},
+			[]message.OperatorID{1},
 			"",
 		},
 		{
 			"no sigs return err",
 			[]*message.SignedMessage{},
-			[]uint64{},
+			[]message.OperatorID{},
 			"could not aggregate decided messages, no msgs",
-		},
-		{
-			"different msgs, can't aggregate",
-			[]*message.SignedMessage{msg1, msgDiff},
-			[]uint64{},
-			"could not aggregate message: can't aggregate different messages",
 		},
 	}
 
@@ -316,4 +304,9 @@ func AggregateMessages(sigs []*message.SignedMessage) (*message.SignedMessage, e
 	}
 
 	return decided, nil
+}
+
+func commitDataToBytes(input *message.CommitData) []byte {
+	ret, _ := json.Marshal(input)
+	return ret
 }

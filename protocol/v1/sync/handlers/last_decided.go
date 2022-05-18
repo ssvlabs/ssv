@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -14,7 +13,7 @@ import (
 func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
-		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
+		logger := plogger.With(zap.String("identifier", msg.ID.String()))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
@@ -27,6 +26,7 @@ func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 			return nil, nil
 		} else {
 			res, err := store.GetLastDecided(msg.ID)
+			//logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}
 

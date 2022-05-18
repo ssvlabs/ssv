@@ -23,7 +23,7 @@ import (
 
 func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newChangeRoundSpeedupScenario(logger))
+	runner.Start(logger, newChangeRoundSpeedupScenario(logger), runner.QBFTScenarioBootstrapper())
 }
 
 // changeRoundSpeedupScenario is the scenario when new nodes are created with a delay after other nodes already started.

@@ -10,7 +10,7 @@ import (
 
 // LastChangeRoundHandler handler for last-decided protocol
 // TODO: add msg validation
-func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.InstanceStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
+func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	//plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
 		//logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))

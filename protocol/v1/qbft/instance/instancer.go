@@ -33,7 +33,7 @@ type Instancer interface {
 	State() *qbft.State
 	ForceDecide(msg *message.SignedMessage)
 	GetStageChan() chan qbft.RoundState
-	GetLastChangeRoundMsg() *message.SignedMessage
+	//GetLastChangeRoundMsg() *message.SignedMessage
 	CommittedAggregatedMsg() (*message.SignedMessage, error)
 	GetCommittedAggSSVMessage() (message.SSVMessage, error)
 	ProcessMsg(msg *message.SignedMessage) (bool, error)

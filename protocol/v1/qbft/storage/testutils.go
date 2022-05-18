@@ -129,12 +129,12 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 
 // SaveLastChangeRoundMsg updates last change round message
 // TODO
-func (i *ibftStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error {
+func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 	value, err := json.Marshal(msg)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, lastChangeRoundKey, identifier)
+	return i.save(value, lastChangeRoundKey, msg.Message.Identifier)
 }
 
 // GetLastChangeRoundMsg returns last known change round message
@@ -152,6 +152,10 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 		return nil, errors.Wrap(err, "un-marshaling error")
 	}
 	return ret, nil
+}
+
+func (i *ibftStorage) Clean(identifier message.Identifier) {
+	panic("implement me")
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
