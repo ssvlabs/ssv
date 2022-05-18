@@ -147,7 +147,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			3,
 			refAttestationDataByts,
 			refAttestationSig,
-			"timed out waiting for post consensus signatures, received 2",
+			"not enough post consensus signatures, received 2",
 		},
 	}
 
@@ -189,6 +189,9 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				}
 
 				require.NoError(t, validator.p2pNetwork.Broadcast(ssvMsg))
+				for _, ibft := range validator.Ibfts() {
+					require.NoError(t, ibft.ProcessMsg(&ssvMsg))
+				}
 			}
 
 			// TODO: do for all ibfts
@@ -198,7 +201,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 					require.EqualError(t, err, test.expectedError)
 				} else {
 					require.NoError(t, err)
-					require.EqualValues(t, test.expectedReconstructedSig, validator.beacon.(*testBeacon).LastSubmittedAttestation.Signature[:])
+					require.EqualValues(t, test.expectedReconstructedSig, ibft.(*testIBFT).beacon.(*testBeacon).LastSubmittedAttestation.Signature[:])
 				}
 			}
 		})
