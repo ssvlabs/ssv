@@ -74,7 +74,7 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
 		commitDataBytes, err := commitData.Encode()
 		if err != nil {
-			f.logger.Panic("could not encodue commit data", zap.Error(err))
+			panic(err)
 		}
 
 		return oids, &message.ConsensusMessage{
