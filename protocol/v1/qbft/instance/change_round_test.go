@@ -485,7 +485,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("lambdas"),
 				Data: changeRoundDataToBytes(&message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
@@ -496,10 +496,9 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 							Signers:   []message.OperatorID{1, 2, 3},
 							Message: &message.ConsensusMessage{
 								MsgType:    message.PrepareMsgType,
-								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       []byte("value"),
+								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
 							},
 						},
 					},
