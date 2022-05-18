@@ -133,7 +133,8 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil)
+	// TODO: score params
+	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil, cfg.Host.ID())
 
 	return ps, ctrl, nil
 }

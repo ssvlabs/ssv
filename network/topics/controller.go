@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -51,12 +52,13 @@ type topicsCtrl struct {
 
 	containers map[string]*topicContainer
 	topicsLock *sync.RWMutex
+	selfPeerID peer.ID
 }
 
 // NewTopicsController creates an instance of Controller
 func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler PubsubMessageHandler,
 	msgValidatorFactory func(string) MsgValidatorFunc, subFilter SubFilter, pubSub *pubsub.PubSub,
-	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+	scoreParams func(string) *pubsub.TopicScoreParams, self peer.ID) Controller {
 	ctrl := &topicsCtrl{
 		ctx:                 ctx,
 		logger:              logger,
@@ -69,6 +71,8 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler Pub
 		containers: make(map[string]*topicContainer),
 
 		subFilter: subFilter,
+
+		selfPeerID: self,
 	}
 
 	return ctrl
@@ -250,6 +254,10 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 		}
 		if msg == nil || msg.Data == nil {
 			logger.Warn("got empty message from subscription")
+			continue
+		}
+		if fromPeer := msg.GetFrom(); bytes.Equal([]byte(fromPeer), []byte(ctrl.selfPeerID)) {
+			logger.Debug("skipping self message")
 			continue
 		}
 		metricsPubsubInbound.WithLabelValues(getTopicBaseName(topicName)).Inc()
