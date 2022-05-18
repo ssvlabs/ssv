@@ -4,10 +4,13 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"log"
 
+	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/storage/forks"
+	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -46,55 +49,41 @@ type ibftStorage struct {
 	prefix []byte
 	db     basedb.IDb
 	logger *zap.Logger
+	fork   forks.Fork
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, logger *zap.Logger, prefix string) qbftstorage.QBFTStore {
+func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
 	ibft := &ibftStorage{
 		prefix: []byte(prefix),
 		db:     db,
 		logger: logger,
+		fork:   forksfactory.NewFork(forkVersion),
 	}
 	return ibft
 }
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
 func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
-	// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	val, found, err := i.get(highestKey, identifier)
-	if found && err == nil {
-		// old one not found, just unmarshal v1
-		ret := &message.SignedMessage{}
-		if err := json.Unmarshal(val, ret); err == nil { // if err, just continue to v0
-			return ret, nil
-		}
-	}
-
-	// v1 not found, try with v0 identifier
-	oldIdentifier := format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String())
-	val, found, err = i.get(highestKey, []byte(oldIdentifier))
-	if !found {
-		return nil, nil
-	}
+	val, found, err := i.get(highestKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		return nil, err
 	}
-	// old val found, unmarshal with old struct and convert to v1
-	ret := &proto.SignedMessage{}
-	if err := json.Unmarshal(val, ret); err != nil {
-		return nil, errors.Wrap(err, "un-marshaling error")
+	if !found {
+		return nil, nil
 	}
-	return v0.ToSignedMessageV1(ret)
+	return i.fork.DecodeSignedMsg(val)
 }
 
 // SaveLastDecided saves a signed message for an ibft instance which is currently highest
 func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) error {
 	for _, signedMsg := range signedMsgs {
-		value, err := signedMsg.Encode()
+		identifier := i.fork.Identifier(signedMsg.Message.Identifier.GetValidatorPK(), signedMsg.Message.Identifier.GetRoleType())
+		value, err := i.fork.EncodeSignedMsg(signedMsg)
 		if err != nil {
-			return errors.Wrap(err, "marshaling error")
+			return errors.Wrap(err, "could not encode signed message")
 		}
-		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
+		if err = i.save(value, highestKey, identifier); err != nil {
 			return err
 		}
 		reportHighestDecided(signedMsg)
@@ -104,6 +93,33 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) erro
 }
 
 func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
+	prefix := make([]byte, len(i.prefix))
+	copy(prefix, i.prefix)
+	fIdentifier := i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType())
+	prefix = append(prefix, fIdentifier...)
+
+	var sequences [][]byte
+	for seq := from; seq <= to; seq++ {
+		sequences = append(sequences, i.key(decidedKey, uInt64ToByteSlice(uint64(seq))))
+	}
+
+	msgs := make([]*message.SignedMessage, 0)
+	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
+		msg, err := i.fork.DecodeSignedMsg(obj.Value)
+		if err != nil {
+			return errors.Wrap(err, "could not decode signed message")
+		}
+		msgs = append(msgs, msg)
+		return nil
+	})
+	if err == nil && len(msgs) > 0 {
+		return msgs, nil
+	}
+
+	return msgs, err
+}
+
+func (i *ibftStorage) GetDecidedDeprecated(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
 	prefix := make([]byte, len(i.prefix))
 	copy(prefix, i.prefix)
 	prefix = append(prefix, identifier...)
@@ -153,11 +169,12 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
 	return i.db.SetMany(i.prefix, len(signedMsg), func(j int) (basedb.Obj, error) {
 		msg := signedMsg[j]
 		k := i.key(decidedKey, uInt64ToByteSlice(uint64(msg.Message.Height)))
-		key := append(msg.Message.Identifier, k...)
-		value, err := msg.Encode()
+		value, err := i.fork.EncodeSignedMsg(msg)
 		if err != nil {
 			return basedb.Obj{}, err
 		}
+		identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
+		key := append(identifier, k...)
 		return basedb.Obj{Key: key, Value: value}, nil
 	})
 }

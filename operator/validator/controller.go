@@ -115,7 +115,7 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	qbftStorage := storage.New(options.DB, options.Logger, message.RoleTypeAttester.String()) // TODO need to support multi duties
+	qbftStorage := storage.New(options.DB, options.Logger, message.RoleTypeAttester.String(), options.ForkVersion) // TODO need to support multi duties
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
