@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
@@ -186,7 +187,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		MsgType:    message.ProposalMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       []byte(time.Now().Weekday().String()),
+		Data:       proposalDataToBytes(&message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
 	})
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
@@ -307,4 +308,9 @@ func (s *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byt
 
 func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
+}
+
+func proposalDataToBytes(input *message.ProposalData) []byte {
+	ret, _ := json.Marshal(input)
+	return ret
 }
