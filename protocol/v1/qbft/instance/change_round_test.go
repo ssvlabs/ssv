@@ -15,8 +15,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	changeround2 "github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -59,7 +60,14 @@ func (v0 *testFork) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 
 // changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
 func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
-	return v0.instance.ChangeRoundMsgValidationPipeline()
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
+		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		changeround.Validate(share, v0.VersionName()),
+	)
 }
 
 // ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
@@ -496,7 +504,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			signature, err := test.msg.Sign(secretKeys[test.signerID], forksprotocol.V1ForkVersion.String())
 			require.NoError(t, err)
 
-			err = changeround2.Validate(instance.ValidatorShare, forksprotocol.V1ForkVersion.String()).
+			err = changeround.Validate(instance.ValidatorShare, forksprotocol.V1ForkVersion.String()).
 				Run(&message.SignedMessage{
 					Signature: signature.Serialize(),
 					Signers:   []message.OperatorID{message.OperatorID(test.signerID)},
@@ -711,8 +719,8 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("Lambda"),
-				Data:       []byte("value"), /*changeRoundDataToBytes(&proto.ChangeRoundData{PreparedValue: nil,})*/
+				Identifier: []byte("lambda"),
+				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
 			}),
 			"",
 		},
@@ -722,8 +730,8 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("Lambda"),
-				Data:       []byte("value"), /*changeRoundDataToBytes(&proto.ChangeRoundData{PreparedValue: []byte("ad")],})*/
+				Identifier: []byte("lambda"),
+				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: []byte("ad")}),
 			}),
 			"change round justification msg is nil",
 		},
@@ -733,8 +741,8 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Height:     2,
 				Round:      1,
-				Identifier: []byte("Lambda"),
-				Data:       []byte("value"), /*changeRoundDataToBytes(&proto.ChangeRoundData{PreparedValue: nil,})*/
+				Identifier: []byte("lambda"),
+				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
 			}),
 			"invalid message sequence number: expected: 1, actual: 2",
 		},
@@ -745,8 +753,8 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("Lambda"),
-				Data:       []byte("value"), /*changeRoundDataToBytes(&proto.ChangeRoundData{PreparedValue: nil,})*/
+				Identifier: []byte("lambdaa"),
+				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
 			}),
 			"message Lambda (lambdaa) does not equal expected Lambda (lambda)",
 		},
@@ -756,8 +764,8 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
 				Round:      4,
-				Identifier: []byte("Lambda"),
-				Data:       []byte("value"), /*changeRoundDataToBytes(&proto.ChangeRoundData{PreparedValue: nil,})*/
+				Identifier: []byte("lambda"),
+				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
 			}),
 			"",
 		},
@@ -767,8 +775,8 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("Lambda"),
-				Data:       []byte("value"), /*changeRoundDataToBytes(&proto.ChangeRoundData{PreparedValue: nil,})*/
+				Identifier: []byte("lambda"),
+				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
 			}),
 			"message type is wrong",
 		},
@@ -781,7 +789,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	height.Store(message.Height(1))
 
 	identifier := atomic.Value{}
-	identifier.Store([]byte("lambda"))
+	identifier.Store(message.Identifier("lambda"))
 
 	instance := &Instance{
 		Config: qbft.DefaultConsensusParams(),
@@ -795,6 +803,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 			Identifier: identifier,
 		},
 	}
+
 	instance.fork = testingFork(instance)
 
 	for _, test := range tests {
