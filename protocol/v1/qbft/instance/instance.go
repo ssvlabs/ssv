@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"encoding/hex"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"sync"
 	"time"
 
@@ -37,8 +38,9 @@ type Options struct {
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
-	Fork   forks.Fork
-	Signer beaconprotocol.Signer
+	Fork             forks.Fork
+	Signer           beaconprotocol.Signer
+	ChangeRoundStore qbftstorage.ChangeRoundStore
 }
 
 // Instance defines the instance attributes
@@ -58,7 +60,6 @@ type Instance struct {
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
 	ChangeRoundMessages msgcont.MessageContainer
-	lastChangeRoundMsg  *message.SignedMessage // lastChangeRoundMsg stores the latest change round msg broadcasted, used for fast instance catchup
 	decidedMsg          *message.SignedMessage
 
 	// channels
@@ -77,6 +78,8 @@ type Instance struct {
 	stopLock                     sync.Mutex
 	lastChangeRoundMsgLock       sync.RWMutex
 	stageChanCloseChan           sync.Mutex
+
+	changeRoundStore qbftstorage.ChangeRoundStore
 }
 
 // NewInstanceWithState used for testing, not PROD!
@@ -118,6 +121,8 @@ func NewInstance(opts *Options) Instancer {
 		stopLock:                     sync.Mutex{},
 		lastChangeRoundMsgLock:       sync.RWMutex{},
 		stageChanCloseChan:           sync.Mutex{},
+
+		changeRoundStore: opts.ChangeRoundStore,
 	}
 
 	ret.setFork(opts.Fork)
@@ -346,17 +351,13 @@ func (i *Instance) SignAndBroadcast(msg *message.ConsensusMessage) error {
 }
 
 func (i *Instance) setLastChangeRoundMsg(msg *message.SignedMessage) {
-	i.lastChangeRoundMsgLock.Lock()
-	defer i.lastChangeRoundMsgLock.Unlock()
-	i.lastChangeRoundMsg = msg
+	_ = i.changeRoundStore.SaveLastChangeRoundMsg(msg)
 }
 
-// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-func (i *Instance) GetLastChangeRoundMsg() *message.SignedMessage {
-	i.lastChangeRoundMsgLock.RLock()
-	defer i.lastChangeRoundMsgLock.RUnlock()
-	return i.lastChangeRoundMsg
-}
+//// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
+//func (i *Instance) GetLastChangeRoundMsg() *message.SignedMessage {
+//	err :=  i.changeRoundStore.GetLastChangeRoundMsg()
+//}
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*message.SignedMessage, error) {
