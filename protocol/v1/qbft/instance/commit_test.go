@@ -176,7 +176,6 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 	require.NoError(t, share.VerifySignedMessage(msg, forksprotocol.V1ForkVersion.String()))
 }
 
-// TODO(nkryuchkov): fix this test
 func TestCommitPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
