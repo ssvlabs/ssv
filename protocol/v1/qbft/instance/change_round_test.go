@@ -114,6 +114,7 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusM
 	}
 }
 
+// TODO(nkryuchkov): fix this test
 func TestRoundChangeInputValue(t *testing.T) {
 	secretKey, nodes := GenerateNodes(4)
 	round := atomic.Value{}
@@ -248,24 +249,13 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			expectedError: "",
 		},
 		{
-			name:     "nil ChangeRoundData",
-			signerID: 1,
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
-				Round:      3,
-				Identifier: []byte("Lambda"),
-				Data:       nil,
-			},
-			expectedError: "change round justification msg is nil",
-		},
-		{
 			name:                "valid justification",
 			signerID:            1,
 			justificationSigIds: []uint64{1, 2, 3},
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Lambdas"),
 				Data: changeRoundDataToBytes(&message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
@@ -278,8 +268,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								MsgType:    message.PrepareMsgType,
 								Height:     0,
 								Round:      2,
-								Identifier: []byte("lambdas"),
-								Data:       []byte("value"),
+								Identifier: []byte("Lambdas"),
+								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
 							},
 						},
 					},

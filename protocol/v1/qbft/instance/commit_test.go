@@ -137,7 +137,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	}
 
 	commitData, err := consensusMessage.GetCommitData()
@@ -160,7 +160,7 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value2"),
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value2")}),
 	}
 
 	commitData, err = m.GetCommitData()
