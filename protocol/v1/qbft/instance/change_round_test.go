@@ -109,10 +109,10 @@ func bytesToChangeRoundData(input []byte) *message.RoundChangeData {
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
+func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
 	nodes := make(map[message.OperatorID]*beacon.Node)
-	sks := make(map[uint64]*bls.SecretKey)
+	sks := make(map[message.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
@@ -121,7 +121,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[message.OperatorID]*
 			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[uint64(i)] = sk
+		sks[message.OperatorID(uint64(i))] = sk
 	}
 	return sks, nodes
 }
@@ -209,7 +209,6 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.EqualValues(t, []byte("value"), data.PreparedValue)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestValidateChangeRoundMessage(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	round := atomic.Value{}
@@ -223,10 +222,32 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 	}
 
+	consensusMessage := &message.ConsensusMessage{
+		MsgType:    message.PrepareMsgType,
+		Height:     0,
+		Round:      2,
+		Identifier: []byte("Lambdas"),
+		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
+	}
+
+	twoSigners := map[message.OperatorID]*bls.SecretKey{
+		1: secretKeys[1],
+		2: secretKeys[2],
+	}
+
+	threeSigners := map[message.OperatorID]*bls.SecretKey{
+		1: secretKeys[1],
+		2: secretKeys[2],
+		3: secretKeys[3],
+	}
+
+	consensusMessageSignatureByTwo := aggregateSign(t, twoSigners, consensusMessage)
+	consensusMessageSignatureByThree := aggregateSign(t, threeSigners, consensusMessage)
+
 	tests := []struct {
 		name                string
 		msg                 *message.ConsensusMessage
-		signerID            uint64
+		signerID            message.OperatorID
 		justificationSigIds []uint64
 		expectedError       string
 	}{
@@ -288,15 +309,9 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					NextProposalData: []byte("value"),
 					RoundChangeJustification: []*message.SignedMessage{
 						{
-							Signature: nil,
+							Signature: consensusMessageSignatureByThree.Serialize(),
 							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
-								Height:     0,
-								Round:      2,
-								Identifier: []byte("Lambdas"),
-								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
-							},
+							Message:   consensusMessage,
 						},
 					},
 				}),
@@ -484,21 +499,16 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("lambdas"),
+				Identifier: []byte("Lambdas"),
 				Data: changeRoundDataToBytes(&message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
 					RoundChangeJustification: []*message.SignedMessage{
 						{
-							Signature: nil,
+							Signature: consensusMessageSignatureByTwo.Serialize(),
 							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
-								Round:      2,
-								Identifier: []byte("lambdas"),
-								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
-							},
+							Message:   consensusMessage,
 						},
 					},
 				}),
@@ -524,7 +534,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			err = changeround.Validate(instance.ValidatorShare, forksprotocol.V1ForkVersion.String()).
 				Run(&message.SignedMessage{
 					Signature: signature.Serialize(),
-					Signers:   []message.OperatorID{message.OperatorID(test.signerID)},
+					Signers:   []message.OperatorID{test.signerID},
 					Message:   test.msg,
 				})
 			if len(test.expectedError) > 0 {
@@ -886,4 +896,18 @@ func TestChangeRoundPipeline(t *testing.T) {
 func prepareDataToBytes(input *message.PrepareData) []byte {
 	ret, _ := json.Marshal(input)
 	return ret
+}
+
+func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg *message.ConsensusMessage) *bls.Sign {
+	var aggregatedSig *bls.Sign
+	for _, sk := range sks {
+		sig, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+		require.NoError(t, err)
+		if aggregatedSig == nil {
+			aggregatedSig = sig
+		} else {
+			aggregatedSig.Add(sig)
+		}
+	}
+	return aggregatedSig
 }

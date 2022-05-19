@@ -71,9 +71,7 @@ func (s *SignatureState) start(logger *zap.Logger, height message.Height, signat
 
 // stopTimer stops timer from firing and drain the channel. also set state to sleep
 func (s *SignatureState) stopTimer() {
-	if !s.timer.Stop() {
-		<-s.timer.C
-	}
+	s.timer.Stop()
 	s.state.Store(StateSleep)
 }
 

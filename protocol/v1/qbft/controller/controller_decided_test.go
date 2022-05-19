@@ -366,8 +366,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	}
 }
 
-// TODO(nkryuchkov): fix this test
-func TestForceDecided(t *testing.T) { // TODo need to align with the new queue process
+func TestForceDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
@@ -389,12 +388,15 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 		time.Sleep(time.Millisecond * 500) // wait for instance to start
 
 		signers := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
+
+		encodedCommit, err := (&message.CommitData{Data: []byte("value")}).Encode()
+		require.NoError(t, err)
 		decidedMsg := testingprotocol.AggregateSign(t, sks, signers, &message.ConsensusMessage{
 			MsgType:    message.CommitMsgType,
 			Height:     message.Height(4),
 			Round:      message.Round(1),
 			Identifier: identifier,
-			Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+			Data:       encodedCommit,
 		})
 
 		require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
