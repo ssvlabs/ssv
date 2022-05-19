@@ -366,8 +366,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 	}
 }
 
-// TODO(nkryuchkov): fix this test
-func TestForceDecided(t *testing.T) { // TODo need to align with the new queue process
+func TestForceDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
