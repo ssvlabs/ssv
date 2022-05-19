@@ -537,7 +537,6 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 	}
 }
 
-// TODO(nkryuchkov): fix this test
 func TestRoundChangeJustification(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 
@@ -577,9 +576,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			Height:     1,
 			Round:      2,
 			Identifier: []byte("Lambda"),
-			Data: changeRoundDataToBytes(&message.RoundChangeData{
-				PreparedValue: []byte("data"),
-			}),
+			Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
 		}
 
 		prepareData, err := msg.GetPrepareData()

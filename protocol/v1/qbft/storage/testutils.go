@@ -3,11 +3,14 @@ package qbftstorage
 import (
 	"encoding/binary"
 	"encoding/json"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -155,7 +158,17 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 }
 
 func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
-	panic("implement me")
+	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
+	err := i.delete(lastChangeRoundKey, identifier)
+	if err != nil {
+		i.logger.Warn("could not clean last change round message", zap.Error(err))
+	}
+	// doing the same for v0
+	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
+	err = i.delete(lastChangeRoundKey, oldIdentifier)
+	if err != nil {
+		i.logger.Warn("could not clean last change round message", zap.Error(err))
+	}
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
@@ -175,6 +188,12 @@ func (i *ibftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 		return nil, found, err
 	}
 	return obj.Value, found, nil
+}
+
+func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
+	prefix := append(i.prefix, pk...)
+	key := i.key(id, keyParams...)
+	return i.db.Delete(prefix, key)
 }
 
 func (i *ibftStorage) key(id string, params ...[]byte) []byte {

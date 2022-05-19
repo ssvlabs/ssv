@@ -28,9 +28,9 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 		_logger := logger.With(zap.String("peer", id.String()))
 		err := handshaker.Handshake(conn)
 		if err != nil {
-			if err == ErrIndexingInProcess {
-				// TODO: check if that's even possible as we run this function in a
-				// 	distinct queue thus the same peer can't here at the same time
+			// the handshake might have been triggered by the other node,
+			// therefore the handshake might be pending
+			if err == ErrIndexingInProcess || err == ErrHandshakeInProcess {
 				_logger.Debug("peer handshake already in process")
 				return err
 			}
