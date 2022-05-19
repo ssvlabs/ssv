@@ -17,8 +17,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
-// TODO(nkryuchkov): fix this test
 func TestVerifyPartialSignature(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
 	tests := []struct {
 		name          string
 		skByts        []byte
