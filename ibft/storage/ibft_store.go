@@ -193,14 +193,9 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 
 // CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
 func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
+	forkIdentifier := i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType())
 	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	err := i.delete(lastChangeRoundKey, identifier)
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
-	}
-	// doing the same for v0
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	err = i.delete(lastChangeRoundKey, oldIdentifier)
+	err := i.delete(lastChangeRoundKey, forkIdentifier)
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}
