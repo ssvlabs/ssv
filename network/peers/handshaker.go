@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,8 @@ const (
 
 	userAgentKey = "AgentVersion"
 )
+
+var ErrHandshakeInProcess = errors.New("handshake already in process")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
 type HandshakeFilter func(*Identity) (bool, error)
@@ -40,6 +43,8 @@ type handshaker struct {
 	idx IdentityIndex
 	// for backwards compatibility
 	ids *identify.IDService
+
+	pending *sync.Map
 }
 
 // NewHandshaker creates a new instance of handshaker
@@ -51,6 +56,7 @@ func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.Stre
 		idx:     idx,
 		ids:     ids,
 		filters: filters,
+		pending: &sync.Map{},
 	}
 	return h
 }
@@ -58,12 +64,18 @@ func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.Stre
 // Handler returns the handshake handler
 func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
+		// start by marking the peer as pending
+		pid := stream.Conn().RemotePeer()
+		h.pending.Store(pid.String(), true)
+		defer h.pending.Delete(pid.String())
+
 		req, res, done, err := h.streams.HandleStream(stream)
 		defer done()
 		if err != nil {
 			h.logger.Warn("could not read identity msg", zap.Error(err))
 			return
 		}
+
 		identity, err := DecodeIdentity(req)
 		if err != nil {
 			h.logger.Warn("could not decode identity msg", zap.Error(err))
@@ -97,8 +109,14 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
+	pid := conn.RemotePeer()
+	if _, loaded := h.pending.LoadOrStore(pid.String(), true); loaded {
+		return ErrHandshakeInProcess
+	}
+	defer h.pending.Delete(pid.String())
+
 	// check if the peer is known
-	idn, err := h.idx.Identity(conn.RemotePeer())
+	idn, err := h.idx.Identity(pid)
 	if err != nil && err != ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
@@ -106,7 +124,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return nil
 	}
 
-	pid := conn.RemotePeer()
 	idn, err = h.sendInfo(conn)
 	if err != nil {
 		// v0 nodes are not supporting the new protocol
