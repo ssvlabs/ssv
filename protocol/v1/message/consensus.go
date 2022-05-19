@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -386,16 +388,18 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 
 					justificationMsg = append(justificationMsg, KeyVal{Key: "round", Val: uint64(rcj.Message.Round)})
 					justificationMsg = append(justificationMsg, KeyVal{Key: "lambda", Val: []byte(format.IdentifierFormat(rcj.Message.Identifier.GetValidatorPK(), rcj.Message.Identifier.GetRoleType().String()))})
-					justificationMsg = append(justificationMsg, KeyVal{Key: "seq_number", Val: uint64(rcj.Message.Height)})
-					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: rcj.Message.Data})
-					mJustificationMsg, err := json.Marshal(justificationMsg)
-					if err != nil {
-						return nil, err
+					if rcj.Message.Height > 0 { // v0 version saves root without seq_number when height is 0.
+						justificationMsg = append(justificationMsg, KeyVal{Key: "seq_number", Val: uint64(rcj.Message.Height)})
 					}
+					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: rcj.Message.Data})
+					//mJustificationMsg, err := json.Marshal(justificationMsg)
+					//if err != nil {
+					//	return nil, err
+					//}
 
+					value = append(value, KeyVal{Key: "justification_msg", Val: justificationMsg})
 					value = append(value, KeyVal{Key: "justification_sig", Val: []byte(rcj.GetSignature())})
 					value = append(value, KeyVal{Key: "signer_ids", Val: rcj.GetSigners()})
-					value = append(value, KeyVal{Key: "justification_msg", Val: mJustificationMsg})
 				}
 			}
 		} else {
@@ -421,6 +425,8 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode message")
 	}
+
+	logex.GetLogger().Debug("---- root ----", zap.String("r", string(marshaledRoot)))
 
 	hasher := sha256.New()
 	_, err = hasher.Write(marshaledRoot)
