@@ -105,7 +105,7 @@ func (s *testStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 	return nil
 }
 
-func (s *testStorage) Clean(identifier message.Identifier) {}
+func (s *testStorage) CleanLastChangeRound(identifier message.Identifier) {}
 
 func newHeight(height message.Height) atomic.Value {
 	res := atomic.Value{}

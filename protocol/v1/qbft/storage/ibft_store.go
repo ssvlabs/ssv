@@ -29,8 +29,8 @@ type ChangeRoundStore interface {
 	GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error)
 	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
 	SaveLastChangeRoundMsg(msg *message.SignedMessage) error
-	// Clean cleans last change round message of some validator, should be called upon controller init
-	Clean(identifier message.Identifier)
+	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
+	CleanLastChangeRound(identifier message.Identifier)
 }
 
 // QBFTStore is the store used by QBFT components

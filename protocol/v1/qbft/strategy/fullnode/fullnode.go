@@ -38,7 +38,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get last decided from peers")
 	}
-	logger.Debug("highest decided", zap.Int64("h", int64(localHeight)), zap.Any("highest", highest))
+	logger.Debug("highest decided", zap.Int64("local", int64(localHeight)), zap.Any("highest", highest))
 	if highest == nil {
 		logger.Debug("could not find highest decided from peers")
 		return nil, nil

@@ -347,7 +347,38 @@ func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 			return nil, err
 		}
 		if cr.GetPreparedValue() != nil && len(cr.GetPreparedValue()) > 0 {
-			signedMsgV0.Message.Value = cr.GetPreparedValue()
+			crV0 := proto.ChangeRoundData{
+				PreparedRound:    uint64(cr.GetPreparedRound()),
+				PreparedValue:    cr.GetPreparedValue(),
+				JustificationMsg: nil,
+				JustificationSig: nil,
+				SignerIds:        nil,
+			}
+			if len(cr.GetRoundChangeJustification()) > 0 {
+				m := cr.GetRoundChangeJustification()[0]
+				crV0.JustificationMsg = &proto.Message{
+					Type:      proto.RoundState_Prepare,
+					Round:     uint64(m.Message.Round),
+					Lambda:    []byte(format.IdentifierFormat(m.Message.Identifier.GetValidatorPK(), m.Message.Identifier.GetRoleType().String())),
+					SeqNumber: uint64(m.Message.Height),
+					Value:     m.Message.Data,
+				}
+
+				crV0.JustificationSig = m.Signature
+
+				var signers []uint64
+				for _, id := range m.Signers {
+					signers = append(signers, uint64(id))
+				}
+				crV0.SignerIds = signers
+			}
+
+			if encoded, err := json.Marshal(crV0); err == nil {
+				signedMsgV0.Message.Value = encoded
+			} else {
+				return nil, errors.Wrap(err, "failed to encode proto msg")
+			}
+
 		} else {
 			v := make(map[string]interface{})
 			marshaledV, err := json.Marshal(v)

@@ -222,8 +222,8 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 	return v0.ToSignedMessageV1(ret)
 }
 
-// Clean cleans last change round message of some validator, should be called upon controller init
-func (i *ibftStorage) Clean(identifier message.Identifier) {
+// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
+func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
 	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
 	err := i.delete(lastChangeRoundKey, identifier)
 	if err != nil {
