@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"sync"
 
 	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/ibft/proto"
@@ -46,25 +47,40 @@ func init() {
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
-	prefix []byte
-	db     basedb.IDb
-	logger *zap.Logger
-	fork   forks.Fork
+	prefix   []byte
+	db       basedb.IDb
+	logger   *zap.Logger
+	fork     forks.Fork
+	forkLock *sync.RWMutex
 }
 
 // New create new ibft storage
 func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
 	ibft := &ibftStorage{
-		prefix: []byte(prefix),
-		db:     db,
-		logger: logger,
-		fork:   forksfactory.NewFork(forkVersion),
+		prefix:   []byte(prefix),
+		db:       db,
+		logger:   logger,
+		fork:     forksfactory.NewFork(forkVersion),
+		forkLock: &sync.RWMutex{},
 	}
 	return ibft
 }
 
+func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	i.forkLock.Lock()
+	defer i.forkLock.Unlock()
+
+	logger := i.logger.With(zap.String("where", "OnFork"))
+	logger.Info("forking ibft storage")
+	i.fork = forksfactory.NewFork(forkVersion)
+	return nil
+}
+
 // GetLastDecided gets a signed message for an ibft instance which is the highest
 func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	val, found, err := i.get(highestKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		return nil, err
@@ -77,6 +93,9 @@ func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.Si
 
 // SaveLastDecided saves a signed message for an ibft instance which is currently highest
 func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	for _, signedMsg := range signedMsgs {
 		identifier := i.fork.Identifier(signedMsg.Message.Identifier.GetValidatorPK(), signedMsg.Message.Identifier.GetRoleType())
 		value, err := i.fork.EncodeSignedMsg(signedMsg)
@@ -93,6 +112,9 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) erro
 }
 
 func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	identifierV0 := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
 	msgs := make([]*message.SignedMessage, 0)
 
@@ -133,6 +155,9 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 }
 
 func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	return i.db.SetMany(i.prefix, len(signedMsg), func(j int) (basedb.Obj, error) {
 		msg := signedMsg[j]
 		k := i.key(decidedKey, uInt64ToByteSlice(uint64(msg.Message.Height)))
@@ -171,6 +196,9 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 
 // SaveLastChangeRoundMsg updates last change round message
 func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
 	signedMsg, err := i.fork.EncodeSignedMsg(msg)
 	if err != nil {
@@ -181,6 +209,9 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 
 // GetLastChangeRoundMsg returns last known change round message
 func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	val, found, err := i.get(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		return nil, err
@@ -193,8 +224,10 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 
 // CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
 func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	forkIdentifier := i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType())
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
 	err := i.delete(lastChangeRoundKey, forkIdentifier)
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))

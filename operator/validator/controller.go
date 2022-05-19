@@ -102,6 +102,14 @@ type controller struct {
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
 
+	storageHandler, ok := c.validatorOptions.IbftStorage.(forksprotocol.ForkHandler)
+	if !ok {
+		return errors.New("ibft storage is not a fork handler")
+	}
+	if err := storageHandler.OnFork(forkVersion); err != nil {
+		return err
+	}
+
 	// call onFork for each validator in order to update the fork instance
 	return c.validatorsMap.ForEach(func(iValidator validator.IValidator) error {
 		return iValidator.OnFork(forkVersion)

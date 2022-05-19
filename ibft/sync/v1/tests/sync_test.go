@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/sync/history"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/ibft/sync/v1/handlers"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/sync/history"
 )
 
 func TestHistory(t *testing.T) {
@@ -29,13 +30,14 @@ func TestHistory(t *testing.T) {
 	}
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
-	ln, validators, err := createNetworkWithValidators(ctx, loggerFactory, nNodes, pks, decidedGenerator)
+	forkVersion := forksprotocol.V1ForkVersion
+	ln, validators, err := createNetworkWithValidators(ctx, loggerFactory, nNodes, pks, decidedGenerator, forkVersion)
 	require.NoError(t, err)
 
 	stores := make([]qbftstorage.QBFTStore, 0)
 	histories := make([]history.History, 0)
 	for i, node := range ln.Nodes {
-		store, err := newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test")
+		store, err := newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test", forkVersion)
 		require.NoError(t, err)
 		stores = append(stores, store)
 		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node, true) // TODO need to check false too?
