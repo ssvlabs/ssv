@@ -204,7 +204,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 
 	var sigs []*message.SignedMessage
 	for i := 1; i < 4; i++ {
-		sigs = append(sigs, SignMsg(t, uint64(i), sks[uint64(i)], &message.ConsensusMessage{
+		sigs = append(sigs, SignMsg(t, uint64(i), sks[message.OperatorID(i)], &message.ConsensusMessage{
 			Height:     2,
 			MsgType:    message.CommitMsgType,
 			Round:      3,
