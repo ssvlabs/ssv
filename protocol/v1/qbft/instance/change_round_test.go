@@ -141,7 +141,6 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusM
 	}
 }
 
-// TODO(nkryuchkov): fix this test
 func TestRoundChangeInputValue(t *testing.T) {
 	secretKey, nodes := GenerateNodes(4)
 	round := atomic.Value{}
@@ -182,7 +181,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, err)
 
 	instance.PrepareMessages.AddMessage(SignMsg(t, 1, secretKey[1], msg), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 1, secretKey[2], msg), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 2, secretKey[2], msg), prepareData.Data)
 
 	// with some prepare votes but not enough
 	byts, err = instance.roundChangeInputValue()
