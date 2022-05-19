@@ -1,6 +1,7 @@
 package storage
 
 import (
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -38,7 +39,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		PreparedValue: preparedValue,
 	}
 
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test")
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.V1ForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveCurrentInstance(identifier, state))
@@ -54,7 +55,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 	require.Equal(t, []byte("input"), savedState.GetInputValue())
 }
 
-func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStore, error) {
+func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Logger: logger.With(zap.String("who", "badger")),
@@ -63,5 +64,5 @@ func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStor
 	if err != nil {
 		return nil, err
 	}
-	return New(db, logger.With(zap.String("who", "ibftStorage")), prefix), nil
+	return New(db, logger.With(zap.String("who", "ibftStorage")), prefix, forkVersion), nil
 }

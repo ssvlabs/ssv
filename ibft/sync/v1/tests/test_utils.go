@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"encoding/hex"
+
 	"github.com/bloxapp/ssv/ibft/storage"
 	p2p "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -12,6 +13,7 @@ import (
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 )
@@ -48,8 +50,8 @@ func decidedGenerator(height message.Height, pk []byte, oids ...message.Operator
 type syncMsgGenerator func(message.Height, []byte, ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage)
 
 func createNetworkWithValidators(ctx context.Context, loggerFactory func(string) *zap.Logger, nNodes int, pks []string,
-	generator syncMsgGenerator) (*p2p.LocalNet, []*validatorData, error) {
-	ln, err := p2p.CreateAndStartLocalNet(ctx, loggerFactory, forksprotocol.V1ForkVersion, nNodes, nNodes/2, false)
+	generator syncMsgGenerator, forkVersion forksprotocol.ForkVersion) (*p2p.LocalNet, []*validatorData, error) {
+	ln, err := p2p.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, nNodes, nNodes/2, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,7 +89,7 @@ func createNetworkWithValidators(ctx context.Context, loggerFactory func(string)
 	return ln, validators, nil
 }
 
-func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStore, error) {
+func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Logger: logger.With(zap.String("who", "badger")),
@@ -96,5 +98,5 @@ func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStor
 	if err != nil {
 		return nil, err
 	}
-	return storage.New(db, logger.With(zap.String("who", "ibftStorage")), prefix), nil
+	return storage.New(db, logger.With(zap.String("who", "ibftStorage")), prefix, forkVersion), nil
 }
