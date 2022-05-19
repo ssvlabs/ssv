@@ -93,10 +93,6 @@ func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.Signed
 	if err == nil && len(msgs) > 0 {
 		return true, msgs[0], nil
 	}
-	res, err := f.store.GetLastDecided(msg.Message.Identifier)
-	if err == nil && res != nil {
-		return true, res, nil
-	}
 	return false, nil, err
 }
 
