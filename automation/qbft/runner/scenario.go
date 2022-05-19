@@ -59,14 +59,15 @@ func QBFTScenarioBootstrapper() Bootstrapper {
 			}
 			dbs = append(dbs, db)
 		}
-		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forksprotocol.V0ForkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, false)
+		forkVersion := forksprotocol.V0ForkVersion
+		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, false)
 		if err != nil {
 			return nil, err
 		}
 		stores := make([]qbftstorageprotocol.QBFTStore, 0)
 		kms := make([]beacon.KeyManager, 0)
 		for i, node := range ln.Nodes {
-			store := qbftstorage.New(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations")
+			store := qbftstorage.New(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations", forkVersion)
 			stores = append(stores, store)
 			km := commons.NewTestSigner()
 			kms = append(kms, km)
