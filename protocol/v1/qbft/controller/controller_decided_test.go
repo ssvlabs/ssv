@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
@@ -100,10 +101,11 @@ func (s *testStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*mes
 	return nil, nil
 }
 
-// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
-func (s *testStorage) SaveLastChangeRoundMsg(identifier message.Identifier, msg *message.SignedMessage) error {
+func (s *testStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 	return nil
 }
+
+func (s *testStorage) CleanLastChangeRound(identifier message.Identifier) {}
 
 func newHeight(height message.Height) atomic.Value {
 	res := atomic.Value{}
@@ -392,7 +394,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 			Height:     message.Height(4),
 			Round:      message.Round(1),
 			Identifier: identifier,
-			Data:       []byte("value"),
+			Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 		})
 
 		require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -401,7 +403,7 @@ func TestForceDecided(t *testing.T) { // TODo need to align with the new queue p
 	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:    zap.L(),
 		SeqNumber: 4,
-		Value:     []byte("value"),
+		Value:     commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)
@@ -473,7 +475,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Height:     message.Height(10),
 		Round:      message.Round(3),
 		Identifier: identifier,
-		Data:       []byte("value"),
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -557,7 +559,6 @@ func TestValidateDecidedMsg(t *testing.T) {
 	}
 }
 
-// TODO(nkryuchkov): fix this test
 func TestController_checkDecidedMessageSigners(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, nodes := testingprotocol.GenerateBLSKeys(uids...)
@@ -568,16 +569,18 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	delete(skQuorum, 4)
 	identifier := []byte("Identifier_2")
 
-	incompleteDecided := testingprotocol.AggregateSign(t, skQuorum, uids, &message.ConsensusMessage{
+	incompleteDecided := testingprotocol.AggregateSign(t, skQuorum, uids[:3], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(2),
 		Identifier: identifier[:],
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	completeDecided := testingprotocol.AggregateSign(t, secretKeys, uids, &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(2),
 		Identifier: identifier[:],
+		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
 	})
 
 	share := &beaconprotocol.Share{
@@ -587,7 +590,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	}
 
 	id := atomic.Value{}
-	id.Store(identifier)
+	id.Store(message.Identifier(identifier))
 
 	height := atomic.Value{}
 	height.Store(message.Height(2))
@@ -601,6 +604,8 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		ibftStorage: newTestStorage(nil),
 	}
 
+	ctrl.fork = forksfactory.NewFork(forksprotocol.V1ForkVersion)
+
 	if ctrl.isFullNode() {
 		ctrl.strategy = fullnode.NewFullNodeStrategy(zap.L(), ctrl.ibftStorage, nil)
 	} else {
@@ -609,16 +614,10 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 
 	require.NoError(t, ctrl.ibftStorage.SaveDecided(incompleteDecided))
 
-	_, incompleteKnownMsg, err := ctrl.strategy.IsMsgKnown(incompleteDecided)
-	require.NoError(t, err)
-
-	_, completeKnownMsg, err := ctrl.strategy.IsMsgKnown(completeDecided)
-	require.NoError(t, err)
-
 	// check message with similar number of signers
-	require.True(t, ctrl.checkDecidedMessageSigners(incompleteKnownMsg, incompleteDecided))
+	require.True(t, ctrl.checkDecidedMessageSigners(incompleteDecided, incompleteDecided))
 	// check message with more signers
-	require.False(t, ctrl.checkDecidedMessageSigners(completeKnownMsg, completeDecided))
+	require.False(t, ctrl.checkDecidedMessageSigners(incompleteDecided, completeDecided))
 }
 
 func populatedIbft(

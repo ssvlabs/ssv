@@ -91,8 +91,6 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 			}
 			height = res.Msg.Message.Height
 		}
-		// TODO move to queue strategy
-		go c.listenToLateCommitMsgs(c.Identifier[:], height)
 		return
 	}
 	// didn't decided -> purge messages
@@ -157,55 +155,6 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 		return true, nil
 	}
 	return false, nil
-}
-
-// listenToLateCommitMsgs handles late arrivals of commit messages and pick up orphan commit messages that
-// were not included in the decided message when quorum was achieved
-func (c *Controller) listenToLateCommitMsgs(identifier []byte, seq message.Height) {
-	/*idxKey := msgqueue.IBFTMessageIndexKey(identifier, uint64(seq))
-	//defer c.msgQueue.PurgeIndexedMessages(idxKey) TODO need to clear worker-queue
-
-	f := func(stopper tasks.Stopper) (interface{}, error) {
-	loop:
-		for {
-			if stopper.IsStopped() {
-				break loop
-			}
-			if netMsg := c.msgQueue.PopMessage(idxKey); netMsg != nil && netMsg.SignedMessage != nil {
-				if netMsg.SignedMessage.Message.Type != proto.RoundState_Commit {
-					// not a commit message -> skip
-					continue
-				}
-				logger := c.logger.With(zap.Uint64("seq", netMsg.SignedMessage.Message.SeqNumber),
-					zap.Uint64s("signers", netMsg.SignedMessage.SignerIds))
-				// TODO: need to use the fork
-				if err := instance.CommitMsgValidationPipelineV0(identifier, seq, c.ValidatorShare).Run(netMsg.SignedMessage); err != nil {
-					c.logger.Error("received invalid late commit message", zap.Error(err))
-					continue
-				}
-				updated, err := instance.ProcessLateCommitMsg(netMsg.SignedMessage, c.ibftStorage,
-					c.ValidatorShare)
-				if err != nil {
-					logger.Error("failed to process late commit message", zap.Error(err))
-				} else if updated != nil {
-					logger.Debug("decided message was updated", zap.Uint64s("updated signers", updated.SignerIds))
-					if err := c.network.BroadcastDecided(c.ValidatorShare.PublicKey.Serialize(), updated); err != nil {
-						logger.Error("could not broadcast decided message", zap.Error(err))
-					}
-					logger.Debug("updated decided was broadcasted")
-					ibft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
-					break loop
-				}
-			} else {
-				time.Sleep(time.Millisecond * 100)
-			}
-		}
-		return nil, nil
-	}
-
-	c.logger.Debug("started listening to late commit msgs", zap.Uint64("seq_number", seq))
-	_, _, _ = tasks.ExecWithTimeout(context.Background(), f, time.Minute*6)
-	c.logger.Debug("stopped listening to late commit msgs", zap.Uint64("seq_number", seq))*/
 }
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.

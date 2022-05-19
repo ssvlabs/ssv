@@ -3,6 +3,8 @@ package validator
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sync"
 	"testing"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
@@ -21,7 +23,7 @@ import (
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/bloxapp/ssv/protocol/v1/utils/threshold"
 )
 
 var (
@@ -69,11 +71,14 @@ type testIBFT struct {
 	identifier      []byte
 	beacon          beacon.Beacon
 	share           *beaconprotocol.Share
+	signatureMu     sync.Mutex
+	signatures      map[message.OperatorID][]byte
 }
 
 func (t *testIBFT) Init() error {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
+	t.signatures = map[message.OperatorID][]byte{}
 	return nil
 }
 
@@ -150,14 +155,47 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message
 	retValueStruct.GetAttestation().Signature = signedAttestation.Signature
 	retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
 
+	t.signatureMu.Lock()
+	signatures := t.signatures
+	t.signatureMu.Unlock()
+
+	seen := map[string]struct{}{}
+	for _, sig := range signatures {
+		seen[hex.EncodeToString(sig)] = struct{}{}
+	}
+
+	if l := len(seen); l < signaturesCount {
+		return fmt.Errorf("not enough post consensus signatures, received %d", l)
+	}
+
+	signature, err := threshold.ReconstructSignatures(signatures)
+	if err != nil {
+		return errors.Wrap(err, "failed to reconstruct signatures")
+	}
+
+	blsSig := spec.BLSSignature{}
+	copy(blsSig[:], signature.Serialize()[:])
+	retValueStruct.GetAttestation().Signature = blsSig
+
 	return t.beacon.SubmitAttestation(retValueStruct.GetAttestation())
 }
 
 func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
+	signedMsg := &message.SignedMessage{}
+	if err := signedMsg.Decode(msg.GetData()); err != nil {
+		return errors.Wrap(err, "could not decode consensus signed message")
+	}
+
+	t.signatureMu.Lock()
+	t.signatures[signedMsg.GetSigners()[0]] = signedMsg.Signature
+	t.signatureMu.Unlock()
 	return nil
 }
 
 func (t *testIBFT) ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error {
+	t.signatureMu.Lock()
+	t.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
+	t.signatureMu.Unlock()
 	return nil
 }
 
