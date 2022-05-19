@@ -93,76 +93,43 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) erro
 }
 
 func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
-	prefix := make([]byte, len(i.prefix))
-	copy(prefix, i.prefix)
-	fIdentifier := i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType())
-	prefix = append(prefix, fIdentifier...)
-
-	var sequences [][]byte
-	for seq := from; seq <= to; seq++ {
-		sequences = append(sequences, i.key(decidedKey, uInt64ToByteSlice(uint64(seq))))
-	}
-
+	identifierV0 := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
 	msgs := make([]*message.SignedMessage, 0)
-	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
-		msg, err := i.fork.DecodeSignedMsg(obj.Value)
-		if err != nil {
-			return errors.Wrap(err, "could not decode signed message")
-		}
-		msgs = append(msgs, msg)
-		return nil
-	})
-	if err == nil && len(msgs) > 0 {
-		return msgs, nil
-	}
 
-	return msgs, err
-}
-
-func (i *ibftStorage) GetDecidedDeprecated(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
-	prefix := make([]byte, len(i.prefix))
-	copy(prefix, i.prefix)
-	prefix = append(prefix, identifier...)
-
-	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
-		sequences = append(sequences, i.key(decidedKey, uInt64ToByteSlice(uint64(seq))))
-	}
-
-	// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	msgs := make([]*message.SignedMessage, 0)
-	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
-		msg := message.SignedMessage{}
-		if err := json.Unmarshal(obj.Value, &msg); err != nil {
-			return errors.Wrap(err, "un-marshaling error")
-		}
-		msgs = append(msgs, &msg)
-		return nil
-	})
-	if err == nil && len(msgs) > 0 {
-		return msgs, nil
-	}
-
-	// v1 not found, get v0 identifier and unmarshal to v1
-	oldPrefix := make([]byte, len(i.prefix))
-	copy(oldPrefix, i.prefix)
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	oldPrefix = append(oldPrefix, oldIdentifier...)
-
-	msgs = make([]*message.SignedMessage, 0)
-	err = i.db.GetMany(oldPrefix, sequences, func(obj basedb.Obj) error {
-		ret := proto.SignedMessage{}
-		if err := json.Unmarshal(obj.Value, &ret); err != nil {
-			return errors.Wrap(err, "un-marshaling error")
-		}
-		msg, err := v0.ToSignedMessageV1(&ret)
+		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
+		val, found, err := i.get(decidedKey, identifier, uInt64ToByteSlice(uint64(seq)))
 		if err != nil {
-			return err
+			return msgs, err
 		}
-		msgs = append(msgs, msg)
-		return nil
-	})
-	return msgs, err
+		if found {
+			msg := message.SignedMessage{}
+			if err := json.Unmarshal(val, &msg); err != nil {
+				return msgs, errors.Wrap(err, "could not unmarshal signed message v1")
+			}
+			msgs = append(msgs, &msg)
+			continue
+		}
+
+		// v1 not found, try with v0 identifier
+		val, found, err = i.get(decidedKey, identifierV0, uInt64ToByteSlice(uint64(seq)))
+		if err != nil {
+			return msgs, err
+		}
+		if found {
+			ret := proto.SignedMessage{}
+			if err := json.Unmarshal(val, &ret); err != nil {
+				return msgs, errors.Wrap(err, "could not unmarshal signed message v0")
+			}
+			msg, err := v0.ToSignedMessageV1(&ret)
+			if err != nil {
+				return msgs, err
+			}
+			msgs = append(msgs, msg)
+		}
+	}
+
+	return msgs, nil
 }
 
 func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
