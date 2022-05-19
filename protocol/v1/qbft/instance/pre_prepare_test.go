@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 
@@ -104,7 +105,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 
@@ -173,7 +174,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 	instance.state.Height.Store(message.Height(0))
@@ -186,7 +187,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		MsgType:    message.ProposalMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       []byte(time.Now().Weekday().String()),
+		Data:       proposalDataToBytes(&message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
 	})
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
@@ -266,7 +267,6 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestPrePreparePipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
@@ -282,8 +282,10 @@ func TestPrePreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(message.Round(1))
-	instance.state.Identifier.Store([]byte("Lambda"))
+	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.Height.Store(message.Height(0))
+
+	instance.fork = testingFork(instance)
 
 	pipeline := instance.PrePrepareMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
@@ -306,4 +308,9 @@ func (s *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byt
 
 func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
+}
+
+func proposalDataToBytes(input *message.ProposalData) []byte {
+	ret, _ := json.Marshal(input)
+	return ret
 }

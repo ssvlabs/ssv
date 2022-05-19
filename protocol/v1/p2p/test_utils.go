@@ -3,12 +3,15 @@ package protcolp2p
 import (
 	crand "crypto/rand"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"encoding/json"
+	"sync"
+
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // MockMessageEvent is an abstraction used to push stream/pubsub messages
@@ -151,34 +154,34 @@ func (m *mockNetwork) registerHandler(protocol SyncProtocol, handlers ...Request
 }
 
 func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) {
-	panic("implement me")
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
-	//m.lock.Lock()
-	//defer m.lock.Unlock()
-	//
-	//spk := hex.EncodeToString(mid.GetValidatorPK())
-	//topic := spk
-	//
-	//syncMsg, err := json.Marshal(&message.SyncMessage{
-	//	Params: &message.SyncParams{
-	//		Identifier: mid,
-	//	},
-	//})
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//msg := &message.SSVMessage{
-	//	Data: syncMsg,
-	//	ID: mid,
-	//	MsgType: message.SSVSyncMsgType,
-	//}
-	//
-	//for _, pi := range m.topics[topic] {
-	//	if err := m.SendStreamMessage("last_decided", pi, msg); err != nil {
-	//		return nil, err
-	//	}
-	//}
+	spk := hex.EncodeToString(mid.GetValidatorPK())
+	topic := spk
+
+	syncMsg, err := json.Marshal(&message.SyncMessage{
+		Params: &message.SyncParams{
+			Identifier: mid,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	msg := &message.SSVMessage{
+		Data:    syncMsg,
+		ID:      mid,
+		MsgType: message.SSVSyncMsgType,
+	}
+
+	for _, pi := range m.topics[topic] {
+		if err := m.SendStreamMessage("last_decided", pi, msg); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil // TODO: fix returned value
 }
 
 func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, error) {
@@ -186,7 +189,34 @@ func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height
 }
 
 func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error) {
-	panic("implement me")
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	spk := hex.EncodeToString(mid.GetValidatorPK())
+	topic := spk
+
+	syncMsg, err := json.Marshal(&message.SyncMessage{
+		Params: &message.SyncParams{
+			Identifier: mid,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	msg := &message.SSVMessage{
+		Data:    syncMsg,
+		ID:      mid,
+		MsgType: message.SSVSyncMsgType,
+	}
+
+	for _, pi := range m.topics[topic] {
+		if err := m.SendStreamMessage("last_changeround", pi, msg); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil // TODO: fix returned value
 }
 
 func (m *mockNetwork) ReportValidation(message *message.SSVMessage, res MsgValidationResult) {

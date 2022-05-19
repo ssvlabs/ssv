@@ -140,6 +140,14 @@ func (h *handshaker) sendInfo(conn libp2pnetwork.Conn) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
+	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), HandshakeProtocol)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
+			conn.RemotePeer().String())
+	}
+	if len(res) == 0 {
+		return nil, errors.Errorf("peer %s doesn't supported handshake protocol", conn.RemotePeer().String())
+	}
 	resBytes, err := h.streams.Request(conn.RemotePeer(), HandshakeProtocol, data)
 	if err != nil {
 		return nil, err
