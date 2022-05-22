@@ -186,6 +186,7 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 		}(f.validators[i-1])
 		go func(store qbftstorage.QBFTStore) {
 			defer wg.Done()
+			<-time.After(time.Millisecond * 20)
 			if err := store.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
 				f.logger.Fatal("could not fork qbft store to v1", zap.Error(err))
 			}
@@ -226,7 +227,7 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 
 	h := from
 
-	for h < to {
+	for h <= to {
 		f.logger.Info("started instances")
 		for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
 			wg.Add(1)
