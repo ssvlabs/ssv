@@ -168,19 +168,19 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 
 	// forking
 	for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
-		wg.Add(2)
+		wg.Add(3)
 		go func(node network.P2PNetwork) {
 			defer wg.Done()
 			if err := node.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
-				f.logger.Fatal("could not fork network to v1", zap.Error(err))
+				f.logger.Panic("could not fork network to v1", zap.Error(err))
 			}
 			<-time.After(time.Second * 3)
 		}(ctx.LocalNet.Nodes[i-1])
-		go func(node validator.IValidator) {
+		go func(val validator.IValidator) {
 			defer wg.Done()
 			<-time.After(time.Millisecond * 10)
-			if err := node.OnFork(forksprotocol.V1ForkVersion); err != nil {
-				f.logger.Fatal("could not fork to v1", zap.Error(err))
+			if err := val.OnFork(forksprotocol.V1ForkVersion); err != nil {
+				f.logger.Panic("could not fork to v1", zap.Error(err))
 			}
 			<-time.After(time.Second * 3)
 		}(f.validators[i-1])
@@ -188,12 +188,17 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 			defer wg.Done()
 			<-time.After(time.Millisecond * 20)
 			if err := store.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
-				f.logger.Fatal("could not fork qbft store to v1", zap.Error(err))
+				f.logger.Panic("could not fork qbft store to v1", zap.Error(err))
 			}
 			<-time.After(time.Second * 3)
 		}(ctx.Stores[i-1])
 	}
 	wg.Wait()
+
+	f.logger.Debug("------ after fork, waiting 10 seconds...")
+	// waiting 10 sec after fork
+	<-time.After(time.Second * 10)
+	f.logger.Debug("------ starting instances")
 
 	// running instances post-fork
 	if err := f.startInstances(message.Height(7), message.Height(9)); err != nil {
