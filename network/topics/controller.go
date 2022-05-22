@@ -7,6 +7,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -26,13 +27,15 @@ type Controller interface {
 	// Subscribe subscribes to the given topic
 	Subscribe(name string) error
 	// Unsubscribe unsubscribes from the given topic
-	Unsubscribe(topicName string) error
+	Unsubscribe(topicName string, hard bool) error
 	// Peers returns the peers subscribed to the given topic
 	Peers(topicName string) ([]peer.ID, error)
 	// Topics lists all the available topics
 	Topics() []string
 	// Broadcast publishes the message on the given topic
 	Broadcast(topicName string, data []byte, timeout time.Duration) error
+
+	io.Closer
 }
 
 // PubsubMessageHandler handles incoming messages
@@ -72,6 +75,17 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler Pub
 	}
 
 	return ctrl
+}
+
+// Close implements io.Closer
+func (ctrl *topicsCtrl) Close() error {
+	topics := ctrl.ps.GetTopics()
+	for _, tp := range topics {
+		if err := ctrl.Unsubscribe(getTopicBaseName(tp), true); err != nil {
+			ctrl.logger.Warn("could not unsubscribe topic", zap.String("topic", tp), zap.Error(err))
+		}
+	}
+	return nil
 }
 
 // Peers returns the peers subscribed to the given topic
@@ -123,7 +137,8 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
-func (ctrl *topicsCtrl) Unsubscribe(name string) error {
+// if hard is true, we will unsubscribe the topic even if there are more subscribers.
+func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 	ctrl.topicsLock.Lock()
 	defer ctrl.topicsLock.Unlock()
 
@@ -134,8 +149,10 @@ func (ctrl *topicsCtrl) Unsubscribe(name string) error {
 	if subCount := tc.decSubCount(); subCount > 0 {
 		ctrl.logger.Debug("there are still active subscriptions for this topic",
 			zap.String("topic", name), zap.Int32("subCount", subCount))
-		ctrl.setTopicContainerUnsafe(name, tc)
-		return nil
+		if !hard {
+			ctrl.setTopicContainerUnsafe(name, tc)
+			return nil
+		}
 	}
 	ctrl.logger.Debug("unsubscribing topic", zap.String("topic", name))
 	delete(ctrl.containers, name)
@@ -265,8 +282,11 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidatorFactory != nil {
 		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
+		if err := ctrl.ps.UnregisterTopicValidator(name); err != nil {
+			ctrl.logger.Debug("could not unregister topic validator", zap.String("topic", name), zap.Error(err))
+		}
 		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
-			pubsub.WithValidatorConcurrency(512)) // TODO: find the best value for concurrency
+			pubsub.WithValidatorConcurrency(256)) // TODO: find the best value for concurrency
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
 			//ctrl.logger.Warn("could not register topic validator", zap.Error(err))

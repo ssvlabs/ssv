@@ -172,16 +172,16 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 			wg.Add(1)
 			go func(p *P, pk string) {
 				defer wg.Done()
-				require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk)))
+				require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk), false))
 				go func(p *P) {
 					<-time.After(time.Millisecond)
-					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk)))
+					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk), false))
 				}(p)
 				wg.Add(1)
 				go func(p *P) {
 					defer wg.Done()
 					<-time.After(time.Millisecond * 50)
-					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk)))
+					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk), false))
 				}(p)
 			}(p, pks[i])
 		}

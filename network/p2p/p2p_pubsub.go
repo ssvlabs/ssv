@@ -99,7 +99,7 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 		if topic == forksv1.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
-		if err := n.topicsCtrl.Unsubscribe(topic); err != nil {
+		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			//return errors.Wrap(err, "could not broadcast message")
 			return err
 		}

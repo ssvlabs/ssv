@@ -90,6 +90,9 @@ func (n *p2pNetwork) Close() error {
 	if err := n.idx.Close(); err != nil {
 		n.logger.Error("could not close index", zap.Error(err))
 	}
+	if err := n.topicsCtrl.Close(); err != nil {
+		n.logger.Error("could not close topics controller", zap.Error(err))
+	}
 	return n.host.Close()
 }
 

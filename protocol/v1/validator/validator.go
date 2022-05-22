@@ -21,7 +21,8 @@ type IValidator interface {
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
 	ProcessMsg(msg *message.SSVMessage) // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
-	OnFork(forkVersion forksprotocol.ForkVersion) error
+
+	forksprotocol.ForkHandler
 }
 
 type Options struct {
@@ -121,7 +122,9 @@ func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*
 // OnFork updates all QFBT controllers with the new fork version
 func (v *Validator) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	for _, ctrl := range v.ibfts {
-		return ctrl.OnFork(forkVersion)
+		if err := ctrl.OnFork(forkVersion); err != nil {
+			return err
+		}
 	}
 	return nil
 }
