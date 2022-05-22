@@ -105,7 +105,6 @@ func TestAggregatedMsg(t *testing.T) {
 	}
 }
 
-// TODO(nkryuchkov): fix this test
 func TestCommittedAggregatedMsg(t *testing.T) {
 	t.Run("v0", func(t *testing.T) {
 		committedAggregatedMsg(t, forksprotocol.V0ForkVersion.String())
