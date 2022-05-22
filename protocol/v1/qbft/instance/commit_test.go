@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -42,19 +41,19 @@ func TestAggregatedMsg(t *testing.T) {
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       []byte("value"),
-	})
+	}, forksprotocol.V0ForkVersion.String())
 	msg2 := SignMsg(t, 2, sks[2], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       []byte("value"),
-	})
+	}, forksprotocol.V0ForkVersion.String())
 	msg3 := SignMsg(t, 3, sks[3], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       []byte("value"),
-	})
+	}, forksprotocol.V0ForkVersion.String())
 
 	tests := []struct {
 		name            string
@@ -108,17 +107,26 @@ func TestAggregatedMsg(t *testing.T) {
 
 // TODO(nkryuchkov): fix this test
 func TestCommittedAggregatedMsg(t *testing.T) {
+	t.Run("v0", func(t *testing.T) {
+		committedAggregatedMsg(t, forksprotocol.V0ForkVersion.String())
+	})
+	t.Run("v1", func(t *testing.T) {
+		committedAggregatedMsg(t, forksprotocol.V1ForkVersion.String())
+	})
+}
+
+func committedAggregatedMsg(t *testing.T, forkVersion string) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		CommitMessages: inmem.New(3, 2),
 		Config:         qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{Committee: nodes},
-		state:          &qbft.State{},
+		state: &qbft.State{
+			Round:         qbft.NewRound(message.Round(1)),
+			PreparedValue: qbft.NewByteValue([]byte(nil)),
+			PreparedRound: qbft.NewRound(message.Round(0)),
+		},
 	}
-
-	instance.state.Round.Store(message.Round(1))
-	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(message.Round(0))
 
 	// no decided msg
 	_, err := instance.CommittedAggregatedMsg()
@@ -137,15 +145,15 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	}
 
 	commitData, err := consensusMessage.GetCommitData()
 	require.NoError(t, err)
 
-	instance.CommitMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage), commitData.Data)
-	instance.CommitMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage), commitData.Data)
-	instance.CommitMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage, forkVersion), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage, forkVersion), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage, forkVersion), commitData.Data)
 
 	instance.decidedMsg, err = AggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 	require.NoError(t, err)
@@ -160,20 +168,20 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value2")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value2")}),
 	}
 
 	commitData, err = m.GetCommitData()
 	require.NoError(t, err)
 
-	instance.CommitMessages.AddMessage(SignMsg(t, 3, sks[3], m), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, 3, sks[3], m, forkVersion), commitData.Data)
 	msg, err = instance.CommittedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
 
 	// test verification
 	share := beacon.Share{Committee: nodes}
-	require.NoError(t, share.VerifySignedMessage(msg, forksprotocol.V1ForkVersion.String()))
+	require.NoError(t, share.VerifySignedMessage(msg, forkVersion))
 }
 
 func TestCommitPipeline(t *testing.T) {
@@ -210,7 +218,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Round:      3,
 			Identifier: []byte(identifier),
 			Data:       []byte("value"),
-		}))
+		}, forksprotocol.V0ForkVersion.String()))
 	}
 	decided, err := AggregateMessages(sigs)
 	require.NoError(t, err)
@@ -231,7 +239,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Round:      3,
 				Identifier: []byte(identifier),
 				Data:       []byte("value"),
-			}),
+			}, forksprotocol.V0ForkVersion.String()),
 		},
 		{
 			"invalid",
@@ -244,7 +252,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 					Round:      3,
 					Identifier: []byte(identifier),
 					Data:       []byte("value"),
-				})
+				}, forksprotocol.V0ForkVersion.String())
 				msg.Signature = []byte("dummy")
 				return msg
 			}(),
@@ -259,7 +267,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("xxx_ATTESTER"),
 				Data:       []byte("value"),
-			}),
+			}, forksprotocol.V0ForkVersion.String()),
 		},
 	}
 	for _, test := range tests {
@@ -305,7 +313,8 @@ func AggregateMessages(sigs []*message.SignedMessage) (*message.SignedMessage, e
 	return decided, nil
 }
 
-func commitDataToBytes(input *message.CommitData) []byte {
-	ret, _ := json.Marshal(input)
+func commitDataToBytes(t *testing.T, input *message.CommitData) []byte {
+	ret, err := input.Encode()
+	require.NoError(t, err)
 	return ret
 }
