@@ -142,6 +142,8 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 	ctrl.topicsLock.Lock()
 	defer ctrl.topicsLock.Unlock()
 
+	name = getTopicName(name)
+
 	tc := ctrl.getTopicContainerUnsafe(name)
 	if tc == nil {
 		return nil
@@ -282,9 +284,8 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidatorFactory != nil {
 		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
-		if err := ctrl.ps.UnregisterTopicValidator(name); err != nil {
-			ctrl.logger.Debug("could not unregister topic validator", zap.String("topic", name), zap.Error(err))
-		}
+		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
+		_ = ctrl.ps.UnregisterTopicValidator(name)
 		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
 			pubsub.WithValidatorConcurrency(256)) // TODO: find the best value for concurrency
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
