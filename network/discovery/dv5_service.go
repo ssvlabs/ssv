@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -111,8 +112,8 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // Bootstrap start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval)
-	//dvs.limitNodeFilter, dvs.badNodeFilter)
+	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
+		dvs.limitNodeFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
@@ -241,10 +242,10 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 //	}, time.Millisecond*100, dvs.badNodeFilter)
 //}
 
-//// limitNodeFilter checks if limit exceeded
-//func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-//	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
-//}
+// limitNodeFilter checks if limit exceeded
+func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
+	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
+}
 
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
