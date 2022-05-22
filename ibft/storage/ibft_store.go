@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	forksv0 "github.com/bloxapp/ssv/ibft/storage/forks/v0"
 	"log"
 	"sync"
 
@@ -77,6 +78,7 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
+// it tries to read current fork items, and if not found it tries to read v0 items
 func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
@@ -86,7 +88,16 @@ func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.Si
 		return nil, err
 	}
 	if !found {
-		return nil, nil
+		// trying v0 if v1 not found
+		identifierV0 := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
+		val, found, err = i.get(highestKey, identifierV0)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, nil
+		}
+		return forksv0.ForkV0{}.DecodeSignedMsg(val)
 	}
 	return i.fork.DecodeSignedMsg(val)
 }
