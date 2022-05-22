@@ -671,7 +671,6 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 }
 
-// TODO(nkryuchkov): fix this test
 func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
@@ -686,7 +685,7 @@ func TestHighestPrepared(t *testing.T) {
 		}},
 	}
 
-	msg := &message.ConsensusMessage{
+	msg1 := &message.ConsensusMessage{
 		MsgType:    message.RoundChangeMsgType,
 		Height:     1,
 		Round:      3,
@@ -694,18 +693,26 @@ func TestHighestPrepared(t *testing.T) {
 		Data:       changeRoundDataToBytes(&message.RoundChangeData{Round: 1, PreparedValue: inputValue}),
 	}
 
-	roundChangeData, err := msg.GetRoundChangeData()
+	msg2 := &message.ConsensusMessage{
+		MsgType:    message.RoundChangeMsgType,
+		Height:     1,
+		Round:      3,
+		Identifier: []byte("Lambda"),
+		Data:       changeRoundDataToBytes(&message.RoundChangeData{Round: 2, PreparedValue: append(inputValue, []byte("highest")...)}),
+	}
+
+	roundChangeData, err := msg1.GetRoundChangeData()
 	require.NoError(t, err)
 
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
 		Signers:   []message.OperatorID{message.OperatorID(1)},
-		Message:   msg,
+		Message:   msg1,
 	}, roundChangeData.PreparedValue)
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
 		Signers:   []message.OperatorID{message.OperatorID(2)},
-		Message:   msg,
+		Message:   msg2,
 	}, roundChangeData.PreparedValue)
 
 	// test one higher than other
@@ -719,7 +726,7 @@ func TestHighestPrepared(t *testing.T) {
 	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
 		Signature: nil,
 		Signers:   []message.OperatorID{message.OperatorID(2)},
-		Message:   msg,
+		Message:   msg2,
 	}, roundChangeData.PreparedValue)
 
 	notPrepared, highest, err = instance.HighestPrepared(3)
