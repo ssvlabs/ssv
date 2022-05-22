@@ -2,7 +2,6 @@ package instance
 
 import (
 	"encoding/json"
-	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"strconv"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ibft/proto"
+	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -148,7 +148,6 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	})
 }
 
-// TODO(nkryuchkov): fix this test
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
 	leader, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)
