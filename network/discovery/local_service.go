@@ -117,6 +117,6 @@ func (md *localDiscovery) Close() error {
 	if err := md.svc.Close(); err != nil {
 		return err
 	}
-	md.peers = nil
+	md.peers = make(map[string]PeerEvent)
 	return nil
 }

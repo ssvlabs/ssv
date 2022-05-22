@@ -24,6 +24,7 @@ type InstanceStore interface {
 	GetCurrentInstance(identifier message.Identifier) (*qbft.State, bool, error)
 }
 
+// ChangeRoundStore manages change round data
 type ChangeRoundStore interface {
 	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
 	GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error)

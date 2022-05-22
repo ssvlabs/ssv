@@ -150,7 +150,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 		//logger := zap.L().With(zap.String("who", who))
 		return logger
 	}
-	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n/2 - 1, true)
+	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n/2-1, true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -214,17 +214,17 @@ func (r *dummyRouter) Route(message message.SSVMessage) {
 		zap.Uint64("count", c))
 }
 
-func dummyMsgs(h int, pks ...string) ([]*message.SSVMessage, error) {
-	var msgs []*message.SSVMessage
-	for _, pk := range pks {
-		msg, err := dummyMsg(pk, h)
-		if err != nil {
-			return nil, err
-		}
-		msgs = append(msgs, msg)
-	}
-	return msgs, nil
-}
+//func dummyMsgs(h int, pks ...string) ([]*message.SSVMessage, error) {
+//	var msgs []*message.SSVMessage
+//	for _, pk := range pks {
+//		msg, err := dummyMsg(pk, h)
+//		if err != nil {
+//			return nil, err
+//		}
+//		msgs = append(msgs, msg)
+//	}
+//	return msgs, nil
+//}
 
 func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)

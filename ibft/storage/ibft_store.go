@@ -4,10 +4,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"log"
+	"sync"
 
+	v0 "github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/ibft/storage/forks"
+	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -43,58 +47,62 @@ func init() {
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
-	prefix []byte
-	db     basedb.IDb
-	logger *zap.Logger
+	prefix   []byte
+	db       basedb.IDb
+	logger   *zap.Logger
+	fork     forks.Fork
+	forkLock *sync.RWMutex
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, logger *zap.Logger, prefix string) qbftstorage.QBFTStore {
+func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
 	ibft := &ibftStorage{
-		prefix: []byte(prefix),
-		db:     db,
-		logger: logger,
+		prefix:   []byte(prefix),
+		db:       db,
+		logger:   logger,
+		fork:     forksfactory.NewFork(forkVersion),
+		forkLock: &sync.RWMutex{},
 	}
 	return ibft
 }
 
+func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	i.forkLock.Lock()
+	defer i.forkLock.Unlock()
+
+	logger := i.logger.With(zap.String("where", "OnFork"))
+	logger.Info("forking ibft storage")
+	i.fork = forksfactory.NewFork(forkVersion)
+	return nil
+}
+
 // GetLastDecided gets a signed message for an ibft instance which is the highest
 func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
-	// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	val, found, err := i.get(highestKey, identifier)
-	if found && err == nil {
-		// old one not found, just unmarshal v1
-		ret := &message.SignedMessage{}
-		if err := json.Unmarshal(val, ret); err == nil { // if err, just continue to v0
-			return ret, nil
-		}
-	}
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
 
-	// v1 not found, try with v0 identifier
-	oldIdentifier := format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String())
-	val, found, err = i.get(highestKey, []byte(oldIdentifier))
-	if !found {
-		return nil, nil
-	}
+	val, found, err := i.get(highestKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		return nil, err
 	}
-	// old val found, unmarshal with old struct and convert to v1
-	ret := &proto.SignedMessage{}
-	if err := json.Unmarshal(val, ret); err != nil {
-		return nil, errors.Wrap(err, "un-marshaling error")
+	if !found {
+		return nil, nil
 	}
-	return v0.ToSignedMessageV1(ret)
+	return i.fork.DecodeSignedMsg(val)
 }
 
 // SaveLastDecided saves a signed message for an ibft instance which is currently highest
 func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	for _, signedMsg := range signedMsgs {
-		value, err := signedMsg.Encode()
+		identifier := i.fork.Identifier(signedMsg.Message.Identifier.GetValidatorPK(), signedMsg.Message.Identifier.GetRoleType())
+		value, err := i.fork.EncodeSignedMsg(signedMsg)
 		if err != nil {
-			return errors.Wrap(err, "marshaling error")
+			return errors.Wrap(err, "could not encode signed message")
 		}
-		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
+		if err = i.save(value, highestKey, identifier); err != nil {
 			return err
 		}
 		reportHighestDecided(signedMsg)
@@ -104,60 +112,61 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*message.SignedMessage) erro
 }
 
 func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error) {
-	prefix := make([]byte, len(i.prefix))
-	copy(prefix, i.prefix)
-	prefix = append(prefix, identifier...)
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
 
-	var sequences [][]byte
-	for seq := from; seq <= to; seq++ {
-		sequences = append(sequences, i.key(decidedKey, uInt64ToByteSlice(uint64(seq))))
-	}
-
-	// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
+	identifierV0 := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
 	msgs := make([]*message.SignedMessage, 0)
-	err := i.db.GetMany(prefix, sequences, func(obj basedb.Obj) error {
-		msg := message.SignedMessage{}
-		if err := json.Unmarshal(obj.Value, &msg); err != nil {
-			return errors.Wrap(err, "un-marshaling error")
+
+	for seq := from; seq <= to; seq++ {
+		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
+		val, found, err := i.get(decidedKey, identifier, uInt64ToByteSlice(uint64(seq)))
+		if err != nil {
+			return msgs, err
 		}
-		msgs = append(msgs, &msg)
-		return nil
-	})
-	if err == nil && len(msgs) > 0 {
-		return msgs, nil
+		if found {
+			msg := message.SignedMessage{}
+			if err := json.Unmarshal(val, &msg); err != nil {
+				return msgs, errors.Wrap(err, "could not unmarshal signed message v1")
+			}
+			msgs = append(msgs, &msg)
+			continue
+		}
+
+		// v1 not found, try with v0 identifier
+		val, found, err = i.get(decidedKey, identifierV0, uInt64ToByteSlice(uint64(seq)))
+		if err != nil {
+			return msgs, err
+		}
+		if found {
+			ret := proto.SignedMessage{}
+			if err := json.Unmarshal(val, &ret); err != nil {
+				return msgs, errors.Wrap(err, "could not unmarshal signed message v0")
+			}
+			msg, err := v0.ToSignedMessageV1(&ret)
+			if err != nil {
+				return msgs, err
+			}
+			msgs = append(msgs, msg)
+		}
 	}
 
-	// v1 not found, get v0 identifier and unmarshal to v1
-	oldPrefix := make([]byte, len(i.prefix))
-	copy(oldPrefix, i.prefix)
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	oldPrefix = append(oldPrefix, oldIdentifier...)
-
-	msgs = make([]*message.SignedMessage, 0)
-	err = i.db.GetMany(oldPrefix, sequences, func(obj basedb.Obj) error {
-		ret := proto.SignedMessage{}
-		if err := json.Unmarshal(obj.Value, &ret); err != nil {
-			return errors.Wrap(err, "un-marshaling error")
-		}
-		msg, err := v0.ToSignedMessageV1(&ret)
-		if err != nil {
-			return err
-		}
-		msgs = append(msgs, msg)
-		return nil
-	})
-	return msgs, err
+	return msgs, nil
 }
 
 func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
 	return i.db.SetMany(i.prefix, len(signedMsg), func(j int) (basedb.Obj, error) {
 		msg := signedMsg[j]
 		k := i.key(decidedKey, uInt64ToByteSlice(uint64(msg.Message.Height)))
-		key := append(msg.Message.Identifier, k...)
-		value, err := msg.Encode()
+		value, err := i.fork.EncodeSignedMsg(msg)
 		if err != nil {
 			return basedb.Obj{}, err
 		}
+		identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
+		key := append(identifier, k...)
 		return basedb.Obj{Key: key, Value: value}, nil
 	})
 }
@@ -187,51 +196,39 @@ func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.S
 
 // SaveLastChangeRoundMsg updates last change round message
 func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
-	value, err := msg.Encode()
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
+	signedMsg, err := i.fork.EncodeSignedMsg(msg)
 	if err != nil {
-		return errors.Wrap(err, "marshaling error")
+		return errors.Wrap(err, "could not encode signed message")
 	}
-	return i.save(value, lastChangeRoundKey, msg.Message.Identifier)
+	return i.save(signedMsg, lastChangeRoundKey, identifier)
 }
 
 // GetLastChangeRoundMsg returns last known change round message
 func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	val, found, err := i.get(lastChangeRoundKey, identifier)
-	if found && err == nil {
-		ret := &message.SignedMessage{}
-		if err := ret.Decode(val); err == nil {
-			return ret, nil
-		}
-	}
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
 
-	// v1 not found, try with v0 identifier
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	val, found, err = i.get(lastChangeRoundKey, oldIdentifier)
-	if !found {
-		return nil, nil
-	}
+	val, found, err := i.get(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
 	if err != nil {
 		return nil, err
 	}
-	// old val found, unmarshal with old struct and convert to v1
-	ret := &proto.SignedMessage{}
-	if err := json.Unmarshal(val, ret); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal signed message")
+	if !found {
+		return nil, nil
 	}
-	return v0.ToSignedMessageV1(ret)
+	return i.fork.DecodeSignedMsg(val)
 }
 
 // CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
 func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	err := i.delete(lastChangeRoundKey, identifier)
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
-	}
-	// doing the same for v0
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-	err = i.delete(lastChangeRoundKey, oldIdentifier)
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	forkIdentifier := i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType())
+	err := i.delete(lastChangeRoundKey, forkIdentifier)
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}

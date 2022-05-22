@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
+	"github.com/bloxapp/ssv/ibft/conversion"
+	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
+	"github.com/bloxapp/ssv/storage/collections"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -87,33 +92,33 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 	}
 	f.msgs = msgs
 
-	//// using old ibft storage to populate db with v0 data
-	//var v0Stores []collections.Iibft
-	//for i, _ := range ctx.Stores {
-	//	v0Store := collections.NewIbft(ctx.DBs[i], f.logger.With(zap.String("who", fmt.Sprintf("qbft-store-%d", i+1))), "attestations")
-	//	v0Stores = append(v0Stores, &v0Store)
-	//}
-	//v0Fork := &v0.ForkV0{}
-	//for _, msg := range msgs {
-	//	v0Msg, err := conversion.ToSignedMessageV0(msg, v0Fork.Identifier(msg.Message.Identifier.GetValidatorPK(),
-	//		msg.Message.Identifier.GetRoleType()))
-	//	if err != nil {
-	//		return errors.Wrap(err, "could not convert message to v0")
-	//	}
-	//	for i, store := range v0Stores {
-	//		if i == 0 { // skip first store
-	//			continue
-	//		}
-	//		if err := store.SaveDecided(v0Msg); err != nil {
-	//			return errors.Wrap(err, "could not save decided messages")
-	//		}
-	//		// save highest
-	//		err := store.SaveHighestDecidedInstance(v0Msg)
-	//		if err != nil {
-	//			return errors.Wrap(err, "could not save decided messages")
-	//		}
-	//	}
-	//}
+	// using old ibft storage to populate db with v0 data
+	var v0Stores []collections.Iibft
+	for i := range ctx.Stores {
+		v0Store := collections.NewIbft(ctx.DBs[i], f.logger.With(zap.String("who", fmt.Sprintf("qbft-store-%d", i+1))), "attestations")
+		v0Stores = append(v0Stores, &v0Store)
+	}
+	for _, msg := range msgs {
+		identifier := format.IdentifierFormat(msg.Message.Identifier.GetValidatorPK(),
+			msg.Message.Identifier.GetRoleType().String())
+		v0Msg, err := conversion.ToSignedMessageV0(msg, []byte(identifier))
+		if err != nil {
+			return errors.Wrap(err, "could not convert message to v0")
+		}
+		for i, store := range v0Stores {
+			if i == 0 { // skip first store
+				continue
+			}
+			if err := store.SaveDecided(v0Msg); err != nil {
+				return errors.Wrap(err, "could not save decided messages")
+			}
+			// save highest
+			err := store.SaveHighestDecidedInstance(v0Msg)
+			if err != nil {
+				return errors.Wrap(err, "could not save decided messages")
+			}
+		}
+	}
 
 	// setting up routers
 	routers := make([]*runner.Router, f.NumOfOperators())
@@ -157,20 +162,35 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	}
 
 	// running instances pre-fork
-	if err := f.startInstances(message.Height(0), message.Height(6)); err != nil {
+	if err := f.startInstances(message.Height(5), message.Height(6)); err != nil {
 		return errors.Wrap(err, "could not start instances")
 	}
 
 	// forking
 	for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
-		wg.Add(1)
+		wg.Add(2)
+		go func(node network.P2PNetwork) {
+			defer wg.Done()
+			if err := node.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
+				f.logger.Fatal("could not fork network to v1", zap.Error(err))
+			}
+			<-time.After(time.Second * 3)
+		}(ctx.LocalNet.Nodes[i-1])
 		go func(node validator.IValidator) {
 			defer wg.Done()
+			<-time.After(time.Millisecond * 10)
 			if err := node.OnFork(forksprotocol.V1ForkVersion); err != nil {
 				f.logger.Fatal("could not fork to v1", zap.Error(err))
 			}
 			<-time.After(time.Second * 3)
 		}(f.validators[i-1])
+		go func(store qbftstorage.QBFTStore) {
+			defer wg.Done()
+			if err := store.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
+				f.logger.Fatal("could not fork qbft store to v1", zap.Error(err))
+			}
+			<-time.After(time.Second * 3)
+		}(ctx.Stores[i-1])
 	}
 	wg.Wait()
 

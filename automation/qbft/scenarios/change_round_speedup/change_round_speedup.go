@@ -111,6 +111,9 @@ func (r *changeRoundSpeedupScenario) Execute(ctx *runner.ScenarioContext) error 
 }
 
 func (r *changeRoundSpeedupScenario) PostExecution(ctx *runner.ScenarioContext) error {
+	// using timeout to avoid flakiness
+	<-time.After(time.Second * 2)
+
 	for i := range ctx.Stores[:len(ctx.Stores)-1] {
 		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(1), message.Height(1))
 		if err != nil {

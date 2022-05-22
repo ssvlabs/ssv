@@ -57,22 +57,23 @@ func (s *SignatureState) start(logger *zap.Logger, height message.Height, signat
 	s.duty = duty
 
 	// start timer
-	s.timer = time.NewTimer(s.SignatureCollectionTimeout)
+	s.timer = time.AfterFunc(s.SignatureCollectionTimeout, func() {
+		if !s.state.CAS(StateRunning, StateTimeout) {
+			logger.Debug("signatures were collected before timeout", zap.Int("received", len(s.signatures)))
+			return
+		}
+		logger.Error("could not process post consensus signature", zap.Error(errors.Errorf("timed out waiting for post consensus signatures, received %d", len(s.signatures))))
+	})
+	//s.timer = time.NewTimer(s.SignatureCollectionTimeout)
 	s.state.Store(StateRunning)
 	// init map
 	s.signatures = make(map[message.OperatorID][]byte, s.sigCount)
-
-	go func() {
-		<-s.timer.C
-		s.state.Store(StateTimeout)
-		logger.Error("could not process post consensus signature", zap.Error(errors.Errorf("timed out waiting for post consensus signatures, received %d", len(s.signatures))))
-	}()
 }
 
 // stopTimer stops timer from firing and drain the channel. also set state to sleep
 func (s *SignatureState) stopTimer() {
-	s.timer.Stop()
 	s.state.Store(StateSleep)
+	s.timer.Stop()
 }
 
 func (s *SignatureState) clear() {
