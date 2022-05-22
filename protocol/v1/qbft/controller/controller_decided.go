@@ -117,7 +117,7 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
 	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
-	if len(knownMsg.Signers) < c.ValidatorShare.CommitteeSize() && len(msg.GetSigners()) > len(knownMsg.Signers) {
+	if len(msg.GetSigners()) > len(knownMsg.Signers) {
 		return false
 	}
 	return true

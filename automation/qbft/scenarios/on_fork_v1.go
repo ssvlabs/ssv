@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/collections"
@@ -93,7 +94,7 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 
 	// using old ibft storage to populate db with v0 data
 	var v0Stores []collections.Iibft
-	for i, _ := range ctx.Stores {
+	for i := range ctx.Stores {
 		v0Store := collections.NewIbft(ctx.DBs[i], f.logger.With(zap.String("who", fmt.Sprintf("qbft-store-%d", i+1))), "attestations")
 		v0Stores = append(v0Stores, &v0Store)
 	}
@@ -183,13 +184,13 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 			}
 			<-time.After(time.Second * 3)
 		}(f.validators[i-1])
-		//go func(store qbftstorage.QBFTStore) {
-		//	defer wg.Done()
-		//	if err := store.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
-		//		f.logger.Fatal("could not fork qbft store to v1", zap.Error(err))
-		//	}
-		//	<-time.After(time.Second * 3)
-		//}(ctx.Stores[i-1])
+		go func(store qbftstorage.QBFTStore) {
+			defer wg.Done()
+			if err := store.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
+				f.logger.Fatal("could not fork qbft store to v1", zap.Error(err))
+			}
+			<-time.After(time.Second * 3)
+		}(ctx.Stores[i-1])
 	}
 	wg.Wait()
 

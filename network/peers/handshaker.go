@@ -16,10 +16,11 @@ import (
 const (
 	// HandshakeProtocol is the protocol.ID used for handshake
 	HandshakeProtocol = "/ssv/handshake/0.0.1"
-
+	// userAgentKey is the key used by libp2p to save user agent
 	userAgentKey = "AgentVersion"
 )
 
+// ErrHandshakeInProcess is thrown when and handshake process for that peer is already running
 var ErrHandshakeInProcess = errors.New("handshake already in process")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them

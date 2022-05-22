@@ -19,15 +19,17 @@ type Fork interface {
 }
 
 type nodeRecord interface {
-	// DecorateNode decorates the given node's record
+	// DecorateNode will enrich the local node record with more entries, according to current fork
 	DecorateNode(node *enode.LocalNode, args map[string]interface{}) error
 }
 
 type pubSubMapping interface {
+	// ValidatorTopicID maps the given validator public key to the corresponding pubsub topic
 	ValidatorTopicID(pk []byte) []string
 }
 
 type pubSubConfig interface {
+	// MsgID is the msgID function to use for pubsub
 	MsgID() MsgIDFunc
 }
 
@@ -37,7 +39,9 @@ type libp2pConfig interface {
 }
 
 type encoding interface {
+	// EncodeNetworkMsg encodes the given message
 	EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error)
+	// DecodeNetworkMsg decodes the given message
 	DecodeNetworkMsg(data []byte) (*message.SSVMessage, error)
 }
 

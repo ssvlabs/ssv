@@ -7,21 +7,19 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
-	"sync/atomic"
 	"time"
 )
 
 var (
 	defaultDiscoveryInterval = time.Second
-	publishENRTimeout        = time.Minute
+	//publishENRTimeout        = time.Minute
 
-	publishStateReady   = int32(0)
-	publishStatePending = int32(1)
+	publishStateReady = int32(0)
+	//publishStatePending = int32(1)
 )
 
 // NodeProvider is an interface for managing ENRs
@@ -226,27 +224,27 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 	return nil
 }
 
-// publishENR publishes the new ENR across the network
-func (dvs *DiscV5Service) publishENR() {
-	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-	defer done()
-	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
-		// pending
-		return
-	}
-	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
-	dvs.discover(ctx, func(e PeerEvent) {
-		err := dvs.dv5Listener.Ping(e.Node)
-		if err != nil {
-			dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
-		}
-	}, time.Millisecond*100, dvs.badNodeFilter)
-}
+//// publishENR publishes the new ENR across the network
+//func (dvs *DiscV5Service) publishENR() {
+//	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+//	defer done()
+//	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
+//		// pending
+//		return
+//	}
+//	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
+//	dvs.discover(ctx, func(e PeerEvent) {
+//		err := dvs.dv5Listener.Ping(e.Node)
+//		if err != nil {
+//			dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
+//		}
+//	}, time.Millisecond*100, dvs.badNodeFilter)
+//}
 
-// limitNodeFilter checks if limit exceeded
-func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
-}
+//// limitNodeFilter checks if limit exceeded
+//func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
+//	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
+//}
 
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
