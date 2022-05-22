@@ -139,8 +139,8 @@ func (s Signature) Aggregate(other Signature) (Signature, error) {
 }
 
 // ComputeSigningRoot computes the signing root
-func ComputeSigningRoot(data Root, domain SignatureDomain) ([]byte, error) {
-	dataRoot, err := data.GetRoot("")
+func ComputeSigningRoot(data Root, domain SignatureDomain, forkVersion string) ([]byte, error) {
+	dataRoot, err := data.GetRoot(forkVersion)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get root from Root")
 	}

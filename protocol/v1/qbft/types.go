@@ -129,10 +129,6 @@ func (s *State) GetPreparedRound() message.Round {
 	return message.Round(0)
 }
 
-func (s *State) SetRound(newRound message.Round) {
-	s.Round.Store(newRound)
-}
-
 func (s *State) GetIdentifier() message.Identifier {
 	if identifier, ok := s.Identifier.Load().(message.Identifier); ok {
 		return identifier
@@ -154,6 +150,12 @@ func (s *State) GetPreparedValue() []byte {
 	}
 
 	return nil
+}
+
+func NewByteValue(val []byte) atomic.Value {
+	value := atomic.Value{}
+	value.Store(val)
+	return value
 }
 
 // InstanceConfig is the configuration of the instance

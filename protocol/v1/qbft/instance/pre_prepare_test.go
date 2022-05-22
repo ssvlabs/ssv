@@ -2,6 +2,7 @@ package instance
 
 import (
 	"encoding/json"
+	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"strconv"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 
 	t.Run("not quorum, not justified", func(t *testing.T) {
 		// change round no quorum
-		msg := SignMsg(t, 1, secretKeys[1], consensusMessage)
+		msg := SignMsg(t, 1, secretKeys[1], consensusMessage, forksprotocol2.V0ForkVersion.String())
 		instance.ChangeRoundMessages.AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, err
@@ -66,7 +67,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Round:      2,
 			Identifier: []byte("Lambda"),
 			Data:       value,
-		})
+		}, forksprotocol2.V0ForkVersion.String())
 		instance.PrePrepareMessages.AddMessage(msg, roundChangeData.PreparedValue)
 		err := instance.JustifyPrePrepare(2, value)
 		require.EqualError(t, err, "no change round quorum")
@@ -74,9 +75,9 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 
 	t.Run("change round quorum, justified", func(t *testing.T) {
 		// test justified change round
-		msg := SignMsg(t, 2, secretKeys[2], consensusMessage)
+		msg := SignMsg(t, 2, secretKeys[2], consensusMessage, forksprotocol2.V0ForkVersion.String())
 		instance.ChangeRoundMessages.AddMessage(msg, roundChangeData.PreparedValue)
-		msg = SignMsg(t, 3, secretKeys[3], consensusMessage)
+		msg = SignMsg(t, 3, secretKeys[3], consensusMessage, forksprotocol2.V0ForkVersion.String())
 		instance.ChangeRoundMessages.AddMessage(msg, roundChangeData.PreparedValue)
 
 		err := instance.JustifyPrePrepare(2, value)
@@ -121,10 +122,10 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 
 	t.Run("no change round quorum, not justified", func(t *testing.T) {
 		// change round no quorum
-		msg := SignMsg(t, 1, secretKeys[1], consensusMessage)
+		msg := SignMsg(t, 1, secretKeys[1], consensusMessage, forksprotocol2.V0ForkVersion.String())
 		instance.ChangeRoundMessages.AddMessage(msg, roundChangeData.PreparedValue)
 
-		msg = SignMsg(t, 2, secretKeys[2], consensusMessage)
+		msg = SignMsg(t, 2, secretKeys[2], consensusMessage, forksprotocol2.V0ForkVersion.String())
 		instance.ChangeRoundMessages.AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, can't justify
@@ -134,7 +135,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 
 	t.Run("change round quorum, justified", func(t *testing.T) {
 		// test justified change round
-		msg := SignMsg(t, 3, secretKeys[3], consensusMessage)
+		msg := SignMsg(t, 3, secretKeys[3], consensusMessage, forksprotocol2.V0ForkVersion.String())
 		instance.ChangeRoundMessages.AddMessage(msg, roundChangeData.PreparedValue)
 
 		// quorum achieved, can justify
@@ -188,7 +189,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Round:      1,
 		Identifier: []byte("Lambda"),
 		Data:       proposalDataToBytes(&message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
-	})
+	}, forksprotocol2.V0ForkVersion.String())
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
@@ -237,7 +238,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	roundChangeData, err := msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 1, secretKeys[1], msg), roundChangeData.PreparedValue)
+	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 1, secretKeys[1], msg, forksprotocol2.V0ForkVersion.String()), roundChangeData.PreparedValue)
 
 	msg = &message.ConsensusMessage{
 		MsgType:    message.RoundChangeMsgType,
@@ -247,7 +248,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 2, secretKeys[2], msg), roundChangeData.PreparedValue)
+	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 2, secretKeys[2], msg, forksprotocol2.V0ForkVersion.String()), roundChangeData.PreparedValue)
 
 	err = instance.JustifyPrePrepare(2, nil)
 	require.EqualError(t, err, "no change round quorum")
@@ -261,7 +262,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 3, secretKeys[3], msg), roundChangeData.PreparedValue)
+	instance.ChangeRoundMessages.AddMessage(SignMsg(t, 3, secretKeys[3], msg, forksprotocol2.V0ForkVersion.String()), roundChangeData.PreparedValue)
 
 	err = instance.JustifyPrePrepare(2, nil)
 	require.NoError(t, err)

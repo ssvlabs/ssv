@@ -1,6 +1,7 @@
 package instance
 
 import (
+	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -50,9 +51,9 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	prepareData, err := consensusMessage1.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage1), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage1), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage1), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
 
 	// test aggregation
 	msg, err := instance.PreparedAggregatedMsg()
@@ -66,7 +67,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value2")}),
 	}
-	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage2), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage2, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)

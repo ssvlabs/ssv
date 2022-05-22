@@ -3,6 +3,7 @@ package ekm
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -135,7 +136,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), "")
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.V0ForkVersion.String())
 		require.NoError(t, err)
 
 		// verify
@@ -164,7 +165,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), "")
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.V0ForkVersion.String())
 		require.NoError(t, err)
 
 		// verify
