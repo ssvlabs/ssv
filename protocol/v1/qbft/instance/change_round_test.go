@@ -736,7 +736,6 @@ func TestHighestPrepared(t *testing.T) {
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 
@@ -765,7 +764,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Identifier: []byte("lambda"),
 				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: []byte("ad")}),
 			}, forksprotocol.V0ForkVersion.String()),
-			"change round justification msg is nil",
+			"change round justification is nil",
 		},
 		{
 			"invalid seq number",
@@ -804,7 +803,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 		{
 			"invalid msg type",
 			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+				MsgType:    message.CommitMsgType,
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("lambda"),
