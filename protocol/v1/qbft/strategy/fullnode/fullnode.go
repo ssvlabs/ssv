@@ -90,7 +90,7 @@ func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
 
 func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
 	msgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	if err == nil && len(msgs) > 0 {
+	if err == nil && len(msgs) > 0 && msgs[0] != nil {
 		return true, msgs[0], nil
 	}
 	return false, nil, err
