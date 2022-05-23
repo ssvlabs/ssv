@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -357,7 +358,12 @@ func TestForceDecided(t *testing.T) {
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+
+	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		return nil
+	}
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
 
 	identifier := []byte("Identifier_11")
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
@@ -408,9 +414,46 @@ func TestSyncAfterDecided(t *testing.T) {
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	identifier := []byte("Identifier_11")
+
+	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
+		Height:     message.Height(10),
+		Round:      message.Round(3),
+		Identifier: identifier,
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
+	})
+
+	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		sm := &message.SyncMessage{
+			Protocol: message.LastDecidedType,
+			Params: &message.SyncParams{
+				Height:     []message.Height{message.Height(9), message.Height(10)},
+				Identifier: identifier,
+			},
+			Data:   []*message.SignedMessage{decidedMsg},
+			Status: message.StatusSuccess,
+		}
+		em, err := sm.Encode()
+		require.NoError(t, err)
+
+		msg := &message.SSVMessage{
+			MsgType: message.SSVDecidedMsgType,
+			ID:      identifier,
+			Data:    em,
+		}
+
+		return msg
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
+	network.Start(ctx)
+	network.AddPeers(message.Identifier(identifier).GetValidatorPK(), network)
+
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 4)
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 
@@ -421,14 +464,6 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
-
-	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
-		MsgType:    message.CommitMsgType,
-		Height:     message.Height(10),
-		Round:      message.Round(3),
-		Identifier: identifier,
-		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
-	})
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
@@ -450,14 +485,8 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	})
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	identifier := []byte("Identifier_11")
-	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
-	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
-
-	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
-
 	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(10),
@@ -465,6 +494,40 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Identifier: identifier,
 		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
+
+	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		sm := &message.SyncMessage{
+			Protocol: message.LastDecidedType,
+			Params: &message.SyncParams{
+				Height:     []message.Height{message.Height(10)},
+				Identifier: identifier,
+			},
+			Data:   []*message.SignedMessage{decidedMsg},
+			Status: message.StatusSuccess,
+		}
+		em, err := sm.Encode()
+		require.NoError(t, err)
+
+		msg := &message.SSVMessage{
+			MsgType: message.SSVDecidedMsgType,
+			ID:      identifier,
+			Data:    em,
+		}
+
+		return msg
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
+	network.Start(ctx)
+	network.AddPeers(message.Identifier(identifier).GetValidatorPK(), network)
+
+	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
+
+	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
@@ -480,7 +543,12 @@ func TestValidateDecidedMsg(t *testing.T) {
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+
+	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		return nil
+	}
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
 	identifier := []byte("Identifier_11")
 	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
@@ -624,6 +692,7 @@ func populatedIbft(
 	}
 
 	opts := Options{
+		Context:        context.Background(),
 		Role:           message.RoleTypeAttester,
 		Identifier:     identifier,
 		Logger:         zap.L(),

@@ -155,7 +155,12 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+
+	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		return nil
+	}
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
 
 	instance := &Instance{
 		PrePrepareMessages: inmem.New(3, 2),
@@ -204,7 +209,12 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+
+	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		return nil
+	}
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
 
 	instance := &Instance{
 		ChangeRoundMessages: inmem.New(3, 2),

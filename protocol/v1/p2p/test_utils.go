@@ -1,10 +1,12 @@
 package protcolp2p
 
 import (
+	"context"
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -29,8 +31,12 @@ type MockNetwork interface {
 	SendStreamMessage(protocol string, pi peer.ID, msg *message.SSVMessage) error
 	Self() peer.ID
 	PushMsg(e MockMessageEvent)
+	PollMsgs() []SyncResult
 	AddPeers(pk message.ValidatorPK, toAdd ...MockNetwork)
+	Start(ctx context.Context)
 }
+
+type EventHandler func(e MockMessageEvent) *message.SSVMessage
 
 type mockNetwork struct {
 	logger *zap.Logger
@@ -47,26 +53,75 @@ type mockNetwork struct {
 	inPubsub  chan MockMessageEvent
 	inStream  chan MockMessageEvent
 
-	peers map[peer.ID]MockNetwork
+	peers       map[peer.ID]MockNetwork
+	messages    map[string]*message.SSVMessage
+	handleEvent EventHandler
+	results     []SyncResult
 }
 
 // NewMockNetwork creates a new instance of MockNetwork
-func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int) MockNetwork {
+func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int, handleEvent EventHandler) MockNetwork {
 	return &mockNetwork{
-		logger:    logger,
-		self:      self,
-		lock:      &sync.Mutex{},
-		topics:    make(map[string][]peer.ID),
-		peers:     make(map[peer.ID]MockNetwork),
-		inBufSize: inBufSize,
-		inPubsub:  make(chan MockMessageEvent, inBufSize),
-		inStream:  make(chan MockMessageEvent, inBufSize),
+		logger:      logger,
+		self:        self,
+		lock:        &sync.Mutex{},
+		topics:      make(map[string][]peer.ID),
+		peers:       make(map[peer.ID]MockNetwork),
+		inBufSize:   inBufSize,
+		inPubsub:    make(chan MockMessageEvent, inBufSize),
+		inStream:    make(chan MockMessageEvent, inBufSize),
+		messages:    make(map[string]*message.SSVMessage),
+		handleEvent: handleEvent,
 	}
 }
 
+// TODO: have additional goroutine in Start method (TODO create).
+// The goroutine should listen to incoming msgs to channel.
+// 1 for pubsub, 1 for stream. WE should define/allow to set it up from a test.
+// Store expected results.
+// Define a handler - should be provided by the test, should accept  MockMessageEvent.
+// Then in test decide - if this message is gotten, respond with that message.
+// Provide results via handler. Also: handle results which I'm getting (e.g. 2 handlers).
+// 1st for responding to smth, 2nd for getting results. 2nd shouldn't be conf'ed from test.
+// 1st - test decides how to respond. 2nd just saves msgs in map[stream]results.
+
+func (m *mockNetwork) Start(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e := <-m.inStream:
+				if m.handleEvent != nil {
+					msg := m.handleEvent(e)
+					m.results = append(m.results, SyncResult{
+						Msg:    msg,
+						Sender: e.From.String(),
+					})
+				}
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e := <-m.inPubsub:
+				m.handleStreamEvent(e)
+			}
+		}
+	}()
+}
+
+func (m *mockNetwork) handleStreamEvent(e MockMessageEvent) {
+	m.messages[e.Topic] = e.Msg
+}
+
 func (m *mockNetwork) Subscribe(pk message.ValidatorPK) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	spk := hex.EncodeToString(pk)
 	m.subscribed[spk] = true
@@ -74,8 +129,8 @@ func (m *mockNetwork) Subscribe(pk message.ValidatorPK) error {
 }
 
 func (m *mockNetwork) Unsubscribe(pk message.ValidatorPK) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	spk := hex.EncodeToString(pk)
 	delete(m.subscribed, spk)
@@ -84,8 +139,8 @@ func (m *mockNetwork) Unsubscribe(pk message.ValidatorPK) error {
 }
 
 func (m *mockNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	spk := hex.EncodeToString(pk)
 	peers, ok := m.topics[spk]
@@ -96,8 +151,8 @@ func (m *mockNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
 }
 
 func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	pk := msg.GetIdentifier().GetValidatorPK()
 	spk := hex.EncodeToString(pk)
@@ -137,8 +192,8 @@ func (m *mockNetwork) RegisterHandlers(handlers ...*SyncHandler) {
 }
 
 func (m *mockNetwork) registerHandler(protocol SyncProtocol, handlers ...RequestHandler) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	var pid string
 	switch protocol {
@@ -154,8 +209,8 @@ func (m *mockNetwork) registerHandler(protocol SyncProtocol, handlers ...Request
 }
 
 func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	spk := hex.EncodeToString(mid.GetValidatorPK())
 	topic := spk
@@ -183,16 +238,41 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 		}
 	}
 
-	return nil, nil // TODO: fix returned value
+	// TODO start goroutine here,wait until ctx.Done - wait for results - query check (the map) (map filled by internal goroutine/handler)
+
+	return m.PollMsgs(), nil // TODO: fix returned value
 }
 
 func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, error) {
-	panic("implement me")
+	//spk := hex.EncodeToString(mid.GetValidatorPK())
+	//topic := spk
+	//
+	//msg := m.messages[topic]
+	//syncMsg := &message.SyncMessage{}
+	//if err := syncMsg.Decode(msg.Data); err != nil {
+	//	return nil, err
+	//}
+	//
+	//if syncMsg.Params == nil {
+	//	return nil, nil
+	//}
+	//
+	//result := make([]SyncResult, 0)
+	//for _, h := range syncMsg.Params.Height {
+	//	if h >= from && h <= to {
+	//		result = append(result, SyncResult{
+	//			Msg:    nil,
+	//			Sender: "",
+	//		})
+	//	}
+	//}
+
+	return m.PollMsgs(), nil // TODO: fix returned value
 }
 
 func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	spk := hex.EncodeToString(mid.GetValidatorPK())
 	topic := spk
@@ -226,8 +306,8 @@ func (m *mockNetwork) ReportValidation(message *message.SSVMessage, res MsgValid
 }
 
 func (m *mockNetwork) SendStreamMessage(protocol string, pi peer.ID, msg *message.SSVMessage) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	e := MockMessageEvent{
 		From:     m.self,
@@ -248,18 +328,29 @@ func (m *mockNetwork) Self() peer.ID {
 }
 
 func (m *mockNetwork) PushMsg(e MockMessageEvent) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
-	if len(m.inPubsub) < m.inBufSize {
-		m.inPubsub <- e
+	if len(e.Topic) > 0 {
+		if len(m.inPubsub) < m.inBufSize {
+			m.inPubsub <- e
+		}
+	} else if len(e.Protocol) > 0 {
+		if len(m.inStream) < m.inBufSize {
+			m.inStream <- e
+		}
 	}
+}
+func (m *mockNetwork) PollMsgs() []SyncResult {
+	time.Sleep(1 * time.Second)
+
+	return m.results
 }
 
 // AddPeers enables to inject other peers
 func (m *mockNetwork) AddPeers(pk message.ValidatorPK, toAdd ...MockNetwork) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
+	//m.lock.Lock()
+	//defer m.lock.Unlock()
 
 	// TODO: support subnets
 	spk := hex.EncodeToString(pk)
