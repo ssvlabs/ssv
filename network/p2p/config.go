@@ -42,9 +42,6 @@ type Config struct {
 	PubSubTrace    bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 
-	// TODO: remove with v0
-	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
-
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional

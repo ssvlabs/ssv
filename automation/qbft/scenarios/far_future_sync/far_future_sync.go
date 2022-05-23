@@ -41,7 +41,7 @@ func (r *farFutureSyncScenario) NumOfOperators() int {
 	return 4
 }
 
-func (r *farFutureSyncScenario) NumOfExporters() int {
+func (r *farFutureSyncScenario) NumOfBootnodes() int {
 	return 0
 }
 

@@ -43,7 +43,7 @@ func (r *f1MultiRoundScenario) NumOfOperators() int {
 	return 4
 }
 
-func (r *f1MultiRoundScenario) NumOfExporters() int {
+func (r *f1MultiRoundScenario) NumOfBootnodes() int {
 	return 0
 }
 

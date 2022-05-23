@@ -41,7 +41,7 @@ func (r *regularScenario) NumOfOperators() int {
 	return 4
 }
 
-func (r *regularScenario) NumOfExporters() int {
+func (r *regularScenario) NumOfBootnodes() int {
 	return 0
 }
 

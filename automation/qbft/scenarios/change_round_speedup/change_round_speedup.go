@@ -44,7 +44,7 @@ func (r *changeRoundSpeedupScenario) NumOfOperators() int {
 	return 4
 }
 
-func (r *changeRoundSpeedupScenario) NumOfExporters() int {
+func (r *changeRoundSpeedupScenario) NumOfBootnodes() int {
 	return 0
 }
 

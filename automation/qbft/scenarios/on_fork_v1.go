@@ -42,7 +42,7 @@ func (f *onForkV1) NumOfOperators() int {
 	return 4
 }
 
-func (f *onForkV1) NumOfExporters() int {
+func (f *onForkV1) NumOfBootnodes() int {
 	return 0
 }
 
@@ -209,12 +209,13 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 }
 
 func (f *onForkV1) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(7))
+	expectedMsgCount := 9
+	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(expectedMsgCount))
 	if err != nil {
 		return err
 	}
 	f.logger.Debug("msgs count", zap.Int("len", len(msgs)))
-	if len(msgs) < 7 {
+	if len(msgs) < expectedMsgCount {
 		return errors.New("node-0 didn't sync all messages")
 	}
 
@@ -222,7 +223,12 @@ func (f *onForkV1) PostExecution(ctx *runner.ScenarioContext) error {
 	if err != nil {
 		return err
 	}
-	f.logger.Debug("last decided", zap.Any("msg", msg))
+	if msg == nil {
+		return errors.New("could not find last decided")
+	}
+	if msg.Message.Height != message.Height(expectedMsgCount) {
+		return errors.Errorf("wrong msg height: %d", msg.Message.Height)
+	}
 
 	return nil
 }
