@@ -209,15 +209,15 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 }
 
 func (f *onForkV1) PostExecution(ctx *runner.ScenarioContext) error {
-	//msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
-	//if err != nil {
-	//	return err
-	//}
-	//if len(msgs) < 4 {
-	//	return errors.New("node-0 didn't sync all messages")
-	//}
-	//f.logger.Debug("msgs", zap.Any("msgs", msgs))
-	//
+	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(7))
+	if err != nil {
+		return err
+	}
+	f.logger.Debug("msgs count", zap.Int("len", len(msgs)))
+	if len(msgs) < 7 {
+		return errors.New("node-0 didn't sync all messages")
+	}
+
 	msg, err := ctx.Stores[0].GetLastDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester))
 	if err != nil {
 		return err
@@ -238,7 +238,7 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 			wg.Add(1)
 			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
 				if err := f.startNode(node, seqNumber); err != nil {
-					f.logger.Fatal("could not start node", zap.Error(err))
+					f.logger.Error("could not start node", zap.Error(err))
 				}
 				wg.Done()
 			}(f.validators[i-1], i, h)
