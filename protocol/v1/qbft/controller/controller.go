@@ -5,8 +5,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/node"
-	"go.uber.org/atomic"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -46,6 +46,14 @@ type Options struct {
 	FullNode       bool
 }
 
+const (
+	NotStarted uint32 = iota
+	InitiatedHandlers
+	WaitingForPeers
+	FoundPeers
+	Ready
+)
+
 // Controller implements Controller interface
 type Controller struct {
 	ctx context.Context
@@ -65,8 +73,7 @@ type Controller struct {
 	signatureState SignatureState
 
 	// flags
-	initHandlers atomic.Bool // bool
-	initSynced   atomic.Bool // bool
+	initState uint32
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -129,8 +136,7 @@ func New(opts Options) IController {
 	}
 
 	// set flags
-	ctrl.initHandlers.Store(false)
-	ctrl.initSynced.Store(false)
+	ctrl.initState = NotStarted
 
 	return ctrl
 }
@@ -162,15 +168,21 @@ func (c *Controller) syncDecided() error {
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
 func (c *Controller) Init() error {
-	if !c.initHandlers.Load() {
-		c.initHandlers.Store(true)
-		c.logger.Info("iBFT implementation init started")
+	// checks if notStarted. if so, preform init handlers and set state to new state
+	if atomic.CompareAndSwapUint32(&c.initState, NotStarted, InitiatedHandlers) {
+		c.logger.Info("start qbft ctrl handler init")
 		go c.startQueueConsumer(c.messageHandler)
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
 
-	if !c.initSynced.Load() {
+	// if already waiting for peers no need to redundant waiting
+	if atomic.LoadUint32(&c.initState) == WaitingForPeers {
+		return ErrAlreadyRunning
+	}
+
+	// only if finished with handlers, start waiting for peers and syncing
+	if atomic.CompareAndSwapUint32(&c.initState, InitiatedHandlers, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
@@ -179,6 +191,9 @@ func (c *Controller) Init() error {
 			return err
 		}
 		c.logger.Debug("found enough peers")
+
+		atomic.StoreUint32(&c.initState, FoundPeers)
+
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := c.syncDecided(); err != nil {
 			if err == ErrAlreadyRunning {
@@ -190,7 +205,9 @@ func (c *Controller) Init() error {
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
 			return errors.Wrap(err, "could not sync history")
 		}
-		c.initSynced.Store(true)
+
+		atomic.StoreUint32(&c.initState, Ready)
+
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
 		c.logger.Info("iBFT implementation init finished")
 	}
@@ -198,9 +215,9 @@ func (c *Controller) Init() error {
 	return nil
 }
 
-// initialized return true is both isInitHandlers and synced
+// initialized return true is done all init process
 func (c *Controller) initialized() bool {
-	return c.initHandlers.Load() && c.initSynced.Load()
+	return atomic.LoadUint32(&c.initState) == Ready
 }
 
 // StartInstance - starts an ibft instance or returns error

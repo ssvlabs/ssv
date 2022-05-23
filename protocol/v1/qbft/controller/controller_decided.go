@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -135,7 +136,7 @@ func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool 
 // 		- AND msg is not for current instance
 func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, error) {
 	// if IBFT sync failed to init, trigger it again
-	if !c.initSynced.Load() {
+	if atomic.LoadUint32(&c.initState) < Ready {
 		return true, nil
 	}
 	if c.decidedForCurrentInstance(msg) {
