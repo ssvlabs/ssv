@@ -9,31 +9,31 @@ func TestNsToSubnet(t *testing.T) {
 	tests := []struct {
 		name     string
 		ns       string
-		expected uint64
+		expected int64
 		isSubnet bool
 	}{
 		{
 			"dummy string",
 			"xxx",
-			uint64(0),
+			int64(-1),
 			false,
 		},
 		{
 			"invalid int",
 			"floodsub:bloxstaking.ssv.xxx",
-			uint64(0),
+			int64(-1),
 			false,
 		},
 		{
 			"invalid",
 			"floodsub:ssv.1",
-			uint64(0),
+			int64(-1),
 			false,
 		},
 		{
 			"valid",
 			"floodsub:bloxstaking.ssv.21",
-			uint64(21),
+			int64(21),
 			true,
 		},
 	}

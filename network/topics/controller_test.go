@@ -15,7 +15,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -254,8 +253,8 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	require.NoError(t, err)
 
 	var p *P
-	logger := zaptest.NewLogger(t)
-	//logger := zap.L()
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
 		midHandler = NewMsgIDHandler(logger, fork, 2*time.Minute)

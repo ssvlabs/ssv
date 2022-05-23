@@ -44,6 +44,6 @@ func gossipSubParam() pubsub.GossipSubParams {
 // We have to unfortunately set this globally in order
 // to configure our message id time-cache rather than instantiating
 // it with a router instance.
-func setGlobalPubSubParams() {
-	pubsub.TimeCacheDuration = 550 * gsHeartbeatInterval
-}
+//func setGlobalPubSubParams() {
+//	pubsub.TimeCacheDuration = 550 * gsHeartbeatInterval
+//}

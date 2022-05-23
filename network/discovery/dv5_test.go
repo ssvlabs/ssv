@@ -15,7 +15,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 	"strconv"
 	"sync"
 	"testing"
@@ -26,15 +25,15 @@ func TestNewService(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	n := 4
+	//logger := zaptest.NewLogger(t)
+	logger := zap.L()
 	udpRand := make(v1_testing.UDPPortsRandomizer)
-	bn, err := createTestBootnode(ctx, zaptest.NewLogger(t), udpRand.Next(13001, 13999))
+	bn, err := createTestBootnode(ctx, logger, udpRand.Next(13001, 13999))
 	require.NoError(t, err)
 	keys, err := v1_testing.CreateKeys(n)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	//logger := zaptest.NewLogger(t)
-	logger := zap.L()
 	peers := make([]host.Host, n)
 	for i := 0; i < n; i++ {
 		h, err := libp2p.New(ctx,

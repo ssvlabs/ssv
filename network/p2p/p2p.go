@@ -53,7 +53,7 @@ type p2pNetwork struct {
 	state int32
 
 	activeValidatorsLock *sync.Mutex
-	activeValidators     map[string]bool
+	activeValidators     map[string]int32
 }
 
 // New creates a new p2p network
@@ -69,7 +69,7 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 		cfg:                  cfg,
 		msgRouter:            cfg.Router,
 		state:                stateClosed,
-		activeValidators:     make(map[string]bool),
+		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
 	}
 }

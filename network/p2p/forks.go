@@ -55,16 +55,16 @@ func (n *p2pNetwork) resubscribeValidators() {
 		pkRaw, err := hex.DecodeString(pk)
 		if err != nil {
 			n.logger.Warn("could not decode validator public key", zap.Error(err))
-			n.activeValidators[pk] = false
+			n.activeValidators[pk] = validatorStateInactive
 			continue
 		}
+		n.activeValidators[pk] = validatorStateInactive
 		if err := n.subscribe(pkRaw); err != nil {
 			n.logger.Warn("could not resubscribe to validator's topic", zap.Error(err))
 			// TODO: handle
-			n.activeValidators[pk] = false
 			continue
 		}
-		n.logger.Debug("resubscribed validator", zap.String("pk", pk))
+		n.activeValidators[pk] = validatorStateSubscribed
 		success++
 	}
 	n.logger.Debug("resubscribed validators", zap.Int("total", len(n.activeValidators)), zap.Int("success", success))

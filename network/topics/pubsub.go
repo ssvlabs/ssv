@@ -120,7 +120,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID()))
 	}
 
-	setGlobalPubSubParams()
+	//setGlobalPubSubParams()
 
 	if len(cfg.StaticPeers) > 0 {
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))
