@@ -121,7 +121,7 @@ func PopulatedStorage(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, r
 			Height:     message.Height(i),
 			Round:      round,
 			Identifier: identifier,
-			Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+			Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 		})
 		require.NoError(t, s.SaveDecided(signedMsg))
 		if i == int(highestHeight) {
@@ -141,7 +141,8 @@ func NewInMemDb() basedb.IDb {
 	return db
 }
 
-func commitDataToBytes(input *message.CommitData) []byte {
-	ret, _ := json.Marshal(input)
+func commitDataToBytes(t *testing.T, input *message.CommitData) []byte {
+	ret, err := json.Marshal(input)
+	require.NoError(t, err)
 	return ret
 }

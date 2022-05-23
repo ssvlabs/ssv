@@ -2,7 +2,6 @@ package validator
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -83,11 +82,15 @@ func (t *testIBFT) Init() error {
 }
 
 func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.InstanceResult, error) {
+	commitData, err := (&message.CommitData{Data: opts.Value}).Encode()
+	if err != nil {
+		return nil, err
+	}
 	return &instance.InstanceResult{
 		Decided: t.decided,
 		Msg: &message.SignedMessage{
 			Message: &message.ConsensusMessage{
-				Data: commitDataToBytes(&message.CommitData{Data: opts.Value}),
+				Data: commitData,
 			},
 			Signers: make([]message.OperatorID, t.signaturesCount),
 		},
@@ -340,9 +343,4 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 		sks[uint64(i)] = sk
 	}
 	return sks, nodes
-}
-
-func commitDataToBytes(input *message.CommitData) []byte {
-	ret, _ := json.Marshal(input)
-	return ret
 }

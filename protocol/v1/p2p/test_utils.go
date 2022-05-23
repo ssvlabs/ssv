@@ -160,11 +160,13 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 	spk := hex.EncodeToString(mid.GetValidatorPK())
 	topic := spk
 
-	syncMsg, err := json.Marshal(&message.SyncMessage{
+	syncMsg, err := (&message.SyncMessage{
 		Params: &message.SyncParams{
 			Identifier: mid,
 		},
-	})
+		Protocol: message.LastDecidedType,
+		Status:   message.StatusSuccess,
+	}).Encode()
 	if err != nil {
 		return nil, err
 	}

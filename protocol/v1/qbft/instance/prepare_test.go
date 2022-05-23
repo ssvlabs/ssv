@@ -1,11 +1,11 @@
 package instance
 
 import (
-	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -45,7 +45,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		MsgType:    message.PrepareMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
+		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
 	}
 
 	prepareData, err := consensusMessage1.GetPrepareData()
@@ -65,7 +65,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		MsgType:    message.PrepareMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value2")}),
+		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value2")}),
 	}
 	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage2, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
