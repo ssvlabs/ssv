@@ -269,7 +269,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	if cInstance != nil {
 		currentState := cInstance.State()
 		if currentState != nil {
-			fields = append(fields, zap.String("stage", currentState.Stage.String()), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
+			fields = append(fields, zap.String("stage", qbft.RoundState_name[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
 		}
 	}
 	fields = append(fields, zap.Any("msg", msg))
