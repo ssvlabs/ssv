@@ -106,18 +106,6 @@ func (s *testStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 
 func (s *testStorage) CleanLastChangeRound(identifier message.Identifier) {}
 
-func newHeight(height message.Height) atomic.Value {
-	res := atomic.Value{}
-	res.Store(height)
-	return res
-}
-
-func newIdentifier(identity []byte) atomic.Value {
-	res := atomic.Value{}
-	res.Store(identity)
-	return res
-}
-
 func TestDecidedRequiresSync(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
@@ -135,7 +123,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		msg             *message.SignedMessage
 		expectedRes     bool
 		expectedErr     string
-		initSynced      bool
+		initState       uint32
 	}{
 		{
 			"decided from future, requires sync.",
@@ -154,7 +142,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided from future, requires sync. current is nil",
@@ -171,7 +159,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided when init failed to sync",
@@ -188,7 +176,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			false,
+			NotStarted,
 		},
 		{
 			"decided from far future, requires sync.",
@@ -207,7 +195,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided from past, doesn't requires sync.",
@@ -226,7 +214,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided for current",
@@ -245,7 +233,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided for seq 0",
@@ -260,7 +248,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
-			true,
+			Ready,
 		},
 	}
 
@@ -269,9 +257,8 @@ func TestDecidedRequiresSync(t *testing.T) {
 			ctrl := Controller{
 				currentInstance: test.currentInstance,
 				ibftStorage:     newTestStorage(test.highestDecided),
-				initSynced:      atomic.Bool{},
+				initState:       test.initState,
 			}
-			ctrl.initSynced.Store(test.initSynced)
 			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
 			if len(test.expectedErr) > 0 {
@@ -653,8 +640,7 @@ func populatedIbft(
 	}
 	ret := New(opts)
 
-	ret.(*Controller).initHandlers.Store(true) // as if they are already synced
-	ret.(*Controller).initSynced.Store(true)   // as if they are already synced
+	ret.(*Controller).initState = Ready // as if they are already synced
 	return ret
 }
 
