@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
@@ -176,15 +175,6 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
-	}
-
-	if len(n.cfg.ExporterPeerID) > 0 {
-		//cfg.StaticPeers =
-		eid, err := peer.Decode(n.cfg.ExporterPeerID)
-		if err != nil {
-			return errors.Wrap(err, "could not decode exporter peer id")
-		}
-		cfg.StaticPeers = []peer.AddrInfo{{ID: eid}}
 	}
 
 	if !n.cfg.PubSubScoring {
