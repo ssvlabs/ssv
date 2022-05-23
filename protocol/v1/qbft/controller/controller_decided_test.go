@@ -505,7 +505,6 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.EqualValues(t, message.Height(10), highest.Message.Height)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestSyncFromScratchAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
@@ -553,7 +552,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	network.SetGetHistoryHandler(func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
 		decidedMsgs := make([]*message.SignedMessage, 0)
 		heights := make([]message.Height, 0)
-		for i := 4; i <= 10; i++ {
+		for i := 0; i <= 10; i++ {
 			decidedMsgs = append(decidedMsgs, testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
 				MsgType:    message.CommitMsgType,
 				Height:     message.Height(i),
