@@ -47,7 +47,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		MsgType:    message.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("Lambda"),
-		Data: changeRoundDataToBytes(&message.RoundChangeData{
+		Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 			Round:         1,
 			PreparedValue: value,
 		}),
@@ -114,7 +114,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		MsgType:    message.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("Lambda"),
-		Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 	}
 
 	roundChangeData, err := consensusMessage.GetRoundChangeData()
@@ -187,7 +187,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		MsgType:    message.ProposalMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       proposalDataToBytes(&message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
+		Data:       proposalDataToBytes(t, &message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
 	}, forksprotocol2.V0ForkVersion.String())
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
 	msgs := instance.PrePrepareMessages.ReadOnlyMessagesByRound(1)
@@ -233,7 +233,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		MsgType:    message.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("lambdas"),
-		Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 	}
 	roundChangeData, err := msg.GetRoundChangeData()
 	require.NoError(t, err)
@@ -243,7 +243,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		MsgType:    message.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("lambdas"),
-		Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
@@ -257,7 +257,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		MsgType:    message.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("lambdas"),
-		Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
@@ -310,7 +310,8 @@ func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	return nil, nil, nil
 }
 
-func proposalDataToBytes(input *message.ProposalData) []byte {
-	ret, _ := json.Marshal(input)
+func proposalDataToBytes(t *testing.T, input *message.ProposalData) []byte {
+	ret, err := json.Marshal(input)
+	require.NoError(t, err)
 	return ret
 }

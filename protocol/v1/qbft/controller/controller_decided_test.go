@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -146,12 +145,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  4,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			true,
 			"",
@@ -163,12 +162,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  4,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			true,
 			"",
@@ -180,12 +179,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			true,
 			"",
@@ -199,12 +198,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  10,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			true,
 			"",
@@ -218,12 +217,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 			"",
@@ -237,12 +236,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 			"",
@@ -257,7 +256,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  0,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 			"",
@@ -308,7 +307,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			true,
 		},
@@ -318,7 +317,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -328,7 +327,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  1,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -340,7 +339,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -352,7 +351,7 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			testingprotocol.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
 				MsgType: message.CommitMsgType,
 				Height:  2,
-				Data:    commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:    commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			false,
 		},
@@ -405,7 +404,7 @@ func TestForceDecided(t *testing.T) {
 	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:    zap.L(),
 		SeqNumber: 4,
-		Value:     commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+		Value:     commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)
@@ -441,7 +440,7 @@ func TestSyncAfterDecided(t *testing.T) {
 		Height:     message.Height(10),
 		Round:      message.Round(3),
 		Identifier: identifier,
-		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -477,7 +476,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Height:     message.Height(10),
 		Round:      message.Round(3),
 		Identifier: identifier,
-		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
@@ -510,7 +509,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(11),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			nil,
 		},
@@ -521,7 +520,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(11),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			errors.New("message type is wrong"),
 		},
@@ -532,7 +531,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(11),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			errors.New("failed to verify signature"),
 		},
@@ -543,7 +542,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Height:     message.Height(0),
 				Round:      message.Round(3),
 				Identifier: identifier,
-				Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+				Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 			}),
 			nil,
 		},
@@ -575,14 +574,14 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(2),
 		Identifier: identifier[:],
-		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
 
 	completeDecided := testingprotocol.AggregateSign(t, secretKeys, uids, &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(2),
 		Identifier: identifier[:],
-		Data:       commitDataToBytes(&message.CommitData{Data: []byte("value")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
 
 	share := &beaconprotocol.Share{
@@ -678,7 +677,8 @@ func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beaconpro
 	return nil, nil, nil
 }
 
-func commitDataToBytes(input *message.CommitData) []byte {
-	ret, _ := json.Marshal(input)
+func commitDataToBytes(t *testing.T, input *message.CommitData) []byte {
+	ret, err := input.Encode()
+	require.NoError(t, err)
 	return ret
 }

@@ -98,8 +98,9 @@ func testingFork(instance *Instance) *testFork {
 	return &testFork{instance: instance}
 }
 
-func changeRoundDataToBytes(input *message.RoundChangeData) []byte {
-	ret, _ := json.Marshal(input)
+func changeRoundDataToBytes(t *testing.T, input *message.RoundChangeData) []byte {
+	ret, err := json.Marshal(input)
+	require.NoError(t, err)
 	return ret
 }
 func bytesToChangeRoundData(input []byte) *message.RoundChangeData {
@@ -175,7 +176,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		Height:     1,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
+		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
 	}
 
 	prepareData, err := msg.GetPrepareData()
@@ -228,7 +229,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		Height:     0,
 		Round:      2,
 		Identifier: []byte("Lambdas"),
-		Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
+		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
 	}
 
 	twoSigners := map[message.OperatorID]*bls.SecretKey{
@@ -259,7 +260,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      1,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
@@ -270,7 +271,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      2,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
@@ -281,7 +282,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
@@ -292,7 +293,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
@@ -304,7 +305,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambdas"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -327,7 +328,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -356,7 +357,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -385,7 +386,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -414,7 +415,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -443,7 +444,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("lambdas"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -456,7 +457,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("value")}),
+								Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
 							},
 						},
 					},
@@ -472,7 +473,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("lambdas"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -485,7 +486,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       prepareDataToBytes(&message.PrepareData{Data: []byte("values")}),
+								Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("values")}),
 							},
 						},
 					},
@@ -501,7 +502,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				MsgType:    message.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambdas"),
-				Data: changeRoundDataToBytes(&message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
 					PreparedValue:    []byte("value"),
 					Round:            message.Round(2),
 					NextProposalData: []byte("value"),
@@ -526,7 +527,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			require.NoError(t, err)
 			if roundChangeData != nil {
 				data, _ := test.msg.GetRoundChangeData()
-				test.msg.Data = changeRoundDataToBytes(data)
+				test.msg.Data = changeRoundDataToBytes(t, data)
 			}
 
 			signature, err := test.msg.Sign(secretKeys[test.signerID], forksprotocol.V1ForkVersion.String())
@@ -550,7 +551,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 func TestRoundChangeJustification(t *testing.T) {
 	sks, _ := GenerateNodes(4)
 
-	inputValue := changeRoundDataToBytes(&message.RoundChangeData{
+	inputValue := changeRoundDataToBytes(t, &message.RoundChangeData{
 		PreparedValue:            []byte("hello"),
 		Round:                    1,
 		NextProposalData:         nil,
@@ -586,7 +587,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			Height:     1,
 			Round:      2,
 			Identifier: []byte("Lambda"),
-			Data:       changeRoundDataToBytes(&message.RoundChangeData{}),
+			Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
 		}
 
 		prepareData, err := msg.GetPrepareData()
@@ -690,7 +691,7 @@ func TestHighestPrepared(t *testing.T) {
 		Height:     1,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       changeRoundDataToBytes(&message.RoundChangeData{Round: 1, PreparedValue: inputValue}),
+		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{Round: 1, PreparedValue: inputValue}),
 	}
 
 	msg2 := &message.ConsensusMessage{
@@ -698,7 +699,7 @@ func TestHighestPrepared(t *testing.T) {
 		Height:     1,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       changeRoundDataToBytes(&message.RoundChangeData{Round: 2, PreparedValue: append(inputValue, []byte("highest")...)}),
+		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{Round: 2, PreparedValue: append(inputValue, []byte("highest")...)}),
 	}
 
 	roundChangeData, err := msg1.GetRoundChangeData()
@@ -751,7 +752,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
 			}, forksprotocol.V0ForkVersion.String()),
 			"",
 		},
@@ -762,7 +763,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: []byte("ad")}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: []byte("ad")}),
 			}, forksprotocol.V0ForkVersion.String()),
 			"change round justification is nil",
 		},
@@ -773,7 +774,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Height:     2,
 				Round:      1,
 				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
 			}, forksprotocol.V0ForkVersion.String()),
 			"invalid message sequence number: expected: 1, actual: 2",
 		},
@@ -785,7 +786,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("lambdaa"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
 			}, forksprotocol.V0ForkVersion.String()),
 			"message Lambda (lambdaa) does not equal expected Lambda (lambda)",
 		},
@@ -796,7 +797,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Height:     1,
 				Round:      4,
 				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
 			}, forksprotocol.V0ForkVersion.String()),
 			"",
 		},
@@ -807,7 +808,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(&message.RoundChangeData{PreparedValue: nil}),
+				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
 			}, forksprotocol.V0ForkVersion.String()),
 			"message type is wrong",
 		},
@@ -900,8 +901,9 @@ func TestChangeRoundPipeline(t *testing.T) {
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
 }
 
-func prepareDataToBytes(input *message.PrepareData) []byte {
-	ret, _ := json.Marshal(input)
+func prepareDataToBytes(t *testing.T, input *message.PrepareData) []byte {
+	ret, err := input.Encode()
+	require.NoError(t, err)
 	return ret
 }
 
