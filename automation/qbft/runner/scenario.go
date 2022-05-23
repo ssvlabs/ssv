@@ -60,7 +60,8 @@ func QBFTScenarioBootstrapper() Bootstrapper {
 			dbs = append(dbs, db)
 		}
 		forkVersion := forksprotocol.V0ForkVersion
-		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, false)
+
+		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, scenario.NumOfBootnodes() > 0)
 		if err != nil {
 			return nil, err
 		}
@@ -96,8 +97,9 @@ func QBFTScenarioBootstrapper() Bootstrapper {
 type scenarioCfg interface {
 	// NumOfOperators returns the desired number of operators for the test
 	NumOfOperators() int
-	// NumOfExporters returns the desired number of operators for the test
-	NumOfExporters() int
+	// NumOfBootnodes returns the desired number of bootnodes for the test
+	// zero in case we want mdns
+	NumOfBootnodes() int
 }
 
 // Scenario represents a testplan for a specific scenario

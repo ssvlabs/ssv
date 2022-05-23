@@ -42,8 +42,8 @@ func (f *onForkV1) NumOfOperators() int {
 	return 4
 }
 
-func (f *onForkV1) NumOfExporters() int {
-	return 0
+func (f *onForkV1) NumOfBootnodes() int {
+	return 1
 }
 
 func (f *onForkV1) Name() string {

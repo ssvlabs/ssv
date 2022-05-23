@@ -42,7 +42,7 @@ func (r *f1SpeedupScenario) NumOfOperators() int {
 	return 4
 }
 
-func (r *f1SpeedupScenario) NumOfExporters() int {
+func (r *f1SpeedupScenario) NumOfBootnodes() int {
 	return 0
 }
 

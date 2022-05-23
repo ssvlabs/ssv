@@ -41,7 +41,7 @@ func (r *syncFailoverScenario) NumOfOperators() int {
 	return 4
 }
 
-func (r *syncFailoverScenario) NumOfExporters() int {
+func (r *syncFailoverScenario) NumOfBootnodes() int {
 	return 0
 }
 
