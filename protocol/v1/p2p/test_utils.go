@@ -39,11 +39,12 @@ type MockNetwork interface {
 
 type EventHandler func(e MockMessageEvent) *message.SSVMessage
 
+// TODO: cleanup mockNetwork
 type mockNetwork struct {
 	logger *zap.Logger
 	self   peer.ID
 
-	lock sync.Locker
+	lock sync.Locker // TODO: use lock
 
 	topics     map[string][]peer.ID
 	subscribed map[string]bool
@@ -247,29 +248,7 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 }
 
 func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, error) {
-	//spk := hex.EncodeToString(mid.GetValidatorPK())
-	//topic := spk
-	//
-	//msg := m.messages[topic]
-	//syncMsg := &message.SyncMessage{}
-	//if err := syncMsg.Decode(msg.Data); err != nil {
-	//	return nil, err
-	//}
-	//
-	//if syncMsg.Params == nil {
-	//	return nil, nil
-	//}
-	//
-	//result := make([]SyncResult, 0)
-	//for _, h := range syncMsg.Params.Height {
-	//	if h >= from && h <= to {
-	//		result = append(result, SyncResult{
-	//			Msg:    nil,
-	//			Sender: "",
-	//		})
-	//	}
-	//}
-
+	// TODO: remove hardcoded return, use input parameters
 	return m.PollGHMsgs(), nil
 }
 
@@ -344,15 +323,16 @@ func (m *mockNetwork) PushMsg(e MockMessageEvent) {
 		}
 	}
 }
-func (m *mockNetwork) PollLDMsgs() []SyncResult {
-	time.Sleep(1 * time.Second)
 
+const delay = 100 * time.Millisecond
+
+func (m *mockNetwork) PollLDMsgs() []SyncResult {
+	time.Sleep(delay)
 	return m.lastDecidedResults
 }
 
 func (m *mockNetwork) PollGHMsgs() []SyncResult {
-	time.Sleep(1 * time.Second)
-
+	time.Sleep(delay)
 	return m.getHistoryResults
 }
 
