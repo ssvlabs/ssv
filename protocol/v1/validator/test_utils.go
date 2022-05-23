@@ -305,11 +305,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
 
-	eventHandler := func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
-		return nil
-	}
-
-	p2pNet := protocolp2p.NewMockNetwork(zap.L(), pi, 10, eventHandler)
+	p2pNet := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	ret.ibfts = make(controller.Controllers)
 	ret.ibfts[message.RoleTypeAttester] = &testIBFT{
