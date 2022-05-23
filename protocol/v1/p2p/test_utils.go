@@ -75,16 +75,6 @@ func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int, handleEvent
 	}
 }
 
-// TODO: have additional goroutine in Start method (TODO create).
-// The goroutine should listen to incoming msgs to channel.
-// 1 for pubsub, 1 for stream. WE should define/allow to set it up from a test.
-// Store expected results.
-// Define a handler - should be provided by the test, should accept  MockMessageEvent.
-// Then in test decide - if this message is gotten, respond with that message.
-// Provide results via handler. Also: handle results which I'm getting (e.g. 2 handlers).
-// 1st for responding to smth, 2nd for getting results. 2nd shouldn't be conf'ed from test.
-// 1st - test decides how to respond. 2nd just saves msgs in map[stream]results.
-
 func (m *mockNetwork) Start(ctx context.Context) {
 	go func() {
 		for {
@@ -237,8 +227,6 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 			return nil, err
 		}
 	}
-
-	// TODO start goroutine here,wait until ctx.Done - wait for results - query check (the map) (map filled by internal goroutine/handler)
 
 	return m.PollMsgs(), nil // TODO: fix returned value
 }
