@@ -120,7 +120,7 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 		signature := sk.Sign(msg)
 		sigVec[id] = *signature
 
-		log.Printf(fmt.Sprintf("sigVec[%d]: \n verify %t", id, signature.Verify(&pk, msg)))
+		log.Printf("sigVec[%d]: \n verify %t", id, signature.Verify(&pk, msg))
 	}
 
 	idxVec := [3]uint64{1, 2, 4}
