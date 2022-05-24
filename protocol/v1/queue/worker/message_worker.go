@@ -92,5 +92,8 @@ func (w *Worker) process(msg *message.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")
 	}
-	w.handler(msg) // TODO handle error
+	// TODO handle error
+	if err := w.handler(msg); err != nil {
+		w.logger.Warn("could not handle message", zap.Error(err))
+	}
 }

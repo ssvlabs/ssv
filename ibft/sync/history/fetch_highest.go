@@ -1,13 +1,7 @@
 package history
 
-import (
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
-	"go.uber.org/zap"
-)
-
 // findHighestInstance returns the highest found decided signed message and the peer it was received from
-func (s *Sync) findHighestInstance() (*proto.SignedMessage, string, error) {
+/*func (s *Sync) findHighestInstance() (*proto.SignedMessage, string, error) {
 	// pick up to committee peers
 	//usedPeers, err := ibftsync.GetPeers(s.network, s.publicKey, s.committeeSize)
 	//if err != nil {
@@ -48,10 +42,10 @@ func (s *Sync) findHighestInstance() (*proto.SignedMessage, string, error) {
 
 	// found a valid highest decided
 	return ret, fromPeer, nil
-}
+}*/
 
 // getHighestDecidedFromPeers receives highest decided messages from peers
-func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
+/*func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage {
 	var results []*network.SyncMessage
 	//var wg sync.WaitGroup
 	//var lock sync.Mutex
@@ -106,3 +100,4 @@ func (s *Sync) getHighestDecidedFromPeers(peers []string) []*network.SyncMessage
 	s.logger.Debug("got highest decided msg's from peers", zap.Any("count", len(results)))
 	return results
 }
+*/

@@ -1,10 +1,5 @@
 package history
 
-import (
-	"github.com/bloxapp/ssv/ibft/proto"
-	"go.uber.org/zap"
-)
-
 // Syncer is the interface for history sync
 type Syncer interface {
 	Start() error
@@ -14,17 +9,17 @@ type Syncer interface {
 //
 // Sync is responsible for syncing and iBFT instance when needed by
 // fetching decided messages from the network
-type Sync struct {
-	logger    *zap.Logger
+/*type Sync struct {
+	logger *zap.Logger
 	publicKey []byte
-	//network             network.Network
-	//ibftStorage         collections.Iibft
+	network             network.Network
+	ibftStorage         collections.Iibft
 	validateDecidedMsgF func(msg *proto.SignedMessage) error
-	identifier          []byte
+	identifier []byte
 	// paginationMaxSize is the max number of returned elements in a single response
 	paginationMaxSize uint64
 	committeeSize     int
-}
+}*/
 
 //
 //// New returns a new instance of Sync

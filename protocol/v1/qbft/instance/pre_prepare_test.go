@@ -178,7 +178,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(message.Round(0))
 	instance.state.Height.Store(message.Height(0))
-	instance.state.Stage.Store(int32(qbft.RoundState_NotStarted))
+	instance.state.Stage.Store(int32(qbft.RoundStateNotStarted))
 
 	instance.fork = testingFork(instance)
 

@@ -28,6 +28,7 @@ import (
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
 var ErrAlreadyRunning = errors.New("already running")
 
+// Options is a set of options for the controller
 type Options struct {
 	Context        context.Context
 	Role           message.RoleType
@@ -46,6 +47,7 @@ type Options struct {
 	FullNode       bool
 }
 
+// set of states for the controller
 const (
 	NotStarted uint32 = iota
 	InitiatedHandlers
@@ -221,7 +223,7 @@ func (c *Controller) initialized() bool {
 }
 
 // StartInstance - starts an ibft instance or returns error
-func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.InstanceResult, err error) {
+func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.Result, err error) {
 	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
@@ -269,7 +271,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	if cInstance != nil {
 		currentState := cInstance.State()
 		if currentState != nil {
-			fields = append(fields, zap.String("stage", qbft.RoundState_name[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
+			fields = append(fields, zap.String("stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
 		}
 	}
 	fields = append(fields, zap.Any("msg", msg))

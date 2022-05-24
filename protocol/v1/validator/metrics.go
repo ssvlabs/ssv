@@ -62,9 +62,9 @@ func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *za
 type validatorStatus int32
 
 var (
-	validatorStatusInactive     validatorStatus = 0
-	validatorStatusNoIndex      validatorStatus = 1
-	validatorStatusError        validatorStatus = 2
+	//validatorStatusInactive     validatorStatus = 0
+	validatorStatusNoIndex validatorStatus = 1
+	//validatorStatusError        validatorStatus = 2
 	validatorStatusReady        validatorStatus = 3
 	validatorStatusNotActivated validatorStatus = 4
 	validatorStatusExiting      validatorStatus = 5

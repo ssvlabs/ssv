@@ -1,23 +1,19 @@
 package exporter
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter/api"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -31,6 +27,8 @@ func init() {
 	logex.Build("test", zapcore.DebugLevel, nil)
 }
 
+// TODO: un-lint
+//nolint
 func TestExporter_ShouldProcessValidator(t *testing.T) {
 	count1, count2 := uint64(0), uint64(0)
 	exp1, err := newMockExporter()
@@ -74,6 +72,8 @@ func TestExporter_ShouldProcessValidator(t *testing.T) {
 	require.Equal(t, 6, int(count2))
 }
 
+// TODO: un-lint
+//nolint
 func TestExporter_handleQueryRequests(t *testing.T) {
 	exp, err := newMockExporter()
 	require.NoError(t, err)
@@ -98,6 +98,8 @@ func TestExporter_handleQueryRequests(t *testing.T) {
 	require.Equal(t, api.TypeError, netMsg.Msg.Type)
 }
 
+// TODO: un-lint
+//nolint
 func TestExporter_ListenToEth1Events(t *testing.T) {
 	exp, err := newMockExporter()
 	require.NoError(t, err)
@@ -179,6 +181,8 @@ func TestExporter_ListenToEth1Events(t *testing.T) {
 
 }
 
+// TODO: un-lint
+//nolint
 func newMockExporter() (*exporter, error) {
 	logger := zap.L()
 	db, err := storage.GetStorageFactory(basedb.Options{
@@ -281,6 +285,8 @@ func validatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event 
 	return &eth1.Event{Log: types.Log{}, Data: *parsed}
 }
 
+//TODO: un-lint
+//nolint
 func operatorAddedMockEvent(t *testing.T, abiVersion eth1.Version) *eth1.Event {
 	var rawOperatorAdded string
 	switch abiVersion {

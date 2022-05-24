@@ -9,6 +9,8 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 )
 
+// TODO: un-lint
+//nolint
 // ListenToEth1Events register for eth1 events
 func (exp *exporter) listenToEth1Events(eventsFeed *event.Feed) <-chan error {
 	cn := make(chan *eth1.Event)

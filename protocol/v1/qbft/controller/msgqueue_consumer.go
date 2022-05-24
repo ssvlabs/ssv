@@ -125,17 +125,17 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	height := state.GetHeight()
 	var indexes []string
 	switch qbft.RoundState(state.Stage.Load()) {
-	case qbft.RoundState_NotStarted:
+	case qbft.RoundStateNotStarted:
 		indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.ProposalMsgType)...)
-	case qbft.RoundState_PrePrepare:
+	case qbft.RoundStatePrePrepare:
 		indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType)...) // looking for propose in case is leader
-	case qbft.RoundState_Prepare:
+	case qbft.RoundStatePrepare:
 		indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType)...)
-	case qbft.RoundState_Commit:
-		return nil // qbft.RoundState_Commit stage is NEVER set
-	case qbft.RoundState_ChangeRound:
+	case qbft.RoundStateCommit:
+		return nil // qbft.RoundStateCommit stage is NEVER set
+	case qbft.RoundStateChangeRound:
 		indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)...)
-		//case qbft.RoundState_Decided: needs to pop decided msgs in all cases not only by state
+		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 	}
 
 	//indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, height, message.CommitMsgType)...)        // always need to look for decided msg's

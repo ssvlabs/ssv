@@ -117,15 +117,15 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 		pk.Set(mpk, &idVec[id])
 		pubVec[id] = pk
 
-		sig := sk.Sign(msg)
-		sigVec[id] = *sig
+		signature := sk.Sign(msg)
+		sigVec[id] = *signature
 
-		log.Println(fmt.Sprintf("sigVec[%d]: \n verify %t", id, sig.Verify(&pk, msg)))
+		log.Println(fmt.Sprintf("sigVec[%d]: \n verify %t", id, signature.Verify(&pk, msg)))
 	}
 
 	idxVec := [3]uint64{1, 2, 4}
 
-	subIdVec := make([]bls.ID, 3)
+	subIDVec := make([]bls.ID, 3)
 	subSecVec := make([]bls.SecretKey, 3)
 	subPubVec := make([]bls.PublicKey, 3)
 	subSigVec := make([]bls.Sign, 3)
@@ -137,7 +137,7 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 		blsID.SetLittleEndian([]byte(strconv.Itoa(int(i + 1))))
 		//blsID.SetDecString(string(idx))
 		fmt.Println(blsID.GetHexString())
-		subIdVec[i] = blsID
+		subIDVec[i] = blsID
 		subSecVec[i] = secVec[i]
 		subPubVec[i] = pubVec[i]
 		subSigVec[i] = sigVec[i]
@@ -147,9 +147,9 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 	pk := bls.PublicKey{}
 	recoverdSig := bls.Sign{}
 
-	sk.Recover(subSecVec, subIdVec)
-	pk.Recover(subPubVec, subIdVec)
-	recoverdSig.Recover(subSigVec, subIdVec)
+	sk.Recover(subSecVec, subIDVec)
+	pk.Recover(subPubVec, subIDVec)
+	recoverdSig.Recover(subSigVec, subIDVec)
 
 	log.Println(fmt.Sprintf("recoverd sk: %s", sk.SerializeToHexStr()))
 	log.Println(fmt.Sprintf("recoverd pk: %s", pk.SerializeToHexStr()))

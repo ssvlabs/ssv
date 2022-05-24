@@ -5,10 +5,12 @@ import (
 	"time"
 )
 
+// Network is a beacon chain network.
 type Network struct {
 	core.Network
 }
 
+// NewNetwork creates a new beacon chain network.
 func NewNetwork(net core.Network) Network {
 	return Network{net}
 }

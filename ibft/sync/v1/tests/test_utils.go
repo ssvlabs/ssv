@@ -3,17 +3,15 @@ package tests
 import (
 	"context"
 	"encoding/hex"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 
-	"github.com/bloxapp/ssv/ibft/storage"
 	p2p "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 )
@@ -25,6 +23,8 @@ type validatorData struct {
 	messages []*message.SignedMessage
 }
 
+// TODO: (lint) fix test
+//nolint
 func changeRoundGenerator(rounder func() message.Round) syncMsgGenerator {
 	return func(height message.Height, pk []byte, oids ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage) {
 		return oids[1:], &message.ConsensusMessage{
@@ -89,6 +89,8 @@ func createNetworkWithValidators(ctx context.Context, loggerFactory func(string)
 	return ln, validators, nil
 }
 
+// TODO: (lint) fix test
+//nolint
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",

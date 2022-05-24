@@ -106,18 +106,24 @@ func (s *testStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 
 func (s *testStorage) CleanLastChangeRound(identifier message.Identifier) {}
 
+// TODO: un-lint
+//nolint
 func newHeight(height message.Height) atomic.Value {
 	res := atomic.Value{}
 	res.Store(height)
 	return res
 }
 
+// TODO: un-lint
+//nolint
 func newIdentifier(identity []byte) atomic.Value {
 	res := atomic.Value{}
 	res.Store(identity)
 	return res
 }
 
+// TODO: (lint) fix test
+//nolint
 func TestDecidedRequiresSync(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
@@ -621,6 +627,8 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	require.False(t, ctrl.checkDecidedMessageSigners(incompleteDecided, completeDecided))
 }
 
+// TODO: (lint) fix test
+//nolint
 func populatedIbft(
 	nodeID message.OperatorID,
 	identifier []byte,

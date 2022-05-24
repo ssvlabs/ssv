@@ -24,6 +24,7 @@ const (
 	StatusBackoff
 )
 
+// EntryNotFoundError is the error message for when an entry is not found
 const EntryNotFoundError = "EntryNotFoundError"
 
 func (sc *StatusCode) String() string {

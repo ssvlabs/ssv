@@ -18,8 +18,8 @@ type ControllerStartInstanceOptions struct {
 	RequireMinPeers bool
 }
 
-// InstanceResult is a struct holding the result of a single iBFT instance
-type InstanceResult struct {
+// Result is a struct holding the result of a single iBFT instance
+type Result struct {
 	Decided bool
 	Msg     *message.SignedMessage
 }

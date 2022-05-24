@@ -101,7 +101,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			[]*message.SSVMessage{generateConsensusMsg(t, message.Height(1), message.Round(1), ctrl.Identifier, message.ProposalMsgType)},
 			message.Height(1),
-			generateInstance(1, 1, qbft.RoundState_NotStarted),
+			generateInstance(1, 1, qbft.RoundStateNotStarted),
 		},
 		{
 			"by_state_not_started_decided",
@@ -113,7 +113,7 @@ func TestConsumeMessages(t *testing.T) {
 				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
 			},
 			message.Height(0),
-			generateInstance(0, 1, qbft.RoundState_NotStarted),
+			generateInstance(0, 1, qbft.RoundStateNotStarted),
 		},
 		{
 			"by_state_PrePrepare",
@@ -126,7 +126,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.PrepareMsgType),
 			},
 			message.Height(0),
-			generateInstance(0, 1, qbft.RoundState_PrePrepare),
+			generateInstance(0, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"by_state_prepare",
@@ -139,7 +139,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType),
 			},
 			message.Height(0),
-			generateInstance(0, 1, qbft.RoundState_Prepare),
+			generateInstance(0, 1, qbft.RoundStatePrepare),
 		},
 		{
 			"by_state_change_round",
@@ -152,7 +152,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
 			},
 			message.Height(0),
-			generateInstance(0, 1, qbft.RoundState_ChangeRound),
+			generateInstance(0, 1, qbft.RoundStateChangeRound),
 		},
 		{
 			"by_state_no_message_pop_decided",
@@ -165,7 +165,7 @@ func TestConsumeMessages(t *testing.T) {
 				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
 			},
 			message.Height(0),
-			generateInstance(0, 1, qbft.RoundState_PrePrepare),
+			generateInstance(0, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"by_state_no_message_pop_change_round",
@@ -177,7 +177,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
 			},
 			message.Height(0),
-			generateInstance(0, 1, qbft.RoundState_PrePrepare),
+			generateInstance(0, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"default_late_commit",
@@ -227,7 +227,7 @@ func TestConsumeMessages(t *testing.T) {
 				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier),
 			},
 			message.Height(1),
-			generateInstance(1, 1, qbft.RoundState_PrePrepare),
+			generateInstance(1, 1, qbft.RoundStatePrePrepare),
 		},
 	}
 

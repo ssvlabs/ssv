@@ -16,7 +16,8 @@ import "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 //	networkReaders sync.Map
 //)
 //
-// ShareHolder is an interface for components that hold a share
+
+// ShareHolder ... is an interface for components that hold a share
 type ShareHolder interface {
 	Share() *beacon.Share
 }

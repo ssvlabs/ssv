@@ -19,6 +19,7 @@ func (r RoleType) String() string {
 	}
 }
 
+// RoleTypeFromString returns RoleType from string
 func RoleTypeFromString(rt string) RoleType {
 	switch rt {
 	case "UNKNOWN":

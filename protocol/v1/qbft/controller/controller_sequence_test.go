@@ -20,6 +20,8 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
+// TODO: (lint) fix test
+//nolint
 func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
 		Identifier:   []byte("Identifier_11"),
@@ -32,6 +34,8 @@ func testIBFTInstance(t *testing.T) *Controller {
 	return ret
 }
 
+// TODO: (lint) fix test
+//nolint
 func TestCanStartNewInstance(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)

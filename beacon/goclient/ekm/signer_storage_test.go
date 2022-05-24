@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -37,7 +38,8 @@ func getStorage(t *testing.T) basedb.IDb {
 }
 
 func getWalletStorage(t *testing.T) *signerStorage {
-	return newSignerStorage(getStorage(t), core.PraterNetwork)
+	network := beaconprotocol.NewNetwork(core.PraterNetwork)
+	return newSignerStorage(getStorage(t), network)
 }
 
 func testWallet(t *testing.T) (core.Wallet, *signerStorage) {

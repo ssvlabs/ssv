@@ -31,6 +31,8 @@ var (
 	// refSk = _byteArray("2c083f2c8fc923fa2bd32a70ab72b4b46247e8c1f347adc30b2f8036a355086c")
 	refPk = _byteArray("a9cf360aa15fb1d1d30ee2b578dc5884823c19661886ae8b892775ccb3bd96b7d7345569a2aa0b14e4d015c54a6a0c54")
 
+	// TODO: (lint) fix test
+	//nolint
 	refSplitShares = [][]byte{
 		_byteArray("1a1b411e54ebb0973dc0f133c8b192cc4320fd464cbdcfe3be38b77f821f30bc"),
 		_byteArray("6a93d37661cfe9cbaff9f051f2dd1d1995905932375e09357be1a50f7f4de323"),
@@ -81,12 +83,12 @@ func (t *testIBFT) Init() error {
 	return nil
 }
 
-func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.InstanceResult, error) {
+func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error) {
 	commitData, err := (&message.CommitData{Data: opts.Value}).Encode()
 	if err != nil {
 		return nil, err
 	}
-	return &instance.InstanceResult{
+	return &instance.Result{
 		Decided: t.decided,
 		Msg: &message.SignedMessage{
 			Message: &message.ConsensusMessage{

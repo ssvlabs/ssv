@@ -19,7 +19,7 @@ func (by By) Combine(other By) By {
 }
 
 // Sort sorts the given containers
-func (by By) Sort(msgs []*msgContainer) {
+func (by By) Sort(msgs []*MsgContainer) {
 	sort.Sort(&messageSorter{
 		msgs: msgs,
 		by:   by,
@@ -27,9 +27,9 @@ func (by By) Sort(msgs []*msgContainer) {
 }
 
 // Add adds a new container
-func (by By) Add(msgs []*msgContainer, msg *msgContainer) []*msgContainer {
+func (by By) Add(msgs []*MsgContainer, msg *MsgContainer) []*MsgContainer {
 	i := sort.Search(len(msgs), func(i int) bool { return by(msgs[i].msg, msg.msg) })
-	var newMsgs []*msgContainer
+	var newMsgs []*MsgContainer
 	if i > 0 {
 		newMsgs = append(msgs[:i], msg)
 		newMsgs = append(newMsgs, msgs[i:]...)
@@ -86,7 +86,7 @@ func ByConsensusMsgType(messageTypes ...message.ConsensusMessageType) By {
 
 // messageSorter sorts a list of msg containers
 type messageSorter struct {
-	msgs []*msgContainer
+	msgs []*MsgContainer
 	by   By
 }
 
