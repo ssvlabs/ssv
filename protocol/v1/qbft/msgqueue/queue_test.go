@@ -55,7 +55,7 @@ func TestNewMsgQueue(t *testing.T) {
 		q.Add(msg3)
 		idx := DefaultMsgIndex(message.SSVConsensusMsgType, []byte("dummy-id-1"))
 		require.Equal(t, 2, q.Count(idx))
-		require.Equal(t, 2, q.Clean(DefaultMsgCleaner(message.SSVConsensusMsgType, []byte("dummy-id-1"))))
+		require.Equal(t, int64(2), q.Clean(DefaultMsgCleaner(message.SSVConsensusMsgType, []byte("dummy-id-1"))))
 		require.Equal(t, 0, q.Count(idx))
 	})
 }

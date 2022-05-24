@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
@@ -31,7 +32,7 @@ type MsgQueue interface {
 	Count(idx string) int
 	// Clean will clean irrelevant keys from the map
 	// TODO: check performance
-	Clean(cleaner Cleaner) int
+	Clean(cleaners ...Cleaner) int64
 }
 
 // New creates a new MsgQueue
@@ -97,17 +98,28 @@ func (q *queue) Purge(idx string) {
 	q.items[idx] = make([]*msgContainer, 0)
 }
 
-func (q *queue) Clean(cleaner Cleaner) int {
+func (q *queue) Clean(cleaners ...Cleaner) int64 {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	cleaned := 0
+	var cleaned int64
+
+	apply := func(k string) bool {
+		for _, cleaner := range cleaners {
+			if cleaner(k) {
+				atomic.AddInt64(&cleaned, int64(len(q.items[k])))
+				return true
+			}
+		}
+		return false
+	}
+
 	for k := range q.items {
-		if cleaner(k) {
-			cleaned += len(q.items[k])
+		if apply(k) {
 			delete(q.items, k)
 		}
 	}
+
 	return cleaned
 }
 
