@@ -99,9 +99,7 @@ func (sm *SyncMessage) UpdateResults(err error, results ...*SignedMessage) {
 		sm.Status = StatusNotFound
 	} else {
 		sm.Data = make([]*SignedMessage, len(results))
-		for i, res := range results {
-			sm.Data[i] = res
-		}
+		copy(sm.Data, results)
 		nResults := len(sm.Data)
 		// updating params with the actual height of the messages
 		sm.Params.Height = []Height{sm.Data[0].Message.Height}
