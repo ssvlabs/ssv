@@ -1,8 +1,12 @@
 package history
 
+import "github.com/bloxapp/ssv/ibft/proto"
+
 // FetchValidateAndSaveInstances fetches, validates and saves decided messages from the P2P network.
 // Range is start to end seq including
-/*func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, n int, err error) {
+// TODO: un-lint
+//nolint
+func (s *Sync) fetchValidateAndSaveInstances(fromPeer string, startSeq uint64, endSeq uint64) (highestSaved *proto.SignedMessage, n int, err error) {
 	failCount := 0
 	start := startSeq
 	done := false
@@ -91,4 +95,3 @@ package history
 		//	zap.Int("count", len(msgsToSave)))
 	}
 }
-*/
