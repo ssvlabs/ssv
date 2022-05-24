@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -106,24 +107,6 @@ func (s *testStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 
 func (s *testStorage) CleanLastChangeRound(identifier message.Identifier) {}
 
-// TODO: un-lint
-//nolint
-func newHeight(height message.Height) atomic.Value {
-	res := atomic.Value{}
-	res.Store(height)
-	return res
-}
-
-// TODO: un-lint
-//nolint
-func newIdentifier(identity []byte) atomic.Value {
-	res := atomic.Value{}
-	res.Store(identity)
-	return res
-}
-
-// TODO: (lint) fix test
-//nolint
 func TestDecidedRequiresSync(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
@@ -141,7 +124,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 		msg             *message.SignedMessage
 		expectedRes     bool
 		expectedErr     string
-		initSynced      bool
+		initState       uint32
 	}{
 		{
 			"decided from future, requires sync.",
@@ -160,7 +143,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided from future, requires sync. current is nil",
@@ -177,7 +160,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided when init failed to sync",
@@ -194,7 +177,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			false,
+			NotStarted,
 		},
 		{
 			"decided from far future, requires sync.",
@@ -213,7 +196,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			true,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided from past, doesn't requires sync.",
@@ -232,7 +215,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided for current",
@@ -251,7 +234,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
-			true,
+			Ready,
 		},
 		{
 			"decided for seq 0",
@@ -266,7 +249,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}),
 			false,
 			"",
-			true,
+			Ready,
 		},
 	}
 
@@ -275,9 +258,8 @@ func TestDecidedRequiresSync(t *testing.T) {
 			ctrl := Controller{
 				currentInstance: test.currentInstance,
 				ibftStorage:     newTestStorage(test.highestDecided),
-				initSynced:      atomic.Bool{},
+				initState:       test.initState,
 			}
-			ctrl.initSynced.Store(test.initSynced)
 			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
 			if len(test.expectedErr) > 0 {
@@ -376,6 +358,7 @@ func TestForceDecided(t *testing.T) {
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
+
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	identifier := []byte("Identifier_11")
@@ -421,15 +404,32 @@ func TestForceDecided(t *testing.T) {
 	require.EqualValues(t, 4, highest.Message.Height)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestSyncAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	identifier := []byte("Identifier_11")
+
+	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
+		Height:     message.Height(10),
+		Round:      message.Round(3),
+		Identifier: identifier,
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
+	})
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier, decidedMsg))
+	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier, 4, 10))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	network.Start(ctx)
+	network.AddPeers(message.Identifier(identifier).GetValidatorPK(), network)
+
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 4)
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 
@@ -441,14 +441,6 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
 
-	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
-		MsgType:    message.CommitMsgType,
-		Height:     message.Height(10),
-		Round:      message.Round(3),
-		Identifier: identifier,
-		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
-	})
-
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
@@ -458,7 +450,6 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.EqualValues(t, message.Height(10), highest.Message.Height)
 }
 
-// TODO(nkryuchkov): fix this test
 func TestSyncFromScratchAfterDecided(t *testing.T) {
 	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
@@ -469,14 +460,8 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	})
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
-	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	identifier := []byte("Identifier_11")
-	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
-	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
-
-	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
-
 	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Height:     message.Height(10),
@@ -484,6 +469,21 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Identifier: identifier,
 		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	})
+
+	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
+	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier, decidedMsg))
+	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier, 0, 10))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	network.Start(ctx)
+	network.AddPeers(message.Identifier(identifier).GetValidatorPK(), network)
+
+	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
+
+	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
@@ -499,6 +499,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
+
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	identifier := []byte("Identifier_11")
 	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
@@ -645,6 +646,7 @@ func populatedIbft(
 	}
 
 	opts := Options{
+		Context:        context.Background(),
 		Role:           message.RoleTypeAttester,
 		Identifier:     identifier,
 		Logger:         zap.L(),
@@ -661,8 +663,7 @@ func populatedIbft(
 	}
 	ret := New(opts)
 
-	ret.(*Controller).initHandlers.Store(true) // as if they are already synced
-	ret.(*Controller).initSynced.Store(true)   // as if they are already synced
+	ret.(*Controller).initState = Ready // as if they are already synced
 	return ret
 }
 
@@ -689,4 +690,65 @@ func commitDataToBytes(t *testing.T, input *message.CommitData) []byte {
 	ret, err := input.Encode()
 	require.NoError(t, err)
 	return ret
+}
+
+func generateGetHistoryHandler(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, uids []message.OperatorID, identifier []byte, from, to int) protocolp2p.EventHandler {
+	return func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		decidedMsgs := make([]*message.SignedMessage, 0)
+		heights := make([]message.Height, 0)
+		for i := from; i <= to; i++ {
+			decidedMsgs = append(decidedMsgs, testingprotocol.AggregateSign(t, sks, uids, &message.ConsensusMessage{
+				MsgType:    message.CommitMsgType,
+				Height:     message.Height(i),
+				Round:      message.Round(3),
+				Identifier: identifier,
+				Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
+			}))
+			heights = append(heights, message.Height(i))
+		}
+
+		sm := &message.SyncMessage{
+			Protocol: message.LastDecidedType,
+			Params: &message.SyncParams{
+				Height:     heights,
+				Identifier: identifier,
+			},
+			Data:   decidedMsgs,
+			Status: message.StatusSuccess,
+		}
+		em, err := sm.Encode()
+		require.NoError(t, err)
+
+		msg := &message.SSVMessage{
+			MsgType: message.SSVDecidedMsgType,
+			ID:      identifier,
+			Data:    em,
+		}
+
+		return msg
+	}
+}
+
+func generateLastDecidedHandler(t *testing.T, identifier []byte, decidedMsg *message.SignedMessage) protocolp2p.EventHandler {
+	return func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
+		sm := &message.SyncMessage{
+			Protocol: message.LastDecidedType,
+			Params: &message.SyncParams{
+				Height:     []message.Height{message.Height(9), message.Height(10)},
+				Identifier: identifier,
+			},
+			Data:   []*message.SignedMessage{decidedMsg},
+			Status: message.StatusSuccess,
+		}
+		em, err := sm.Encode()
+		require.NoError(t, err)
+
+		msg := &message.SSVMessage{
+			MsgType: message.SSVDecidedMsgType,
+			ID:      identifier,
+			Data:    em,
+		}
+
+		return msg
+	}
 }

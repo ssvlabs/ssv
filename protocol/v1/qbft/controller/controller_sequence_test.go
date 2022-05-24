@@ -24,9 +24,7 @@ import (
 //nolint
 func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
-		Identifier:   []byte("Identifier_11"),
-		initHandlers: atomic.Bool{},
-		initSynced:   atomic.Bool{},
+		Identifier: []byte("Identifier_11"),
 		// instances: make([]*Instance, 0),
 	}
 
@@ -48,8 +46,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		opts            instance2.ControllerStartInstanceOptions
 		share           *beacon.Share
 		storage         qbftstorage.QBFTStore
-		initFinished    bool
-		initSynced      bool
+		initState       uint32
 		currentInstance instance2.Instancer
 		expectedError   string
 	}{
@@ -64,8 +61,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			testingprotocol.PopulatedStorage(t, sks, 3, 10),
-			true,
-			true,
+			Ready,
 			nil,
 			"",
 		},
@@ -80,8 +76,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			nil,
-			true,
-			true,
+			Ready,
 			nil,
 			"",
 		},
@@ -94,8 +89,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			nil,
-			false,
-			false,
+			NotStarted,
 			nil,
 			"iBFT hasn't initialized yet",
 		},
@@ -108,8 +102,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			nil,
-			true,
-			false,
+			InitiatedHandlers,
 			nil,
 			"iBFT hasn't initialized yet",
 		},
@@ -124,8 +117,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			testingprotocol.PopulatedStorage(t, sks, 3, 10),
-			true,
-			true,
+			Ready,
 			nil,
 			"instance seq invalid",
 		},
@@ -140,8 +132,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			testingprotocol.PopulatedStorage(t, sks, 3, 10),
-			true,
-			true,
+			Ready,
 			nil,
 			"instance seq invalid",
 		},
@@ -156,8 +147,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				Committee: nodes,
 			},
 			testingprotocol.PopulatedStorage(t, sks, 3, 10),
-			true,
-			true,
+			Ready,
 			instance2.NewInstanceWithState(&qbft.State{
 				Height: height10,
 			}),
@@ -168,8 +158,7 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-			i.initHandlers.Store(test.initFinished)
-			i.initSynced.Store(test.initSynced)
+			i.initState = test.initState
 			if test.currentInstance != nil {
 				i.currentInstance = test.currentInstance
 			}

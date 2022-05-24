@@ -107,8 +107,6 @@ spec:
           value: "discv5"
         - name: NETWORK
           value: "prater"
-        - name: BOOTNODES
-          value: "enr:-LK4QPbCB0Mw_8ji7D02OwXmqSRZe9wTmitle_cQnECIl-5GBPH9PH__eUpdeiI_t122inm62uTgO9CptbGNLKNId7gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBGGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS

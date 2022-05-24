@@ -3,11 +3,12 @@ package protcolp2p
 import (
 	"context"
 	"encoding/hex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestWaitForMinPeers(t *testing.T) {
@@ -16,6 +17,7 @@ func TestWaitForMinPeers(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	pi, err := GenPeerID()
 	require.NoError(t, err)
+
 	sub := NewMockNetwork(logger, pi, 10)
 	pk := "a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b"
 	vpk, err := hex.DecodeString(pk)

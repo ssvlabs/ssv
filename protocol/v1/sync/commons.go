@@ -1,10 +1,11 @@
 package sync
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 // GetHighest returns the highest message from the given collection
@@ -51,9 +52,6 @@ func ExtractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
 	}
 	if sm.Status != message.StatusSuccess {
 		return nil, errors.Errorf("failed to get sync message: %s", sm.Status.String())
-	}
-	if len(sm.Data) == 0 {
-		return nil, errors.New("empty decided message")
 	}
 	return sm, nil
 }
