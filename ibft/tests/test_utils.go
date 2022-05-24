@@ -3,15 +3,17 @@ package tests
 import (
 	"context"
 	"encoding/hex"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
 
+	"github.com/bloxapp/ssv/ibft/storage"
 	p2p "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 )

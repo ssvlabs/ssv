@@ -1,9 +1,10 @@
-package tests
+package sync
 
 import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/ibft/tests"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"testing"
@@ -31,13 +32,13 @@ func TestHistory(t *testing.T) {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
 	forkVersion := forksprotocol.V1ForkVersion
-	ln, validators, err := createNetworkWithValidators(ctx, loggerFactory, nNodes, pks, decidedGenerator, forkVersion)
+	ln, validators, err := tests.createNetworkWithValidators(ctx, loggerFactory, nNodes, pks, tests.decidedGenerator, forkVersion)
 	require.NoError(t, err)
 
 	stores := make([]qbftstorage.QBFTStore, 0)
 	histories := make([]history.History, 0)
 	for i, node := range ln.Nodes {
-		store, err := newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test", forkVersion)
+		store, err := tests.newTestIbftStorage(loggerFactory(fmt.Sprintf("ibft-store-%d", i)), "test", forkVersion)
 		require.NoError(t, err)
 		stores = append(stores, store)
 		h := history.New(loggerFactory(fmt.Sprintf("history_sync-%d", i)), node, true) // TODO need to check false too?
