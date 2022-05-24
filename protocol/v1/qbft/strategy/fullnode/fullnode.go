@@ -116,18 +116,5 @@ func (f *fullNode) SaveDecided(signedMsgs ...*message.SignedMessage) error {
 	if err := f.store.SaveDecided(signedMsgs...); err != nil {
 		return errors.Wrap(err, "could not save decided msg to storage")
 	}
-	// check if we need to save also last decided
-	for _, msg := range signedMsgs {
-		last, err := f.store.GetLastDecided(msg.Message.Identifier)
-		if err != nil {
-			return err
-		}
-		if last != nil && last.Message.Height > msg.Message.Height {
-			continue
-		}
-		if err := f.store.SaveLastDecided(msg); err != nil {
-			return err
-		}
-	}
-	return nil
+	return strategy.SaveLastDecided(f.logger, f.store, signedMsgs...)
 }

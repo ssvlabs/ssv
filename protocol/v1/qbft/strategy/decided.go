@@ -4,6 +4,8 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"go.uber.org/zap"
 )
 
 // Decided helps to decouple regular from full-node mode where the node is saving decided history.
@@ -23,4 +25,30 @@ type Decided interface {
 	GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error)
 	// SaveDecided saves historical decided messages
 	SaveDecided(signedMsg ...*message.SignedMessage) error
+}
+
+// SaveLastDecided saves last decided message if its height is larger than persisted height
+func SaveLastDecided(logger *zap.Logger, store qbftstorage.QBFTStore, signedMsgs ...*message.SignedMessage) error {
+	for _, msg := range signedMsgs {
+		last, err := store.GetLastDecided(msg.Message.Identifier)
+		if err != nil {
+			return err
+		}
+		if last != nil && last.Message.Height > msg.Message.Height {
+			logger.Debug("skipping decided with lower height",
+				zap.String("identifier", msg.Message.Identifier.String()),
+				zap.Int64("height", int64(msg.Message.Height)))
+			continue
+		}
+		if err := store.SaveLastDecided(msg); err != nil {
+			logger.Debug("could not save decided",
+				zap.String("identifier", msg.Message.Identifier.String()),
+				zap.Int64("height", int64(msg.Message.Height)),
+				zap.Error(err))
+			return err
+		}
+		logger.Debug("saved decided", zap.String("identifier", msg.Message.Identifier.String()),
+			zap.Int64("height", int64(msg.Message.Height)))
+	}
+	return nil
 }

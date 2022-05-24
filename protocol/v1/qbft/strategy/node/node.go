@@ -75,6 +75,6 @@ func (f *regularNode) GetDecided(identifier message.Identifier, heightRange ...m
 	return []*message.SignedMessage{ld}, nil
 }
 
-func (f *regularNode) SaveDecided(signedMsg ...*message.SignedMessage) error {
-	return f.store.SaveLastDecided(signedMsg...)
+func (f *regularNode) SaveDecided(signedMsgs ...*message.SignedMessage) error {
+	return strategy.SaveLastDecided(f.logger, f.store, signedMsgs...)
 }
