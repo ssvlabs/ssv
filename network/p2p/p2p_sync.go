@@ -2,7 +2,7 @@ package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
@@ -11,11 +11,11 @@ import (
 )
 
 // LastDecided fetches last decided from a random set of peers
-func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResult, error) {
+func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
-		return nil, ErrNetworkIsNotReady
+		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
-	pid, peerCount := n.fork.ProtocolID(protocolp2p.LastDecidedProtocol)
+	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
 	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
@@ -29,11 +29,11 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]protocolp2p.SyncResu
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]protocolp2p.SyncResult, error) {
+func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
-		return nil, ErrNetworkIsNotReady
+		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
-	protocolID, peerCount := n.fork.ProtocolID(protocolp2p.DecidedHistoryProtocol)
+	protocolID, peerCount := n.fork.ProtocolID(p2pprotocol.DecidedHistoryProtocol)
 	peers := make([]peer.ID, 0)
 	for _, t := range targets {
 		p, err := peer.Decode(t)
@@ -51,7 +51,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 		peers = random
 	}
 	maxBatchRes := message.Height(n.cfg.MaxBatchResponse)
-	var results []protocolp2p.SyncResult
+	var results []p2pprotocol.SyncResult
 	for from < to {
 		currentEnd := to
 		if to-from > maxBatchRes {
@@ -74,11 +74,11 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
-func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]protocolp2p.SyncResult, error) {
+func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
-		return nil, ErrNetworkIsNotReady
+		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
-	pid, peerCount := n.fork.ProtocolID(protocolp2p.LastChangeRoundProtocol)
+	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastChangeRoundProtocol)
 	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
@@ -93,13 +93,13 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 }
 
 // RegisterHandlers registers the given handlers
-func (n *p2pNetwork) RegisterHandlers(handlers ...*protocolp2p.SyncHandler) {
-	m := make(map[libp2p_protocol.ID][]protocolp2p.RequestHandler)
+func (n *p2pNetwork) RegisterHandlers(handlers ...*p2pprotocol.SyncHandler) {
+	m := make(map[libp2p_protocol.ID][]p2pprotocol.RequestHandler)
 	for _, handler := range handlers {
 		pid, _ := n.fork.ProtocolID(handler.Protocol)
 		current, ok := m[pid]
 		if !ok {
-			current = make([]protocolp2p.RequestHandler, 0)
+			current = make([]p2pprotocol.RequestHandler, 0)
 		}
 		current = append(current, handler.Handler)
 		m[pid] = current
@@ -110,8 +110,8 @@ func (n *p2pNetwork) RegisterHandlers(handlers ...*protocolp2p.SyncHandler) {
 	}
 }
 
-func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...protocolp2p.RequestHandler) {
-	handler := protocolp2p.CombineRequestHandlers(handlers...)
+func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2pprotocol.RequestHandler) {
+	handler := p2pprotocol.CombineRequestHandlers(handlers...)
 	n.host.SetStreamHandler(pid, func(stream libp2pnetwork.Stream) {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
@@ -171,8 +171,8 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 	return peers[:i], nil
 }
 
-func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]protocolp2p.SyncResult, error) {
-	var results []protocolp2p.SyncResult
+func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
+	var results []p2pprotocol.SyncResult
 	data, err := syncMsg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode sync message")
@@ -200,7 +200,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 			continue
 		}
 		logger.Debug("got stream response", zap.String("res identifier", res.ID.String()))
-		results = append(results, protocolp2p.SyncResult{
+		results = append(results, p2pprotocol.SyncResult{
 			Msg:    res,
 			Sender: pid.String(),
 		})

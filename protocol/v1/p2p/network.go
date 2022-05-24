@@ -3,6 +3,12 @@ package protcolp2p
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
+)
+
+var (
+	// ErrNetworkIsNotReady is returned when trying to access the network instance before it's ready
+	ErrNetworkIsNotReady = errors.New("network services are not ready")
 )
 
 // Subscriber manages topics subscription

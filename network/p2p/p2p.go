@@ -11,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"sync"
@@ -25,11 +24,6 @@ const (
 	stateClosing      int32 = 1
 	stateClosed       int32 = 2
 	stateReady        int32 = 10
-)
-
-var (
-	// ErrNetworkIsNotReady is returned when trying to access the network instance before it's ready
-	ErrNetworkIsNotReady = errors.New("network services are not ready")
 )
 
 // p2pNetwork implements network.P2PNetwork

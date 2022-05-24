@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
@@ -39,7 +40,7 @@ func (n *p2pNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
 // Broadcast publishes the message to all peers in subnet
 func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
 	if !n.isReady() {
-		return ErrNetworkIsNotReady
+		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	raw, err := n.fork.EncodeNetworkMsg(&message)
 	if err != nil {
@@ -63,7 +64,7 @@ func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
 // Subscribe subscribes to validator subnet
 func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
 	if !n.isReady() {
-		return ErrNetworkIsNotReady
+		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	pkHex := hex.EncodeToString(pk)
 	if !n.setValidatorStateSubscribing(pkHex) {
@@ -80,7 +81,7 @@ func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
 // Unsubscribe unsubscribes from the validator subnet
 func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 	if !n.isReady() {
-		return ErrNetworkIsNotReady
+		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	pkHex := hex.EncodeToString(pk)
 	if !n.canUnsubscribe(pkHex) {
