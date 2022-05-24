@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -22,7 +23,7 @@ import (
 
 func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newSyncFailoverScenario(logger), runner.QBFTScenarioBootstrapper())
+	runner.Start(logger, newSyncFailoverScenario(logger), scenarios.QBFTScenarioBootstrapper())
 }
 
 type syncFailoverScenario struct {

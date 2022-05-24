@@ -16,6 +16,6 @@ func Test_Automation_QBFTScenarios(t *testing.T) {
 
 	for _, s := range scenariosToRun {
 		scenario := scenarios.NewScenario(s, logger)
-		runner.Start(logger, scenario, runner.QBFTScenarioBootstrapper())
+		runner.Start(logger, scenario, scenarios.QBFTScenarioBootstrapper())
 	}
 }

@@ -2,16 +2,9 @@ package runner
 
 import (
 	"context"
-	"fmt"
-	"github.com/bloxapp/ssv/automation/commons"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"go.uber.org/zap"
 )
@@ -37,62 +30,6 @@ type ScenarioContext struct {
 
 // Bootstrapper bootstraps the given scenario
 type Bootstrapper func(ctx context.Context, logger *zap.Logger, scenario Scenario) (*ScenarioContext, error)
-
-// QBFTScenarioBootstrapper bootstraps qbft scenarios
-func QBFTScenarioBootstrapper() Bootstrapper {
-	return func(ctx context.Context, plogger *zap.Logger, scenario Scenario) (*ScenarioContext, error) {
-		loggerFactory := func(s string) *zap.Logger {
-			return plogger.With(zap.String("who", s))
-		}
-		logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", scenario.Name()))
-		logger.Info("creating resources")
-
-		dbs := make([]basedb.IDb, 0)
-		for i := 0; i < scenario.NumOfOperators(); i++ {
-			db, err := storage.GetStorageFactory(basedb.Options{
-				Type:   "badger-memory",
-				Path:   "",
-				Logger: logger,
-			})
-			if err != nil {
-				logger.Panic("could not setup storage", zap.Error(err))
-			}
-			dbs = append(dbs, db)
-		}
-		forkVersion := forksprotocol.V0ForkVersion
-
-		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, scenario.NumOfBootnodes() > 0)
-		if err != nil {
-			return nil, err
-		}
-		stores := make([]qbftstorageprotocol.QBFTStore, 0)
-		kms := make([]beacon.KeyManager, 0)
-		for i, node := range ln.Nodes {
-			store := qbftstorage.New(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations", forkVersion)
-			stores = append(stores, store)
-			km := commons.NewTestSigner()
-			kms = append(kms, km)
-			node.RegisterHandlers(p2pprotocol.WithHandler(
-				p2pprotocol.LastDecidedProtocol,
-				handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", i+1)), store, node),
-			), p2pprotocol.WithHandler(
-				p2pprotocol.LastChangeRoundProtocol,
-				handlers.LastChangeRoundHandler(loggerFactory(fmt.Sprintf("changeround-handler-%d", i+1)), store, node),
-			), p2pprotocol.WithHandler(
-				p2pprotocol.DecidedHistoryProtocol,
-				handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-handler-%d", i+1)), store, node, 25),
-			))
-		}
-
-		return &ScenarioContext{
-			Ctx:         ctx,
-			LocalNet:    ln,
-			Stores:      stores,
-			KeyManagers: kms,
-			DBs:         dbs,
-		}, nil
-	}
-}
 
 type scenarioCfg interface {
 	// NumOfOperators returns the desired number of operators for the test

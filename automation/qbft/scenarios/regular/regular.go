@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 
 func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newRegularScenario(logger), runner.QBFTScenarioBootstrapper())
+	runner.Start(logger, newRegularScenario(logger), scenarios.QBFTScenarioBootstrapper())
 }
 
 // regularScenario is the most basic scenario where 4 operators starts qbft for a single validator

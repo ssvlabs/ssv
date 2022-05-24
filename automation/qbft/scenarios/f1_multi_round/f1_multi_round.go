@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 
 func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newF1MultiRoundScenario(logger), runner.QBFTScenarioBootstrapper())
+	runner.Start(logger, newF1MultiRoundScenario(logger), scenarios.QBFTScenarioBootstrapper())
 }
 
 // f1MultiRoundScenario is the scenario when new nodes are created with a delay after other nodes already started.
