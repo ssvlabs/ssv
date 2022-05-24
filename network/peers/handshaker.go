@@ -108,6 +108,20 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	}
 }
 
+// preHandshake makes sure we have exchanged framework information (libp2p)
+// with the peer on the other side of the connection.
+// it should enable us to know the supported protocols of peers we connect to
+func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
+	ctx, cancel := context.WithTimeout(h.ctx, time.Second*10)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return errors.New("identity protocol (libp2p) timeout")
+	case <-h.ids.IdentifyWait(conn):
+	}
+	return nil
+}
+
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	pid := conn.RemotePeer()
@@ -123,6 +137,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	if idn != nil {
 		return nil
+	}
+
+	if err := h.preHandshake(conn); err != nil {
+		return errors.Wrap(err, "could not perform pre-handshake")
 	}
 
 	idn, err = h.sendInfo(conn)
@@ -175,13 +193,6 @@ func (h *handshaker) sendInfo(conn libp2pnetwork.Conn) (*Identity, error) {
 
 func (h *handshaker) handshakeWithUserAgent(conn libp2pnetwork.Conn) (*Identity, error) {
 	pid := conn.RemotePeer()
-	ctx, cancel := context.WithTimeout(h.ctx, time.Second*10)
-	defer cancel()
-	select {
-	case <-ctx.Done():
-		return nil, errors.New("identity (user agent) protocol timeout")
-	case <-h.ids.IdentifyWait(conn):
-	}
 	uaRaw, err := h.ids.Host.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
 		return nil, err
