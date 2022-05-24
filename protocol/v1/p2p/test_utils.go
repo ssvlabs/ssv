@@ -37,6 +37,7 @@ type MockNetwork interface {
 	SetGetHistoryHandler(getHistoryHandler EventHandler)
 }
 
+// EventHandler represents a function that handles a message event
 type EventHandler func(e MockMessageEvent) *message.SSVMessage
 
 // TODO: cleanup mockNetwork

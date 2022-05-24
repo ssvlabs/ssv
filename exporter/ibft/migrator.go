@@ -19,11 +19,12 @@ var migrator mainMigrator
 
 var migratorOnce sync.Once
 
-// GetMainMigrator returns the instance of migrator
+// GetMainMigrator TODO: un-lint
+//nolint
+//GetMainMigrator returns the instance of migrator
 func GetMainMigrator() Migrator {
 	migratorOnce.Do(func() {
 		logger := logex.GetLogger(zap.String("who", "migrateManager"))
-		// TODO: un-lint
 		migrators := []Migrator{&decidedGenesisMigrator{logger}} //nolint
 		migrator = mainMigrator{
 			migrators: migrators,
