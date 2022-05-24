@@ -1,10 +1,15 @@
 package beacon
 
 import (
+	"context"
+
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 //go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
@@ -49,4 +54,14 @@ type Signer interface {
 type SigningUtil interface {
 	GetDomain(data *spec.AttestationData) ([]byte, error)
 	ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error)
+}
+
+// Options for controller struct creation
+type Options struct {
+	Context        context.Context
+	Logger         *zap.Logger
+	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
+	Graffiti       []byte
+	DB             basedb.IDb
 }

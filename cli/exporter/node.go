@@ -4,8 +4,16 @@ import (
 	"context"
 	"crypto/rsa"
 	"fmt"
+	"log"
+	"net/http"
+	"time"
+
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/prysmaticlabs/prysm/time/slots"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
@@ -16,18 +24,12 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2p "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/prysmaticlabs/prysm/time/slots"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-	"log"
-	"net/http"
-	"time"
 )
 
 type config struct {

@@ -1,7 +1,7 @@
 package ibft
 
 //
-//// decidedGenesisMigrator
+// decidedGenesisMigrator
 //type decidedGenesisMigrator struct {
 //	logger *zap.Logger
 //}

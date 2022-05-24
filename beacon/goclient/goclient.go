@@ -3,8 +3,6 @@ package goclient
 import (
 	"context"
 	"fmt"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"sync"
 	"time"
@@ -15,9 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/http"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/beacon/goclient/ekm"
-	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -25,6 +20,11 @@ import (
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/beacon/goclient/ekm"
+	"github.com/bloxapp/ssv/monitoring/metrics"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 const (
@@ -64,7 +64,7 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beacon.Options) (beaconprotocol.Beacon, error) {
+func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 
