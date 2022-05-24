@@ -36,23 +36,25 @@ func newInMemDb() basedb.IDb {
 
 func TestAggregatedMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
+	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()
+	require.NoError(t, err)
 	msg1 := SignMsg(t, 1, sks[1], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitData,
 	}, forksprotocol.V0ForkVersion.String())
 	msg2 := SignMsg(t, 2, sks[2], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitData,
 	}, forksprotocol.V0ForkVersion.String())
 	msg3 := SignMsg(t, 3, sks[3], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitData,
 	}, forksprotocol.V0ForkVersion.String())
 
 	tests := []struct {
@@ -210,13 +212,16 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), message.RoleTypeAttester.String())
 
 	var sigs []*message.SignedMessage
+	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()
+	require.NoError(t, err)
+
 	for i := 1; i < 4; i++ {
 		sigs = append(sigs, SignMsg(t, uint64(i), sks[message.OperatorID(i)], &message.ConsensusMessage{
 			Height:     2,
 			MsgType:    message.CommitMsgType,
 			Round:      3,
 			Identifier: []byte(identifier),
-			Data:       []byte("value"),
+			Data:       commitData,
 		}, forksprotocol.V0ForkVersion.String()))
 	}
 	decided, err := AggregateMessages(sigs)
@@ -237,7 +242,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				MsgType:    message.CommitMsgType,
 				Round:      3,
 				Identifier: []byte(identifier),
-				Data:       []byte("value"),
+				Data:       commitData,
 			}, forksprotocol.V0ForkVersion.String()),
 		},
 		{
@@ -250,7 +255,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 					MsgType:    message.CommitMsgType,
 					Round:      3,
 					Identifier: []byte(identifier),
-					Data:       []byte("value"),
+					Data:       commitData,
 				}, forksprotocol.V0ForkVersion.String())
 				msg.Signature = []byte("dummy")
 				return msg
@@ -265,7 +270,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				MsgType:    message.CommitMsgType,
 				Round:      3,
 				Identifier: []byte("xxx_ATTESTER"),
-				Data:       []byte("value"),
+				Data:       commitData,
 			}, forksprotocol.V0ForkVersion.String()),
 		},
 	}

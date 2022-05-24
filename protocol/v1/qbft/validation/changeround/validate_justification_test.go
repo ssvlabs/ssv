@@ -160,7 +160,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"missing change-round-data",
-			"failed to get round change data: could not decode change round data from message: unexpected end of JSON input",
+			"change round justification msg is nil",
 			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
 				MsgType:    message.RoundChangeMsgType,
 				Round:      1,

@@ -25,7 +25,8 @@ import (
 
 func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	secretKeys, nodes := GenerateNodes(4)
-	value := []byte(time.Now().Weekday().String())
+	value, err := (&message.ProposalData{Data: []byte(time.Now().Weekday().String())}).Encode()
+	require.NoError(t, err)
 	instance := &Instance{
 		PrePrepareMessages:  inmem.New(3, 2),
 		ChangeRoundMessages: inmem.New(3, 2),
