@@ -220,12 +220,8 @@ func DefaultMsgCleaner(mid message.Identifier, mts ...message.MsgType) Cleaner {
 				return false
 			}
 		}
-
-		if parts[2] != identifier {
-			return false
-		}
-		// clean
-		return true
+		// clean if we reached here, and the identifier is equal
+		return parts[2] == identifier
 	}
 }
 

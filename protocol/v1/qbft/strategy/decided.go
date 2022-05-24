@@ -30,7 +30,7 @@ type Decided interface {
 }
 
 // SaveLastDecided saves last decided message if its height is larger than persisted height
-func SaveLastDecided(logger *zap.Logger, store qbftstorage.QBFTStore, signedMsgs ...*message.SignedMessage) error {
+func SaveLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, signedMsgs ...*message.SignedMessage) error {
 	for _, msg := range signedMsgs {
 		last, err := store.GetLastDecided(msg.Message.Identifier)
 		if err != nil {
