@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestWorker(t *testing.T) {
 	worker := NewWorker(&Config{
 		Ctx:          context.Background(),
+		Logger:       zap.L(),
 		WorkersCount: 1,
 		Buffer:       2,
 	})
