@@ -36,23 +36,25 @@ func newInMemDb() basedb.IDb {
 
 func TestAggregatedMsg(t *testing.T) {
 	sks, _ := GenerateNodes(4)
+	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()
+	require.NoError(t, err)
 	msg1 := SignMsg(t, 1, sks[1], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitData,
 	}, forksprotocol.V0ForkVersion.String())
 	msg2 := SignMsg(t, 2, sks[2], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitData,
 	}, forksprotocol.V0ForkVersion.String())
 	msg3 := SignMsg(t, 3, sks[3], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       []byte("value"),
+		Data:       commitData,
 	}, forksprotocol.V0ForkVersion.String())
 
 	tests := []struct {
