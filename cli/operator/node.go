@@ -3,47 +3,46 @@ package operator
 import (
 	"context"
 	"fmt"
-	types "github.com/prysmaticlabs/eth2-types"
 	"log"
 	"net/http"
 	"time"
 
-	ssv_identity "github.com/bloxapp/ssv/identity"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/prysmaticlabs/prysm/time/slots"
-
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/ilyakaznacheev/cleanenv"
+	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/prysmaticlabs/prysm/time/slots"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options   `yaml:"db"`
-	SSVOptions                 operator.Options `yaml:"ssv"`
-	ETH1Options                eth1.Options     `yaml:"eth1"`
-	ETH2Options                beacon.Options   `yaml:"eth2"`
-	P2pNetworkConfig           p2pv1.Config     `yaml:"p2p"`
+	DBOptions                  basedb.Options         `yaml:"db"`
+	SSVOptions                 operator.Options       `yaml:"ssv"`
+	ETH1Options                eth1.Options           `yaml:"eth1"`
+	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
+	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`

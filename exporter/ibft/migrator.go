@@ -1,8 +1,6 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap"
 	"sync"
 )
 
@@ -22,16 +20,16 @@ var migratorOnce sync.Once
 // GetMainMigrator TODO: un-lint
 //nolint
 //GetMainMigrator returns the instance of migrator
-func GetMainMigrator() Migrator {
-	migratorOnce.Do(func() {
-		logger := logex.GetLogger(zap.String("who", "migrateManager"))
-		migrators := []Migrator{&decidedGenesisMigrator{logger}} //nolint
-		migrator = mainMigrator{
-			migrators: migrators,
-		}
-	})
-	return &migrator
-}
+//func GetMainMigrator() Migrator {
+//	migratorOnce.Do(func() {
+//		logger := logex.GetLogger(zap.String("who", "migrateManager"))
+//		migrators := []Migrator{&decidedGenesisMigrator{logger}} //nolint
+//		migrator = mainMigrator{
+//			migrators: migrators,
+//		}
+//	})
+//	return &migrator
+//}
 
 // Migrate applies the existing migrators on the given reader
 func (mm *mainMigrator) Migrate(r Reader) error {

@@ -1,11 +1,13 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/beacon"
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
+
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 var (
@@ -29,7 +31,7 @@ func init() {
 }
 
 // ReportValidatorStatus reports the current status of validator
-func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
+func ReportValidatorStatus(pk string, meta *beaconprotocol.ValidatorMetadata, logger *zap.Logger) {
 	logger = logger.With(zap.String("pubKey", pk), zap.String("who", "ReportValidatorStatus"),
 		zap.Any("metadata", meta))
 	if meta == nil {
