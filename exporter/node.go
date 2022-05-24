@@ -4,10 +4,13 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/exporter/ibft"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
+	"sync"
 	"time"
 )
 
@@ -78,38 +81,39 @@ type Options struct {
 	InstanceID     int
 }
 
-//
-//// exporter is the internal implementation of Exporter interface
+// exporter is the internal implementation of Exporter interface
+// TODO: un-lint
+//nolint
 type exporter struct {
-	//	ctx              context.Context
-	//	storage          storage.Storage
-	//	validatorStorage validator.ICollection
-	//	ibftStorage      collections.Iibft
-	//	logger           *zap.Logger
-	//	network          network.Network
-	//	eth1Client       eth1.Client
-	//	beacon           beacon.Beacon
-	//
-	//	ws           api.WebSocketServer
-	//	commitReader ibft.Reader
-	//
-	//	readersMut     sync.RWMutex
-	//	decidedReaders map[string]ibft.Reader
-	//	netReaders     map[string]ibft.Reader
-	//
-	//	wsAPIPort                       int
-	//	ibftSyncEnabled                 bool
-	//	validatorMetaDataUpdateInterval time.Duration
-	//
-	//	decidedReadersQueue  queue.Queue
-	//	networkReadersQueue  queue.Queue
-	//	metaDataReadersQueue queue.Queue
-	//
-	//	networkMsgMediator ibftController.Mediator
-	//	useMainTopic       bool
-	//
-	//	numOfInstances int
-	//	instanceID     int
+	ctx              context.Context
+	storage          storage.Storage
+	validatorStorage validator.ICollection
+	ibftStorage      collections.Iibft
+	logger           *zap.Logger
+	network          network.Network
+	eth1Client       eth1.Client
+	beacon           beacon.Beacon
+
+	ws           api.WebSocketServer
+	commitReader ibft.Reader
+
+	readersMut     sync.RWMutex
+	decidedReaders map[string]ibft.Reader
+	netReaders     map[string]ibft.Reader
+
+	wsAPIPort                       int
+	ibftSyncEnabled                 bool
+	validatorMetaDataUpdateInterval time.Duration
+
+	decidedReadersQueue  queue.Queue
+	networkReadersQueue  queue.Queue
+	metaDataReadersQueue queue.Queue
+
+	networkMsgMediator ibftController.Mediator
+	useMainTopic       bool
+
+	numOfInstances int
+	instanceID     int
 }
 
 //

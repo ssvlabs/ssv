@@ -14,7 +14,7 @@ type IController interface {
 	Init() error
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.InstanceResult, error)
+	StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error)
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0

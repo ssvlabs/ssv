@@ -98,9 +98,9 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 		mpk[i] = *sk.GetPublicKey()
 	}
 	sig := msk[0].Sign(msg)
-	log.Println(fmt.Sprintf("master sk: %s", msk[0].SerializeToHexStr()))
-	log.Println(fmt.Sprintf("master pk: %s", mpk[0].SerializeToHexStr()))
-	log.Println(fmt.Sprintf("master message: %s \n verify %t", sig.SerializeToHexStr(), sig.Verify(&mpk[0], msg)))
+	log.Printf("master sk: %s", msk[0].SerializeToHexStr())
+	log.Printf("master pk: %s", mpk[0].SerializeToHexStr())
+	log.Printf("master message: %s \n verify %t", sig.SerializeToHexStr(), sig.Verify(&mpk[0], msg))
 
 	for id := uint64(0); id < count; id++ {
 		idVec[id] = bls.ID{}
@@ -117,15 +117,15 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 		pk.Set(mpk, &idVec[id])
 		pubVec[id] = pk
 
-		sig := sk.Sign(msg)
-		sigVec[id] = *sig
+		signature := sk.Sign(msg)
+		sigVec[id] = *signature
 
-		log.Println(fmt.Sprintf("sigVec[%d]: \n verify %t", id, sig.Verify(&pk, msg)))
+		log.Printf("sigVec[%d]: \n verify %t", id, signature.Verify(&pk, msg))
 	}
 
 	idxVec := [3]uint64{1, 2, 4}
 
-	subIdVec := make([]bls.ID, 3)
+	subIDVec := make([]bls.ID, 3)
 	subSecVec := make([]bls.SecretKey, 3)
 	subPubVec := make([]bls.PublicKey, 3)
 	subSigVec := make([]bls.Sign, 3)
@@ -137,7 +137,7 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 		blsID.SetLittleEndian([]byte(strconv.Itoa(int(i + 1))))
 		//blsID.SetDecString(string(idx))
 		fmt.Println(blsID.GetHexString())
-		subIdVec[i] = blsID
+		subIDVec[i] = blsID
 		subSecVec[i] = secVec[i]
 		subPubVec[i] = pubVec[i]
 		subSigVec[i] = sigVec[i]
@@ -147,12 +147,12 @@ func TestSplitAndReconstructHerumi(t *testing.T) {
 	pk := bls.PublicKey{}
 	recoverdSig := bls.Sign{}
 
-	sk.Recover(subSecVec, subIdVec)
-	pk.Recover(subPubVec, subIdVec)
-	recoverdSig.Recover(subSigVec, subIdVec)
+	sk.Recover(subSecVec, subIDVec)
+	pk.Recover(subPubVec, subIDVec)
+	recoverdSig.Recover(subSigVec, subIDVec)
 
-	log.Println(fmt.Sprintf("recoverd sk: %s", sk.SerializeToHexStr()))
-	log.Println(fmt.Sprintf("recoverd pk: %s", pk.SerializeToHexStr()))
-	log.Println(fmt.Sprintf("recoverd sig: %s", recoverdSig.SerializeToHexStr()))
-	log.Println(fmt.Sprintf("is sig equal: %t", recoverdSig.SerializeToHexStr() == sig.SerializeToHexStr()))
+	log.Printf("recoverd sk: %s", sk.SerializeToHexStr())
+	log.Printf("recoverd pk: %s", pk.SerializeToHexStr())
+	log.Printf("recoverd sig: %s", recoverdSig.SerializeToHexStr())
+	log.Printf("is sig equal: %t", recoverdSig.SerializeToHexStr() == sig.SerializeToHexStr())
 }

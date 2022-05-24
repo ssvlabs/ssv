@@ -1,6 +1,9 @@
-## IBFT Fast Sync For Current Running Instances
+## QBFT Speedup
+
+Fast sync for current running instances, in order to speedup change round.
 
 ### Background
+
 SSV nodes broadcast a change round msg when their internal timeout clock elapses. 
 Timeout are exponential, that is some base timeout to the round x^r (x - base timeout, r - round number).
 
@@ -12,6 +15,7 @@ There are 2 ways to catchup:
 The above helps somewhat but is still very slow as timeouts are exponential and quickly get to very long timeouts (hours and days).
 
 ### Solution - Fast Sync
+
 A solution is to actively ask other nodes for their latest change rounds when a node boots.  
 Doing so will bump the node immediately forward, still using the f+1 IBFT speedup but now not needing to wait passively for other nodes to send the change round msg.
 

@@ -37,6 +37,7 @@ func GenerateBLSKeys(oids ...message.OperatorID) (map[message.OperatorID]*bls.Se
 	return sks, nodes
 }
 
+// MsgGenerator represents a message generator
 type MsgGenerator func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage)
 
 // CreateMultipleSignedMessages enables to create multiple decided messages

@@ -54,11 +54,13 @@ func DecodeKey(sk *rsa.PrivateKey, hashBase64 string) (string, error) {
 // ConvertPemToPrivateKey return rsa private key from secret key
 func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(skPem))
-	enc := x509.IsEncryptedPEMBlock(block)
+	// TODO: resolve deprecation
+	enc := x509.IsEncryptedPEMBlock(block) //nolint
 	b := block.Bytes
 	if enc {
 		var err error
-		b, err = x509.DecryptPEMBlock(block, nil)
+		// TODO: resolve deprecation
+		b, err = x509.DecryptPEMBlock(block, nil) //nolint
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to decrypt private key")
 		}

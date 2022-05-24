@@ -21,7 +21,7 @@ loop:
 	i.Logger.Debug("instance round timer loop stopped")
 }
 
-// ResetRoundTimer
+// ResetRoundTimer ...
 /**
 "Timer:
 	In addition to the state variables, each correct process pi also maintains a timer represented by timeri,

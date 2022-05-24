@@ -118,10 +118,7 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 // checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
 	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
-	if len(msg.GetSigners()) > len(knownMsg.GetSigners()) {
-		return false
-	}
-	return true
+	return len(msg.GetSigners()) <= len(knownMsg.GetSigners())
 }
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance

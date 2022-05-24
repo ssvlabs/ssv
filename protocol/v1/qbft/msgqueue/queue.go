@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/pkg/errors"
@@ -33,7 +34,7 @@ type MsgQueue interface {
 	Len() int
 	// Clean will clean irrelevant keys from the map
 	// TODO: check performance
-	Clean(cleaner Cleaner) int
+	Clean(cleaners ...Cleaner) int64
 }
 
 // New creates a new MsgQueue
@@ -53,11 +54,12 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		logger:    logger,
 		indexers:  opts.Indexers,
 		itemsLock: &sync.RWMutex{},
-		items:     make(map[string][]*msgContainer),
+		items:     make(map[string][]*MsgContainer),
 	}, err
 }
 
-type msgContainer struct {
+// MsgContainer is a container for a message
+type MsgContainer struct {
 	msg *message.SSVMessage
 }
 
@@ -67,7 +69,7 @@ type queue struct {
 	indexers []Indexer
 
 	itemsLock *sync.RWMutex
-	items     map[string][]*msgContainer // map[index][]msgs
+	items     map[string][]*MsgContainer
 }
 
 func (q *queue) Add(msg *message.SSVMessage) {
@@ -75,7 +77,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 	defer q.itemsLock.Unlock()
 
 	indices := q.indexMessage(msg)
-	mc := &msgContainer{
+	mc := &MsgContainer{
 		msg: msg,
 	}
 	for _, idx := range indices {
@@ -84,7 +86,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		}
 		msgs, ok := q.items[idx]
 		if !ok {
-			msgs = make([]*msgContainer, 0)
+			msgs = make([]*MsgContainer, 0)
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
@@ -96,20 +98,31 @@ func (q *queue) Purge(idx string) {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	q.items[idx] = make([]*msgContainer, 0)
+	q.items[idx] = make([]*MsgContainer, 0)
 }
 
-func (q *queue) Clean(cleaner Cleaner) int {
+func (q *queue) Clean(cleaners ...Cleaner) int64 {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	cleaned := 0
+	var cleaned int64
+
+	apply := func(k string) bool {
+		for _, cleaner := range cleaners {
+			if cleaner(k) {
+				atomic.AddInt64(&cleaned, int64(len(q.items[k])))
+				return true
+			}
+		}
+		return false
+	}
+
 	for k := range q.items {
-		if cleaner(k) {
-			cleaned += len(q.items[k])
+		if apply(k) {
 			delete(q.items, k)
 		}
 	}
+
 	return cleaned
 }
 

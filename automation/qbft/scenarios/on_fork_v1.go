@@ -167,31 +167,28 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	}
 
 	// forking
-	for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
+	for i := 0; i < f.NumOfOperators(); i++ {
 		wg.Add(3)
 		go func(node network.P2PNetwork) {
 			defer wg.Done()
 			if err := node.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
 				f.logger.Panic("could not fork network to v1", zap.Error(err))
 			}
-			<-time.After(time.Second * 3)
-		}(ctx.LocalNet.Nodes[i-1])
+		}(ctx.LocalNet.Nodes[i])
 		go func(val validator.IValidator) {
 			defer wg.Done()
-			<-time.After(time.Millisecond * 10)
+			<-time.After(time.Second)
 			if err := val.OnFork(forksprotocol.V1ForkVersion); err != nil {
 				f.logger.Panic("could not fork to v1", zap.Error(err))
 			}
-			<-time.After(time.Second * 3)
-		}(f.validators[i-1])
+		}(f.validators[i])
 		go func(store qbftstorage.QBFTStore) {
 			defer wg.Done()
-			<-time.After(time.Millisecond * 20)
+			<-time.After(time.Second)
 			if err := store.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion); err != nil {
 				f.logger.Panic("could not fork qbft store to v1", zap.Error(err))
 			}
-			<-time.After(time.Second * 3)
-		}(ctx.Stores[i-1])
+		}(ctx.Stores[i])
 	}
 	wg.Wait()
 
@@ -200,9 +197,19 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	<-time.After(time.Second * 10)
 	f.logger.Debug("------ starting instances")
 
+	for i := 0; i < f.NumOfOperators(); i++ {
+		peers, err := ctx.LocalNet.Nodes[i].Peers(f.share.PublicKey.Serialize())
+		if err != nil {
+			return errors.Wrap(err, "could not check peers of topic")
+		}
+		if len(peers) < f.NumOfOperators()/2 {
+			return errors.Errorf("node %d could not find enough peers after fork: %d", i, len(peers))
+		}
+	}
+
 	// running instances post-fork
 	if err := f.startInstances(message.Height(7), message.Height(9)); err != nil {
-		return errors.Wrap(err, "could not start instances")
+		return errors.Wrap(err, "could not start instance after fork")
 	}
 
 	return nil
@@ -239,12 +246,11 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 	h := from
 
 	for h <= to {
-		f.logger.Info("started instances")
 		for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
 			wg.Add(1)
 			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
 				if err := f.startNode(node, seqNumber); err != nil {
-					f.logger.Error("could not start node", zap.Error(err))
+					f.logger.Error("could not start node", zap.Uint64("node", index-1), zap.Error(err))
 				}
 				wg.Done()
 			}(f.validators[i-1], i, h)

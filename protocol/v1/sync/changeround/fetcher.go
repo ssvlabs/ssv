@@ -10,6 +10,7 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
+// ErrNotFound represents a not found error
 var ErrNotFound = fmt.Errorf("not found")
 
 // MsgHandler handles incoming change round messages

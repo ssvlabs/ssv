@@ -8,19 +8,22 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
+// RoundState is the state of the round
 type RoundState int32
 
+// RoundState values
 const (
-	RoundState_NotStarted  RoundState = 0
-	RoundState_PrePrepare  RoundState = 1
-	RoundState_Prepare     RoundState = 2
-	RoundState_Commit      RoundState = 3
-	RoundState_ChangeRound RoundState = 4
-	RoundState_Decided     RoundState = 5
-	RoundState_Stopped     RoundState = 6
+	RoundStateNotStarted  RoundState = 0
+	RoundStatePrePrepare  RoundState = 1
+	RoundStatePrepare     RoundState = 2
+	RoundStateCommit      RoundState = 3
+	RoundStateChangeRound RoundState = 4
+	RoundStateDecided     RoundState = 5
+	RoundStateStopped     RoundState = 6
 )
 
-var RoundState_name = map[int32]string{
+// RoundStateName represents the map of the round state names
+var RoundStateName = map[int32]string{
 	0: "NotStarted",
 	1: "PrePrepare",
 	2: "Prepare",
@@ -28,16 +31,6 @@ var RoundState_name = map[int32]string{
 	4: "ChangeRound",
 	5: "Decided",
 	6: "Stopped",
-}
-
-var RoundState_value = map[string]int32{
-	"NotStarted":  0,
-	"PrePrepare":  1,
-	"Prepare":     2,
-	"Commit":      3,
-	"ChangeRound": 4,
-	"Decided":     5,
-	"Stopped":     6,
 }
 
 // State holds an iBFT state, thread safe
@@ -94,6 +87,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetHeight returns the height of the state
 func (s *State) GetHeight() message.Height {
 	if height, ok := s.Height.Load().(message.Height); ok {
 		return height
@@ -102,12 +96,14 @@ func (s *State) GetHeight() message.Height {
 	return message.Height(0)
 }
 
+// NewHeight returns a new height
 func NewHeight(height message.Height) atomic.Value {
 	h := atomic.Value{}
 	h.Store(height)
 	return h
 }
 
+// GetRound returns the round of the state
 func (s *State) GetRound() message.Round {
 	if round, ok := s.Round.Load().(message.Round); ok {
 		return round
@@ -115,12 +111,14 @@ func (s *State) GetRound() message.Round {
 	return message.Round(0)
 }
 
+// NewRound returns a new round
 func NewRound(round message.Round) atomic.Value {
 	value := atomic.Value{}
 	value.Store(round)
 	return value
 }
 
+// GetPreparedRound returns the prepared round of the state
 func (s *State) GetPreparedRound() message.Round {
 	if round, ok := s.PreparedRound.Load().(message.Round); ok {
 		return round
@@ -129,6 +127,7 @@ func (s *State) GetPreparedRound() message.Round {
 	return message.Round(0)
 }
 
+// GetIdentifier returns the identifier of the state
 func (s *State) GetIdentifier() message.Identifier {
 	if identifier, ok := s.Identifier.Load().(message.Identifier); ok {
 		return identifier
@@ -137,6 +136,7 @@ func (s *State) GetIdentifier() message.Identifier {
 	return nil
 }
 
+// GetInputValue returns the input value of the state
 func (s *State) GetInputValue() []byte {
 	if inputValue, ok := s.InputValue.Load().([]byte); ok {
 		return inputValue
@@ -144,6 +144,7 @@ func (s *State) GetInputValue() []byte {
 	return nil
 }
 
+// GetPreparedValue returns the prepared value of the state
 func (s *State) GetPreparedValue() []byte {
 	if value, ok := s.PreparedValue.Load().([]byte); ok {
 		return value
@@ -152,6 +153,7 @@ func (s *State) GetPreparedValue() []byte {
 	return nil
 }
 
+// NewByteValue returns a new byte value
 func NewByteValue(val []byte) atomic.Value {
 	value := atomic.Value{}
 	value.Store(val)

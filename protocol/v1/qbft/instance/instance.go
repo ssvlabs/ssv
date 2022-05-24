@@ -93,7 +93,7 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 func NewInstance(opts *Options) Instancer {
 	pk := opts.Identifier.GetValidatorPK()
 	role := opts.Identifier.GetRoleType().String()
-	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundState_NotStarted))
+	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundStateNotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
 
 	ret := &Instance{
@@ -174,7 +174,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
-			//i.ProcessStageChange(qbft.RoundState_PrePrepare) we need to process the proposal msg in order to broadcast to prepare msg
+			//i.ProcessStageChange(qbft.RoundStatePrePrepare) we need to process the proposal msg in order to broadcast to prepare msg
 
 			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
@@ -220,7 +220,7 @@ func (i *Instance) stop() {
 	i.stopped = true
 	i.roundTimer.Kill()
 	i.Logger.Debug("STOPPING IBFTController -> stopped round timer")
-	i.ProcessStageChange(qbft.RoundState_Stopped)
+	i.ProcessStageChange(qbft.RoundStateStopped)
 	i.Logger.Debug("STOPPING IBFTController -> round stage stopped")
 	// stop stage chan
 	if i.stageChangedChan != nil {
@@ -246,6 +246,7 @@ func (i *Instance) Stopped() bool {
 	return i.stopped
 }
 
+// ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *message.SignedMessage) (bool, error) {
 	var pp pipelines.SignedMessagePipeline
 
@@ -266,7 +267,7 @@ func (i *Instance) ProcessMsg(msg *message.SignedMessage) (bool, error) {
 		return false, err
 	}
 
-	if i.State().Stage.Load() == int32(qbft.RoundState_Decided) { // TODO better way to compare? (:Niv)
+	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
 		return true, nil // TODO that's the right decidedValue? (:Niv)
 	}
 	return false, nil
@@ -406,7 +407,7 @@ func generateState(opts *Options) *qbft.State {
 	iv := atomic.Value{}
 	iv.Store([]byte{})
 	return &qbft.State{
-		Stage:         *atomic.NewInt32(int32(qbft.RoundState_NotStarted)),
+		Stage:         *atomic.NewInt32(int32(qbft.RoundStateNotStarted)),
 		Identifier:    identifier,
 		Height:        height,
 		InputValue:    iv,

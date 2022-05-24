@@ -28,6 +28,7 @@ func (v0 *ForkV0) Apply(instance *instance.Instance) {
 	v0.instance = instance
 }
 
+// VersionName returns version name
 func (v0 *ForkV0) VersionName() string {
 	return forksprotocol.V0ForkVersion.String()
 }

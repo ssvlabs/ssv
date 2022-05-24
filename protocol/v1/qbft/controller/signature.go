@@ -15,8 +15,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// TimerState is the state of the timer.
 type TimerState int
 
+// set of timer states.
 const (
 	StateSleep = iota
 	StateRunning
@@ -35,6 +37,7 @@ func (s TimerState) toString() string {
 	return ""
 }
 
+// SignatureState represents the signature state.
 type SignatureState struct {
 	timer      *time.Timer
 	state      atomic.Int32

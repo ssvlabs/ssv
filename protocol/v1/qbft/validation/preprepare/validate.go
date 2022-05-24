@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
+// ErrInvalidSignersNum represents an error when the number of signers is invalid.
 var ErrInvalidSignersNum = errors.New("invalid number of signers for pre-prepare message")
 
 // LeaderResolver resolves round's leader

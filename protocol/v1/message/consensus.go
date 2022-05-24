@@ -349,25 +349,25 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 	switch msg.MsgType {
 	case ProposalMsgType:
 		m = append(m, KeyVal{"type", proto.RoundState_PrePrepare})
-		if p, err := msg.GetProposalData(); err != nil {
+		p, err := msg.GetProposalData()
+		if err != nil {
 			return nil, err
-		} else {
-			data = p.Data
 		}
+		data = p.Data
 	case PrepareMsgType:
 		m = append(m, KeyVal{"type", proto.RoundState_Prepare})
-		if p, err := msg.GetPrepareData(); err != nil {
+		p, err := msg.GetPrepareData()
+		if err != nil {
 			return nil, err
-		} else {
-			data = p.Data
 		}
+		data = p.Data
 	case CommitMsgType:
 		m = append(m, KeyVal{"type", proto.RoundState_Commit})
-		if c, err := msg.GetCommitData(); err != nil {
+		p, err := msg.GetCommitData()
+		if err != nil {
 			return nil, err
-		} else {
-			data = c.Data
 		}
+		data = p.Data
 	case RoundChangeMsgType:
 		m = append(m, KeyVal{"type", proto.RoundState_ChangeRound})
 		var value OrderedMap
@@ -436,6 +436,7 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
+// KeyVal is a struct of key value pair
 type KeyVal struct {
 	Key string
 	Val interface{}

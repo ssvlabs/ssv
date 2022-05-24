@@ -199,7 +199,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 			logger.Debug("could not decode stream response")
 			continue
 		}
-		logger.Debug("got stream response", zap.String("res identifier", res.ID.String()), zap.Any("res", res))
+		logger.Debug("got stream response", zap.String("res identifier", res.ID.String()))
 		results = append(results, protocolp2p.SyncResult{
 			Msg:    res,
 			Sender: pid.String(),

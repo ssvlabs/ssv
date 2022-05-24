@@ -131,10 +131,8 @@ func (r *farFutureSyncScenario) Execute(ctx *runner.ScenarioContext) error {
 		if err != nil {
 			r.logger.Error("node #4 could not get state", zap.Int64("index", int64(i)))
 			return errors.New("node #4 could not get state")
-		} else {
-			r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1), zap.Int64("index", int64(i)))
 		}
-
+		r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1), zap.Int64("index", int64(i)))
 	}
 	return nil
 }

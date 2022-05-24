@@ -105,6 +105,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			// validatorStorage pk
 			pk := &bls.PublicKey{}
 			err := pk.Deserialize(refPk)
+			require.NoError(t, err)
 
 			b := newTestBeacon(t)
 
@@ -183,6 +184,8 @@ var (
 		_byteArray("890a3eb48f9189be5a53452c156a0725a67c7cc2178fd5505d13349b8e05963ed6fdcd9239dafb0cdecf8c306e400358000f014ba5db49ab8a2355eaafba38e79fb65f15ec7e80d2b259e19a96cc4383ae974a74ec7d69ce17e404965338fcdf"),
 	}
 
+	// TODO: (lint) fix test
+	//nolint
 	refAttestationSig = _byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776")
 	refSigRoot        = _byteArray("ae1f95e7f59eb99862ba7b3666a71a01facf4524e5922c6cb8f3b964a5041962")
 )

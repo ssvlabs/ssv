@@ -280,6 +280,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 	//})
 }
 
+// TODO: un-lint
+//nolint
 func newDecidedAPIMsg(pk string, from, to int64) *api.NetworkMessage {
 	return &api.NetworkMessage{
 		Msg: api.Message{

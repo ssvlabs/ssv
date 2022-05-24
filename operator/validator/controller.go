@@ -524,7 +524,10 @@ func (c *controller) startValidator(v validator.IValidator) (bool, error) {
 	if v.GetShare().Metadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	v.Start()
+	if err := v.Start(); err != nil {
+		metricsValidatorStatus.WithLabelValues(v.GetShare().PublicKey.SerializeToHexStr()).Set(float64(validatorStatusError))
+		return false, errors.Wrap(err, "could not start validator")
+	}
 	return true, nil
 }
 
