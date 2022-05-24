@@ -391,7 +391,12 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 					if rcj.Message.Height > 0 { // v0 version saves root without seq_number when height is 0.
 						justificationMsg = append(justificationMsg, KeyVal{Key: "seq_number", Val: uint64(rcj.Message.Height)})
 					}
-					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: rcj.Message.Data})
+
+					pd, err := rcj.Message.GetPrepareData()
+					if err != nil {
+						return nil, err
+					}
+					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: pd.Data})
 					//mJustificationMsg, err := json.Marshal(justificationMsg)
 					//if err != nil {
 					//	return nil, err
