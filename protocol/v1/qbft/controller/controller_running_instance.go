@@ -55,7 +55,7 @@ instanceLoop:
 				break instanceLoop
 			}
 			if len(retMsg) == 0 {
-				err = errors.New("could not fetch decided msg after instance finished")
+				err = errors.Errorf("could not fetch decided msg with height %d after instance finished", instanceOpts.Height)
 				break instanceLoop
 			}
 			retRes = &instance.InstanceResult{

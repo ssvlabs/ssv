@@ -14,6 +14,8 @@ func (fv ForkVersion) String() string {
 }
 
 const (
+	// ForkVersionEmpty represents an empty version
+	ForkVersionEmpty ForkVersion = ""
 	// V0ForkVersion is the version for v0
 	V0ForkVersion ForkVersion = "v0"
 	// V1ForkVersion is the version for v1
