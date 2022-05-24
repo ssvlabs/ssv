@@ -30,7 +30,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 	iv.Store([]byte("input"))
 
 	state := &qbft.State{
-		Stage:         *atomic.NewInt32(int32(qbft.RoundState_Decided)),
+		Stage:         *atomic.NewInt32(int32(qbft.RoundStateDecided)),
 		Identifier:    identifierAtomic,
 		Height:        height,
 		InputValue:    iv,

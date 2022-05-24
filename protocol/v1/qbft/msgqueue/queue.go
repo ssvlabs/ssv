@@ -52,11 +52,12 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		logger:    logger,
 		indexers:  opts.Indexers,
 		itemsLock: &sync.RWMutex{},
-		items:     make(map[string][]*msgContainer),
+		items:     make(map[string][]*MsgContainer),
 	}, err
 }
 
-type msgContainer struct {
+// MsgContainer is a container for a message
+type MsgContainer struct {
 	msg *message.SSVMessage
 }
 
@@ -66,7 +67,7 @@ type queue struct {
 	indexers []Indexer
 
 	itemsLock *sync.RWMutex
-	items     map[string][]*msgContainer
+	items     map[string][]*MsgContainer
 }
 
 func (q *queue) Add(msg *message.SSVMessage) {
@@ -74,7 +75,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 	defer q.itemsLock.Unlock()
 
 	indices := q.indexMessage(msg)
-	mc := &msgContainer{
+	mc := &MsgContainer{
 		msg: msg,
 	}
 	for _, idx := range indices {
@@ -83,7 +84,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		}
 		msgs, ok := q.items[idx]
 		if !ok {
-			msgs = make([]*msgContainer, 0)
+			msgs = make([]*MsgContainer, 0)
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
@@ -95,7 +96,7 @@ func (q *queue) Purge(idx string) {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	q.items[idx] = make([]*msgContainer, 0)
+	q.items[idx] = make([]*MsgContainer, 0)
 }
 
 func (q *queue) Clean(cleaners ...Cleaner) int64 {

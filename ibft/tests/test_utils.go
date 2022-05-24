@@ -18,6 +18,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: (lint) fix test
+//nolint
 type validatorData struct {
 	PK       string
 	sks      map[message.OperatorID]*bls.SecretKey
@@ -25,6 +27,8 @@ type validatorData struct {
 	messages []*message.SignedMessage
 }
 
+// TODO: (lint) fix test
+//nolint
 func changeRoundGenerator(rounder func() message.Round) syncMsgGenerator {
 	return func(height message.Height, pk []byte, oids ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage) {
 		return oids[1:], &message.ConsensusMessage{
@@ -37,6 +41,8 @@ func changeRoundGenerator(rounder func() message.Round) syncMsgGenerator {
 	}
 }
 
+// TODO: (lint) fix test
+//nolint
 func decidedGenerator(height message.Height, pk []byte, oids ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage) {
 	return oids[1:], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
@@ -47,8 +53,12 @@ func decidedGenerator(height message.Height, pk []byte, oids ...message.Operator
 	}
 }
 
+// TODO: (lint) fix test
+//nolint
 type syncMsgGenerator func(message.Height, []byte, ...message.OperatorID) ([]message.OperatorID, *message.ConsensusMessage)
 
+// TODO: (lint) fix test
+//nolint
 func createNetworkWithValidators(ctx context.Context, loggerFactory func(string) *zap.Logger, nNodes int, pks []string,
 	generator syncMsgGenerator, forkVersion forksprotocol.ForkVersion) (*p2p.LocalNet, []*validatorData, error) {
 	ln, err := p2p.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, nNodes, nNodes/2, false)
@@ -89,6 +99,8 @@ func createNetworkWithValidators(ctx context.Context, loggerFactory func(string)
 	return ln, validators, nil
 }
 
+// TODO: (lint) fix test
+//nolint
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",

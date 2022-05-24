@@ -124,7 +124,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 
 				i.decidedMsg = aggMsg
 				// mark instance commit
-				i.ProcessStageChange(qbft.RoundState_Decided)
+				i.ProcessStageChange(qbft.RoundStateDecided)
 			})
 		}
 		return nil

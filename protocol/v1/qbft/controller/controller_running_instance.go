@@ -16,7 +16,7 @@ import (
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.InstanceResult, error) {
+func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.Result, error) {
 	c.currentInstance = instance.NewInstance(instanceOpts)
 	c.currentInstance.Init()
 	stageChan := c.currentInstance.GetStageChan()
@@ -32,7 +32,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 	go c.fastChangeRoundCatchup(c.currentInstance)
 
 	// main instance callback loop
-	var retRes *instance.InstanceResult
+	var retRes *instance.Result
 	var err error
 instanceLoop:
 	for {
@@ -58,7 +58,7 @@ instanceLoop:
 				err = errors.Errorf("could not fetch decided msg with height %d after instance finished", instanceOpts.Height)
 				break instanceLoop
 			}
-			retRes = &instance.InstanceResult{
+			retRes = &instance.Result{
 				Decided: true,
 				Msg:     retMsg[0],
 			}
@@ -80,7 +80,7 @@ instanceLoop:
 }
 
 // afterInstance is triggered after the instance was finished
-func (c *Controller) afterInstance(height message.Height, res *instance.InstanceResult, err error) {
+func (c *Controller) afterInstance(height message.Height, res *instance.Result, err error) {
 	// if instance was decided -> wait for late commit messages
 	decided := res != nil && res.Decided
 	if decided && err == nil {
@@ -106,13 +106,13 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
 func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
-	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundState_name[int32(stage)]))
+	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
-	case qbft.RoundState_Prepare:
+	case qbft.RoundStatePrepare:
 		if err := c.ibftStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
-	case qbft.RoundState_Decided:
+	case qbft.RoundStateDecided:
 		run := func() error {
 			agg, err := c.currentInstance.CommittedAggregatedMsg()
 			if err != nil {
@@ -142,7 +142,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			return true, err
 		}
 		return false, nil
-	case qbft.RoundState_ChangeRound:
+	case qbft.RoundStateChangeRound:
 		// set time for next round change
 		c.currentInstance.ResetRoundTimer()
 		// broadcast round change
@@ -150,7 +150,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			c.logger.Error("could not broadcast round change message", zap.Error(err))
 		}
 
-	case qbft.RoundState_Stopped:
+	case qbft.RoundStateStopped:
 		c.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", uint64(c.currentInstance.State().GetHeight())))
 		return true, nil
 	}
@@ -165,7 +165,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 
 	handler := func(msg *message.SignedMessage) error {
 		if c.currentInstance == nil {
-			return errors.New("current instance is nil.")
+			return errors.New("current instance is nil")
 		}
 		err := c.currentInstance.ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {

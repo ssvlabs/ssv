@@ -5,6 +5,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Start starts the runner
 func Start(logger *zap.Logger, scenario Scenario, bootstrapper Bootstrapper) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

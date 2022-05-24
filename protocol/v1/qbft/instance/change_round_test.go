@@ -29,6 +29,8 @@ func (v0 *testFork) VersionName() string {
 	return "v0"
 }
 
+// TODO: (lint) fix test
+//nolint
 func (v0 *testFork) Apply(instance Instance) {
 
 }

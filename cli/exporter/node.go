@@ -54,6 +54,8 @@ var cfg config
 
 var globalArgs global_config.Args
 
+// TODO: un-lint
+//nolint
 var exporterNode exporter.Exporter
 
 // StartExporterNodeCmd is the command to start SSV boot node
@@ -192,6 +194,8 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
 
+// TODO: un-lint
+//nolint
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enableProf bool) {
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, logger, enableProf, exporterNode.(metrics.HealthCheckAgent))

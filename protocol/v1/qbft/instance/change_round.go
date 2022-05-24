@@ -81,7 +81,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 		}
 
 		i.processChangeRoundQuorumOnce.Do(func() {
-			i.ProcessStageChange(qbft.RoundState_NotStarted)
+			i.ProcessStageChange(qbft.RoundStateNotStarted)
 			logger := i.Logger.With(zap.Uint64("round", uint64(signedMessage.Message.Round)),
 				zap.Bool("is_leader", i.IsLeader()),
 				zap.Uint64("leader", i.ThisRoundLeader()),
@@ -192,9 +192,10 @@ func (i *Instance) uponChangeRoundTrigger() {
 	// bump round
 	i.BumpRound()
 	// mark stage
-	i.ProcessStageChange(qbft.RoundState_ChangeRound)
+	i.ProcessStageChange(qbft.RoundStateChangeRound)
 }
 
+// BroadcastChangeRound will broadcast a change round message.
 func (i *Instance) BroadcastChangeRound() error {
 	broadcastMsg, err := i.generateChangeRoundMessage()
 	if err != nil {

@@ -628,6 +628,8 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	require.False(t, ctrl.checkDecidedMessageSigners(incompleteDecided, completeDecided))
 }
 
+// TODO: (lint) fix test
+//nolint
 func populatedIbft(
 	nodeID message.OperatorID,
 	identifier []byte,

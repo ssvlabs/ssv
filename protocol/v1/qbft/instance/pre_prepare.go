@@ -88,7 +88,7 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 		}
 
 		// mark state
-		i.ProcessStageChange(qbft.RoundState_PrePrepare)
+		i.ProcessStageChange(qbft.RoundStatePrePrepare)
 
 		// broadcast prepare msg
 		broadcastMsg, err := i.generatePrepareMessage(prepareMsg.Data)

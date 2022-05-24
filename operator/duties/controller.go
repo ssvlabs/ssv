@@ -113,7 +113,11 @@ func (dc *dutyController) ExecuteDuty(duty *beaconprotocol.Duty) error {
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
 		go func() {
 			// force the validator to be started (subscribed to validator's topic and synced)
-			v.Start()
+			// TODO: handle error (return error
+			if err := v.Start(); err != nil {
+				logger.Error("could not start validator", zap.Error(err))
+				return
+			}
 			logger.Info("starting duty processing")
 			v.ExecuteDuty(uint64(duty.Slot), duty)
 		}()

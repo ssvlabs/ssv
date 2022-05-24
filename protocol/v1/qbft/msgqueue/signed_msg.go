@@ -50,11 +50,10 @@ func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
 // SignedMsgIndexer is the Indexer used for message.SignedMessage
 func SignedMsgIndexer() Indexer {
 	return func(msg *message.SSVMessage) string {
-		if sm := signedMsgIndexValidator(msg); sm == nil {
-			return ""
-		} else {
+		if sm := signedMsgIndexValidator(msg); sm != nil {
 			return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)[0]
 		}
+		return ""
 	}
 }
 
@@ -73,11 +72,10 @@ func DecidedMsgIndexer() Indexer {
 		if msg.MsgType != message.SSVDecidedMsgType {
 			return ""
 		}
-		if sm := signedMsgIndexValidator(msg); sm == nil {
-			return ""
-		} else {
+		if sm := signedMsgIndexValidator(msg); sm != nil {
 			return DecidedMsgIndex(msg.ID)
 		}
+		return ""
 	}
 }
 

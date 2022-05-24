@@ -84,7 +84,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 
 		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
-			var err error
+			var errorPrp error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
 					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Any("round", i.State().GetRound()))
@@ -92,7 +92,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)
 				i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the message.PrepareData cause of msgCount saves that way
-				i.ProcessStageChange(qbft.RoundState_Prepare)
+				i.ProcessStageChange(qbft.RoundStatePrepare)
 
 				// send commit msg
 				broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
@@ -101,10 +101,10 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 				}
 				if e := i.SignAndBroadcast(broadcastMsg); e != nil {
 					i.Logger.Info("could not broadcast commit message", zap.Error(err))
-					err = e
+					errorPrp = e
 				}
 			})
-			return err
+			return errorPrp
 		}
 		return nil
 	})

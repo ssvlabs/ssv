@@ -20,6 +20,7 @@ func New() controllerfork.Fork {
 	return &ForkV0{}
 }
 
+// VersionName returns the name of the fork
 func (v0 *ForkV0) VersionName() string {
 	return "v0"
 }

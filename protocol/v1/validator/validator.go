@@ -16,6 +16,7 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
+// IValidator is the interface for validator
 type IValidator interface {
 	Start() error
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
@@ -25,6 +26,7 @@ type IValidator interface {
 	forksprotocol.ForkHandler
 }
 
+// Options is the validator options
 type Options struct {
 	Context                    context.Context
 	Logger                     *zap.Logger
@@ -41,6 +43,7 @@ type Options struct {
 	FullNode                   bool
 }
 
+// Validator represents the validator
 type Validator struct {
 	ctx        context.Context
 	logger     *zap.Logger
@@ -57,10 +60,12 @@ type Validator struct {
 	saveHistory bool
 }
 
+// Ibfts returns the ibft controllers
 func (v *Validator) Ibfts() controller.Controllers {
 	return v.ibfts
 }
 
+// NewValidator creates a new validator
 func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
@@ -82,6 +87,7 @@ func NewValidator(opt *Options) IValidator {
 	}
 }
 
+// Start starts the validator
 func (v *Validator) Start() error {
 	if err := v.p2pNetwork.Subscribe(v.GetShare().PublicKey.Serialize()); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
@@ -103,6 +109,7 @@ func (v *Validator) Start() error {
 	return nil
 }
 
+// GetShare returns the validator share
 func (v *Validator) GetShare() *beaconprotocol.Share {
 	// TODO need lock?
 	return v.share

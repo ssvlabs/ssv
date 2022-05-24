@@ -61,8 +61,9 @@ func TestValidatorMetadata_Status(t *testing.T) {
 	})
 }
 
+// TODO: (lint) fix test
+//nolint
 func TestUpdateValidatorsMetadata(t *testing.T) {
-	var updateCount uint64
 	pks := []string{
 		"a17bb48a3f8f558e29d08ede97d6b7b73823d8dc2e0530fe8b747c93d7d6c2755957b7ffb94a7cec830456fd5492ba19",
 		"a0cf5642ed5aa82178a5f79e00292c5b700b67fbf59630ce4f542c392495d9835a99c826aa2459a67bc80867245386c6",
@@ -90,7 +91,9 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		Status:    v1.ValidatorStateActiveOngoing,
 		Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
 	}
+
 	bc := NewMockBeacon(map[uint64][]*Duty{}, data)
+	var updateCount uint64
 
 	storage := NewMockValidatorMetadataStorage()
 

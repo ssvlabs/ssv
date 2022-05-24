@@ -19,6 +19,7 @@ func New() controcllerfork.Fork {
 	return &ForkV1{}
 }
 
+// VersionName returns the name of the fork
 func (v1 *ForkV1) VersionName() string {
 	return "v1"
 }
