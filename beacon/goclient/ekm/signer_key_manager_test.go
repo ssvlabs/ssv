@@ -1,18 +1,22 @@
 package ekm
 
 import (
+	"testing"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/utils/threshold"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-ssz"
 	"github.com/stretchr/testify/require"
-	"testing"
+	"go.uber.org/zap/zapcore"
+
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 const (
@@ -121,18 +125,25 @@ func TestSignAttestation(t *testing.T) {
 }
 
 func TestSignIBFTMessage(t *testing.T) {
+	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
+
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
 	km := testKeyManager(t)
 
 	t.Run("pk 1", func(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
 
+		commitData, err := (&message.CommitData{Data: []byte("value1")}).Encode()
+		require.NoError(t, err)
+
 		msg := &message.ConsensusMessage{
 			MsgType:    message.CommitMsgType,
 			Height:     message.Height(3),
 			Round:      message.Round(2),
 			Identifier: []byte("lambda1"),
-			Data:       []byte("value1"),
+			Data:       commitData,
 		}
 
 		// sign
@@ -146,7 +157,7 @@ func TestSignIBFTMessage(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, "")
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, forksprotocol.V0ForkVersion.String())
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
@@ -156,12 +167,15 @@ func TestSignIBFTMessage(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
 
+		commitData, err := (&message.CommitData{Data: []byte("value2")}).Encode()
+		require.NoError(t, err)
+
 		msg := &message.ConsensusMessage{
 			MsgType:    message.CommitMsgType,
 			Height:     message.Height(1),
 			Round:      message.Round(3),
 			Identifier: []byte("lambda2"),
-			Data:       []byte("value2"),
+			Data:       commitData,
 		}
 
 		// sign
@@ -175,7 +189,7 @@ func TestSignIBFTMessage(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, "")
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, forksprotocol.V0ForkVersion.String())
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
