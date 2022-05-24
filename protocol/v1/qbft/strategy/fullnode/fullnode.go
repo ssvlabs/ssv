@@ -49,6 +49,14 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 			if err := pip.Run(msg); err != nil {
 				return errors.Wrap(err, "invalid msg")
 			}
+			known, _, err := f.IsMsgKnown(msg)
+			if err != nil {
+				return errors.Wrap(err, "could not check if message is known")
+			}
+			if known {
+				f.logger.Debug("msg is known", zap.Int64("h", int64(msg.Message.Height)))
+				return nil
+			}
 			//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
 			if err := f.store.SaveDecided(msg); err != nil {
 				return errors.Wrap(err, "could not save decided msg to storage")
@@ -63,7 +71,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		if message.Height(counter-1) < highest.Message.Height-localHeight {
 			warnMsg = "could not sync all messages in range"
 		} else if message.Height(counter-1) > highest.Message.Height-localHeight {
-			warnMsg = "got too many messages during synced"
+			warnMsg = "got too many messages during sync"
 		}
 		if len(warnMsg) > 0 {
 			logger.Warn(warnMsg,
