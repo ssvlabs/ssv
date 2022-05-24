@@ -35,6 +35,10 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 	for ctx.Err() == nil {
 		time.Sleep(interval)
 
+		if c.q.Len() == 0 {
+			continue // no msg's at all. need to prevent cpu usage in query
+		}
+
 		lastHeight := c.signatureState.height
 
 		if processed := c.processNoRunningInstance(handler, lastHeight); processed {

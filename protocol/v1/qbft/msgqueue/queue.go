@@ -29,6 +29,8 @@ type MsgQueue interface {
 	Pop(n int, idx ...string) []*message.SSVMessage
 	// Count counts messages for the given index
 	Count(idx string) int
+	// Len counts all messages
+	Len() int
 	// Clean will clean irrelevant keys from the map
 	// TODO: check performance
 	Clean(cleaner Cleaner) int
@@ -65,7 +67,7 @@ type queue struct {
 	indexers []Indexer
 
 	itemsLock *sync.RWMutex
-	items     map[string][]*msgContainer
+	items     map[string][]*msgContainer // map[index][]msgs
 }
 
 func (q *queue) Add(msg *message.SSVMessage) {
@@ -171,6 +173,12 @@ func (q *queue) Count(idx string) int {
 	return len(containers)
 }
 
+func (q *queue) Len() int {
+	q.itemsLock.RLock()
+	defer q.itemsLock.RUnlock()
+	return len(q.items)
+}
+
 // indexMessage returns indexes for the given message.
 // NOTE: this function is not thread safe
 func (q *queue) indexMessage(msg *message.SSVMessage) []string {
@@ -186,17 +194,21 @@ func (q *queue) indexMessage(msg *message.SSVMessage) []string {
 }
 
 // DefaultMsgCleaner cleans ssv msgs from the queue
-func DefaultMsgCleaner(mt message.MsgType, mid message.Identifier) Cleaner {
+func DefaultMsgCleaner(mid message.Identifier, mts ...message.MsgType) Cleaner {
+	identifier := mid.String()
 	return func(k string) bool {
 		parts := strings.Split(k, "/")
 		if len(parts) < 2 {
 			return false // unknown
 		}
 		parts = parts[1:]
-		if parts[0] != mt.String() {
-			return false
+		for _, mt := range mts {
+			if parts[0] != mt.String() {
+				return false
+			}
 		}
-		if parts[2] != mid.String() {
+
+		if parts[2] != identifier {
 			return false
 		}
 		// clean

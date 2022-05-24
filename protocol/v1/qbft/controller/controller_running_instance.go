@@ -96,8 +96,8 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Instance
 	// didn't decided -> purge messages
 	//c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO: that's the right indexer? might need be height and all messages
 	idn := hex.EncodeToString(c.Identifier)
-	c.q.Clean(func(s string) bool {
-		if strings.Contains(s, idn) && strings.Contains(s, fmt.Sprintf("%d", height)) {
+	c.q.Clean(func(k string) bool {
+		if strings.Contains(k, idn) && strings.Contains(k, fmt.Sprintf("%d", height)) {
 			return true
 		}
 		return false
@@ -123,10 +123,10 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			}
 
 			ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
-			c.logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
 			if err != nil {
 				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
 			}
+			c.logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
 			if err = c.network.Broadcast(ssvMsg); err != nil {
 				return errors.Wrap(err, "could not broadcast decided message")
 			}
