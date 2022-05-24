@@ -10,6 +10,7 @@ import (
 // SignedMsgCleaner cleans consensus messages from the queue
 // it will clean messages of the given identifier and under the given height
 func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
+	identifier := mid.String()
 	return func(k string) bool {
 		parts := strings.Split(k, "/")
 		if len(parts) < 2 {
@@ -19,7 +20,7 @@ func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 		if parts[0] != message.SSVConsensusMsgType.String() {
 			return false
 		}
-		if parts[2] != mid.String() {
+		if parts[2] != identifier {
 			return false
 		}
 		if getIndexHeight(parts...) > h {

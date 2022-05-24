@@ -14,12 +14,12 @@ import (
 
 type regularNode struct {
 	logger         *zap.Logger
-	store          qbftstorage.QBFTStore
+	store          qbftstorage.DecidedMsgStore
 	decidedFetcher lastdecided.Fetcher
 }
 
 // NewRegularNodeStrategy creates a new instance of regular node strategy
-func NewRegularNodeStrategy(logger *zap.Logger, store qbftstorage.QBFTStore, syncer p2pprotocol.Syncer) strategy.Decided {
+func NewRegularNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer) strategy.Decided {
 	return &regularNode{
 		logger:         logger.With(zap.String("who", "RegularNodeStrategy")),
 		store:          store,
@@ -27,14 +27,18 @@ func NewRegularNodeStrategy(logger *zap.Logger, store qbftstorage.QBFTStore, syn
 	}
 }
 
-func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) (*message.SignedMessage, error) {
+func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
 	highest, _, _, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get last decided from peers")
+		return errors.Wrap(err, "could not get last decided from peers")
 	}
-	return highest, nil
+
+	if err == nil && highest != nil {
+		return f.store.SaveLastDecided(highest)
+	}
+	return nil
 }
 
 func (f *regularNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
@@ -73,6 +77,10 @@ func (f *regularNode) GetDecided(identifier message.Identifier, heightRange ...m
 		return nil, err
 	}
 	return []*message.SignedMessage{ld}, nil
+}
+
+func (f *regularNode) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
+	return f.store.GetLastDecided(identifier)
 }
 
 func (f *regularNode) SaveDecided(signedMsgs ...*message.SignedMessage) error {

@@ -2,7 +2,6 @@ package ekm
 
 import (
 	"encoding/hex"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"sync"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -11,15 +10,16 @@ import (
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 type ethKeyManagerSigner struct {

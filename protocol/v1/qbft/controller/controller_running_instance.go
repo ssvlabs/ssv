@@ -49,7 +49,7 @@ instanceLoop:
 		if exit {
 			// exited with no error means instance decided
 			// fetch decided msg and return
-			retMsg, e := c.ibftStorage.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
+			retMsg, e := c.decidedStrategy.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
 			if e != nil {
 				err = e
 				break instanceLoop
@@ -96,8 +96,8 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 	// didn't decided -> purge messages
 	//c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO: that's the right indexer? might need be height and all messages
 	idn := hex.EncodeToString(c.Identifier)
-	c.q.Clean(func(s string) bool {
-		if strings.Contains(s, idn) && strings.Contains(s, fmt.Sprintf("%d", height)) {
+	c.q.Clean(func(k string) bool {
+		if strings.Contains(k, idn) && strings.Contains(k, fmt.Sprintf("%d", height)) {
 			return true
 		}
 		return false
@@ -109,7 +109,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.ibftStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
+		if err := c.instanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
@@ -118,15 +118,15 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if err = c.strategy.SaveDecided(agg); err != nil {
+			if err = c.decidedStrategy.SaveDecided(agg); err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 
 			ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
-			c.logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
 			if err != nil {
 				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
 			}
+			c.logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
 			if err = c.network.Broadcast(ssvMsg); err != nil {
 				return errors.Wrap(err, "could not broadcast decided message")
 			}

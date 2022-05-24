@@ -15,13 +15,13 @@ import (
 
 type fullNode struct {
 	logger         *zap.Logger
-	store          qbftstorage.QBFTStore
+	store          qbftstorage.DecidedMsgStore
 	decidedFetcher lastdecided.Fetcher
 	historySyncer  history.Syncer
 }
 
 // NewFullNodeStrategy creates a new instance of fullNode strategy
-func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.QBFTStore, syncer p2pprotocol.Syncer) strategy.Decided {
+func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer) strategy.Decided {
 	return &fullNode{
 		logger:         logger.With(zap.String("who", "FullNodeStrategy")),
 		store:          store,
@@ -30,18 +30,18 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.QBFTStore, syncer
 	}
 }
 
-func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) (*message.SignedMessage, error) {
+func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
 	logger := f.logger.With(zap.String("identifier", identifier.String()))
 	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get last decided from peers")
+		return errors.Wrap(err, "could not get last decided from peers")
 	}
 	logger.Debug("highest decided", zap.Int64("local", int64(localHeight)), zap.Any("highest", highest))
 	if highest == nil {
 		logger.Debug("could not find highest decided from peers")
-		return nil, nil
+		return nil
 	}
 	if highest.Message.Height > localHeight {
 		counter := 0
@@ -57,7 +57,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 			return nil
 		}, localHeight, highest.Message.Height, sender)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not complete sync")
+			return errors.Wrap(err, "could not complete sync")
 		}
 		warnMsg := ""
 		if message.Height(counter-1) < highest.Message.Height-localHeight {
@@ -71,7 +71,11 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 				zap.Int64("to", int64(highest.Message.Height)))
 		}
 	}
-	return highest, nil
+
+	if err == nil && highest != nil {
+		return f.store.SaveLastDecided(highest)
+	}
+	return nil
 }
 
 func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
@@ -109,6 +113,10 @@ func (f *fullNode) GetDecided(identifier message.Identifier, heightRange ...mess
 		return nil, errors.New("missing height range")
 	}
 	return f.store.GetDecided(identifier, heightRange[0], heightRange[1])
+}
+
+func (f *fullNode) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
+	return f.store.GetLastDecided(identifier)
 }
 
 // SaveDecided in for fullnode saves both decided and last decided

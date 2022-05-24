@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"sync"
 	"testing"
 	"time"
@@ -22,8 +23,6 @@ import (
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/node"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -255,10 +254,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			storage := newTestStorage(test.highestDecided)
 			ctrl := Controller{
-				currentInstance: test.currentInstance,
-				ibftStorage:     newTestStorage(test.highestDecided),
-				initState:       test.initState,
+				currentInstance:    test.currentInstance,
+				instanceStorage:    storage,
+				changeRoundStorage: storage,
+				initState:          test.initState,
 			}
 			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
@@ -365,7 +366,7 @@ func TestForceDecided(t *testing.T) {
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 	// test before sync
-	highest, err := i1.(*Controller).ibftStorage.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.Height)
@@ -398,7 +399,7 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, err = i1.(*Controller).ibftStorage.GetLastDecided(identifier)
+	highest, err = i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -436,7 +437,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	// test before sync
-	highest, err := i1.(*Controller).ibftStorage.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -444,7 +445,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*Controller).ibftStorage.GetLastDecided(identifier)
+	highest, err = i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, message.Height(10), highest.Message.Height)
@@ -488,7 +489,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*Controller).ibftStorage.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.Height)
@@ -603,24 +604,23 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	height := atomic.Value{}
 	height.Store(message.Height(2))
 
+	storage := newTestStorage(nil)
 	ctrl := Controller{
 		ValidatorShare: share,
 		currentInstance: instance.NewInstanceWithState(&qbft.State{
 			Identifier: id,
 			Height:     height,
 		}),
-		ibftStorage: newTestStorage(nil),
+		instanceStorage:    storage,
+		changeRoundStorage: storage,
 	}
+
+	ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.isFullNode(), storage, nil)
+	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 	ctrl.fork = forksfactory.NewFork(forksprotocol.V1ForkVersion)
 
-	if ctrl.isFullNode() {
-		ctrl.strategy = fullnode.NewFullNodeStrategy(zap.L(), ctrl.ibftStorage, nil)
-	} else {
-		ctrl.strategy = node.NewRegularNodeStrategy(zap.L(), ctrl.ibftStorage, nil)
-	}
-
-	require.NoError(t, ctrl.ibftStorage.SaveDecided(incompleteDecided))
+	require.NoError(t, ctrl.decidedStrategy.SaveDecided(incompleteDecided))
 
 	// check message with similar number of signers
 	require.True(t, ctrl.checkDecidedMessageSigners(incompleteDecided, incompleteDecided))

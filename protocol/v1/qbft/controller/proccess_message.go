@@ -62,7 +62,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-		if err := c.strategy.SaveLateCommit(updated); err != nil {
+		if err := c.decidedStrategy.SaveLateCommit(updated); err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
 		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
@@ -89,7 +89,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
 func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.SignedMessage) (*message.SignedMessage, error) {
-	decidedMessages, err := c.strategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	decidedMessages, err := c.decidedStrategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided for late commit")
