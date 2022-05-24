@@ -10,7 +10,7 @@ import (
 // in regular mode, the node only cares about last decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
-	Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) (*message.SignedMessage, error)
+	Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error
 	// ValidateHeight validates the height of the given message
 	ValidateHeight(msg *message.SignedMessage) (bool, error)
 	// IsMsgKnown checks if the given decided message is known
@@ -21,6 +21,8 @@ type Decided interface {
 	UpdateDecided(msg *message.SignedMessage) error
 	// GetDecided returns historical decided messages
 	GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error)
+	// GetLastDecided returns height decided messages
+	GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error)
 	// SaveDecided saves historical decided messages
 	SaveDecided(signedMsg ...*message.SignedMessage) error
 }

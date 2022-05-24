@@ -35,14 +35,14 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
 
-	if valid, err := c.strategy.ValidateHeight(msg); err != nil {
+	if valid, err := c.decidedStrategy.ValidateHeight(msg); err != nil {
 		return errors.Wrap(err, "failed to check msg height")
 	} else if !valid {
 		return nil // msg is too old, do nothing
 	}
 
 	// if we already have this in storage, pass
-	known, knownMsg, err := c.strategy.IsMsgKnown(msg)
+	known, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return nil
@@ -50,7 +50,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if known {
 		// if decided is known, check for a more complete message (more signers)
 		if ignore := c.checkDecidedMessageSigners(knownMsg, msg); !ignore {
-			if err := c.strategy.UpdateDecided(msg); err != nil {
+			if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
 				logger.Error("can't update decided message", zap.Error(err))
 				return nil
 			}
@@ -66,7 +66,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
 	if c.readMode {
-		if err := c.strategy.SaveDecided(msg); err != nil {
+		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not update decided message")
 		}
 		logger.Debug("decided was updated for controller with read only mode")
@@ -108,7 +108,7 @@ func (c *Controller) forceDecideCurrentInstance(msg *message.SignedMessage) bool
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
-	highestKnown, err := c.ibftStorage.GetLastDecided(c.GetIdentifier())
+	highestKnown, err := c.decidedStrategy.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, erro
 		return false, nil
 	}
 
-	highest, err := c.ibftStorage.GetLastDecided(msg.Message.Identifier)
+	highest, err := c.decidedStrategy.GetLastDecided(msg.Message.Identifier)
 	if highest == nil {
 		return msg.Message.Height > 0, nil
 	}

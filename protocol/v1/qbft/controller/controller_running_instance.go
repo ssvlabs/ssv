@@ -49,7 +49,7 @@ instanceLoop:
 		if exit {
 			// exited with no error means instance decided
 			// fetch decided msg and return
-			retMsg, e := c.ibftStorage.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
+			retMsg, e := c.decidedStrategy.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
 			if e != nil {
 				err = e
 				break instanceLoop
@@ -109,7 +109,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.ibftStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
+		if err := c.instanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
@@ -118,7 +118,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if err = c.strategy.SaveDecided(agg); err != nil {
+			if err = c.decidedStrategy.SaveDecided(agg); err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 

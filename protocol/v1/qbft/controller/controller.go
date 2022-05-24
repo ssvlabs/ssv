@@ -3,8 +3,7 @@ package controller
 import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/node"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,16 +59,17 @@ const (
 type Controller struct {
 	ctx context.Context
 
-	currentInstance instance.Instancer
-	logger          *zap.Logger
-	ibftStorage     qbftstorage.QBFTStore
-	network         p2pprotocol.Network
-	instanceConfig  *qbft.InstanceConfig
-	ValidatorShare  *beaconprotocol.Share
-	Identifier      message.Identifier
-	fork            forks.Fork
-	beacon          beaconprotocol.Beacon
-	signer          beaconprotocol.Signer
+	currentInstance    instance.Instancer
+	logger             *zap.Logger
+	instanceStorage    qbftstorage.InstanceStore
+	changeRoundStorage qbftstorage.ChangeRoundStore
+	network            p2pprotocol.Network
+	instanceConfig     *qbft.InstanceConfig
+	ValidatorShare     *beaconprotocol.Share
+	Identifier         message.Identifier
+	fork               forks.Fork
+	beacon             beaconprotocol.Beacon
+	signer             beaconprotocol.Signer
 
 	// signature
 	signatureState SignatureState
@@ -89,7 +89,8 @@ type Controller struct {
 
 	q msgqueue.MsgQueue
 
-	strategy strategy.Decided
+	decidedFactory  *factory.Factory
+	decidedStrategy strategy.Decided
 }
 
 // New is the constructor of Controller
@@ -106,17 +107,18 @@ func New(opts Options) IController {
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
 	ctrl := &Controller{
-		ctx:            opts.Context,
-		ibftStorage:    opts.Storage,
-		logger:         logger,
-		network:        opts.Network,
-		instanceConfig: opts.InstanceConfig,
-		ValidatorShare: opts.ValidatorShare,
-		Identifier:     opts.Identifier,
-		fork:           fork,
-		beacon:         opts.Beacon,
-		signer:         opts.Signer,
-		signatureState: SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
+		ctx:                opts.Context,
+		instanceStorage:    opts.Storage,
+		changeRoundStorage: opts.Storage,
+		logger:             logger,
+		network:            opts.Network,
+		instanceConfig:     opts.InstanceConfig,
+		ValidatorShare:     opts.ValidatorShare,
+		Identifier:         opts.Identifier,
+		fork:               fork,
+		beacon:             opts.Beacon,
+		signer:             opts.Signer,
+		signatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
 		// locks
 		currentInstanceLock: &sync.Mutex{},
@@ -130,12 +132,8 @@ func New(opts Options) IController {
 		q: q,
 	}
 
-	// create strategy
-	if ctrl.isFullNode() {
-		ctrl.strategy = fullnode.NewFullNodeStrategy(logger, opts.Storage, opts.Network)
-	} else {
-		ctrl.strategy = node.NewRegularNodeStrategy(logger, opts.Storage, opts.Network)
-	}
+	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.isFullNode(), opts.Storage, opts.Network)
+	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 	// set flags
 	ctrl.initState = NotStarted
@@ -147,24 +145,15 @@ func New(opts Options) IController {
 func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	// get new QBFT controller fork
 	c.fork = forksfactory.NewFork(forkVersion)
-	// update strategy
-	if c.isFullNode() {
-		c.strategy = fullnode.NewFullNodeStrategy(c.logger, c.ibftStorage, c.network)
-	} else {
-		c.strategy = node.NewRegularNodeStrategy(c.logger, c.ibftStorage, c.network)
-	}
+
+	// update decidedStrategy
+	c.decidedStrategy = c.decidedFactory.GetStrategy()
 	return nil
 }
 
 func (c *Controller) syncDecided() error {
 	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
-
-	highest, err := c.strategy.Sync(c.ctx, c.Identifier, c.fork.ValidateDecidedMsg(c.ValidatorShare))
-	if err == nil && highest != nil {
-		err = c.ibftStorage.SaveLastDecided(highest)
-	}
-
-	return err
+	return c.decidedStrategy.Sync(c.ctx, c.Identifier, c.fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -236,7 +225,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
 	c.signatureState.height = opts.SeqNumber                         // update sig state once height determent
-	instanceOpts.ChangeRoundStore = c.ibftStorage                    // in order to set the last change round msg
+	instanceOpts.ChangeRoundStore = c.changeRoundStorage             // in order to set the last change round msg
 	instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier) // clean previews last change round msg's (TODO place in instance?)
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
 	defer func() {
