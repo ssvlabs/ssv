@@ -201,7 +201,12 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 		consensusMsg.Height = message.Height(ret.GetJustificationMsg().SeqNumber)
 		consensusMsg.Round = message.Round(ret.GetJustificationMsg().Round)
 		consensusMsg.Identifier = toIdentifierV1(ret.GetJustificationMsg().Lambda)
-		consensusMsg.Data = ret.GetJustificationMsg().Value
+		pd := message.PrepareData{Data: ret.GetJustificationMsg().Value}
+		encodedPrepare, err := pd.Encode()
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to encode prepare data")
+		}
+		consensusMsg.Data = encodedPrepare
 		consensusMsg.MsgType = message.PrepareMsgType // can be only prepare
 	}
 
