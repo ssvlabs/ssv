@@ -1,15 +1,9 @@
-package main
+package scenarios
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
 	"time"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
@@ -19,13 +13,13 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-func main() {
-	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newF1SpeedupScenario(logger), scenarios.QBFTScenarioBootstrapper())
-}
+// F1SpeedupScenario is the f1 speedup scenario name
+const F1SpeedupScenario = "F1Speedup"
 
 type f1SpeedupScenario struct {
 	logger     *zap.Logger
@@ -48,7 +42,7 @@ func (r *f1SpeedupScenario) NumOfBootnodes() int {
 }
 
 func (r *f1SpeedupScenario) Name() string {
-	return "f1Speedup"
+	return F1SpeedupScenario
 }
 
 func (r *f1SpeedupScenario) PreExecution(ctx *runner.ScenarioContext) error {

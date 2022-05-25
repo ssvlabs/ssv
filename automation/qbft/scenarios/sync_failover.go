@@ -1,14 +1,8 @@
-package main
+package scenarios
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
@@ -18,13 +12,13 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-func main() {
-	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newSyncFailoverScenario(logger), scenarios.QBFTScenarioBootstrapper())
-}
+// SyncFailoverScenario is the sync fail over scenario name
+const SyncFailoverScenario = "SyncFailover"
 
 type syncFailoverScenario struct {
 	logger     *zap.Logger
@@ -47,7 +41,7 @@ func (r *syncFailoverScenario) NumOfBootnodes() int {
 }
 
 func (r *syncFailoverScenario) Name() string {
-	return "syncFailover"
+	return SyncFailoverScenario
 }
 
 func (r *syncFailoverScenario) PreExecution(ctx *runner.ScenarioContext) error {

@@ -1,14 +1,12 @@
-package main
+package scenarios
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
@@ -18,13 +16,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
-func main() {
-	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newFarFutureSyncScenario(logger), scenarios.QBFTScenarioBootstrapper())
-}
+// FarFutureSyncScenario is the far future sync scenario name
+const FarFutureSyncScenario = "FarFutureSync"
 
 type farFutureSyncScenario struct {
 	logger     *zap.Logger
@@ -47,7 +42,7 @@ func (r *farFutureSyncScenario) NumOfBootnodes() int {
 }
 
 func (r *farFutureSyncScenario) Name() string {
-	return "farFutureSync"
+	return FarFutureSyncScenario
 }
 
 func (r *farFutureSyncScenario) PreExecution(ctx *runner.ScenarioContext) error {

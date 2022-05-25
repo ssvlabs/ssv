@@ -1,15 +1,9 @@
-package main
+package scenarios
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"sync"
 	"time"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
@@ -17,13 +11,13 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-func main() {
-	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
-	runner.Start(logger, newRegularScenario(logger), scenarios.QBFTScenarioBootstrapper())
-}
+// RegularScenario is the regular scenario name
+const RegularScenario = "regular"
 
 // regularScenario is the most basic scenario where 4 operators starts qbft for a single validator
 type regularScenario struct {
@@ -47,7 +41,7 @@ func (r *regularScenario) NumOfBootnodes() int {
 }
 
 func (r *regularScenario) Name() string {
-	return "regular"
+	return RegularScenario
 }
 
 func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
