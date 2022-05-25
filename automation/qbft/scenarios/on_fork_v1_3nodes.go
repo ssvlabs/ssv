@@ -9,6 +9,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -21,10 +22,14 @@ import (
 	"time"
 )
 
-// OnForkV1Scenario is the scenario name for OnForkV1
-const OnForkV1Scenario = "OnForkV1"
+/// TODO: extract code duplicates with onForkV1
 
-type onForkV1 struct {
+// OnForkV13NodesScenario is the scenario name for on fork v1 with 3 nodes.
+// the idea of this scenario is to test the case where 3 nodes do the fork while the 4th doesn't,
+// all 4 nodes start instances but the node-4 should not participate.
+const OnForkV13NodesScenario = "OnForkV13Nodes"
+
+type onForkV13Nodes struct {
 	logger     *zap.Logger
 	share      *beacon.Share
 	sks        map[uint64]*bls.SecretKey
@@ -33,24 +38,24 @@ type onForkV1 struct {
 }
 
 // newOnForkV1 creates 'on fork v1' scenario
-func newOnForkV1(logger *zap.Logger) runner.Scenario {
-	return &onForkV1{logger: logger}
+func newOnForkV13Nodes(logger *zap.Logger) runner.Scenario {
+	return &onForkV13Nodes{logger: logger}
 }
 
-func (f *onForkV1) NumOfOperators() int {
+func (f *onForkV13Nodes) NumOfOperators() int {
 	return 4
 }
 
-func (f *onForkV1) NumOfBootnodes() int {
+func (f *onForkV13Nodes) NumOfBootnodes() int {
 	return 0
 }
 
-func (f *onForkV1) Name() string {
+func (f *onForkV13Nodes) Name() string {
 	return OnForkV1Scenario
 }
 
 // PreExecution will create messages in v0 format
-func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
+func (f *onForkV13Nodes) PreExecution(ctx *runner.ScenarioContext) error {
 	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, f.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
@@ -133,7 +138,7 @@ func (f *onForkV1) PreExecution(ctx *runner.ScenarioContext) error {
 	return nil
 }
 
-func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
+func (f *onForkV13Nodes) Execute(ctx *runner.ScenarioContext) error {
 	if len(f.sks) == 0 || f.share == nil {
 		return errors.New("pre-execution failed")
 	}
@@ -162,7 +167,7 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	}
 
 	// forking
-	for i := 0; i < f.NumOfOperators(); i++ {
+	for i := 0; i < f.NumOfOperators()-1; i++ {
 		wg.Add(3)
 		go func(node network.P2PNetwork) {
 			defer wg.Done()
@@ -190,9 +195,8 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	f.logger.Debug("------ after fork, waiting 10 seconds...")
 	// waiting 10 sec after fork
 	<-time.After(time.Second * 10)
-	f.logger.Debug("------ starting instances")
 
-	for i := 0; i < f.NumOfOperators(); i++ {
+	for i := 0; i < f.NumOfOperators()-1; i++ {
 		peers, err := ctx.LocalNet.Nodes[i].Peers(f.share.PublicKey.Serialize())
 		if err != nil {
 			return errors.Wrap(err, "could not check peers of topic")
@@ -203,14 +207,14 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 	}
 
 	// running instances post-fork
-	if err := f.startInstances(message.Height(7), message.Height(9)); err != nil {
-		return errors.Wrap(err, "could not start instance after fork")
+	err := f.startInstances(message.Height(7), message.Height(9))
+	if err != nil {
+		return err
 	}
-
 	return nil
 }
 
-func (f *onForkV1) PostExecution(ctx *runner.ScenarioContext) error {
+func (f *onForkV13Nodes) PostExecution(ctx *runner.ScenarioContext) error {
 	expectedMsgCount := 9
 	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(expectedMsgCount))
 	if err != nil {
@@ -232,20 +236,35 @@ func (f *onForkV1) PostExecution(ctx *runner.ScenarioContext) error {
 		return errors.Errorf("wrong msg height: %d", msg.Message.Height)
 	}
 
+	// check last node (didn't do fork)
+	msgs, err = ctx.Stores[3].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(expectedMsgCount))
+	if err != nil {
+		return err
+	}
+	msgCountV0 := len(msgs)
+	if msgCountV0 != expectedMsgCount-3 {
+		return errors.Errorf("node-4 (v0) has too many decided: %d", msgCountV0)
+
+	}
 	return nil
 }
 
-func (f *onForkV1) startInstances(from, to message.Height) error {
+func (f *onForkV13Nodes) startInstances(from, to message.Height) error {
 	var wg sync.WaitGroup
 
 	h := from
+	var err error
+	var errLock sync.Mutex
 
 	for h <= to {
 		for i := uint64(1); i < uint64(f.NumOfOperators()); i++ {
 			wg.Add(1)
 			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
-				if err := startNode(node, seqNumber, []byte("value"), f.logger); err != nil {
-					f.logger.Error("could not start node", zap.Uint64("node", index-1), zap.Error(err))
+				if _err := startNode(node, seqNumber, []byte("value"), f.logger); _err != nil {
+					errLock.Lock()
+					err = _err
+					errLock.Unlock()
+					f.logger.Warn("could not start node", zap.Uint64("node", index-1), zap.Error(err))
 				}
 				wg.Done()
 			}(f.validators[i-1], i, h)
@@ -253,5 +272,27 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 		wg.Wait()
 		h++
 	}
+	return err
+}
+
+func startNode(val validator.IValidator, h message.Height, value []byte, logger *zap.Logger) error {
+	ibftControllers := val.(*validator.Validator).Ibfts()
+
+	for _, ibftc := range ibftControllers {
+		res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
+			Logger:    logger,
+			SeqNumber: h,
+			Value:     value,
+		})
+
+		if err != nil {
+			return err
+		} else if !res.Decided {
+			return errors.New("instance could not decide")
+		} else {
+			logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Data)))
+		}
+	}
+
 	return nil
 }

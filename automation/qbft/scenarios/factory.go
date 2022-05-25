@@ -24,6 +24,8 @@ func NewScenario(name string, logger *zap.Logger) runner.Scenario {
 			s = newFarFutureSyncScenario(logger)
 		case OnForkV1Scenario:
 			s = newOnForkV1(logger)
+		case OnForkV13NodesScenario:
+			s = newOnForkV13Nodes(logger)
 		case RegularScenario:
 			s = newRegularScenario(logger)
 		case SyncFailoverScenario:
