@@ -89,7 +89,7 @@ func getIndexHeight(idxParts ...string) message.Height {
 	hraw := idxParts[2]
 	h, err := strconv.Atoi(hraw)
 	if err != nil {
-		return 0
+		return message.Height(0)
 	}
 	return message.Height(h)
 }

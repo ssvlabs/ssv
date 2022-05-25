@@ -53,6 +53,7 @@ const (
 	WaitingForPeers
 	FoundPeers
 	Ready
+	Forking
 )
 
 // Controller implements Controller interface
@@ -75,7 +76,7 @@ type Controller struct {
 	signatureState SignatureState
 
 	// flags
-	initState uint32
+	state uint32
 
 	// locks
 	currentInstanceLock sync.Locker
@@ -136,17 +137,23 @@ func New(opts Options) IController {
 	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 	// set flags
-	ctrl.initState = NotStarted
+	ctrl.state = NotStarted
 
 	return ctrl
 }
 
-// OnFork called when fork occur.
+// OnFork called upon fork, it will make sure all decided messages were processed
+// before clearing the entire msg queue.
+// it also recreates the fork instance and decided strategy with the new fork version
 func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
-	// get new QBFT controller fork
-	c.fork = forksfactory.NewFork(forkVersion)
+	atomic.StoreUint32(&c.state, Forking)
+	defer atomic.StoreUint32(&c.state, Ready)
 
-	// update decidedStrategy
+	c.processAllDecided(c.messageHandler)
+	cleared := c.q.Clean(msgqueue.AllIndicesCleaner)
+	c.logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
+	// get new QBFT controller fork and update decidedStrategy
+	c.fork = forksfactory.NewFork(forkVersion)
 	c.decidedStrategy = c.decidedFactory.GetStrategy()
 	return nil
 }
@@ -160,7 +167,7 @@ func (c *Controller) syncDecided() error {
 // if init fails to sync
 func (c *Controller) Init() error {
 	// checks if notStarted. if so, preform init handlers and set state to new state
-	if atomic.CompareAndSwapUint32(&c.initState, NotStarted, InitiatedHandlers) {
+	if atomic.CompareAndSwapUint32(&c.state, NotStarted, InitiatedHandlers) {
 		c.logger.Info("start qbft ctrl handler init")
 		go c.startQueueConsumer(c.messageHandler)
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
@@ -168,12 +175,12 @@ func (c *Controller) Init() error {
 	}
 
 	// if already waiting for peers no need to redundant waiting
-	if atomic.LoadUint32(&c.initState) == WaitingForPeers {
+	if atomic.LoadUint32(&c.state) == WaitingForPeers {
 		return ErrAlreadyRunning
 	}
 
 	// only if finished with handlers, start waiting for peers and syncing
-	if atomic.CompareAndSwapUint32(&c.initState, InitiatedHandlers, WaitingForPeers) {
+	if atomic.CompareAndSwapUint32(&c.state, InitiatedHandlers, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
@@ -183,7 +190,7 @@ func (c *Controller) Init() error {
 		}
 		c.logger.Debug("found enough peers")
 
-		atomic.StoreUint32(&c.initState, FoundPeers)
+		atomic.StoreUint32(&c.state, FoundPeers)
 
 		// IBFT sync to make sure the operator is aligned for this validator
 		if err := c.syncDecided(); err != nil {
@@ -197,7 +204,7 @@ func (c *Controller) Init() error {
 			return errors.Wrap(err, "could not sync history")
 		}
 
-		atomic.StoreUint32(&c.initState, Ready)
+		atomic.StoreUint32(&c.state, Ready)
 
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
 		c.logger.Info("iBFT implementation init finished")
@@ -206,9 +213,17 @@ func (c *Controller) Init() error {
 	return nil
 }
 
-// initialized return true is done all init process
-func (c *Controller) initialized() bool {
-	return atomic.LoadUint32(&c.initState) == Ready
+// initialized return true is done the init process and not in forking state
+func (c *Controller) initialized() (bool, error) {
+	state := atomic.LoadUint32(&c.state)
+	switch state {
+	case Ready:
+		return true, nil
+	case Forking:
+		return false, errors.New("forking in progress")
+	default:
+		return false, errors.New("iBFT hasn't initialized yet")
+	}
 }
 
 // StartInstance - starts an ibft instance or returns error

@@ -133,7 +133,7 @@ func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool 
 // 		- AND msg is not for current instance
 func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, error) {
 	// if IBFT sync failed to init, trigger it again
-	if atomic.LoadUint32(&c.initState) < Ready {
+	if atomic.LoadUint32(&c.state) < Ready {
 		return true, nil
 	}
 	if c.decidedForCurrentInstance(msg) {

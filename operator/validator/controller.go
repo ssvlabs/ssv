@@ -98,7 +98,9 @@ type controller struct {
 	messageWorker *worker.Worker
 }
 
-// OnFork preform action when fork happen
+// OnFork called upon a fork, it will propagate the fork event to all internal components.
+// triggering validators fork with goroutines as validator.OnFork might block due to
+// decided message processing in the qbft controllers
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
 
@@ -106,14 +108,28 @@ func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	if !ok {
 		return errors.New("ibft storage is not a fork handler")
 	}
-	if err := storageHandler.OnFork(forkVersion); err != nil {
+	err := storageHandler.OnFork(forkVersion)
+	if err != nil {
 		return err
 	}
 
-	// call onFork for each validator in order to update the fork instance
-	return c.validatorsMap.ForEach(func(iValidator validator.IValidator) error {
-		return iValidator.OnFork(forkVersion)
+	var wg sync.WaitGroup
+	var errLock sync.Mutex
+	_ = c.validatorsMap.ForEach(func(iValidator validator.IValidator) error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if localErr := iValidator.OnFork(forkVersion); localErr != nil {
+				errLock.Lock()
+				err = localErr
+				errLock.Unlock()
+			}
+		}()
+		return nil
 	})
+	wg.Wait()
+
+	return err
 }
 
 // NewController creates a new validator controller instance

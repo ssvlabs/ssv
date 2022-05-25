@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -35,7 +36,14 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 	for ctx.Err() == nil {
 		time.Sleep(interval)
 
+		// no msg's in the queue
 		if c.q.Len() == 0 {
+			time.Sleep(interval)
+			continue
+		}
+		// avoid process messages on fork
+		if atomic.LoadUint32(&c.state) == Forking {
+			time.Sleep(interval)
 			continue // no msg's at all. need to prevent cpu usage in query
 		}
 
@@ -141,10 +149,20 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 		indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)...)
 		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 	}
-
-	//indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, height, message.CommitMsgType)...)        // always need to look for decided msg's
-	indexes = append(indexes, msgqueue.DecidedMsgIndex(c.Identifier))                                                                    // look for decided with any height
-	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)...) // when sync change round need to handle msg's
+	// avoid creating redundant indexes in case we already found some,
+	// we try to pop messages with existing indexes and if not found continue to decided and signed msg indexes
+	if len(indexes) > 0 {
+		msgs := c.popByPriority(indexes...)
+		if len(msgs) > 0 {
+			return msgs[0]
+		}
+		// no messages were found, reset the indexes that we already tried
+		indexes = make([]string, 0)
+	}
+	// look for decided with any height
+	indexes = append(indexes, msgqueue.DecidedMsgIndex(c.Identifier))
+	// and change round messages
+	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)...)
 	msgs := c.popByPriority(indexes...)
 	if len(msgs) > 0 {
 		return msgs[0]
@@ -153,7 +171,21 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	return nil
 }
 
+// processOnFork this phase is to allow process remaining decided messages that arrived late to the msg queue
+func (c *Controller) processAllDecided(handler MessageHandler) {
+	idx := msgqueue.DecidedMsgIndex(c.Identifier)
+	msgs := c.q.Pop(1, idx)
+	for len(msgs) > 0 {
+		err := handler(msgs[0])
+		if err != nil {
+			c.logger.Warn("could not handle msg", zap.Error(err))
+		}
+		msgs = c.q.Pop(1, idx)
+	}
+}
+
 // popByPriority return msgs by the order of the indexes provided
+// TODO: move this to queue
 func (c *Controller) popByPriority(indexes ...string) []*message.SSVMessage {
 	var msgs []*message.SSVMessage
 	for _, index := range indexes {

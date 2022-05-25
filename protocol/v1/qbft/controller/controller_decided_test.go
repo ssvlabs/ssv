@@ -259,7 +259,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 				currentInstance:    test.currentInstance,
 				instanceStorage:    storage,
 				changeRoundStorage: storage,
-				initState:          test.initState,
+				state:              test.initState,
 			}
 			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
@@ -663,7 +663,7 @@ func populatedIbft(
 	}
 	ret := New(opts)
 
-	ret.(*Controller).initState = Ready // as if they are already synced
+	ret.(*Controller).state = Ready // as if they are already synced
 	return ret
 }
 

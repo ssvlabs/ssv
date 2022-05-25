@@ -14,6 +14,11 @@ import (
 // Cleaner is a function for iterating over keys and clean irrelevant ones
 type Cleaner func(string) bool
 
+// AllIndicesCleaner is a cleaner that removes all existing indices
+func AllIndicesCleaner(k string) bool {
+	return true
+}
+
 // Indexer indexes the given message, returns an empty string if not applicable
 // use WithIndexers to inject indexers upon start
 type Indexer func(msg *message.SSVMessage) string
