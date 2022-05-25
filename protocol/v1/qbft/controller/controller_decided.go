@@ -1,12 +1,13 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 // ValidateDecidedMsg - the main decided msg pipeline
@@ -98,8 +99,8 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 func (c *Controller) forceDecideCurrentInstance(msg *message.SignedMessage) bool {
 	if c.decidedForCurrentInstance(msg) {
 		// stop current instance
-		if c.currentInstance != nil {
-			c.currentInstance.ForceDecide(msg)
+		if c.getCurrentInstance() != nil {
+			c.getCurrentInstance().ForceDecide(msg)
 		}
 		return true
 	}
@@ -123,9 +124,10 @@ func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage,
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
 func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool {
-	return c.currentInstance != nil &&
-		c.currentInstance.State() != nil &&
-		c.currentInstance.State().GetHeight() == msg.Message.Height
+	instance := c.getCurrentInstance()
+	return instance != nil &&
+		instance.State() != nil &&
+		instance.State().GetHeight() == msg.Message.Height
 }
 
 // decidedRequiresSync returns true if:

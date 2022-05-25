@@ -2,18 +2,21 @@ package controller
 
 import (
 	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -25,16 +28,19 @@ func TestConsumeMessages(t *testing.T) {
 		logex.GetLogger().With(zap.String("who", "msg_q")),
 		msgqueue.WithIndexers(msgqueue.DefaultMsgIndexer(), msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
 	)
-	ctrl := Controller{
-		ctx:    context.Background(),
-		logger: logex.GetLogger().With(zap.String("who", "controller")),
-		q:      q,
-		signatureState: SignatureState{
-			height: 0,
-		},
-		Identifier: message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
-	}
 	require.NoError(t, err)
+	currentInstanceLock := &sync.RWMutex{}
+	ctrl := Controller{
+		ctx:                  context.Background(),
+		logger:               logex.GetLogger().With(zap.String("who", "controller")),
+		q:                    q,
+		signatureState:       SignatureState{},
+		Identifier:           message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
+		currentInstanceLock:  currentInstanceLock,
+		currentInstanceRLock: currentInstanceLock.RLocker(),
+		forkLock:             &sync.Mutex{},
+	}
+	ctrl.signatureState.setHeight(0)
 
 	tests := []struct {
 		name            string
@@ -235,8 +241,9 @@ func TestConsumeMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			ctrl.ctx = ctx
-			ctrl.currentInstance = test.currentInstance
-			ctrl.signatureState = SignatureState{height: test.lastHeight}
+			ctrl.setCurrentInstance(test.currentInstance)
+			ctrl.signatureState = SignatureState{}
+			ctrl.signatureState.setHeight(test.lastHeight)
 
 			for _, msg := range test.msgs {
 				ctrl.q.Add(msg)
@@ -247,7 +254,6 @@ func TestConsumeMessages(t *testing.T) {
 				if ctx.Err() == nil && test.expected != nil {
 					panic("time out")
 				} else {
-					ctrl.logger.Debug(" ----- done ----", zap.String("name", test.name))
 					cancel()
 					q.Clean(func(s string) bool {
 						return true

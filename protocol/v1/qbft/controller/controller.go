@@ -2,11 +2,12 @@ package controller
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -18,10 +19,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"golang.org/x/sync/semaphore"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 )
 
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
@@ -60,27 +59,26 @@ const (
 type Controller struct {
 	ctx context.Context
 
-	currentInstance    instance.Instancer
-	logger             *zap.Logger
-	instanceStorage    qbftstorage.InstanceStore
-	changeRoundStorage qbftstorage.ChangeRoundStore
-	network            p2pprotocol.Network
-	instanceConfig     *qbft.InstanceConfig
-	ValidatorShare     *beaconprotocol.Share
-	Identifier         message.Identifier
-	fork               forks.Fork
-	beacon             beaconprotocol.Beacon
-	signer             beaconprotocol.Signer
+	currentInstanceLock  sync.Locker
+	currentInstanceRLock sync.Locker
+	currentInstance      instance.Instancer
+	logger               *zap.Logger
+	instanceStorage      qbftstorage.InstanceStore
+	changeRoundStorage   qbftstorage.ChangeRoundStore
+	network              p2pprotocol.Network
+	instanceConfig       *qbft.InstanceConfig
+	ValidatorShare       *beaconprotocol.Share
+	Identifier           message.Identifier
+	forkLock             sync.Locker
+	fork                 forks.Fork
+	beacon               beaconprotocol.Beacon
+	signer               beaconprotocol.Signer
 
 	// signature
 	signatureState SignatureState
 
 	// flags
 	state uint32
-
-	// locks
-	currentInstanceLock sync.Locker
-	syncingLock         *semaphore.Weighted
 
 	syncRateLimit time.Duration
 
@@ -107,6 +105,7 @@ func New(opts Options) IController {
 		// TODO: we should probably stop here, TBD
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
+	currentInstanceLock := &sync.RWMutex{}
 	ctrl := &Controller{
 		ctx:                opts.Context,
 		instanceStorage:    opts.Storage,
@@ -121,16 +120,16 @@ func New(opts Options) IController {
 		signer:             opts.Signer,
 		signatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
-		// locks
-		currentInstanceLock: &sync.Mutex{},
-		syncingLock:         semaphore.NewWeighted(1),
-
 		syncRateLimit: opts.SyncRateLimit,
 
 		readMode: opts.ReadMode,
 		fullNode: opts.FullNode,
 
 		q: q,
+
+		currentInstanceLock:  currentInstanceLock,
+		currentInstanceRLock: currentInstanceLock.RLocker(),
+		forkLock:             &sync.Mutex{},
 	}
 
 	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.isFullNode(), opts.Storage, opts.Network)
@@ -140,6 +139,20 @@ func New(opts Options) IController {
 	ctrl.state = NotStarted
 
 	return ctrl
+}
+
+func (c *Controller) getCurrentInstance() instance.Instancer {
+	c.currentInstanceRLock.Lock()
+	defer c.currentInstanceRLock.Unlock()
+
+	return c.currentInstance
+}
+
+func (c *Controller) setCurrentInstance(instance instance.Instancer) {
+	c.currentInstanceLock.Lock()
+	defer c.currentInstanceLock.Unlock()
+
+	c.currentInstance = instance
 }
 
 // OnFork called upon fork, it will make sure all decided messages were processed
@@ -152,7 +165,10 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.processAllDecided(c.messageHandler)
 	cleared := c.q.Clean(msgqueue.AllIndicesCleaner)
 	c.logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
+
 	// get new QBFT controller fork and update decidedStrategy
+	c.forkLock.Lock()
+	defer c.forkLock.Unlock()
 	c.fork = forksfactory.NewFork(forkVersion)
 	c.decidedStrategy = c.decidedFactory.GetStrategy()
 	return nil
@@ -160,7 +176,11 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 func (c *Controller) syncDecided() error {
 	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
-	return c.decidedStrategy.Sync(c.ctx, c.Identifier, c.fork.ValidateDecidedMsg(c.ValidatorShare))
+	c.forkLock.Lock()
+	fork := c.fork
+	decidedStrategy := c.decidedStrategy
+	c.forkLock.Unlock()
+	return decidedStrategy.Sync(c.ctx, c.Identifier, fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -239,7 +259,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.signatureState.height = opts.SeqNumber                         // update sig state once height determent
+	c.signatureState.setHeight(opts.SeqNumber)                       // update sig state once height determent
 	instanceOpts.ChangeRoundStore = c.changeRoundStorage             // in order to set the last change round msg
 	instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier) // clean previews last change round msg's (TODO place in instance?)
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
@@ -271,7 +291,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 		return c.messageHandler(msg)
 	}
 	var fields []zap.Field
-	cInstance := c.currentInstance
+	cInstance := c.getCurrentInstance()
 	if cInstance != nil {
 		currentState := cInstance.State()
 		if currentState != nil {
