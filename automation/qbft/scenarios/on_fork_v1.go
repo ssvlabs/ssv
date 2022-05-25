@@ -33,8 +33,8 @@ type onForkV1 struct {
 	msgs       []*message.SignedMessage
 }
 
-// NewOnForkV1 creates 'on fork v1' scenario
-func NewOnForkV1(logger *zap.Logger) runner.Scenario {
+// newOnForkV1 creates 'on fork v1' scenario
+func newOnForkV1(logger *zap.Logger) runner.Scenario {
 	return &onForkV1{logger: logger}
 }
 
@@ -48,10 +48,6 @@ func (f *onForkV1) NumOfBootnodes() int {
 
 func (f *onForkV1) Name() string {
 	return OnForkV1Scenario
-}
-
-func (f *onForkV1) setLogger(l *zap.Logger) {
-	f.logger = l
 }
 
 // PreExecution will create messages in v0 format
