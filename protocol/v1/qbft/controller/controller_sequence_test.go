@@ -163,7 +163,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				i.currentInstance = test.currentInstance
 			}
 			if test.storage != nil {
-				i.ibftStorage = test.storage
+				i.instanceStorage = test.storage
 			} else {
 				options := basedb.Options{
 					Type:   "badger-memory",
@@ -173,7 +173,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				// creating new db instance each time to get cleared one (without no data)
 				db, err := storage.GetStorageFactory(options)
 				require.NoError(t, err)
-				i.ibftStorage = qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
+				i.instanceStorage = qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
 			}
 
 			i.ValidatorShare = test.share

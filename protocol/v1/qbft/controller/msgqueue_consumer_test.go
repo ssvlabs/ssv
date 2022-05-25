@@ -83,16 +83,6 @@ func TestConsumeMessages(t *testing.T) {
 			nil,
 		},
 		{
-			"no_running_instance_round_change",
-			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(0), ctrl.Identifier, message.RoundChangeMsgType), // differ height, verify priority is correct
-				generateConsensusMsg(t, message.Height(1), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
-			},
-			[]*message.SSVMessage{generateConsensusMsg(t, message.Height(1), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType)},
-			message.Height(1),
-			nil,
-		},
-		{
 			"by_state_not_started_proposal",
 			[]*message.SSVMessage{
 				generateConsensusMsg(t, message.Height(0), 1, ctrl.Identifier, message.ProposalMsgType), // verify priority is right

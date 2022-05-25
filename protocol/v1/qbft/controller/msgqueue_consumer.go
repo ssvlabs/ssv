@@ -39,12 +39,12 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 		// no msg's in the queue
 		if c.q.Len() == 0 {
 			time.Sleep(interval)
-			continue
+			continue // no msg's at all. need to prevent cpu usage in query
 		}
 		// avoid process messages on fork
 		if atomic.LoadUint32(&c.state) == Forking {
 			time.Sleep(interval)
-			continue // no msg's at all. need to prevent cpu usage in query
+			continue
 		}
 
 		lastHeight := c.signatureState.height
@@ -73,10 +73,9 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight
 	}
 
 	var indexes []string
-	indexes = append(indexes, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, lastHeight)) // looking for last height sig msg's or late commit
-	indexes = append(indexes, msgqueue.DecidedMsgIndex(c.Identifier))                         // look for decided with any height
-	//indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastHeight, message.CommitMsgType)...)                               // looking for last height decided msgs or late decided
-	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight, message.CommitMsgType, message.RoundChangeMsgType)...) // looking for late commit msg's or might be change round between duties
+	indexes = append(indexes, msgqueue.SignedPostConsensusMsgIndex(c.Identifier, lastHeight))                                           // looking for last height sig msg's or late commit
+	indexes = append(indexes, msgqueue.DecidedMsgIndex(c.Identifier))                                                                   // look for decided with any height
+	indexes = append(indexes, msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight, message.CommitMsgType)...) // looking for late commit msg's
 	msgs := c.popByPriority(indexes...)
 
 	if len(msgs) == 0 || msgs[0] == nil {
