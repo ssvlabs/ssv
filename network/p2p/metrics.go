@@ -46,6 +46,8 @@ func init() {
 	}
 }
 
+var unknown = "unknown"
+
 func (n *p2pNetwork) reportAllPeers() {
 	pids := n.host.Network().Peers()
 	var ids []string
@@ -80,16 +82,27 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
-	identity, err := n.idx.Identity(pid)
+	// TODO: uncomment
+	ni, err := n.idx.NodeInfo(pid)
 	if err != nil {
 		//n.trace("WARNING: could not report peer", zap.String("peer", pid.String()), zap.Error(err))
 		return
 	}
+	oid := unknown
+	nodeVersion := unknown
+	if ni.Metadata != nil {
+		oid = ni.Metadata.OperatorID
+		nodeVersion = ni.Metadata.NodeVersion
+	}
+	nodeType := "operator"
+	if len(oid) == 0 && nodeVersion != unknown {
+		nodeType = "exporter"
+	}
 	n.logger.Debug("peer identity", zap.String("peer", pid.String()),
-		zap.String("oid", identity.OperatorID))
-
-	MetricsPeersIdentity.WithLabelValues(identity.OperatorID, identity.NodeVersion(),
-		pid.String(), identity.NodeType()).Set(1)
+		zap.String("forkv", ni.ForkVersion.String()),
+		zap.String("oid", oid), zap.String("nodeType", nodeType))
+	MetricsPeersIdentity.WithLabelValues(oid, nodeVersion,
+		pid.String(), nodeType).Set(1)
 }
 
 //

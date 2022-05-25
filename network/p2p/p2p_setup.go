@@ -4,10 +4,13 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
@@ -94,9 +97,18 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	self := peers.NewIdentity(n.host.ID().String(), n.cfg.OperatorID, string(n.cfg.ForkVersion), make(map[string]string))
+	libPrivKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(n.cfg.NetworkPrivateKey))
+	//self := peers.NewIdentity(n.host.ID().String(), n.cfg.OperatorID, string(n.cfg.ForkVersion), make(map[string]string))
+
+	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
+	self.Metadata = &records.NodeMetadata{
+		OperatorID:  n.cfg.OperatorID,
+		NodeVersion: commons2.GetNodeVersion(),
+	}
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
+	}, func() crypto.PrivKey {
+		return libPrivKey
 	}, 10*time.Minute)
 	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
@@ -108,10 +120,10 @@ func (n *p2pNetwork) setupPeerServices() error {
 	filters := make([]peers.HandshakeFilter, 0)
 	// v0 was before we checked forks, therefore asking if we are above v0
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
-		filters = append(filters, peers.ForkVersionFilter(n.cfg.ForkVersion))
+		filters = append(filters, peers.ForkVersionFilter(n.cfg.ForkVersion), peers.NetworkIDFilter(n.cfg.NetworkID))
 	}
 	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids, filters...)
-	n.host.SetStreamHandler(peers.HandshakeProtocol, handshaker.Handler())
+	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
 	connHandler := peers.HandleConnections(n.ctx, n.logger, handshaker)

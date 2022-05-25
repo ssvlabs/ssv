@@ -42,16 +42,20 @@ type Config struct {
 	PubSubTrace    bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 
+	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"ssv-testnet" env-description:"Network ID is the network of this node"`
+
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
 	OperatorID string
-
-	Logger    *zap.Logger
-	Router    network.MessageRouter
+	// Router propagate incoming network messages to the responsive components
+	Router network.MessageRouter
+	// UserAgent to use by libp2p identify protocol
 	UserAgent string
-
+	// ForkVersion to use
 	ForkVersion forksprotocol.ForkVersion
+
+	Logger *zap.Logger
 }
 
 // Libp2pOptions creates options list for the libp2p host

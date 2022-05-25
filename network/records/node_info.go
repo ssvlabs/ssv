@@ -26,6 +26,14 @@ type NodeInfo struct {
 	// TODO: add fields, e.g. subnets
 }
 
+// NewNodeInfo creates a new node info
+func NewNodeInfo(forkVersion forksprotocol.ForkVersion, networkID string) *NodeInfo {
+	return &NodeInfo{
+		ForkVersion: forkVersion,
+		NetworkID:   networkID,
+	}
+}
+
 // Seal seals and encodes the record to be sent to other peers
 func (ni *NodeInfo) Seal(privateKey crypto.PrivKey) ([]byte, error) {
 	ev, err := record.Seal(ni, privateKey)

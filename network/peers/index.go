@@ -2,18 +2,12 @@ package peers
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/network/records"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"io"
 	"time"
-)
-
-const (
-	// forkVKey is the key used to store the fork version
-	forkVKey = "forkv"
-	// operatorIDKey is the key used to store the operatorID
-	operatorIDKey = "oid"
 )
 
 var (
@@ -72,14 +66,16 @@ type ScoreIndex interface {
 	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
-// IdentityIndex is an interface for managing peers identity
-type IdentityIndex interface {
-	// Self returns the current node identity
-	Self() *Identity
-	// Add indexes the given peer identity
-	Add(node *Identity) (bool, error)
-	// Identity returns the identity of the given peer
-	Identity(id peer.ID) (*Identity, error)
+// NodeInfoStore is an interface for managing peers identity
+type NodeInfoStore interface {
+	// SelfSealed returns a sealed, encoded of self node info
+	SelfSealed() ([]byte, error)
+	// Self returns the current node info
+	Self() *records.NodeInfo
+	// Add indexes the given peer info
+	Add(id peer.ID, node *records.NodeInfo) (bool, error)
+	// NodeInfo returns the info of the given node
+	NodeInfo(id peer.ID) (*records.NodeInfo, error)
 	// State returns the state of the peer in the identity store
 	State(id peer.ID) NodeState
 	// EvictPruned removes the given operator or peer from pruned list
@@ -94,13 +90,13 @@ type IdentityIndex interface {
 // It uses libp2p's Peerstore (github.com/libp2p/go-libp2p-peerstore) to store metadata of peers.
 type Index interface {
 	ConnectionIndex
-	IdentityIndex
+	NodeInfoStore
 	ScoreIndex
 	io.Closer
 }
 
-func formatIdentityKey(k string) string {
-	return fmt.Sprintf("ssv/identity/%s", k)
+func formatInfoKey(k string) string {
+	return fmt.Sprintf("ssv/info/%s", k)
 }
 
 func formatScoreKey(k string) string {

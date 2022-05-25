@@ -174,5 +174,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		Logger:            logger,
 		ForkVersion:       forkVersion,
 		UserAgent:         ua,
+		NetworkID:         "ssv-testnet",
 	}
 }

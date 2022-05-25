@@ -2,6 +2,7 @@ package peers
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -14,8 +15,8 @@ import (
 )
 
 const (
-	// HandshakeProtocol is the protocol.ID used for handshake
-	HandshakeProtocol = "/ssv/handshake/0.0.1"
+	// NodeInfoProtocol is the protocol.ID used for handshake
+	NodeInfoProtocol = "/ssv/info/0.0.1"
 	// userAgentKey is the key used by libp2p to save user agent
 	userAgentKey = "AgentVersion"
 )
@@ -24,9 +25,10 @@ const (
 var ErrHandshakeInProcess = errors.New("handshake already in process")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
-type HandshakeFilter func(*Identity) (bool, error)
+type HandshakeFilter func(info *records.NodeInfo) (bool, error)
 
-// Handshaker is the interface for handshaking with peers
+// Handshaker is the interface for handshaking with peers.
+// it uses node info protocol to exchange information with other nodes and decide whether we want to connect.
 type Handshaker interface {
 	Handshake(conn libp2pnetwork.Conn) error
 	Handler() libp2pnetwork.StreamHandler
@@ -41,7 +43,7 @@ type handshaker struct {
 
 	streams streams.StreamController
 
-	idx IdentityIndex
+	idx NodeInfoStore
 	// for backwards compatibility
 	ids *identify.IDService
 
@@ -49,7 +51,7 @@ type handshaker struct {
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx IdentityIndex, ids *identify.IDService, filters ...HandshakeFilter) Handshaker {
+func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore, ids *identify.IDService, filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:     ctx,
 		logger:  logger,
@@ -73,38 +75,36 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		req, res, done, err := h.streams.HandleStream(stream)
 		defer done()
 		if err != nil {
-			h.logger.Warn("could not read identity msg", zap.Error(err))
+			h.logger.Warn("could not read node info msg", zap.Error(err))
 			return
 		}
 
-		identity, err := DecodeIdentity(req)
+		var ni records.NodeInfo
+		err = ni.Consume(req)
 		if err != nil {
-			h.logger.Warn("could not decode identity msg", zap.Error(err))
+			h.logger.Warn("could not consume node info request", zap.Error(err))
 			return
 		}
-		h.logger.Debug("handling handshake request from peer", zap.Any("identity", identity))
-		if !h.applyFilters(identity) {
-			h.logger.Debug("filtering peer", zap.Any("identity", identity))
+		h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
+		if !h.applyFilters(&ni) {
+			h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
-		if added, err := h.idx.Add(identity); err != nil {
-			h.logger.Warn("could not add identity identity", zap.Error(err))
+		if added, err := h.idx.Add(pid, &ni); err != nil {
+			h.logger.Warn("could not add node info", zap.Error(err))
 			return
 		} else if !added {
-			h.logger.Warn("identity was not added", zap.String("id", identity.ID))
+			h.logger.Warn("node info was not added", zap.String("id", pid.String()))
 		}
-
-		self, err := h.idx.Self().Encode()
+		self, err := h.idx.SelfSealed()
 		if err != nil {
-			h.logger.Warn("could not marshal self identity", zap.Error(err))
+			h.logger.Error("could not seal self node info", zap.Error(err))
 			return
 		}
-
 		if err := res(self); err != nil {
-			h.logger.Warn("could not send self identity", zap.Error(err))
+			h.logger.Warn("could not send self node info", zap.Error(err))
 			return
 		}
-		//h.logger.Debug("successful handshake", zap.String("id", identity.ID))
 	}
 }
 
@@ -112,7 +112,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 // with the peer on the other side of the connection.
 // it should enable us to know the supported protocols of peers we connect to
 func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
-	ctx, cancel := context.WithTimeout(h.ctx, time.Second*10)
+	ctx, cancel := context.WithTimeout(h.ctx, time.Second*15)
 	defer cancel()
 	select {
 	case <-ctx.Done():
@@ -131,11 +131,11 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	defer h.pending.Delete(pid.String())
 
 	// check if the peer is known
-	idn, err := h.idx.Identity(pid)
+	ni, err := h.idx.NodeInfo(pid)
 	if err != nil && err != ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
-	if idn != nil {
+	if ni != nil && h.idx.State(pid) != StateUnknown {
 		return nil
 	}
 
@@ -143,40 +143,40 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errors.Wrap(err, "could not perform pre-handshake")
 	}
 
-	idn, err = h.sendInfo(conn)
+	ni, err = h.nodeInfoFromStream(conn)
 	if err != nil {
 		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
-		h.logger.Debug("could not handshake, trying with user agent", zap.String("id", pid.String()), zap.Error(err))
-		idn, err = h.handshakeWithUserAgent(conn)
+		ni, err = h.nodeInfoFromUserAgent(conn)
 	}
 	if err != nil {
-		return errors.Wrap(err, "could not handshake")
+		return errors.Wrapf(err, "could not handshake with peer %s", pid.String())
 	}
-	if idn == nil {
+	if ni == nil {
 		return errors.New("empty identity")
 	}
-	if !h.applyFilters(idn) {
-		h.logger.Debug("filtering peer", zap.Any("identity", idn))
+	if !h.applyFilters(ni) {
+		h.logger.Debug("filtering peer", zap.Any("info", ni))
 		return errors.New("peer was filtered")
 	}
 	// adding to index
-	added, err := h.idx.Add(idn)
+	added, err := h.idx.Add(pid, ni)
 	if added {
-		h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()), zap.Any("identity", idn))
+		//h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()), zap.Any("info", ni))
+		return nil
 	}
 	if err != nil {
-		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()))
+		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()), zap.Any("info", ni))
 	}
 	return err
 }
 
-func (h *handshaker) sendInfo(conn libp2pnetwork.Conn) (*Identity, error) {
-	data, err := h.idx.Self().Encode()
+func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
+	data, err := h.idx.SelfSealed()
 	if err != nil {
 		return nil, err
 	}
-	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), HandshakeProtocol)
+	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
@@ -184,14 +184,19 @@ func (h *handshaker) sendInfo(conn libp2pnetwork.Conn) (*Identity, error) {
 	if len(res) == 0 {
 		return nil, errors.Errorf("peer %s doesn't supported handshake protocol", conn.RemotePeer().String())
 	}
-	resBytes, err := h.streams.Request(conn.RemotePeer(), HandshakeProtocol, data)
+	resBytes, err := h.streams.Request(conn.RemotePeer(), NodeInfoProtocol, data)
 	if err != nil {
 		return nil, err
 	}
-	return DecodeIdentity(resBytes)
+	var ni records.NodeInfo
+	err = ni.Consume(resBytes)
+	if err != nil {
+		return nil, err
+	}
+	return &ni, nil
 }
 
-func (h *handshaker) handshakeWithUserAgent(conn libp2pnetwork.Conn) (*Identity, error) {
+func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
 	pid := conn.RemotePeer()
 	uaRaw, err := h.ids.Host.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
@@ -201,18 +206,31 @@ func (h *handshaker) handshakeWithUserAgent(conn libp2pnetwork.Conn) (*Identity,
 	if !ok {
 		return nil, errors.New("could not cast ua to string")
 	}
-	return identityFromUserAgent(ua, pid.String()), nil
+	parts := strings.Split(ua, ":")
+	if len(parts) < 2 { // too old
+		return nil, errors.Errorf("user agent is unknown %s", ua)
+	}
+	// TODO: don't assume network is the same
+	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.idx.Self().NetworkID)
+	ni.Metadata = &records.NodeMetadata{
+		NodeVersion: parts[1],
+	}
+	// extract operator id if exist
+	if len(parts) > 3 {
+		ni.Metadata.OperatorID = parts[3]
+	}
+	return ni, nil
 }
 
-func (h *handshaker) applyFilters(identity *Identity) bool {
+func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 	for _, filter := range h.filters {
-		ok, err := filter(identity)
+		ok, err := filter(nodeInfo)
 		if err != nil {
-			h.logger.Warn("could not filter identity", zap.Error(err), zap.Any("identity", identity))
+			h.logger.Warn("could not filter identity", zap.Error(err), zap.Any("identity", nodeInfo))
 			return false
 		}
 		if !ok {
-			h.logger.Debug("filtering peer", zap.Any("identity", identity))
+			h.logger.Debug("filtering peer", zap.Any("identity", nodeInfo))
 			return false
 		}
 	}
@@ -221,28 +239,21 @@ func (h *handshaker) applyFilters(identity *Identity) bool {
 
 // ForkVersionFilter determines whether we will connect to the given node by the fork version
 func ForkVersionFilter(forkVersion forksprotocol.ForkVersion) HandshakeFilter {
-	fv := string(forkVersion)
-	return func(identity *Identity) (bool, error) {
-		if fv != identity.ForkV {
-			return false, errors.Errorf("fork version '%s' instead of '%s'", identity.ForkV, fv)
+	forkvStr := forkVersion.String()
+	return func(ni *records.NodeInfo) (bool, error) {
+		if forkVersion != ni.ForkVersion {
+			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), forkvStr)
 		}
 		return true, nil
 	}
 }
 
-func identityFromUserAgent(ua string, pid string) *Identity {
-	parts := strings.Split(ua, ":")
-	if len(parts) < 2 { // too old
-		return nil
+// NetworkIDFilter determines whether we will connect to the given node by the network ID
+func NetworkIDFilter(networkID string) HandshakeFilter {
+	return func(ni *records.NodeInfo) (bool, error) {
+		if networkID != ni.NetworkID {
+			return false, errors.Errorf("networkID '%s' instead of '%s'", ni.NetworkID, networkID)
+		}
+		return true, nil
 	}
-	idn := new(Identity)
-	idn.ID = pid
-	// TODO: extract v0 to constant
-	idn.ForkV = "v0"
-	idn.Metadata = make(map[string]string)
-	idn.Metadata[nodeVersionKey] = parts[1]
-	if len(parts) > 3 { // operator
-		idn.OperatorID = parts[3]
-	}
-	return idn
 }

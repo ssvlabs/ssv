@@ -1,6 +1,8 @@
 package peers
 
 import (
+	"github.com/bloxapp/ssv/network/records"
+	"github.com/libp2p/go-libp2p-core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
@@ -10,31 +12,41 @@ import (
 	"time"
 )
 
+const (
+	nodeInfoKey = "nodeInfo"
+)
+
 // peersIndex implements Index interface
 type peersIndex struct {
 	logger *zap.Logger
 
-	network libp2pnetwork.Network
+	netKeyProvider func() crypto.PrivKey
+	network        libp2pnetwork.Network
 
 	statesLock *sync.RWMutex
 	states     map[string]nodeStateObj
 
-	self *Identity
+	selfLock *sync.RWMutex
+	self     *records.NodeInfo
+	// selfSealed helps to cache the node info record instead of signing multiple times
+	selfSealed []byte
 
 	maxPeers func() int
 	pruneTTL time.Duration
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *Identity, maxPeers func() int, pruneTTL time.Duration) Index {
+func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers func() int, netKeyProvider func() crypto.PrivKey, pruneTTL time.Duration) Index {
 	return &peersIndex{
-		logger:     logger,
-		network:    network,
-		statesLock: &sync.RWMutex{},
-		states:     make(map[string]nodeStateObj),
-		self:       self,
-		maxPeers:   maxPeers,
-		pruneTTL:   pruneTTL,
+		logger:         logger,
+		network:        network,
+		statesLock:     &sync.RWMutex{},
+		states:         make(map[string]nodeStateObj),
+		self:           self,
+		selfLock:       &sync.RWMutex{},
+		maxPeers:       maxPeers,
+		pruneTTL:       pruneTTL,
+		netKeyProvider: netKeyProvider,
 	}
 }
 
@@ -90,13 +102,28 @@ func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 	return len(peers) < maxPeers
 }
 
-func (pi *peersIndex) Self() *Identity {
+func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }
 
+func (pi *peersIndex) SelfSealed() ([]byte, error) {
+	pi.selfLock.Lock()
+	defer pi.selfLock.Unlock()
+
+	if len(pi.selfSealed) == 0 {
+		sealed, err := pi.self.Seal(pi.netKeyProvider())
+		if err != nil {
+			return nil, err
+		}
+		pi.selfSealed = sealed
+	}
+
+	return pi.selfSealed, nil
+}
+
 // Add adds a new peer identity
-func (pi *peersIndex) Add(identity *Identity) (bool, error) {
-	switch pi.state(identity.ID) {
+func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
+	switch pi.state(id.String()) {
 	case StateReady:
 		return true, nil
 	case StateIndexing:
@@ -107,11 +134,11 @@ func (pi *peersIndex) Add(identity *Identity) (bool, error) {
 	case StateUnknown:
 	default:
 	}
-	return pi.add(identity)
+	return pi.add(id, nodeInfo)
 }
 
-// Identity returns the identity of the given peer
-func (pi *peersIndex) Identity(id peer.ID) (*Identity, error) {
+// NodeInfo returns the identity of the given peer
+func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
 	switch pi.state(id.String()) {
 	case StateIndexing:
 		return nil, ErrIndexingInProcess
@@ -121,12 +148,13 @@ func (pi *peersIndex) Identity(id peer.ID) (*Identity, error) {
 		return nil, ErrNotFound
 	default:
 	}
-	// if in good state -> get identity
-	idn, err := pi.get(id)
+	// if in good state -> get node info
+	ni, err := pi.get(id)
 	if err == peerstore.ErrNotFound {
 		return nil, ErrNotFound
 	}
-	return idn, err
+
+	return ni, err
 }
 
 func (pi *peersIndex) State(id peer.ID) NodeState {
@@ -218,81 +246,77 @@ func (pi *peersIndex) Close() error {
 }
 
 // add saves the given identity
-func (pi *peersIndex) add(identity *Identity) (bool, error) {
-	pi.setState(identity.ID, StateIndexing)
-	pid, err := peer.Decode(identity.ID)
+func (pi *peersIndex) add(pid peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
+	id := pid.String()
+	pi.setState(id, StateIndexing)
+
+	raw, err := nodeInfo.MarshalRecord()
 	if err != nil {
-		return false, errors.Wrap(err, "could not convert string to peer.ID")
+		pi.setState(id, StateUnknown)
+		return false, errors.Wrap(err, "could not marshal node info record")
 	}
 	tx := newTransactional(pid, pi.network.Peerstore())
-	tx.Put(formatIdentityKey(forkVKey), identity.ForkV)
-	tx.Put(formatIdentityKey(operatorIDKey), identity.OperatorID)
-	tx.Put(formatIdentityKey(consensusNodeKey), identity.ConsensusNode())
-	tx.Put(formatIdentityKey(execNodeKey), identity.ExecutionNode())
-	tx.Put(formatIdentityKey(nodeVersionKey), identity.NodeVersion())
+	tx.Put(formatInfoKey(nodeInfoKey), raw)
 	// commit changes or rollback
 	if err := tx.Commit(); err != nil {
+		pi.setState(id, StateUnknown)
+		pi.logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", id))
 		return false, tx.Rollback()
 	}
-	pi.setState(identity.ID, StateReady)
+	pi.setState(id, StateReady)
 	return true, nil
 }
 
 // add saves the given identity
-func (pi *peersIndex) get(pid peer.ID) (*Identity, error) {
+func (pi *peersIndex) get(pid peer.ID) (*records.NodeInfo, error) {
 	tx := newTransactional(pid, pi.network.Peerstore())
 	// build identity object
-	fraw, err := tx.Get(formatIdentityKey(forkVKey))
+	raw, err := tx.Get(formatInfoKey(nodeInfoKey))
 	if err != nil {
 		return nil, err
 	}
-	forkV, ok := fraw.(string)
-	if !ok {
-		return nil, errors.New("could not cast fork version")
+	if raw == nil {
+		return nil, nil
 	}
-	oraw, err := tx.Get(formatIdentityKey(operatorIDKey))
+	var ni records.NodeInfo
+	err = ni.UnmarshalRecord(raw.([]byte))
 	if err != nil {
 		return nil, err
 	}
-	oid, ok := oraw.(string)
-	if !ok {
-		return nil, errors.New("could not cast operator ID")
-	}
 
-	metadata, err := pi.getMetadata(tx)
-
-	return NewIdentity(pid.String(), oid, forkV, metadata), err
+	return &ni, nil
 }
 
-func (pi *peersIndex) getMetadata(tx Transactional) (map[string]string, error) {
-	var ok bool
-	metadata := make(map[string]string)
-	craw, err := tx.Get(formatIdentityKey(consensusNodeKey))
-	if err != nil {
-		return nil, err
-	}
-	metadata[consensusNodeKey], ok = craw.(string)
-	if !ok {
-		return nil, errors.New("could not cast consensus node")
-	}
-	eraw, err := tx.Get(formatIdentityKey(execNodeKey))
-	if err != nil {
-		return nil, err
-	}
-	metadata[execNodeKey], ok = eraw.(string)
-	if !ok {
-		return nil, errors.New("could not cast exec node")
-	}
-	vraw, err := tx.Get(formatIdentityKey(nodeVersionKey))
-	if err != nil {
-		return nil, err
-	}
-	metadata[nodeVersionKey], ok = vraw.(string)
-	if !ok {
-		return nil, errors.New("could not cast node version")
-	}
-	return metadata, nil
-}
+//
+//func (pi *peersIndex) getMetadata(tx Transactional) (map[string]string, error) {
+//	var ok bool
+//	metadata := make(map[string]string)
+//	craw, err := tx.Get(formatInfoKey(consensusNodeKey))
+//	if err != nil {
+//		return nil, err
+//	}
+//	metadata[consensusNodeKey], ok = craw.(string)
+//	if !ok {
+//		return nil, errors.New("could not cast consensus node")
+//	}
+//	eraw, err := tx.Get(formatInfoKey(execNodeKey))
+//	if err != nil {
+//		return nil, err
+//	}
+//	metadata[execNodeKey], ok = eraw.(string)
+//	if !ok {
+//		return nil, errors.New("could not cast exec node")
+//	}
+//	vraw, err := tx.Get(formatInfoKey(nodeVersionKey))
+//	if err != nil {
+//		return nil, err
+//	}
+//	metadata[nodeVersionKey], ok = vraw.(string)
+//	if !ok {
+//		return nil, errors.New("could not cast node version")
+//	}
+//	return metadata, nil
+//}
 
 func (pi *peersIndex) state(pid string) NodeState {
 	pi.statesLock.RLock()
