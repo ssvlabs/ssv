@@ -87,8 +87,10 @@ func (m *mockNetwork) SetGetHistoryHandler(getHistoryHandler EventHandler) {
 	m.getHistoryHandler = getHistoryHandler
 }
 
-func (m *mockNetwork) Start(ctx context.Context) {
+func (m *mockNetwork) Start(pctx context.Context) {
 	go func() {
+		ctx, cancel := context.WithCancel(pctx)
+		defer cancel()
 		for {
 			select {
 			case <-ctx.Done():
@@ -111,6 +113,8 @@ func (m *mockNetwork) Start(ctx context.Context) {
 	}()
 
 	go func() {
+		ctx, cancel := context.WithCancel(pctx)
+		defer cancel()
 		for {
 			select {
 			case <-ctx.Done():
