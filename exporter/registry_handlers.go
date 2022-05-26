@@ -32,6 +32,8 @@ func (exp *exporter) listenToEth1Events(eventsFeed *event.Feed) <-chan error {
 	return cnErr
 }
 
+// TODO: un-lint
+//nolint
 // ListenToEth1Events register for eth1 events
 func (exp *exporter) handleEth1Event(e eth1.Event) error {
 	var err error = nil
@@ -43,6 +45,8 @@ func (exp *exporter) handleEth1Event(e eth1.Event) error {
 	return err
 }
 
+// TODO: un-lint
+//nolint
 // handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator
 func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEvent) error {
 	//pubKeyHex := hex.EncodeToString(event.PublicKey)
@@ -90,6 +94,8 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	return nil
 }
 
+// TODO: un-lint
+//nolint
 // handleOperatorAddedEvent parses the given event and saves operator information
 func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
 	//logger := exp.logger.With(zap.String("eventType", "OperatorAdded"),
@@ -117,6 +123,8 @@ func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	return nil
 }
 
+// TODO: un-lint
+//nolint
 // toValidatorInformation converts raw event to ValidatorInformation
 func toValidatorInformation(validatorAddedEvent abiparser.ValidatorAddedEvent) (*storage.ValidatorInformation, error) {
 	pubKey := &bls.PublicKey{}
