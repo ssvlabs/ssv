@@ -144,4 +144,4 @@ fi
 
 #deploy
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls/ssv-node-v2-2-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/yamls/ssv-node-v2-6-deployment.yml || exit 1
+#kubectl --context=$K8S_CONTEXT apply -f .k8/yamls/ssv-node-v2-6-deployment.yml || exit 1
