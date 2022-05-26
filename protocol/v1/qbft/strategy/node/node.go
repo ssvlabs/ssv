@@ -28,7 +28,7 @@ func NewRegularNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStor
 }
 
 func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
-	highest, _, _, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+	highest, _, _, err := f.decidedFetcher.GetLastDecided(identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {

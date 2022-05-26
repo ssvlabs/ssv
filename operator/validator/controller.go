@@ -454,7 +454,7 @@ func (c *controller) handleValidatorAddedEvent(
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create share")
 		}
-		if err := c.onNewShare(newValShare, shareSecret); err != nil {
+		if err := c.onNewShare(newValShare, shareSecret, isOperatorShare); err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return nil, err
 		}
@@ -462,6 +462,7 @@ func (c *controller) handleValidatorAddedEvent(
 		if isOperatorShare {
 			logger := c.logger.With(zap.String("pubKey", pubKey))
 			logger.Debug("ValidatorAdded event was handled successfully")
+			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		}
 	}
 	return validatorShare, nil
@@ -507,12 +508,14 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 
 // onNewShare is called when a new validator was added or during registry sync
 // if the validator was persisted already, this function won't be called
-func (c *controller) onNewShare(share *beaconprotocol.Share, shareSecret *bls.SecretKey) error {
+func (c *controller) onNewShare(share *beaconprotocol.Share, shareSecret *bls.SecretKey, isOperatorShare bool) error {
 	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
-	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
-		logger.Warn("could not add validator metadata", zap.Error(err))
-	} else if !updated {
-		logger.Warn("could not find validator metadata")
+	if isOperatorShare {
+		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
+			logger.Warn("could not add validator metadata", zap.Error(err))
+		} else if !updated {
+			logger.Warn("could not find validator metadata")
+		}
 	}
 
 	// in case this validator belongs to operator, the secret key is not nil

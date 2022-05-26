@@ -260,7 +260,7 @@ make build
 
 Then run with:
 ```shell
-make CONFIG_PATH=./config/config.exporter.yaml BUILD_PATH=./bin/ssvnode start-exporter
+make CONFIG_PATH=./config/config.yaml BUILD_PATH=./bin/ssvnode start-exporter
 ```
 
 ### Run in Docker

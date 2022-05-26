@@ -32,7 +32,7 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 
 func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
 	logger := f.logger.With(zap.String("identifier", identifier.String()))
-	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
@@ -43,41 +43,43 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		logger.Debug("could not find highest decided from peers")
 		return nil
 	}
-	if highest.Message.Height > localHeight {
-		counter := 0
-		err := f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
-			if err := pip.Run(msg); err != nil {
-				return errors.Wrap(err, "invalid msg")
-			}
-			known, _, err := f.IsMsgKnown(msg)
-			if err != nil {
-				return errors.Wrap(err, "could not check if message is known")
-			}
-			if known {
-				f.logger.Debug("msg is known", zap.Int64("h", int64(msg.Message.Height)))
-				return nil
-			}
-			//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
-			if err := f.store.SaveDecided(msg); err != nil {
-				return errors.Wrap(err, "could not save decided msg to storage")
-			}
-			counter++
-			return nil
-		}, localHeight, highest.Message.Height, sender)
+	if localHeight > highest.Message.Height {
+		return nil // local is higher than remote, no need for sync or update
+	}
+
+	counter := 0
+	err = f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
+		if err := pip.Run(msg); err != nil {
+			return errors.Wrap(err, "invalid msg")
+		}
+		known, _, err := f.IsMsgKnown(msg)
 		if err != nil {
-			return errors.Wrap(err, "could not complete sync")
+			return errors.Wrap(err, "could not check if message is known")
 		}
-		warnMsg := ""
-		if message.Height(counter-1) < highest.Message.Height-localHeight {
-			warnMsg = "could not sync all messages in range"
-		} else if message.Height(counter-1) > highest.Message.Height-localHeight {
-			warnMsg = "got too many messages during sync"
+		if known {
+			f.logger.Debug("msg is known", zap.Int64("h", int64(msg.Message.Height)))
+			return nil
 		}
-		if len(warnMsg) > 0 {
-			logger.Warn(warnMsg,
-				zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
-				zap.Int64("to", int64(highest.Message.Height)))
+		//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
+		if err := f.store.SaveDecided(msg); err != nil {
+			return errors.Wrap(err, "could not save decided msg to storage")
 		}
+		counter++
+		return nil
+	}, localHeight, highest.Message.Height, sender)
+	if err != nil {
+		return errors.Wrap(err, "could not complete sync")
+	}
+	warnMsg := ""
+	if message.Height(counter-1) < highest.Message.Height-localHeight {
+		warnMsg = "could not sync all messages in range"
+	} else if message.Height(counter-1) > highest.Message.Height-localHeight {
+		warnMsg = "got too many messages during sync"
+	}
+	if len(warnMsg) > 0 {
+		logger.Warn(warnMsg,
+			zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
+			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
 	if err == nil && highest != nil {

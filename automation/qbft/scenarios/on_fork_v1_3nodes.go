@@ -242,7 +242,7 @@ func (f *onForkV13Nodes) PostExecution(ctx *runner.ScenarioContext) error {
 		return err
 	}
 	msgCountV0 := len(msgs)
-	if msgCountV0 != expectedMsgCount-3 {
+	if msgCountV0 > expectedMsgCount-4 {
 		return errors.Errorf("node-4 (v0) has too many decided: %d", msgCountV0)
 
 	}
