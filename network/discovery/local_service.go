@@ -2,6 +2,9 @@ package discovery
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -10,8 +13,6 @@ import (
 	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns_legacy"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 const (
@@ -117,6 +118,9 @@ func (md *localDiscovery) Close() error {
 	if err := md.svc.Close(); err != nil {
 		return err
 	}
+
+	md.peersLock.Lock()
 	md.peers = make(map[string]PeerEvent)
+	md.peersLock.Unlock()
 	return nil
 }

@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
@@ -19,10 +20,10 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 		}
 		fallthrough // not processed, need to process as regular consensus commit msg
 	case message.ProposalMsgType, message.PrepareMsgType, message.RoundChangeMsgType:
-		if c.currentInstance == nil {
+		if c.getCurrentInstance() == nil {
 			return errors.New("current instance is nil")
 		}
-		decided, err := c.currentInstance.ProcessMsg(signedMessage)
+		decided, err := c.getCurrentInstance().ProcessMsg(signedMessage)
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
@@ -46,8 +47,8 @@ func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message
 // and "fullSync" mode, regular process for late commit (saving all range of high msg's)
 // if height is the same as last decided msg height, update the last decided with the updated one.
 func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (bool, error) {
-	if c.currentInstance != nil {
-		if signedMessage.Message.Height >= c.currentInstance.State().GetHeight() {
+	if c.getCurrentInstance() != nil {
+		if signedMessage.Message.Height >= c.getCurrentInstance().State().GetHeight() {
 			// process as regular consensus commit msg
 			return false, nil
 		}
