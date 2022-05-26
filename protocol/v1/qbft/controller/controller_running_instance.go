@@ -165,8 +165,10 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	count := 0
 	f := changeround.NewLastRoundFetcher(c.logger, c.network)
-
 	handler := func(msg *message.SignedMessage) error {
+		if c.getCurrentInstance() == nil {
+			return errors.New("current instance is nil")
+		}
 		err := c.getCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {
 			return errors.Wrap(err, "invalid msg")
