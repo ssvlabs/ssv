@@ -85,6 +85,9 @@ func (v *Validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
 	// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
 	logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
 
+	// TODO remove after debugging
+	logger.Debug("decided value", zap.Any("duty", duty))
+
 	// Sign, aggregate and broadcast signature
 	if err := qbftCtrl.PostConsensusDutyExecution(logger, seqNumber, decidedValue, signaturesCount, duty); err != nil {
 		logger.Error("could not execute duty", zap.Error(err))
