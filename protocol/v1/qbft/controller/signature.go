@@ -2,17 +2,17 @@ package controller
 
 import (
 	"encoding/base64"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
-
 	"github.com/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/utils/threshold"
 )
 
 // TimerState is the state of the timer.
@@ -43,7 +43,7 @@ type SignatureState struct {
 	state      atomic.Int32
 	signatures map[message.OperatorID][]byte
 
-	height                     message.Height
+	height                     atomic.Value // message.Height
 	SignatureCollectionTimeout time.Duration
 	sigCount                   int
 	root                       []byte
@@ -51,9 +51,21 @@ type SignatureState struct {
 	duty                       *beaconprotocol.Duty
 }
 
+func (s *SignatureState) getHeight() message.Height {
+	if height, ok := s.height.Load().(message.Height); ok {
+		return height
+	}
+
+	return message.Height(0)
+}
+
+func (s *SignatureState) setHeight(height message.Height) {
+	s.height.Store(height)
+}
+
 func (s *SignatureState) start(logger *zap.Logger, height message.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
 	// set var's
-	s.height = height
+	s.setHeight(height)
 	s.sigCount = signaturesCount
 	s.root = root
 	s.valueStruct = valueStruct

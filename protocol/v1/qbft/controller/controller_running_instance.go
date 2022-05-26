@@ -17,19 +17,22 @@ import (
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
 func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.Result, error) {
-	c.currentInstance = instance.NewInstance(instanceOpts)
-	c.currentInstance.Init()
-	stageChan := c.currentInstance.GetStageChan()
+	newInstance := instance.NewInstance(instanceOpts)
+
+	c.setCurrentInstance(newInstance)
+
+	newInstance.Init()
+	stageChan := newInstance.GetStageChan()
 
 	// reset leader seed for sequence
-	if err := c.currentInstance.Start(value); err != nil {
+	if err := newInstance.Start(value); err != nil {
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetValidatorPK())).Set(float64(c.currentInstance.State().GetHeight()))
+	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetValidatorPK())).Set(float64(newInstance.State().GetHeight()))
 
 	// catch up if we can
-	go c.fastChangeRoundCatchup(c.currentInstance)
+	go c.fastChangeRoundCatchup(newInstance)
 
 	// main instance callback loop
 	var retRes *instance.Result
@@ -37,7 +40,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 instanceLoop:
 	for {
 		stage := <-stageChan
-		if c.currentInstance == nil {
+		if c.getCurrentInstance() == nil {
 			c.logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
 			break instanceLoop
 		}
@@ -66,11 +69,11 @@ instanceLoop:
 		}
 	}
 	var seq message.Height
-	if c.currentInstance != nil {
+	if c.getCurrentInstance() != nil {
 		// saves seq as instance will be cleared
-		seq = c.currentInstance.State().GetHeight()
+		seq = c.getCurrentInstance().State().GetHeight()
 		// when main instance loop breaks, nil current instance
-		c.currentInstance = nil
+		c.setCurrentInstance(nil)
 	}
 	c.logger.Debug("iBFT instance result loop stopped")
 
@@ -109,12 +112,12 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.instanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.currentInstance.State()); err != nil {
+		if err := c.instanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.getCurrentInstance().State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
 		run := func() error {
-			agg, err := c.currentInstance.CommittedAggregatedMsg()
+			agg, err := c.getCurrentInstance().CommittedAggregatedMsg()
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
@@ -122,7 +125,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 
-			ssvMsg, err := c.currentInstance.GetCommittedAggSSVMessage()
+			ssvMsg, err := c.getCurrentInstance().GetCommittedAggSSVMessage()
 			if err != nil {
 				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
 			}
@@ -137,21 +140,21 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 
 		err := run()
 		// call stop after decided in order to prevent race condition
-		c.currentInstance.Stop()
+		c.getCurrentInstance().Stop()
 		if err != nil {
 			return true, err
 		}
 		return false, nil
 	case qbft.RoundStateChangeRound:
 		// set time for next round change
-		c.currentInstance.ResetRoundTimer()
+		c.getCurrentInstance().ResetRoundTimer()
 		// broadcast round change
-		if err := c.currentInstance.BroadcastChangeRound(); err != nil {
+		if err := c.getCurrentInstance().BroadcastChangeRound(); err != nil {
 			c.logger.Error("could not broadcast round change message", zap.Error(err))
 		}
 
 	case qbft.RoundStateStopped:
-		c.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", uint64(c.currentInstance.State().GetHeight())))
+		c.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", uint64(c.getCurrentInstance().State().GetHeight())))
 		return true, nil
 	}
 	return false, nil
@@ -164,7 +167,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	f := changeround.NewLastRoundFetcher(c.logger, c.network)
 
 	handler := func(msg *message.SignedMessage) error {
-		err := c.currentInstance.ChangeRoundMsgValidationPipeline().Run(msg)
+		err := c.getCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}

@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +22,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -255,12 +255,21 @@ func TestDecidedRequiresSync(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			storage := newTestStorage(test.highestDecided)
+			currentInstanceLock := &sync.RWMutex{}
 			ctrl := Controller{
-				currentInstance:    test.currentInstance,
-				instanceStorage:    storage,
-				changeRoundStorage: storage,
-				state:              test.initState,
+				currentInstance:      test.currentInstance,
+				instanceStorage:      storage,
+				changeRoundStorage:   storage,
+				state:                test.initState,
+				currentInstanceLock:  currentInstanceLock,
+				currentInstanceRLock: currentInstanceLock.RLocker(),
+				forkLock:             &sync.Mutex{},
 			}
+
+			ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+			ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.isFullNode(), storage, nil)
+			ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
+
 			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
 			if len(test.expectedErr) > 0 {
@@ -348,7 +357,13 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ibft := Controller{currentInstance: test.currentInstance}
+			currentInstanceLock := &sync.RWMutex{}
+			ibft := Controller{
+				currentInstance:      test.currentInstance,
+				currentInstanceLock:  currentInstanceLock,
+				currentInstanceRLock: currentInstanceLock.RLocker(),
+				forkLock:             &sync.Mutex{},
+			}
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
 	}
@@ -605,20 +620,23 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	height.Store(message.Height(2))
 
 	storage := newTestStorage(nil)
+	currentInstanceLock := &sync.RWMutex{}
 	ctrl := Controller{
 		ValidatorShare: share,
 		currentInstance: instance.NewInstanceWithState(&qbft.State{
 			Identifier: id,
 			Height:     height,
 		}),
-		instanceStorage:    storage,
-		changeRoundStorage: storage,
+		instanceStorage:      storage,
+		changeRoundStorage:   storage,
+		currentInstanceLock:  currentInstanceLock,
+		currentInstanceRLock: currentInstanceLock.RLocker(),
+		forkLock:             &sync.Mutex{},
 	}
 
+	ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
 	ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.isFullNode(), storage, nil)
 	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
-
-	ctrl.fork = forksfactory.NewFork(forksprotocol.V1ForkVersion)
 
 	require.NoError(t, ctrl.decidedStrategy.SaveDecided(incompleteDecided))
 

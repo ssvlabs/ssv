@@ -47,7 +47,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			continue
 		}
 
-		lastHeight := c.signatureState.height
+		lastHeight := c.signatureState.getHeight()
 
 		if processed := c.processNoRunningInstance(handler, lastHeight); processed {
 			c.logger.Debug("process none running instance is done")
@@ -68,7 +68,8 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 
 // processNoRunningInstance pop msg's only if no current instance running
 func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight message.Height) bool {
-	if c.currentInstance != nil {
+	instance := c.getCurrentInstance()
+	if instance != nil {
 		return false // only pop when no instance running
 	}
 
@@ -81,7 +82,7 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
-	c.logger.Debug("found message in queue when no running instance", zap.String("sig state", c.signatureState.getState().toString()), zap.Int32("height", int32(c.signatureState.height)))
+	c.logger.Debug("found message in queue when no running instance", zap.String("sig state", c.signatureState.getState().toString()), zap.Int32("height", int32(c.signatureState.getHeight())))
 	err := handler(msgs[0])
 	if err != nil {
 		c.logger.Warn("could not handle msg", zap.Error(err))
@@ -91,12 +92,12 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight
 
 // processByState if an instance is running -> get the state and get the relevant messages
 func (c *Controller) processByState(handler MessageHandler) bool {
-	if c.currentInstance == nil {
+	if c.getCurrentInstance() == nil {
 		return false
 	}
 
 	var msg *message.SSVMessage
-	currentState := c.currentInstance.State()
+	currentState := c.getCurrentInstance().State()
 	msg = c.getNextMsgForState(currentState)
 	if msg == nil {
 		return false // no msg found

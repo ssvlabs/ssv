@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	testingprotocol "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -23,9 +25,13 @@ import (
 // TODO: (lint) fix test
 //nolint
 func testIBFTInstance(t *testing.T) *Controller {
+	currentInstanceLock := &sync.RWMutex{}
 	ret := &Controller{
 		Identifier: []byte("Identifier_11"),
 		// instances: make([]*Instance, 0),
+		currentInstanceLock:  currentInstanceLock,
+		currentInstanceRLock: currentInstanceLock.RLocker(),
+		forkLock:             &sync.Mutex{},
 	}
 
 	ret.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
@@ -159,11 +165,17 @@ func TestCanStartNewInstance(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
 			i.state = test.initState
+			currentInstanceLock := &sync.RWMutex{}
+			i.currentInstanceLock = currentInstanceLock
+			i.currentInstanceRLock = currentInstanceLock.RLocker()
+			i.forkLock = &sync.Mutex{}
 			if test.currentInstance != nil {
-				i.currentInstance = test.currentInstance
+				i.setCurrentInstance(test.currentInstance)
 			}
 			if test.storage != nil {
 				i.instanceStorage = test.storage
+				i.changeRoundStorage = test.storage
+				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.isFullNode(), test.storage, nil)
 			} else {
 				options := basedb.Options{
 					Type:   "badger-memory",
@@ -173,8 +185,13 @@ func TestCanStartNewInstance(t *testing.T) {
 				// creating new db instance each time to get cleared one (without no data)
 				db, err := storage.GetStorageFactory(options)
 				require.NoError(t, err)
-				i.instanceStorage = qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
+				store := qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
+				i.instanceStorage = store
+				i.changeRoundStorage = store
+				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.isFullNode(), store, nil)
 			}
+
+			i.decidedStrategy = i.decidedFactory.GetStrategy()
 
 			i.ValidatorShare = test.share
 			i.instanceConfig = qbft.DefaultConsensusParams()

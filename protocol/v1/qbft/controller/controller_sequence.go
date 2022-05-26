@@ -1,15 +1,16 @@
 package controller
 
 import (
-	"go.uber.org/zap"
 	"strconv"
 	"time"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
-	"github.com/pkg/errors"
 )
 
 /**
@@ -22,8 +23,9 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	if ready, err := c.initialized(); !ready {
 		return err
 	}
-	if c.currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", c.currentInstance.State().GetHeight())
+	currentInstance := c.getCurrentInstance()
+	if currentInstance != nil {
+		return errors.Errorf("current instance (%d) is still running", currentInstance.State().GetHeight())
 	}
 	if !c.ValidatorShare.OperatorReady() {
 		return errors.New("operator share not ready")
