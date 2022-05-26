@@ -30,7 +30,7 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 		if err != nil {
 			// the handshake might have been triggered by the other node,
 			// therefore the handshake might be pending
-			if err == ErrIndexingInProcess || err == ErrHandshakeInProcess {
+			if err == ErrIndexingInProcess || err == errHandshakeInProcess {
 				_logger.Debug("peer handshake already in process")
 				return err
 			}
@@ -52,7 +52,6 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
-
 			id := conn.RemotePeer()
 			q.QueueDistinct(func() error {
 				return handshake(net, conn)
