@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -25,6 +26,9 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundSt
 			return nil, nil
 		} else {
 			res, err := store.GetLastChangeRoundMsg(msg.ID)
+			if err != nil {
+				logex.GetLogger().Warn("change round sync msg error", zap.Error(err))
+			}
 			plogger.Debug("last change round handler", zap.Any("msgs", res))
 			sm.UpdateResults(err, res)
 		}
