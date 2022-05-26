@@ -150,14 +150,14 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		ni, err = h.nodeInfoFromUserAgent(conn)
 	}
 	if err != nil {
-		return errors.Wrapf(err, "could not handshake with peer %s", pid.String())
+		return errors.Wrapf(err, "could not handshake with peer [%s]", pid.String())
 	}
 	if ni == nil {
 		return errors.New("empty identity")
 	}
 	if !h.applyFilters(ni) {
 		h.logger.Debug("filtering peer", zap.Any("info", ni))
-		return errors.New("peer was filtered")
+		return errors.Errorf("peer [%s] was filtered during handshake", pid.String())
 	}
 	// adding to index
 	added, err := h.idx.Add(pid, ni)
@@ -172,17 +172,17 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
-	data, err := h.idx.SelfSealed()
-	if err != nil {
-		return nil, err
-	}
 	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
 	}
+	data, err := h.idx.SelfSealed()
+	if err != nil {
+		return nil, err
+	}
 	if len(res) == 0 {
-		return nil, errors.Errorf("peer %s doesn't supported handshake protocol", conn.RemotePeer().String())
+		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
 	resBytes, err := h.streams.Request(conn.RemotePeer(), NodeInfoProtocol, data)
 	if err != nil {
@@ -207,8 +207,8 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 		return nil, errors.New("could not cast ua to string")
 	}
 	parts := strings.Split(ua, ":")
-	if len(parts) < 2 { // too old
-		return nil, errors.Errorf("user agent is unknown %s", ua)
+	if len(parts) < 2 { // too old or unknown
+		return nil, errors.Errorf("user agent is unknown: %s", ua)
 	}
 	// TODO: don't assume network is the same
 	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.idx.Self().NetworkID)
