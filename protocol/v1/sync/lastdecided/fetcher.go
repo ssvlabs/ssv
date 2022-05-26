@@ -1,7 +1,6 @@
 package lastdecided
 
 import (
-	"context"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
@@ -15,7 +14,7 @@ type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
 
 // Fetcher is responsible for fetching last/highest decided messages from other peers in the network
 type Fetcher interface {
-	GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error)
+	GetLastDecided(identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error)
 }
 
 type lastDecidedFetcher struct {
@@ -32,7 +31,7 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 }
 
 // GetLastDecided returns last decided message from other peers in the network
-func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
+func (l *lastDecidedFetcher) GetLastDecided(identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
 	logger := l.logger.With(zap.String("identifier", identifier.String()))
 	var err error
 	var remoteMsgs []p2pprotocol.SyncResult
@@ -53,15 +52,16 @@ func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier mess
 			time.Sleep(delay)
 		}
 	}
-	if len(remoteMsgs) == 0 {
-		logger.Info("node is synced: remote highest decided not found (V0), assuming 0")
-		return nil, "", 0, nil
-	}
 
 	localMsg, err := getLastDecided(identifier)
 	if err != nil {
 		return nil, "", 0, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
+	if len(remoteMsgs) == 0 && localMsg == nil {
+		logger.Info("node is synced: remote highest decided not found (V0), assuming 0")
+		return nil, "", 0, nil
+	}
+
 	var localHeight message.Height
 	if localMsg != nil {
 		localHeight = localMsg.Message.Height
@@ -69,13 +69,13 @@ func (l *lastDecidedFetcher) GetLastDecided(ctx context.Context, identifier mess
 
 	highest, height, sender := sync.GetHighest(l.logger, localMsg, remoteMsgs...)
 	if highest == nil {
-		logger.Info("node is synced: remote highest decided not found (V1)")
+		logger.Info("node is synced: remote highest decided not found")
 		return nil, "", localHeight, nil
 	}
 
 	if height <= localHeight {
 		logger.Info("node is synced: local is higher or equal to remote")
-		return nil, "", height, nil
+		return nil, "", localHeight, nil
 	}
 
 	return highest, sender, localHeight, nil
