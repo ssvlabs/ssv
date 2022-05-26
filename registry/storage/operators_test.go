@@ -2,17 +2,17 @@ package storage
 
 import (
 	"fmt"
+	"strings"
+	"testing"
 
-	"github.com/bloxapp/ssv/fixtures"
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"strings"
-	"testing"
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
@@ -20,8 +20,10 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	require.NotNil(t, storage)
 	defer done()
 
+	_, pk := blskeygen.GenBLSKeyPair()
+
 	operatorInfo := OperatorInformation{
-		PublicKey:    string(fixtures.RefPk[:]),
+		PublicKey:    string(pk.Serialize()),
 		Name:         "my_operator",
 		OwnerAddress: common.Address{},
 	}

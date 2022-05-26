@@ -13,8 +13,12 @@ type mainMigrator struct {
 	migrators []Migrator
 }
 
+// TODO: un-lint
+//nolint
 var migrator mainMigrator
 
+// TODO: un-lint
+//nolint
 var migratorOnce sync.Once
 
 // GetMainMigrator TODO: un-lint

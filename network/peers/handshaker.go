@@ -21,14 +21,17 @@ const (
 	userAgentKey = "AgentVersion"
 )
 
-// ErrHandshakeInProcess is thrown when and handshake process for that peer is already running
-var ErrHandshakeInProcess = errors.New("handshake already in process")
+// errHandshakeInProcess is thrown when and handshake process for that peer is already running
+var errHandshakeInProcess = errors.New("handshake already in process")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
 type HandshakeFilter func(info *records.NodeInfo) (bool, error)
 
 // Handshaker is the interface for handshaking with peers.
 // it uses node info protocol to exchange information with other nodes and decide whether we want to connect.
+//
+// NOTE: due to compatibility with v0,
+// we accept nodes with user agent as a fallback when the new protocol is not supported.
 type Handshaker interface {
 	Handshake(conn libp2pnetwork.Conn) error
 	Handler() libp2pnetwork.StreamHandler
@@ -126,7 +129,7 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	pid := conn.RemotePeer()
 	if _, loaded := h.pending.LoadOrStore(pid.String(), true); loaded {
-		return ErrHandshakeInProcess
+		return errHandshakeInProcess
 	}
 	defer h.pending.Delete(pid.String())
 
@@ -135,8 +138,17 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if err != nil && err != ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
-	if ni != nil && h.idx.State(pid) != StateUnknown {
-		return nil
+	if ni != nil {
+		switch h.idx.State(pid) {
+		case StateIndexing:
+			return errHandshakeInProcess
+		case StatePruned:
+			return errors.Errorf("pruned peer [%s]", pid.String())
+		case StateUnknown:
+			// continue the flow
+		default: // ready
+			return nil
+		}
 	}
 
 	if err := h.preHandshake(conn); err != nil {
@@ -150,14 +162,14 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		ni, err = h.nodeInfoFromUserAgent(conn)
 	}
 	if err != nil {
-		return errors.Wrapf(err, "could not handshake with peer %s", pid.String())
+		return errors.Wrapf(err, "could not handshake with peer [%s]", pid.String())
 	}
 	if ni == nil {
 		return errors.New("empty identity")
 	}
 	if !h.applyFilters(ni) {
 		h.logger.Debug("filtering peer", zap.Any("info", ni))
-		return errors.New("peer was filtered")
+		return errors.Errorf("peer [%s] was filtered during handshake", pid.String())
 	}
 	// adding to index
 	added, err := h.idx.Add(pid, ni)
@@ -172,17 +184,17 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
-	data, err := h.idx.SelfSealed()
-	if err != nil {
-		return nil, err
-	}
 	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
 	}
+	data, err := h.idx.SelfSealed()
+	if err != nil {
+		return nil, err
+	}
 	if len(res) == 0 {
-		return nil, errors.Errorf("peer %s doesn't supported handshake protocol", conn.RemotePeer().String())
+		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
 	resBytes, err := h.streams.Request(conn.RemotePeer(), NodeInfoProtocol, data)
 	if err != nil {
@@ -207,8 +219,8 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 		return nil, errors.New("could not cast ua to string")
 	}
 	parts := strings.Split(ua, ":")
-	if len(parts) < 2 { // too old
-		return nil, errors.Errorf("user agent is unknown %s", ua)
+	if len(parts) < 2 { // too old or unknown
+		return nil, errors.Errorf("user agent is unknown: %s", ua)
 	}
 	// TODO: don't assume network is the same
 	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.idx.Self().NetworkID)
