@@ -39,6 +39,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if valid, err := c.decidedStrategy.ValidateHeight(msg); err != nil {
 		return errors.Wrap(err, "failed to check msg height")
 	} else if !valid {
+		logger.Debug("decided is too old, do nothing")
 		return nil // msg is too old, do nothing
 	}
 
