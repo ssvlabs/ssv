@@ -143,7 +143,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		case StateIndexing:
 			return errHandshakeInProcess
 		case StatePruned:
-			return errors.Errorf("pruned peer [%s]")
+			return errors.Errorf("pruned peer [%s]", pid.String())
 		case StateUnknown:
 			// continue the flow
 		default: // ready
