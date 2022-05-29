@@ -115,7 +115,7 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
-		dvs.limitNodeFilter, dvs.forkVersionFilter)//, dvs.badNodeFilter)
+		dvs.limitNodeFilter, dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
