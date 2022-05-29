@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"fmt"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -46,29 +44,21 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 
 	// if we already have this in storage, pass
-	known, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
+	shouldUpdate, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return nil
 	}
-	if known {
-		// if decided is known, check for a more complete message (more signers)
-		ignore := c.checkDecidedMessageSigners(knownMsg, msg)
-		newSSZData, err := c.checkDecidedData(knownMsg, msg)
-		if err != nil {
-			logger.Warn("failed to check decided data", zap.Error(err))
-		}
-
-		if !ignore || newSSZData {
-			if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
-				logger.Error("can't update decided message", zap.Error(err))
-				return nil
-			}
-			logger.Debug("decided was updated")
-
-			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+	if shouldUpdate {
+		if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+			logger.Error("can't update decided message", zap.Error(err))
 			return nil
 		}
+		logger.Debug("decided was updated")
+
+		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+		return nil
+	} else if knownMsg != nil {
 		logger.Debug("decided is known, skipped")
 		return nil
 	}
@@ -129,38 +119,6 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
 	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
 	return len(msg.GetSigners()) <= len(knownMsg.GetSigners())
-}
-
-// checkDecidedData checks if new decided msg target epoch is higher than the known decided target epoch
-func (c *Controller) checkDecidedData(knownMsg *message.SignedMessage, msg *message.SignedMessage) (bool, error) {
-
-	knownEpoch, err := extractTargetEpoch(knownMsg)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to extract known decided target epoch")
-	}
-	epoch, err := extractTargetEpoch(msg)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to extract known decided target epoch")
-	}
-	return epoch > knownEpoch, nil
-}
-
-// extractTargetEpoch return the target epoch for the decided msg
-func extractTargetEpoch(msg *message.SignedMessage) (spec.Epoch, error) {
-	commitData, err := msg.Message.GetCommitData()
-	if err != nil {
-		return 0, err
-	}
-	switch msg.Message.Identifier.GetRoleType() {
-	case message.RoleTypeAttester:
-		s := &spec.AttestationData{}
-		if err := s.UnmarshalSSZ(commitData.Data); err != nil {
-			return 0, errors.Wrap(err, "failed to marshal attestation")
-		}
-		return s.Target.Epoch, nil
-	default:
-		return 0, errors.New(fmt.Sprintf("role type is not supported. role - %s", msg.Message.Identifier.GetRoleType().String()))
-	}
 }
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
