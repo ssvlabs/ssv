@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -13,10 +14,83 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"testing"
+	"time"
 )
 
 func init() {
 	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
+}
+
+func TestIbftStorage_CleanAllV1Decided(t *testing.T) {
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.V0ForkVersion)
+	require.NoError(t, err)
+
+	var identifiers []message.Identifier
+	for i := 1; i <= 10; i++ {
+		identifiers = append(identifiers, message.NewIdentifier([]byte(fmt.Sprintf("pk-%d", i)), message.RoleTypeAttester))
+	}
+
+	var msgs []*message.SignedMessage
+	for _, identifier := range identifiers {
+		for i := 1; i <= 10; i++ {
+			commitData := message.CommitData{Data: []byte("data")}
+			encodedCommit, err := commitData.Encode()
+			require.NoError(t, err)
+
+			decided := &message.SignedMessage{
+				Signature: []byte("sig"),
+				Signers:   []message.OperatorID{1, 2},
+				Message: &message.ConsensusMessage{
+					MsgType:    2,
+					Height:     message.Height(i),
+					Round:      0,
+					Identifier: identifier,
+					Data:       encodedCommit,
+				},
+			}
+			msgs = append(msgs, decided)
+		}
+	}
+
+	require.NoError(t, storage.SaveDecided(msgs...))
+	for _, identifier := range identifiers {
+		r, err := storage.GetDecided(identifier, 1, 10)
+		require.NoError(t, err)
+		require.Equal(t, 10, len(r))
+	}
+
+	require.NoError(t, storage.(forksprotocol.ForkHandler).OnFork(forksprotocol.V1ForkVersion))
+	time.Sleep(time.Second * 2)
+
+	for _, identifier := range identifiers {
+		for i := 1; i <= 10; i++ {
+			commitData := message.CommitData{Data: []byte("data")}
+			encodedCommit, err := commitData.Encode()
+			require.NoError(t, err)
+
+			decided := &message.SignedMessage{
+				Signature: []byte("sig"),
+				Signers:   []message.OperatorID{1, 2},
+				Message: &message.ConsensusMessage{
+					MsgType:    2,
+					Height:     message.Height(i),
+					Round:      0,
+					Identifier: identifier,
+					Data:       encodedCommit,
+				},
+			}
+			msgs = append(msgs, decided)
+		}
+	}
+
+	require.NoError(t, storage.SaveDecided(msgs...))
+	require.NoError(t, storage.CleanAllV1Decided(identifiers))
+
+	for _, identifier := range identifiers {
+		r, err := storage.GetDecided(identifier, 1, 10)
+		require.NoError(t, err)
+		require.Equal(t, 10, len(r))
+	}
 }
 
 func TestSaveAndFetchLastState(t *testing.T) {

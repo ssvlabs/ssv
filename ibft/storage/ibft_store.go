@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	forksv0 "github.com/bloxapp/ssv/ibft/storage/forks/v0"
+	"github.com/bloxapp/ssv/utils/logex"
 	"log"
 	"sync"
 
@@ -65,6 +66,15 @@ func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprot
 		forkLock: &sync.RWMutex{},
 	}
 	return ibft
+}
+
+func (i *ibftStorage) CleanAllV1Decided(pks []message.Identifier) error {
+	for _, pk := range pks {
+		if err := i.delete(decidedKey, pk); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
@@ -131,6 +141,7 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 
 	for seq := from; seq <= to; seq++ {
 		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
+		logex.GetLogger().Debug("----- Get decided -----", zap.String("k", identifier.String()))
 		val, found, err := i.get(decidedKey, identifier, uInt64ToByteSlice(uint64(seq)))
 		if err != nil {
 			return msgs, err
@@ -144,6 +155,7 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 			continue
 		}
 
+		logex.GetLogger().Debug("----- Get decided v0-----", zap.String("k", string(identifierV0)))
 		// v1 not found, try with v0 identifier
 		val, found, err = i.get(decidedKey, identifierV0, uInt64ToByteSlice(uint64(seq)))
 		if err != nil {
@@ -177,6 +189,7 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
 			return basedb.Obj{}, err
 		}
 		identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
+		logex.GetLogger().Debug("----- save decided -----", zap.String("k", string(identifier)))
 		key := append(identifier, k...)
 		return basedb.Obj{Key: key, Value: value}, nil
 	})

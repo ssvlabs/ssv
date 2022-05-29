@@ -14,6 +14,7 @@ type DecidedMsgStore interface {
 	GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error)
 	// SaveDecided saves historical decided messages
 	SaveDecided(signedMsg ...*message.SignedMessage) error
+	CleanAllV1Decided(pks []message.Identifier) error
 }
 
 // InstanceStore manages instance data

@@ -3,8 +3,12 @@ package migrations
 import (
 	"bytes"
 	"context"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorage2 "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 
 	exporterstorage "github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/operator"
@@ -24,6 +28,7 @@ var (
 		migrationCleanOperatorNodeRegistryData,
 		migrationCleanExporterRegistryData,
 		migrationCleanValidatorRegistryData,
+		migrationCleanV1Decided,
 	}
 )
 
@@ -67,6 +72,10 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 }
 func (o Options) nodeStorage() operator.Storage {
 	return operator.NewNodeStorage(o.Db, o.Logger)
+}
+
+func (o Options) qbftStorage() qbftstorage2.QBFTStore {
+	return qbftstorage.New(o.Db, o.Logger, message.RoleTypeAttester.String(), forksprotocol.V0ForkVersion)
 }
 
 // Run executes the migrations.
