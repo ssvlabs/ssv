@@ -47,6 +47,9 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		return nil // local is higher than remote, no need for sync or update
 	}
 
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
 	counter := 0
 	err = f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
 		if err := pip.Run(msg); err != nil {
