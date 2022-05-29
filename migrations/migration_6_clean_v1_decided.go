@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var migrationCleanV1Decided = Migration{
@@ -11,9 +12,9 @@ var migrationCleanV1Decided = Migration{
 		if err != nil {
 			return err
 		}
-		var pks [][]byte
+		var pks []message.Identifier
 		for _, share := range shares {
-			pks = append(pks, share.PublicKey.Serialize())
+			pks = append(pks, message.NewIdentifier(share.PublicKey.Serialize(), message.RoleTypeAttester))
 		}
 
 		s := opt.qbftStorage()
