@@ -35,15 +35,15 @@ type Config struct {
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"50" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"250" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
-
+	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"150" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
+	// 	PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
-
+	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
 	PubSubTrace    bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
+	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
-
+	// NetworkID is the network of this node
 	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"ssv-testnet" env-description:"Network ID is the network of this node"`
-
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
@@ -54,7 +54,7 @@ type Config struct {
 	UserAgent string
 	// ForkVersion to use
 	ForkVersion forksprotocol.ForkVersion
-
+	// Logger to used by network services
 	Logger *zap.Logger
 }
 

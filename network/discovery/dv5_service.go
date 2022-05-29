@@ -5,9 +5,9 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -48,6 +48,7 @@ type DiscV5Service struct {
 
 	publishState int32
 	conn         *net.UDPConn
+	forkv        forksprotocol.ForkVersion
 }
 
 func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) {
@@ -58,6 +59,7 @@ func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) 
 		logger:       discOpts.Logger.With(zap.String("where", "discv5")),
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
+		forkv:        discOpts.ForkVersion,
 	}
 	dvs.logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
@@ -113,7 +115,7 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
-		dvs.limitNodeFilter) //, dvs.badNodeFilter)
+		dvs.limitNodeFilter, dvs.forkVersionFilter)//, dvs.badNodeFilter)
 
 	return nil
 }
@@ -241,31 +243,6 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
 //		}
 //	}, time.Millisecond*100, dvs.badNodeFilter)
 //}
-
-// limitNodeFilter checks if limit exceeded
-func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
-}
-
-// badNodeFilter checks if the node was pruned or have a bad score
-func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
-	pid, err := PeerID(node)
-	if err != nil {
-		dvs.logger.Warn("could not get peer ID from node record", zap.Error(err))
-		return false
-	}
-	return !dvs.conns.IsBad(pid)
-}
-
-func (dvs *DiscV5Service) findBySubnetFilter(subnet uint64) func(node *enode.Node) bool {
-	return func(node *enode.Node) bool {
-		subnets, err := records.GetSubnetsEntry(node.Record())
-		if err != nil {
-			return false
-		}
-		return subnets[subnet] > 0
-	}
-}
 
 func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
 	opts := discOpts.DiscV5Opts

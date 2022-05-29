@@ -287,37 +287,7 @@ func (pi *peersIndex) get(pid peer.ID) (*records.NodeInfo, error) {
 	return &ni, nil
 }
 
-//
-//func (pi *peersIndex) getMetadata(tx Transactional) (map[string]string, error) {
-//	var ok bool
-//	metadata := make(map[string]string)
-//	craw, err := tx.Get(formatInfoKey(consensusNodeKey))
-//	if err != nil {
-//		return nil, err
-//	}
-//	metadata[consensusNodeKey], ok = craw.(string)
-//	if !ok {
-//		return nil, errors.New("could not cast consensus node")
-//	}
-//	eraw, err := tx.Get(formatInfoKey(execNodeKey))
-//	if err != nil {
-//		return nil, err
-//	}
-//	metadata[execNodeKey], ok = eraw.(string)
-//	if !ok {
-//		return nil, errors.New("could not cast exec node")
-//	}
-//	vraw, err := tx.Get(formatInfoKey(nodeVersionKey))
-//	if err != nil {
-//		return nil, err
-//	}
-//	metadata[nodeVersionKey], ok = vraw.(string)
-//	if !ok {
-//		return nil, errors.New("could not cast node version")
-//	}
-//	return metadata, nil
-//}
-
+// state returns the NodeState of the given peer
 func (pi *peersIndex) state(pid string) NodeState {
 	pi.statesLock.RLock()
 	defer pi.statesLock.RUnlock()
@@ -329,9 +299,10 @@ func (pi *peersIndex) state(pid string) NodeState {
 	return so.state
 }
 
+// pruned checks if the given peer was pruned and that TTL was not reached
 func (pi *peersIndex) pruned(pid string) bool {
-	pi.statesLock.RLock()
-	defer pi.statesLock.RUnlock()
+	pi.statesLock.Lock()
+	defer pi.statesLock.Unlock()
 
 	so, ok := pi.states[pid]
 	if !ok {
@@ -347,6 +318,7 @@ func (pi *peersIndex) pruned(pid string) bool {
 	return false
 }
 
+// setState updates the NodeState of the peer
 func (pi *peersIndex) setState(pid string, state NodeState) {
 	pi.statesLock.Lock()
 	defer pi.statesLock.Unlock()

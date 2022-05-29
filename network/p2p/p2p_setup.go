@@ -122,7 +122,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
 		filters = append(filters, peers.ForkVersionFilter(n.cfg.ForkVersion), peers.NetworkIDFilter(n.cfg.NetworkID))
 	}
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, ids, filters...)
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
