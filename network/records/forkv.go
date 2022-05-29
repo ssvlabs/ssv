@@ -1,6 +1,7 @@
 package records
 
 import (
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -39,7 +40,7 @@ func GetForkVersionEntry(record *enr.Record) (string, error) {
 	oid := new(ForkVersionEntry)
 	if err := record.Load(oid); err != nil {
 		if enr.IsNotFound(err) {
-			return "", nil
+			return forksprotocol.V0ForkVersion.String(), nil
 		}
 		return "", err
 	}
