@@ -1,7 +1,6 @@
 package topics
 
 import (
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"go.uber.org/zap"
@@ -46,14 +45,6 @@ func (pst *psTracer) report(evt *ps_pb.TraceEvent) {
 
 // log prints event to log
 func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
-	pid := "unknown"
-	id, err := peer.IDFromBytes(evt.PeerID)
-	if err != nil {
-		pst.logger.Debug("could not convert peer.ID", zap.Error(err))
-	} else {
-		pid = id.String()
-	}
 	pst.logger.Debug("pubsub event",
-		zap.String("type", evt.GetType().String()),
-		zap.String("peer", pid))
+		zap.String("type", evt.GetType().String()))
 }
