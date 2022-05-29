@@ -27,6 +27,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 			return nil, 0, nil, 0, errors.Wrap(err, "failed to get attestation data")
 		}
 
+		v.logger.Debug("--- got attestation data ---", zap.Any("data", attData))
 		inputByts, err = attData.MarshalSSZ()
 		if err != nil {
 			return nil, 0, nil, 0, errors.Errorf("failed to marshal on attestation role: %s", duty.Type.String())
