@@ -22,7 +22,7 @@ type ICollection interface {
 	GetValidatorShare(key []byte) (*beaconprotocol.Share, bool, error)
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
 	GetEnabledOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error)
-	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beaconprotocol, error)
+	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beaconprotocol.Share, error)
 	DeleteValidatorShare(key []byte) error
 }
 

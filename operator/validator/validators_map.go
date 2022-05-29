@@ -86,13 +86,13 @@ func (vm *validatorsMap) GetOrCreateValidator(share *beacon.Share) validator.IVa
 }
 
 // RemoveValidator removes a validator instance from the map
-func (vm *validatorsMap) RemoveValidator(pubKey string) *Validator {
+func (vm *validatorsMap) RemoveValidator(pubKey string) *validator.IValidator {
 	if v, found := vm.GetValidator(pubKey); found {
 		vm.lock.Lock()
 		defer vm.lock.Unlock()
 
 		delete(vm.validatorsMap, pubKey)
-		return v
+		return &v
 	}
 	return nil
 }

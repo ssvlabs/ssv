@@ -735,9 +735,10 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 
 	// stop instance
 	if v != nil {
-		if err := v.Close(); err == nil {
-			return errors.Wrap(err, "could not close validator")
-		}
+		// TODO
+		//if err := v.Close(); err == nil {
+		//	return errors.Wrap(err, "could not close validator")
+		//}
 	}
 
 	// remove the share secret from key-manager

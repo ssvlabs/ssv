@@ -3,16 +3,15 @@ package exporter
 import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
-	"go.uber.org/zap"
 )
 
+// TODO: un-lint
+//nolint
 // ListenToEth1Events register for eth1 events
 func (exp *exporter) listenToEth1Events(eventsFeed *event.Feed) <-chan error {
 	cn := make(chan *eth1.Event)
@@ -22,8 +21,8 @@ func (exp *exporter) listenToEth1Events(eventsFeed *event.Feed) <-chan error {
 		defer sub.Unsubscribe()
 		for {
 			select {
-			case event := <-cn:
-				if err := exp.handleEth1Event(*event); err != nil {
+			case e := <-cn:
+				if err := exp.handleEth1Event(*e); err != nil {
 					cnErr <- err
 				}
 			case err := <-sub.Err():
@@ -123,6 +122,7 @@ func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	}()
 
 	return nil*/
+	return nil
 }
 
 // TODO: un-lint
